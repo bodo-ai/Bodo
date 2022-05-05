@@ -1082,7 +1082,8 @@ class UntypedPass:
             # infer column names and types from constant filename
             msg = (
                 "pd.read_excel() requires explicit type annotation using "
-                "the 'names' and 'dtype' arguments if the filename is not constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths"
+                "the 'names' and 'dtype' arguments if the filename is not constant. "
+                "For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow"
             )
             fname_const = get_const_value(
                 fname_var, self.func_ir, msg, arg_types=self.args
@@ -1600,7 +1601,9 @@ class UntypedPass:
             # infer column names and types from constant filename
             msg = (
                 "pd.read_csv() requires explicit type "
-                "annotation using the 'names' and 'dtype' arguments if the filename is not constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths"
+                "annotation using the 'names' and 'dtype' arguments if the filename is "
+                "not constant. For more information, "
+                "see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow"
             )
             fname_const = get_const_value(
                 fname,
@@ -1943,7 +1946,10 @@ class UntypedPass:
         # not explicitly passed with dtype
         # not reading from s3 & hdfs
         # not reading from directory
-        msg = "pd.read_json() requires the filename to be a compile time constant. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths"
+        msg = ("pd.read_json() requires the filename to be a compile time constant. "
+        "For more information, "
+        "see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow"
+        )
         fname_const = get_const_value(
             fname,
             self.func_ir,

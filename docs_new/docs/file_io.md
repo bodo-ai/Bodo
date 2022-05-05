@@ -15,16 +15,77 @@ engines by Bodo.
 Bodo automatically parallelizes I/O for any number of cores and cluster
 size without any additional API layers.
 
-Supported formats
------------------
+
+I/O Workflow {#io_workflow}
+------------
+
+Make sure I/O calls for large data are inside JIT functions
+to allow Bodo to parallelize I/O and divide the data across cores
+automatically
+(see below for supported formats and APIs).
+
+!!! warning
+    Performing I/O in regular Python (outside JIT functions) replicates
+    data on all Python processes,
+    which can result in out-of-memory errors if the data is large.
+    For example, a 1 GB dataframe replicated on 1000 cores consumes
+    1 TB of memory.
+
+Bodo looks at the schema of the input dataset during compilation time to infer
+the datatype of the resulting dataframe.
+This requires the dataset path to be available to the compiler. The path should be either a constant string value, an argument
+to the JIT function, or a simple combination of the two.
+For example, the following code passes the dataset path as an argument, allowing Bodo to infer the data type of `df`:
+
+```py
+import os
+import pandas as pd
+import bodo
+
+data_path = os.environ["JOB_DATA_PATH"]
+
+@bodo.jit
+def f(path):
+    df = pd.read_parquet(path)
+    print(df.A.sum())
+
+f(data_path)
+```
+
+Concatenating arguments and constant values also works:
+
+```py
+import os
+import pandas as pd
+import bodo
+
+data_root = os.environ["JOB_DATA_ROOT"]
+
+@bodo.jit
+def f(root):
+    df = pd.read_parquet(root + "/table1.pq")
+    print(df.A.sum())
+
+f(data_root)
+```
+
+In the rare case that the path should be a dynamic value inside JIT functions,
+the data types have to be specified manually
+(see [Specifying I/O Data Types Manually][non-constant-filepaths]).
+This is error-prone and should be avoided as much as possible.
+
+
+Supported Data Formats
+----------------------
 
 Currently, Bodo supports I/O for [Parquet](http://parquet.apache.org/),
 CSV, SQL, JSON, [HDF5](http://www.h5py.org/), and Numpy binaries
 formats. It can read these formats from multiple filesystems, including
 S3, HDFS and Azure Data Lake (ADLS) (see [File Systems](#file-systems)
 below for more information).
+Many databases and data warehouses such as [Snowflake][snowflake-section] are supported as well.
 
-Also see [supported pandas Operations][pandas] for supported arguments of I/O functions.
+Also see [supported pandas APIs][pandas] for supported arguments of I/O functions.
 
 ### Parquet {#parquet-section}
 
@@ -40,11 +101,11 @@ import bodo
 
 @bodo.jit
 def write_pq(df):
-    df.to_parquet('example.pq')
+    df.to_parquet("s3://bucket-name/example.pq")
 
 @bodo.jit
 def read_pq():
-    df = pd.read_parquet('example.pq')
+    df = pd.read_parquet("s3://bucket-name/example.pq")
     return df
 ```
 
@@ -54,15 +115,15 @@ not distributed, `to_parquet(name)` writes to a single file called
 `name`:
 
 ```py
-df = pd.DataFrame({'A': range(10)})
+df = pd.DataFrame({"A": range(10)})
 
 @bodo.jit
 def example1_pq(df):
-    df.to_parquet('example1.pq')
+    df.to_parquet("example1.pq")
 
-@bodo.jit(distributed={'df'})
+@bodo.jit(distributed={"df"})
 def example2_pq(df):
-    df.to_parquet('example2.pq')
+    df.to_parquet("example2.pq")
 
 if bodo.get_rank() == 0:
     example1_pq(df)
@@ -90,36 +151,37 @@ folder containing 4 parquet files:
 
 See [`read_parquet()`][pandas-f-in], [`to_parquet()`][serialization-io-conversion] for supported arguments.
 
-#### Filter pushdown
-***Filter Pushdown***
+#### Filter Pushdown and Column Pruning
+***Filter Pushdown and Column Pruning***
 
 Bodo can detect filters used by the code and optimize the `read_parquet`
 call by pushing the filters down to the storage layer, so that only the
-rows required by the program are read. This can significantly speed up
-I/O in many cases and will reduce the program's memory footprint,
-sometimes substantially.
+rows required by the program are read.
+In addition, Bodo only reads the columns that are used in the program,
+and prunes the unused columns.
+These optimizations can significantly speed up
+I/O in many cases and can substantially reduce the program's memory footprint.
 
-For example, suppose we have a large dataset that spans many years and
-we only need to read data for a particular year. With pandas, we might
-perform a query on the year 2021 like this:
+For example, suppose we have a large dataset with many columns that spans many years, and
+we only need to read revenue data for a particular year:
 
 ```py
 @bodo.jit
 def query():
     df = pd.read_parquet("s3://my-bucket/data.pq")
-    df = df[(df["year"] == 2021)]
+    df = df[df["year"] == 2021]
     return df.groupby("customer_key")["revenue"].max()
 ```
 
-When compiling the above, Bodo detects the `df[(df["year"] == 2021)]`
+When compiling the above, Bodo detects the `df[df["year"] == 2021]`
 filter and optimizes the `read_parquet` call so that it only reads data
-for year 2021 from S3. Because the data will have already been filtered
-after reading, Bodo removes the filter operation during compilation.
-Note that this requires code transformation and optimization and is
-something that pandas cannot do. Bodo automatically infers which filters
-can be pushed down.
+for year 2021 from S3.
+This requires the dataframe filtering operation to be in the same JIT function
+as `read_parquet`, and the dataframe variable shouldn't be used before filtering.
+Bodo also makes sure only `customer_key` and `revenue` columns are read since
+other columns are not used in the programs.
 
-If your dataset is *hive-partitioned* and partition columns appear in
+In general, if the dataset is *hive-partitioned* and partition columns appear in
 filter expressions, only the files that contain relevant data are read,
 and the rest are discarded based on their path. For example, if `year`
 is a partition column above and we have a dataset:
@@ -143,9 +205,11 @@ looking at their parquet metadata (depending on the filters and
 statistics contained in the metadata) or filter the rows during read.
 
 !!! note
-    Filter pushdown can be a very significant optimization. 
-    Please refer to the [inlining][inlining] section to make
-    sure these optimizations are applied in your program.
+    Filter pushdown is often a very important optimization
+    and critical for having manageable memory footprint in big data workloads.
+    Make sure filtering happens in the same JIT function
+    right after dataset read (or JIT functions for I/O are inlined, see [inlining][inlining]).
+
 
 #### Exploring Large Data Without Full Read
 ***Exploring Large Data Without Full Read***
@@ -158,7 +222,7 @@ large cluster with a lot of memory. For example:
 ```py
 @bodo.jit
 def head_only_read():
-    df = pd.read_parquet("example.pq")
+    df = pd.read_parquet("s3://my-bucket/example.pq")
     print(df.shape)
     print(df.head())
 ```
@@ -178,11 +242,11 @@ import bodo
 
 @bodo.jit
 def write_csv(df):
-    df.to_csv('example.csv')
+    df.to_csv("s3://my-bucket/example.csv")
 
 @bodo.jit
 def read_csv():
-    df = pd.read_csv('example.csv')
+    df = pd.read_csv("s3://my-bucket/example.csv")
     return df
 ```
 
@@ -196,7 +260,7 @@ Usage:
 ```py
 @bodo.jit
 def read_csv_folder():
-    df = pd.read_csv("/path/to/folder/foldername")
+    df = pd.read_csv("s3://my-bucket/path/to/folder/foldername")
     doSomething(df)
 ```
 
@@ -223,15 +287,15 @@ def read_test():
     distributed, but writing is still done in parallel when more than 1 processor is used:
 
     ```py
-    df = pd.DataFrame({'A': np.arange(n)})
+    df = pd.DataFrame({"A": np.arange(n)})
     
     @bodo.jit
     def example1_csv(df):
-        df.to_csv('example1.csv')
+        df.to_csv("example1.csv")
     
-    @bodo.jit(distributed={'df'})
+    @bodo.jit(distributed={"df"})
     def example2_csv(df):
-        df.to_csv('example2.csv')
+        df.to_csv("example2.csv")
     
     if bodo.get_rank() == 0:
         example1_csv(df)
@@ -257,15 +321,15 @@ def read_test():
     ``to_csv(name)`` writes to a single file called ``name``:
 
     ```py
-    df = pd.DataFrame({'A': np.arange(n)})
+    df = pd.DataFrame({"A": np.arange(n)})
 
     @bodo.jit
     def example1_csv(df):
-        df.to_csv('s3://bucket-name/example1.csv')
+        df.to_csv("s3://bucket-name/example1.csv")
 
-    @bodo.jit(distributed={'df'})
+    @bodo.jit(distributed={"df"})
     def example2_csv(df):
-        df.to_csv('s3://bucket-name/example2.csv')
+        df.to_csv("s3://bucket-name/example2.csv")
 
     if bodo.get_rank() == 0:
         example1_csv(df)
@@ -305,11 +369,11 @@ def example_write_json(df, fname):
 
 @bodo.jit
 def example_read_json_lines_format():
-    df = pd.read_json('example.json', orient = 'records', lines = True)
+    df = pd.read_json("example.json", orient = "records", lines = True)
 
 @bodo.jit
 def example_read_json_multi_lines():
-    df = pd.read_json('example_file.json', orient = 'records', lines = False,
+    df = pd.read_json("example_file.json", orient = "records", lines = False,
         dtype={"A": float, "B": "bool", "C": int})
 ```
 
@@ -324,21 +388,21 @@ def example_read_json_multi_lines():
 
 1. POSIX file systems: ``to_json(name)`` behavior depends on ``orient`` and ``lines`` arguments.
 
-    1. ``DataFrame.to_json(name, orient='records', lines=True)``
+    1. ``DataFrame.to_json(name, orient="records", lines=True)``
         (i.e. writing [JSON Lines text file format](http://jsonlines.org/){target="blank"}) always writes to a single file,
         regardless of the number of processes and whether the data is distributed,
         but writing is still done in parallel when more than 1 processor is used:
 
         ```py
-        df = pd.DataFrame({'A': np.arange(n)})
+        df = pd.DataFrame({"A": np.arange(n)})
     
         @bodo.jit
         def example1_json(df):
-            df.to_json('example1.json', orient='records', lines=True)
+            df.to_json("example1.json", orient="records", lines=True)
     
-        @bodo.jit(distributed={'df'})
+        @bodo.jit(distributed={"df"})
         def example2_json(df):
-            df.to_json('example2.json', orient='records', lines=True)
+            df.to_json("example2.json", orient="records", lines=True)
     
         if bodo.get_rank() == 0:
             example1_json(df)
@@ -367,15 +431,15 @@ def example_read_json_multi_lines():
     ``to_json(name)`` writes to a file called ``name``:
 
     ```py
-    df = pd.DataFrame({'A': np.arange(n)})
+    df = pd.DataFrame({"A": np.arange(n)})
 
     @bodo.jit
     def example1_json(df):
-        df.to_json('s3://bucket-name/example1.json')
+        df.to_json("s3://bucket-name/example1.json")
 
-    @bodo.jit(distributed={'df'})
+    @bodo.jit(distributed={"df"})
     def example2_json(df):
-        df.to_json('s3://bucket-name/example2.json')
+        df.to_json("s3://bucket-name/example2.json")
 
     if bodo.get_rank() == 0:
         example1_json(df)
@@ -411,7 +475,7 @@ For SQL, the syntax is also the same as pandas. For reading:
 ```py
 @bodo.jit
 def example_read_sql():
-    df = pd.read_sql('select * from employees', 'mysql+pymysql://<username>:<password>@<host>/<db_name>')
+    df = pd.read_sql("select * from employees", "mysql+pymysql://<username>:<password>@<host>/<db_name>")
 ```
 
 See [`read_sql()`][pandas-f-in] for supported arguments.
@@ -421,13 +485,42 @@ For writing:
 ```py
 @bodo.jit
 def example_write_sql(df):
-    df.to_sql('table_name', 'mysql+pymysql://<username>:<password>@<host>/<db_name>')
+    df.to_sql("table_name", "mysql+pymysql://<username>:<password>@<host>/<db_name>")
 ```
 
 See [`to_sql()`][pandas-f-in] for supported arguments.
 
 !!! note
     `sqlalchemy` must be installed in order to use `pandas.read_sql`.
+
+
+#### Filter Pushdown and Column Pruning
+***Filter Pushdown and Column Pruning***
+
+Similar to Parquet read, Bodo JIT compiler is able to
+push down filters to the data source and prune unused columns automatically.
+For example, this program reads data from a very large Snowflake table,
+but only needs limited rows and columns:
+
+```py
+@bodo.jit
+def filter_ex(conn, int_val):
+    df = pd.read_sql("SELECT * FROM LINEITEM", conn)
+    df = df[(df["l_orderkey"] > 10) & (int_val >= df["l_linenumber"])]
+    result = df["l_suppkey"]
+    print(result)
+
+filter_ex(conn, 2)
+```
+
+Bodo optimizes the query passed to `read_sql` to push filters down and
+prune unused columns. In this case, Bodo will replace `SELECT * FROM LINEITEM` with
+the optimized version automatically:
+
+```sql
+SELECT "L_SUPPKEY" FROM (SELECT * FROM LINEITEM) as TEMP
+WHERE  ( ( l_orderkey > 10 ) AND ( l_linenumber <= 2 ) )
+```
 
 
 ### Delta Lake {#deltalake-section}
@@ -444,7 +537,7 @@ Example code for reading:
 ```py
 @bodo.jit
 def example_read_deltalake():
-    df = pd.read_parquet('path/to/deltalake')
+    df = pd.read_parquet("path/to/deltalake")
 ```
 
 !!! note
@@ -479,77 +572,9 @@ same as the [h5py](http://www.h5py.org/) package. For example:
 @bodo.jit
 def example_h5():
     f = h5py.File("data.hdf5", "r")
-    X = f['points'][:]
-    Y = f['responses'][:]
+    X = f["points"][:]
+    Y = f["responses"][:]
 ```
-
-Filepaths determined at runtime {#non-constant-filepaths}
--------------------------------
-
-When reading from a file, Bodo needs to know the types of the resulting
-dataframe. If the file name is a constant string or function argument,
-Bodo can look at the file at compile time and infer the types. If the
-the filepath is not constant, this information must be supplied by the
-user. For `pd.read_csv` and `pd.read_excel`, this information can be supplied
-through the `names` and `dtypes` keyword arguments:
-
-```py
-@bodo.jit
-def example_csv(fname1, fname2, flag)):
-    if flag:
-        file_name = fname1
-    else:
-        file_name = fname2
-    return pd.read_csv(file_name, names = ["A", "B", "C"], dtype={"A": int, "B": float, "C": str})
-
-@bodo.jit
-def example_excel(fname1, fname2, flag)):
-    if flag:
-            file_name = fname1
-    else:
-        file_name = fname2
-    return pd.read_excel(
-        file_name,
-        names=["A", "B", "C", "D", "E"],
-        dtype={"A": int, "B": float, "C": str, "D": str, "E": np.bool_},
-    )
-```
-
-For the remaining pandas read functions, the existing APIs do not
-currently allow this information to be supplied. Users can still provide
-this information by adding type information in the `bodo.jit` decorator,
-similar to [Numba's typing syntax](http://numba.pydata.org/numba-doc/latest/reference/types.html){target="blank"}.
-For example:
-
-```py
-@bodo.jit(locals={'df':{'one': bodo.float64[:],
-                  'two': bodo.string_array_type,
-                  'three': bodo.bool_[:],
-                  'four': bodo.float64[:],
-                  'five': bodo.string_array_type,
-                  }})
-def example_df_schema(fname1, fname2, flag):
-    if flag:
-        file_name = fname1
-    else:
-        file_name = fname2
-    df = pd.read_parquet(file_name)
-    return df
-
-
- @bodo.jit(locals={'X': bodo.float64[:,:], 'Y': bodo.float64[:]})
- def example_h5(fname1, fname2, flag):
-    if flag:
-        file_name = fname1
-    else:
-        file_name = fname2
-     f = h5py.File(file_name, "r")
-     X = f['points'][:]
-     Y = f['responses'][:]
-```
-
-For the complete list of supported types, please see the [pandas dtype section][pandas-dtype]. 
-In the event that the dtypes are improperly specified, Bodo will throw a runtime error.
 
 File Systems {#File Systems}
 ------------
@@ -565,7 +590,7 @@ with `s3://`:
 ```py
 @bodo.jit
 def example_s3_parquet():
-    df = pd.read_parquet('s3://bucket-name/file_name.parquet')
+    df = pd.read_parquet("s3://bucket-name/file_name.parquet")
 ```
 
 These environment variables are used for File I/O with S3 credentials:
@@ -595,7 +620,7 @@ The file path should start with `gs://` or `gcs://`:
 ```py
 @bodo.jit
 def example_gcs_parquet():
-    df = pd.read_parquet('gcs://bucket-name/file_name.parquet')
+    df = pd.read_parquet("gcs://bucket-name/file_name.parquet")
 ```
 These environment variables are used for File I/O with GCS credentials:
 
@@ -619,7 +644,7 @@ should start with `hdfs://` or `abfs[s]://`:
 ```py
 @bodo.jit
 def example_hdfs_parquet():
-    df = pd.read_parquet('hdfs://host:port/dir/file_name.pq')
+    df = pd.read_parquet("hdfs://host:port/dir/file_name.pq")
 ```
 
 These environment variables are used for File I/O with HDFS:
@@ -648,19 +673,20 @@ Snowflake {#snowflake-section}
 
 To read a dataframe from a Snowflake database, users can use
 `pd.read_sql` with their Snowflake username and password:
-`pd.read_sql(query,snowflake://<username>:<password>@url)`.
+`pd.read_sql(query, "snowflake://<username>:<password>@url")`.
 
 ### Prerequisites
 
-In order to be able to query Snowflake from Bodo, you will have to
-install the Snowflake connector. If you're using Bodo in a conda
+In order to be able to query Snowflake from Bodo,
+installing the Snowflake connector is necessary (it is installed by default in Bodo Platform).
+If you are using Bodo in a conda
 environment:
 
 ``` shell
 conda install -c conda-forge snowflake-connector-python
 ```
 
-If you've installed Bodo using pip, then you can install the Snowflake
+If you have installed Bodo using pip, then you can install the Snowflake
 connector using pip as well:
 
 ``` shell
@@ -691,12 +717,18 @@ We can use the `pd.to_sql` method to persist a dataframe to a Snowflake
 table:
 
 ```py
-df.to_sql('<table_name>',f"snowflake://<username>:<password>@url/<db_name>/public?warehouse=XL_WH",schema="<schema>",if_exists="append",index=False)
+df.to_sql(
+    "<table_name>",
+    f"snowflake://<username>:<password>@url/<db_name>/public?warehouse=XL_WH",
+    schema="<schema>",
+    if_exists="append",
+    index=False
+)
 ```
 
 !!! note
-    - `index=False` is required as Snowflake does not support indexes. 
-    - `if_exists=append` is needed if the table already exists in snowflake.
+    - `index=False` is required as Snowflake does not support Indexes.
+    - `if_exists=append` is needed if the table already exists in Snowflake.
     - `schema` is recommended to avoid object permission issues.
     
 MySQL
@@ -706,14 +738,14 @@ MySQL
 
 ### Prerequisites
 
-In addition to ``sqlalchemy``, install ``pymysql``.
-If you're using Bodo in a conda environment:
+In addition to ``sqlalchemy``, installing ``pymysql`` is required.
+If you are using Bodo in a conda environment:
 
 ```shell
 conda install pymysql -c conda-forge
 ```
 
-If you've installed Bodo using pip:
+If you have installed Bodo using pip:
 
 ```shell
 pip install PyMySQL
@@ -728,7 +760,7 @@ import bodo
 import pandas as pd
 
 
-@bodo.jit(distributed=['df'])
+@bodo.jit(distributed=["df"])
 def read_mysql(table_name, conn):
     df = pd.read_sql(
             f"SELECT * FROM {table_name}",
@@ -749,7 +781,7 @@ import bodo
 import pandas as pd
 
 
-@bodo.jit(distributed=['df'])
+@bodo.jit(distributed=["df"])
 def write_mysql(df, table_name, conn):
     df.to_sql(table, conn)
 
@@ -765,13 +797,13 @@ write_mysql(df, table_name, conn)
 ### Prerequisites
 
 In addition to ``sqlalchemy``, install ``cx_oracle`` and Oracle instant client driver.
-If you're using Bodo in a conda environment:
+If you are using Bodo in a conda environment:
 
 ```shell
 conda install cx_oracle -c conda-forge
 ```
 
-If you've installed Bodo using pip:
+If you have installed Bodo using pip:
 
 ```shell
 pip install cx-Oracle
@@ -808,7 +840,7 @@ import bodo
 import pandas as pd
 
 
-@bodo.jit(distributed=['df'])
+@bodo.jit(distributed=["df"])
 def read_oracle(table_name, conn):
     df = pd.read_sql(
             f"SELECT * FROM {table_name}",
@@ -831,7 +863,7 @@ import bodo
 import pandas as pd
 
 
-@bodo.jit(distributed=['df'])
+@bodo.jit(distributed=["df"])
 def write_mysql(df, table_name, conn):
     df.to_sql(table, conn)
 
@@ -847,13 +879,13 @@ write_mysql(df, table_name, conn)
 ### Prerequisites
 In addition to `sqlalchemy`, install `psycopg2`.
 
-If you're using Bodo in a conda environment:
+If you are using Bodo in a conda environment:
 
 ```shell
 conda install psycopg2 -c conda-forge
 ```
 
-If you've installed Bodo using pip:
+If you have installed Bodo using pip:
 
 ```shell
 $ pip install psycopg2
@@ -868,7 +900,7 @@ import bodo
 import pandas as pd
 
 
-@bodo.jit(distributed=['df'])
+@bodo.jit(distributed=["df"])
 def read_postgresql(table_name, conn):
     df = pd.read_sql(
             f"SELECT * FROM {table_name}",
@@ -889,7 +921,7 @@ import bodo
 import pandas as pd
 
 
-@bodo.jit(distributed=['df'])
+@bodo.jit(distributed=["df"])
 def write_postgresql(df, table_name, conn):
     df.to_sql(table, conn)
 
@@ -901,3 +933,64 @@ write_postgresql(df, table_name, conn)
 ```
 [comment]: <> (Autorefs in [pandas], [pandas-f-in], [serialization-io-conversion], [inlining] and [integer-na-issue-pandas] will populate as those sections are added.)
 [todo]: <> (Modify/remove the comment above as the [pandas], [pandas-f-in], [serialization-io-conversion], [inlining] and [integer-na-issue-pandas] sections are added.)
+
+
+Specifying I/O Data Types Manually {#non-constant-filepaths}
+----------------------------------
+
+In some rase use cases, the dataset path cannot be a constant value
+or a JIT function argument. In such cases, the path is determined dynamically, which does not allow automatic Bodo data type inference.
+Therefore, the user has to provide the data types manually.
+For example, `names` and `dtypes` keyword arguments of `pd.read_csv` and `pd.read_excel`
+allow the user to specify the data types:
+
+```py
+@bodo.jit
+def example_csv(fname1, fname2, flag):
+    if flag:
+        file_name = fname1
+    else:
+        file_name = fname2
+    return pd.read_csv(file_name, names = ["A", "B", "C"], dtype={"A": int, "B": float, "C": str})
+```
+
+For other pandas read functions, the existing APIs do not
+currently allow this information to be provided.
+Users can still provide
+typing information in the `bodo.jit` decorator,
+similar to [Numba's typing syntax](http://numba.pydata.org/numba-doc/latest/reference/types.html){target="blank"}.
+For example:
+
+```py
+@bodo.jit(locals={"df":{"one": bodo.float64[:],
+                  "two": bodo.string_array_type,
+                  "three": bodo.bool_[:],
+                  "four": bodo.float64[:],
+                  "five": bodo.string_array_type,
+                  }})
+def example_df_schema(fname1, fname2, flag):
+    if flag:
+        file_name = fname1
+    else:
+        file_name = fname2
+    df = pd.read_parquet(file_name)
+    return df
+
+
+ @bodo.jit(locals={"X": bodo.float64[:,:], "Y": bodo.float64[:]})
+ def example_h5(fname1, fname2, flag):
+    if flag:
+        file_name = fname1
+    else:
+        file_name = fname2
+     f = h5py.File(file_name, "r")
+     X = f["points"][:]
+     Y = f["responses"][:]
+```
+
+For the complete list of supported types, please see the [pandas dtype section][pandas-dtype].
+In the event that the dtypes are improperly specified, Bodo will throw a runtime error.
+
+!!! warning
+    Providing data types manually is error-prone and should be
+    avoided as much as possible.
