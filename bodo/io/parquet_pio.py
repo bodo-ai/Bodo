@@ -202,7 +202,11 @@ class ParquetHandler:
             self.locals.pop(lhs.name + ":convert")
 
         if table_types is None:
-            msg = "Parquet schema not available. Either path argument should be constant for Bodo to look at the file at compile time or schema should be provided. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#non-constant-filepaths"
+            msg = ("Parquet schema not available. Either path argument "
+                "should be constant for Bodo to look at the file at compile "
+                "time or schema should be provided. For more information, "
+                "see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow"
+            )
             file_name_str = get_const_value(
                 file_name,
                 self.func_ir,

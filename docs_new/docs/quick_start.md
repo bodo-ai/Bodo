@@ -8,7 +8,14 @@ before using Bodo.
 Installation
 ------------
 
-Bodo can be installed using [Conda](https://docs.conda.io){target="blank"}:
+You can try Bodo using Bodo Platform's [free hosted trial](https://platform.bodo.ai/){target="blank"}
+or install locally using `pip`:
+
+```console 
+pip install bodo
+```
+
+[Conda](https://docs.conda.io){target="blank"} installation is available too:
 
 ```console 
 conda create -n Bodo python=3.9 mamba -c conda-forge
@@ -16,11 +23,12 @@ conda activate Bodo
 mamba install bodo -c bodo.ai -c conda-forge
 ```
 
-This command installs Bodo Community Edition by default, which is free
-and works on up to 8 cores. You can also [request a 30 day free
-trial](https://bodo.ai/try-bodo) on up to 128 cores. If you need a trial
-license for even more cores, please [contact
-us](https://bodo.ai/contact/). See [the installation section][install] for more details of setting up Bodo.
+These commands install the [Bodo Community Edition](https://www.bodo.ai/community-edition){target="blank"}
+by default, which is free on up to 8 cores.
+You can also subscribe to
+[Bodo Platform on AWS Marketplace](https://aws.amazon.com/marketplace/pp/prodview-zg6n2qyj5h74o){target="blank"}
+or [contact us](https://bodo.ai/contact/){target="blank"} for trial licenses.
+See [the installation section][install] for more details of setting up Bodo.
 
 Data Transform Example with Bodo
 --------------------------------
@@ -379,6 +387,46 @@ parallelism challenges like communication.
 Bodo JIT Requirements
 ---------------------
 
+To take advantage of the Bodo JIT compiler and avoid errors,
+make sure only compute and data-intensive
+code is in JIT functions.
+Other Python code for setup and configuration
+should run in regular Python.
+For example, consider this simple script:
+
+```py
+import os
+import pandas as pd
+
+data_path = os.environ["JOB_DATA_PATH"]
+
+df = pd.read_parquet(data_path)
+print(df.A.sum())
+```
+
+The Bodo version performs the computation in JIT functions,
+but keeps the setup code (finding `data_path`) in regular Python:
+
+```py
+import os
+import pandas as pd
+import bodo
+
+data_path = os.environ["JOB_DATA_PATH"]
+
+@bodo.jit
+def f(path):
+    df = pd.read_parquet(path)
+    print(df.A.sum())
+
+f(data_path)
+```
+
+In addition, the Bodo version passes the file path `data_path` as an argument
+to the JIT function `f`, allowing Bodo to find the input dataframe schema
+which is necessary for type inference (more in [Scalable Data I/O][file_io]).
+
+
 Bodo JIT supports specific APIs in Pandas currently, and other APIs
 cannot be used inside JIT functions. For example:
 
@@ -407,8 +455,8 @@ $ python df_unsupported.py
 
 As the error indicates, Bodo doesn't currently support the `transpose`
 call in JIT functions. In these cases, an alternative API should be used
-or this portion of the code should be in regular Python with Bodo's [object mode][objmode]. See
-[supported Pandas API][pandas] for the
+or this portion of the code should be either be in regular Python or in Bodo's [Object Mode][objmode].
+See [supported Pandas API][pandas] for the
 complete list of supported Pandas operations.
 
 ### Type Stability
@@ -525,8 +573,7 @@ if __name__ == "__main__":
     create_list()
 ```
 
-See our [Unsupported Python
-Programs][unsupported]
+See the [Unsupported Python Programs](bodo_parallelism/not_supported.md#notsupported)
 section for more details.
 
 Using Bodo in Jupyter Notebooks {#jupyter}

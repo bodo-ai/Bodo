@@ -27,7 +27,7 @@ are supported.
  - `decimal.Decimal` values (including nulls). The decimal values are stored as fixed-precision [Apache Arrow Decimal128](https://arrow.apache.org/docs/cpp/api/utilities.html#classarrow_1_1_decimal128) format, which is also similar to [PySpark decimals](https://spark.apache.org/docs/latest/api/python/pyspark.sql.html). The decimal type has a `precision` (the maximum total number of digits) and a `scale` (the number of digits on the right of dot) attribute, specifying how the stored data is interpreted. For example, the (4, 2) case can store from -999.99 to 999.99. The precision can be up to 38, and the scale must be less or equal to precision. Arbitrary-precision Python `decimal.Decimal` values are converted with precision of 38 and scale of 18.
 
 In addition, it may be desirable to specify type annotations in some
-cases (*e.g.*, [file I/O array input types][non-constant-filepaths]). 
+cases (see [Specifying I/O Data Types Manually][non-constant-filepaths] for example).
 Typically these types are array types and they all can be
 accessed directly from the `bodo` module. The following
 table can be used to select the necessary Bodo Type based upon the
