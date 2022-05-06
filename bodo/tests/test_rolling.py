@@ -254,7 +254,8 @@ def test_apply_raw_false(memory_leak_check):
         return df.rolling(2)["B"].apply(lambda a: a.idxmin())
 
     def impl2(df):
-        return df.rolling("2s", on="C").apply(lambda a: a.idxmin())
+        # Change to min. Possible bug in pandas
+        return df.rolling("2s", on="C").apply(lambda a: a.min())
 
     df = pd.DataFrame(
         {
