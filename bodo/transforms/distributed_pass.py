@@ -3427,7 +3427,7 @@ class DistributedPass:
         # avoid printing empty slices of distributed arrays/series/dataframes
         if not print_node.vararg and all(
             guard(self._is_dist_slice, arg, equiv_set)
-            or isinstance(get_definition(self.func_ir, arg), ir.Const)
+            or isinstance(guard(get_definition, self.func_ir, arg), ir.Const)
             for arg in print_node.args
         ):
             arg_names = ", ".join(f"arg_{i}" for i in range(len(print_node.args)))
