@@ -5698,9 +5698,8 @@ def test_head(memory_leak_check):
         }
     )
     check_func(impl1, (df,))
-    if pandas_version > (1, 3):  # TODO: fix once underlying issue is found
-        check_func(impl2, (df,))
-        check_func(impl3, (df,))
+    check_func(impl2, (df,))
+    check_func(impl3, (df,))
     check_func(impl4, (df,))
 
     df_empty = pd.DataFrame({"A": [], "B": []})
@@ -5741,5 +5740,4 @@ def test_head_idx(datapath, memory_leak_check):
         A = df.groupby("one").head(1)
         return A
 
-    if pandas_version > (1, 3):  # TODO: fix once underlying issue is found
-        check_func(impl1, ())
+    check_func(impl1, ())
