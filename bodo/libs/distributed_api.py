@@ -2914,14 +2914,13 @@ def single_print(*args):  # pragma: no cover
         print(*args)
 
 
-def print_if_not_empty(args):   # pragma: no cover
+def print_if_not_empty(args):  # pragma: no cover
     pass
 
 
 @overload(print_if_not_empty)
 def overload_print_if_not_empty(*args):
-    """print input arguments only if rank == 0 or any data on current rank is not empty
-    """
+    """print input arguments only if rank == 0 or any data on current rank is not empty"""
     any_not_empty = (
         "("
         + " or ".join(
@@ -2940,7 +2939,8 @@ def overload_print_if_not_empty(*args):
         f"        print(*args)"
     )
     loc_vars = {}
-    exec(func_text, {"bodo": bodo}, loc_vars)
+    # TODO: Provide specific globals after Numba's #3355 is resolved
+    exec(func_text, globals(), loc_vars)
     impl = loc_vars["impl"]
     return impl
 
