@@ -2267,10 +2267,9 @@ Also see [S3][] and [HDFS][] configuration requirements and more on [Scalable Fi
     * `row_group_size` argument can be used to specify the size of the row-groups in the generated parquet files. This must be an integer. If not specified, Bodo writes row-groups with 1M rows.
 
     !!! note
-      The size of the row groups can affect read performance significantly. In general, the dataset should have at least as many row-groups as the number of cores used for reading, but ideally a lot more.
+      The size of the row groups can affect read performance significantly. In general, the dataset should have at least as many row-groups as the number of cores used for reading, but ideally a lot more. At the same time, the row-groups shouldn't be too small since this can lead to overheads at read time.
+      For more details, see [Parquet I/O][parquet-section]
       Bodo typically writes multiple files in parallel (one per core), and the total number of row-groups across all files is roughly `total_rows / row_group_size`.
-      At the same time, the row-groups shouldn't be too small since this can lead to overheads at read time.
-      For more details, refer to the [parquet file format](https://parquet.apache.org/docs/concepts/){target=blank}.
 
 
     ***Example Usage***
