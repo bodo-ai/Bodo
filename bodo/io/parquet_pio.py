@@ -202,7 +202,8 @@ class ParquetHandler:
             self.locals.pop(lhs.name + ":convert")
 
         if table_types is None:
-            msg = ("Parquet schema not available. Either path argument "
+            msg = (
+                "Parquet schema not available. Either path argument "
                 "should be constant for Bodo to look at the file at compile "
                 "time or schema should be provided. For more information, "
                 "see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow"
@@ -1537,7 +1538,8 @@ def get_parquet_dataset(
                 warnings.warn(
                     BodoWarning(
                         f"""Total number of row groups in parquet dataset {fpath} ({total_num_row_groups}) is too small for effective IO parallelization.
-For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()})
+For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()}). For more details, refer to
+https://docs.bodo.ai/latest/file_io/#parquet-section.
 """
                     )
                 )
