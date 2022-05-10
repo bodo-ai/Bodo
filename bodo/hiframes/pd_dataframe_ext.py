@@ -4,7 +4,7 @@ Implement pd.DataFrame typing and data model handling.
 """
 import json
 import operator
-from urllib.parse import urlparse, quote
+from urllib.parse import quote
 
 import llvmlite.binding as ll
 import numba
@@ -3828,8 +3828,7 @@ def to_sql_exception_guard(
     """Call of to_sql and guard the exception and return it as string if error happens"""
     err_msg = "all_ok"
     # Find the db_type to determine if we are using Snowflake
-    parseresult = urlparse(con)
-    db_type = parseresult.scheme
+    db_type = bodo.ir.sql_ext.parse_dbtype(con)
     if _is_parallel and bodo.get_rank() == 0:
         # Default number of rows to write to create the table. This is done in case
         # rank 0 has a large number of rows because that delays writing on other ranks.

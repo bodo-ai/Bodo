@@ -5,6 +5,8 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
+from urllib.parse import urlparse
+
 import numba
 import numpy as np
 import pandas as pd
@@ -91,6 +93,23 @@ class SqlReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         return f"{self.df_out} = ReadSql(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, vars={self.out_vars}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, type_usecol_offset={self.type_usecol_offset},)"
+
+
+def parse_dbtype(con_str):
+    """
+    Converts a constant string used for db_type to a standard representation
+    for each database.
+    """
+    # urlparse skips oracle since its handle has _
+    # which is not in `scheme_chars`
+    # oracle+cx_oracle
+    if con_str.startswith("oracle+cx_oracle://"):
+        return "oracle"
+    db_type = urlparse(con_str).scheme
+    if db_type == "mysql+pymysql":
+        # Standardize mysql to always use "mysql"
+        return "mysql"
+    return db_type
 
 
 def remove_dead_sql(
@@ -351,7 +370,7 @@ def escape_column_names(col_names, db_type, converted_colnames):
     # MySQL uses tilda as an escape character by default, not quotations
     # However, MySQL does support using quotations in ASCII_MODE. Tilda is always allowed though
     # MySQL names are case-insensitive
-    elif db_type == "mysql" or db_type == "mysql+pymysql":
+    elif db_type == "mysql":
         col_str = ", ".join([f"`{x}`" for x in col_names])
 
     # By the SQL 1997 standard, wrapping with quotations should be the default
@@ -712,7 +731,7 @@ def _gen_sql_reader_py(
             type_usecols_offsets_arr = np.array(type_usecol_offset, dtype=np.int64)
         func_text += "  df_typeref_2 = df_typeref\n"
         func_text += "  sqlalchemy_check()\n"
-        if db_type == "mysql" or db_type == "mysql+pymysql":
+        if db_type == "mysql":
             func_text += "  pymysql_check()\n"
         elif db_type == "oracle":
             func_text += "  cx_oracle_check()\n"
