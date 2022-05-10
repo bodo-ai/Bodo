@@ -31,9 +31,9 @@
 - Documentation:
   - [ ] Added documentation for changes/updates/new implementation in docs.
 
-   (Pandas docs : https://github.com/Bodo-inc/Bodo/blob/master/docs_new/api_docs/pandas)
-(Numpy docs: https://github.com/Bodo-inc/Bodo/blob/master/docs_new/docs/api_docs/numpy.md
-   (ML docs: https://github.com/Bodo-inc/Bodo/blob/master/docs_new/api_docs/ml)
+   (Pandas docs : https://github.com/Bodo-inc/bodo-doc-markdown/tree/master/api_docs/pandas)
+(Numpy docs: https://github.com/Bodo-inc/bodo-doc-markdown/blob/master/docs/api_docs/numpy.md)
+   (ML docs: https://github.com/Bodo-inc/bodo-doc-markdown/tree/master/api_docs/ml)
 
   - [ ] Updates the draft release notes on confluence if it should be mentioned
   in the release notes. These can be found at `Bodo-Engine/Draft Release Notes` with the name of the next major release.
