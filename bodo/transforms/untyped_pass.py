@@ -10,7 +10,6 @@ import itertools
 import datetime
 import pandas as pd
 import numpy as np
-from urllib.parse import urlparse
 import pyarrow as pa
 
 import numba
@@ -1946,9 +1945,10 @@ class UntypedPass:
         # not explicitly passed with dtype
         # not reading from s3 & hdfs
         # not reading from directory
-        msg = ("pd.read_json() requires the filename to be a compile time constant. "
-        "For more information, "
-        "see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow"
+        msg = (
+            "pd.read_json() requires the filename to be a compile time constant. "
+            "For more information, "
+            "see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow"
         )
         fname_const = get_const_value(
             fname,
@@ -2926,13 +2926,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
     to type a SQL query.
     """
     # find db type
-    # urlparse skips oracle since its handle has _
-    # which is not in `scheme_chars`
-    # oracle+cx_oracle
-    if con_const.startswith("oracle+cx_oracle://"):
-        db_type = "oracle"
-    else:
-        db_type = urlparse(con_const).scheme
+    db_type = bodo.ir.sql_ext.parse_dbtype(con_const)
     # Whether SQL statement is SELECT query
     is_select_query = False
     # Operations that create or edit objects don't return data.
@@ -3112,7 +3106,7 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
                 # MySQL+DESCRIBE: has fixed DataFrameType. Created upfront.
                 # SHOW has many variation depending on object to show
                 # so it will fall in the else-stmt
-                if db_type == "mysql" and sql_word("DESCRIBE", "DESC"):
+                if db_type == "mysql" and sql_word in ("DESCRIBE", "DESC"):
                     colnames = ("Field", "Type", "Null", "Key", "Default", "Extra")
                     index_type = bodo.RangeIndexType(bodo.none)
                     data_type = (
