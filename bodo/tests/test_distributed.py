@@ -359,6 +359,17 @@ def test_print_dist_get_rank(memory_leak_check, capsys):
     assert captured.out
 
 
+def test_range_index_1D_Var(memory_leak_check):
+    """Test 1D_Var handling of RangeIndex. See [BE-2569]."""
+
+    def impl(df):
+        df = df.groupby("A", as_index=False).count()
+        print(df.head())
+
+    df = pd.DataFrame({"A": [3, 3, 3, 3, 3], "B": [1, 2, 3, 4, 5]})
+    check_func(impl, (df,), only_1DVar=True)
+
+
 def test_bodo_func_dist_call1(memory_leak_check):
     """make sure calling other bodo functions with their distributed flags set works as
     expected (dist info is propagated across functions).

@@ -323,7 +323,11 @@ def get_slice_step(typemap, func_ir, var):
 
 
 def is_array_typ(var_typ, include_index_series=True):
-    # TODO: make sure all Bodo arrays are here
+    """return True if var_typ is an array type.
+    include_index_series=True also includes Index and Series types (as "array-like").
+    """
+
+    # NOTE: make sure all Bodo arrays are here
     return (
         is_np_array_typ(var_typ)
         or var_typ
