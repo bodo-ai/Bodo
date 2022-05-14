@@ -1894,6 +1894,39 @@ class DistributedAnalysis:
         if fdef == ("init_range_index", "bodo.hiframes.pd_index_ext"):
             if lhs not in array_dists:
                 array_dists[lhs] = Distribution.OneD
+
+            # some operations like groupby(as_index=False) create a RangeIndex
+            # with the same size as input arrays. This RangeIndex should have the same
+            # distribution as the input arrays semantically as well. See [BE-2569]
+            is_simple_range = (
+                guard(
+                    get_const_value_inner,
+                    self.func_ir,
+                    args[0],
+                    typemap=self.typemap,
+                )
+                == 0
+                and guard(
+                    get_const_value_inner,
+                    self.func_ir,
+                    args[2],
+                    typemap=self.typemap,
+                )
+                == 1
+            )
+            if is_simple_range:
+                size_var = args[1]
+                for v in equiv_set.get_equiv_set(size_var):
+                    # 'v' could be int (size value) or str (varname)
+                    if (
+                        isinstance(v, str)
+                        and "#" in v
+                        and v.split("#")[0] in array_dists
+                        and not isinstance(array_dists[v.split("#")[0]], list)
+                    ):
+                        arr_name = v.split("#")[0]
+                        self._meet_array_dists(lhs, arr_name, array_dists)
+
             return
 
         if fdef == ("init_multi_index", "bodo.hiframes.pd_multi_index_ext"):

@@ -2921,6 +2921,7 @@ def print_if_not_empty(args):  # pragma: no cover
 @overload(print_if_not_empty)
 def overload_print_if_not_empty(*args):
     """print input arguments only if rank == 0 or any data on current rank is not empty"""
+
     any_not_empty = (
         "("
         + " or ".join(
@@ -2929,6 +2930,7 @@ def overload_print_if_not_empty(*args):
                 f"len(args[{i}]) != 0"
                 for i, arg_type in enumerate(args)
                 if is_array_typ(arg_type)
+                or isinstance(arg_type, bodo.hiframes.pd_dataframe_ext.DataFrameType)
             ]
         )
         + ")"
