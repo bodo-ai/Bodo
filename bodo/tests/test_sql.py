@@ -380,7 +380,9 @@ def test_sql_snowflake_use_index(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['l_suppkey', 'l_partkey']")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+# TODO: Re-add this test once [BE-2758] is resolved
+# @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest.mark.skip(reason="Outdated index returned by pandas")
 def test_sql_snowflake_use_index_dead_table(memory_leak_check):
     """
     Tests loading using index_col with pd.read_sql from snowflake

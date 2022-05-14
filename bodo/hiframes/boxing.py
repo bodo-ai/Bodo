@@ -688,15 +688,23 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
         # def __init__(self, dtype, name_typ=None, data=None)
 
         # In the case that we're converting a dataframe index,
-        # we need to upcast to 64 bitwith in order to match pandas semantics
+        # we need to upcast to 64 bit width in order to match pandas semantics
         if upcast_numeric_index:
 
             if isinstance(typ.dtype, types.Float):
                 upcasted_dtype = types.float64
                 upcasted_arr_typ = types.Array(upcasted_dtype, 1, "C")
-            elif typ.dtype in {types.int8, types.int16, types.int32, types.int64}:
+            elif typ.dtype in {
+                types.int8,
+                types.int16,
+                types.int32,
+                types.int64,
+            }:
                 upcasted_dtype = types.int64
-                upcasted_arr_typ = types.Array(upcasted_dtype, 1, "C")
+                if isinstance(typ.data, IntegerArrayType):
+                    upcasted_arr_typ = IntegerArrayType(upcasted_dtype)
+                else:
+                    upcasted_arr_typ = types.Array(upcasted_dtype, 1, "C")
             elif typ.dtype in {
                 types.uint8,
                 types.uint16,
@@ -704,7 +712,10 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
                 types.uint64,
             }:
                 upcasted_dtype = types.uint64
-                upcasted_arr_typ = types.Array(upcasted_dtype, 1, "C")
+                if isinstance(typ.data, IntegerArrayType):
+                    upcasted_arr_typ = IntegerArrayType(upcasted_dtype)
+                else:
+                    upcasted_arr_typ = types.Array(upcasted_dtype, 1, "C")
             elif typ.dtype == types.bool_:
                 upcasted_dtype = typ.dtype
                 upcasted_arr_typ = typ.data

@@ -235,9 +235,9 @@ def test_init_numeric_index_array_analysis(memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Int64Index([10, 12]),
-        pd.Float64Index([10.1, 12.1]),
-        pd.UInt64Index([10, 12]),
+        pd.Index([10, 12], dtype="Int64"),
+        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10, 12], dtype="UInt64"),
         pd.Index(["A", "B"]),
         pytest.param(pd.Index([b"hkjl", bytes(2), b""]), id="binary_case"),
     ],
@@ -253,9 +253,9 @@ def test_array_index_box(index, memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Int64Index([10, 12]),
-        pd.Float64Index([10.1, 12.1]),
-        pd.UInt64Index([10, 12]),
+        pd.Index([10, 12], dtype="Int64"),
+        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10, 12], dtype="UInt64"),
         pd.Index(["A", "B"] * 4),
         pd.RangeIndex(10),
         # pd.RangeIndex(3, 10, 2), # TODO: support
@@ -278,7 +278,7 @@ def test_index_values(index, memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Int64Index([10, 12, 11, 1, 3, 4], name="A"),
+        pd.Index([10, 12, 11, 1, 3, 4], dtype="Int64", name="A"),
         pd.Index(["A", "B", "C", "D", "FF"], name="B"),
         pytest.param(
             pd.Index([b"A", bytes(1), b"C", b"", b"ghbjhk"], name="cur_idx"),
@@ -302,7 +302,7 @@ def test_index_slice_name(index, memory_leak_check):
     "index, key",
     [
         (pd.RangeIndex(3, 22, 3), 9),
-        (pd.Int64Index([10, 12, 15, 18]), 15),
+        (pd.Index([10, 12, 15, 18], dtype="Int64"), 15),
         (pd.Index(["A", "B", "C", "AA", "DD"]), "A"),
         pytest.param(
             pd.Index([b"asdhgk", b"", bytes(7), b"AA", b"DD"]),
@@ -378,9 +378,9 @@ def test_index_get_loc_error_checking():
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Int64Index([10, 12, 0, 2, 1, 3, -4]),
-        pd.Float64Index([10.1, 12.1, 1.2, 3.1, -1.2, -3.1, 0.0]),
-        pd.UInt64Index([10, 12, 0, 1, 11, 12, 5, 3]),
+        pd.Index([10, 12, 0, 2, 1, 3, -4], dtype="Int64"),
+        pd.Index([10.1, 12.1, 1.2, 3.1, -1.2, -3.1, 0.0], dtype="float64"),
+        pd.Index([10, 12, 0, 1, 11, 12, 5, 3], dtype="UInt64"),
         pd.Index(["A", "B", "AB", "", "CDEF", "CC", "l"]),
         pytest.param(
             pd.Index([b"asdga", b"asdga", b"", b"oihjb", bytes(2), b"CC", b"asdfl"]),
@@ -975,9 +975,9 @@ def test_init_binary_array_bad_numpy_arr(memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Int64Index([10, 12]),
-        pd.Float64Index([10.1, 12.1]),
-        pd.UInt64Index([10, 12]),
+        pd.Index([10, 12], dtype="Int64"),
+        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10, 12], dtype="UInt64"),
         pd.Index(["A", "B"] * 4),
         pytest.param(pd.Index([b"A", b"B"] * 4), id="binary_idx"),
         pd.RangeIndex(1, 15, 2),
@@ -1032,7 +1032,7 @@ def test_map_str(memory_leak_check):
     def test_impl(I):
         return I.map(lambda a: str(a))
 
-    I = pd.Int64Index([1, 211, 333, 43, 51])
+    I = pd.Index([1, 211, 333, 43, 51], dtype="Int64")
     check_func(test_impl, (I,))
 
 
@@ -1040,9 +1040,10 @@ def test_map_str(memory_leak_check):
     "index",
     [
         pytest.param(pd.RangeIndex(11), marks=pytest.mark.slow),
-        pd.Int64Index([10, 12, 1, 3, 2, 4, 5, -1]),
+        # TODO: revert when [BE-2672] is resolved
+        # pd.Index([10, 12, 1, 3, 2, 4, 5, -1], dtype="Int64"),
         pytest.param(
-            pd.Float64Index([10.1, 12.1, 1.1, 2.2, -1.2, 4.1, -2.1]),
+            pd.Index([10.1, 12.1, 1.1, 2.2, -1.2, 4.1, -2.1], dtype="float64"),
             marks=pytest.mark.slow,
         ),
         pytest.param(
@@ -1062,15 +1063,19 @@ def test_map(index, memory_leak_check):
     def test_impl(I):
         return I.map(lambda a: a)
 
-    check_func(test_impl, (index,))
+    check_func(test_impl, (index,), check_dtype=False)
 
 
 @pytest.mark.parametrize(
     "index",
     [
         pd.Index([i for i in range(100)]),
-        pytest.param(pd.UInt64Index([i for i in range(100)]), marks=pytest.mark.slow),
-        pytest.param(pd.Float64Index([i for i in range(100)]), marks=pytest.mark.slow),
+        pytest.param(
+            pd.Index([i for i in range(100)], dtype="UInt64"), marks=pytest.mark.slow
+        ),
+        pytest.param(
+            pd.Index([i for i in range(100)], dtype="float64"), marks=pytest.mark.slow
+        ),
         pd.Index([i for i in range(100, -1, -1)]),
         pd.Index([1, 4, 3, 2, 5, 6, 4]),
         pytest.param(
@@ -1098,7 +1103,7 @@ def test_map(index, memory_leak_check):
             pd.timedelta_range(start="1D", end="15D", freq="1D"), marks=pytest.mark.slow
         ),
         pytest.param(
-            pd.timedelta_range(start="3Y", end="1Y", periods=100),
+            pd.timedelta_range(start="3D", end="1D", periods=100),
             marks=pytest.mark.slow,
         ),
         pytest.param(
@@ -1628,9 +1633,9 @@ def test_index_cmp_ops(op, memory_leak_check):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Int64Index([10, 12]),
-        pd.Float64Index([10.1, 12.1]),
-        pd.UInt64Index([10, 12]),
+        pd.Index([10, 12], dtype="Int64"),
+        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10, 12], dtype="UInt64"),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
         pd.Index(["A", "BB", "ABC", "", "KG", "FF", "ABCDF"]),
@@ -1684,6 +1689,15 @@ def test_index_nbytes(index, memory_leak_check):
     elif isinstance(index, pd.PeriodIndex):
         py_out = 24 + bodo.get_size()
         check_func(impl, (index,), py_output=py_out, only_1D=True)
+
+    # Nullable int index example:
+    # data = 16 bytes
+    # null_bit_map= 1 byte if 1 rank, 2 bytes if > 1 rank
+    # Total = 16 + num_ranks bytes
+    elif isinstance(index, pd.Index) and str(index.dtype) in ["Int64", "UInt64"]:
+        py_out = 16 + (1 if bodo.get_size() == 1 else 2)
+        check_func(impl, (index,), py_output=py_out, only_1D=True)
+
     else:
         check_func(impl, (index,))
 

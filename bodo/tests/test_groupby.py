@@ -73,14 +73,24 @@ from bodo.utils.typing import BodoError
                     "A": pd.Categorical(["AA", "BB", "", "AA", None], ordered=True),
                     "B": pd.Categorical([1, 2, 5, None, 5], ordered=True),
                     "C": pd.Categorical(
-                        pd.Series(
-                            pd.date_range(start="2/1/2015", end="2/24/2021", periods=4)
-                        ).append(pd.Series(data=[None], index=[4])),
+                        pd.concat(
+                            [
+                                pd.Series(
+                                    pd.date_range(
+                                        start="2/1/2015", end="2/24/2021", periods=4
+                                    )
+                                ),
+                                pd.Series(data=[None], index=[4]),
+                            ]
+                        ),
                         ordered=True,
                     ),
                     "D": pd.Categorical(
-                        pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                            pd.Series(data=[None], index=[4])
+                        pd.concat(
+                            [
+                                pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                                pd.Series(data=[None], index=[4]),
+                            ]
                         ),
                         ordered=True,
                     ),
@@ -5517,9 +5527,14 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
         # datetime
         pd.DataFrame(
             {
-                "A": pd.Series(
-                    pd.date_range(start="2/1/2015", end="2/24/2016", periods=6)
-                ).append(pd.Series(data=[None])),
+                "A": pd.concat(
+                    [
+                        pd.Series(
+                            pd.date_range(start="2/1/2015", end="2/24/2016", periods=6)
+                        ),
+                        pd.Series(data=[None]),
+                    ]
+                ),
                 "B": [2.2, 5.5, 5.5, 11.1, 12.2, 5.5, 2.2],
             }
         ),

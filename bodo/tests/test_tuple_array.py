@@ -21,7 +21,8 @@ from bodo.tests.utils import check_func
                 (3, 4.0),
                 (-3, -1.2),
                 (None, 9.0),
-            ]
+            ],
+            dtype=object,
         ),
         # homogeneous values
         pytest.param(
@@ -34,7 +35,8 @@ from bodo.tests.utils import check_func
                     (3.1, 4.1),
                     (-3.1, -1.1),
                     (5.1, 9.1),
-                ]
+                ],
+                dtype=object,
             ),
             marks=pytest.mark.slow,
         ),

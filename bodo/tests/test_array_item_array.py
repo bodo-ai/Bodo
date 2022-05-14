@@ -99,7 +99,7 @@ from bodo.tests.utils import check_func
         ),
         # string data with NA
         pytest.param(
-            np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4),
+            np.array([[["1", "2", "8"], ["3"]], [["2", None]]] * 4, dtype=object),
             marks=pytest.mark.slow,
         ),
         # two level nesting
@@ -142,7 +142,9 @@ def array_item_arr_value(request):
 @pytest.fixture(
     params=[
         pytest.param(
-            np.array([[1, 3, None], [2.2], None, ["bodo"], [1, 1], None] * 2),
+            np.array(
+                [[1, 3, None], [2.2], None, ["bodo"], [1, 1], None] * 2, dtype=object
+            ),
             marks=pytest.mark.skip("[BE-57]"),
         )
     ]

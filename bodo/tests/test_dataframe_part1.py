@@ -2252,12 +2252,12 @@ def test_df_reset_index1(df_value, memory_leak_check):
     "test_index",
     [
         # named numeric index
-        pd.Int64Index([3, 1, 2, 4, 6], name="AA"),
+        pd.Index([3, 1, 2, 4, 6], dtype="Int64", name="AA"),
         pytest.param(
-            pd.UInt64Index([3, 1, 2, 4, 6], name="AA"), marks=pytest.mark.slow
+            pd.Index([3, 1, 2, 4, 6], dtype="UInt64", name="AA"), marks=pytest.mark.slow
         ),
         pytest.param(
-            pd.Float64Index([3.1, 1.2, 2.3, 4.4, 6.6], name="AA"),
+            pd.Index([3.1, 1.2, 2.3, 4.4, 6.6], dtype="float64", name="AA"),
             marks=pytest.mark.slow,
         ),
         pytest.param(

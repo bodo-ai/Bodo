@@ -322,7 +322,9 @@ def test_print_dist_slice(memory_leak_check, capsys):
     assert "Empty" not in captured.out
 
     # dataframe case, non-trivial Index
-    bodo.jit(distributed=["df"])(impl2)(pd.DataFrame({"A": np.arange(111)}, index=np.arange(111)+2))
+    bodo.jit(distributed=["df"])(impl2)(
+        pd.DataFrame({"A": np.arange(111)}, index=np.arange(111) + 2)
+    )
     captured = capsys.readouterr()
     assert "Empty" not in captured.out
 
@@ -332,7 +334,9 @@ def test_print_dist_slice(memory_leak_check, capsys):
     assert "[]" not in captured.out
 
     # series case, non-trival Index
-    bodo.jit(distributed=["df"])(impl2)(pd.Series(np.arange(111), index=np.arange(111)+2))
+    bodo.jit(distributed=["df"])(impl2)(
+        pd.Series(np.arange(111), index=np.arange(111) + 2)
+    )
     captured = capsys.readouterr()
     assert "[]" not in captured.out
 
@@ -1768,10 +1772,7 @@ def test_diagnostics_list(capsys, memory_leak_check):
     f(np.ones(3), np.arange(3))
     f.distributed_diagnostics()
     if bodo.get_rank() == 0:
-        assert (
-            "[1D_Block_Var, 1D_Block_Var]"
-            in capsys.readouterr().out
-        )
+        assert "[1D_Block_Var, 1D_Block_Var]" in capsys.readouterr().out
 
 
 def test_sort_output_1D_Var_size(memory_leak_check):
@@ -2098,7 +2099,7 @@ def get_random_decimalarray(n):
 
 def get_random_int64index(n):
     np.random.seed(5)
-    return pd.Int64Index(np.random.randint(0, 10, n))
+    return pd.Index(np.random.randint(0, 10, n), dtype="Int64")
 
 
 @pytest.mark.parametrize(

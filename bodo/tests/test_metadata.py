@@ -18,9 +18,9 @@ from bodo.tests.utils import reduce_sum
 
 @pytest.fixture(
     params=[
-        pd.Int64Index([10, 12]),
-        pd.Float64Index([10.1, 12.1]),
-        pd.UInt64Index([10, 12]),
+        pd.Index([10, 12], dtype="Int64"),
+        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10, 12], dtype="UInt64"),
         pd.Index(["A", "B"] * 4),
         pd.RangeIndex(10),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
@@ -74,9 +74,9 @@ def test_metadata_typemaps():
             [b"32234", b"342432", b"g43b2", b"4t242t", b" weew"] * 2, dtype=object
         ),
         # index types
-        pd.Int64Index([10, 12]),
-        pd.Float64Index([10.1, 12.1]),
-        pd.UInt64Index([10, 12]),
+        pd.Index([10, 12], dtype="Int64"),
+        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10, 12], dtype="UInt64"),
         pd.Index(["A", "B"] * 4),
         pd.RangeIndex(10),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),

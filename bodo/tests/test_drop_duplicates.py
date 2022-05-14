@@ -24,7 +24,8 @@ from bodo.tests.utils import check_func, gen_random_list_string_array
                     [[[4, 5, 6], []], [[1]], [[1, 2]]],
                     [[[4, 5, 6], []], [[1], [4, 3]]],
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             id="nested_array_0_",
         ),
@@ -39,7 +40,8 @@ from bodo.tests.utils import check_func, gen_random_list_string_array
                     [[["x", "yy", "zzz"], []], [["aa"]], [["b", "c"]]],
                     [[["DD", "eee", "ff"], ["E1"]], [["gg"], ["hhhhhhh", "i"]]],
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             id="nested_array_1_",
         ),
@@ -56,7 +58,8 @@ from bodo.tests.utils import check_func, gen_random_list_string_array
                     [{"A": 53, "B": 61}, {"A": 50, "B": 60}, {"A": 501, "B": 604}],
                     [{"A": 52, "B": 61}, {"A": 501, "B": 604}, {"A": 500, "B": 600}],
                 ]
-                * 2
+                * 2,
+                dtype=object,
             ),
             id="nested_array_2_",
         ),

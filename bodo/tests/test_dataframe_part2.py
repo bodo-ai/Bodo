@@ -2699,7 +2699,7 @@ def test_dataframe_empty_with_index():
     def impl(A):
         return bodo.hiframes.pd_dataframe_ext.init_dataframe((), A, ())
 
-    A = pd.Int64Index([1, 3, 4, 11, 16, 19])
+    A = pd.Index([1, 3, 4, 11, 16, 19], dtype="Int64")
     check_func(impl, (A,), py_output=pd.DataFrame(index=A), only_seq=True)
 
 

@@ -981,12 +981,15 @@ def test_mul_scalar(test_unicode, memory_leak_check):
 @pytest.fixture(
     params=[
         pytest.param(
-            np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2),
+            np.array([["a", "bc"], ["a"], ["aaa", "b", "cc"]] * 2, dtype=object),
             marks=pytest.mark.slow,
         ),
         # empty strings, empty lists, NA
         pytest.param(
-            np.array([["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2),
+            np.array(
+                [["a", "bc"], ["a"], [], ["aaa", "", "cc"], [""], np.nan] * 2,
+                dtype=object,
+            ),
             marks=pytest.mark.slow,
         ),
         # large array
@@ -1014,7 +1017,8 @@ def test_mul_scalar(test_unicode, memory_leak_check):
                 ],
                 ["😀🐍,⚡😅😂", "🌶🍔,🏈💔💑💕", "𠁆𠁪,𠀓𠄩𠆶", "🏈,💔,𠄩,😅", "🠂,🠋🢇🄐,🞧"],
             ]
-            * 1000
+            * 1000,
+            dtype=object,
         ),
     ]
 )
