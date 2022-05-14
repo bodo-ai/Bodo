@@ -12,6 +12,7 @@ import pytest
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
+from bodo.pandas_compat import pandas_version
 from bodo.tests.series_common import (  # noqa
     SeriesReplace,
     numeric_series_val,
@@ -26,7 +27,6 @@ from bodo.tests.utils import (
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import is_call_assign
-from bodo.pandas_compat import pandas_version
 
 
 # TODO: integer Null and other Nulls
@@ -47,8 +47,8 @@ from bodo.pandas_compat import pandas_version
         pd.Series(["A", "B", "CC"], name="A"),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-        pd.Int64Index([10, 12, 13]),
-        pd.Int64Index([10, 12, 14], name="A"),
+        pd.Index([10, 12, 13], dtype="Int64"),
+        pd.Index([10, 12, 14], dtype="Int64", name="A"),
     ],
 )
 @pytest.mark.parametrize(
@@ -60,8 +60,8 @@ from bodo.pandas_compat import pandas_version
         np.array([2, 3, 5]),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-        pd.Int64Index([10, 12, 13]),
-        pd.Int64Index([10, 12, 14], name="A"),
+        pd.Index([10, 12, 13], dtype="Int64"),
+        pd.Index([10, 12, 14], dtype="Int64", name="A"),
         pd.RangeIndex(1, 4, 1),
         None,
     ],
@@ -256,7 +256,11 @@ def test_str_binary_series_fillna_inplace_mismatch():
         check_func(impl, (A, A2), check_dtype=False)
 
 
-def series_replace_impl(series, to_replace, value):
+def series_replace_impl(series, to_replace):
+    return series.replace(to_replace)
+
+
+def series_replace_value_impl(series, to_replace, value):
     return series.replace(to_replace, value)
 
 
@@ -283,9 +287,9 @@ def test_replace_series_val(series_val):
 
     if message:
         with pytest.raises(BodoError, match=message):
-            bodo.jit(series_replace_impl)(series, to_replace, value)
+            bodo.jit(series_replace_value_impl)(series, to_replace, value)
     else:
-        check_func(series_replace_impl, (series, to_replace, value))
+        check_func(series_replace_value_impl, (series, to_replace, value))
 
 
 def test_series_replace_bitwidth(memory_leak_check):
@@ -386,7 +390,10 @@ def test_replace_types_supported(series_replace):
     series = series_replace.series
     to_replace = series_replace.to_replace
     value = series_replace.value
-    check_func(series_replace_impl, (series, to_replace, value))
+    if value is None:
+        check_func(series_replace_impl, (series, to_replace))
+    else:
+        check_func(series_replace_value_impl, (series, to_replace, value))
 
 
 @pytest.mark.slow
@@ -451,7 +458,7 @@ def test_replace_types_unsupported(series_replace):
         message = "'to_replace' type must match series type"
 
     with pytest.raises(BodoError, match=message):
-        bodo.jit(series_replace_impl)(series, to_replace, value)
+        bodo.jit(series_replace_value_impl)(series, to_replace, value)
 
 
 @pytest.mark.slow
@@ -459,7 +466,7 @@ def test_replace_float_int_scalar_scalar():
     series = pd.Series([1.0, 2.0, 3.0] * 4)
     to_replace = 1
     value = 2.0
-    check_func(series_replace_impl, (series, to_replace, value))
+    check_func(series_replace_value_impl, (series, to_replace, value))
 
 
 @pytest.mark.slow
@@ -467,7 +474,7 @@ def test_replace_float_int_list_scalar():
     series = pd.Series([1.0, 2.0, 3.0] * 4)
     to_replace = [1, 3, 6]
     value = 4.0
-    check_func(series_replace_impl, (series, to_replace, value))
+    check_func(series_replace_value_impl, (series, to_replace, value))
 
 
 @pytest.mark.slow
@@ -475,7 +482,7 @@ def test_replace_float_int_list_list():
     series = pd.Series([1.0, 2.0, 3.0] * 4)
     to_replace = [1, 3]
     value = [2.0, 4.0]
-    check_func(series_replace_impl, (series, to_replace, value))
+    check_func(series_replace_value_impl, (series, to_replace, value))
 
 
 @pytest.mark.slow
@@ -483,7 +490,7 @@ def test_replace_string_int():
     series = pd.Series(["AZ", "BY", "CX"] * 4)
     to_replace = 1
     value = "DW"
-    check_func(series_replace_impl, (series, to_replace, value))
+    check_func(series_replace_value_impl, (series, to_replace, value))
 
 
 @pytest.mark.slow
@@ -491,7 +498,7 @@ def test_replace_inf_nan():
     series = pd.Series([0, 1, 2, 3] * 4)
     to_replace = [np.inf, -np.inf]
     value = np.nan
-    check_func(series_replace_impl, (series, to_replace, value))
+    check_func(series_replace_value_impl, (series, to_replace, value))
 
 
 @pytest.mark.slow
@@ -2843,7 +2850,10 @@ def test_series_and_or_int(arg1, arg2, memory_leak_check):
     # Pandas doesn't currently support and/or between
     # two Nullable Integer Arrays, or nullable integer Arrays and
     # scalars but it most likely will in the future.
-    assert pandas_version in ((1, 3), (1, 4)), "Check support for pd.IntegerArray's and/or"
+    assert pandas_version in (
+        (1, 3),
+        (1, 4),
+    ), "Check support for pd.IntegerArray's and/or"
 
     # Lambda functions used for setting expected output:
     or_scalar = lambda v, x: v if pd.isna(v) else v | x

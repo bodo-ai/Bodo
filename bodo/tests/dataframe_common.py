@@ -25,14 +25,22 @@ import bodo
                 {
                     "A": pd.Series(["AA", "BB", "", "AA", None], dtype="category"),
                     "B": pd.Series([1, 2, 5, None, 5], dtype="category"),
-                    "C": pd.Series(
-                        pd.date_range(start="2/1/2015", end="2/24/2021", periods=4)
-                    )
-                    .append(pd.Series(data=[None], index=[4]))
-                    .astype("category"),
-                    "D": pd.Series(pd.timedelta_range(start="1 day", periods=4))
-                    .append(pd.Series(data=[None], index=[4]))
-                    .astype("category"),
+                    "C": pd.concat(
+                        [
+                            pd.Series(
+                                pd.date_range(
+                                    start="2/1/2015", end="2/24/2021", periods=4
+                                )
+                            ),
+                            pd.Series(data=[None], index=[4]),
+                        ]
+                    ).astype("category"),
+                    "D": pd.concat(
+                        [
+                            pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                            pd.Series(data=[None], index=[4]),
+                        ]
+                    ).astype("category"),
                 }
             ),
         ),
@@ -203,7 +211,8 @@ def select_dtypes_df(request):
         pytest.param(np.array([2.9, np.nan, 1.4, -1.1, -4.2]), marks=pytest.mark.slow),
         pd.Series([2.1, 5.3, np.nan, -1.0, -3.7], [3, 5, 6, -2, 4], name="C"),
         pytest.param(
-            pd.Int64Index([10, 12, 14, 17, 19], name="A"), marks=pytest.mark.slow
+            pd.Index([10, 12, 14, 17, 19], dtype="Int64", name="A"),
+            marks=pytest.mark.slow,
         ),
         pytest.param(pd.RangeIndex(5), marks=pytest.mark.slow),
         # dataframe

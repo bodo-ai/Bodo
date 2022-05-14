@@ -654,7 +654,7 @@ def test_groupby_unsupported_error_checking(memory_leak_check):
 
 @pytest.mark.slow
 def test_first_args(memory_leak_check):
-    """ Test Groupby.first with arguments """
+    """Test Groupby.first with arguments"""
 
     def impl_numeric_only(df):
         A = df.groupby("A").first(numeric_only=True)
@@ -679,7 +679,7 @@ def test_first_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_last_args(memory_leak_check):
-    """ Test Groupby.last with arguments """
+    """Test Groupby.last with arguments"""
 
     def impl_numeric_only(df):
         A = df.groupby("A").last(numeric_only=True)
@@ -704,7 +704,7 @@ def test_last_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_first_last_unsupported_types(memory_leak_check):
-    """ Test first/last with unsupported Bodo types"""
+    """Test first/last with unsupported Bodo types"""
 
     def impl1(df):
         A = df.groupby("A").first()
@@ -752,7 +752,7 @@ def test_first_last_unsupported_types(memory_leak_check):
 
 @pytest.mark.slow
 def test_mean_args(memory_leak_check):
-    """ Test Groupby.mean with wrong arguments values"""
+    """Test Groupby.mean with wrong arguments values"""
 
     # wrong keyword value test
     def impl_numeric_only(df):
@@ -779,7 +779,7 @@ def test_mean_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_median_args(memory_leak_check):
-    """ Test Groupby.median with wrong arguments values"""
+    """Test Groupby.median with wrong arguments values"""
 
     # wrong keyword value test
     def impl_numeric_only(df):
@@ -809,7 +809,7 @@ def test_median_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_sum_args(memory_leak_check):
-    """ Test Groupby.sum with arguments """
+    """Test Groupby.sum with arguments"""
 
     # wrong keyword value test
     def impl_numeric_only(df):
@@ -842,7 +842,7 @@ def test_sum_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_prod_args(memory_leak_check):
-    """ Test Groupby.prod with arguments """
+    """Test Groupby.prod with arguments"""
 
     # wrong keyword value
     def impl_numeric_only(df):
@@ -882,8 +882,11 @@ def test_prod_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                    pd.Series(data=[None], index=[4])
+                "B": pd.concat(
+                    [
+                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(data=[None], index=[4]),
+                    ]
                 ),
             }
         ),
@@ -940,7 +943,7 @@ def test_prod_args(memory_leak_check):
     ],
 )
 def test_mean_median_unsupported_types(df, memory_leak_check):
-    """ Test mean/median with their unsupported Bodo types"""
+    """Test mean/median with their unsupported Bodo types"""
 
     def impl1(df):
         A = df.groupby("A").mean()
@@ -973,8 +976,11 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                    pd.Series(data=[None], index=[4])
+                "B": pd.concat(
+                    [
+                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(data=[None], index=[4]),
+                    ]
                 ),
             }
         ),
@@ -1035,7 +1041,7 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
     ],
 )
 def test_sum_prod_unsupported_types(df, memory_leak_check):
-    """ Test sum/prod with their unsupported Bodo types"""
+    """Test sum/prod with their unsupported Bodo types"""
 
     def impl1(df):
         A = df.groupby("A").sum()
@@ -1064,7 +1070,7 @@ def test_sum_prod_unsupported_types(df, memory_leak_check):
 
 @pytest.mark.slow
 def test_min_args(memory_leak_check):
-    """ Test Groupby.min with arguments """
+    """Test Groupby.min with arguments"""
 
     # wrong keyword value test
     def impl_numeric_only(df):
@@ -1098,7 +1104,7 @@ def test_min_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_max_args(memory_leak_check):
-    """ Test Groupby.max with arguments """
+    """Test Groupby.max with arguments"""
 
     # wrong keyword value test
     def impl_numeric_only(df):
@@ -1131,7 +1137,7 @@ def test_max_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_min_max_unsupported_types(memory_leak_check):
-    """ Test min/max with unsupported Bodo types"""
+    """Test min/max with unsupported Bodo types"""
 
     def impl1(df):
         A = df.groupby("A").min()
@@ -1166,7 +1172,7 @@ def test_min_max_unsupported_types(memory_leak_check):
 
 @pytest.mark.slow
 def test_var_args(memory_leak_check):
-    """ Test Groupby.var with arguments """
+    """Test Groupby.var with arguments"""
 
     # wrong keyword value test
     def impl_ddof(df):
@@ -1193,7 +1199,7 @@ def test_var_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_std_args(memory_leak_check):
-    """ Test Groupby.std with arguments """
+    """Test Groupby.std with arguments"""
 
     # wrong keyword value test
     def impl_ddof(df):
@@ -1223,7 +1229,7 @@ def test_std_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_idxmin_args(memory_leak_check):
-    """ Test Groupby.idxmin with arguments """
+    """Test Groupby.idxmin with arguments"""
 
     # wrong keyword value test
     def impl_axis(df):
@@ -1256,7 +1262,7 @@ def test_idxmin_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_idxmax_args(memory_leak_check):
-    """ Test Groupby.idxmax with arguments """
+    """Test Groupby.idxmax with arguments"""
 
     # wrong keyword value test
     def impl_axis(df):
@@ -1302,8 +1308,11 @@ def test_idxmax_args(memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                    pd.Series(data=[None], index=[4])
+                "B": pd.concat(
+                    [
+                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(data=[None], index=[4]),
+                    ]
                 ),
             }
         ),
@@ -1360,7 +1369,7 @@ def test_idxmax_args(memory_leak_check):
     ],
 )
 def test_var_std_unsupported_types(df, memory_leak_check):
-    """ Test var/std with their unsupported Bodo types"""
+    """Test var/std with their unsupported Bodo types"""
 
     def impl1(df):
         A = df.groupby("A").var()
@@ -1411,8 +1420,11 @@ def test_var_std_unsupported_types(df, memory_leak_check):
         pd.DataFrame(
             {
                 "A": [1, 2, 3, 2, 1],
-                "B": pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                    pd.Series(data=[None], index=[4])
+                "B": pd.concat(
+                    [
+                        pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                        pd.Series(data=[None], index=[4]),
+                    ]
                 ),
             }
         ),
@@ -1463,7 +1475,7 @@ def test_var_std_unsupported_types(df, memory_leak_check):
     ],
 )
 def test_idxmin_idxmax_unsupported_types(df, memory_leak_check):
-    """ Test idxmin/idxmax with their unsupported Bodo types"""
+    """Test idxmin/idxmax with their unsupported Bodo types"""
 
     def impl1(df):
         A = df.groupby("A").idxmin()
@@ -1493,7 +1505,7 @@ def test_idxmin_idxmax_unsupported_types(df, memory_leak_check):
 # ------------------------------ df.groupby().cumulatives()------------------------------ #
 @pytest.mark.slow
 def test_cumultative_args(memory_leak_check):
-    """ Test Groupby.cumultatives (sum, prod, min, max) with arguments """
+    """Test Groupby.cumultatives (sum, prod, min, max) with arguments"""
 
     # keyword axis=1 cummin
     def impl_cummin_axis_kwargs(df):
@@ -1675,7 +1687,7 @@ def test_cumulatives_df(request):
 
 
 def test_cumulatives_unsupported_types(test_cumulatives_df, memory_leak_check):
-    """ Test cummin, cummax, cumprod, and cumsum with their unsupported Bodo types"""
+    """Test cummin, cummax, cumprod, and cumsum with their unsupported Bodo types"""
 
     def impl1(df):
         A = df.groupby("A").cummin()
@@ -1721,7 +1733,7 @@ def test_cumulatives_unsupported_types(test_cumulatives_df, memory_leak_check):
 # ------------------------------ df.groupby().count()/size()------------------------------ #
 @pytest.mark.slow
 def test_count_size_args(memory_leak_check):
-    """ Test Groupby.size/count with arguments """
+    """Test Groupby.size/count with arguments"""
 
     # keyword axis=1
     def impl_size_kwargs(df):
@@ -1777,7 +1789,7 @@ def test_count_size_args(memory_leak_check):
     ],
 )
 def test_count_unsupported_types(df, memory_leak_check):
-    """ Test count with their unsupported Bodo types"""
+    """Test count with their unsupported Bodo types"""
 
     def impl1(df):
         A = df.groupby("A").count()
@@ -1794,7 +1806,7 @@ def test_count_unsupported_types(df, memory_leak_check):
 
 @pytest.mark.slow
 def test_shift_args(memory_leak_check):
-    """ Test Groupby.shift with wrong arguments values"""
+    """Test Groupby.shift with wrong arguments values"""
 
     # wrong freq keyword value test
     def impl_freq(df):
@@ -1849,7 +1861,7 @@ def test_shift_args(memory_leak_check):
 )
 @pytest.mark.slow
 def test_nunique_shift_unsupported_types(df, memory_leak_check):
-    """ Test nunique/shift with their unsupported Bodo types"""
+    """Test nunique/shift with their unsupported Bodo types"""
 
     def impl_nunique(df):
         A = df.groupby("A").nunique()
@@ -1871,7 +1883,7 @@ def test_nunique_shift_unsupported_types(df, memory_leak_check):
 # ------------------------------ df.groupby().agg()------------------------------ #
 @pytest.mark.slow
 def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):
-    """ Test groupby.agg with unsupported types"""
+    """Test groupby.agg with unsupported types"""
 
     def impl1(df):
         A = df.groupby("A").agg(lambda x: x.sum())
@@ -1904,7 +1916,7 @@ def test_cum_noncum_mix(memory_leak_check):
 # ------------------------------ df.groupby().transform()------------------------------ #
 @pytest.mark.slow
 def test_transform_args(memory_leak_check):
-    """ Test Groupby.transform with unsupported arguments """
+    """Test Groupby.transform with unsupported arguments"""
 
     # unsupported function
     def impl_func(df):
@@ -1940,7 +1952,7 @@ def test_transform_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_transform_unsupported_type(memory_leak_check):
-    """ Test Groupby.transform('sum') with unsupported column type"""
+    """Test Groupby.transform('sum') with unsupported column type"""
 
     def impl(df):
         A = df.groupby("A").transform("sum")
@@ -1959,7 +1971,7 @@ def test_transform_unsupported_type(memory_leak_check):
 # ------------------------------ df.groupby().head()------------------------------ #
 @pytest.mark.slow
 def test_head_negative_value(memory_leak_check):
-    """ Test Groupby.head() with -ve value"""
+    """Test Groupby.head() with -ve value"""
 
     def impl(df):
         A = df.groupby("A").head(-2)

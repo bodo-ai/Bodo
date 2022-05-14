@@ -101,14 +101,24 @@ from bodo.utils.typing import BodoError, BodoWarning
                 "A": pd.Categorical(["AA", "BB", "", "C", None], ordered=True),
                 "B": pd.Categorical([1, 2, 4, None, 5], ordered=True),
                 "C": pd.Categorical(
-                    pd.Series(
-                        pd.date_range(start="2/1/2015", end="2/24/2021", periods=4)
-                    ).append(pd.Series(data=[None], index=[4])),
+                    pd.concat(
+                        [
+                            pd.Series(
+                                pd.date_range(
+                                    start="2/1/2015", end="2/24/2021", periods=4
+                                )
+                            ),
+                            pd.Series(data=[None], index=[4]),
+                        ]
+                    ),
                     ordered=True,
                 ),
                 "D": pd.Categorical(
-                    pd.Series(pd.timedelta_range(start="1 day", periods=4)).append(
-                        pd.Series(data=[None], index=[4])
+                    pd.concat(
+                        [
+                            pd.Series(pd.timedelta_range(start="1 day", periods=4)),
+                            pd.Series(data=[None], index=[4]),
+                        ]
                     ),
                     ordered=True,
                 ),

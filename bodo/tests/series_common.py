@@ -139,15 +139,23 @@ GLOBAL_VAL = 2
             id="series_val19",
         ),
         pytest.param(
-            pd.Series(pd.date_range(start="1/1/2018", end="1/10/2018", periods=9))
-            .append(pd.Series([None]))
-            .astype("category"),
+            pd.concat(
+                [
+                    pd.Series(
+                        pd.date_range(start="1/1/2018", end="1/10/2018", periods=9)
+                    ),
+                    pd.Series([None]),
+                ]
+            ).astype("category"),
             id="series_val20",
         ),
         pytest.param(
-            pd.Series(pd.timedelta_range(start="1 day", periods=9))
-            .append(pd.Series([None]))
-            .astype(pd.CategoricalDtype(ordered=True)),
+            pd.concat(
+                [
+                    pd.Series(pd.timedelta_range(start="1 day", periods=9)),
+                    pd.Series([None]),
+                ]
+            ).astype(pd.CategoricalDtype(ordered=True)),
             id="series_val21",
         ),
         pytest.param(

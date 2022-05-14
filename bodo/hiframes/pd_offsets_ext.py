@@ -463,8 +463,6 @@ def overload_mul_date_offset_types(lhs, rhs):
         def impl(lhs, rhs):  # pragma: no cover
             n = lhs.n * rhs
             normalize = lhs.normalize
-            nanoseconds = lhs._nanoseconds
-            nanosecond = lhs._nanosecond
             # Make sure has_kws behavior doesn't change
             if lhs._has_kws:
                 years = lhs._years
@@ -483,6 +481,8 @@ def overload_mul_date_offset_types(lhs, rhs):
                 minute = lhs._minute
                 second = lhs._second
                 microsecond = lhs._microsecond
+                nanoseconds = lhs._nanoseconds
+                nanosecond = lhs._nanosecond
                 return pd.tseries.offsets.DateOffset(
                     n,
                     normalize,
@@ -506,9 +506,7 @@ def overload_mul_date_offset_types(lhs, rhs):
                     nanosecond,
                 )
             else:
-                return pd.tseries.offsets.DateOffset(
-                    n, normalize, nanoseconds=nanoseconds, nanosecond=nanosecond
-                )
+                return pd.tseries.offsets.DateOffset(n, normalize)
 
     # rhs is the offset
     if rhs in [week_type, month_end_type, month_begin_type, date_offset_type]:
@@ -724,8 +722,7 @@ def lower_constant_date_offset(context, builder, ty, pyval):
     for i, field in enumerate(date_offset_fields):
         if hasattr(pyval, field):
             f = context.get_constant(types.int64, getattr(pyval, field))
-            if field != "nanoseconds" and field != "nanosecond":
-                has_kws = True
+            has_kws = True
         else:
             f = context.get_constant(types.int64, default_values[i])
         fields.append(f)
@@ -996,6 +993,8 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
                 second = dateoffset._second
             if dateoffset._microsecond != -1:
                 microsecond = dateoffset._microsecond
+            if dateoffset._nanosecond != -1:
+                nanosecond = dateoffset._nanosecond
 
             ts = pd.Timestamp(
                 year=year,
@@ -1009,6 +1008,9 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
             )
 
             # Pandas ignores nanosecond/nanoseconds because it uses relative delta
+            # However, starting 1.4 it adds it if nanoseconds is used alone or with
+            # non _kwds_use_relativedelta arguments
+            # Bodo opts to always include nanoseconds and nanosecond
             td = pd.Timedelta(
                 days=dateoffset._days + 7 * dateoffset._weeks,
                 hours=dateoffset._hours,
@@ -1016,6 +1018,7 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
                 seconds=dateoffset._seconds,
                 microseconds=dateoffset._microseconds,
             )
+            td = td + pd.Timedelta(dateoffset._nanoseconds, unit="ns")
             if sign == -1:
                 td = -td
 
@@ -1111,8 +1114,6 @@ def overload_neg(lhs):
             # Negate only n
             n = -lhs.n
             normalize = lhs.normalize
-            nanoseconds = lhs._nanoseconds
-            nanosecond = lhs._nanosecond
             # Make sure has_kws behavior doesn't change
             if lhs._has_kws:
                 years = lhs._years
@@ -1131,6 +1132,8 @@ def overload_neg(lhs):
                 minute = lhs._minute
                 second = lhs._second
                 microsecond = lhs._microsecond
+                nanoseconds = lhs._nanoseconds
+                nanosecond = lhs._nanosecond
                 return pd.tseries.offsets.DateOffset(
                     n,
                     normalize,
@@ -1154,9 +1157,7 @@ def overload_neg(lhs):
                     nanosecond,
                 )
             else:
-                return pd.tseries.offsets.DateOffset(
-                    n, normalize, nanoseconds=nanoseconds, nanosecond=nanosecond
-                )
+                return pd.tseries.offsets.DateOffset(n, normalize)
 
     else:
         # not an offset value, should be handled elsewhere
