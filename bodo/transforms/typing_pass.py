@@ -42,6 +42,7 @@ from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
+from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
     compile_func_single_block,
     container_update_method_names,
@@ -311,8 +312,6 @@ class TypingTransforms:
         self.rhs_labels = {}
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
-        # variables that are transformed away at some point and are potentially dead
-        self._transformed_vars = set()
         # variables that are potentially list/set/dict and updated inplace
         self._updated_containers = {}
         # contains variables that need to be constant (e.g. index of df getitem) but
@@ -373,37 +372,9 @@ class TypingTransforms:
         if self.change_required and not self.changed and not self.needs_transform:
             self._try_unroll_const_loop()
 
-        # find transformed variables that are not used anymore so they can be removed
-        # removing cases like agg dicts may be necessary since not type stable
-        remove_vars = self._transformed_vars.copy()
-        for block in self.func_ir.blocks.values():
-            for stmt in block.body:
-                # ignore dead definitions of variables
-                if (
-                    isinstance(stmt, ir.Assign)
-                    and stmt.target.name in self._transformed_vars
-                ):
-                    continue
-                # remove variables that are used somewhere else
-                remove_vars -= set(v.name for v in stmt.list_vars())
-
-        # add dummy variable with constant zero in first block after arg nodes to use
-        # below
-        first_block = self.func_ir.blocks[min(self.func_ir.blocks.keys())]
-        zero_var = ir.Var(first_block.scope, mk_unique_var("zero"), first_block.loc)
-        const_assign = ir.Assign(
-            ir.Const(0, first_block.loc), zero_var, first_block.loc
-        )
-        self.func_ir._definitions[zero_var.name] = [const_assign.value]
-        first_block.body.insert(len(self.arg_types), const_assign)
-
-        # change transformed variable to a trivial case to enable type inference
-        for v in remove_vars:
-            rhs = get_definition(self.func_ir, v)
-            if is_expr(rhs, "build_map"):
-                rhs.items = [(zero_var, zero_var)]
-            if is_expr(rhs, "build_list"):
-                rhs.items = [zero_var]
+        # Remove any transformed variables that are not used anymore
+        # since cases like agg dicts may not be type stable
+        mini_dce(self.func_ir)
 
         return self.changed, self.needs_transform
 
@@ -488,8 +459,6 @@ class TypingTransforms:
                 rhs.index = val
             else:
                 rhs.index = new_var
-            # old index var is not used anymore
-            self._transformed_vars.add(idx.name)
             self.changed = True
             nodes.append(assign)
             return nodes
@@ -3147,10 +3116,6 @@ class TypingTransforms:
             # replace argument variable with a new variable holding constant
             new_var = _create_const_var(val, var.name, var.scope, rhs.loc, nodes)
             set_call_expr_arg(new_var, rhs.args, kws, arg_no, arg_name)
-            # var is not used here anymore, add to _transformed_vars so it can
-            # potentially be removed since some dictionaries (e.g. in agg) may not be
-            # type stable
-            self._add_to_transformed_vars(var.name)
             self.changed = True
 
         rhs.kws = list(kws.items())
@@ -3801,24 +3766,6 @@ class TypingTransforms:
                 == ("bool", "builtins")
             )
         )
-
-    def _add_to_transformed_vars(self, varname):
-        """add variable 'varname' to the set of transformed variables to be removed
-        later to avoid typing errors.
-        If the variable is a constant dict, it looks at the values and removes
-        list of functions since they can fail in Numba's typing.
-        """
-        var_def = guard(get_definition, self.func_ir, varname)
-        if is_expr(var_def, "build_map"):
-            for v in var_def.items:
-                v_def = guard(get_definition, self.func_ir, v[1])
-                if is_expr(v_def, "build_list"):
-                    if any(
-                        is_const_func_type(self.typemap.get(a.name, None))
-                        for a in v_def.items
-                    ):
-                        self._transformed_vars.add(v[1].name)
-        self._transformed_vars.add(varname)
 
     def _is_na_filter_pushdown_func(self, index_def, index_call_name):
         """
