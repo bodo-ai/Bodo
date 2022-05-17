@@ -100,16 +100,18 @@ def parse_dbtype(con_str):
     Converts a constant string used for db_type to a standard representation
     for each database.
     """
+    parseresult = urlparse(con_str)
+    db_type = parseresult.scheme
+    con_paswd = parseresult.password
     # urlparse skips oracle since its handle has _
     # which is not in `scheme_chars`
     # oracle+cx_oracle
     if con_str.startswith("oracle+cx_oracle://"):
-        return "oracle"
-    db_type = urlparse(con_str).scheme
+        return "oracle", con_paswd
     if db_type == "mysql+pymysql":
         # Standardize mysql to always use "mysql"
-        return "mysql"
-    return db_type
+        return "mysql", con_paswd
+    return db_type, con_paswd
 
 
 def remove_dead_sql(
