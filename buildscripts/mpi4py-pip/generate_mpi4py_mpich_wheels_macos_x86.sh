@@ -17,7 +17,7 @@ git apply $PATH_TO_BODO_SRC/buildscripts/mpi4py-pip/patch-3.1.2.diff
 # append MPICH license to mpi4py license
 cat $PATH_TO_BODO_SRC/buildscripts/mpi4py-pip/mpich_COPYRIGHT.txt >> LICENSE.rst
 
-for PYTHON_VER in "3.8" "3.9"
+for PYTHON_VER in "3.8" "3.9" "3.10"
 do
     conda create -n BUILDPIP python=$PYTHON_VER -c conda-forge -y
     conda activate BUILDPIP

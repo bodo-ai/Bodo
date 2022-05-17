@@ -1,10 +1,9 @@
 #!/bin/bash
 set -e -u -x
 
-# We don't support Python 3.6, 3.7 or 3.10 (because of Bodo or a dependency of Bodo)
+# We don't support Python 3.6, 3.7 (because of Bodo or a dependency of Bodo)
 rm -rf /opt/python/cp36-cp36m
 rm -rf /opt/python/cp37-cp37m
-rm -rf /opt/python/cp310-cp310
 
 cd /bodo
 # obfuscate

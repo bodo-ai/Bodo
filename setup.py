@@ -579,6 +579,7 @@ setup(
         "Intended Audience :: Developers",
         "Operating System :: POSIX :: Linux",
         "Operating System :: Microsoft :: Windows",
+        "Operating System :: MacOS :: MacOS X",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
