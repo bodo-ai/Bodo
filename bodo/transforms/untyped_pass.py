@@ -2926,7 +2926,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
     to type a SQL query.
     """
     # find db type
-    db_type = bodo.ir.sql_ext.parse_dbtype(con_const)
+    db_type, con_paswd = bodo.ir.sql_ext.parse_dbtype(con_const)
     # Whether SQL statement is SELECT query
     is_select_query = False
     # Operations that create or edit objects don't return data.

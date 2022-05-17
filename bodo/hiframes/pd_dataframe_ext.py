@@ -3828,7 +3828,7 @@ def to_sql_exception_guard(
     """Call of to_sql and guard the exception and return it as string if error happens"""
     err_msg = "all_ok"
     # Find the db_type to determine if we are using Snowflake
-    db_type = bodo.ir.sql_ext.parse_dbtype(con)
+    db_type, con_paswd = bodo.ir.sql_ext.parse_dbtype(con)
     if _is_parallel and bodo.get_rank() == 0:
         # Default number of rows to write to create the table. This is done in case
         # rank 0 has a large number of rows because that delays writing on other ranks.
@@ -3857,7 +3857,6 @@ def to_sql_exception_guard(
     df_columns_original = df.columns
     try:
         if db_type == "snowflake":
-            con_paswd = parseresult.password
             # replacing password only if special characters in password and password is not the same as username
             if con_paswd and con.count(con_paswd) == 1:
                 con = con.replace(con_paswd, quote(con_paswd))
