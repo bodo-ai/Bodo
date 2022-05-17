@@ -5756,3 +5756,18 @@ def test_head_idx(datapath, memory_leak_check):
         return A
 
     check_func(impl1, ())
+
+
+def test_groupby_asindex_no_values(memory_leak_check):
+    """
+    Test for BE-434. Verifies that groupby(as_index=False)
+    works when there aren't any output columns.
+    """
+
+    def test_impl(df):
+        return df.groupby("A", as_index=False).min()
+
+    df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
+
+    # Specify sort_output because the ordering may not match.
+    check_func(test_impl, (df_empty,), sort_output=True, reset_index=True)
