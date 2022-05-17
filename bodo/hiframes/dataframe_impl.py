@@ -109,6 +109,7 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
     is_overload_zero,
+    is_scalar_type,
     parse_dtype,
     raise_bodo_error,
     unliteral_val,
@@ -4438,16 +4439,11 @@ def overload_dataframe_melt(
     col_level=None,
     ignore_index=True,
 ):
-    # TODO [BE-2536]: support var_name and value_name
     unsupported_args = dict(
-        var_name=var_name,
-        value_name=value_name,
         col_level=col_level,
         ignore_index=ignore_index,
     )
     arg_defaults = dict(
-        var_name=None,
-        value_name="value",
         col_level=None,
         ignore_index=True,
     )
@@ -4460,13 +4456,34 @@ def overload_dataframe_melt(
     )
 
     if not isinstance(frame, DataFrameType):
-        raise BodoError("pandas.melt(): 'frame' argument must be a DataFrame")
+        raise BodoError("pandas.melt(): 'frame' argument must be a DataFrame.")
     if not is_overload_none(id_vars) and not is_literal_type(id_vars):
-        raise BodoError("DataFrame.melt(): 'id_vars', if specified, must be a literal")
-    if not is_overload_none(value_vars) and not is_literal_type(value_vars):
-        raise BodoError(
-            "DataFrame.melt(): 'value_vars', if specified, must be a literal"
+        raise_bodo_error(
+            "DataFrame.melt(): 'id_vars', if specified, must be a literal."
         )
+    if not is_overload_none(value_vars) and not is_literal_type(value_vars):
+        raise_bodo_error(
+            "DataFrame.melt(): 'value_vars', if specified, must be a literal."
+        )
+    if not is_overload_none(var_name) and not (
+        is_literal_type(var_name)
+        and (is_scalar_type(var_name) or isinstance(value_name, types.Omitted))
+    ):
+        raise_bodo_error(
+            "DataFrame.melt(): 'var_name', if specified, must be a literal."
+        )
+    if value_name != "value" and not (
+        is_literal_type(value_name)
+        and (is_scalar_type(value_name) or isinstance(value_name, types.Omitted))
+    ):
+        raise_bodo_error(
+            "DataFrame.melt(): 'value_name', if specified, must be a literal."
+        )
+
+    var_name = (
+        get_literal_value(var_name) if not is_overload_none(var_name) else "variable"
+    )
+    value_name = get_literal_value(value_name) if value_name != "value" else "value"
 
     id_lit = get_literal_value(id_vars) if not is_overload_none(id_vars) else []
     if not isinstance(id_lit, (list, tuple)):
@@ -4475,7 +4492,7 @@ def overload_dataframe_melt(
     for c in id_lit:
         if c not in frame.columns:
             raise BodoError(
-                f"DataFrame.melt(): 'id_vars' column {c} not found in {frame}"
+                f"DataFrame.melt(): 'id_vars' column {c} not found in {frame}."
             )
 
     col_map = {c: i for i, c in enumerate(frame.columns)}
@@ -4511,7 +4528,7 @@ def overload_dataframe_melt(
     for c in value_lit:
         if c not in frame.columns:
             raise BodoError(
-                f"DataFrame.melt(): 'value_vars' column {c} not found in {frame}"
+                f"DataFrame.melt(): 'value_vars' column {c} not found in {frame}."
             )
     if not (
         all(isinstance(c, int) for c in value_lit)
@@ -4574,7 +4591,7 @@ def overload_dataframe_melt(
         ", " if len(id_idxs) > 0 else ""
     )
     data_args = id_args + "var_col, val_col"
-    columns = tuple(id_lit + ["variable", "value"])
+    columns = tuple(id_lit + [var_name, value_name])
     index = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(frame) * {len(value_lit)}, 1, None)"
     return _gen_init_df(
         header,

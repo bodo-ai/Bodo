@@ -1775,7 +1775,12 @@ class TypingTransforms:
             "explode": [
                 (0, "column"),
             ],
-            "melt": [(0, "id_vars"), (1, "value_vars")],
+            "melt": [
+                (0, "id_vars"),
+                (1, "value_vars"),
+                (2, "var_name"),
+                (3, "value_name"),
+            ],
             "memory_usage": [(0, "index")],
         }
         if func_name in df_call_const_args:
@@ -2331,7 +2336,12 @@ class TypingTransforms:
         top_level_call_const_args = {
             "concat": [(1, "axis"), (3, "ignore_index")],
             "DataFrame": [(2, "columns")],
-            "melt": [(1, "id_vars"), (2, "value_vars")],
+            "melt": [
+                (1, "id_vars"),
+                (2, "value_vars"),
+                (3, "var_name"),
+                (4, "value_name"),
+            ],
             "merge": [
                 (2, "how"),
                 (3, "on"),

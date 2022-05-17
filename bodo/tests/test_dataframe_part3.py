@@ -1453,6 +1453,33 @@ def test_df_melt_diff_types(df_dict, memory_leak_check):
         )
 
 
+def test_df_melt_var_value_names(memory_leak_check):
+    def impl(df, var_name, value_name):
+        return df.melt(["A", "B"], "C", var_name=var_name, value_name=value_name)
+
+    df = pd.DataFrame(
+        {
+            "A": ["a", "b", "c"] * 4,
+            "B": ["c", "d", "e"] * 4,
+            "C": [1, 3, 5] * 4,
+            "D": [2, 4, 6] * 4,
+        }
+    )
+
+    check_func(impl, (df, "some", "name"), sort_output=True, reset_index=True)
+    check_func(
+        impl,
+        (df, 2, "name"),
+        sort_output=True,
+        reset_index=True,
+        py_output=df.melt(["A", "B"], "C").rename(
+            columns={"variable": 2, "value": "name"}
+        ),
+    )
+    # TODO: Pandas produces KeyError
+    # check_func(impl, (df, "some", None), sort_output=True, reset_index=True, py_output=df.melt(["A","B"], "C").rename(columns={"variable":"some","value":None}))
+
+
 def test_df_melt_many_columns(memory_leak_check):
     def impl(df):
         return df.melt(id_vars=["col0", "col1"], value_vars=None)
