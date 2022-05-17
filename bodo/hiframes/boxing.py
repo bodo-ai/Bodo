@@ -803,7 +803,15 @@ def _infer_series_dtype(S, array_metadata=None):
     # TODO: use this if all the values in S.values are NULL as well
     if S.dtype == np.dtype("O"):
         if len(S.values) == 0:
-            if (
+            if array_metadata != None:
+                # If the metadata is passed by the dataframe, it is the type of the underlying array.
+
+                # TODO: array metadata is going to return the type of the array, not the
+                # type of the Series. This will return different types for null integer,
+                # but for object series, I can't think of a situation in which the
+                # dtypes would be different.
+                return _dtype_from_type_enum_list(array_metadata).dtype
+            elif (
                 hasattr(S, "_bodo_meta")
                 and S._bodo_meta is not None
                 and "type_metadata" in S._bodo_meta
@@ -814,14 +822,6 @@ def _infer_series_dtype(S, array_metadata=None):
                 # If the Series itself has the typing metadata, it will be the original
                 # dtype of the series
                 return _dtype_from_type_enum_list(type_list)
-            elif array_metadata != None:
-                # If the metadata is passed by the dataframe, it is the type of the underlying array.
-
-                # TODO: array metadata is going to return the type of the array, not the
-                # type of the Series. This will return different types for null integer,
-                # but for object series, I can't think of a situation in which the
-                # dtypes would be different.
-                return _dtype_from_type_enum_list(array_metadata).dtype
 
         return numba.typeof(S.values).dtype
 

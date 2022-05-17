@@ -78,7 +78,7 @@ def test_read_parquet_cache_fname_arg(
     check_caching(impl, (fname,), is_cached, fn_distribution, py_output=py_out)
 
 
-def test_read_parquet_cache_fname_arg(
+def test_read_parquet_cache_fname_arg2(
     fn_distribution, is_cached, datapath, memory_leak_check
 ):
     """
