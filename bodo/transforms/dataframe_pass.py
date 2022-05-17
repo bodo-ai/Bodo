@@ -1517,11 +1517,18 @@ class DataFramePass:
             )
         elif isinstance(out_typ.index, RangeIndexType):
             # as_index=False case generates trivial RangeIndex
+            # If there are no output columns, we get the length
+            # from the out keys. See test_groupby_asindex_no_values
+            output_column_ir_var = (
+                list(df_out_vars.values())[0]
+                if len(df_out_vars) > 0
+                else out_key_vars[0]
+            )
             nodes += compile_func_single_block(
                 eval(
                     "lambda A: bodo.hiframes.pd_index_ext.init_range_index(0, len(A), 1, None)"
                 ),
-                (list(df_out_vars.values())[0],),
+                (output_column_ir_var,),
                 None,
                 self,
             )
