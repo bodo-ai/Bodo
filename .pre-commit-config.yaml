@@ -1,23 +1,33 @@
 repos:
--   repo: https://github.com/psf/black
+  - repo: https://github.com/psf/black
     rev: 22.3.0
     hooks:
-    -   id: black
+      - id: black
         language_version: python3
--   repo: https://gitlab.com/pycqa/flake8
+  - repo: https://gitlab.com/pycqa/flake8
     rev: 3.8.3
     hooks:
-    - id: flake8
-      language: python_venv
-      additional_dependencies: [flake8-comprehensions>=3.1.0]
--   repo: https://github.com/PyCQA/isort
+      - id: flake8
+        language: python_venv
+        additional_dependencies: [flake8-comprehensions>=3.1.0]
+  - repo: https://github.com/PyCQA/isort
     rev: 5.5.2
     hooks:
-    - id: isort
-      language: python_venv
--   repo: https://github.com/myint/autoflake
+      - id: isort
+        language: python_venv
+  - repo: https://github.com/myint/autoflake
     rev: v1.4
     hooks:
-    - id: autoflake
-      args: ['--in-place', '--remove-all-unused-imports', '--exclude', 'bodo/__init__.py']
-
+      - id: autoflake
+        args:
+          [
+            "--in-place",
+            "--remove-all-unused-imports",
+            "--exclude",
+            "bodo/__init__.py",
+          ]
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.3.0
+    hooks:
+      - id: pretty-format-java
+        args: ["--autofix", "--google-java-formatter-version", "1.9"]
