@@ -4,8 +4,11 @@ representations (Arrow and Bodo)
 """
 from collections import namedtuple
 
+import jpype
+
 import bodoicebergconnector.bodo_apis.jpype_support
 from bodoicebergconnector.bodo_apis.config import DEFAULT_PORT
+from bodoicebergconnector.bodo_apis.errors import IcebergError
 
 # Types I didn't figure out how to test with Spark:
 #   FixedType
@@ -73,25 +76,29 @@ def get_bodo_schemas(port, warehouse, schema, table):
     """
     from bodo.io.parquet_pio import _get_numba_typ_from_pa_typ
 
-    bodo_iceberg_table_reader = (
-        bodoicebergconnector.bodo_apis.jpype_support.get_iceberg_java_table_reader(
-            warehouse,
-            schema,
-            table,
+    try:
+        bodo_iceberg_table_reader = (
+            bodoicebergconnector.bodo_apis.jpype_support.get_iceberg_java_table_reader(
+                warehouse,
+                schema,
+                table,
+            )
         )
-    )
 
-    # get Iceberg schema
-    java_schema = bodo_iceberg_table_reader.getIcebergSchema()
-    py_schema = java_schema_to_python(java_schema)
+        # get Iceberg schema
+        java_schema = bodo_iceberg_table_reader.getIcebergSchema()
+        py_schema = java_schema_to_python(java_schema)
 
-    pyarrow_schema = get_pyarrow_schema(
-        port, warehouse, schema, table, bodo_iceberg_table_reader
-    )
-    bodo_types = [
-        _get_numba_typ_from_pa_typ(pyarrow_schema.field(name), False, True, None)[0]
-        for name in pyarrow_schema.names
-    ]
+        pyarrow_schema = get_pyarrow_schema(
+            port, warehouse, schema, table, bodo_iceberg_table_reader
+        )
+        bodo_types = [
+            _get_numba_typ_from_pa_typ(pyarrow_schema.field(name), False, True, None)[0]
+            for name in pyarrow_schema.names
+        ]
+
+    except jpype.JException as e:
+        raise IcebergError.from_java_exception(e)
 
     return (
         BodoIcebergSchema(

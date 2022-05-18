@@ -4,8 +4,11 @@ Python Objects usable inside Bodo.
 """
 from collections import namedtuple
 
+import jpype
+
 import bodoicebergconnector.bodo_apis.jpype_support
 from bodoicebergconnector.bodo_apis.config import DEFAULT_PORT
+from bodoicebergconnector.bodo_apis.errors import IcebergError
 from bodoicebergconnector.bodo_apis.filter_to_java import convert_expr_to_java_parsable
 
 # Named Tuple for Parquet info
@@ -37,15 +40,22 @@ def get_bodo_parquet_info(port, warehouse, schema, table, filters):
 
     Port is unused and kept in case we opt to switch back to py4j
     """
-    bodo_iceberg_table_reader = (
-        bodoicebergconnector.bodo_apis.jpype_support.get_iceberg_java_table_reader(
-            warehouse,
-            schema,
-            table,
+    try:
+        bodo_iceberg_table_reader = (
+            bodoicebergconnector.bodo_apis.jpype_support.get_iceberg_java_table_reader(
+                warehouse,
+                schema,
+                table,
+            )
         )
-    )
-    filter_expr = convert_expr_to_java_parsable(filters)
-    java_parquet_infos = get_java_parquet_info(bodo_iceberg_table_reader, filter_expr)
+
+        filter_expr = convert_expr_to_java_parsable(filters)
+        java_parquet_infos = get_java_parquet_info(
+            bodo_iceberg_table_reader, filter_expr
+        )
+    except jpype.JException as e:
+        raise IcebergError.from_java_exception(e)
+
     return java_to_python(java_parquet_infos)
 
 
