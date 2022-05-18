@@ -2255,7 +2255,8 @@ class DistributedAnalysis:
         # We support mappable prefixes that don't need to be separate functions.
         if func_name[0] == "~":
             func_name = func_name[1:]
-        if func_name == "bodo.libs.array_ops.array_op_isna":
+        # Note: This isn't an elif because the ~ may modify the name
+        if func_name in ("bodo.libs.array_ops.array_op_isna", "copy"):
             # Not currently in the code because it is otherwise inlined.
             # This should be included somewhere.
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

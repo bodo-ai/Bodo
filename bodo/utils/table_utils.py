@@ -8,7 +8,9 @@ from numba.core import types
 import bodo
 from bodo.hiframes.table import TableType
 from bodo.utils.typing import (
+    get_overload_const_bool,
     get_overload_const_str,
+    is_overload_constant_bool,
     is_overload_constant_str,
     is_overload_none,
     raise_bodo_error,
@@ -16,7 +18,9 @@ from bodo.utils.typing import (
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def generate_mappable_table_func(table, func_name, out_arr_typ, used_cols=None):
+def generate_mappable_table_func(
+    table, func_name, out_arr_typ, is_method, used_cols=None
+):
     """
     Function to help table implementations for mapping functions across
     column types and returning a Table of the same size.
@@ -32,7 +36,9 @@ def generate_mappable_table_func(table, func_name, out_arr_typ, used_cols=None):
                  This must be a string literal.
                  Note: this can also be a function + ~.
     out_arr_typ -- Type of the output column, assumed to be a single
-                   shared type for all columns
+                   shared type for all columns. If `types.none` then we maintain
+                   the existing type
+    is_method -- Should the passed in name be called as a function or a method for each array.
     used_cols -- Which columns are used/alive. If None presumed that every column
                  is alive. This is set in compiler optimizations and should not
                  be passed manually.
@@ -41,22 +47,39 @@ def generate_mappable_table_func(table, func_name, out_arr_typ, used_cols=None):
         raise_bodo_error(
             "generate_mappable_table_func(): func_name must be a constant string"
         )
+    if not is_overload_constant_bool(is_method):
+        raise_bodo_error(
+            "generate_mappable_table_func(): is_method must be a constant boolean"
+        )
 
     func_name = get_overload_const_str(func_name)
+    is_method_const = get_overload_const_bool(is_method)
     out_typ = (
         out_arr_typ.instance_type
         if isinstance(out_arr_typ, types.TypeRef)
         else out_arr_typ
     )
+    # Do we reuse the input data type
+    keep_input_typ = out_typ == types.none
     num_cols = len(table.arr_types)
     # Generate the typerefs for the output table
-    col_typ_tuple = tuple([out_typ] * num_cols)
-    table_typ = TableType(col_typ_tuple)
+    if keep_input_typ:
+        table_typ = table
+    else:
+        col_typ_tuple = tuple([out_typ] * num_cols)
+        table_typ = TableType(col_typ_tuple)
     # Set the globals
     glbls = {"bodo": bodo, "lst_dtype": out_typ, "table_typ": table_typ}
 
-    func_text = "def impl(table, func_name, out_arr_typ, used_cols=None):\n"
-    func_text += f"  out_list = bodo.hiframes.table.alloc_empty_list_type({num_cols}, lst_dtype)\n"
+    func_text = "def impl(table, func_name, out_arr_typ, is_method, used_cols=None):\n"
+    if keep_input_typ:
+        # We maintain the original types.
+        func_text += f"  out_table = bodo.hiframes.table.init_table(table, False)\n"
+        # XXX: Support changing length?
+        func_text += f"  l = len(table)\n"
+    else:
+        # We are converting to a common type.
+        func_text += f"  out_list = bodo.hiframes.table.alloc_empty_list_type({num_cols}, lst_dtype)\n"
     # Convert used_cols to a set if it exists
     if not is_overload_none(used_cols):
         func_text += f"  used_cols_set = set(used_cols)\n"
@@ -66,12 +89,17 @@ def generate_mappable_table_func(table, func_name, out_arr_typ, used_cols=None):
     # Select each block from the table
     func_text += f"  bodo.hiframes.table.ensure_table_unboxed(table, used_cols_set)\n"
     for blk in table.type_to_blk.values():
-        func_text += f"  blk = bodo.hiframes.table.get_table_block(table, {blk})\n"
+        func_text += (
+            f"  blk_{blk} = bodo.hiframes.table.get_table_block(table, {blk})\n"
+        )
         # lower the original indices
         glbls[f"col_indices_{blk}"] = np.array(
             table.block_to_arr_ind[blk], dtype=np.int64
         )
-        func_text += f"  for i in range(len(blk)):\n"
+        if keep_input_typ:
+            # If we are maintaining the same types, output each list.
+            func_text += f"  out_list_{blk} = bodo.hiframes.table.alloc_list_like(blk_{blk}, False)\n"
+        func_text += f"  for i in range(len(blk_{blk})):\n"
         # Since we have one list, store each element in its original column location
         func_text += f"    col_loc = col_indices_{blk}[i]\n"
         # Skip any dead columns
@@ -79,10 +107,31 @@ def generate_mappable_table_func(table, func_name, out_arr_typ, used_cols=None):
             func_text += f"    if col_loc not in used_cols_set:\n"
             func_text += f"        continue\n"
         # TODO: Support APIs that take additional arguments
-        func_text += f"    out_list[col_loc] = {func_name}(blk[i])\n"
-    func_text += (
-        "  return bodo.hiframes.table.init_table_from_lists((out_list,), table_typ)"
-    )
+        if keep_input_typ:
+            # If we are maintaining types reuse i
+            out_idx_val = "i"
+            out_list_name = f"out_list_{blk}"
+        else:
+            out_idx_val = "col_loc"
+            out_list_name = "out_list"
+        if is_method_const:
+            func_text += (
+                f"    {out_list_name}[{out_idx_val}] = blk_{blk}[i].{func_name}()\n"
+            )
+        else:
+            func_text += (
+                f"    {out_list_name}[{out_idx_val}] = {func_name}(blk_{blk}[i])\n"
+            )
+        if keep_input_typ:
+            func_text += f"  out_table = bodo.hiframes.table.set_table_block(out_table, {out_list_name}, {blk})\n"
+
+    if keep_input_typ:
+        func_text += f"  out_table = bodo.hiframes.table.set_table_len(out_table, l)\n"
+        func_text += "  return out_table"
+    else:
+        func_text += (
+            "  return bodo.hiframes.table.init_table_from_lists((out_list,), table_typ)"
+        )
 
     local_vars = {}
     exec(func_text, glbls, local_vars)

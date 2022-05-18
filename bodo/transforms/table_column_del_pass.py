@@ -717,7 +717,7 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir)
                     args = rhs.args
                     nodes = compile_func_single_block(
                         eval(
-                            "lambda table, func_name, out_arr_typ: bodo.utils.table_utils.generate_mappable_table_func(table, func_name, out_arr_typ, used_columns)"
+                            "lambda table, func_name, out_arr_typ, is_method: bodo.utils.table_utils.generate_mappable_table_func(table, func_name, out_arr_typ, is_method, used_cols=used_columns)"
                         ),
                         rhs.args,
                         stmt.target,
