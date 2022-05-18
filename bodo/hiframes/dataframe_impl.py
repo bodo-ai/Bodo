@@ -470,18 +470,51 @@ def overload_dataframe_copy(df, deep=True):
     # just call copy() on all arrays
     check_runtime_cols_unsupported(df, "DataFrame.copy()")
 
-    data_outs = []
-    for i in range(len(df.columns)):
-        arr = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
-        if is_overload_true(deep):
-            data_outs.append(arr + ".copy()")
-        elif is_overload_false(deep):
-            data_outs.append(arr)
-        else:
-            data_outs.append(f"{arr}.copy() if deep else {arr}")
-
     header = "def impl(df, deep=True):\n"
-    return _gen_init_df(header, df.columns, ", ".join(data_outs))
+    extra_globals = None
+    out_df_type = None
+    if df.is_table_format:
+        header += "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
+        out_df_type = df
+        output_arr_typ = types.none
+        extra_globals = {"output_arr_typ": output_arr_typ}
+        if is_overload_true(deep):
+            data_args = "table"
+        elif is_overload_false(deep):
+            data_args = (
+                "bodo.utils.table_utils.generate_mappable_table_func("
+                + "table, "
+                + "'copy', "
+                + "output_arr_typ, "
+                + "True)"
+            )
+        else:
+            data_args = (
+                "bodo.utils.table_utils.generate_mappable_table_func("
+                + "table, "
+                + "'copy', "
+                + "output_arr_typ, "
+                + "True) if deep else table"
+            )
+    else:
+        data_outs = []
+        for i in range(len(df.columns)):
+            arr = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+            if is_overload_true(deep):
+                data_outs.append(arr + ".copy()")
+            elif is_overload_false(deep):
+                data_outs.append(arr)
+            else:
+                data_outs.append(f"{arr}.copy() if deep else {arr}")
+        data_args = ", ".join(data_outs)
+
+    return _gen_init_df(
+        header,
+        df.columns,
+        data_args,
+        extra_globals=extra_globals,
+        out_df_type=out_df_type,
+    )
 
 
 @overload_method(DataFrameType, "rename", inline="always", no_unliteral=True)
@@ -701,7 +734,8 @@ def overload_dataframe_isna(df):
             "bodo.utils.table_utils.generate_mappable_table_func("
             + "bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df), "
             + "'bodo.libs.array_ops.array_op_isna', "
-            + "output_arr_typ)"
+            + "output_arr_typ, "
+            + "False)"
         )
     else:
         # call isna() on column Series
@@ -825,7 +859,8 @@ def overload_dataframe_notna(df):
             "bodo.utils.table_utils.generate_mappable_table_func("
             + "bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df), "
             + "'~bodo.libs.array_ops.array_op_isna', "
-            + "output_arr_typ)"
+            + "output_arr_typ, "
+            + "False)"
         )
     else:
         # call notna() on column Series

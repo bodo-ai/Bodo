@@ -1558,3 +1558,28 @@ def test_df_table_memory_usage(use_index, memory_leak_check):
         )
     finally:
         _del_many_column_file(file_type)
+
+
+@pytest.mark.parametrize("use_deep", [True, False])
+def test_df_table_copy(use_deep, memory_leak_check):
+    """
+    Test copy when using table format.
+    """
+
+    def copy_table(use_deep):
+        df = pd.read_parquet("many_columns.parquet")
+        df = df.copy(deep=use_deep)
+        return df[["Column1", "Column3"]]
+
+    file_type = "parquet"
+    try:
+        _create_many_column_file(file_type)
+        check_func(copy_table, (use_deep,))
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(copy_table)(use_deep)
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['Column1', 'Column3']")
+    finally:
+        _del_many_column_file(file_type)
