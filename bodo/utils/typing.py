@@ -2077,7 +2077,7 @@ def iternext_bodo_array(context, builder, sig, args, result):
     result.set_valid(is_valid)
 
     with builder.if_then(is_valid):
-        getitem_sig = signature(iterty.arr_type.dtype, iterty.arr_type, types.intp)
+        getitem_sig = signature(iterty.yield_type, iterty.arr_type, types.intp)
         value = context.compile_internal(
             builder, lambda a, i: a[i], getitem_sig, [iterobj.array, index]
         )
