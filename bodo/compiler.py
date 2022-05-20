@@ -615,10 +615,13 @@ class BodoSeriesPass(FunctionPass):
         )
         # run multiple times to make sure transformations are fully applied
         # TODO(ehsan): run as long as IR changes
-        series_pass.run()
-        series_pass.run()
-        series_pass.run()
-        return True
+        orig_changed = series_pass.run()
+        changed = orig_changed
+        if changed:
+            changed = series_pass.run()
+        if changed:
+            series_pass.run()
+        return orig_changed
 
 
 @register_pass(mutates_CFG=False, analysis_only=True)

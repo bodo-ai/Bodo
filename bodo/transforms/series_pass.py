@@ -230,11 +230,17 @@ class SeriesPass:
 
         # NOTE: this is iterating in topological order; we're poping from the reversed ordering.
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
+        changed = False
         while work_list:
             label, block = work_list.pop()
             new_body = []
             replaced = False
             for i, inst in enumerate(block.body):
+                if not changed:
+                    # Create a str copy for determining if we have had a change.
+                    # This is done since there is no copy() method implemented
+                    # for IR.
+                    inst_str_copy = str(inst)
                 out_nodes = [inst]
                 self.curr_loc = inst.loc
                 self.dataframe_pass.curr_loc = self.curr_loc
@@ -272,6 +278,14 @@ class SeriesPass:
                 if isinstance(out_nodes, list):
                     new_body.extend(out_nodes)
                     self._update_definitions(out_nodes)
+                    if not changed:
+                        # out_nodes is reset each iteration,
+                        # so if there are no changes to the IR
+                        # it should only contain the original
+                        # instruction.
+                        changed = (
+                            len(out_nodes) != 1 or str(out_nodes[0]) != inst_str_copy
+                        )
                 if isinstance(out_nodes, ReplaceFunc):
                     rp_func = out_nodes
                     if rp_func.pre_nodes is not None:
@@ -362,11 +376,14 @@ class SeriesPass:
 
             if not replaced:
                 blocks[label].body = new_body
+            else:
+                changed = True
 
         # simplify CFG and run dead code elimination
-        self._simplify_IR()
+        simplified_ir = self._simplify_IR()
+        changed = changed or simplified_ir
         dprint_func_ir(self.func_ir, "after series pass")
-        return
+        return changed
 
     def _run_assign(self, assign):
         lhs = assign.target.name
@@ -3603,14 +3620,17 @@ class SeriesPass:
 
     def _simplify_IR(self):
         """Simplify IR after Series pass transforms."""
+        changed = False
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
         while ir_utils.remove_dead(
             self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
         ):
-            pass
+            changed = True
 
-        bodo.transforms.untyped_pass.remove_dead_branches(self.func_ir)
+        removed_branch = bodo.transforms.untyped_pass.remove_dead_branches(self.func_ir)
+        changed = changed or removed_branch
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
+        return changed
 
     def _get_const_tup(self, tup_var):
         tup_def = guard(get_definition, self.func_ir, tup_var)
