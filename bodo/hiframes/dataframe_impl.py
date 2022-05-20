@@ -5033,11 +5033,9 @@ def overload_dataframe_reset_index(
         index_names = get_index_names(df.index, "DataFrame.reset_index()", default_name)
         columns = index_names + columns
         if isinstance(df.index, MultiIndexType):
-            # MultiIndex case takes multiple arrays from MultiIndex._data
-            func_text += (
-                "  m_index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)\n"
-            )
-            ind_arrs = ["m_index._data[{}]".format(i) for i in range(df.index.nlevels)]
+            # MultiIndex case takes multiple arrays from MultiIndex
+            func_text += "  m_index = bodo.hiframes.pd_index_ext.get_index_data(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))\n"
+            ind_arrs = ["m_index[{}]".format(i) for i in range(df.index.nlevels)]
             data_args = ind_arrs + data_args
         else:
             ind_arr = "bodo.utils.conversion.index_to_array(bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df))"

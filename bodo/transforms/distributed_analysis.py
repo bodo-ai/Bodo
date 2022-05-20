@@ -1884,9 +1884,27 @@ class DistributedAnalysis:
             "init_timedelta_index",
             "init_period_index",
             "init_interval_index",
-            "get_index_data",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == ("get_index_data", "bodo.hiframes.pd_index_ext"):
+            idx_typ = self.typemap[rhs.args[0].name]
+            if isinstance(idx_typ, MultiIndexType):
+                # If we have a multi-index set each tuple entry to the
+                # dist of the array.
+                tuple_typ = self.typemap[lhs]
+                if lhs not in array_dists:
+                    array_dists[lhs] = [Distribution.OneD] * len(tuple_typ)
+                tuple_dist = array_dists[lhs]
+                out_dist = Distribution(min(tuple_dist, key=lambda x: x.value))
+                out_dist = Distribution(
+                    min(out_dist.value, array_dists[rhs.args[0].name].value)
+                )
+                array_dists[lhs] = [out_dist] * len(tuple_typ)
+                self._set_var_dist(rhs.args[0].name, array_dists, out_dist)
+            else:
+                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         # RangeIndexType is technically a distributable type even though the

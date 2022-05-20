@@ -32,7 +32,7 @@ from bodo.utils.typing import (
 # NOTE: minimal MultiIndex support that just stores the index arrays without factorizing
 # the data into `levels` and `codes`
 # TODO: support factorizing similar to pd.core.algorithms._factorize_array
-class MultiIndexType(types.Type):
+class MultiIndexType(types.ArrayCompatible):
     """type class for pd.MultiIndex object"""
 
     def __init__(self, array_types, names_typ=None, name_typ=None):
@@ -50,6 +50,11 @@ class MultiIndexType(types.Type):
         )
 
     ndim = 1
+
+    @property
+    def as_array(self):
+        # using types.undefined to avoid Array templates for binary ops
+        return types.Array(types.undefined, 1, "C")
 
     def copy(self):
         return MultiIndexType(self.array_types, self.names_typ, self.name_typ)

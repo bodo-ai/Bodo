@@ -58,6 +58,7 @@ from bodo.utils.typing import (
     dtype_to_array_type,
     element_type,
     get_common_scalar_dtype,
+    get_index_names,
     get_literal_value,
     get_overload_const_bytes,
     get_overload_const_int,
@@ -324,18 +325,30 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
 
     # TODO: [BE-100] Support name argument with a constant string.
     series_name = get_name_literal(S.name_typ)
-    index_name = get_name_literal(S.index.name_typ, True, series_name)
-    columns = [
-        index_name,
-        series_name,
-    ]
+    if isinstance(S.index, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
+        ind_arrs = ", ".join(
+            ["index_arrs[{}]".format(i) for i in range(S.index.nlevels)]
+        )
+    else:
+        ind_arrs = "    bodo.utils.conversion.index_to_array(index)\n"
+
+    default_name = "index" if "index" != series_name else "level_0"
+    index_names = get_index_names(S.index, "Series.reset_index()", default_name)
+    columns = [name for name in index_names]
+    columns.append(series_name)
 
     func_text = "def _impl(S, level=None, drop=False, name=None, inplace=False):\n"
     func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-    func_text += "    index = bodo.utils.conversion.index_to_array(bodo.hiframes.pd_series_ext.get_series_index(S))\n"
+    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    if isinstance(S.index, bodo.hiframes.pd_multi_index_ext.MultiIndexType):
+        # If you have a MultiIndexType, index_arrs in ind_arrs to
+        # to create a tuple of all individual arrays in the DataFrame.
+        func_text += (
+            "    index_arrs = bodo.hiframes.pd_index_ext.get_index_data(index)\n"
+        )
     func_text += "    df_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(S), 1, None)\n"
     func_text += "    col_var = {}\n".format(gen_const_tup(columns))
-    func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe((index, arr), df_index, col_var)\n"
+    func_text += f"    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({ind_arrs}, arr), df_index, col_var)\n"
     loc_vars = {}
     exec(
         func_text,
