@@ -2577,6 +2577,7 @@ def remove_dead_branches(func_ir):
     Similar to dead_branch_prune() of Numba, but dead_branch_prune() only focuses on
     binary expressions in conditions, not simple constants like global values.
     """
+    changed = False
     for block in func_ir.blocks.values():
         assert len(block.body) > 0
         last_stmt = block.body[-1]
@@ -2594,6 +2595,7 @@ def remove_dead_branches(func_ir):
                 cond_val = find_const(func_ir, cond)
                 target_label = last_stmt.truebr if cond_val else last_stmt.falsebr
                 block.body[-1] = ir.Jump(target_label, last_stmt.loc)
+                changed = True
             except GuardException:
                 pass
 
@@ -2601,6 +2603,8 @@ def remove_dead_branches(func_ir):
     cfg = compute_cfg_from_blocks(func_ir.blocks)
     for dead in cfg.dead_nodes():
         del func_ir.blocks[dead]
+        changed = True
+    return changed
 
 
 def _dtype_val_to_arr_type(t, func_name, loc):
