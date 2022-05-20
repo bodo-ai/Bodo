@@ -3563,7 +3563,7 @@ def get_index_data_equiv(self, scope, equiv_set, loc, args, kws):
     assert len(args) == 1 and not kws
     var = args[0]
     # avoid returning shape for tuple input (results in dimension mismatch error)
-    if isinstance(self.typemap[var.name], HeterogeneousIndexType):
+    if isinstance(self.typemap[var.name], (HeterogeneousIndexType, MultiIndexType)):
         return None
     if equiv_set.has_shape(var):
         return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])

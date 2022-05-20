@@ -5758,6 +5758,27 @@ def test_head_idx(datapath, memory_leak_check):
     check_func(impl1, ())
 
 
+def test_series_reset_index(memory_leak_check):
+    """
+    [BE-2800] Test that Series.reset_index() handles
+    MultiIndex types properly when drop=False.
+    """
+
+    def impl(df):
+        b = df.groupby(["A", "C"])["B"].agg("min")
+        b = b.reset_index()
+        return b
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 2, 2, 3, 3],
+            "B": [1, 2, 3, 4, 5, 6],
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        }
+    )
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
 def test_groupby_asindex_no_values(memory_leak_check):
     """
     Test for BE-434. Verifies that groupby(as_index=False)
