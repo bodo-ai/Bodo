@@ -4,6 +4,7 @@ Implement pd.DataFrame typing and data model handling.
 """
 import json
 import operator
+from functools import cached_property
 from urllib.parse import quote
 
 import llvmlite.binding as ll
@@ -228,6 +229,10 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
         determined at runtime
         """
         return self.columns is None
+
+    @cached_property
+    def column_index(self):
+        return {c: i for i, c in enumerate(self.columns)}
 
     @property
     def runtime_colname_typ(self):
@@ -2788,9 +2793,9 @@ def concat_overload(
         # get array types for all output columns (for NA generation for missing columns)
         arr_types = {}
         for col_no, c in enumerate(all_colnames):
-            for df in objs.types:
-                if c in df.columns:
-                    arr_types["arr_typ{}".format(col_no)] = df.data[df.columns.index(c)]
+            for i, df in enumerate(objs.types):
+                if c in df.column_index:
+                    arr_types[f"arr_typ{col_no}"] = df.data[df.column_index[c]]
                     break
         assert len(arr_types) == len(all_colnames)
 
@@ -2799,8 +2804,8 @@ def concat_overload(
         for col_no, c in enumerate(all_colnames):
             args = []
             for i, df in enumerate(objs.types):
-                if c in df.columns:
-                    col_ind = df.columns.index(c)
+                if c in df.column_index:
+                    col_ind = df.column_index[c]
                     args.append(
                         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(objs[{}], {})".format(
                             i, col_ind

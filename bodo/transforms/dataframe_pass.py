@@ -792,9 +792,8 @@ class DataFramePass:
             out_index_var = in_index_var
         else:
             out_vars = {}
-            for k in df_typ.columns:
+            for ind, k in enumerate(df_typ.columns):
                 out_var = ir.Var(lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc)
-                ind = df_typ.columns.index(k)
                 self.typemap[out_var.name] = df_typ.data[ind]
                 out_vars[k] = out_var
             # index var
@@ -1483,7 +1482,7 @@ class DataFramePass:
                 self.typemap[var.name] = (
                     out_typ.data
                     if isinstance(out_typ, SeriesType)
-                    else out_typ.data[out_typ.columns.index(c)]
+                    else out_typ.data[out_typ.column_index[c]]
                 )
                 df_out_vars[c] = var
 

@@ -802,6 +802,7 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         )
     else:
         chosen_columns = df.columns
+
     if not exclude_none:
         # If the input is a list process each elem in the list
         if is_overload_constant_list(exclude):
@@ -824,11 +825,11 @@ def overload_dataframe_select_dtypes(df, include=None, exclude=None):
         chosen_columns = tuple(
             c
             for c in chosen_columns
-            if df.data[df.columns.index(c)] not in exclude_types
+            if df.data[df.column_index[c]] not in exclude_types
         )
 
     data_args = ", ".join(
-        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})"
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})"
         for c in chosen_columns
     )
     # Define our function
@@ -1073,11 +1074,9 @@ def overload_dataframe_isin(df, values):
     if isinstance(values, DataFrameType):
         df_case = True
         for i, c in enumerate(df.columns):
-            if c in values.columns:
+            if c in values.column_index:
                 v_name = "val{}".format(i)
-                func_text += "  {} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(values, {})\n".format(
-                    v_name, values.columns.index(c)
-                )
+                func_text += f"  {v_name} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(values, {values.column_index[c]})\n"
                 other_colmap[c] = v_name
     # Series contains (x in y) does not seem to be supported?
     elif is_iterable_type(values) and not isinstance(values, SeriesType):
@@ -1168,11 +1167,11 @@ def overload_dataframe_corr(df, method="pearson", min_periods=1):
 
     arr_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
-            df.columns.index(c),
+            df.column_index[c],
             ".astype(np.float64)"
             if (
-                isinstance(df.data[df.columns.index(c)], IntegerArrayType)
-                or df.data[df.columns.index(c)] == boolean_array
+                isinstance(df.data[df.column_index[c]], IntegerArrayType)
+                or df.data[df.column_index[c]] == boolean_array
             )
             else "",
         )
@@ -1228,11 +1227,11 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
 
     arr_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
-            df.columns.index(c),
+            df.column_index[c],
             ".astype(np.float64)"
             if (
-                isinstance(df.data[df.columns.index(c)], IntegerArrayType)
-                or df.data[df.columns.index(c)] == boolean_array
+                isinstance(df.data[df.column_index[c]], IntegerArrayType)
+                or df.data[df.column_index[c]] == boolean_array
             )
             else "",
         )
@@ -1610,7 +1609,7 @@ def _gen_reduce_impl(df, func_name, args=None, axis=None):
             comm_dtype = None
         else:
             dtypes = [
-                numba.np.numpy_support.as_dtype(df.data[df.columns.index(c)].dtype)
+                numba.np.numpy_support.as_dtype(df.data[df.column_index[c]].dtype)
                 for c in out_colnames
             ]
             # TODO: Determine what possible exceptions this might raise.
@@ -1691,7 +1690,7 @@ def _gen_reduce_impl_axis0(df, func_name, out_colnames, comm_dtype, args):
         kernel_args = "True"
 
     data_args = ", ".join(
-        f"{kernel_func_name}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)}), {kernel_args})"
+        f"{kernel_func_name}(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]}), {kernel_args})"
         for c in out_colnames
     )
 
@@ -1715,7 +1714,7 @@ def _gen_reduce_impl_axis0(df, func_name, out_colnames, comm_dtype, args):
 
 def _gen_reduce_impl_axis1(func_name, out_colnames, comm_dtype, df_type):
     """generate function body for dataframe reduction across columns"""
-    col_inds = [df_type.columns.index(c) for c in out_colnames]
+    col_inds = [df_type.column_index[c] for c in out_colnames]
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
     data_args = "\n    ".join(
         "arr_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})".format(i)
@@ -1889,7 +1888,7 @@ def overload_dataframe_describe(
 
     # number of datetime columns
     num_dt = sum(
-        df.data[df.columns.index(c)].dtype == bodo.datetime64ns for c in numeric_cols
+        df.data[df.column_index[c]].dtype == bodo.datetime64ns for c in numeric_cols
     )
 
     def _get_describe(col_ind):
@@ -1907,10 +1906,10 @@ def overload_dataframe_describe(
 
     header = "def impl(df, percentiles=None, include=None, exclude=None, datetime_is_numeric=True):\n"
     for c in numeric_cols:
-        col_ind = df.columns.index(c)
+        col_ind = df.column_index[c]
         header += f"  des_{col_ind} = bodo.libs.array_ops.array_op_describe(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {col_ind}))\n"
 
-    data_args = ", ".join(_get_describe(df.columns.index(c)) for c in numeric_cols)
+    data_args = ", ".join(_get_describe(df.column_index[c]) for c in numeric_cols)
 
     index_vals = "['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max']"
     # Pandas avoids std for datetime-only cases
@@ -2053,8 +2052,7 @@ def overload_dataframe_explode(df, column, ignore_index=False):
     else:
         explode_cols = [get_literal_value(column)]
 
-    column_map = {c: i for i, c in enumerate(df.columns)}
-    explode_inds = [column_map[c] for c in explode_cols]
+    explode_inds = [df.column_index[c] for c in explode_cols]
     for i in explode_inds:
         if (
             not isinstance(df.data[i], ArrayItemArrayType)
@@ -2235,12 +2233,12 @@ def overload_dataframe_drop_duplicates(
 
     subset_idx = []
     for col_name in subset_columns:
-        if col_name not in df.columns:
+        if col_name not in df.column_index:
             raise BodoError(
                 "DataFrame.drop_duplicates(): All subset columns must be found in the DataFrame."
                 + f"Column {col_name} not found in DataFrame columns {df.columns}"
             )
-        subset_idx.append(df.columns.index(col_name))
+        subset_idx.append(df.column_index[col_name])
 
     check_unsupported_args(
         "DataFrame.drop_duplicates",
@@ -2343,11 +2341,10 @@ def create_dataframe_mask_where_overload(func_name):
             cond_str = lambda i, _: "cond"
         elif cond.ndim == 2:
             if isinstance(cond, DataFrameType):
-                cond_map = {c: i for i, c in enumerate(cond.columns)}
 
                 def cond_str(i, gen_all_false):
-                    if df.columns[i] in cond_map:
-                        return f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(cond, {cond_map[df.columns[i]]})"
+                    if df.columns[i] in cond.column_index:
+                        return f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(cond, {cond.column_index[df.columns[i]]})"
                     else:
                         gen_all_false[0] = True
                         return "all_false"
@@ -2359,10 +2356,9 @@ def create_dataframe_mask_where_overload(func_name):
             other_str = lambda i: "other"
         elif other.ndim == 2:
             if isinstance(other, DataFrameType):
-                other_map = {c: i for i, c in enumerate(other.columns)}
                 other_str = (
-                    lambda i: f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(other, {other_map[df.columns[i]]})"
-                    if df.columns[i] in other_map
+                    lambda i: f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(other, {other.column_index[df.columns[i]]})"
+                    if df.columns[i] in other.column_index
                     else "None"
                 )
             elif isinstance(other, types.Array):
@@ -2444,13 +2440,12 @@ def _validate_arguments_mask_where(
         elif other.ndim != 1:
             raise BodoError(f"{func_name}(): 'other' must be either 1 or 2-dimensional")
     if isinstance(other, DataFrameType):
-        other_map = {c: i for i, c in enumerate(other.columns)}
         for i in range(n_cols):
-            if df.columns[i] in other_map:
+            if df.columns[i] in other.column_index:
                 bodo.hiframes.series_impl._validate_self_other_mask_where(
                     func_name,
                     df.data[i],
-                    other.data[other_map[df.columns[i]]],
+                    other.data[other.column_index[df.columns[i]]],
                 )
             else:
                 # Essentially only validates df.data[i]
@@ -4041,10 +4036,9 @@ def pivot_error_checking(df, index, columns, values, func_name):
         raise BodoError(
             f"{func_name}(): 'columns' column {columns_lit} not found in DataFrame {df}."
         )
-    columns_idx_map = {c: i for i, c in enumerate(df.columns)}
 
     # Get the column numbers
-    columns_idx = columns_idx_map[columns_lit]
+    columns_idx = df.column_index[columns_lit]
 
     # Handle index
     if is_overload_none(index):
@@ -4057,11 +4051,11 @@ def pivot_error_checking(df, index, columns, values, func_name):
             index_lit = [index_lit]
         index_idxs = []
         for index in index_lit:
-            if index not in columns_idx_map:
+            if index not in df.column_index:
                 raise BodoError(
                     f"{func_name}(): 'index' column {index} not found in DataFrame {df}."
                 )
-            index_idxs.append(columns_idx_map[index])
+            index_idxs.append(df.column_index[index])
 
     # Validate that the index values can be lowered as a list (for groupby).
     # Note if the list is empty (which means use the index),
@@ -4091,11 +4085,11 @@ def pivot_error_checking(df, index, columns, values, func_name):
             values_lit = [values_lit]
         values_idxs = []
         for val in values_lit:
-            if val not in columns_idx_map:
+            if val not in df.column_index:
                 raise BodoError(
                     f"{func_name}(): 'values' column {val} not found in DataFrame {df}."
                 )
-            values_idxs.append(columns_idx_map[val])
+            values_idxs.append(df.column_index[val])
 
     # Convert values_lit to an array for lowering
     if all(isinstance(c, int) for c in values_lit):
@@ -4530,8 +4524,7 @@ def overload_dataframe_melt(
                 f"DataFrame.melt(): 'id_vars' column {c} not found in {frame}."
             )
 
-    col_map = {c: i for i, c in enumerate(frame.columns)}
-    id_idxs = [col_map[i] for i in id_lit]
+    id_idxs = [frame.column_index[i] for i in id_lit]
     # Handle value_vars
     if is_overload_none(value_vars):
         # If value_vars isn't provided, all columns except the id_vars are used
@@ -4555,11 +4548,11 @@ def overload_dataframe_melt(
             )
         value_idxs = []
         for val in value_lit:
-            if val not in col_map:
+            if val not in frame.column_index:
                 raise BodoError(
                     f"DataFrame.melt(): 'value_vars' column {val} not found in DataFrame {frame}."
                 )
-            value_idxs.append(col_map[val])
+            value_idxs.append(frame.column_index[val])
     for c in value_lit:
         if c not in frame.columns:
             raise BodoError(
@@ -5099,11 +5092,11 @@ def overload_dataframe_dropna(
         subset_vals = get_overload_const_list(subset)
         subset_ints = []
         for s in subset_vals:
-            if s not in df.columns:
+            if s not in df.column_index:
                 raise_bodo_error(
                     f"df.dropna(): column '{s}' not in data frame columns {df}"
                 )
-            subset_ints.append(df.columns.index(s))
+            subset_ints.append(df.column_index[s])
 
     n_cols = len(df.columns)
     data_args = ", ".join("data_{}".format(i) for i in range(n_cols))
@@ -5205,7 +5198,7 @@ def overload_dataframe_drop(
     new_cols = tuple(c for c in df.columns if c not in drop_cols)
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
-            df.columns.index(c), ".copy()" if not inplace else ""
+            df.column_index[c], ".copy()" if not inplace else ""
         )
         for c in new_cols
     )

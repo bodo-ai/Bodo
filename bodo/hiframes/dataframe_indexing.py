@@ -291,7 +291,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                     "Column {} not found in dataframe columns {}".format(c, df.columns)
                 )
         columns = tuple(cols_to_keep_list)
-        data_type = tuple(df.data[df.columns.index(name)] for name in columns)
+        data_type = tuple(df.data[df.column_index[name]] for name in columns)
         return (columns, data_type)
 
     def replace_range_with_numeric_idx_if_needed(self, df, ind):
@@ -371,14 +371,12 @@ def df_getitem_overload(df, ind):
         ind_columns = get_overload_const_list(ind)
         # error checking, TODO: test
         for c in ind_columns:
-            if c not in df.columns:
+            if c not in df.column_index:
                 raise_bodo_error(
                     "Column {} not found in dataframe columns {}".format(c, df.columns)
                 )
         new_data = ", ".join(
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}).copy()".format(
-                df.columns.index(c)
-            )
+            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]}).copy()"
             for c in ind_columns
         )
         func_text = "def impl(df, ind):\n"
@@ -401,7 +399,7 @@ def df_getitem_overload(df, ind):
             new_data = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)[ind]"
         else:
             new_data = ", ".join(
-                f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})[ind]"
+                f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[ind]"
                 for c in df.columns
             )
         return bodo.hiframes.dataframe_impl._gen_init_df(
@@ -596,7 +594,7 @@ def _gen_iloc_getitem_bool_slice_impl(df, col_names, idx_typ, idx, is_out_series
         func_text += f"  idx_t = bodo.utils.conversion.coerce_to_ndarray({idx})\n"
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
     new_data = ", ".join(
-        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})[idx_t]"
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[idx_t]"
         for c in col_names
     )
 
@@ -619,7 +617,7 @@ def _gen_iloc_getitem_row_impl(df, col_names, idx):
     func_text = "def impl(I, idx):\n"
     func_text += "  df = I._obj\n"
     row_args = ", ".join(
-        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.columns.index(c)})[{idx}]"
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[{idx}]"
         for c in col_names
     )
     func_text += f"  row_idx = bodo.hiframes.pd_index_ext.init_heter_index({gen_const_tup(col_names)}, None)\n"
@@ -727,9 +725,7 @@ def overload_loc_getitem(I, idx):
         func_text += "  idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)\n"
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
         new_data = ", ".join(
-            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx_t]".format(
-                df.columns.index(c)
-            )
+            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[idx_t]"
             for c in df.columns
         )
         return bodo.hiframes.dataframe_impl._gen_init_df(
@@ -790,9 +786,7 @@ def gen_df_loc_col_select_impl(df, col_idx_list):
 
     # create a new dataframe, create new data/index using idx
     new_data = ", ".join(
-        "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {})[idx[0]]".format(
-            df.columns.index(c)
-        )
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[idx[0]]"
         for c in col_idx_list
     )
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx[0]]"

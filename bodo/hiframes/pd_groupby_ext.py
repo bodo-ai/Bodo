@@ -459,6 +459,7 @@ def get_agg_typ(
     out_data = []  # type of output columns (array type)
     out_columns = []  # name of output columns
     out_column_type = []  # ColumnType of output columns (see ColumnType Enum above)
+
     if func_name == "head":
         # Per Pandas documentation as_index flag is ignored
         # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.core.groupby.GroupBy.head.html
@@ -475,7 +476,7 @@ def get_agg_typ(
     else:
         if len(grp.keys) > 1:
             key_col_inds = tuple(
-                grp.df_type.columns.index(grp.keys[i]) for i in range(len(grp.keys))
+                grp.df_type.column_index[grp.keys[i]] for i in range(len(grp.keys))
             )
             arr_types = tuple(grp.df_type.data[ind] for ind in key_col_inds)
             arr_types = tuple(to_str_arr_if_dict_array(t) for t in arr_types)
@@ -483,7 +484,7 @@ def get_agg_typ(
                 arr_types, tuple(types.StringLiteral(k) for k in grp.keys)
             )
         else:
-            ind = grp.df_type.columns.index(grp.keys[0])
+            ind = grp.df_type.column_index[grp.keys[0]]
             ind_arr_t = to_str_arr_if_dict_array(grp.df_type.data[ind])
             index = bodo.hiframes.pd_index_ext.array_type_to_index(
                 ind_arr_t, types.StringLiteral(grp.keys[0])
@@ -509,7 +510,7 @@ def get_agg_typ(
         )
         # get output type for each selected column
         for c in columns:
-            ind = grp.df_type.columns.index(c)
+            ind = grp.df_type.column_index[c]
             data = grp.df_type.data[ind]  # type of input column
             data = to_str_arr_if_dict_array(data)
             e_column_type = ColumnType.NonNumericalColumn.value

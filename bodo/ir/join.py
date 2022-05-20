@@ -932,7 +932,7 @@ def _get_col_to_ind(key_names, col_vars):
     col_to_ind = {c: i for (i, c) in enumerate(key_names)}
     i = n_keys
     for c in sorted(col_vars, key=lambda a: str(a)):
-        if c in key_names:
+        if c in col_to_ind:
             continue
         col_to_ind[c] = i
         i += 1
