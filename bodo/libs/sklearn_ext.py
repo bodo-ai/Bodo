@@ -30,6 +30,7 @@ from numba.extending import (
     typeof_impl,
     unbox,
 )
+from scipy import stats  # noqa
 from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
 from sklearn.preprocessing import LabelBinarizer
@@ -4405,6 +4406,333 @@ def overload_preprocessing_minmax_scaler_inverse_transform(
         return inverse_transformed_X
 
     return _preprocessing_minmax_scaler_inverse_transform_impl
+
+
+# ----------------------------------------------------------------------------------------
+# ----------------------------------- Robust-Scaler --------------------------------------
+# Support for sklearn.preprocessing.RobustScaler.
+# Currently only fit, transform and inverse_transform functions are supported.
+# We use sklearn's transform and inverse_transform directly in their Bodo implementation.
+# For distributed fit, we use a native implementation where we use our quantile_parallel
+# and median array_kernels.
+# ----------------------------------------------------------------------------------------
+
+
+class BodoPreprocessingRobustScalerType(types.Opaque):
+    def __init__(self):
+        super(BodoPreprocessingRobustScalerType, self).__init__(
+            name="BodoPreprocessingRobustScalerType"
+        )
+
+
+preprocessing_robust_scaler_type = BodoPreprocessingRobustScalerType()
+types.preprocessing_robust_scaler_type = preprocessing_robust_scaler_type
+
+register_model(BodoPreprocessingRobustScalerType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.preprocessing.RobustScaler)
+def typeof_preprocessing_robust_scaler(val, c):
+    return preprocessing_robust_scaler_type
+
+
+@box(BodoPreprocessingRobustScalerType)
+def box_preprocessing_robust_scaler(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoPreprocessingRobustScalerType)
+def unbox_preprocessing_robust_scaler(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload_attribute(BodoPreprocessingRobustScalerType, "with_centering")
+def get_robust_scaler_with_centering(m):
+    """Overload with_centering attribute to be accessible inside bodo.jit"""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="boolean"):
+            result = m.with_centering
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingRobustScalerType, "with_scaling")
+def get_robust_scaler_with_scaling(m):
+    """Overload with_scaling attribute to be accessible inside bodo.jit"""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="boolean"):
+            result = m.with_scaling
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingRobustScalerType, "quantile_range")
+def get_robust_scaler_quantile_range(m):
+    """Overload quantile_range attribute to be accessible inside bodo.jit"""
+
+    typ = numba.typeof((25.0, 75.0))
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result=typ):
+            result = m.quantile_range
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingRobustScalerType, "unit_variance")
+def get_robust_scaler_unit_variance(m):
+    """Overload unit_variance attribute to be accessible inside bodo.jit"""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="boolean"):
+            result = m.unit_variance
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingRobustScalerType, "copy")
+def get_robust_scaler_copy(m):
+    """Overload copy attribute to be accessible inside bodo.jit"""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="boolean"):
+            result = m.copy
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingRobustScalerType, "center_")
+def get_robust_scaler_center_(m):
+    """Overload center_ attribute to be accessible inside bodo.jit"""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="float64[:]"):
+            result = m.center_
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingRobustScalerType, "scale_")
+def get_robust_scaler_scale_(m):
+    """Overload scale_ attribute to be accessible inside bodo.jit"""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="float64[:]"):
+            result = m.scale_
+        return result
+
+    return impl
+
+
+@overload(sklearn.preprocessing.RobustScaler, no_unliteral=True)
+def sklearn_preprocessing_robust_scaler_overload(
+    with_centering=True,
+    with_scaling=True,
+    quantile_range=(25.0, 75.0),
+    copy=True,
+    unit_variance=False,
+):
+    """
+    Provide implementation for __init__ functions of RobustScaler.
+    We simply call sklearn in objmode.
+    """
+
+    check_sklearn_version()
+
+    def _sklearn_preprocessing_robust_scaler_impl(
+        with_centering=True,
+        with_scaling=True,
+        quantile_range=(25.0, 75.0),
+        copy=True,
+        unit_variance=False,
+    ):  # pragma: no cover
+
+        with numba.objmode(m="preprocessing_robust_scaler_type"):
+            m = sklearn.preprocessing.RobustScaler(
+                with_centering=with_centering,
+                with_scaling=with_scaling,
+                quantile_range=quantile_range,
+                copy=copy,
+                unit_variance=unit_variance,
+            )
+        return m
+
+    return _sklearn_preprocessing_robust_scaler_impl
+
+
+@overload_method(BodoPreprocessingRobustScalerType, "fit", no_unliteral=True)
+def overload_preprocessing_robust_scaler_fit(
+    m,
+    X,
+    y=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position)
+):
+    """
+    Provide implementations for the fit function.
+    In case input is replicated, we simply call sklearn,
+    else we use our native implementation.
+    We only support numpy arrays and Pandas DataFrames at the moment.
+    CSR matrices are not yet supported.
+    """
+
+    check_sklearn_version()
+
+    # TODO Add general error-checking [BE-52]
+
+    if is_overload_true(_is_data_distributed):
+        # If distributed, then use native implementation
+
+        func_text = f"def preprocessing_robust_scaler_fit_impl(\n"
+        func_text += f"  m, X, y=None, _is_data_distributed=False\n"
+        func_text += f"):\n"
+
+        # In case a DataFrame was provided, convert it to a Numpy Array first.
+        # This is required since we'll be looping over the columns, which
+        # is not supported for DataFrames.
+        # TODO Add a compile time check that all columns are numeric since
+        # `to_numpy` will error out otherwise anyway. [BE-52]
+        if isinstance(X, DataFrameType):
+            func_text += f"  X = X.to_numpy()\n"
+
+        func_text += f"  with numba.objmode(qrange_l='float64', qrange_r='float64'):\n"
+        func_text += f"    (qrange_l, qrange_r) = m.quantile_range\n"
+        func_text += f"  if not 0 <= qrange_l <= qrange_r <= 100:\n"
+        # scikit-learn throws the error: `"Invalid quantile range: %s" % str(self.quantile_range)`
+        # but we cannot use format strings, so we use a slightly modified error message.
+        func_text += f"    raise ValueError(\n"
+        func_text += f"      'Invalid quantile range provided. Ensure that 0 <= quantile_range[0] <= quantile_range[1] <= 100.'\n"
+        func_text += f"    )\n"
+        func_text += f"  qrange_l, qrange_r = qrange_l / 100.0, qrange_r / 100.0\n"
+        func_text += f"  X = bodo.utils.conversion.coerce_to_array(X)\n"
+        func_text += f"  num_features = X.shape[1]\n"
+        func_text += f"  if m.with_scaling:\n"
+        func_text += f"    scales = np.zeros(num_features)\n"
+        func_text += f"  else:\n"
+        func_text += f"    scales = None\n"
+        func_text += f"  if m.with_centering:\n"
+        func_text += f"    centers = np.zeros(num_features)\n"
+        func_text += f"  else:\n"
+        func_text += f"    centers = None\n"
+        func_text += f"  if m.with_scaling or m.with_centering:\n"
+        ## XXX Not sure if prange is useful here
+        func_text += f"    numba.parfors.parfor.init_prange()\n"
+        func_text += f"    for feature_idx in numba.parfors.parfor.internal_prange(num_features):\n"
+        func_text += f"      column_data = bodo.utils.conversion.ensure_contig_if_np(X[:, feature_idx])\n"
+        func_text += f"      if m.with_scaling:\n"
+        func_text += f"        q1 = bodo.libs.array_kernels.quantile_parallel(\n"
+        func_text += f"          column_data, qrange_l, 0\n"
+        func_text += f"        )\n"
+        func_text += f"        q2 = bodo.libs.array_kernels.quantile_parallel(\n"
+        func_text += f"          column_data, qrange_r, 0\n"
+        func_text += f"        )\n"
+        func_text += f"        scales[feature_idx] = q2 - q1\n"
+        func_text += f"      if m.with_centering:\n"
+        func_text += (
+            f"        centers[feature_idx] = bodo.libs.array_ops.array_op_median(\n"
+        )
+        func_text += f"          column_data, True, True\n"
+        func_text += f"        )\n"
+        func_text += f"  if m.with_scaling:\n"
+        # Handle zeros (See sklearn.preprocessing._data._handle_zeros_in_scale)
+        # RobustScaler.fit calls
+        # `self.scale_ = _handle_zeros_in_scale(self.scale_, copy=False)`
+        # which translates to:
+        func_text += f"    constant_mask = scales < 10 * np.finfo(scales.dtype).eps\n"
+        func_text += f"    scales[constant_mask] = 1.0\n"
+        func_text += f"    if m.unit_variance:\n"
+        func_text += f"      with numba.objmode(adjust='float64'):\n"
+        func_text += (
+            f"        adjust = stats.norm.ppf(qrange_r) - stats.norm.ppf(qrange_l)\n"
+        )
+        func_text += f"      scales = scales / adjust\n"
+        func_text += f"  with numba.objmode():\n"
+        func_text += f"    m.center_ = centers\n"
+        func_text += f"    m.scale_ = scales\n"
+        func_text += f"  return m\n"
+
+        loc_vars = {}
+        exec(
+            func_text,
+            globals(),
+            loc_vars,
+        )
+        _preprocessing_robust_scaler_fit_impl = loc_vars[
+            "preprocessing_robust_scaler_fit_impl"
+        ]
+        return _preprocessing_robust_scaler_fit_impl
+    else:
+
+        # If replicated, then just use sklearn implementation
+
+        def _preprocessing_robust_scaler_fit_impl(
+            m, X, y=None, _is_data_distributed=False
+        ):  # pragma: no cover
+
+            with numba.objmode(m="preprocessing_robust_scaler_type"):
+                m = m.fit(X, y)
+            return m
+
+        return _preprocessing_robust_scaler_fit_impl
+
+
+@overload_method(BodoPreprocessingRobustScalerType, "transform", no_unliteral=True)
+def overload_preprocessing_robust_scaler_transform(
+    m,
+    X,
+):
+    """
+    Provide implementation for the transform function.
+    We simply call sklearn's transform on each rank.
+    """
+
+    check_sklearn_version()
+
+    def _preprocessing_robust_scaler_transform_impl(
+        m,
+        X,
+    ):  # pragma: no cover
+        with numba.objmode(transformed_X="float64[:,:]"):
+            transformed_X = m.transform(X)
+        return transformed_X
+
+    return _preprocessing_robust_scaler_transform_impl
+
+
+@overload_method(
+    BodoPreprocessingRobustScalerType, "inverse_transform", no_unliteral=True
+)
+def overload_preprocessing_robust_scaler_inverse_transform(
+    m,
+    X,
+):
+    """
+    Provide implementation for the inverse_transform function.
+    We simply call sklearn's inverse_transform on each rank.
+    """
+
+    check_sklearn_version()
+
+    def _preprocessing_robust_scaler_inverse_transform_impl(
+        m,
+        X,
+    ):  # pragma: no cover
+        with numba.objmode(inverse_transformed_X="float64[:,:]"):
+            inverse_transformed_X = m.inverse_transform(X)
+        return inverse_transformed_X
+
+    return _preprocessing_robust_scaler_inverse_transform_impl
 
 
 # ----------------------------------------------------------------------------------------

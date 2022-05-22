@@ -15,7 +15,12 @@ from sklearn import datasets
 from sklearn.metrics import precision_score
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
+from sklearn.preprocessing import (
+    LabelEncoder,
+    MinMaxScaler,
+    RobustScaler,
+    StandardScaler,
+)
 from sklearn.svm import LinearSVC
 from sklearn.utils._testing import assert_array_equal
 from sklearn.utils.validation import check_random_state
@@ -224,7 +229,7 @@ def test_train_test_split(memory_leak_check):
     "train_size, test_size", [(0.6, None), (None, 0.3), (None, None), (0.7, 0.3)]
 )
 def test_train_test_split_df(train_size, test_size, memory_leak_check):
-    """ Test train_test_split with DataFrame dataset and train_size/test_size variation"""
+    """Test train_test_split with DataFrame dataset and train_size/test_size variation"""
 
     def impl_shuffle(X, y, train_size, test_size):
         X_train, X_test, y_train, y_test = train_test_split(
@@ -283,7 +288,7 @@ def test_train_test_split_df(train_size, test_size, memory_leak_check):
     from sklearn import model_selection
 
     def impl_shuffle_import(X, y):
-        """ Test to verify that both import styles work for model_selection"""
+        """Test to verify that both import styles work for model_selection"""
         # simple test
         X_train, X_test, y_train, y_test = model_selection.train_test_split(X, y)
         return X_train, X_test, y_train, y_test
@@ -518,6 +523,9 @@ def test_standard_scaler(data, copy, with_mean, with_std, memory_leak_check):
     )
 
 
+# ---------------------MinMaxScaler Tests--------------------
+
+
 @pytest.mark.parametrize(
     "data",
     [
@@ -591,3 +599,185 @@ def test_minmax_scaler(data, feature_range, copy, clip, memory_leak_check):
         atol=1e-8,
         copy_input=True,
     )
+
+
+# ---------------------RobustScaler Tests--------------------
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        # Test one with numpy array and one with df
+        (
+            gen_sklearn_scalers_random_data(15, 5, 0.2, 4),
+            gen_sklearn_scalers_random_data(60, 5, 0.5, 2),
+        ),
+        (
+            pd.DataFrame(gen_sklearn_scalers_random_data(20, 3)),
+            gen_sklearn_scalers_random_data(100, 3),
+        ),
+        # The other combinations are marked slow
+        pytest.param(
+            (
+                gen_sklearn_scalers_random_data(20, 3),
+                gen_sklearn_scalers_random_data(100, 3),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                gen_sklearn_scalers_random_data(20, 3),
+                pd.DataFrame(gen_sklearn_scalers_random_data(100, 3)),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(gen_sklearn_scalers_random_data(20, 3)),
+                pd.DataFrame(gen_sklearn_scalers_random_data(100, 3)),
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "with_centering", [True, pytest.param(False, marks=pytest.mark.slow)]
+)
+@pytest.mark.parametrize(
+    "with_scaling", [True, pytest.param(False, marks=pytest.mark.slow)]
+)
+@pytest.mark.parametrize(
+    "quantile_range",
+    [
+        (25.0, 75.0),
+        pytest.param((10.0, 85.0), marks=pytest.mark.slow),
+        pytest.param((40.0, 60.0), marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "unit_variance", [False, pytest.param(True, marks=pytest.mark.slow)]
+)
+@pytest.mark.parametrize("copy", [True, pytest.param(False, marks=pytest.mark.slow)])
+def test_robust_scaler(
+    data,
+    with_centering,
+    with_scaling,
+    quantile_range,
+    unit_variance,
+    copy,
+    ## TODO Fix memory leak [BE-2825]
+    # memory_leak_check,
+):
+    """
+    Tests for sklearn.preprocessing.RobustScaler implementation in Bodo.
+    """
+
+    def test_fit(X):
+        m = RobustScaler(
+            with_centering=with_centering,
+            with_scaling=with_scaling,
+            quantile_range=quantile_range,
+            unit_variance=unit_variance,
+            copy=copy,
+        )
+        m = m.fit(X)
+        return m
+
+    py_output = test_fit(data[0])
+    bodo_output = bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
+
+    if with_centering:
+        assert np.allclose(
+            py_output.center_, bodo_output.center_, atol=1e-4, equal_nan=True
+        )
+    if with_scaling:
+        assert np.allclose(
+            py_output.scale_, bodo_output.scale_, atol=1e-4, equal_nan=True
+        )
+
+    def test_transform(X, X1):
+        m = RobustScaler(
+            with_centering=with_centering,
+            with_scaling=with_scaling,
+            quantile_range=quantile_range,
+            unit_variance=unit_variance,
+            copy=copy,
+        )
+        m = m.fit(X)
+        X1_transformed = m.transform(X1)
+        return X1_transformed
+
+    check_func(
+        test_transform, data, is_out_distributed=True, atol=1e-4, copy_input=True
+    )
+
+    def test_inverse_transform(X, X1):
+        m = RobustScaler(
+            with_centering=with_centering,
+            with_scaling=with_scaling,
+            quantile_range=quantile_range,
+            unit_variance=unit_variance,
+            copy=copy,
+        )
+        m = m.fit(X)
+        X1_inverse_transformed = m.inverse_transform(X1)
+        return X1_inverse_transformed
+
+    check_func(
+        test_inverse_transform,
+        data,
+        is_out_distributed=True,
+        atol=1e-4,
+        copy_input=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "bool_val",
+    [True, pytest.param(False, marks=pytest.mark.slow)],
+)
+def test_robust_scaler_bool_attrs(bool_val, memory_leak_check):
+    def impl_with_centering():
+        m = RobustScaler(with_centering=bool_val)
+        return m.with_centering
+
+    def impl_with_scaling():
+        m = RobustScaler(with_scaling=bool_val)
+        return m.with_scaling
+
+    def impl_unit_variance():
+        m = RobustScaler(unit_variance=bool_val)
+        return m.unit_variance
+
+    def impl_copy():
+        m = RobustScaler(copy=bool_val)
+        return m.copy
+
+    check_func(impl_with_centering, ())
+    check_func(impl_with_scaling, ())
+    check_func(impl_unit_variance, ())
+    check_func(impl_copy, ())
+
+
+## TODO Fix memory leak [BE-2825]
+def test_robust_scaler_array_and_quantile_range_attrs():
+
+    data = gen_sklearn_scalers_random_data(20, 3)
+
+    def impl_center_(X):
+        m = RobustScaler()
+        m.fit(X)
+        return m.center_
+
+    def impl_scale_(X):
+        m = RobustScaler()
+        m.fit(X)
+        return m.scale_
+
+    def impl_quantile_range():
+        m = RobustScaler()
+        return m.quantile_range
+
+    check_func(impl_center_, (data,), is_out_distributed=False)
+    check_func(impl_scale_, (data,), is_out_distributed=False)
+    check_func(impl_quantile_range, (), is_out_distributed=False)

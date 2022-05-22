@@ -989,6 +989,7 @@ class DistributedAnalysis:
                 (
                     bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
+                    bodo.libs.sklearn_ext.BodoPreprocessingRobustScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
                 ),
             )
@@ -2198,8 +2199,9 @@ class DistributedAnalysis:
         array_dists,
     ):
         """
-        Analyze distribution of sklearn.preprocessing.StandardScaler, sklearn.preprocessing.MinMaxScaler, and
-        sklearn.preprocessing.LabelEncoder functions.
+        Analyze distribution of sklearn.preprocessing.StandardScaler,
+        sklearn.preprocessing.MinMaxScaler, sklearn.preprocessing.RobustScaler functions
+        and sklearn.preprocessing.LabelEncoder functions.
         Only need to handle fit_transform, transform and inverse_transform. fit is handled automatically.
         """
 
