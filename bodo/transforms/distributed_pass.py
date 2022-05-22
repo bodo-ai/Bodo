@@ -477,6 +477,7 @@ class DistributedPass:
                     bodo.libs.sklearn_ext.BodoLinearSVCType,
                     bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
+                    bodo.libs.sklearn_ext.BodoPreprocessingRobustScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
                 ),
             )
