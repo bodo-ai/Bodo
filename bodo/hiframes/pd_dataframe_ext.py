@@ -3897,6 +3897,27 @@ def to_sql_exception_guard(
                     " 'pip install snowflake-sqlalchemy snowflake-connector-python'."
                 )
                 return err_msg
+        # Pandas + SQLAlchemy per default save all object (string) columns as CLOB in Oracle DB,
+        # which makes insertion extremely slow.
+        # Stack overflow suggestion:
+        # explicitly specify dtype for all DF columns of object dtype as VARCHAR
+        # when saving DataFrames to Oracle DB.
+        # See [BE-2770] and
+        # https://stackoverflow.com/questions/42727990/speed-up-to-sql-when-writing-pandas-dataframe-to-oracle-database-using-sqlalch
+        # If a column's dtype is identified as `object` by Pandas,
+        # use Bodo DataFrame type to get its original dtype.
+        if db_type == "oracle":
+            import sqlalchemy as sa
+
+            bodo_df_type = bodo.typeof(df)
+            dtyp = {}
+            for c, col_dtype in zip(bodo_df_type.columns, bodo_df_type.data):
+                if df[c].dtype == "object":
+                    if col_dtype == datetime_date_array_type:
+                        dtyp[c] = sa.types.Date
+                    elif col_dtype == bodo.string_array_type:
+                        dtyp[c] = sa.types.VARCHAR(df[c].str.len().max())
+            dtype = dtyp
         try:
             df.to_sql(
                 name,
