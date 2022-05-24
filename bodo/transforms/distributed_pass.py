@@ -1997,9 +1997,6 @@ class DistributedPass:
                 shape_vars = find_build_tuple(self.func_ir, args[1])
             return self._run_np_reshape(assign, args[0], shape_vars, equiv_set)
 
-        if func_name == "ravel" and self._is_1D_arr(args[0].name):
-            assert self.typemap[args[0].name].ndim == 1, "only 1D ravel supported"
-
         if func_name in list_cumulative and self._is_1D_or_1D_Var_arr(args[0].name):
             in_arr_var = args[0]
             lhs_var = assign.target

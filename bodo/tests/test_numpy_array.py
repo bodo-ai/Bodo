@@ -1306,3 +1306,25 @@ def test_np_array_from_enum(arr_fun):
 
     for member in TestEnum:
         check_func(arr_fun, (member,))
+
+
+def test_np_ravel(memory_leak_check):
+    """
+    [BE-2795] Tests support np.ravel
+    on 2-dim numpy array with various
+    layouts.
+    """
+
+    def impl(df):
+        values = df.values
+        values = values.reshape(-1, 1)
+        result = values.ravel()
+        return result
+
+    df = pd.DataFrame(
+        {
+            "A": np.arange(100),
+            "B": np.arange(100, 200) / 0.25,
+        }
+    )
+    check_func(impl, (df,))
