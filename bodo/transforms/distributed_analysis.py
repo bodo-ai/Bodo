@@ -2413,7 +2413,22 @@ class DistributedAnalysis:
             return
 
         if func_name == "ravel":
-            self._meet_array_dists(lhs, args[0].name, array_dists)
+            if lhs not in array_dists:
+                if self.typemap[args[0].name].ndim != 1:
+                    # special case: output is 1D_Var since we just reshape
+                    # locally without data exchange
+                    array_dists[lhs] = Distribution.OneD_Var
+                else:
+                    array_dists[lhs] = Distribution.OneD
+            in_dist = array_dists[args[0].name]
+            out_dist = array_dists[lhs]
+            out_dist = Distribution(min(out_dist.value, in_dist.value))
+            array_dists[lhs] = out_dist
+            # output can cause input REP. Ravel can never force
+            # the input to go from 1D -> 1DVar, regardless of
+            # the initial distribution
+            if out_dist == Distribution.REP:
+                array_dists[args[0].name] = out_dist
             return
 
         if func_name == "digitize":
