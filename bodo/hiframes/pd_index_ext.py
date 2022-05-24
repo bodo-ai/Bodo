@@ -4099,10 +4099,10 @@ def overload_rename(I, name, inplace=False):
     if is_overload_true(inplace):
         raise BodoError("Index.rename(): inplace index renaming unsupported")
 
-    return init_index(I, name)
+    return init_index_from_index(I, name)
 
 
-def init_index(I, name):
+def init_index_from_index(I, name):
     """Creates an Index value using data of input Index 'I' and new name value 'name'"""
     # TODO: add more possible initializer types
     standard_init_map = {
@@ -4146,6 +4146,71 @@ def init_index(I, name):
         )  # pragma: no cover
 
     raise_bodo_error(f"init_index(): Unknown type {type(I)}")
+
+
+def get_index_constructor(I):
+    """Returns the constructor for a corresponding Index type"""
+    standard_constructors = {
+        NumericIndexType: bodo.hiframes.pd_index_ext.init_numeric_index,
+        DatetimeIndexType: bodo.hiframes.pd_index_ext.init_datetime_index,
+        TimedeltaIndexType: bodo.hiframes.pd_index_ext.init_timedelta_index,
+        StringIndexType: bodo.hiframes.pd_index_ext.init_binary_str_index,
+        BinaryIndexType: bodo.hiframes.pd_index_ext.init_binary_str_index,
+        CategoricalIndexType: bodo.hiframes.pd_index_ext.init_categorical_index,
+        IntervalIndexType: bodo.hiframes.pd_index_ext.init_interval_index,
+        RangeIndexType: bodo.hiframes.pd_index_ext.init_range_index,
+    }
+
+    if type(I) in standard_constructors:  # pragma: no cover
+        return standard_constructors[type(I)]
+
+    raise BodoError(
+        f"Unsupported type for standard Index constructor: {type(I)}"
+    )  # pragma: no cover
+
+
+@overload_method(NumericIndexType, "unique", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "unique", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "unique", no_unliteral=True, inline="always")
+@overload_method(CategoricalIndexType, "unique", no_unliteral=True, inline="always")
+# Does not work if the intervals are distinct but share a start-value
+# (i.e. [(1, 2), (2, 3), (1, 3)]).
+# Does not work for time-based intervals.
+# See [BE-2813]
+@overload_method(IntervalIndexType, "unique", no_unliteral=True, inline="always")
+@overload_method(DatetimeIndexType, "unique", no_unliteral=True, inline="always")
+@overload_method(TimedeltaIndexType, "unique", no_unliteral=True, inline="always")
+def overload_index_unique(I):
+    """Add support for Index.unique() on most Index types"""
+    constructor = get_index_constructor(I)
+
+    def impl(I):  # pragma: no cover
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        name = bodo.hiframes.pd_index_ext.get_index_name(I)
+        uni = bodo.libs.array_kernels.unique(arr)
+        return constructor(uni, name)
+
+    return impl
+
+
+@overload_method(RangeIndexType, "unique", no_unliteral=True)
+def overload_range_index_unique(I):
+    """Add support for Index.unique() on RangeIndex"""
+
+    def impl(I):  # pragma: no cover
+        return I.copy()
+
+    return impl
+
+
+@overload_method(PeriodIndexType, "unique", no_unliteral=True)
+@overload_method(MultiIndexType, "unique", no_unliteral=True)
+@overload_method(HeterogeneousIndexType, "unique", no_unliteral=True)
+def overload_unsupported_index_unique(I):
+    """Add support for Index.unique() on unsupported Index types"""
+    raise BodoError(
+        f"Index.unique(): {type(I).__name__} supported yet"
+    )  # pragma: no cover
 
 
 # TODO(ehsan): test
@@ -4369,7 +4434,6 @@ index_unsupported_methods = [
     "tolist",
     "transpose",
     "union",
-    "unique",
     "value_counts",
     "view",
     "where",

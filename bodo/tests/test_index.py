@@ -1257,6 +1257,146 @@ def test_monotonicity(index, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "idx",
+    [
+        pd.Index([1, 2, 3]),
+        pd.Index([1, 1, 2, 1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1]),
+        pd.Index(
+            [
+                0.7573456092417888,
+                0.21589999967248008,
+                0.8671567646182514,
+                0.383775019426454,
+                0.21589999967248008,
+                0.5937443415123859,
+                0.5583538962837552,
+                0.5583538962837552,
+                0.6448399071221529,
+                0.383775019426454,
+            ]
+        ),
+        # Unskip after [BE-2811] is resolved  (.unique() on boolean index)
+        pytest.param(
+            pd.Index([True, True, True, True, False, True, False, False]),
+            marks=pytest.mark.skip,
+        ),
+        # Unskip after [BE-2811] is resolved  (.unique() on boolean index)
+        pytest.param(
+            pd.Index([False, False, False]),
+            marks=pytest.mark.skip,
+        ),
+        pd.Index(["A", "B"] * 4),
+        pd.Index(
+            [
+                "blue",
+                "green",
+                "yellow",
+                "purple",
+                "red",
+                "green",
+                "blue",
+                "purple",
+                "yellow",
+                "green",
+                "blue",
+                "yellow",
+                "yellow",
+                "purple",
+                "orange",
+                "purple",
+                "purple",
+                "red",
+                "orange",
+                "purple",
+                "red",
+                "yellow",
+                "green",
+                "orange",
+                "blue",
+                "purple",
+                "blue",
+                "orange",
+                "red",
+                "blue",
+            ]
+        ),
+        pd.Index(["alpha", "Alpha", "alpha", "ALPHA", "alphonse", "a", "A"]),
+        pd.CategoricalIndex(["A", "B", "C", "A", "A", "C", "A", "B"]),
+        pd.CategoricalIndex([1, 5, 1, 2, 0, 1, 1, 1, 0, 5, 9]),
+        pd.CategoricalIndex([0.0, 0.25, 0.5, 0.75, 0.25, 0.25, 0.75, 0.25]),
+        # Unskip after [BE-2811] is resolved (.unique() on boolean index)
+        pytest.param(
+            pd.CategoricalIndex([True, True, True, True, False, True, False, False]),
+            marks=pytest.mark.skip,
+        ),
+        # Unskip after [BE-2811] is resolved (.unique() on boolean index)
+        pytest.param(
+            pd.CategoricalIndex([True, True, True]),
+            marks=pytest.mark.skip,
+        ),
+        pd.RangeIndex(start=0, stop=10, step=2),
+        pd.RangeIndex(start=100, stop=0, step=-10),
+        # Unskip after [BE-2812] is resolved (PeriodIndex.unique())
+        pytest.param(
+            pd.PeriodIndex(year=[2000, 2000, 2001, 2001], quarter=[1, 1, 1, 3]),
+            marks=pytest.mark.skip,
+        ),
+        # Unskip after [BE-2811] is resolved (PeriodIndex.unique())
+        pytest.param(
+            pd.period_range(start="2017-01-01", end="2018-01-01", freq="M"),
+            marks=pytest.mark.skip,
+        ),
+        pd.interval_range(0, 5),
+        pd.IntervalIndex.from_tuples([(0, 1), (3, 4), (2, 3), (1, 2)]),
+        pd.IntervalIndex.from_tuples([(1.0, 1.5), (1.5, 3.0), (3.0, 4.0), (4.0, 10.1)]),
+        pd.IntervalIndex.from_tuples(
+            [(0, 1), (3, 4), (2, 3), (0, 1), (0, 1), (1, 2), (2, 3)]
+        ),
+        # Unskip after [BE-2813] is resolved (intervals of datetime values)
+        pytest.param(
+            pd.interval_range(
+                start=pd.Timestamp("2005-01-01"), end=pd.Timestamp("2005-01-31")
+            ),
+            marks=pytest.mark.skip,
+        ),
+        # Unskip after [BE-2813] is resolved (intervals with shared start-value)
+        pytest.param(
+            pd.IntervalIndex.from_tuples(
+                [(1, 2), (2, 3), (3, 5), (1, 2), (2, 5), (1, 5)]
+            ),
+            marks=pytest.mark.skip,
+        ),
+        pd.IntervalIndex.from_tuples([(1, 5), (2, 6), (3, 7)]),
+        pd.IntervalIndex.from_tuples([(1, 5), (2, 5), (3, 7)]),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
+        pd.TimedeltaIndex(
+            ["1 days", "2 days", "3 days", "2 days", "3 hours", "2 minutes"]
+        ),
+        pd.Index([b"asdga", b"asdga", b"", b"oihjb", bytes(2), b"CC", b"asdfl"]),
+        pd.Index(
+            [
+                b"alpha",
+                b"beta",
+                b"gamma",
+                b"delta",
+                b"ALPHA",
+                b"a",
+                b"A",
+                b"A",
+                b"beta",
+                b"ALPHA",
+            ]
+        ),
+    ],
+)
+def test_index_unique(idx):
+    def impl(idx):
+        return idx.unique()
+
+    check_func(impl, (idx,), dist_test=False)
+
+
+@pytest.mark.parametrize(
     "data",
     [
         np.array([1, 3, 4]),  # Int array
@@ -1683,12 +1823,6 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_union)(idx=pd.Index(data))
-
-    def test_unique(idx):
-        return idx.unique()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_unique)(idx=pd.Index(data))
 
     def test_value_counts(idx):
         return idx.value_counts()
