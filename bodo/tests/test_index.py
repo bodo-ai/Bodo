@@ -993,6 +993,46 @@ def test_init_binary_array_bad_numpy_arr(memory_leak_check):
         pytest.param(
             pd.timedelta_range(start="1D", end="3D", name="A"), marks=pytest.mark.skip
         ),
+        # Note: only functional for homogenous Index types
+        pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
+        pd.CategoricalIndex(["a", "b", "c", "a", "b", "c"]),
+        pd.CategoricalIndex([1.1, 2.2, 3.3, 1.13, 2.2, 4.05, 3.3]),
+        pd.CategoricalIndex(["A", "a", "E", "e", "I", "i"]),
+        pd.CategoricalIndex(
+            [
+                "blue",
+                "green",
+                "yellow",
+                "purple",
+                "red",
+                "green",
+                "blue",
+                "purple",
+                "yellow",
+                "green",
+                "blue",
+                "yellow",
+                "yellow",
+                "purple",
+                "orange",
+                "purple",
+                "purple",
+                "red",
+                "orange",
+                "purple",
+                "red",
+                "yellow",
+                "green",
+                "orange",
+                "blue",
+                "purple",
+                "blue",
+                "orange",
+                "red",
+                "blue",
+            ]
+        ),
+        pd.CategoricalIndex([True, False, False, True, False, True, True, True]),
     ],
 )
 def test_index_iter(index, memory_leak_check):
@@ -1007,6 +1047,87 @@ def test_index_iter(index, memory_leak_check):
 
     check_func(test_impl1, (index,), dist_test=False)
     check_func(test_impl2, (index,), dist_test=False)
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([10, 12], dtype="Int64"),
+        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10, 12], dtype="UInt64"),
+        pd.Index(["A", "B"] * 4),
+        pytest.param(pd.Index([b"A", b"B"] * 4), id="binary_idx"),
+        pd.RangeIndex(1, 15, 2),
+        pd.RangeIndex(-4, 8, 4),
+        pytest.param(
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
+        ),
+        pytest.param(
+            pd.timedelta_range(start="1D", end="3D", name="A"),
+        ),
+        pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
+        pd.CategoricalIndex(["a", "b", "c", "a", "b", "c"]),
+        pd.CategoricalIndex([1.1, 2.2, 3.3, 1.13, 2.2, 4.05, 3.3]),
+        pd.CategoricalIndex(["A", "a", "E", "e", "I", "i"]),
+        pd.CategoricalIndex(
+            [
+                "blue",
+                "green",
+                "yellow",
+                "purple",
+                "red",
+                "green",
+                "blue",
+                "purple",
+                "yellow",
+                "green",
+                "blue",
+                "yellow",
+                "yellow",
+                "purple",
+                "orange",
+                "purple",
+                "purple",
+                "red",
+                "orange",
+                "purple",
+                "red",
+                "yellow",
+                "green",
+                "orange",
+                "blue",
+                "purple",
+                "blue",
+                "orange",
+                "red",
+                "blue",
+            ]
+        ),
+    ],
+)
+def test_index_getitem(index, memory_leak_check):
+    def test_impl_1(index):
+        return index[0]
+
+    def test_impl_2(index):
+        return index[len(index) - 1]
+
+    def test_impl_3(index):
+        return index[:2]
+
+    def test_impl_4(index):
+        return index[1::2]
+
+    # Unskip after [BE-2829] resolved
+    def test_impl_5(index):
+        return index[pd.Index([i % 2 == 0 for i in range(len(index))])]
+
+    check_func(test_impl_1, (index,), dist_test=False)
+    check_func(test_impl_2, (index,), dist_test=False)
+    check_func(test_impl_3, (index,), dist_test=False)
+    check_func(test_impl_4, (index,), dist_test=False)
+    # Unskip after [BE-2829] resolved
+    # check_func(test_impl_5, (index,), dist_test=False)
 
 
 def test_init_range_index_array_analysis(memory_leak_check):

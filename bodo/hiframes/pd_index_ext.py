@@ -811,6 +811,34 @@ def overload_timedelta_index_getitem(I, ind):
     return impl
 
 
+@overload(operator.getitem, no_unliteral=True)
+def overload_categorical_index_getitem(I, ind):
+    """getitem overload for CategoricalIndex"""
+    if not isinstance(I, CategoricalIndexType):
+        return
+
+    if isinstance(ind, types.Integer):
+
+        def impl(I, ind):  # pragma: no cover
+            cat_arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+            val = cat_arr[ind]
+            return val
+
+        return impl
+
+    if isinstance(ind, types.SliceType):
+
+        def impl(I, ind):  # pragma: no cover
+            cat_arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+            name = bodo.hiframes.pd_index_ext.get_index_name(I)
+            new_arr = cat_arr[ind]
+            return bodo.hiframes.pd_index_ext.init_categorical_index(new_arr, name)
+
+        return impl
+
+    raise BodoError(f"pd.CategoricalIndex.__getitem__: unsupported index type {ind}")
+
+
 # from pandas.core.arrays.datetimelike
 @numba.njit(no_cpython_wrapper=True)
 def validate_endpoints(closed):  # pragma: no cover
@@ -2042,7 +2070,7 @@ def unbox_period_index(typ, val, c):
 # ------------------------------ CategoricalIndex ---------------------------
 
 
-class CategoricalIndexType(types.ArrayCompatible):
+class CategoricalIndexType(types.IterableType, types.ArrayCompatible):
     """data type for CategoricalIndex values"""
 
     def __init__(self, data, name_typ=None):
@@ -2095,6 +2123,10 @@ class CategoricalIndexType(types.ArrayCompatible):
         from bodo.hiframes.pd_categorical_ext import get_categories_int_type
 
         return str(get_categories_int_type(self.dtype))
+
+    @property
+    def iterator_type(self):
+        return bodo.utils.typing.BodoArrayIterator(self, self.dtype.elem_type)
 
 
 @register_model(CategoricalIndexType)
