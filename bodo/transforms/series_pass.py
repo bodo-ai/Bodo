@@ -532,6 +532,10 @@ class SeriesPass:
                 impl = bodo.hiframes.pd_index_ext.overload_timedelta_index_getitem(
                     typ1, typ2
                 )
+            elif isinstance(target_typ, bodo.hiframes.pd_index_ext.CategoricalIndexType):
+                impl = bodo.hiframes.pd_index_ext.overload_categorical_index_getitem(
+                    typ1, typ2
+                )
             else:
                 impl = bodo.hiframes.pd_index_ext.overload_index_getitem(typ1, typ2)
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)

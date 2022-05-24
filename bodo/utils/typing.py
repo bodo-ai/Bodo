@@ -2042,10 +2042,11 @@ class BodoArrayIterator(types.SimpleIteratorType):
     TODO(ehsan): add iterator support using this for all bodo array types.
     """
 
-    def __init__(self, arr_type):
+    def __init__(self, arr_type, yield_type=None):
         self.arr_type = arr_type
         name = f"iter({arr_type})"
-        yield_type = arr_type.dtype
+        if yield_type == None:
+            yield_type = arr_type.dtype
         super(BodoArrayIterator, self).__init__(name, yield_type)
 
 
