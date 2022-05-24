@@ -659,7 +659,7 @@ class Aggregate(ir.Stmt):
             if self.pivot_arr is not None
             else ""
         )
-        key_names = ",".join(self.key_names)
+        key_names = ",".join([str(k) for k in self.key_names])
         key_arrnames = ",".join([v.name for v in self.key_arrs])
         return "aggregate: {} = {} [key: {}:{}] {}".format(
             df_out_str, df_in_str, key_names, key_arrnames, pivot
