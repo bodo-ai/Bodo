@@ -1583,3 +1583,30 @@ def test_df_table_copy(use_deep, memory_leak_check):
             check_logger_msg(stream, "Columns loaded ['Column1', 'Column3']")
     finally:
         _del_many_column_file(file_type)
+
+
+@pytest.mark.parametrize("use_copy", [True, False])
+def test_df_table_rename(use_copy, memory_leak_check):
+    """
+    Test rename when using table format.
+    """
+
+    def rename_table(use_copy):
+        df = pd.read_parquet("many_columns.parquet")
+        df = df.rename(
+            copy=use_copy, columns={"Column1": "Columnx23", "Column5": "Column1"}
+        )
+        return df[["Column1", "Columnx23"]]
+
+    file_type = "parquet"
+    try:
+        _create_many_column_file(file_type)
+        check_func(rename_table, (use_copy,))
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(rename_table)(use_copy)
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['Column1', 'Column5']")
+    finally:
+        _del_many_column_file(file_type)

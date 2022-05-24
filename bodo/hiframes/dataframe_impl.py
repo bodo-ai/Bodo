@@ -595,25 +595,69 @@ def overload_dataframe_rename(
         raise_bodo_error(
             "DataFrame.rename(): must pass columns either via 'mapper' and 'axis'=1 or 'columns'"
         )
-    new_cols = [
-        col_map.get(df.columns[i], df.columns[i]) for i in range(len(df.columns))
-    ]
-
-    data_outs = []
-    for i in range(len(df.columns)):
-        arr = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
-        if is_overload_true(copy):
-            data_outs.append(arr + ".copy()")
-        elif is_overload_false(copy):
-            data_outs.append(arr)
-        else:
-            data_outs.append(f"{arr}.copy() if copy else {arr}")
+    new_cols = tuple(
+        [col_map.get(df.columns[i], df.columns[i]) for i in range(len(df.columns))]
+    )
 
     header = (
         "def impl(df, mapper=None, index=None, columns=None, axis=None, "
         "copy=True, inplace=False, level=None, errors='ignore', _bodo_transformed=False):\n"
     )
-    return _gen_init_df(header, new_cols, ", ".join(data_outs))
+    extra_globals = None
+    out_df_type = None
+
+    if df.is_table_format:
+        header += "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
+        out_df_type = df.copy(columns=new_cols)
+        output_arr_typ = types.none
+        extra_globals = {"output_arr_typ": output_arr_typ}
+        if is_overload_false(copy):
+            data_args = (
+                "bodo.utils.table_utils.generate_mappable_table_func("
+                + "table, "
+                + "None, "
+                + "output_arr_typ, "
+                + "True)"
+            )
+        elif is_overload_true(copy):
+            data_args = (
+                "bodo.utils.table_utils.generate_mappable_table_func("
+                + "table, "
+                + "'copy', "
+                + "output_arr_typ, "
+                + "True)"
+            )
+        else:
+            data_args = (
+                "bodo.utils.table_utils.generate_mappable_table_func("
+                + "table, "
+                + "'copy', "
+                + "output_arr_typ, "
+                + "True) if copy else bodo.utils.table_utils.generate_mappable_table_func("
+                + "table, "
+                + "None, "
+                + "output_arr_typ, "
+                + "True)"
+            )
+    else:
+        data_outs = []
+        for i in range(len(df.columns)):
+            arr = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+            if is_overload_true(copy):
+                data_outs.append(arr + ".copy()")
+            elif is_overload_false(copy):
+                data_outs.append(arr)
+            else:
+                data_outs.append(f"{arr}.copy() if copy else {arr}")
+        data_args = ", ".join(data_outs)
+
+    return _gen_init_df(
+        header,
+        new_cols,
+        data_args,
+        extra_globals=extra_globals,
+        out_df_type=out_df_type,
+    )
 
 
 @overload_method(DataFrameType, "filter", no_unliteral=True)
