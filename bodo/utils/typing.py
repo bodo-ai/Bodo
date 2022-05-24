@@ -663,32 +663,32 @@ def check_unsupported_args(
 
     if unsupported and package_name == "pandas":
         if module_name == "IO":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/io.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/io/).\n"
         elif module_name == "General":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/general.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/general/).\n"
         elif module_name == "DataFrame":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/dataframe.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/dataframe/).\n"
         elif module_name == "Window":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/window.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/window/).\n"
         elif module_name == "GroupBy":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/groupby.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/groupby/).\n"
         elif module_name == "Series":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/series.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/series/).\n"
         elif module_name == "HeterogeneousSeries":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/series.html#heterogeneous-series).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/series/#heterogeneous_series).\n"
         elif module_name == "Index":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/indexapi.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/indexapi/).\n"
         elif module_name == "Timestamp":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/timestamp.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/timestamp/).\n"
         elif module_name == "Timedelta":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/timedelta.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/timedelta/).\n"
         elif module_name == "DateOffsets":
-            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/pandas/dateoffsets.html).\n"
+            error_message += "\nPlease check supported Pandas operations here (https://docs.bodo.ai/latest/api_docs/pandas/dateoffsets/).\n"
 
     elif unsupported and package_name == "ml":
-        error_message += "\nPlease check supported ML operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/ml.html).\n"
+        error_message += "\nPlease check supported ML operations here (https://docs.bodo.ai/latest/api_docs/ml/).\n"
     elif unsupported and package_name == "numpy":
-        error_message += "\nPlease check supported Numpy operations here (https://docs.bodo.ai/latest/source/programming_with_bodo/bodo_api_reference/numpy.html).\n"
+        error_message += "\nPlease check supported Numpy operations here (https://docs.bodo.ai/latest/api_docs/numpy/).\n"
     if unsupported:
         raise BodoError(error_message)
 

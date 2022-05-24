@@ -206,7 +206,7 @@ class ParquetHandler:
                 "Parquet schema not available. Either path argument "
                 "should be constant for Bodo to look at the file at compile "
                 "time or schema should be provided. For more information, "
-                "see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow"
+                "see: https://docs.bodo.ai/latest/file_io/#parquet-section."
             )
             file_name_str = get_const_value(
                 file_name,
@@ -1149,6 +1149,7 @@ def get_parquet_dataset(
 
     import pyarrow as pa
     import pyarrow.parquet as pq
+
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
@@ -1748,6 +1749,7 @@ def _add_categories_to_pq_dataset(pq_dataset):
     as '_category_info' attribute
     """
     import pyarrow as pa
+
     from mpi4py import MPI
 
     # NOTE: shouldn't be possible

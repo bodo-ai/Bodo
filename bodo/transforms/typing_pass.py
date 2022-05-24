@@ -2905,7 +2905,7 @@ class TypingTransforms:
                 (
                     "DataFrame.{}(): non-deterministic inplace change of dataframe schema "
                     "not supported.\nSee "
-                    "http://docs.bodo.ai/latest/source/not_supported.html"
+                    "https://docs.bodo.ai/latest/bodo_parallelism/not_supported/"
                 ).format(func_name)
             )
 

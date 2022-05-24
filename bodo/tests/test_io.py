@@ -5372,9 +5372,10 @@ def test_csv_non_constant_filepath_error(datapath):
             )
         return df
 
-    msg = (r".*pd.read_csv\(\) requires explicit type annotation using the 'names' "
-    r"and 'dtype' arguments if the filename is not constant. For more information, "
-    r"see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow.*"
+    msg = (
+        r".*pd.read_csv\(\) requires explicit type annotation using the 'names' "
+        r"and 'dtype' arguments if the filename is not constant. For more information, "
+        r"see: https://docs.bodo.ai/latest/file_io/#io_workflow."
     )
 
     with pytest.raises(BodoError, match=msg):
@@ -5434,8 +5435,10 @@ def test_json_non_constant_filepath_error(datapath):
             )
         return df
 
-    msg = (r".*pd.read_json\(\) requires the filename to be a compile time constant. "
-    r"For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow.*")
+    msg = (
+        r".*pd.read_json\(\) requires the filename to be a compile time constant. "
+        r"For more information, see: https://docs.bodo.ai/latest/file_io/#json-section."
+    )
 
     with pytest.raises(BodoError, match=msg):
         bodo.jit(lambda: impl())()
@@ -5485,9 +5488,10 @@ def test_excel_non_constant_filepath_error(datapath):
             )
         return df
 
-    msg1 = (r".*pd.read_excel\(\) requires explicit type annotation using the 'names' "
-    r"and 'dtype' arguments if the filename is not constant. For more information, "
-    r"see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow.*"
+    msg1 = (
+        r".*pd.read_excel\(\) requires explicit type annotation using the 'names' "
+        r"and 'dtype' arguments if the filename is not constant. For more information, "
+        r"see: https://docs.bodo.ai/latest/file_io/#io_workflow"
     )
     msg2 = r".*pd.read_excel\(\): both 'dtype' and 'names' should be provided if either is provided.*"
 
@@ -5526,9 +5530,10 @@ def test_pq_non_constant_filepath_error(datapath):
             df = pd.read_parquet(filepath)
         return df
 
-    msg = (r".*Parquet schema not available. Either path argument should be constant "
-    r"for Bodo to look at the file at compile time or schema should be provided. "
-    r"For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/file_io.html#io_workflow.*"
+    msg = (
+        r".*Parquet schema not available. Either path argument should be constant "
+        r"for Bodo to look at the file at compile time or schema should be provided. "
+        r"For more information, see: https://docs.bodo.ai/latest/file_io/#parquet-section."
     )
 
     with pytest.raises(BodoError, match=msg):
