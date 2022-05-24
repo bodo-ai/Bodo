@@ -522,7 +522,7 @@ def find_file_name_or_handler(path, ftype, storage_options=None):
     else:
         if parsed_url.scheme != "":
             raise BodoError(
-                f"Unrecognized scheme {parsed_url.scheme}. Please refer to https://docs.bodo.ai/latest/source/file_io.html"
+                f"Unrecognized scheme {parsed_url.scheme}. Please refer to https://docs.bodo.ai/latest/file_io/."
             )
         is_handler = False
 

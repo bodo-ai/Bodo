@@ -1622,7 +1622,7 @@ class PivotTableTyper(AbstractTemplate):
 
         if is_overload_none(_pivot_values):
             raise_bodo_error(
-                "Dataframe.pivot_table() requires explicit annotation to determine output columns. For more information, see: https://docs.bodo.ai/latest/source/programming_with_bodo/pandas.html"
+                "Dataframe.pivot_table() requires explicit annotation to determine output columns. For more information, see: https://docs.bodo.ai/latest/api_docs/pandas/dataframe/#pddataframepivot."
             )
 
         pivot_vals = _pivot_values.meta

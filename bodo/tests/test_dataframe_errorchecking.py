@@ -1012,7 +1012,7 @@ def test_df_getitem_non_const_columname_error(memory_leak_check):
             col = df.columns[0]
         return df[col]
 
-    message = r"df\[\] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+    message = r"df\[\] getitem selecting a subset of columns requires providing constant column names. For more information, see https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
 
     df = pd.DataFrame({"A": [1, 2, 3]})
     with pytest.raises(BodoError, match=message):
@@ -1035,7 +1035,7 @@ def test_df_getitem_non_const_columname_list_error(memory_leak_check):
             cols = [df.columns[0]]
         return df[cols]
 
-    message = r"df\[\] getitem using .* not supported. If you are trying to select a subset of the columns, you must provide the column names you are selecting as a constant. See https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+    message = r"df\[\] getitem using .* not supported. If you are trying to select a subset of the columns, you must provide the column names you are selecting as a constant. See https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
 
     df = pd.DataFrame({"A": [1, 2, 3]})
     with pytest.raises(BodoError, match=message):
@@ -1063,7 +1063,7 @@ def test_df_loc_getitem_non_const_columname_error(memory_leak_check):
     # TODO: add when loc supports indexing with integer col names
     # df = pd.DataFrame({1: [1, 2, 3]})
 
-    message = r"DataFrame.loc\[\] getitem \(location-based indexing\) requires constant column names. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+    message = r"DataFrame.loc\[\] getitem \(location-based indexing\) requires constant column names. For more information, see https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
     with pytest.raises(BodoError, match=message):
         f(df, "A")
     with pytest.raises(BodoError, match=message):
@@ -1096,7 +1096,7 @@ def test_df_loc_getitem_non_const_columname_list_error(memory_leak_check):
     # TODO: add when loc supports indexing with integer col names
     # df = pd.DataFrame({1: [1, 2, 3]})
 
-    message = r"DataFrame.loc\[\] getitem \(location-based indexing\) using .* not supported yet. If you are trying to select a subset of the columns by passing a list of column names, that list must be a compile time constant. See https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+    message = r"DataFrame.loc\[\] getitem \(location-based indexing\) using .* not supported yet. If you are trying to select a subset of the columns by passing a list of column names, that list must be a compile time constant. See https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
 
     # TODO: re add this check when we support it in df.loc
     # with pytest.raises(BodoError, match=message):
@@ -1120,7 +1120,7 @@ def test_df_iloc_getitem_non_const_columname_error(memory_leak_check):
 
     df = pd.DataFrame({"A": np.arange(10)})
 
-    message = r"idx2 in df.iloc\[idx1, idx2\] should be a constant integer or constant list of integers. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+    message = r"idx2 in df.iloc\[idx1, idx2\] should be a constant integer or constant list of integers. For more information, see https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
     with pytest.raises(BodoError, match=message):
         f(df, 1)
     with pytest.raises(BodoError, match=message):
@@ -1142,7 +1142,7 @@ def test_df_iloc_getitem_non_const_slice_error(memory_leak_check):
 
     df = pd.DataFrame({"A": np.arange(10)})
 
-    message = r"slice2 in df.iloc\[slice1,slice2\] should be constant. For more information, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html."
+    message = r"slice2 in df.iloc\[slice1,slice2\] should be constant. For more information, see https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
 
     with pytest.raises(BodoError, match=message):
         f(df, slice(0, 1))
@@ -1159,7 +1159,7 @@ def test_df_iat_getitem_non_const_error(memory_leak_check):
 
     df = pd.DataFrame({"A": np.arange(10)})
 
-    message = r"DataFrame.iat getitem: column index must be a constant integer. For more informaton, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+    message = r"DataFrame.iat getitem: column index must be a constant integer. For more informaton, see https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
 
     with pytest.raises(BodoError, match=message):
         f(df, 0)
@@ -1175,7 +1175,7 @@ def test_df_iat_setitem_non_const_error(memory_leak_check):
 
     df = pd.DataFrame({"A": np.arange(10)})
 
-    message = r"DataFrame.iat setitem: column index must be a constant integer. For more informaton, see https://docs.bodo.ai/latest/source/programming_with_bodo/require_constants.html"
+    message = r"DataFrame.iat setitem: column index must be a constant integer. For more informaton, see https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
 
     with pytest.raises(BodoError, match=message):
         f(df, 0)
