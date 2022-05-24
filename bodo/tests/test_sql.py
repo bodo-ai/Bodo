@@ -5,6 +5,7 @@ import json
 import os
 import random
 import re
+import string
 import urllib
 import uuid
 
@@ -1443,4 +1444,69 @@ def test_to_sql_postgres(is_distributed, memory_leak_check):
     n_passed = reduce_sum(passed)
     n_pes = bodo.get_size()
     assert n_passed == n_pes, "test_to_sql_postgres failed"
+    bodo.barrier()
+
+
+# @pytest.mark.slow
+@pytest.mark.parametrize("is_distributed", [True, False])
+def test_to_sql_oracle(is_distributed, memory_leak_check):
+    """Test to_sql with PostgreSQL database
+    Data is compared vs. original DF
+    """
+
+    def test_impl_write_sql(df, table_name, conn):
+        df.to_sql(table_name, conn, index=False, if_exists="replace")
+
+    np.random.seed(5)
+    random.seed(5)
+    # To ensure we're above rank 0 100 row limit
+    len_list = 330
+    list_int = list(np.random.choice(10, len_list))
+    list_double = list(np.random.choice([4.0, np.nan], len_list))
+    letters = string.ascii_letters
+    list_string = [
+        "".join(random.choice(letters) for i in range(random.randrange(10, 100)))
+        for _ in range(len_list)
+    ]
+    list_datetime = pd.date_range("2001-01-01", periods=len_list)
+    list_date = [d.date() for d in pd.date_range("2021-11-06", periods=len_list)]
+    df_in = pd.DataFrame(
+        {
+            "a": list_int,
+            "b": list_double,
+            "c": list_string,
+            "d": list_date,
+            "e": list_datetime,
+        }
+    )
+    table_name = "to_sql_table"
+    if is_distributed:
+        start, end = get_start_end(len(df_in))
+        df_input = df_in.iloc[start:end]
+    else:
+        df_input = df_in
+    conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
+    bodo.jit(all_args_distributed_block=is_distributed)(test_impl_write_sql)(
+        df_input, table_name, conn
+    )
+    bodo.barrier()
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            df_load = pd.read_sql(
+                "select * from " + table_name,
+                conn,
+            )
+            # The writing does not preserve the order a priori
+            l_cols = df_in.columns.to_list()
+            df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
+            df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
+            # check_dtype is False because Date column is read by Pandas as `object`
+            pd.testing.assert_frame_equal(df_load_sort, df_in_sort, check_dtype=False)
+        except Exception as e:
+            print(e)
+            passed = 0
+    n_passed = reduce_sum(passed)
+    n_pes = bodo.get_size()
+    assert n_passed == n_pes, "test_to_sql_oracle failed"
     bodo.barrier()
