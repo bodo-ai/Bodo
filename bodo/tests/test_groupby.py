@@ -338,14 +338,17 @@ def test_agg(memory_leak_check):
 
 def test_agg_set_error(memory_leak_check):
     """
-    Test Groupby.agg() with constant set input (BE-327)
-    TODO: support set input
+    Test Groupby.agg() with constant set input but no single
+    output column.
     """
 
     def impl(df):
         return df.groupby("A").agg({"max"})
 
-    with pytest.raises(BodoError, match="must be user defined function"):
+    with pytest.raises(
+        BodoError,
+        match="must select exactly one column when more than one function is supplied",
+    ):
         bodo.jit(impl)(udf_in_df)
 
 
@@ -5792,3 +5795,66 @@ def test_groupby_asindex_no_values(memory_leak_check):
 
     # Specify sort_output because the ordering may not match.
     check_func(test_impl, (df_empty,), sort_output=True, reset_index=True)
+
+
+def test_groupby_agg_list_builtin(memory_leak_check):
+    """
+    [BE-2764] Tests support for groupby.agg with
+    a constant list of builtin functions.
+    """
+
+    def impl(df):
+        b = df.groupby(["A", "C"])["B"].agg(["min", "max"])
+        return b
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 2, 2, 3, 3] * 2,
+            "B": [1, 2, 3, 4, 5, 6] * 2,
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] * 2,
+        }
+    )
+    # Specify sort_output because the ordering may not match.
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
+def test_groupby_agg_list_lambda(memory_leak_check):
+    """
+    [BE-2764] Tests support for groupby.agg with
+    a constant list of lambda functions.
+    """
+
+    def impl(df):
+        b = df.groupby(["A", "C"])["B"].agg([lambda x: x.max() - x.min()])
+        return b
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 2, 2, 3, 3] * 2,
+            "B": [1, 2, 3, 4, 5, 6] * 2,
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] * 2,
+        }
+    )
+    # Specify sort_output because the ordering may not match.
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
+def test_agg_set(memory_leak_check):
+    """
+    [BE-327] Test Groupby.agg() with constant set input
+    """
+
+    def impl(df):
+        b = df.groupby(["A", "C"])["B"].agg({"max"})
+        return b
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 1, 2, 2, 3, 3] * 2,
+            "B": [1, 2, 3, 4, 5, 6] * 2,
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] * 2,
+        }
+    )
+
+    # Specify sort_output because the ordering may not match.
+    check_func(impl, (df,), sort_output=True, reset_index=True)

@@ -275,7 +275,7 @@ def test_groupby_agg_multi_funcs(memory_leak_check):
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
     with pytest.raises(
         BodoError,
-        match="must select exactly one column when more than one functions supplied",
+        match="must select exactly one column when more than one function is supplied",
     ):
         bodo.jit(impl)(df)
 
@@ -346,7 +346,7 @@ def test_groupby_aggregate_multi_funcs(memory_leak_check):
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"], "E": ["aa", "bb", "cc"]})
     with pytest.raises(
         BodoError,
-        match="must select exactly one column when more than one functions supplied",
+        match="must select exactly one column when more than one function is supplied",
     ):
         bodo.jit(impl)(df)
 
