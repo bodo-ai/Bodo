@@ -2817,6 +2817,31 @@ def test_unroll_loop(memory_leak_check, is_slow_run):
     check_func(impl9, (df,), copy_input=True)
 
 
+def test_df_copy_update(memory_leak_check):
+    """
+    Test if df.copy() works as expected with
+    deep=True.
+    """
+
+    def impl1(df):
+        df1 = df.copy()
+        df1["B"] = np.arange(len(df1))
+        df1["A"][2] = 7
+        return df, df1
+
+    def impl2(df):
+        df1 = df.copy(deep=False)
+        df1["B"] = np.arange(len(df1))
+        df1["A"][2] = 7
+        return df, df1
+
+    df = pd.DataFrame({"A": [1, 2, 3] * 10, "C": [2, 3, 4] * 10})
+    for i in range(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD):
+        df[f"A{i}"] = df["A"].copy()
+    check_func(impl1, (df,), copy_input=True)
+    check_func(impl2, (df,), copy_input=True)
+
+
 @pytest.mark.slow
 def test_unsupported_df_method():
     """Raise Bodo error for unsupported df methods"""

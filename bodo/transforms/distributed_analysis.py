@@ -53,6 +53,7 @@ from bodo.utils.typing import (
     BodoWarning,
     get_overload_const_str,
     is_overload_false,
+    is_overload_none,
     is_tuple_like_type,
 )
 from bodo.utils.utils import (
@@ -2270,15 +2271,24 @@ class DistributedAnalysis:
 
         Returns True if there was a known implementation.
         """
-        # TODO: Make this more scalable by recalling internal
-        func_name = guard(get_overload_const_str, self.typemap[rhs.args[1].name])
-        # We support mappable prefixes that don't need to be separate functions.
-        if func_name[0] == "~":
-            func_name = func_name[1:]
-        # Note: This isn't an elif because the ~ may modify the name
-        if func_name in ("bodo.libs.array_ops.array_op_isna", "copy"):
-            # Not currently in the code because it is otherwise inlined.
-            # This should be included somewhere.
+        func_name_typ = self.typemap[rhs.args[1].name]
+        has_func = not is_overload_none(func_name_typ)
+        if has_func:
+            # XXX: Make this more scalable by recalling the distributed
+            # analysis already in this pass for each of the provided
+            # func names.
+            func_name = guard(get_overload_const_str, func_name_typ)
+            # We support mappable prefixes that don't need to be separate functions.
+            if func_name[0] == "~":
+                func_name = func_name[1:]
+            # Note: This isn't an elif because the ~ may modify the name
+            if func_name in ("bodo.libs.array_ops.array_op_isna", "copy"):
+                # Not currently in the code because it is otherwise inlined.
+                # This should be included somewhere.
+                self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+                return True
+        else:
+            # If we don't have a func, this is a shallow copy.
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return True
 
