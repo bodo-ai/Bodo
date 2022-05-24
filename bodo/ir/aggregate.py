@@ -75,9 +75,11 @@ from bodo.utils.typing import (
     decode_if_dict_array,
     get_literal_value,
     get_overload_const_func,
+    get_overload_const_list,
     get_overload_const_str,
     get_overload_constant_dict,
     is_overload_constant_dict,
+    is_overload_constant_list,
     is_overload_constant_str,
     list_cumulative,
     to_str_arr_if_dict_array,
@@ -450,10 +452,19 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         ]
 
     # multi-function tuple case
-    if isinstance(agg_func_typ, types.BaseTuple):
+    if isinstance(agg_func_typ, types.BaseTuple) or is_overload_constant_list(
+        agg_func_typ
+    ):
         funcs = []
         lambda_count = 0
-        for t in agg_func_typ.types:
+        if is_overload_constant_list(agg_func_typ):
+            # Lists find functions through their initial/literal values
+            agg_func_vals = get_overload_const_list(agg_func_typ)
+        else:
+            # Tuples can find functions through their types
+            agg_func_vals = agg_func_typ.types
+
+        for t in agg_func_vals:
             if is_overload_constant_str(t):
                 func_name = get_overload_const_str(t)
                 funcs.append(
@@ -467,7 +478,7 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
                 # similar to _resolve_agg, TODO(ehsan): refactor
                 # if tuple has lambdas they will be named <lambda_0>,
                 # <lambda_1>, ... in output
-                if func.fname == "<lambda>":
+                if func.fname == "<lambda>" and len(agg_func_vals) > 1:
                     func.fname = "<lambda_" + str(lambda_count) + ">"
                     lambda_count += 1
                 funcs.append(func)

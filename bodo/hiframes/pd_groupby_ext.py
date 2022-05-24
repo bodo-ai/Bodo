@@ -878,15 +878,25 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
         return signature(out_res, *args), gb_info
 
-    # multi-function tuple case
-    if isinstance(func, types.BaseTuple) and not isinstance(
-        func, types.LiteralStrKeyDict
-    ):
+    # multi-function tuple or list case
+    if (
+        isinstance(func, types.BaseTuple)
+        and not isinstance(func, types.LiteralStrKeyDict)
+    ) or is_overload_constant_list(func):
         if not (len(grp.selection) == 1 and grp.explicit_select):
             raise_bodo_error(
-                "Groupby.agg()/aggregate(): must select exactly one column when more than one functions supplied"
+                "Groupby.agg()/aggregate(): must select exactly one column when more than one function is supplied"
             )
-        assert len(func) > 0
+        if is_overload_constant_list(func):
+            # Lists find functions through their initial/literal values
+            func_vals = get_overload_const_list(func)
+        else:
+            # Tuples can find functions through their types
+            func_vals = func.types
+        if len(func_vals) == 0:
+            raise_bodo_error(
+                "Groupby.agg()/aggregate(): List of functions must contain at least 1 function"
+            )
         out_data = []
         out_columns = []
         out_column_type = []
@@ -895,14 +905,14 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
             get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
         gb_info = {}
         in_col_name = grp.selection[0]
-        for f_val in func.types:
+        for f_val in func_vals:
             f_name, out_tp = get_agg_funcname_and_outtyp(
                 grp, in_col_name, f_val, typing_context, target_context
             )
             has_cumulative_ops = f_name in list_cumulative
             # if tuple has lambdas they will be named <lambda_0>,
             # <lambda_1>, ... in output
-            if f_name == "<lambda>":
+            if f_name == "<lambda>" and len(func_vals) > 1:
                 f_name = "<lambda_" + str(lambda_count) + ">"
                 lambda_count += 1
             out_columns.append(f_name)
