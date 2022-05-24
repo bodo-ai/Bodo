@@ -478,9 +478,15 @@ def overload_dataframe_copy(df, deep=True):
         out_df_type = df
         output_arr_typ = types.none
         extra_globals = {"output_arr_typ": output_arr_typ}
-        if is_overload_true(deep):
-            data_args = "table"
-        elif is_overload_false(deep):
+        if is_overload_false(deep):
+            data_args = (
+                "bodo.utils.table_utils.generate_mappable_table_func("
+                + "table, "
+                + "None, "
+                + "output_arr_typ, "
+                + "True)"
+            )
+        elif is_overload_true(deep):
             data_args = (
                 "bodo.utils.table_utils.generate_mappable_table_func("
                 + "table, "
@@ -494,7 +500,11 @@ def overload_dataframe_copy(df, deep=True):
                 + "table, "
                 + "'copy', "
                 + "output_arr_typ, "
-                + "True) if deep else table"
+                + "True) if deep else bodo.utils.table_utils.generate_mappable_table_func("
+                + "table, "
+                + "None, "
+                + "output_arr_typ, "
+                + "True)"
             )
     else:
         data_outs = []

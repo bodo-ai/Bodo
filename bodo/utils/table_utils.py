@@ -33,7 +33,8 @@ def generate_mappable_table_func(
     Keyword arguments:
     table -- Table upon which to map the function.
     func_name -- Name of the function being mapped to each column.
-                 This must be a string literal.
+                 This must be a string literal or None (to make a table
+                 copy).
                  Note: this can also be a function + ~.
     out_arr_typ -- Type of the output column, assumed to be a single
                    shared type for all columns. If `types.none` then we maintain
@@ -43,7 +44,9 @@ def generate_mappable_table_func(
                  is alive. This is set in compiler optimizations and should not
                  be passed manually.
     """
-    if not is_overload_constant_str(func_name):  # pragma: no cover
+    if not is_overload_constant_str(func_name) and not is_overload_none(
+        func_name
+    ):  # pragma: no cover
         raise_bodo_error(
             "generate_mappable_table_func(): func_name must be a constant string"
         )
@@ -52,8 +55,12 @@ def generate_mappable_table_func(
             "generate_mappable_table_func(): is_method must be a constant boolean"
         )
 
-    func_name = get_overload_const_str(func_name)
-    is_method_const = get_overload_const_bool(is_method)
+    # `func_name is None`` means we are just making a shallow
+    # copy and not executing any function.
+    has_func = not is_overload_none(func_name)
+    if has_func:
+        func_name = get_overload_const_str(func_name)
+        is_method_const = get_overload_const_bool(is_method)
     out_typ = (
         out_arr_typ.instance_type
         if isinstance(out_arr_typ, types.TypeRef)
@@ -114,7 +121,9 @@ def generate_mappable_table_func(
         else:
             out_idx_val = "col_loc"
             out_list_name = "out_list"
-        if is_method_const:
+        if not has_func:
+            func_text += f"    {out_list_name}[{out_idx_val}] = blk_{blk}[i]\n"
+        elif is_method_const:
             func_text += (
                 f"    {out_list_name}[{out_idx_val}] = blk_{blk}[i].{func_name}()\n"
             )

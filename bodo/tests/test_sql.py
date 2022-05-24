@@ -6,6 +6,7 @@ import os
 import random
 import re
 import urllib
+import uuid
 
 import numpy as np
 import pandas as pd
@@ -206,7 +207,16 @@ def test_sql_single_column(memory_leak_check):
         df.to_sql(table_name, conn, if_exists="replace")
 
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-    table_name = "test_small_table"
+    if bodo.get_size() == 1:
+        # Add a uuid to avoid potential conflict as this may be running in
+        # several different CI sessions at once. This may be the source of
+        # sporadic failures (although this is uncertain).
+        table_name = f"test_small_table_{uuid.uuid4()}"
+    else:
+        table_name = "test_small_table"
+
+    query1 = f"select A, B, C from `{table_name}`"
+    query2 = f"select * from `{table_name}`"
 
     df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5, "C": [31, 247] * 5})
     # Create the table once.
@@ -215,13 +225,13 @@ def test_sql_single_column(memory_leak_check):
     bodo.barrier()
 
     def test_impl1():
-        sql_request = "select A, B, C from test_small_table"
+        sql_request = query1
         conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
         frame = pd.read_sql(sql_request, conn)
         return frame["B"]
 
     def test_impl2():
-        sql_request = "select * from test_small_table"
+        sql_request = query2
         conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
         frame = pd.read_sql(sql_request, conn)
         return frame["B"]
@@ -240,7 +250,15 @@ def test_sql_use_index_column(memory_leak_check):
         df.to_sql(table_name, conn, if_exists="replace")
 
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-    table_name = "test_small_table"
+    if bodo.get_size() == 1:
+        # Add a uuid to avoid potential conflict as this may be running in
+        # several different CI sessions at once. This may be the source of
+        # sporadic failures (although this is uncertain).
+        table_name = f"test_small_table_{uuid.uuid4()}"
+    else:
+        table_name = "test_small_table"
+
+    query = f"select A, B, C from `{table_name}`"
 
     df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5, "C": [31, 247] * 5})
     # Create the table once.
@@ -249,7 +267,7 @@ def test_sql_use_index_column(memory_leak_check):
     bodo.barrier()
 
     def test_impl():
-        sql_request = "select A, B, C from test_small_table"
+        sql_request = query
         conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
         frame = pd.read_sql(sql_request, conn, index_col="A")
         return frame["B"]
