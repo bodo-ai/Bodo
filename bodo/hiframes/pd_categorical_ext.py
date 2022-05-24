@@ -460,7 +460,6 @@ def get_code_for_value(cat_dtype, val):
 
     return -2  # return dummy value that doesn't match any categorical code
 
-
 @overload_method(CategoricalArrayType, "astype", inline="always", no_unliteral=True)
 def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
     # If dtype is a string, force it to be a literal
