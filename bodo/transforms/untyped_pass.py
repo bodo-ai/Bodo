@@ -1082,7 +1082,7 @@ class UntypedPass:
             msg = (
                 "pd.read_excel() requires explicit type annotation using "
                 "the 'names' and 'dtype' arguments if the filename is not constant. "
-                "For more information, see:  https://docs.bodo.ai/latest/file_io/#io_workflow."
+                "For more information, see: https://docs.bodo.ai/latest/file_io/#io_workflow."
             )
             fname_const = get_const_value(
                 fname_var, self.func_ir, msg, arg_types=self.args
@@ -1602,7 +1602,7 @@ class UntypedPass:
                 "pd.read_csv() requires explicit type "
                 "annotation using the 'names' and 'dtype' arguments if the filename is "
                 "not constant. For more information, "
-                "see:  https://docs.bodo.ai/latest/file_io/#io_workflow."
+                "see: https://docs.bodo.ai/latest/file_io/#io_workflow."
             )
             fname_const = get_const_value(
                 fname,
