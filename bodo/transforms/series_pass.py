@@ -453,13 +453,12 @@ class SeriesPass:
             )
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
-        # TODO: reimplement Iat optimization
-        # if isinstance(self.typemap[rhs.value.name], SeriesIatType):
-        #     val_def = guard(get_definition, self.func_ir, rhs.value)
-        #     assert (isinstance(val_def, ir.Expr) and val_def.op == 'getattr'
-        #         and val_def.attr in ('iat', 'iloc', 'loc'))
-        #     series_var = val_def.value
-        #     rhs.value = series_var
+        # Series.iat[]
+        if isinstance(target_typ, SeriesIatType):
+            impl = bodo.hiframes.series_indexing.overload_series_iat_getitem(
+                self.typemap[target.name], self.typemap[idx.name]
+            )
+            return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
         # simplify geitem on Series with constant Index values
         # used for df.apply() UDF optimization
@@ -755,7 +754,9 @@ class SeriesPass:
             isinstance(rhs_type, (SeriesIlocType, SeriesLocType, SeriesIatType))
             and rhs.attr == "_obj"
         ):
-            assign.value = guard(get_definition, self.func_ir, rhs.value).value
+            arg = guard(get_definition, self.func_ir, rhs.value)
+            if arg:
+                assign.value = arg.value
             return [assign]
 
         # inline Series.cat.codes

@@ -1111,3 +1111,41 @@ def test_unique(memory_leak_check):
         match=re.escape("pd.unique(): 'values' must be either a Series or a 1-d array"),
     ):
         bodo.jit(test_impl)([1, 2, 3, 4, 2, 3, 5] * 5)
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series(np.arange(100)),
+        pd.Series(pd.date_range("02-20-2022", freq="3D1H", periods=30)),
+    ],
+)
+def test_dist_iat(S, memory_leak_check):
+    """
+    Tests for [BE-2838], replicated return values from
+    Series.iat.
+    """
+
+    def impl(S):
+        return S.iat[1]
+
+    check_func(impl, (S,))
+
+
+def test_iat_control_flow(memory_leak_check):
+    """
+    Tests for [BE-2838], replicated return values from
+    Series.iat with control flow.
+    """
+
+    def impl(S1, S2, flag):
+        if flag:
+            s_iat = S1.iat
+        else:
+            s_iat = S2.iat
+        return s_iat[1]
+
+    S1 = pd.Series(np.arange(100))
+    S2 = pd.Series(np.arange(100, 200))
+
+    check_func(impl, (S1, S2, False))
