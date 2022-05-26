@@ -3154,17 +3154,45 @@ def overload_index_take(I, indices, axis=0, allow_fill=True, fill_value=None):
     return lambda I, indices: I[indices]  # pragma: no cover
 
 
-@numba.njit(no_cpython_wrapper=True)
-def _init_engine(I):  # pragma: no cover
+def _init_engine(I, ban_unique=True):
+    pass
+
+
+@overload(_init_engine)
+def overload_init_engine(I, ban_unique=True):
     """initialize the Index hashmap engine (just a simple dict for now)"""
-    if len(I) > 0 and not I._dict:
-        arr = bodo.utils.conversion.coerce_to_array(I)
-        for i in range(len(arr)):
-            val = arr[i]
-            if val in I._dict:
-                # See BE-1562
-                raise ValueError("Index.get_loc(): non-unique Index not supported yet")
-            I._dict[val] = i
+    if isinstance(I, CategoricalIndexType):
+
+        def impl(I, ban_unique=True):  # pragma: no cover
+            if len(I) > 0 and not I._dict:
+                arr = bodo.utils.conversion.coerce_to_array(I)
+                for i in range(len(arr)):
+                    if not bodo.libs.array_kernels.isna(arr, i):
+                        val = bodo.hiframes.pd_categorical_ext.get_code_for_value(
+                            arr.dtype, arr[i]
+                        )
+                        if ban_unique and val in I._dict:
+                            raise ValueError(
+                                "Index.get_loc(): non-unique Index not supported yet"
+                            )
+                        I._dict[val] = i
+
+        return impl
+    else:
+
+        def impl(I, ban_unique=True):  # pragma: no cover
+            if len(I) > 0 and not I._dict:
+                arr = bodo.utils.conversion.coerce_to_array(I)
+                for i in range(len(arr)):
+                    if not bodo.libs.array_kernels.isna(arr, i):
+                        val = arr[i]
+                        if ban_unique and val in I._dict:
+                            raise ValueError(
+                                "Index.get_loc(): non-unique Index not supported yet"
+                            )
+                        I._dict[val] = i
+
+        return impl
 
 
 @overload(operator.contains, no_unliteral=True)
@@ -3178,11 +3206,37 @@ def index_contains(I, val):
             I.start, I.stop, I.step, val
         )  # pragma: no cover
 
+    if isinstance(I, CategoricalIndexType):
+
+        def impl(I, val):  # pragma: no cover
+            key = bodo.utils.conversion.unbox_if_timestamp(val)
+            if not is_null_value(I._dict):
+                _init_engine(I, False)
+                arr = bodo.utils.conversion.coerce_to_array(I)
+                code = bodo.hiframes.pd_categorical_ext.get_code_for_value(
+                    arr.dtype, key
+                )
+                return code in I._dict
+            else:
+                # TODO(ehsan): support raising a proper BodoWarning object
+                msg = "Global Index objects can be slow (pass as argument to JIT function for better performance)."
+                warnings.warn(msg)
+                arr = bodo.utils.conversion.coerce_to_array(I)
+                ind = -1
+                for i in range(len(arr)):
+                    if not bodo.libs.array_kernels.isna(arr, i):
+                        if arr[i] == key:
+                            ind = i
+            return ind != -1
+
+        return impl
+
+    # Note: does not work on implicit Timedelta via string
+    # i.e. "1 days" in pd.TimedeltaIndex(["1 days", "2 hours"])
     def impl(I, val):  # pragma: no cover
         key = bodo.utils.conversion.unbox_if_timestamp(val)
-        # build the index dict if not initialized yet
         if not is_null_value(I._dict):
-            _init_engine(I)
+            _init_engine(I, False)
             return key in I._dict
         else:
             # TODO(ehsan): support raising a proper BodoWarning object
@@ -3191,12 +3245,9 @@ def index_contains(I, val):
             arr = bodo.utils.conversion.coerce_to_array(I)
             ind = -1
             for i in range(len(arr)):
-                if arr[i] == key:
-                    if ind != -1:
-                        raise ValueError(
-                            "Index.get_loc(): non-unique Index not supported yet"
-                        )
-                    ind = i
+                if not bodo.libs.array_kernels.isna(arr, i):
+                    if arr[i] == key:
+                        ind = i
         return ind != -1
 
     return impl

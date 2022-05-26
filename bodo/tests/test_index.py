@@ -372,6 +372,110 @@ def test_index_get_loc_error_checking():
     with pytest.raises(KeyError, match=r"Index.get_loc\(\): key not found"):
         bodo.jit(impl)(pd.RangeIndex(3, 11, 2), 2)
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        (pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9]), 1),
+        (pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9]), 5),
+        pytest.param(
+            (pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9]), 8),
+            marks=pytest.mark.slow),
+        pytest.param(
+            (pd.Index([1, 5, 2, 1, 0, 3, 1, 2, 5, 1]), 1),
+            marks=pytest.mark.slow),
+        pytest.param(
+            (pd.Index([1, 5, 2, 1, 0, 3, 1, 2, 5, 1]), 5),
+            marks=pytest.mark.slow),
+        pytest.param(
+            (pd.Index([1, 5, 2, 1, 0, 3, 1, 2, 5, 1]), 8),
+            marks=pytest.mark.slow),
+        pytest.param(
+            (pd.Index([0.7573456092417888, 0.21589999967248008, 0.8671567646182514, 
+            0.383775019426454, 0.21589999967248008, 0.5937443415123859, 0.5583538962837552, 
+            0.5583538962837552, 0.6448399071221529, 0.383775019426454]), 0.21589999967248008),
+            marks=pytest.mark.slow
+        ),
+        pytest.param(
+           (pd.Index([0.7573456092417888, 0.21589999967248008, 0.8671567646182514, 
+            0.383775019426454, 0.21589999967248008, 0.5937443415123859, 0.5583538962837552, 
+            0.5583538962837552, 0.6448399071221529, 0.383775019426454]), 0.314159265359),
+            marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (pd.Index([True, True, True, True, False, True, False, False]), True),
+            marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (pd.Index([True, True, True]), False),
+            marks=pytest.mark.slow
+        ),
+        (pd.Index(["A", "L", "P", "H", "A", "B", "E", "T"]), "A"),
+        (pd.Index(["A", "L", "P", "H", "A", "B", "E", "T"]), "a"),
+        pytest.param(
+            (pd.Index(["A", "L", "P", "H", "A", "B", "E", "T"]), "B"),
+            marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (pd.Index(["A", "L", "P", "H", "A", "B", "E", "T"]), "C"),
+            marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (pd.Index(["A", "L", "P", "H", "A", "B", "E", "T"]), "AL"),
+            marks=pytest.mark.slow
+        ),
+        (pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]), 1),
+        (pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]), 4),
+        # Unskip after [BE-2811] resolved
+        pytest.param(
+            (pd.CategoricalIndex([True, True, True]), True),
+            marks=(pytest.mark.slow, pytest.mark.skip)
+        ),
+        # Unskip after [BE-2811] resolved
+        pytest.param(
+            (pd.CategoricalIndex([True, True, True]), False),
+            marks=(pytest.mark.slow, pytest.mark.skip)
+        ),
+        pytest.param(
+            (pd.CategoricalIndex([1.0, 1.1, 1.2, 1.8, 1.5]), 1.5),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.CategoricalIndex([1.0, 1.1, 1.2, 1.8, 1.5]), 1.6),
+            marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (pd.CategoricalIndex(["A", "B", "C", "A", "A", "C", "A", "B"]), "A"),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.CategoricalIndex(["A", "B", "C", "A", "A", "C", "A", "B"]), "D"),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.CategoricalIndex([pd.Timestamp("2018-01-01"), pd.Timestamp("2018-02-01")]), pd.Timestamp("2018-02-01")),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.CategoricalIndex([pd.Timestamp("2018-01-01"), pd.Timestamp("2018-02-01")]), pd.Timestamp("2018-03-01")),
+            marks=pytest.mark.slow
+        ),
+        (pd.RangeIndex(start=0, stop=10, step=2), 4),
+        (pd.RangeIndex(start=0, stop=10, step=2), 5),
+        (pd.date_range(start="2018-04-24", end="2018-04-27", periods=3), pd.Timestamp("2018-04-24")),
+        (pd.date_range(start="2018-04-24", end="2018-04-27", periods=3), pd.Timestamp("2018-04-26")),
+        (pd.TimedeltaIndex(["1 days", "2 days", "3 days", "2 days", "3 hours", "2 minutes"]), pd.Timedelta("1 days")),
+        (pd.TimedeltaIndex(["1 days", "2 days", "3 days", "2 days", "3 hours", "2 minutes"]), pd.Timedelta("4 days")),
+        (pd.Index([b"asdga", b"asdga", b"", b"oihjb", bytes(2), b"CC", b"asdfl"]), b"CC"),
+        (pd.Index([b"asdga", b"asdga", b"", b"oihjb", bytes(2), b"CC", b"asdfl"]), b"asdgA")
+    ],
+)
+def test_index_contains(args, memory_leak_check):
+    def impl(idx, elem):
+        return elem in idx
+
+    idx, elem = args
+    check_func(impl, (idx, elem), dist_test=False)
+
 
 # Need to add the code and the check for the PeriodIndex
 # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
