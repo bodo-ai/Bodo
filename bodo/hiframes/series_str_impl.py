@@ -682,6 +682,19 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
 def overload_str_method_center(S_str, width, fillchar=" "):
     common_validate_padding("center", width, fillchar)
 
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_center_dict_impl(S_str, width, fillchar=" "):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_center(arr, width, fillchar)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_center_dict_impl
+
     def impl(S_str, width, fillchar=" "):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
