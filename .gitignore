@@ -17,6 +17,7 @@ bodo/tests/caching_tests/__pycache__
 bodo/transforms/__pycache__
 bodo/utils/__pycache__
 demo/__pycache__
+iceberg/**/__pycache__
 
 # Python egg metadata, regenerated from source files by setuptools.
 **/*.egg-info
@@ -35,8 +36,9 @@ dev_docs/_build/
 dev_docs/gh-pages/
 *.DS_Store
 
-# VS Code config
+# Config
 .vscode
+iceberg/**/.idea
 
 # Jupyter checkpoints
 *.ipynb_checkpoints/

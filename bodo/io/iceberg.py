@@ -12,11 +12,11 @@ from bodo.utils import tracing
 from bodo.utils.typing import BodoError
 
 
-def get_iceberg_type_info(table_name, con, database_schema):
+def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
     """
     Helper function to fetch Bodo types for an
     Iceberg table with the given table name, conn,
-    and database_schema, each passed as Python strings.
+    and database_schema.
 
     Returns:
         - List of column names
