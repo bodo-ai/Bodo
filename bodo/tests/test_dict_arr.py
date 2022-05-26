@@ -392,6 +392,43 @@ def test_str_capitalize(test_unicode_dict_str_arr, memory_leak_check):
     assert dist_IR_contains(f_ir, "str_capitalize")
 
 
+def test_str_center(test_unicode_dict_str_arr, memory_leak_check):
+    """
+    test optimization of Series.str.center() for dict array
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.center(5, "*")
+
+    def impl2(A):
+        return pd.Series(A).str.center(5, "🍔")
+
+    def impl3(A):
+        return pd.Series(A).str.center(5)
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.center(5, "*"),
+    )
+    check_func(
+        impl2,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.center(5, "🍔"),
+    )
+    check_func(
+        impl3,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.center(5),
+    )
+
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_center")
+
+
 @pytest.mark.parametrize("case", [True, False])
 def test_str_contains_regex(memory_leak_check, test_unicode_dict_str_arr, case):
     """
