@@ -1906,7 +1906,12 @@ class DistributedPass:
         if is_simple_range:
             size_var = args[1]
         else:
-            f = eval("lambda start, stop, step: max(0, -(-(stop - start) // step))")
+            # If step = 0, evaluates as max(0, -(-(stop - start) // 1)) to
+            # prevent a ZeroDivisionError from being raised before init_range_index
+            # can raise its own error.
+            f = eval(
+                "lambda start, stop, step: max(0, -(-(stop - start) // (step + (step == 0))))"
+            )
             out += compile_func_single_block(f, args[:-1], None, self)
             size_var = out[-1].target
 

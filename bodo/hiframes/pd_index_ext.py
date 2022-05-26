@@ -49,6 +49,7 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     dtype_to_array_type,
     get_overload_const_func,
+    get_overload_const_int,
     get_overload_const_str,
     get_udf_error_msg,
     get_udf_out_arr_type,
@@ -56,6 +57,7 @@ from bodo.utils.typing import (
     is_const_func_type,
     is_heterogeneous_tuple_type,
     is_iterable_type,
+    is_overload_constant_int,
     is_overload_false,
     is_overload_none,
     is_overload_true,
@@ -1678,8 +1680,24 @@ def init_range_index(typingctx, start, stop, step, name=None):
     """Create RangeIndex object"""
     name = types.none if name is None else name
 
+    # Compile time check of step = 0
+    literal_zero = is_overload_constant_int(step) and get_overload_const_int(step) == 0
+
     def codegen(context, builder, signature, args):
         assert len(args) == 4
+
+        if literal_zero:
+            raise_bodo_error("Step must not be zero")
+
+        step_zero = cgutils.is_scalar_zero(builder, args[2])
+        pyapi = context.get_python_api(builder)
+
+        # Runtime check of step = 0
+        with builder.if_then(step_zero):
+            pyapi.err_format("PyExc_ValueError", "Step must not be zero")
+            val = context.get_constant(types.int32, -1)
+            builder.ret(val)
+
         range_val = cgutils.create_struct_proxy(signature.return_type)(context, builder)
         range_val.start = args[0]
         range_val.stop = args[1]

@@ -477,6 +477,61 @@ def test_index_contains(args, memory_leak_check):
     check_func(impl, (idx, elem), dist_test=False)
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        (0, 1, 0),
+        (0, 100, 0),
+        (0, 100, 1),
+        (0, 100, -1),
+        (0, 100, 10),
+        (99, -1, -1),
+        (0, 100, 5),
+        (15, 210, 27),
+    ],
+)
+def test_range_index_malformed(args):
+    # Compile time check: step passed in is zero
+    def impl1(start, stop, step):
+        return pd.RangeIndex(start, stop, step)
+
+    # Compile time check: step sometimes zero
+    def impl2(start, stop, step=0):
+        return pd.RangeIndex(start, stop, step)
+
+    # Compile time check: step always zero
+    def impl3(start, stop):
+        return pd.RangeIndex(start, stop, 0)
+
+    # Runtime check: loop that un-obviously proceeds until step=0
+    def impl4(start, stop, step):
+        step = abs(step) + 4
+        while True:
+            if step % 2 == 0:
+                step //= 2
+            else:
+                step = 3 * step + 1
+            if step < 2:
+                step -= 1
+                break
+        return pd.RangeIndex(start, stop, step)
+
+    start, stop, step = args
+    if step == 0:
+        with pytest.raises(BodoError, match="Step must not be zero"):
+            bodo.jit(impl1)(start=start, stop=stop, step=step)
+        with pytest.raises(BodoError, match="Step must not be zero"):
+            bodo.jit(impl2)(start=start, stop=stop, step=step)
+    else:
+        check_func(impl1, (start, stop, step), dist_test=False)
+        with pytest.raises(BodoError, match="Step must not be zero"):
+            bodo.jit(impl2)(start=start, stop=stop)
+    with pytest.raises(BodoError, match="Step must not be zero"):
+        bodo.jit(impl3)(start=start, stop=stop)
+    with pytest.raises(ValueError, match="Step must not be zero"):
+        bodo.jit(impl4)(start=start, stop=stop, step=step)
+
+
 # Need to add the code and the check for the PeriodIndex
 # pd.PeriodIndex(year=[2015, 2016, 2018], month=[1, 2, 3], freq="M"),
 @pytest.mark.parametrize(
