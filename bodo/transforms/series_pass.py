@@ -531,7 +531,9 @@ class SeriesPass:
                 impl = bodo.hiframes.pd_index_ext.overload_timedelta_index_getitem(
                     typ1, typ2
                 )
-            elif isinstance(target_typ, bodo.hiframes.pd_index_ext.CategoricalIndexType):
+            elif isinstance(
+                target_typ, bodo.hiframes.pd_index_ext.CategoricalIndexType
+            ):
                 impl = bodo.hiframes.pd_index_ext.overload_categorical_index_getitem(
                     typ1, typ2
                 )
@@ -2141,6 +2143,11 @@ class SeriesPass:
                 and len(var_def.args) > 1
             ):
                 assign.value = var_def.args[1]
+            elif (
+                call_def == ("init_range_index", "bodo.hiframes.pd_index_ext")
+                and len(var_def.args) > 3
+            ):
+                assign.value = var_def.args[3]
             return [assign]
 
         # optimize out decode_if_dict_array() if not needed

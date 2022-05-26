@@ -1256,6 +1256,37 @@ def test_monotonicity(index, memory_leak_check):
     check_func(f3, (index,))
 
 
+def test_range_index_dce(memory_leak_check):
+    """
+    Tests a use case from BodoSQL where a RangeIndex is
+    generated but cannot have its distribution determined
+    because the uses have all been optimized out.
+
+    The solution tests that the range index, whose name may
+    be needed, can be properly eliminated.
+    """
+
+    def impl(df):
+        df1 = df
+        S0 = df1["A"]
+        S1 = df1["B"]
+        df2 = pd.DataFrame(
+            {"EXPR$0": S0.max(), "__bodo_dummy__1": S1.max()},
+            index=pd.RangeIndex(0, 1, 1, name="my_copied_name"),
+        )
+        df3 = df2[((df2["__bodo_dummy__1"] != 200))]
+        df4 = df3.loc[
+            :,
+            [
+                "EXPR$0",
+            ],
+        ]
+        return df4
+
+    df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
+    check_func(impl, (df,))
+
+
 @pytest.mark.parametrize(
     "idx",
     [

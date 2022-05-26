@@ -289,6 +289,11 @@ def remove_hiframes(rhs, lives, call_list):
     call_tuple = tuple(call_list)
     if call_tuple in no_side_effect_call_tuples:
         return True
+    # Note we cannot import bodo.hiframes.pd_index_ext globally,
+    # which is why this isn't in no_side_effect_call_tuples.
+    # This needs to be refactored to have 1 single representation.
+    if call_tuple == (bodo.hiframes.pd_index_ext.init_range_index,):
+        return True
 
     # TODO: probably not reachable here since always inlined?
     if len(call_list) == 4 and call_list[1:] == [
