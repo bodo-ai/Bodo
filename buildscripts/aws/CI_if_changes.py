@@ -27,6 +27,7 @@ def run_ci():
             or filename.startswith("aws_scripts/")
             or filename.startswith("bodo/")
             or filename.startswith("buildscripts/")
+            or filename.startswith("iceberg/")
         ):
             return True
 

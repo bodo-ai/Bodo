@@ -5541,6 +5541,36 @@ def test_pq_non_constant_filepath_error(datapath):
     bodo.jit(lambda: impl2())()
 
 
+def test_unify_null_column(memory_leak_check):
+    """
+    Tests reading from parquet with a null column in the first
+    file unifies properly.
+    """
+    if bodo.get_rank() == 0:
+        os.mkdir("temp_parquet_test")
+        df1 = pd.DataFrame({"A": np.arange(10), "B": [None] * 10})
+        df1.to_parquet("temp_parquet_test/f1.pq")
+        df2 = pd.DataFrame({"A": np.arange(10, 16), "B": [None, "A"] * 3})
+        df2.to_parquet("temp_parquet_test/f2.pq")
+    bodo.barrier()
+    try:
+
+        def impl():
+            return pd.read_parquet("temp_parquet_test")
+
+        # Pandas doesn't seem to be able to unify data.
+        # TODO: Open a Pandas issue?
+        py_output = pd.DataFrame(
+            {"A": np.arange(16), "B": ([None] * 10) + ([None, "A"] * 3)}
+        )
+
+        check_func(impl, (), py_output=py_output)
+    finally:
+        bodo.barrier()
+        if bodo.get_rank() == 0:
+            shutil.rmtree("temp_parquet_test")
+
+
 def test_pd_datetime_arr_load_from_arrow(memory_leak_check):
     """
     Tests loading and returning an array with timezone information

@@ -1,0 +1,33 @@
+# Copied from BodoSQL
+package:
+  name: bodo-iceberg-connector
+  version: {{ CONNECTOR_VERSION }}
+
+source:
+  path: ../../../iceberg
+
+requirements:
+  host:
+    - python
+    - setuptools
+    - openjdk >=9.0
+    - maven
+    - ninja
+    - bodo >=2022.4
+
+  run:
+    - openjdk >=9.0
+    - bodo >=2022.4
+    - jpype1
+    - python
+
+build:
+  script_env:
+    - CONNECTOR_VERSION
+
+
+about:
+home: https://bodo.ai/
+license: Proprietary
+license_file: LICENSE.md
+summary: Bodo Iceberg Connector

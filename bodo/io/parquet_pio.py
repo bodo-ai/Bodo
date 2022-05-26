@@ -21,6 +21,7 @@ from numba.core.ir_utils import (
 )
 from numba.extending import (
     NativeValue,
+    box,
     intrinsic,
     models,
     overload,
@@ -43,11 +44,13 @@ from bodo.hiframes.pd_categorical_ext import (
 from bodo.hiframes.table import TableType
 from bodo.io.fs_io import (
     get_hdfs_fs,
+    get_s3_bucket_region_njit,
     get_s3_fs_from_path,
     get_s3_subtree_fs,
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
+from bodo.io.helpers import is_nullable
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
@@ -114,6 +117,13 @@ def unbox_parquet_predicate_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return NativeValue(val)
+
+
+@box(ParquetPredicateType)
+def box_parquet_predicate_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
 
 
 class ReadParquetFilepathType(types.Opaque):
@@ -320,83 +330,6 @@ class ParquetHandler:
         return col_names, data_arrs, index_col, nodes, col_types, index_column_type
 
 
-def determine_filter_cast(pq_node, typemap, filter_val, orig_colname_map):
-    """
-    Function that generates text for casts that need to be included
-    in the filter when not automatically handled by Arrow. For example
-    timestamp and string. This function returns two strings. In most cases
-    one of the strings will be empty and the other contain the argument that
-    should be cast. However, if we have a partition column, we always cast the
-    partition column either to its original type or the new type.
-
-    This is because of an issue in arrow where if a partion has a mix of integer
-    and string names it won't look at the global types when Bodo processes per
-    file (see test_read_partitions_string_int for an example).
-
-    We opt to cast in the direction that keep maximum information, for
-    example date -> timestamp rather than timestamp -> date.
-
-    Right now we assume filter_val[0] is a column name and filter_val[2]
-    is a scalar Var that is found in the typemap.
-    """
-    colname = filter_val[0]
-    lhs_arr_typ = pq_node.original_out_types[orig_colname_map[colname]]
-    lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
-    if colname in pq_node.partition_names:
-        # Always cast partitions to protect again multiple types
-        # see test_read_partitions_string_int.
-
-        if lhs_scalar_typ == types.unicode_type:
-            col_cast = ".cast(pyarrow.string(), safe=False)"
-        elif isinstance(lhs_scalar_typ, types.Integer):
-            # all arrow types integer type names are the same as numba
-            # type names.
-            col_cast = f".cast(pyarrow.{lhs_scalar_typ.name}(), safe=False)"
-        else:
-            # Currently arrow support int and string partitions, so we only capture those casts
-            # https://github.com/apache/arrow/blob/230afef57f0ccc2135ced23093bac4298d5ba9e4/python/pyarrow/parquet.py#L989
-            col_cast = ""
-    else:
-        col_cast = ""
-    rhs_typ = typemap[filter_val[2].name]
-    # If we do isin, then rhs_typ will be a list or set
-    if isinstance(rhs_typ, (types.List, types.Set)):
-        rhs_scalar_typ = rhs_typ.dtype
-    else:
-        rhs_scalar_typ = rhs_typ
-
-    # Here we assume is_common_scalar_dtype conversions are common
-    # enough that Arrow will support them, since these are conversions
-    # like int -> float. TODO: Test
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        lhs_scalar_typ, "Filter pushdown"
-    )
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        rhs_scalar_typ, "Filter pushdown"
-    )
-    if not bodo.utils.typing.is_common_scalar_dtype([lhs_scalar_typ, rhs_scalar_typ]):
-        # If a cast is not implicit it must be in our white list.
-        if not bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
-            raise BodoError(
-                f"Unsupported Arrow cast from {lhs_scalar_typ} to {rhs_scalar_typ} in filter pushdown. Please try a comparison that avoids casting the column."
-            )
-        # We always cast string -> other types
-        # Only supported types should be string and timestamp
-        if lhs_scalar_typ == types.unicode_type:
-            return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
-        elif lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type):
-            if isinstance(rhs_typ, (types.List, types.Set)):  # pragma: no cover
-                # This path should never be reached because we checked that
-                # list/set doesn't contain Timestamp or datetime64 in typing pass.
-                type_name = "list" if isinstance(rhs_typ, types.List) else "tuple"
-                raise BodoError(
-                    f"Cannot cast {type_name} values with isin filter pushdown."
-                )
-            return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
-
-    return col_cast, ""
-
-
 def pq_distributed_run(
     pq_node,
     array_dists,
@@ -410,115 +343,21 @@ def pq_distributed_run(
     data read.
     """
     n_cols = len(pq_node.out_vars)
-    extra_args = ""
     dnf_filter_str = "None"
     expr_filter_str = "None"
 
     filter_map, filter_vars = bodo.ir.connector.generate_filter_map(pq_node.filters)
-    # If no filters use variables (i.e. all isna, then we still need to take this path)
-    if pq_node.filters:
-        # Create two formats for parquet. One using the old DNF format
-        # which contains just the partition columns (partition pushdown)
-        # and one using the more verbose expression format and all expressions
-        # (predicate pushdown).
-        # https://arrow.apache.org/docs/python/dataset.html#filtering-data
-        #
-        # partition pushdown requires the expressions to just contain Hive partitions
-        # If any expressions are not hive partitions then the DNF filters is an AND of
-        # filters expressions that are seen in ALL OR conditions
-        #
-        # For example if A, C are paritions and B is not
-        #
-        # Then (A & B) | (A & C) -> A (for the partition expressions)
-        #
-        dnf_or_conds = []
-        expr_or_conds = []
-        dnf_modified = False
-        # If one of the filters isn't a partition column, then
-        # we can only select the partition columns that are shared
-        # across all possible or statements. Initialize this set to
-        # None so we don't intersect with an empty set in the first OR.
-        shared_expr_set = None
-        # Create a mapping for faster column indexing
-        orig_colname_map = {c: i for i, c in enumerate(pq_node.original_df_colnames)}
-        for predicate in pq_node.filters:
-            dnf_and_conds = []
-            expr_and_conds = []
-            and_expr_set = set()
-            for v in predicate:
-                # First update expr since these include all expressions.
-                # If v[2] is a var we pass the variable at runtime,
-                # otherwise we pass a constant (i.e. NULL) which
-                # requires special handling
-                if isinstance(v[2], ir.Var):
-                    # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
-                    # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
-                    # column_cast and scalar_cast.
-                    column_cast, scalar_cast = determine_filter_cast(
-                        pq_node, typemap, v, orig_colname_map
-                    )
-                    if v[1] == "in":
-                        # Expected output for this format should like
-                        # (ds.field('A').isin(py_var))
-                        expr_and_conds.append(
-                            f"(ds.field('{v[0]}').isin({filter_map[v[2].name]}))"
-                        )
-                    else:
-                        # Expected output for this format should like
-                        # (ds.field('A') > ds.scalar(py_var))
-                        expr_and_conds.append(
-                            f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})"
-                        )
-                else:
-                    # Currently the only constant expressions we support are IS [NOT] NULL
-                    assert v[2] == "NULL", "unsupport constant used in filter pushdown"
-                    if v[1] == "is not":
-                        prefix = "~"
-                    else:
-                        prefix = ""
-                    # Expected output for this format should like
-                    # (~ds.field('A').is_null())
-                    expr_and_conds.append(f"({prefix}ds.field('{v[0]}').is_null())")
-                # Now handle the dnf section. We can only append a value if its not a constant
-                # expression and is a partition column
-                if v[0] in pq_node.partition_names and isinstance(v[2], ir.Var):
-                    dnf_str = f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})"
-                    dnf_and_conds.append(dnf_str)
-                    and_expr_set.add(dnf_str)
-                else:
-                    # Mark this expression as modified.
-                    dnf_modified = True
-
-            if shared_expr_set is None:
-                shared_expr_set = and_expr_set
-            else:
-                shared_expr_set.intersection_update(and_expr_set)
-
-            # Group and according to the expected format
-            dnf_and_str = ", ".join(dnf_and_conds)
-            expr_and_str = " & ".join(expr_and_conds)
-            # If all the filters are truncated we may have an empty string.
-            if dnf_and_str:
-                dnf_or_conds.append(f"[{dnf_and_str}]")
-            expr_or_conds.append(f"({expr_and_str})")
-
-        dnf_or_str = ", ".join(dnf_or_conds)
-        expr_or_str = " | ".join(expr_or_conds)
-        if dnf_modified:
-            # If DNF filters are modified we produce an AND of the
-            # common partition expressions.
-            if shared_expr_set:
-                # Sort the set to get consistent code on all ranks
-                filters = sorted(shared_expr_set)
-                dnf_filter_str = f"[[{', '.join(filters)}]]"
-        elif dnf_or_str:
-            # If the expression is not modified (and exist) we use the whole expression
-            dnf_filter_str = f"[{dnf_or_str}]"
-        expr_filter_str = f"({expr_or_str})"
-
-        extra_args = ", ".join(filter_map.values())
-
-    # get column variables
+    extra_args = ", ".join(filter_map.values())
+    dnf_filter_str, expr_filter_str = bodo.ir.connector.generate_arrow_filters(
+        pq_node.filters,
+        filter_map,
+        filter_vars,
+        pq_node.original_df_colnames,
+        pq_node.partition_names,
+        pq_node.original_out_types,
+        typemap,
+        "parquet",
+    )
     arg_names = ", ".join(f"out{i}" for i in range(n_cols))
     func_text = f"def pq_impl(fname, {extra_args}):\n"
     # total_rows is used for setting total size variable below
@@ -779,15 +618,8 @@ def _gen_pq_reader_py(
     # Tell C++ which columns in the parquet file are nullable, since there
     # are some types like integer which Arrow always considers to be nullable
     # but pandas might not. This is mainly intended to tell C++ which Int/Bool
-    # arrays require null bitmap and which don't
-
-    def is_nullable(typ):
-        return bodo.utils.utils.is_array_typ(typ, False) and (
-            not isinstance(typ, types.Array)  # or is_dtype_nullable(typ.dtype)
-            and not isinstance(typ, bodo.DatetimeArrayType)
-        )
-
-    # we need to load the nullable check in the same order as select columns. To do
+    # arrays require null bitmap and which don't.
+    # We need to load the nullable check in the same order as select columns. To do
     # this, we first need to determine the index of each selected column in the original
     # type and check if that type is nullable.
     nullable_cols = [
@@ -1118,6 +950,7 @@ def get_parquet_dataset(
     read_categories=False,
     is_parallel=False,  # only used with get_row_counts=True
     tot_rows_to_read=None,
+    typing_pa_schema=None,
 ):
     """get ParquetDataset object for 'fpath' and set the number of total rows as an
     attribute. Also, sets the number of rows per file as an attribute of
@@ -1131,6 +964,11 @@ def get_parquet_dataset(
     'tot_rows_to_read' : total number of rows to read from dataset. Used at runtime
     for example if doing df.head(tot_rows_to_read) where df is the output of
     read_parquet()
+    'typing_pa_schema': PyArrow schema determined at compile time. When provided,
+    we should validate that the unified schema of all files matches this schema,
+    and throw an error otherwise. Currently this is only used in the case
+    of iceberg, but should be expanded to all use cases.
+    https://bodo.atlassian.net/browse/BE-2787
     """
 
     # NOTE: This function obtains the metadata for a parquet dataset and works
@@ -1347,7 +1185,22 @@ def get_parquet_dataset(
             )
             # restore pyarrow default IO thread count
             pa.set_io_thread_count(pa_default_io_thread_count)
-            dataset_schema = bodo.io.pa_parquet.get_dataset_schema(dataset)
+
+            # If typing schema is available, then use that as the baseline
+            # schema to unify with, else get it from the dataset.
+            # This is important for getting understandable errors in cases where
+            # files have different schemas, some of which may or may not match
+            # the iceberg schema. `get_dataset_schema` essentially gets the
+            # schema of the first file. So, starting with that schema will
+            # raise errors such as
+            # "pyarrow.lib.ArrowInvalid: No match for FieldRef.Name(TY)"
+            # where TY is a column that originally had a different name.
+            # Therefore, it's better to start with the expected schema,
+            # and then raise the errors correctly after validation.
+            if typing_pa_schema:
+                dataset_schema = typing_pa_schema
+            else:
+                dataset_schema = bodo.io.pa_parquet.get_dataset_schema(dataset)
             if dnf_filters:
                 # Apply filters after getting the schema, because they might
                 # remove all the pieces from the dataset which would make
@@ -1396,6 +1249,8 @@ def get_parquet_dataset(
             error = dataset
             raise error
         dataset_schema = comm.bcast(None)
+
+    dataset_schema_names = set(dataset_schema.names)
 
     # Reinitialize the file system. The filesystem is needed at compile time
     # to get metadata from a sample of pieces in determine_str_as_dict_columns
@@ -1474,9 +1329,38 @@ def get_parquet_dataset(
             dataset_ = ds.dataset(
                 fpaths,
                 filesystem=filesystem,
-                partitioning=ds.partitioning(flavor="hive"),
+                partitioning=ds.partitioning(flavor="hive")
+                if dataset.partitions
+                else None,
             )
             for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
+
+                # The validation (and unification) step needs to happen before the
+                # scan on the fragment since otherwise it will fail in case the
+                # file schema doesn't match the dataset schema exactly.
+                # Currently this is only applicable for Iceberg reads.
+                if validate_schema:
+                    # Two files are compatible if arrow can unify their schemas.
+                    file_schema = frag.metadata.schema.to_arrow_schema()
+                    fileset_schema_names = set(file_schema.names)
+                    # Check the names are the same because pa.unify_schemas
+                    # will unify a schema where a column is in 1 file but not
+                    # another.
+                    if dataset_schema_names != fileset_schema_names:
+                        added_columns = fileset_schema_names - dataset_schema_names
+                        missing_columns = dataset_schema_names - fileset_schema_names
+                        msg = f"Schema in {piece} was different.\n"
+                        if added_columns:
+                            msg += f"File contains column(s) {added_columns} not found in other files in the dataset.\n"
+                        if missing_columns:
+                            msg += f"File missing column(s) {missing_columns} found in other files in the dataset.\n"
+                        raise BodoError(msg)
+                    try:
+                        dataset_schema = pa.unify_schemas([dataset_schema, file_schema])
+                    except Exception as e:
+                        msg = f"Schema in {piece} was different.\n" + str(e)
+                        raise BodoError(msg)
+
                 t0 = time.time()
                 row_count = frag.scanner(
                     schema=dataset_.schema,
@@ -1490,17 +1374,7 @@ def get_parquet_dataset(
                 total_row_groups_size_chunk += sum(
                     rg.total_byte_size for rg in frag.row_groups
                 )
-                if validate_schema:
-                    file_schema = frag.metadata.schema.to_arrow_schema()
-                    if dataset_schema != file_schema:  # pragma: no cover
-                        # this is the same error message that pyarrow shows
-                        print(
-                            "Schema in {!s} was different. \n{!s}\n\nvs\n\n{!s}".format(
-                                piece, file_schema, dataset_schema
-                            )
-                        )
-                        valid = False
-                        break
+
         except Exception as e:
             error = e
 
@@ -1610,6 +1484,30 @@ https://docs.bodo.ai/latest/file_io/#parquet-section.
 
     if get_row_counts:
         ev.finalize()
+
+    if validate_schema and is_parallel:
+        if tracing.is_tracing():
+            ev_unify_schemas = tracing.Event("unify_schemas_across_ranks")
+        error = None
+
+        try:
+            dataset_schema = comm.allreduce(
+                dataset_schema, bodo.io.helpers.pa_schema_unify_mpi_op
+            )
+        except Exception as e:
+            error = e
+
+        if tracing.is_tracing():
+            ev_unify_schemas.finalize()
+
+        # synchronize error state
+        if comm.allreduce(error is not None, op=MPI.LOR):
+            for error in comm.allgather(error):
+                if error:
+                    msg = f"Schema in some files were different.\n" + str(error)
+                    raise BodoError(msg)
+
+    dataset._bodo_arrow_schema = dataset_schema
     return dataset
 
 
@@ -1625,6 +1523,8 @@ def get_scanner_batches(
     str_as_dict_cols,
     start_offset,  # starting row offset in the pieces this process is going to read
     rows_to_read,  # total number of rows this process is going to read
+    has_partitions,  # parquet dataset has partitions
+    schema,
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
     that match expr_filters (or all rows if expr_filters is None). Only project the
@@ -1653,6 +1553,12 @@ def get_scanner_batches(
         bucket_name = urlparse(fpaths[0]).netloc
         prefix = "s3://" + bucket_name + "/"
         fpaths = [f[len(prefix) :] for f in fpaths]  # remove prefix from file paths
+        if region == "":
+            # In case of iceberg, the region won't be passed, so we need to
+            # get it here instead.
+            # `parallel=False` since some ranks may get here, e.g. when
+            # they don't need to read any rows.
+            region = get_s3_bucket_region_njit(fpaths[0], parallel=False)
         filesystem = get_s3_subtree_fs(
             bucket_name, region=region, storage_options=storage_options
         )
@@ -1672,9 +1578,25 @@ def get_scanner_batches(
     dataset = ds.dataset(
         fpaths,
         filesystem=filesystem,
-        partitioning=ds.partitioning(flavor="hive"),
+        partitioning=ds.partitioning(flavor="hive") if has_partitions else None,
         format=pq_format,
     )
+    # Update the provided schema to convert arrays to be dictionary
+    # encoded. This is needed for unifying with the dictionary encoded
+    # values in dataset.schema.
+    dict_col_set = set(str_as_dict_cols)
+    names = schema.names
+    for i, name in enumerate(names):
+        if name in dict_col_set:
+            old_field = schema.field(i)
+            new_field = pa.field(
+                name, pa.dictionary(pa.int32(), old_field.type), old_field.nullable
+            )
+            schema = schema.remove(i).insert(i, new_field)
+    # Replace the schema after unifying rather than set the schema
+    # because the provided schema doesn't contain any of the partitions.
+    # TODO: Move to get_parquet_dataset as part of the ParquetDatasetV2 refactoring.
+    dataset = dataset.replace_schema(pa.unify_schemas([dataset.schema, schema]))
     col_names = dataset.schema.names
     selected_names = [col_names[field_num] for field_num in selected_fields]
 
@@ -1920,6 +1842,10 @@ def parquet_file_schema(
         storage_options=storage_options,
         read_categories=True,
     )
+    if hasattr(pq_dataset, "_bodo_arrow_schema"):
+        pa_schema = pq_dataset._bodo_arrow_schema
+    else:
+        pa_schema = pq_dataset.schema.to_arrow_schema()
 
     # not using 'partition_names' since the order may not match 'levels'
     partition_names = (
@@ -1930,7 +1856,6 @@ def parquet_file_schema(
             for i in range(len(pq_dataset.partitions.partition_names))
         ]
     )
-    pa_schema = pq_dataset.schema.to_arrow_schema()
     num_pieces = len(pq_dataset.pieces)
 
     # Get list of string columns

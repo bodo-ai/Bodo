@@ -57,6 +57,7 @@ from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     FilenameType,
+    check_unsupported_args,
     get_literal_value,
     get_overload_const_bool,
     get_overload_const_int,
@@ -649,8 +650,9 @@ class TypingTransforms:
         )
         require(all(get_definition(func_ir, v) == read_node for v in data_def.items))
         if isinstance(read_node, bodo.ir.sql_ext.SqlReader):
-            # Filter pushdown is only supported for snowflake right now.
-            require(read_node.db_type == "snowflake")
+            # Filter pushdown is only supported for snowflake and iceberg
+            # right now.
+            require(read_node.db_type in ("snowflake", "iceberg"))
         elif isinstance(read_node, bodo.ir.parquet_ext.ParquetReader):
             filename_var = read_node.file_name.name
             # If the filename_var isn't in the typemap we are likely
@@ -1049,9 +1051,11 @@ class TypingTransforms:
         # literal case
         # TODO(ehsan): support 'in' and 'not in'
         is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+        # Iceberg uses arrow operators instead of SQL operators.
+        use_sql_ops = is_sql and read_node.db_type != "iceberg"
         op_map = {
-            operator.eq: "=" if is_sql else "==",
-            operator.ne: "<>" if is_sql else "!=",
+            operator.eq: "=" if use_sql_ops else "==",
+            operator.ne: "<>" if use_sql_ops else "!=",
             operator.lt: "<",
             operator.le: "<=",
             operator.gt: ">",
@@ -1540,6 +1544,9 @@ class TypingTransforms:
             return [assign]
 
         func_name, func_mod = fdef
+
+        if fdef == ("read_sql_table", "pandas"):
+            return self._run_call_read_sql_table(assign, rhs, func_name, label)
 
         if func_mod == "pandas":
             return self._run_call_pd_top_level(assign, rhs, func_name, label)
@@ -2294,6 +2301,110 @@ class TypingTransforms:
             nodes += self._replace_arg_with_literal(func_name, rhs, func_args, label)
 
         return nodes + [assign]
+
+    def _run_call_read_sql_table(self, assign, rhs, func_name, label):
+        """transform pd.read_sql_table into a SQL node"""
+        func_str = "pandas.read_sql_table"
+        lhs = assign.target
+        kws = dict(rhs.kws)
+        # Note schema here refers to a database schema, so we
+        # will use the variable name database_schema.
+        supported_args = ["table_name", "con", "schema"]
+        arg_values = []
+        for i, arg in enumerate(supported_args):
+            err_msg = f"pandas.read_sql_table(): '{arg}', if provided must be a constant string."
+            temp = get_call_expr_arg(func_str, rhs.args, kws, i, arg)
+            temp = self._get_const_value(temp, label, rhs.loc, err_msg=err_msg)
+            if not isinstance(temp, str):
+                raise BodoError(err_msg)
+            arg_values.append(temp)
+        table_name, con, database_schema = arg_values
+        # TODO [BE-2828] Need to add logic for parsing iceberg connection string
+        arg_defaults = {
+            "index_col": None,
+            "coerce_float": True,
+            "parse_dates": None,
+            "columns": None,
+            "chunksize": None,
+        }
+        unsupported_args = {}
+        for i, (arg, default) in enumerate(arg_defaults.items()):
+            # we support args 0-2, so we start at len(supported_args)=3
+            temp = get_call_expr_arg(
+                func_str,
+                rhs.args,
+                kws,
+                i + len(supported_args),
+                arg,
+                default=default,
+                use_default=True,
+            )
+            if temp != default:
+                temp = self._get_const_value(
+                    temp,
+                    label,
+                    rhs.loc,
+                    f"pandas.read_sql_table(): '{arg}', if provided must be a constant and the default value {default}.",
+                )
+            unsupported_args[arg] = temp
+        check_unsupported_args(
+            "read_sql_table", unsupported_args, arg_defaults, package_name="pandas"
+        )
+        (
+            col_names,
+            arr_types,
+            pyarrow_table_schema,
+        ) = bodo.io.iceberg.get_iceberg_type_info(table_name, con, database_schema)
+        index = bodo.RangeIndexType(None)
+        df_type = DataFrameType(
+            tuple(arr_types),
+            index,
+            tuple(col_names),
+            is_table_format=True,
+        )
+        data_arrs = [
+            ir.Var(lhs.scope, mk_unique_var("sql_table"), lhs.loc),
+            # Note index_col will always be dead since we don't support
+            # index_col yet.
+            ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
+        ]
+        self.typemap[data_arrs[0].name] = df_type.table_type
+        self.typemap[data_arrs[1].name] = types.none
+        nodes = [
+            bodo.ir.sql_ext.SqlReader(
+                table_name,
+                con,
+                lhs.name,
+                list(df_type.columns),
+                data_arrs,
+                list(df_type.data),
+                set(),
+                "iceberg",
+                lhs.loc,
+                [],
+                [],
+                True,
+                None,
+                types.none,
+                database_schema,
+                pyarrow_table_schema,
+            )
+        ]
+        data_args = ["table_val", "idx_arr_val"]
+        # Create the index + dataframe
+        index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
+        func_text = f"def _init_df({data_args[0]}, {data_args[1]}):\n"
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, df_type)\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        _init_df = loc_vars["_init_df"]
+
+        nodes += compile_func_single_block(
+            _init_df, data_arrs, lhs, self, extra_globals={"df_type": df_type}
+        )
+        # Mark the IR as changed
+        self.changed = True
+        return nodes
 
     def _run_call_pd_top_level(self, assign, rhs, func_name, label):
         """transform top-level pandas functions"""
@@ -3772,11 +3883,22 @@ class TypingTransforms:
         Does an expression match a supported is/not na call that can
         be used in filterpushdown.
         """
-        return (
+        if not (
             is_call(index_def)
             and index_call_name[0] in ("isna", "isnull", "notna", "notnull")
-            and isinstance(self.typemap.get(index_call_name[1].name, None), SeriesType)
-        )
+        ):
+            return False
+
+        method_obj_type = self.typemap.get(index_call_name[1].name, None)
+
+        # rerun type inference if we don't have the method's object type yet
+        # read_sql_table (and other I/O calls in the future) is handled in typing pass
+        # so the Series type may not be available yet
+        if method_obj_type in (None, types.unknown, types.undefined):
+            self.needs_transform = True
+            return False
+
+        return isinstance(method_obj_type, SeriesType)
 
     def _is_isin_filter_pushdown_func(self, index_def, index_call_name):
         """
@@ -3787,12 +3909,21 @@ class TypingTransforms:
         because we don't want to worry about distributed data and tuples aren't
         supported in the isin API.
         """
-        if not (
-            is_call(index_def)
-            and index_call_name[0] == "isin"
-            and isinstance(self.typemap.get(index_call_name[1].name, None), SeriesType)
-        ):
+        if not (is_call(index_def) and index_call_name[0] == "isin"):
             return False
+
+        method_obj_type = self.typemap.get(index_call_name[1].name, None)
+
+        # rerun type inference if we don't have the method's object type yet
+        # read_sql_table (and other I/O calls in the future) is handled in typing pass
+        # so the Series type may not be available yet
+        if method_obj_type in (None, types.unknown, types.undefined):
+            self.needs_transform = True
+            return False
+
+        if not isinstance(method_obj_type, SeriesType):
+            return False
+
         list_set_typ = self.typemap.get(index_def.args[0].name, None)
         # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
         # filter pushdown in that situation.

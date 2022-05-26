@@ -12,6 +12,7 @@ from numba.extending import box, models, register_model
 from bodo.hiframes.table import TableType
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
+from bodo.utils.typing import BodoError
 from bodo.utils.utils import debug_prints
 
 
@@ -405,3 +406,249 @@ def is_connector_table_parallel(node, array_dists, typemap, node_name):
             )
         ), f"{node_name} data/index parallelization does not match"
     return parallel
+
+
+def generate_arrow_filters(
+    filters,
+    filter_map,
+    filter_vars,
+    col_names,
+    partition_names,
+    original_out_types,
+    typemap,
+    source,
+):
+    """
+    Generate Arrow DNF filters and expression filters with the
+    given filter_map and filter_vars.
+
+    Keyword arguments:
+    filters -- DNF expression from the IR node for filters. None
+               if there are no filters.
+    filter_map -- Mapping from filter value to var name.
+    filter_vars -- List of filter vars
+    col_names -- original column names in the IR node, including dead columns.
+    partition_names -- Column names that can be used as partitions.
+    original_out_types -- original column types in the IR node, including dead columns.
+    typemap -- Maps variables name -> types.
+    source -- What is generating this filter. Either "parquet" or "iceberg".
+    """
+    dnf_filter_str = "None"
+    expr_filter_str = "None"
+    # If no filters use variables (i.e. all isna, then we still need to take this path)
+    if filters:
+        # Create two formats for parquet/arrow. One using the old DNF format
+        # which contains just the partition columns (partition pushdown)
+        # and one using the more verbose expression format and all expressions
+        # (predicate pushdown).
+        # https://arrow.apache.org/docs/python/dataset.html#filtering-data
+        #
+        # partition pushdown requires the expressions to just contain Hive partitions
+        # If any expressions are not hive partitions then the DNF filters should treat
+        # them as true
+        #
+        # For example if A, C are parition column names and B is not
+        #
+        # Then for partition expressions:
+        # ((A > 4) & (B < 2)) | ((A < 2) & (C == 1))
+        # => ((A > 4) & True) | ((A < 2) & (C == 1))
+        # => (A > 4) | ((A < 2) & (C == 1))
+        #
+        # Similarly if any OR expression consist of all True we do not have
+        # any partition filters.
+        #
+        # For example f A, C are parition column names and B is not
+        # (B < 2) | ((A < 2) & (C == 1))
+        # => True | ((A < 2) & (C == 1))
+        # => True
+        #
+        # So we set dnf_filter_str = "None"
+        #
+        # expr_filter_str always contains all of the filters, regardless of if
+        # the column is a partition column.
+        #
+        dnf_or_conds = []
+        expr_or_conds = []
+        # If any filters aren't on a partition column or are unsupported
+        # in partitions, then this expression must effectively be replaced with TRUE.
+        # If any of the AND sections contain only TRUE expresssions, then we must won't
+        # be able to filter anything based on partitioning. To represent this we will set
+        # skip_partitions = True, which will set  dnf_filter_str = "None".
+        skip_partitions = False
+        # Create a mapping for faster column indexing
+        orig_colname_map = {c: i for i, c in enumerate(col_names)}
+        for predicate in filters:
+            dnf_and_conds = []
+            expr_and_conds = []
+            for v in predicate:
+                # First update expr since these include all expressions.
+                # If v[2] is a var we pass the variable at runtime,
+                # otherwise we pass a constant (i.e. NULL) which
+                # requires special handling
+                if isinstance(v[2], ir.Var):
+                    # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
+                    # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
+                    # column_cast and scalar_cast.
+                    column_cast, scalar_cast = determine_filter_cast(
+                        original_out_types,
+                        typemap,
+                        v,
+                        orig_colname_map,
+                        partition_names,
+                        source,
+                    )
+                    if v[1] == "in":
+                        # Expected output for this format should like
+                        # (ds.field('A').isin(py_var))
+                        expr_and_conds.append(
+                            f"(ds.field('{v[0]}').isin({filter_map[v[2].name]}))"
+                        )
+                    else:
+                        # Expected output for this format should like
+                        # (ds.field('A') > ds.scalar(py_var))
+                        expr_and_conds.append(
+                            f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})"
+                        )
+                else:
+                    # Currently the only constant expressions we support are IS [NOT] NULL
+                    assert v[2] == "NULL", "unsupport constant used in filter pushdown"
+                    if v[1] == "is not":
+                        prefix = "~"
+                    else:
+                        prefix = ""
+                    # Expected output for this format should like
+                    # (~ds.field('A').is_null())
+                    expr_and_conds.append(f"({prefix}ds.field('{v[0]}').is_null())")
+                # Now handle the dnf section. We can only append a value if its not a constant
+                # expression and is a partition column. If we already know skip_partitions = False,
+                # then we skip partitions as they will be unused.
+
+                if not skip_partitions:
+                    if v[0] in partition_names and isinstance(v[2], ir.Var):
+                        dnf_str = f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})"
+                        dnf_and_conds.append(dnf_str)
+                    # handle isna/notna (e.g. [[('C', 'is', 'NULL')]]) cases only for
+                    # Iceberg, since supporting nulls in Parquet/Arrow/Hive partitioning is
+                    # complicated (e.g. Spark allows users to specify custom null directory)
+                    elif (
+                        v[0] in partition_names
+                        and not isinstance(v[2], ir.Var)
+                        and source == "iceberg"
+                    ):
+                        dnf_str = f"('{v[0]}', '{v[1]}', '{v[2]}')"
+                        dnf_and_conds.append(dnf_str)
+                    # If we don't append to the list, we are effectively
+                    # replacing this expression with TRUE as
+                    # (expr AND TRUE => expr)
+
+            dnf_and_str = ""
+            if dnf_and_conds:
+                dnf_and_str = ", ".join(dnf_and_conds)
+            else:
+                # If dnf_and_conds is empty, this expression = TRUE
+                # Since (expr OR TRUE => TRUE), we should omit all partitions.
+                skip_partitions = True
+            expr_and_str = " & ".join(expr_and_conds)
+            # If all the filters are truncated we may have an empty string.
+            if dnf_and_str:
+                dnf_or_conds.append(f"[{dnf_and_str}]")
+            expr_or_conds.append(f"({expr_and_str})")
+
+        dnf_or_str = ", ".join(dnf_or_conds)
+        expr_or_str = " | ".join(expr_or_conds)
+        if dnf_or_str and not skip_partitions:
+            # If the expression exists use and we don't need
+            # to skip partitions we need  update dnf_filter_str
+            dnf_filter_str = f"[{dnf_or_str}]"
+        expr_filter_str = f"({expr_or_str})"
+    return dnf_filter_str, expr_filter_str
+
+
+def determine_filter_cast(
+    col_types, typemap, filter_val, orig_colname_map, partition_names, source
+):
+    """
+    Function that generates text for casts that need to be included
+    in the filter when not automatically handled by Arrow. For example
+    timestamp and string. This function returns two strings. In most cases
+    one of the strings will be empty and the other contain the argument that
+    should be cast. However, if we have a partition column, we always cast the
+    partition column either to its original type or the new type.
+
+    This is because of an issue in arrow where if a partion has a mix of integer
+    and string names it won't look at the global types when Bodo processes per
+    file (see test_read_partitions_string_int for an example).
+
+    We opt to cast in the direction that keep maximum information, for
+    example date -> timestamp rather than timestamp -> date.
+
+    Right now we assume filter_val[0] is a column name and filter_val[2]
+    is a scalar Var that is found in the typemap.
+
+    Keyword arguments:
+    col_types -- Types of the original columns, including dead columns.
+    typemap -- Maps variables name -> types.
+    filter_val -- Filter value DNF expression
+    orig_colname_map -- Map index -> column name.
+    partition_names -- List of column names that can be used as partitions.
+    source -- What is generating this filter. Either "parquet" or "iceberg".
+    """
+    import bodo
+
+    colname = filter_val[0]
+    lhs_arr_typ = col_types[orig_colname_map[colname]]
+    lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
+    if source == "parquet" and colname in partition_names:
+        # Always cast partitions to protect again multiple types
+        # with parquet (see test_read_partitions_string_int).
+        # We skip this with Iceberg because partitions are hidden.
+
+        if lhs_scalar_typ == types.unicode_type:
+            col_cast = ".cast(pyarrow.string(), safe=False)"
+        elif isinstance(lhs_scalar_typ, types.Integer):
+            # all arrow types integer type names are the same as numba
+            # type names.
+            col_cast = f".cast(pyarrow.{lhs_scalar_typ.name}(), safe=False)"
+        else:
+            # Currently arrow support int and string partitions, so we only capture those casts
+            # https://github.com/apache/arrow/blob/230afef57f0ccc2135ced23093bac4298d5ba9e4/python/pyarrow/parquet.py#L989
+            col_cast = ""
+    else:
+        col_cast = ""
+    rhs_typ = typemap[filter_val[2].name]
+    # If we do isin, then rhs_typ will be a list or set
+    if isinstance(rhs_typ, (types.List, types.Set)):
+        rhs_scalar_typ = rhs_typ.dtype
+    else:
+        rhs_scalar_typ = rhs_typ
+
+    # Here we assume is_common_scalar_dtype conversions are common
+    # enough that Arrow will support them, since these are conversions
+    # like int -> float. TODO: Test
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        lhs_scalar_typ, "Filter pushdown"
+    )
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+        rhs_scalar_typ, "Filter pushdown"
+    )
+    if not bodo.utils.typing.is_common_scalar_dtype([lhs_scalar_typ, rhs_scalar_typ]):
+        # If a cast is not implicit it must be in our white list.
+        if not bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
+            raise BodoError(
+                f"Unsupported Arrow cast from {lhs_scalar_typ} to {rhs_scalar_typ} in filter pushdown. Please try a comparison that avoids casting the column."
+            )
+        # We always cast string -> other types
+        # Only supported types should be string and timestamp
+        if lhs_scalar_typ == types.unicode_type:
+            return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
+        elif lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type):
+            if isinstance(rhs_typ, (types.List, types.Set)):  # pragma: no cover
+                # This path should never be reached because we checked that
+                # list/set doesn't contain Timestamp or datetime64 in typing pass.
+                type_name = "list" if isinstance(rhs_typ, types.List) else "tuple"
+                raise BodoError(
+                    f"Cannot cast {type_name} values with isin filter pushdown."
+                )
+            return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
+
+    return col_cast, ""

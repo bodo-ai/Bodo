@@ -60,6 +60,7 @@ import bodo.libs.timsort
 import bodo.io
 import bodo.io.np_io
 import bodo.io.csv_iterator_ext
+import bodo.io.iceberg
 from bodo.libs.distributed_api import (
     allgatherv,
     barrier,

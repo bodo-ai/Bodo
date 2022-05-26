@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import subprocess
+from mpi4py import MPI
 
 import pytest
 from numba.core.runtime import rtsys
@@ -213,7 +214,7 @@ def s3_bucket_helper(minio_server, datapath, bucket_name, region="us-east-1"):
                 os.remove(file_name + ".bz2")
 
         def upload_dir(prefix, dst_dirname, extension):
-            """ upload all files with same given extension in a directory to s3 """
+            """upload all files with same given extension in a directory to s3"""
             pat = prefix + f"/*.{extension}"
             for path in glob.glob(pat):
                 fname = path[len(prefix) + 1 :]
@@ -371,3 +372,69 @@ def is_cached(pytestconfig):
     """Fixture used with caching tests, returns true if pytest was called with --is_cached
     and false otherwise"""
     return pytestconfig.getoption("is_cached")
+
+
+@pytest.fixture(scope="session")
+@pytest.mark.iceberg
+def iceberg_database():
+    """
+    Create and populate Iceberg test tables.
+    """
+    from bodo.tests.iceberg_database_helpers.create_all_tables import (
+        create_all_tables,
+    )
+
+    comm = MPI.COMM_WORLD
+
+    warehouse_loc = os.path.abspath(os.getcwd())
+
+    database_schema_or_e = None
+    if bodo.get_rank() == 0:
+        try:
+            database_schema_or_e = create_all_tables()
+        except Exception as e:
+            database_schema_or_e = e
+    database_schema_or_e = comm.bcast(database_schema_or_e)
+    if isinstance(database_schema_or_e, Exception):
+        raise database_schema_or_e
+    database_schema = database_schema_or_e
+
+    yield database_schema, warehouse_loc
+
+    if bodo.get_rank() == 0:
+        import shutil
+
+        dir_to_rm = os.path.join(warehouse_loc, database_schema)
+        shutil.rmtree(dir_to_rm, ignore_errors=True)
+
+
+@pytest.fixture(scope="session")
+@pytest.mark.iceberg
+def iceberg_table_conn():
+    """Get the connection string and database-schema for Iceberg table.
+
+    Parameters
+    ----------
+    table_name : str
+    database_schema: str
+    warehouse_loc: str
+
+    Returns
+    -------
+    conn : connection string for the iceberg database
+
+    Raises
+    ------
+    ValueError
+        If the table doesn't exist.
+    """
+
+    def deco(table_name, database_schema, warehouse_loc, check_exists=True):
+        path = os.path.join(warehouse_loc, database_schema, table_name)
+        if check_exists and not os.path.exists(path):
+            msg = "Could not find table {}."
+            raise ValueError(msg.format(table_name))
+        # Currently the connection string is the location of the warehouse
+        return f"{warehouse_loc}"
+
+    return deco

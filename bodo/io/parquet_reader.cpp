@@ -3,13 +3,7 @@
 // Implementation of ParquetReader (subclass of ArrowDataframeReader) with
 // functionality that is specific to reading parquet datasets
 
-#include "_fsspec_reader.h"
-#include "_hdfs_reader.h"
-#include "_s3_reader.h"
-#include "arrow/io/hdfs.h"
-#include "arrow_reader.h"
-#include "parquet/api/reader.h"
-#include "parquet/arrow/reader.h"
+#include "parquet_reader.h"
 
 using arrow::Type;
 using parquet::ParquetFileReader;
@@ -114,370 +108,252 @@ static void fill_input_file_name_col_dict(
 
 // -------- ParquetReader --------
 
-class ParquetReader : public ArrowDataframeReader {
-   public:
-    /**
-     * Initialize ParquetReader.
-     * See pq_read function below for description of arguments.
-     */
-    ParquetReader(PyObject* _path, bool _parallel, char* _bucket_region,
-                  PyObject* _dnf_filters, PyObject* _expr_filters,
-                  PyObject* _storage_options, int64_t _tot_rows_to_read,
-                  int32_t* _selected_fields, int32_t num_selected_fields,
-                  int32_t* is_nullable, int32_t* _selected_part_cols,
-                  int32_t* _part_cols_cat_dtype, int32_t num_partition_cols,
-                  int32_t* _str_as_dict_cols, int32_t num_str_as_dict_cols,
-                  bool _input_file_name_col)
-        : ArrowDataframeReader(_parallel, _tot_rows_to_read, _selected_fields,
-                               num_selected_fields, is_nullable),
-          path(_path),
-          bucket_region(_bucket_region),
-          dnf_filters(_dnf_filters),
-          expr_filters(_expr_filters),
-          storage_options(_storage_options),
-          input_file_name_col(_input_file_name_col) {
-        if (storage_options == Py_None)
-            throw std::runtime_error("ParquetReader: storage_options is None");
-
-        // copy selected_fields to a Python list to pass to
-        // parquet_pio.get_scanner_batches
-        selected_fields_py = PyList_New(selected_fields.size());
-        size_t i = 0;
-        for (auto field_num : selected_fields) {
-            PyList_SetItem(selected_fields_py, i++, PyLong_FromLong(field_num));
+void ParquetReader::add_piece(PyObject* piece, int64_t num_rows,
+                              int64_t total_rows) {
+    // p = piece.path
+    PyObject* p = PyObject_GetAttrString(piece, "path");
+    const char* c_path = PyUnicode_AsUTF8(p);
+    file_paths.emplace_back(c_path);
+    pieces_nrows.push_back(num_rows);
+    if (this->input_file_name_col) {
+        // allocate indices array for the dictionary-encoded
+        // input_file_name col if not already allocated
+        if (this->input_file_name_col_indices_arr == nullptr) {
+            // use alloc_nullable_array_no_nulls since there cannot
+            // be any nulls here
+            this->input_file_name_col_indices_arr =
+                alloc_nullable_array_no_nulls(total_rows, Bodo_CTypes::INT32,
+                                              0);
         }
-
-        // Extract values from the storage_options dict
-        // Check that it's a dictionary, else throw an error
-        if (PyDict_Check(storage_options)) {
-            // Get value of "anon". Returns NULL if it doesn't exist in the
-            // dict. No need to decref s3fs_anon_py, PyDict_GetItemString
-            // returns borrowed ref
-            PyObject* s3fs_anon_py =
-                PyDict_GetItemString(storage_options, "anon");
-            if (s3fs_anon_py != NULL && s3fs_anon_py == Py_True) {
-                this->s3fs_anon = true;
-            }
-        } else {
-            throw std::runtime_error(
-                "ParquetReader: storage_options is not a Python dictionary.");
-        }
-
-        // initialize reader
-        init({_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});
-
-        if (parallel) {
-            // Get the average number of pieces per rank. This is used to
-            // increase the number of threads of the Arrow batch reader
-            // for ranks that have to read many more files than others.
-            int num_ranks;
-            MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
-            uint64_t num_pieces = static_cast<uint64_t>(get_num_pieces());
-            MPI_Allreduce(MPI_IN_PLACE, &num_pieces, 1, MPI_UINT64_T, MPI_SUM,
-                          MPI_COMM_WORLD);
-            avg_num_pieces = num_pieces / static_cast<double>(num_ranks);
-        }
-
-        // allocate output partition columns. These are categorical columns
-        // where we only fill out the codes in C++ (see fill_partition_column
-        // comments)
-        for (auto i = 0; i < num_partition_cols; i++) {
-            part_cols.push_back(alloc_array(
-                count, -1, -1, bodo_array_type::NUMPY,
-                Bodo_CTypes::CTypeEnum(_part_cols_cat_dtype[i]), 0, -1));
-            selected_part_cols.push_back(_selected_part_cols[i]);
-        }
-        part_cols_offset.resize(num_partition_cols, 0);
+        // fill a range in the indices array
+        fill_input_file_name_col_indices(
+            file_paths.size() - 1, this->input_file_name_col_indices_arr->data1,
+            this->input_file_name_col_indices_offset, num_rows);
+        this->input_file_name_col_indices_offset += num_rows;
+        this->input_file_name_col_dict_arr_total_chars +=
+            (std::strlen(c_path) + this->prefix.length());
     }
 
-    virtual ~ParquetReader() {}
+    // for this parquet file: store partition value of each partition column
+    get_partition_info(piece);
+    Py_DECREF(p);
+}
 
-    /// a piece is a single parquet file in the context of parquet
-    virtual size_t get_num_pieces() const { return file_paths.size(); }
+PyObject* ParquetReader::get_dataset() {
+    // import bodo.io.parquet_pio
+    PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
 
-    /// returns output partition columns
-    std::vector<array_info*>& get_partition_cols() { return part_cols; }
+    // ds = bodo.io.parquet_pio.get_parquet_dataset(path, true, filters,
+    // storage_options)
+    PyObject* ds = PyObject_CallMethod(
+        pq_mod, "get_parquet_dataset", "OOOOOOOL", path, Py_True, dnf_filters,
+        expr_filters, storage_options, Py_False, PyBool_FromLong(parallel),
+        tot_rows_to_read);
+    if (ds == NULL && PyErr_Occurred()) {
+        throw std::runtime_error("python");
+    }
+    PyObject* partitions = PyObject_GetAttrString(ds, "partitions");
+    this->ds_has_partitions = (partitions != Py_None);
+    Py_DECREF(partitions);
+    Py_DECREF(path);
+    Py_DECREF(dnf_filters);
+    Py_DECREF(pq_mod);
+    if (PyErr_Occurred()) throw std::runtime_error("python");
 
-    array_info* get_input_file_name_col() { return input_file_name_col_arr; }
+    // prefix = ds.prefix
+    PyObject* prefix_py = PyObject_GetAttrString(ds, "_prefix");
+    this->prefix.assign(PyUnicode_AsUTF8(prefix_py));
+    Py_DECREF(prefix_py);
 
-   protected:
-    virtual void add_piece(PyObject* piece, int64_t num_rows,
-                           int64_t total_rows) {
-        // p = piece.path
-        PyObject* p = PyObject_GetAttrString(piece, "path");
-        const char* c_path = PyUnicode_AsUTF8(p);
-        file_paths.emplace_back(c_path);
-        pieces_nrows.push_back(num_rows);
-        if (this->input_file_name_col) {
-            // allocate indices array for the dictionary-encoded
-            // input_file_name col if not already allocated
-            if (this->input_file_name_col_indices_arr == nullptr) {
-                // use alloc_nullable_array_no_nulls since there cannot
-                // be any nulls here
-                this->input_file_name_col_indices_arr =
-                    alloc_nullable_array_no_nulls(total_rows,
-                                                  Bodo_CTypes::INT32, 0);
-            }
-            // fill a range in the indices array
-            fill_input_file_name_col_indices(
-                file_paths.size() - 1,
-                this->input_file_name_col_indices_arr->data1,
-                this->input_file_name_col_indices_offset, num_rows);
-            this->input_file_name_col_indices_offset += num_rows;
-            this->input_file_name_col_dict_arr_total_chars +=
-                (std::strlen(c_path) + this->prefix.length());
+    return ds;
+}
+
+std::shared_ptr<arrow::Schema> ParquetReader::get_schema(PyObject* dataset) {
+    PyObject* pq_mod = PyImport_ImportModule("bodo.io.pa_parquet");
+    PyObject* schema_py =
+        PyObject_CallMethod(pq_mod, "get_dataset_schema", "O", dataset);
+    if (schema_py == NULL && PyErr_Occurred()) {
+        throw std::runtime_error("python");
+    }
+    Py_DECREF(pq_mod);
+    // see
+    // https://arrow.apache.org/docs/python/extending.html#using-pyarrow-from-c-and-cython-code
+    auto schema_ = arrow::py::unwrap_schema(schema_py).ValueOrDie();
+    // calculate selected columns (not fields)
+    int col = 0;
+    for (int i = 0; i < schema_->num_fields(); i++) {
+        auto f = schema_->field(i);
+        int field_num_columns = get_num_columns(f);
+        if (selected_fields.find(i) != selected_fields.end()) {
+            for (int j = 0; j < field_num_columns; j++)
+                selected_columns.push_back(col + j);
         }
+        col += field_num_columns;
+    }
+    Py_DECREF(schema_py);
+    return schema_;
+}
 
-        // for this parquet file: store partition value of each partition column
-        get_partition_info(piece);
-        Py_DECREF(p);
+void ParquetReader::read_all(TableBuilder& builder) {
+    if (get_num_pieces() == 0) return;
+
+    size_t cur_piece = 0;
+    int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
+
+    PyObject* fnames_list_py = PyList_New(file_paths.size());
+    size_t i = 0;
+    for (auto p : file_paths) {
+        PyList_SetItem(fnames_list_py, i++, PyUnicode_FromString(p.c_str()));
     }
 
-    virtual PyObject* get_dataset() {
-        // import bodo.io.parquet_pio
-        PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
-
-        // ds = bodo.io.parquet_pio.get_parquet_dataset(path, true, filters,
-        // storage_options)
-        PyObject* ds = PyObject_CallMethod(
-            pq_mod, "get_parquet_dataset", "OOOOOOOL", path, Py_True,
-            dnf_filters, expr_filters, storage_options, Py_False,
-            PyBool_FromLong(parallel), tot_rows_to_read);
-        Py_DECREF(path);
-        Py_DECREF(dnf_filters);
-        Py_DECREF(pq_mod);
-        if (PyErr_Occurred()) throw std::runtime_error("python");
-
-        // prefix = ds.prefix
-        PyObject* prefix_py = PyObject_GetAttrString(ds, "_prefix");
-        this->prefix.assign(PyUnicode_AsUTF8(prefix_py));
-        Py_DECREF(prefix_py);
-
-        return ds;
+    PyObject* str_as_dict_cols_py = PyList_New(str_as_dict_colnames.size());
+    i = 0;
+    for (auto field_name : str_as_dict_colnames) {
+        PyList_SetItem(str_as_dict_cols_py, i++,
+                       PyUnicode_FromString(field_name.c_str()));
     }
 
-    virtual std::shared_ptr<arrow::Schema> get_schema(PyObject* dataset) {
-        PyObject* pq_mod = PyImport_ImportModule("bodo.io.pa_parquet");
-        PyObject* schema_py =
-            PyObject_CallMethod(pq_mod, "get_dataset_schema", "O", dataset);
-        Py_DECREF(pq_mod);
-        // see
-        // https://arrow.apache.org/docs/python/extending.html#using-pyarrow-from-c-and-cython-code
-        auto schema_ = arrow::py::unwrap_schema(schema_py).ValueOrDie();
-        // calculate selected columns (not fields)
-        int col = 0;
-        for (int i = 0; i < schema_->num_fields(); i++) {
-            auto f = schema_->field(i);
-            int field_num_columns = get_num_columns(f);
-            if (selected_fields.find(i) != selected_fields.end()) {
-                for (int j = 0; j < field_num_columns; j++)
-                    selected_columns.push_back(col + j);
-            }
-            col += field_num_columns;
-        }
-        Py_DECREF(schema_py);
-        return schema_;
+    int64_t rows_to_skip = start_row_first_piece;
+    PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
+    // This only loads record batches that match the filter.
+    // get_scanner_batches returns a tuple with the dataset object
+    // and the record batch reader. We really just need the batch reader,
+    // but hdfs has an issue in the order in which objects are garbage
+    // collected, where Java will print error on trying to close a file
+    // saying that the filesystem is already closed. This happens when done
+    // reading.
+    // Keeping a reference to the dataset and deleting it in the last place
+    // seems to help, but the problem can still occur, so this needs
+    // further investigation,
+    tracing::Event ev_get_scanner_batches("get_scanner_batches");
+    PyObject* py_schema = arrow::py::wrap_schema(this->schema);
+    PyObject* dataset_batches_tup = PyObject_CallMethod(
+        pq_mod, "get_scanner_batches", "OOOdiOssOlliO", fnames_list_py,
+        expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
+        storage_options, bucket_region.c_str(), prefix.c_str(),
+        str_as_dict_cols_py, this->start_row_first_piece, this->count,
+        int(ds_has_partitions), py_schema);
+    if (dataset_batches_tup == NULL && PyErr_Occurred()) {
+        throw std::runtime_error("python");
     }
 
-    virtual void read_all(TableBuilder& builder) {
-        if (get_num_pieces() == 0) return;
+    ev_get_scanner_batches.finalize();
+    // PyTuple_GetItem returns a borrowed reference
+    PyObject* dataset = PyTuple_GetItem(dataset_batches_tup, 0);
+    Py_INCREF(dataset);  // call incref to keep the reference
+    PyObject* batches_it = PyTuple_GetItem(dataset_batches_tup, 1);
+    rows_to_skip = PyLong_AsLong(PyTuple_GetItem(dataset_batches_tup, 2));
+    Py_DECREF(pq_mod);
+    Py_DECREF(expr_filters);
+    Py_DECREF(selected_fields_py);
+    Py_DECREF(storage_options);
+    Py_DECREF(fnames_list_py);
+    Py_DECREF(str_as_dict_cols_py);
+    Py_DECREF(py_schema);
+    PyObject* batch_py = NULL;
+    // while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with
+    // batch reader returned by scanner
+    while (
+        (batch_py = PyObject_CallMethod(batches_it, "read_next_batch", NULL))) {
+        auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
+        int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
+        int64_t length = std::min(rows_left, batch->num_rows() - batch_offset);
+        if (length > 0) {
+            // this is zero-copy slice
+            auto table = arrow::Table::Make(
+                schema, batch->Slice(batch_offset, length)->columns());
+            builder.append(table);
+            rows_left -= length;
 
-        size_t cur_piece = 0;
-        int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
-
-        PyObject* fnames_list_py = PyList_New(file_paths.size());
-        size_t i = 0;
-        for (auto p : file_paths) {
-            PyList_SetItem(fnames_list_py, i++,
-                           PyUnicode_FromString(p.c_str()));
-        }
-
-        PyObject* str_as_dict_cols_py = PyList_New(str_as_dict_colnames.size());
-        i = 0;
-        for (auto field_name : str_as_dict_colnames) {
-            PyList_SetItem(str_as_dict_cols_py, i++,
-                           PyUnicode_FromString(field_name.c_str()));
-        }
-
-        int64_t rows_to_skip = start_row_first_piece;
-        PyObject* pq_mod = PyImport_ImportModule("bodo.io.parquet_pio");
-        // This only loads record batches that match the filter.
-        // get_scanner_batches returns a tuple with the dataset object
-        // and the record batch reader. We really just need the batch reader,
-        // but hdfs has an issue in the order in which objects are garbage
-        // collected, where Java will print error on trying to close a file
-        // saying that the filesystem is already closed. This happens when done
-        // reading.
-        // Keeping a reference to the dataset and deleting it in the last place
-        // seems to help, but the problem can still occur, so this needs
-        // further investigation,
-        tracing::Event ev_get_scanner_batches("get_scanner_batches");
-        PyObject* dataset_batches_tup = PyObject_CallMethod(
-            pq_mod, "get_scanner_batches", "OOOdiOssOll", fnames_list_py,
-            expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
-            storage_options, bucket_region.c_str(), prefix.c_str(),
-            str_as_dict_cols_py, this->start_row_first_piece, this->count);
-        ev_get_scanner_batches.finalize();
-        // PyTuple_GetItem returns a borrowed reference
-        PyObject* dataset = PyTuple_GetItem(dataset_batches_tup, 0);
-        Py_INCREF(dataset);  // call incref to keep the reference
-        PyObject* batches_it = PyTuple_GetItem(dataset_batches_tup, 1);
-        rows_to_skip = PyLong_AsLong(PyTuple_GetItem(dataset_batches_tup, 2));
-        Py_DECREF(pq_mod);
-        Py_DECREF(expr_filters);
-        Py_DECREF(selected_fields_py);
-        Py_DECREF(storage_options);
-        Py_DECREF(fnames_list_py);
-        Py_DECREF(str_as_dict_cols_py);
-        PyObject* batch_py = NULL;
-        // while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with
-        // batch reader returned by scanner
-        while ((batch_py =
-                    PyObject_CallMethod(batches_it, "read_next_batch", NULL))) {
-            auto batch = arrow::py::unwrap_batch(batch_py).ValueOrDie();
-            int64_t batch_offset = std::min(rows_to_skip, batch->num_rows());
-            int64_t length =
-                std::min(rows_left, batch->num_rows() - batch_offset);
-            if (length > 0) {
-                // this is zero-copy slice
-                auto table = arrow::Table::Make(
-                    schema, batch->Slice(batch_offset, length)->columns());
-                builder.append(table);
-                rows_left -= length;
-
-                // handle partition columns and input_file_name column
-                if (part_cols.size() > 0) {
-                    while (length > 0) {
-                        int64_t rows_read_from_piece =
-                            std::min(rows_left_cur_piece, length);
-                        rows_left_cur_piece -= rows_read_from_piece;
-                        length -= rows_read_from_piece;
-                        // fill partition cols
-                        for (auto i = 0; i < part_cols.size(); i++) {
-                            int64_t part_val =
-                                part_vals[cur_piece][selected_part_cols[i]];
-                            fill_partition_column(part_val, part_cols[i]->data1,
-                                                  part_cols_offset[i],
-                                                  rows_read_from_piece,
-                                                  part_cols[i]->dtype);
-                            part_cols_offset[i] += rows_read_from_piece;
-                        }
-                        if (rows_left_cur_piece == 0 &&
-                            cur_piece < get_num_pieces() - 1) {
-                            rows_left_cur_piece = pieces_nrows[++cur_piece];
-                        }
+            // handle partition columns and input_file_name column
+            if (part_cols.size() > 0) {
+                while (length > 0) {
+                    int64_t rows_read_from_piece =
+                        std::min(rows_left_cur_piece, length);
+                    rows_left_cur_piece -= rows_read_from_piece;
+                    length -= rows_read_from_piece;
+                    // fill partition cols
+                    for (auto i = 0; i < part_cols.size(); i++) {
+                        int64_t part_val =
+                            part_vals[cur_piece][selected_part_cols[i]];
+                        fill_partition_column(
+                            part_val, part_cols[i]->data1, part_cols_offset[i],
+                            rows_read_from_piece, part_cols[i]->dtype);
+                        part_cols_offset[i] += rows_read_from_piece;
+                    }
+                    if (rows_left_cur_piece == 0 &&
+                        cur_piece < get_num_pieces() - 1) {
+                        rows_left_cur_piece = pieces_nrows[++cur_piece];
                     }
                 }
             }
-            rows_to_skip -= batch_offset;
-            Py_DECREF(batch_py);
         }
-        if (batch_py == NULL && PyErr_Occurred() &&
-            PyErr_ExceptionMatches(PyExc_StopIteration))
-            // StopIteration is raised at the end of iteration.
-            // An iterator would clear this automatically, but we are
-            // not using an interator, so we have to clear it manually
-            PyErr_Clear();
-        Py_DECREF(dataset_batches_tup);
-        Py_DECREF(dataset);  // delete dataset last
-
-        if (this->input_file_name_col) {
-            // allocate and fill the dictionary for the
-            // dictionary-encoded input_file_name column
-            this->input_file_name_col_dict_arr = alloc_string_array(
-                this->file_paths.size(),
-                this->input_file_name_col_dict_arr_total_chars, 0);
-            offset_t* offsets =
-                (offset_t*)this->input_file_name_col_dict_arr->data2;
-            offsets[0] = 0;
-            fill_input_file_name_col_dict(
-                this->file_paths, this->prefix,
-                this->input_file_name_col_dict_arr->data1,
-                this->input_file_name_col_dict_arr->data2);
-
-            // create the final dictionary-encoded input_file_name
-            // column from the indices array and dictionary
-            this->input_file_name_col_arr = new array_info(
-                bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-                this->count, -1, -1, NULL, NULL, NULL,
-                this->input_file_name_col_indices_arr->null_bitmask, NULL, NULL,
-                NULL, NULL, 0, 0, 0, false, false,
-                this->input_file_name_col_dict_arr,
-                this->input_file_name_col_indices_arr);
-        }
+        rows_to_skip -= batch_offset;
+        Py_DECREF(batch_py);
     }
-
-   private:
-    PyObject* path;  // path passed to pd.read_parquet() call
-    PyObject* dnf_filters = nullptr;
-    PyObject* expr_filters = nullptr;
-    PyObject* storage_options;
-    PyObject* selected_fields_py;
-    bool input_file_name_col;
-
-    std::vector<int64_t> pieces_nrows;
-    double avg_num_pieces = 0;
-
-    // Parquet files that this process has to read
-    std::vector<std::string> file_paths;
-    // Prefix to add to each of the file paths before they are opened
-    std::string prefix;
-    std::string bucket_region;  // s3 bucket region
-    bool s3fs_anon = false;     // s3 anonymous mode
-
-    // selected columns in the parquet file (not fields). For example,
-    // field "struct<A: int64, B: int64>" has two int64 columns in the
-    // parquet file
-    std::vector<int> selected_columns;
-
-    // selected partition columns
-    std::vector<int> selected_part_cols;
-    // for each piece that this process reads, store the value of each partition
-    // column (value is stored as the categorical code). Note that a given
-    // piece/file has the same partition value for all of its rows
-    std::vector<std::vector<int64_t>> part_vals;
-    // output partition columns
-    std::vector<array_info*> part_cols;
-    // current fill offset of each partition column
-    std::vector<int64_t> part_cols_offset;
-
-    // output input_file_name column
-    // indices for the dictionary-encoding
-    array_info* input_file_name_col_indices_arr = nullptr;
-    int64_t input_file_name_col_indices_offset = 0;
-    // dictionary for the dictionary encoding
-    array_info* input_file_name_col_dict_arr = nullptr;
-    int64_t input_file_name_col_dict_arr_total_chars = 0;
-    // output array_info for the dictionary-encoded
-    // string array
-    array_info* input_file_name_col_arr = nullptr;
-
-    /**
-     * Get values for all partition columns of a piece of
-     * pyarrow.parquet.ParquetDataset and store in part_vals.
-     * @param piece : ParquetDataset piece (a single parquet file)
-     */
-    void get_partition_info(PyObject* piece) {
-        PyObject* partition_keys_py =
-            PyObject_GetAttrString(piece, "partition_keys");
-        if (PyList_Size(partition_keys_py) > 0) {
-            part_vals.emplace_back();
-            std::vector<int64_t>& vals = part_vals.back();
-
-            PyObject* part_keys_iter = PyObject_GetIter(partition_keys_py);
-            PyObject* key_val_tuple;
-            while ((key_val_tuple = PyIter_Next(part_keys_iter))) {
-                // PyTuple_GetItem returns borrowed reference, no need to decref
-                PyObject* part_val_py = PyTuple_GetItem(key_val_tuple, 1);
-                int64_t part_val = PyLong_AsLongLong(part_val_py);
-                vals.emplace_back(part_val);
-                Py_DECREF(key_val_tuple);
-            }
-            Py_DECREF(part_keys_iter);
-        }
-        Py_DECREF(partition_keys_py);
+    if (batch_py == NULL && PyErr_Occurred() &&
+        PyErr_ExceptionMatches(PyExc_StopIteration)) {
+        // StopIteration is raised at the end of iteration.
+        // An iterator would clear this automatically, but we are
+        // not using an interator, so we have to clear it manually
+        PyErr_Clear();
+    } else if (batch_py == NULL && PyErr_Occurred()) {
+        throw std::runtime_error("python");
     }
-};
+    Py_DECREF(dataset_batches_tup);
+    Py_DECREF(dataset);  // delete dataset last
+
+    if (this->input_file_name_col) {
+        // allocate and fill the dictionary for the
+        // dictionary-encoded input_file_name column
+        this->input_file_name_col_dict_arr = alloc_string_array(
+            this->file_paths.size(),
+            this->input_file_name_col_dict_arr_total_chars, 0);
+        offset_t* offsets =
+            (offset_t*)this->input_file_name_col_dict_arr->data2;
+        offsets[0] = 0;
+        fill_input_file_name_col_dict(
+            this->file_paths, this->prefix,
+            this->input_file_name_col_dict_arr->data1,
+            this->input_file_name_col_dict_arr->data2);
+
+        // create the final dictionary-encoded input_file_name
+        // column from the indices array and dictionary
+        this->input_file_name_col_arr = new array_info(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, this->count,
+            -1, -1, NULL, NULL, NULL,
+            this->input_file_name_col_indices_arr->null_bitmask, NULL, NULL,
+            NULL, NULL, 0, 0, 0, false, false,
+            this->input_file_name_col_dict_arr,
+            this->input_file_name_col_indices_arr);
+    }
+}
+
+/**
+ * Get values for all partition columns of a piece of
+ * pyarrow.parquet.ParquetDataset and store in part_vals.
+ * @param piece : ParquetDataset piece (a single parquet file)
+ */
+void ParquetReader::get_partition_info(PyObject* piece) {
+    PyObject* partition_keys_py =
+        PyObject_GetAttrString(piece, "partition_keys");
+    if (PyList_Size(partition_keys_py) > 0) {
+        part_vals.emplace_back();
+        std::vector<int64_t>& vals = part_vals.back();
+
+        PyObject* part_keys_iter = PyObject_GetIter(partition_keys_py);
+        PyObject* key_val_tuple;
+        while ((key_val_tuple = PyIter_Next(part_keys_iter))) {
+            // PyTuple_GetItem returns borrowed reference, no need to decref
+            PyObject* part_val_py = PyTuple_GetItem(key_val_tuple, 1);
+            int64_t part_val = PyLong_AsLongLong(part_val_py);
+            vals.emplace_back(part_val);
+            Py_DECREF(key_val_tuple);
+        }
+        Py_DECREF(part_keys_iter);
+    }
+    Py_DECREF(partition_keys_py);
+}
 
 /**
  * Read a parquet dataset.
@@ -525,9 +401,10 @@ table_info* pq_read(PyObject* path, bool parallel, char* bucket_region,
         ParquetReader reader(path, parallel, bucket_region, dnf_filters,
                              expr_filters, storage_options, tot_rows_to_read,
                              selected_fields, num_selected_fields, is_nullable,
-                             selected_part_cols, part_cols_cat_dtype,
-                             num_partition_cols, str_as_dict_cols,
-                             num_str_as_dict_cols, input_file_name_col);
+                             input_file_name_col);
+        // initialize reader
+        reader.init(str_as_dict_cols, num_str_as_dict_cols, part_cols_cat_dtype,
+                    selected_part_cols, num_partition_cols);
         *total_rows_out = reader.get_total_rows();
         table_info* out = reader.read();
         // append the partition columns to the final output table

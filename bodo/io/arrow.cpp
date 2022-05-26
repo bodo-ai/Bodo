@@ -16,6 +16,14 @@ table_info* pq_read(PyObject* path, bool parallel, char* bucket_region,
                     int32_t* str_as_dict_cols, int32_t num_str_as_dict_cols,
                     int64_t* total_rows_out, bool input_file_name_col);
 
+// --------- functions defined in iceberg_parquet_reader.cpp --------
+table_info* iceberg_pq_read(const char* conn, const char* database_schema,
+                            const char* table_name, bool parallel,
+                            PyObject* dnf_filters, PyObject* expr_filters,
+                            int32_t* selected_fields,
+                            int32_t num_selected_fields, int32_t* is_nullable,
+                            PyObject* pyarrow_table_schema);
+
 // --------- functions defined in parquet_write.cpp ---------
 void pq_write_py_entry(const char* filename, const table_info* table,
                        const array_info* col_names, const array_info* index,
@@ -48,6 +56,8 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     bodo_common_init();
 
     PyObject_SetAttrString(m, "pq_read", PyLong_FromVoidPtr((void*)(&pq_read)));
+    PyObject_SetAttrString(m, "iceberg_pq_read",
+                           PyLong_FromVoidPtr((void*)(&iceberg_pq_read)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void*)(&pq_write_py_entry)));
     PyObject_SetAttrString(m, "pq_write_partitioned",
