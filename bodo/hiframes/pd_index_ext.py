@@ -4254,14 +4254,68 @@ def overload_range_index_unique(I):
     return impl
 
 
-@overload_method(PeriodIndexType, "unique", no_unliteral=True)
-@overload_method(MultiIndexType, "unique", no_unliteral=True)
-@overload_method(HeterogeneousIndexType, "unique", no_unliteral=True)
-def overload_unsupported_index_unique(I):
-    """Add support for Index.unique() on unsupported Index types"""
-    raise BodoError(
-        f"Index.unique(): {type(I).__name__} supported yet"
-    )  # pragma: no cover
+@overload_method(NumericIndexType, "isin", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "isin", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "isin", no_unliteral=True, inline="always")
+@overload_method(DatetimeIndexType, "isin", no_unliteral=True, inline="always")
+@overload_method(TimedeltaIndexType, "isin", no_unliteral=True, inline="always")
+def overload_index_isin(I, values):
+    # if input is Series or array, special implementation is necessary since it may
+    # require hash-based shuffling of both inputs for parallelization
+    if bodo.utils.utils.is_array_typ(values):
+
+        def impl_arr(I, values):  # pragma: no cover
+            values_arr = bodo.utils.conversion.coerce_to_array(values)
+            A = bodo.hiframes.pd_index_ext.get_index_data(I)
+            n = len(A)
+            out_arr = np.empty(n, np.bool_)
+            bodo.libs.array.array_isin(out_arr, A, values_arr, False)
+            return out_arr
+
+        return impl_arr
+
+    # 'values' should be a set or list, TODO: support other list-likes such as Array
+    if not isinstance(values, (types.Set, types.List)):
+        raise BodoError("Series.isin(): 'values' parameter should be a set or a list")
+
+    def impl(I, values):  # pragma: no cover
+        A = bodo.hiframes.pd_index_ext.get_index_data(I)
+        out_arr = bodo.libs.array_ops.array_op_isin(A, values)
+        return out_arr
+
+    return impl
+
+
+@overload_method(RangeIndexType, "isin", no_unliteral=True)
+def overload_range_index_isin(I, values):
+    # if input is Series or array, special implementation is necessary since it may
+    # require hash-based shuffling of both inputs for parallelization
+    if bodo.utils.utils.is_array_typ(values):
+
+        def impl_arr(I, values):  # pragma: no cover
+            values_arr = bodo.utils.conversion.coerce_to_array(values)
+            A = np.arange(I.start, I.stop, I.step)
+            n = len(A)
+            out_arr = np.empty(n, np.bool_)
+            # TODO: design special kernel operator at C++ level to optimize
+            # this operation just for ranges [BE-2836]
+            bodo.libs.array.array_isin(out_arr, A, values_arr, False)
+            return out_arr
+
+        return impl_arr
+
+    # 'values' should be a set or list, TODO: support other list-likes such as Array
+    if not isinstance(values, (types.Set, types.List)):
+        raise BodoError("Index.isin(): 'values' parameter should be a set or a list")
+
+    def impl(I, values):  # pragma: no cover
+        A = np.arange(I.start, I.stop, I.step)
+        # TODO: design special kernel operator at C++ level to optimize
+        # this operation just for ranges [BE-2836]
+        out_arr = bodo.libs.array_ops.array_op_isin(A, values)
+        return out_arr
+
+    return impl
 
 
 # TODO(ehsan): test
@@ -4456,7 +4510,6 @@ index_unsupported_methods = [
     "is_numeric",
     "is_object",
     "is_type_compatible",
-    "isin",
     "item",
     "join",
     "memory_usage",
@@ -4529,6 +4582,7 @@ cat_idx_unsupported_methods = [
     "as_ordered",
     "as_unordered",
     "get_loc",
+    "isin",
 ]
 
 
@@ -4566,6 +4620,7 @@ interval_idx_unsupported_methods = [
     "isna",
     "isnull",
     "map",
+    "isin",
 ]
 
 
@@ -4602,6 +4657,8 @@ multi_index_unsupported_methods = [
     "isna",
     "isnull",
     "map",
+    "isin",
+    "unique",
 ]
 
 
@@ -4692,6 +4749,8 @@ period_index_unsupported_methods = [
     "asfreq",
     "strftime",
     "to_timestamp",
+    "isin",
+    "unique",
 ]
 
 index_types = [
