@@ -1154,6 +1154,61 @@ def test_index_iter(index, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "args",
+    [
+        (pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9]), pd.Series([0, 1, 2, 3])),
+        (
+            pd.Index(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]),
+            pd.Series(["A", "E", "I", "O", "U"]),
+        ),
+        (
+            pd.Index([b"alpha", b"beta", b"gamma", b"delta", b"epsilon"]),
+            pd.Series([b"alphabet", b"beta", b"ALPHA", b"delta", b"beta"]),
+        ),
+        (
+            pd.Index([1.1, 2.2, 1.3, 1.4, 1.1, 1.2, 1.3, 2.4]),
+            pd.Series([1.1, 1.2, 1.3, 1.5]),
+        ),
+        # Unskip after [BE-2811] resolved
+        pytest.param(
+            (
+                pd.Index([True, True, True, True, False, True, False, False]),
+                pd.Series([True]),
+            ),
+            marks=(pytest.mark.slow, pytest.mark.skip),
+        ),
+        (pd.RangeIndex(start=0, stop=100, step=10), pd.Series([0, 25, 50, 75])),
+        (
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
+            pd.date_range(start="2018-04-25", end="2018-04-28", periods=3),
+        ),
+        (
+            pd.TimedeltaIndex(
+                ["1 days", "2 days", "3 days", "2 days", "3 hours", "2 minutes"]
+            ),
+            pd.TimedeltaIndex(
+                ["4 days", "2 days", "5 days", "2 days", "3 hours", "2 seconds"]
+            ),
+        ),
+    ],
+)
+def test_index_isin(args, memory_leak_check):
+    def impl(idx, elems):
+        return idx.isin(elems)
+
+    idx, elems = args
+    check_func(impl, (idx, elems), dist_test=False)
+    # TODO: fix casting certain types of series to list or set
+    if (
+        not isinstance(idx, (pd.TimedeltaIndex, pd.DatetimeIndex))
+        and idx.dtype != "object"
+    ):
+        check_func(impl, (idx, list(elems)), dist_test=False)
+        check_func(impl, (idx, set(elems)), dist_test=False)
+    check_func(impl, (idx, pd.Index(elems)), dist_test=False)
+
+
+@pytest.mark.parametrize(
     "index",
     [
         pd.Index([10, 12], dtype="Int64"),
@@ -1410,12 +1465,13 @@ def test_range_index_dce(memory_leak_check):
                 0.383775019426454,
             ]
         ),
-        # Unskip after [BE-2811] is resolved  (.unique() on boolean index)
+        pd.Index(pd.array([1, 1, 2, 1, None, None, 1, 2, 3, 2, 1, 1, None])),
+        # Unskip after [BE-2811] is resolved
         pytest.param(
             pd.Index([True, True, True, True, False, True, False, False]),
             marks=pytest.mark.skip,
         ),
-        # Unskip after [BE-2811] is resolved  (.unique() on boolean index)
+        # Unskip after [BE-2811] is resolved
         pytest.param(
             pd.Index([False, False, False]),
             marks=pytest.mark.skip,
@@ -1784,12 +1840,6 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_is_type_compatible)(idx=pd.Index(data))
-
-    def test_isin(idx):
-        return idx.isin()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_isin)(idx=pd.Index(data))
 
     def test_item(idx):
         return idx.item()
