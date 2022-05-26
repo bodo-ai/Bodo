@@ -167,6 +167,17 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
+      conda install -y -c conda-forge openjdk jpype1 maven pyspark=3.2
+      cd iceberg/bodo_iceberg_connector/iceberg-reader
+      mvn clean install -Dmaven.test.skip=true -f pom.xml
+      cd ../..
+      python setup.py develop
+    displayName: "Setup Iceberg testing"
+
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
       conda install -y -c conda-forge sqlalchemy cx_oracle unzip
       if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
         conda install -y -c conda-forge  libaio

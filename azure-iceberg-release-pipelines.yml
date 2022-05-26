@@ -1,0 +1,28 @@
+trigger:
+- refs/tags/*
+
+pr: none
+
+schedules:
+- cron: "0 5 * * *"
+  displayName: 'Daily Midnight Build'
+  branches:
+    include:
+    - master
+
+stages:
+- stage: Build_Iceberg_Connector_Binary
+  displayName: 'Build Iceberg Connector Binary'
+  jobs:
+  - template: buildscripts/iceberg/azure-build-binary-linux-macos.yml
+    parameters:
+      name: Linux
+      vmImage: ubuntu-latest
+  - template: buildscripts/iceberg/azure-build-binary-linux-macos.yml
+    parameters:
+      name: macOS
+      vmImage: macOS-latest
+  - template: buildscripts/iceberg/azure-build-binary-linux-macos.yml
+    parameters:
+      name: macOS_ARM
+      vmImage: macOS-latest

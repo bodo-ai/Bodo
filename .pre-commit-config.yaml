@@ -26,7 +26,7 @@ repos:
             "--exclude",
             "bodo/__init__.py",
             "--exclude",
-            "iceberg/bodoicebergconnector/__init__.py",
+            "iceberg/bodo-iceberg-connector/__init__.py",
           ]
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
     rev: v2.3.0

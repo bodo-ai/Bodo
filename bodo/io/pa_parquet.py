@@ -63,8 +63,9 @@ def get_parquet_filesnames_from_deltalake(delta_lake_path):
 
 # pyarrow.parquet._make_manifest monkey-patch (see "Bodo change" comment)
 # https://github.com/apache/arrow/blob/e453ffeff233c358ec934a53a33b8b4b1d4e299b/python/pyarrow/parquet.py#L1687
-def _make_manifest(path_or_paths, fs, pathsep='/', metadata_nthreads=1,
-                   open_file_func=None):
+def _make_manifest(
+    path_or_paths, fs, pathsep="/", metadata_nthreads=1, open_file_func=None
+):
     partitions = None
     common_metadata_path = None
     metadata_path = None
@@ -74,10 +75,13 @@ def _make_manifest(path_or_paths, fs, pathsep='/', metadata_nthreads=1,
         path_or_paths = path_or_paths[0]
 
     if pq._is_path_like(path_or_paths) and fs.isdir(path_or_paths):
-        manifest = ParquetManifest(path_or_paths, filesystem=fs,
-                                   open_file_func=open_file_func,
-                                   pathsep=getattr(fs, "pathsep", "/"),
-                                   metadata_nthreads=metadata_nthreads)
+        manifest = ParquetManifest(
+            path_or_paths,
+            filesystem=fs,
+            open_file_func=open_file_func,
+            pathsep=getattr(fs, "pathsep", "/"),
+            metadata_nthreads=metadata_nthreads,
+        )
         common_metadata_path = manifest.common_metadata_path
         metadata_path = manifest.metadata_path
         pieces = manifest.pieces
@@ -88,7 +92,7 @@ def _make_manifest(path_or_paths, fs, pathsep='/', metadata_nthreads=1,
 
         # List of paths
         if len(path_or_paths) == 0:
-            raise ValueError('Must pass at least one file path')
+            raise ValueError("Must pass at least one file path")
 
         pieces = []
         protocol = urlparse(path_or_paths[0]).scheme  # Bodo change
@@ -102,8 +106,7 @@ def _make_manifest(path_or_paths, fs, pathsep='/', metadata_nthreads=1,
                     f"Passed non-file path: {path}, but only files or glob"
                     " strings (no directories) are supported when passing a list"
                 )
-            piece = pq.ParquetDatasetPiece._create(
-                path, open_file_func=open_file_func)
+            piece = pq.ParquetDatasetPiece._create(path, open_file_func=open_file_func)
             pieces.append(piece)
 
     return pieces, partitions, common_metadata_path, metadata_path
@@ -113,6 +116,11 @@ pq._make_manifest = _make_manifest
 
 
 def get_dataset_schema(dataset):
+    # BODO CHANGE: Add the _bodo_arrow_schema as the
+    # schema was already computed during validation.
+    if hasattr(dataset, "_bodo_arrow_schema"):
+        # Note: This schema doesn't contain any partitions
+        return dataset._bodo_arrow_schema
     # All of the code in this function is copied from
     # pyarrow.parquet.ParquetDataset.validate_schemas and is the first part
     # of that function
@@ -287,7 +295,9 @@ class ParquetManifest:
         filtered_files.sort()
         filtered_directories.sort()
 
-        if len(filtered_files) > 0 and len(filtered_directories) > 0:  # pragma: no cover
+        if (
+            len(filtered_files) > 0 and len(filtered_directories) > 0
+        ):  # pragma: no cover
             raise ValueError(
                 "Found files in an intermediate " "directory: {}".format(base_path)
             )

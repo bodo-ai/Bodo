@@ -948,6 +948,7 @@ class UntypedPass:
                 is_select_query,
                 index_col_name,
                 index_arr_typ,
+                None,
             )
         ]
 

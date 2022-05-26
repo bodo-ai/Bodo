@@ -1,3 +1,0 @@
-import bodoicebergconnector.bodo_apis.gateway
-
-bodoicebergconnector.bodo_apis.gateway.launch_default_java_process_async()

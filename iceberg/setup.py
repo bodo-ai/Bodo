@@ -1,15 +1,71 @@
+import os
+import sys
+from distutils.errors import DistutilsExecError
+
 from setuptools import find_packages, setup
+from setuptools.command.build_py import build_py
+from setuptools.command.develop import develop
+
+# ----- Trick to pass the Bodo Version in CI -----
+# During CI, conda copies and isolates the iceberg subfolder from the monorep
+# Thus, we can not import the top-level versioneer.py to get the version
+# Instead, we first get the version, save it in the CONNECTOR_VERSION environment variable
+# and then pass that in during the build step
+if "CONNECTOR_VERSION" in os.environ:
+    version = os.environ["CONNECTOR_VERSION"]
+else:
+    sys.path.insert(0, "..")
+    from versioneer import get_version
+
+    version = get_version()
+
+
+# Automatically Build Java Project on `python setup.py develop`
+development_mode = "develop" in sys.argv
+
+
+def build_libs(obj):
+    """Build maven and then calls the original run command"""
+
+    try:
+        pom_dir = os.path.join("bodo_iceberg_connector", "iceberg-reader", "pom.xml")
+        cmd_list = ["mvn", "install"]
+        cmd_list += [
+            "-Dmaven.test.skip=true",
+            "-f",
+            pom_dir,
+        ]
+
+        obj.spawn(cmd_list)
+    except DistutilsExecError as e:
+        obj.error("Maven Build Failed with Error:", e)
+
+
+class CustomDevelopCommand(develop):
+    """Custom command to build the jars with python setup.py develop"""
+
+    def run(self):
+        build_libs(self)
+        super().run()
+
+
+class CustomBuildCommand(build_py):
+    """Custom command to build the jars with python setup.py build"""
+
+    def run(self):
+        build_libs(self)
+        super().run()
+
 
 setup(
-    name="bodoicebergconnector",
-    version=0.1,
+    name="bodo-iceberg-connector",
+    version=f"{version}alpha",
     description="Bodo Connector for Iceberg",
     long_description="Bodo Connector for Iceberg",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
         "Operating System :: POSIX :: Linux",
-        "Operating System :: Microsoft :: Windows",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
@@ -21,4 +77,9 @@ setup(
     url="https://bodo.ai",
     author="Bodo.ai",
     packages=find_packages(),
+    # When doing `python setup.py develop`, setuptools will try to install whatever is
+    # in `install_requires` after building, so we set it to empty (we don't want to
+    # install bodo in development mode, and it will also break CI
+    install_requires=[] if development_mode else ["bodo"],
+    cmdclass={"build_py": CustomBuildCommand, "develop": CustomDevelopCommand},
 )

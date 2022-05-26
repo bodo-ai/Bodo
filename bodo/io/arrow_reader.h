@@ -123,9 +123,10 @@ class ArrowDataframeReader {
     /// read data and return a Bodo table
     table_info* read() {
         tracing::Event ev("reader::read", parallel);
-        if (!initialized)
+        if (!initialized) {
             throw std::runtime_error(
                 "ArrowDataframeReader::read(): not initialized");
+        }
         TableBuilder builder(schema, selected_fields, count, is_nullable,
                              str_as_dict_colnames);
         rows_left = count;
@@ -156,7 +157,7 @@ class ArrowDataframeReader {
     int64_t rows_left;  // only used during ArrowDataframeReader::read()
 
     /// initialize reader
-    void init(const std::vector<int32_t>& str_as_dict_cols = {});
+    virtual void init(const std::vector<int32_t>& str_as_dict_cols = {});
 
     /**
      * Register a piece for this process to read
