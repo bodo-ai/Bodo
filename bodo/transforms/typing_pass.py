@@ -8,6 +8,7 @@ import operator
 import types as pytypes
 import warnings
 from collections import defaultdict
+from urllib.parse import urlparse
 
 import numba
 import numpy as np
@@ -2312,14 +2313,26 @@ class TypingTransforms:
         supported_args = ["table_name", "con", "schema"]
         arg_values = []
         for i, arg in enumerate(supported_args):
-            err_msg = f"pandas.read_sql_table(): '{arg}', if provided must be a constant string."
+            err_msg = f"pandas.read_sql_table(): '{arg}', if provided, must be a constant string."
             temp = get_call_expr_arg(func_str, rhs.args, kws, i, arg)
             temp = self._get_const_value(temp, label, rhs.loc, err_msg=err_msg)
             if not isinstance(temp, str):
                 raise BodoError(err_msg)
             arg_values.append(temp)
         table_name, con, database_schema = arg_values
-        # TODO [BE-2828] Need to add logic for parsing iceberg connection string
+
+        # Parse `con` String and Ensure its an Iceberg Connection
+        parse_res = urlparse(con)
+        parse_scheme = parse_res.scheme.split("+")
+        if parse_res.scheme not in ["iceberg", "iceberg+thrift"]:
+            raise BodoError(
+                "pandas.read_sql_table(): Only Iceberg is currently supported. 'con' must start with 'iceberg://' or 'iceberg+thrift://'."
+            )
+
+        extra_scheme = f"{parse_scheme[1]}://" if len(parse_scheme) == 2 else ""
+        con = f"{extra_scheme}{parse_res.netloc}{parse_res.path}"
+
+        # Generate Output DataFrame Type
         arg_defaults = {
             "index_col": None,
             "coerce_float": True,

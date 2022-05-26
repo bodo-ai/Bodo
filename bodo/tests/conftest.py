@@ -5,9 +5,9 @@ import hashlib
 import json
 import os
 import subprocess
-from mpi4py import MPI
 
 import pytest
+from mpi4py import MPI
 from numba.core.runtime import rtsys
 
 import bodo
@@ -435,6 +435,6 @@ def iceberg_table_conn():
             msg = "Could not find table {}."
             raise ValueError(msg.format(table_name))
         # Currently the connection string is the location of the warehouse
-        return f"{warehouse_loc}"
+        return f"iceberg://{warehouse_loc}"
 
     return deco
