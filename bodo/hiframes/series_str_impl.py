@@ -1215,6 +1215,7 @@ def create_str2str_methods_overload(func_name):
     # outside of the overload, and then
     # return the function with two different overload declarations
 
+    # func_text for regular string arrays
     if func_name in ["lstrip", "rstrip", "strip"]:
         func_text = "def f(S_str, to_strip=None):\n"
     else:
@@ -1248,6 +1249,17 @@ def create_str2str_methods_overload(func_name):
     func_text += (
         "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
     )
+
+    # func_text for dictionary-encoded string array
+    func_text += "def _dict_impl(S_str):\n"
+    func_text += "    S = S_str._obj\n"
+    func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+    func_text += f"    out_arr = bodo.libs.dict_arr_ext.str_{func_name}(arr)\n"
+    func_text += (
+        "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+    )
     loc_vars = {}
     exec(
         func_text,
@@ -1261,6 +1273,7 @@ def create_str2str_methods_overload(func_name):
         loc_vars,
     )
     f = loc_vars["f"]
+    _dict_impl = loc_vars["_dict_impl"]
 
     if func_name in ["lstrip", "rstrip", "strip"]:
 
@@ -1270,6 +1283,14 @@ def create_str2str_methods_overload(func_name):
             return f
 
         return overload_strip_method
+    elif func_name in ["capitalize"]:
+        # TODO: support more string methods(https://bodo.atlassian.net/browse/BE-2685)
+        def overload_str_method_dict_supported(S_str):
+            if S_str.stype.data == bodo.dict_str_arr_type:
+                return _dict_impl
+            return f
+
+        return overload_str_method_dict_supported
     else:
 
         def overload_str2str_methods(S_str):

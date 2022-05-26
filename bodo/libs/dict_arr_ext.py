@@ -776,3 +776,23 @@ def str_contains_non_regex(arr, pat, case):  # pragma: no cover
         else:
             out_arr[i] = dict_arr_out[indices_arr[i]]
     return out_arr
+
+
+@register_jitable
+def str_capitalize(arr):  # pragma: no cover
+    """implement optimized string capitalization for dictionary array.
+    Capitalize strings in the dictionary array.
+    """
+    # Pandas implementation:
+    # https://github.com/pandas-dev/pandas/blob/66e3805b8cabe977f40c05259cc3fcf7ead5687d/pandas/core/strings/object_array.py#L389
+    data_arr = arr._data
+    n_data = len(data_arr)
+    out_str_arr = pre_alloc_string_array(n_data, -1)
+
+    for i in range(n_data):
+        if bodo.libs.array_kernels.isna(data_arr, i):
+            bodo.libs.array_kernels.setna(out_str_arr, i)
+            continue
+        out_str_arr[i] = data_arr[i].capitalize()
+
+    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)

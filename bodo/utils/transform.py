@@ -265,6 +265,7 @@ no_side_effect_call_tuples = {
     ("str_endswith", "dict_arr_ext", "libs", bodo),
     ("str_contains_non_regex", "dict_arr_ext", "libs", bodo),
     ("str_series_contains_regex", "dict_arr_ext", "libs", bodo),
+    ("str_capitalize", "dict_arr_ext", "libs", bodo),
     ("prange", bodo),
     (bodo.prange,),
     ("objmode", bodo),

@@ -1230,6 +1230,7 @@ class DistributedAnalysis:
             "str_endswith",
             "str_contains_non_regex",
             "str_series_contains_regex",
+            "str_capitalize",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
