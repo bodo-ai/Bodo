@@ -84,7 +84,7 @@ jobs:
       else
         export PATH=$HOME/miniconda3/bin:$PATH
       fi
-      conda create -y -n bodo_build conda-build anaconda-client conda-verify 'python<=3.9' -c conda-forge
+      conda create -y -n bodo_build conda-build anaconda-client conda-verify conda=4.12 'python<=3.9' -c conda-forge
     displayName: 'Create Conda Env'
 
   # It was taken from code in the Numba feedstock that handles cross compiling,
