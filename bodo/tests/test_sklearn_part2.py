@@ -665,8 +665,7 @@ def test_robust_scaler(
     quantile_range,
     unit_variance,
     copy,
-    ## TODO Fix memory leak [BE-2825]
-    # memory_leak_check,
+    memory_leak_check,
 ):
     """
     Tests for sklearn.preprocessing.RobustScaler implementation in Bodo.
