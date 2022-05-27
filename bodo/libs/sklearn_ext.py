@@ -17,7 +17,7 @@ import sklearn.naive_bayes
 import sklearn.svm
 import sklearn.utils
 from mpi4py import MPI
-from numba.core import types
+from numba.core import cgutils, types
 from numba.extending import (
     NativeValue,
     box,
@@ -4428,7 +4428,22 @@ class BodoPreprocessingRobustScalerType(types.Opaque):
 preprocessing_robust_scaler_type = BodoPreprocessingRobustScalerType()
 types.preprocessing_robust_scaler_type = preprocessing_robust_scaler_type
 
-register_model(BodoPreprocessingRobustScalerType)(models.OpaqueModel)
+
+# creating a wrapper meminfo around the Python object that holds and manages a reference
+# to avoid memory leaks (see [BE-2825]).
+# See boxing and unboxing for Numpy arrays in Numba as an example:
+# https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L332
+# https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L310
+# https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L248
+# https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L34
+@register_model(BodoPreprocessingRobustScalerType)
+class BodoPreprocessingRobustScalerModel(models.StructModel):
+    def __init__(self, dmm, fe_type):
+        members = [
+            ("meminfo", types.MemInfoPointer(preprocessing_robust_scaler_type)),
+            ("pyobj", types.pyobject),
+        ]
+        super().__init__(dmm, fe_type, members)
 
 
 @typeof_impl.register(sklearn.preprocessing.RobustScaler)
@@ -4438,16 +4453,22 @@ def typeof_preprocessing_robust_scaler(val, c):
 
 @box(BodoPreprocessingRobustScalerType)
 def box_preprocessing_robust_scaler(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
+    rob_scalar = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    obj = rob_scalar.pyobj
+    c.pyapi.incref(obj)
+    c.context.nrt.decref(c.builder, typ, val)
+    return obj
 
 
 @unbox(BodoPreprocessingRobustScalerType)
 def unbox_preprocessing_robust_scaler(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+    rob_scalar = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    # borrows and manages a reference for obj (see data model comments above)
+    rob_scalar.meminfo = c.pyapi.nrt_meminfo_new_from_pyobject(
+        c.context.get_constant_null(types.voidptr), obj
+    )
+    rob_scalar.pyobj = obj
+    return NativeValue(rob_scalar._getvalue())
 
 
 @overload_attribute(BodoPreprocessingRobustScalerType, "with_centering")
