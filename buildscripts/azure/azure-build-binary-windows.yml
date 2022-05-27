@@ -39,25 +39,25 @@ jobs:
         Write-Host "##vso[task.prependpath]$HOME/miniconda3/bin"
     displayName: 'Add conda to PATH'
 
-  - script: conda update -q -n base conda
+  - script: conda install -y -q -n base conda=4.12
     displayName: 'Update conda'
 
   - bash: |
       set -eo pipefail
-      conda install -y flake8
+      conda install -y flake8 conda=4.12
       flake8 bodo
     displayName: 'Flake8'
 
   - bash: |
       set -eo pipefail
-      conda create -y -n bodo_build conda-build anaconda-client conda-verify
+      conda create -y -n bodo_build conda-build anaconda-client conda-verify conda=4.12
     displayName: 'Create Conda Env'
 
   - bash: |
       set -eo pipefail
       source activate bodo_build
       if [[ $OBFUSCATE == 1 ]]; then
-        conda install -y astor -c conda-forge
+        conda install -y astor conda=4.12 -c conda-forge
         cd obfuscation
         ./do_obfuscation.py
       else
