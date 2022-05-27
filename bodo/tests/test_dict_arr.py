@@ -1,5 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 
+
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -371,25 +372,60 @@ def test_str_endswith(test_unicode_dict_str_arr, memory_leak_check):
     assert dist_IR_contains(f_ir, "str_endswith")
 
 
-def test_str_capitalize(test_unicode_dict_str_arr, memory_leak_check):
+def test_str_simple_str2str_methods(test_unicode_dict_str_arr, memory_leak_check):
     """
-    test optimization of Series.str.capitalize() for dict array
+    test optimization of Series.str.capitalize/upper/lower/swapcase/title for dict array
     """
 
     def impl1(A):
         return pd.Series(A).str.capitalize()
+
+    def impl2(A):
+        return pd.Series(A).str.lower()
+
+    def impl3(A):
+        return pd.Series(A).str.upper()
+
+    def impl4(A):
+        return pd.Series(A).str.title()
+
+    def impl5(A):
+        return pd.Series(A).str.swapcase()
 
     check_func(
         impl1,
         (test_unicode_dict_str_arr,),
         py_output=pd.Series(test_unicode_dict_str_arr).str.capitalize(),
     )
+    check_func(
+        impl2,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.lower(),
+    )
+    check_func(
+        impl3,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.upper(),
+    )
+    check_func(
+        impl4,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.title(),
+    )
+    check_func(
+        impl5,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.swapcase(),
+    )
 
     # make sure IR has the optimized function
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
-    bodo_func(test_unicode_dict_str_arr)
-    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert dist_IR_contains(f_ir, "str_capitalize")
+    impls = [impl1, impl2, impl3, impl4, impl5]
+    func_names = ["capitalize", "lower", "upper", "title", "swapcase"]
+    for i in range(len(impls)):
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impls[i])
+        bodo_func(test_unicode_dict_str_arr)
+        f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+        assert dist_IR_contains(f_ir, f"str_{func_names[i]}")
 
 
 def test_str_center(test_unicode_dict_str_arr, memory_leak_check):

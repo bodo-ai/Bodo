@@ -1296,20 +1296,14 @@ def create_str2str_methods_overload(func_name):
             return f
 
         return overload_strip_method
-    elif func_name in ["capitalize"]:
-        # TODO: support more string methods(https://bodo.atlassian.net/browse/BE-2685)
+    else:
+
         def overload_str_method_dict_supported(S_str):
             if S_str.stype.data == bodo.dict_str_arr_type:
                 return _dict_impl
             return f
 
         return overload_str_method_dict_supported
-    else:
-
-        def overload_str2str_methods(S_str):
-            return f
-
-        return overload_str2str_methods
 
 
 def create_str2bool_methods_overload(func_name):
