@@ -11,4 +11,4 @@ source activate $CONDA_ENV
 # ------ Install Bodo -----------
 artifactory_channel=`./buildscripts/azure/get_channel.sh $PLATFORM_DEV_RELEASE`
 
-conda install -y h5py scipy bodo=$BODO_VERSION -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$artifactory_channel/$sub_channel -c conda-forge
+conda install -y h5py scipy bodo=$BODO_VERSION -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$artifactory_channel -c conda-forge
