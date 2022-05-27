@@ -778,24 +778,39 @@ def str_contains_non_regex(arr, pat, case):  # pragma: no cover
     return out_arr
 
 
-@register_jitable
-def str_capitalize(arr):  # pragma: no cover
-    """implement optimized string capitalization for dictionary array.
-    Capitalize strings in the dictionary array.
-    """
-    # Pandas implementation:
-    # https://github.com/pandas-dev/pandas/blob/66e3805b8cabe977f40c05259cc3fcf7ead5687d/pandas/core/strings/object_array.py#L389
-    data_arr = arr._data
-    n_data = len(data_arr)
-    out_str_arr = pre_alloc_string_array(n_data, -1)
+def create_simple_str2str_methods(func_name):
+    func_text = (
+        f"def str_{func_name}(arr):\n"
+        "    data_arr = arr._data\n"
+        "    n_data = len(data_arr)\n"
+        "    out_str_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n_data, -1)\n"
+        "    for i in range(n_data):\n"
+        "        if bodo.libs.array_kernels.isna(data_arr, i):\n"
+        "            bodo.libs.array_kernels.setna(out_str_arr, i)\n"
+        "            continue\n"
+        f"        out_str_arr[i] = data_arr[i].{func_name}()\n"
+        "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)\n"
+    )
 
-    for i in range(n_data):
-        if bodo.libs.array_kernels.isna(data_arr, i):
-            bodo.libs.array_kernels.setna(out_str_arr, i)
-            continue
-        out_str_arr[i] = data_arr[i].capitalize()
+    loc_vars = {}
+    exec(
+        func_text,
+        {"bodo": bodo, "numba": numba, "init_dict_arr": init_dict_arr},
+        loc_vars,
+    )
+    return loc_vars[f"str_{func_name}"]
 
-    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)
+
+def _register_simple_str2str_methods():
+    # install simple string to string transformation functions
+    func_names = ["capitalize", "lower", "swapcase", "title", "upper"]
+    for func in func_names:
+        func_impl = create_simple_str2str_methods(func)
+        func_impl = register_jitable(func_impl)
+        globals()[f"str_{func}"] = func_impl
+
+
+_register_simple_str2str_methods()
 
 
 @register_jitable
