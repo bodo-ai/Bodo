@@ -24,16 +24,16 @@ jobs:
         Write-Host "##vso[task.prependpath]$HOME/miniconda3/bin"
     displayName: 'Add conda to PATH'
 
-  - script: conda update -q -n base conda
+  - script: conda install -y -q -n base conda=4.12
     displayName: 'Update conda'
 
   - script: |
-      conda install -y flake8
+      conda install -y flake8 conda=4.12
       flake8 bodo
     displayName: 'Flake8'
 
   - bash: |
-      conda create -y -n bodo_build conda-build anaconda-client conda-verify
+      conda create -y -n bodo_build conda-build anaconda-client conda-verify conda=4.12
     displayName: 'Create Conda Env'
 
   - bash: |
