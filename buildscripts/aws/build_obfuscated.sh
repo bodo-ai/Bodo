@@ -5,7 +5,7 @@ set -exo pipefail
 export PATH=$HOME/miniconda3/bin:$PATH
 
 echo "********** Creating Conda Env **********"
-conda create -y -n bodo_build conda-build anaconda-client conda-verify
+conda create -y -n bodo_build conda-build anaconda-client conda-verify conda=4.12
 
 echo "********** Flake8-ing **********"
 conda install -y flake8
