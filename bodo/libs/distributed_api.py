@@ -3415,7 +3415,7 @@ def create_subcomm_mpi4py(comm_ranks):  # pragma: no cover
 
 
 def get_nodes_first_ranks():  # pragma: no cover
-    """Get number of nodes"""
+    """Get first rank in each node"""
     host_ranks = get_host_ranks()
     return np.array([ranks[0] for ranks in host_ranks.values()], dtype="int32")
 
