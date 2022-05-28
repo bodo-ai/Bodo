@@ -47,6 +47,11 @@ from numba import (  # re-export from Numba
 )
 from numba.core.types import *
 
+# This env variable is set by the platform and points to the central cache directory
+# on the shared filesystem.
+if (cache_loc := os.environ.get("BODO_PLATFORM_CACHE_LOCATION")) is not None:
+    numba.config.CACHE_DIR = cache_loc
+
 from bodo.numba_compat import jitclass
 
 datetime64ns = numba.core.types.NPDatetime("ns")

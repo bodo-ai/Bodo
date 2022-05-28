@@ -1300,6 +1300,8 @@ def compile(self, sig):
     from numba.core import sigutils
     from numba.core.compiler_lock import global_compiler_lock
 
+    import bodo
+
     disp = self._get_dispatcher_for_current_target()
     if disp is not self:
         return disp.compile(sig)
@@ -1358,7 +1360,20 @@ def compile(self, sig):
 
                     raise e.bind_fold_arguments(folded)
                 self.add_overload(cres)
-            self._cache.save_overload(sig, cres)
+            # get_suitable_cache_subpath in numba.core.caching.py will perform a
+            # hash of the parent directory path of the file being cached and append
+            # this to the new cache folders path name, preventing name clashes
+            if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
+                # Since we used a shared file system on the platform, writing with just one rank is
+                # sufficient, and desirable (to avoid I/O contention due to filesystem limitations).
+                if bodo.get_rank() == 0:
+                    self._cache.save_overload(sig, cres)
+            else:
+                # Even when not on platform, it's best to minimize I/O contention, so we
+                # write cache files from one rank on each node.
+                first_ranks = bodo.get_nodes_first_ranks()
+                if bodo.get_rank() in first_ranks:
+                    self._cache.save_overload(sig, cres)
             return cres.entry_point
 
 
@@ -5940,3 +5955,18 @@ numba.core.compiler.CompileResult._reduce = _reduce
 numba.core.compiler.CompileResult._rebuild = _rebuild
 
 #### END MONKEY PATCH FOR METADATA CACHING SUPPORT ####
+
+#### BEGIN MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
+
+
+def _get_cache_path(self):
+    # _UserProvidedCacheLocator uses os.path.join(config.CACHE_DIR, cache_subpath), where cache_subpath
+    # is derived from the python file being cached
+    return numba.config.CACHE_DIR
+
+
+if _check_numba_change:  # pragma: no cover
+    if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
+        numba.core.caching._IPythonCacheLocator.get_cache_path = _get_cache_path
+
+#### END MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
