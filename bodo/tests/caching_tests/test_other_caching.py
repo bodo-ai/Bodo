@@ -125,7 +125,7 @@ def test_metadata_cache(gen_type_annotated_df_func, is_cached, memory_leak_check
     )
 
 
-def test_jit_func_cache(fn_distribution, is_cached, memory_leak_check):
+def test_jit_func_cache(is_cached, memory_leak_check):
     """
     test caching for jitted functions
     """
@@ -163,3 +163,36 @@ def test_jit_func_cache(fn_distribution, is_cached, memory_leak_check):
         # assert that it wasn't loaded from cache
         assert g._cache_hits[sig] == 0
         assert g._cache_misses[sig] == 1
+
+
+def test_index_info_caching(is_cached, memory_leak_check):
+    """
+    test caching for index info when reading from a parquet file
+    """
+
+    import os
+
+    import bodo
+
+    def impl():
+        df = pd.read_parquet("test.pq")
+        return df
+
+    # create different sized dataframes with the same schema
+    if is_cached:
+        df = pd.DataFrame(
+            {"A": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], "B": range(0, 22, 2)}
+        )
+    else:
+        df = pd.DataFrame({"A": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "B": range(0, 20, 2)})
+
+    # write and read the dataframe to/from a parquet file
+    try:
+        if bodo.get_rank() == 0:
+            df.to_parquet("test.pq")
+        bodo.barrier()
+        check_caching(impl, (), is_cached, InputDist.OneD)
+        bodo.barrier()
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove("test.pq")

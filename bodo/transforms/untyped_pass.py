@@ -2170,29 +2170,23 @@ class UntypedPass:
         )
         n_cols = len(columns)
 
-        index_colname = (
-            None if (isinstance(index_col, dict) or index_col is None) else index_col
-        )
         if index_col is None:
             assert n_cols > 0
             index_arg = (
-                "bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
+                f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
             )
             index_typ = RangeIndexType(types.none)
         elif isinstance(index_col, dict):
             if index_col["name"] is None:
                 index_col_name = None
+                index_col_name_str = None
             else:
-                index_col_name = "'{}'".format(index_col["name"])
-            # In case there is filtering we take a min between the stop and the filtered length.
-            # This won't match Pandas, which instead should have a Numeric Index if there is any filtering.
-            # TODO: Match Pandas
-            min_str = f"min({index_col['stop']}, (len(T) * {index_col['step']}) + {index_col['start']})"
-            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index({index_col['start']}, {min_str}, {index_col['step']}, {index_col_name})"
+                index_col_name = index_col["name"]
+                index_col_name_str = f"'{index_col_name}'"
+            # ignore range index information in pandas metadata
+            index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, {index_col_name_str})"
             index_typ = RangeIndexType(
-                types.none
-                if index_col["name"] is None
-                else types.literal(index_col["name"])
+                types.none if index_col_name is None else types.literal(index_col_name)
             )
         else:
             # if the index_col is __index_level_0_, it means it has no name.
