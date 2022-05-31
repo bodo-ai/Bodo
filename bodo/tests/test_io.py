@@ -125,7 +125,7 @@ def test_pq_RangeIndex(test_RangeIndex_input, pq_write_idx, memory_leak_check):
         if bodo.libs.distributed_api.get_rank() == 0:
             test_RangeIndex_input.to_parquet("test.pq", index=pq_write_idx)
         bodo.barrier()
-        check_func(impl, (), only_seq=True)
+        check_func(impl, (), only_seq=True, reset_index=True)
         bodo.barrier()
     finally:
         if bodo.libs.distributed_api.get_rank() == 0:
@@ -146,7 +146,7 @@ def test_pq_select_column(
             test_RangeIndex_input.index.name = index_name
             test_RangeIndex_input.to_parquet("test.pq", index=pq_write_idx)
         bodo.barrier()
-        check_func(impl, (), only_seq=True)
+        check_func(impl, (), only_seq=True, reset_index=True)
         bodo.barrier()
     finally:
         if bodo.libs.distributed_api.get_rank() == 0:

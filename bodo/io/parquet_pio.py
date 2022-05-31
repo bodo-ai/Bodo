@@ -987,7 +987,6 @@ def get_parquet_dataset(
 
     import pyarrow as pa
     import pyarrow.parquet as pq
-
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
@@ -1671,7 +1670,6 @@ def _add_categories_to_pq_dataset(pq_dataset):
     as '_category_info' attribute
     """
     import pyarrow as pa
-
     from mpi4py import MPI
 
     # NOTE: shouldn't be possible
@@ -1734,11 +1732,8 @@ def get_pandas_metadata(schema, num_pieces):
         if n_indices > 1:
             raise BodoError("read_parquet: MultiIndex not supported yet")
         index_col = pandas_metadata["index_columns"][0] if n_indices else None
-        # ignore RangeIndex metadata for multi-part datasets
-        # TODO: check what pandas/pyarrow does
-        if not isinstance(index_col, str) and (
-            not isinstance(index_col, dict) or num_pieces != 1
-        ):
+        # ignore non-str/dict index metadata
+        if not isinstance(index_col, str) and not isinstance(index_col, dict):
             index_col = None
 
         for col_dict in pandas_metadata["columns"]:
