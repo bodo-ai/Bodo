@@ -1,21 +1,16 @@
 package com.bodo.iceberg;
 
+import java.net.URISyntaxException;
 import java.util.*;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.arrow.ArrowSchemaUtil;
-import org.apache.iceberg.catalog.Namespace;
-import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Literal;
-import org.apache.iceberg.hadoop.HadoopTables;
-import org.apache.iceberg.hive.HiveCatalog;
 
 public class BodoIcebergReader {
   /**
@@ -26,27 +21,10 @@ public class BodoIcebergReader {
   // Table instance for the underlying Iceberg table
   private Table table;
 
-  public BodoIcebergReader(String warehouse_loc, String db_name, String tableName) {
-    // Hive metastore case
-    if (warehouse_loc.startsWith("thrift:")) {
-      Map<String, String> properties = new HashMap<>();
-      properties.put(CatalogProperties.URI, warehouse_loc);
-      HiveCatalog catalog = new HiveCatalog();
-      Configuration conf = new Configuration();
-      catalog.setConf(conf);
-      // TODO[BE-2833]: explore using CachingCatalog
-      catalog.initialize("hive_catalog", properties);
-      Namespace db_namespace = Namespace.of(db_name);
-      TableIdentifier name = TableIdentifier.of(db_namespace, tableName);
-      this.table = catalog.loadTable(name);
-      return;
-    }
-
-    // local file system case
-    HadoopTables hadoopTables = new HadoopTables();
-    // Set CWD for opening the metadata files later.
-    System.setProperty("user.dir", warehouse_loc);
-    this.table = hadoopTables.load(warehouse_loc + "/" + db_name + "/" + tableName);
+  public BodoIcebergReader(String connStr, String dbName, String tableName)
+      throws URISyntaxException {
+    CatalogHandler catalog_handler = new CatalogHandler(connStr, dbName, tableName);
+    this.table = catalog_handler.loadTable();
   }
 
   public Schema getIcebergSchema() {
