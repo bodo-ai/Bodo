@@ -3,14 +3,17 @@ API used to translate Java BodoParquetInfo objects into
 Python Objects usable inside Bodo.
 """
 from collections import namedtuple
+from urllib.parse import urlparse
 
 import jpype
-
 from bodo_iceberg_connector.bodo_apis.config import DEFAULT_PORT
 from bodo_iceberg_connector.bodo_apis.errors import IcebergJavaError
-from bodo_iceberg_connector.bodo_apis.filter_to_java import convert_expr_to_java_parsable
-from bodo_iceberg_connector.bodo_apis.jpype_support import get_iceberg_java_table_reader
-
+from bodo_iceberg_connector.bodo_apis.filter_to_java import (
+    convert_expr_to_java_parsable,
+)
+from bodo_iceberg_connector.bodo_apis.jpype_support import (
+    get_iceberg_java_table_reader,
+)
 
 # Named Tuple for Parquet info
 BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start length")
@@ -24,13 +27,15 @@ def bodo_connector_get_parquet_file_list(warehouse, schema, table, filters):
     """
     pq_infos = get_bodo_parquet_info(DEFAULT_PORT, warehouse, schema, table, filters)
 
-    # Hive metastore case, the path is a full path
-    if warehouse.startswith("thrift:"):
-        # replace Hadoop S3A URI scheme
-        return [x.filepath.replace("s3a://", "s3://") for x in pq_infos]
-
-    # local filesystem case, the path is a relative path so add the warehouse path
-    return [f"{warehouse}/{x.filepath}" for x in pq_infos]
+    # filepath is a URI (file:///User/sw/...) or a relative path that needs converted to
+    # a full path
+    # replace Hadoop S3A URI scheme
+    return [
+        x.filepath.replace("s3a://", "s3://").removeprefix("file:")
+        if _has_uri_scheme(x.filepath)
+        else f"{warehouse.removeprefix('file:')}/{x.filepath}"
+        for x in pq_infos
+    ]
 
 
 def bodo_connector_get_parquet_info(warehouse, schema, table, filters):
@@ -92,3 +97,11 @@ def java_to_python(java_parquet_infos):
             )
         )
     return pq_infos
+
+
+def _has_uri_scheme(path: str):
+    """return True of path has a URI scheme, e.g. file://, s3://, etc."""
+    try:
+        return urlparse(path).scheme != ""
+    except:
+        return False

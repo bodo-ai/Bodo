@@ -2323,14 +2323,19 @@ class TypingTransforms:
 
         # Parse `con` String and Ensure its an Iceberg Connection
         parse_res = urlparse(con)
-        parse_scheme = parse_res.scheme.split("+")
-        if parse_res.scheme not in ["iceberg", "iceberg+thrift"]:
+        if parse_res.scheme not in (
+            "iceberg",
+            "iceberg+file",
+            "iceberg+thrift",
+            "iceberg+http",
+            "iceberg+https",
+        ):
             raise BodoError(
-                "pandas.read_sql_table(): Only Iceberg is currently supported. 'con' must start with 'iceberg://' or 'iceberg+thrift://'."
+                "pandas.read_sql_table(): Only Iceberg is currently supported. "
+                "'con' must start with 'iceberg://' or 'iceberg+file://' or 'iceberg+thrift://' or 'iceberg+http://' or 'iceberg+https://'."
             )
 
-        extra_scheme = f"{parse_scheme[1]}://" if len(parse_scheme) == 2 else ""
-        con = f"{extra_scheme}{parse_res.netloc}{parse_res.path}"
+        con = con.removeprefix("iceberg+").removeprefix("iceberg://")
 
         # Generate Output DataFrame Type
         arg_defaults = {
