@@ -608,14 +608,6 @@ PyMODINIT_FUNC PyInit_hdist(void) {
                            PyLong_FromVoidPtr((void *)(&c_alltoall)));
     PyObject_SetAttrString(m, "allgather",
                            PyLong_FromVoidPtr((void *)(&allgather)));
-    PyObject_SetAttrString(m, "comm_req_alloc",
-                           PyLong_FromVoidPtr((void *)(&comm_req_alloc)));
-    PyObject_SetAttrString(m, "req_array_setitem",
-                           PyLong_FromVoidPtr((void *)(&req_array_setitem)));
-    PyObject_SetAttrString(m, "dist_waitall",
-                           PyLong_FromVoidPtr((void *)(&dist_waitall)));
-    PyObject_SetAttrString(m, "comm_req_dealloc",
-                           PyLong_FromVoidPtr((void *)(&comm_req_dealloc)));
     PyObject_SetAttrString(m, "finalize",
                            PyLong_FromVoidPtr((void *)(&finalize)));
     PyObject_SetAttrString(m, "oneD_reshape_shuffle",

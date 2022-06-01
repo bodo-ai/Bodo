@@ -67,7 +67,6 @@ static void dist_recv(void* out, int size, int type_enum, int pe,
 static void dist_send(void* out, int size, int type_enum, int pe,
                       int tag) __UNUSED__;
 static void dist_wait(MPI_Request req, bool cond) __UNUSED__;
-static void dist_waitall(int size, MPI_Request* req) __UNUSED__;
 
 static void c_gather_scalar(void* send_data, void* recv_data, int typ_enum,
                             bool allgather, int root) __UNUSED__;
@@ -94,10 +93,6 @@ static int64_t dist_get_item_pointer(int64_t ind, int64_t start,
                                      int64_t count) __UNUSED__;
 static void allgather(void* out_data, int size, void* in_data,
                       int type_enum) __UNUSED__;
-static MPI_Request* comm_req_alloc(int size) __UNUSED__;
-static void comm_req_dealloc(MPI_Request* req_arr) __UNUSED__;
-static void req_array_setitem(MPI_Request* req_arr, int64_t ind,
-                              MPI_Request req) __UNUSED__;
 
 /**
  * This is a wrapper around MPI_Alltoallv that supports int64 counts and
@@ -411,17 +406,6 @@ static void allgather(void* out_data, int size, void* in_data, int type_enum) {
     return;
 }
 
-static void req_array_setitem(MPI_Request* req_arr, int64_t ind,
-                              MPI_Request req) {
-    req_arr[ind] = req;
-    return;
-}
-
-static void dist_waitall(int size, MPI_Request* req_arr) {
-    MPI_Waitall(size, req_arr, MPI_STATUSES_IGNORE);
-    return;
-}
-
 static MPI_Datatype get_MPI_typ(int typ_enum) {
     switch (typ_enum) {
         case Bodo_CTypes::_BOOL:
@@ -630,12 +614,6 @@ static void c_alltoall(void* send_data, void* recv_data, int count,
                  MPI_COMM_WORLD);
 }
 
-MPI_Request* comm_req_alloc(int size) {
-    // printf("req alloc %d\n", size);
-    return new MPI_Request[size];
-}
-
-static void comm_req_dealloc(MPI_Request* req_arr) { delete[] req_arr; }
 
 static int finalize() {
     int is_initialized;
