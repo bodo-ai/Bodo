@@ -1,7 +1,6 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 import atexit
 import datetime
-import operator
 import sys
 import time
 import warnings
@@ -19,13 +18,7 @@ from numba.core import cgutils, ir_utils, types
 from numba.core.typing import signature
 from numba.core.typing.builtins import IndexValueType
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import (
-    intrinsic,
-    models,
-    overload,
-    register_jitable,
-    register_model,
-)
+from numba.extending import intrinsic, overload, register_jitable
 from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
@@ -85,10 +78,6 @@ ll.add_symbol("dist_wait", hdist.dist_wait)
 ll.add_symbol("dist_get_item_pointer", hdist.dist_get_item_pointer)
 ll.add_symbol("get_dummy_ptr", hdist.get_dummy_ptr)
 ll.add_symbol("allgather", hdist.allgather)
-ll.add_symbol("comm_req_alloc", hdist.comm_req_alloc)
-ll.add_symbol("comm_req_dealloc", hdist.comm_req_dealloc)
-ll.add_symbol("req_array_setitem", hdist.req_array_setitem)
-ll.add_symbol("dist_waitall", hdist.dist_waitall)
 ll.add_symbol("oneD_reshape_shuffle", hdist.oneD_reshape_shuffle)
 ll.add_symbol("permutation_int", hdist.permutation_int)
 ll.add_symbol("permutation_array_index", hdist.permutation_array_index)
@@ -2970,48 +2959,6 @@ def wait(req, cond=True):
         return lambda req, cond=True: None  # pragma: no cover
 
     return lambda req, cond=True: _wait(req, cond)  # pragma: no cover
-
-
-class ReqArrayType(types.Type):
-    def __init__(self):
-        super(ReqArrayType, self).__init__(name="ReqArrayType()")
-
-
-req_array_type = ReqArrayType()
-register_model(ReqArrayType)(models.OpaqueModel)
-waitall = types.ExternalFunction(
-    "dist_waitall", types.void(types.int32, req_array_type)
-)
-comm_req_alloc = types.ExternalFunction("comm_req_alloc", req_array_type(types.int32))
-comm_req_dealloc = types.ExternalFunction(
-    "comm_req_dealloc", types.void(req_array_type)
-)
-req_array_setitem = types.ExternalFunction(
-    "req_array_setitem", types.void(req_array_type, types.int64, mpi_req_numba_type)
-)
-
-
-@overload(operator.setitem, no_unliteral=True)
-def overload_req_arr_setitem(A, idx, val):
-    if A == req_array_type:
-        assert val == mpi_req_numba_type
-        return lambda A, idx, val: req_array_setitem(A, idx, val)
-
-
-# find overlapping range of an input range (start:stop) and a chunk range
-# (chunk_start:chunk_start+chunk_count). Inputs are assumed positive.
-# output is set to empty range of local range goes out of bounds
-@numba.njit
-def _get_local_range(start, stop, chunk_start, chunk_count):  # pragma: no cover
-    assert start >= 0 and stop > 0
-    new_start = max(start, chunk_start)
-    new_stop = min(stop, chunk_start + chunk_count)
-    loc_start = new_start - chunk_start
-    loc_stop = new_stop - chunk_start
-    if loc_start < 0 or loc_stop < 0:
-        loc_start = 1
-        loc_stop = 0
-    return loc_start, loc_stop
 
 
 @register_jitable
