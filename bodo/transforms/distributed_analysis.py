@@ -1047,6 +1047,21 @@ class DistributedAnalysis:
                         rhs.loc,
                     )
 
+            if func_name == "log_loss":
+                self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
+                    lhs, func_name, rhs, kws, array_dists
+                )
+                # labels is an optional kw arg, so check if it is provided.
+                # if it is provided, then set it to REP
+                if "labels" in kws:
+                    labels_arg_name = kws["labels"].name
+                    self._set_REP(
+                        labels_arg_name,
+                        array_dists,
+                        f"labels when provided are assumed to be REP",
+                        rhs.loc,
+                    )
+
             if func_name == "accuracy_score":
                 self._analyze_sklearn_score_err_ytrue_ypred_optional_sample_weight(
                     lhs, func_name, rhs, kws, array_dists

@@ -660,73 +660,165 @@ class DistributedPass:
                     extra_globals={"sklearn": sklearn},
                 )
 
-        if (
-            func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
-            and func_name == "accuracy_score"
+        if (func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
+            and func_name == "log_loss"
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                import sklearn
+            import sklearn
 
-                rhs = assign.value
-                kws = dict(rhs.kws)
-                nodes = []
+            rhs = assign.value
+            kws = dict(rhs.kws)
+            nodes = []
 
-                y_true = get_call_expr_arg(
-                    "sklearn.metrics.accuracy_score", rhs.args, kws, 0, "y_true"
-                )
-                y_pred = get_call_expr_arg(
-                    "sklearn.metrics.accuracy_score", rhs.args, kws, 1, "y_pred"
-                )
+            y_true = get_call_expr_arg(
+                "sklearn.metrics.log_loss", rhs.args, kws, 0, "y_true"
+            )
+            y_pred = get_call_expr_arg(
+                "sklearn.metrics.log_loss", rhs.args, kws, 1, "y_pred"
+            )
 
-                ## normalize argument
-                normalize_var = ir.Var(
-                    assign.target.scope,
-                    mk_unique_var("accuracy_score_normalize"),
-                    rhs.loc,
-                )
-                nodes.append(ir.Assign(ir.Const(True, rhs.loc), normalize_var, rhs.loc))
-                self.typemap[normalize_var.name] = types.BooleanLiteral(True)
-                # normalize cannot be specified positionally
-                normalize = get_call_expr_arg(
-                    "accuracy_score", rhs.args, kws, 1e6, "normalize", normalize_var
-                )
+            # eps argument
+            eps_var = ir.Var(
+                assign.target.scope,
+                mk_unique_var("log_loss_eps"),
+                rhs.loc,
+            )
+            nodes.append(ir.Assign(ir.Const(1e-15, rhs.loc), eps_var, rhs.loc))
+            self.typemap[eps_var.name] = types.float64
+            # eps cannot be specified positionally
+            eps = get_call_expr_arg(
+                "log_loss", rhs.args, kws, 1e6, "eps", eps_var
+            )
 
-                # sample_weight argument
-                sample_weight_var = ir.Var(
-                    assign.target.scope,
-                    mk_unique_var("accuracy_score_sample_weight"),
-                    rhs.loc,
-                )
-                nodes.append(
-                    ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc)
-                )
-                self.typemap[sample_weight_var.name] = types.none
-                # sample_weight cannot be specified positionally
-                sample_weight = get_call_expr_arg(
-                    "accuracy_score",
-                    rhs.args,
-                    kws,
-                    1e6,
-                    "sample_weight",
-                    sample_weight_var,
-                )
+            # normalize argument
+            normalize_var = ir.Var(
+                assign.target.scope,
+                mk_unique_var("log_loss_normalize"),
+                rhs.loc,
+            )
+            nodes.append(ir.Assign(ir.Const(True, rhs.loc), normalize_var, rhs.loc))
+            self.typemap[normalize_var.name] = types.BooleanLiteral(True)
+            # normalize cannot be specified positionally
+            normalize = get_call_expr_arg(
+                "log_loss", rhs.args, kws, 1e6, "normalize", normalize_var
+            )
 
-                f = eval(
-                    "lambda y_true, y_pred, normalize, sample_weight: sklearn.metrics.accuracy_score("
-                    "    y_true,"
-                    "    y_pred,"
-                    "    normalize=normalize,"
-                    "    sample_weight=sample_weight,"
-                    "    _is_data_distributed=True,"
-                    ")"
-                )
-                return nodes + compile_func_single_block(
-                    f,
-                    [y_true, y_pred, normalize, sample_weight],
-                    assign.target,
-                    self,
-                    extra_globals={"sklearn": sklearn},
-                )
+            # sample_weight argument
+            sample_weight_var = ir.Var(
+                assign.target.scope,
+                mk_unique_var("log_loss_sample_weight"),
+                rhs.loc,
+            )
+            nodes.append(
+                ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc)
+            )
+            self.typemap[sample_weight_var.name] = types.none
+            # sample_weight cannot be specified positionally
+            sample_weight = get_call_expr_arg(
+                "log_loss", rhs.args, kws, 1e6, "sample_weight", sample_weight_var
+            )
+
+            # labels argument
+            labels_var = ir.Var(
+                assign.target.scope,
+                mk_unique_var("log_loss_labels"),
+                rhs.loc,
+            )
+            nodes.append(
+                ir.Assign(ir.Const(None, rhs.loc), labels_var, rhs.loc)
+            )
+            self.typemap[labels_var.name] = types.none
+            # labels cannot be specified positionally
+            labels = get_call_expr_arg(
+                "log_loss", rhs.args, kws, 1e6, "labels", labels_var
+            )
+
+            f = eval(
+                "lambda y_true, y_pred, eps, normalize, sample_weight, labels: sklearn.metrics.log_loss("
+                "    y_true,"
+                "    y_pred,"
+                "    eps=eps,"
+                "    normalize=normalize,"
+                "    sample_weight=sample_weight,"
+                "    labels=labels,"
+                "    _is_data_distributed=True,"
+                ")"
+            )
+            return nodes + compile_func_single_block(
+                f,
+                [y_true, y_pred, eps, normalize, sample_weight, labels],
+                assign.target,
+                self,
+                extra_globals={"sklearn": sklearn},
+            )
+
+
+        if (func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
+            and func_name == "accuracy_score"
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            import sklearn
+
+            rhs = assign.value
+            kws = dict(rhs.kws)
+            nodes = []
+
+            y_true = get_call_expr_arg(
+                "sklearn.metrics.accuracy_score", rhs.args, kws, 0, "y_true"
+            )
+            y_pred = get_call_expr_arg(
+                "sklearn.metrics.accuracy_score", rhs.args, kws, 1, "y_pred"
+            )
+
+            ## normalize argument
+            normalize_var = ir.Var(
+                assign.target.scope,
+                mk_unique_var("accuracy_score_normalize"),
+                rhs.loc,
+            )
+            nodes.append(ir.Assign(ir.Const(True, rhs.loc), normalize_var, rhs.loc))
+            self.typemap[normalize_var.name] = types.BooleanLiteral(True)
+            # normalize cannot be specified positionally
+            normalize = get_call_expr_arg(
+                "accuracy_score", rhs.args, kws, 1e6, "normalize", normalize_var
+            )
+
+            # sample_weight argument
+            sample_weight_var = ir.Var(
+                assign.target.scope,
+                mk_unique_var("accuracy_score_sample_weight"),
+                rhs.loc,
+            )
+            nodes.append(
+                ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc)
+            )
+            self.typemap[sample_weight_var.name] = types.none
+            # sample_weight cannot be specified positionally
+            sample_weight = get_call_expr_arg(
+                "accuracy_score",
+                rhs.args,
+                kws,
+                1e6,
+                "sample_weight",
+                sample_weight_var,
+            )
+
+            f = eval(
+                "lambda y_true, y_pred, normalize, sample_weight: sklearn.metrics.accuracy_score("
+                "    y_true,"
+                "    y_pred,"
+                "    normalize=normalize,"
+                "    sample_weight=sample_weight,"
+                "    _is_data_distributed=True,"
+                ")"
+            )
+            return nodes + compile_func_single_block(
+                f,
+                [y_true, y_pred, normalize, sample_weight],
+                assign.target,
+                self,
+                extra_globals={"sklearn": sklearn},
+            )
 
         if (
             func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
