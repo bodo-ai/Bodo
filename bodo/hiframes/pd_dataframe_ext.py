@@ -2515,25 +2515,31 @@ class JoinTyper(AbstractTemplate):
             how_var,
             suffix_x,
             suffix_y,
-            is_join,
+            is_join,  # True if this is DataFrame.join
             indicator,
-            _bodo_na_equal,
-            _gen_cond,
+            _,
+            _,
         ) = args
 
         left_on = get_overload_const_list(left_on)
         right_on = get_overload_const_list(right_on)
+
+        # Map left_on and right_on to dictionaries for finding
+        # key numbers later
+        left_on_map = {c: i for i, c in enumerate(left_on)}
+        right_on_map = {c: i for i, c in enumerate(right_on)}
 
         # columns with common name that are not common keys will get a suffix
         comm_keys = set(left_on) & set(right_on)
         comm_data = set(left_df.columns) & set(right_df.columns)
         add_suffix = comm_data - comm_keys
 
-        # Those two variables have the same values as the "left_index" in argument
-        # to "merge" even if the index has a name.
+        # If $_bodo_index_ is found in either set of keys then we merge on the
+        # index.
         left_index = "$_bodo_index_" in left_on
         right_index = "$_bodo_index_" in right_on
 
+        # Determine if this is a left outer join or a right outer join.
         how = get_overload_const_str(how_var)
         is_left = how in {"left", "outer"}
         is_right = how in {"right", "outer"}
@@ -2542,19 +2548,19 @@ class JoinTyper(AbstractTemplate):
         if left_index:
             left_key_type = bodo.utils.typing.get_index_data_arr_types(left_df.index)[0]
         else:
-            # TODO: Fix for large # columns
-            left_key_type = left_df.data[left_df.columns.index(left_on[0])]
+            left_key_type = left_df.data[left_df.column_index[left_on[0]]]
         if right_index:
             right_key_type = bodo.utils.typing.get_index_data_arr_types(right_df.index)[
                 0
             ]
         else:
-            # TODO: Fix for large # columns
-            right_key_type = right_df.data[right_df.columns.index(right_on[0])]
+            right_key_type = right_df.data[right_df.column_index[right_on[0]]]
 
+        # merge between left_index and right column requires special
+        # handling if the column also exists in left.
         if left_index and not right_index and not is_join.literal_value:
             right_key = right_on[0]
-            if right_key in left_df.columns:
+            if right_key in left_df.column_index:
                 columns.append(right_key)
                 if (
                     right_key_type == bodo.dict_str_arr_type
@@ -2567,9 +2573,12 @@ class JoinTyper(AbstractTemplate):
                 else:
                     out_col = right_key_type
                 data.append(out_col)
+
+        # merge between right_index and left column requires special
+        # handling if the column also exists in right.
         if right_index and not left_index and not is_join.literal_value:
             left_key = left_on[0]
-            if left_key in right_df.columns:
+            if left_key in right_df.column_index:
                 columns.append(left_key)
                 if (
                     left_key_type == bodo.dict_str_arr_type
@@ -2593,20 +2602,18 @@ class JoinTyper(AbstractTemplate):
                 if in_type == bodo.dict_str_arr_type:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
-                    # TODO: Fix for large # columns
-                    in_type = right_df.data[right_df.columns.index(col)]
+                    in_type = right_df.data[right_df.column_index[col]]
                 data.append(in_type)
             else:
-                if in_type == bodo.dict_str_arr_type and col in left_on:
+                if in_type == bodo.dict_str_arr_type and col in left_on_map:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
-                    # TODO: Fix for large # columns
                     if right_index:
                         in_type = right_key_type
                     else:
-                        key_num = left_on.index(col)
+                        key_num = left_on_map[col]
                         right_key_name = right_on[key_num]
-                        in_type = right_df.data[right_df.columns.index(right_key_name)]
+                        in_type = right_df.data[right_df.column_index[right_key_name]]
                 if is_right:
                     # For a key that is not common OR data column, we have to plan for a NaN column
                     in_type = to_nullable_type(in_type)
@@ -2618,16 +2625,15 @@ class JoinTyper(AbstractTemplate):
                 columns.append(
                     str(col) + suffix_y.literal_value if col in add_suffix else col
                 )
-                if in_type == bodo.dict_str_arr_type and col in right_on:
+                if in_type == bodo.dict_str_arr_type and col in right_on_map:
                     # If we have a dict array we need to check that the other table doesn't have a string
                     # array, otherwise we must use a regular string array.
-                    # TODO: Fix for large # columns
                     if left_index:
                         in_type = left_key_type
                     else:
-                        key_num = right_on.index(col)
+                        key_num = right_on_map[col]
                         left_key_name = left_on[key_num]
-                        in_type = left_df.data[left_df.columns.index(left_key_name)]
+                        in_type = left_df.data[left_df.column_index[left_key_name]]
                 if is_left:
                     # a key column that is not common needs to plan for NaN.
                     # Same for a data column of course.
@@ -2649,18 +2655,24 @@ class JoinTyper(AbstractTemplate):
         # In the case of merging with left_index=True or right_index=True then
         # the index is coming from the other index. And so we need to set it adequately.
         index_typ = RangeIndexType(types.none)
+        # Convert range index to numeric index
+        convert_range = False
         if left_index and right_index and not is_overload_str(how, "asof"):
             index_typ = left_df.index
-            if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
-                index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+            convert_range = True
         elif left_index and not right_index:
             index_typ = right_df.index
-            if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
-                index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+            convert_range = True
         elif right_index and not left_index:
             index_typ = left_df.index
-            if isinstance(index_typ, bodo.hiframes.pd_index_ext.RangeIndexType):
-                index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+            convert_range = True
+
+        if convert_range and isinstance(
+            index_typ, bodo.hiframes.pd_index_ext.RangeIndexType
+        ):
+            # If the index comes from one of the tables it will no longer be a range
+            # as the entries will be shuffled
+            index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
 
         out_df = DataFrameType(tuple(data), index_typ, tuple(columns))
         return signature(out_df, *args)
