@@ -71,7 +71,7 @@ jobs:
       else
         artifactory_os_dir="osx-64"
       fi
-      artifactory_channel=`./buildscripts/azure/get_channel.sh`
+      artifactory_channel=`./buildscripts/iceberg/get_channel.sh`
       echo "artifactory_channel: $artifactory_channel"
       if [[ "${{ parameters.name }}" = "macOS_ARM" ]]; then
         export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-11.0}
