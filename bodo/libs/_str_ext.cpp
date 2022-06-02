@@ -538,24 +538,26 @@ void* np_array_from_string_array(int64_t no_strings,
     CHECK(nan_obj, "getting np.nan failed");
 
     for (int64_t i = 0; i < no_strings; ++i) {
-        PyObject* s;
-        if (is_bytes)
-            s = PyBytes_FromStringAndSize(
-                buffer + offset_table[i],
-                offset_table[i + 1] - offset_table[i]);
-        else
-            s = PyUnicode_FromStringAndSize(
-                buffer + offset_table[i],
-                offset_table[i + 1] - offset_table[i]);
-        CHECK(s, "creating Python string/unicode object failed");
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
         CHECK(p, "getting offset in numpy array failed");
-        if (!is_na(null_bitmap, i))
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
-        else
+        if (is_na(null_bitmap, i)) {
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, nan_obj);
+        } else {
+            PyObject* s;
+            if (is_bytes) {
+                s = PyBytes_FromStringAndSize(
+                    buffer + offset_table[i],
+                    offset_table[i + 1] - offset_table[i]);
+            } else {
+                s = PyUnicode_FromStringAndSize(
+                    buffer + offset_table[i],
+                    offset_table[i + 1] - offset_table[i]);
+            }
+            CHECK(s, "creating Python string/unicode object failed");
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
+            Py_DECREF(s);
+        }
         CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(s);
     }
 
     Py_DECREF(np_mod);
@@ -593,17 +595,18 @@ void* pd_array_from_string_array(int64_t no_strings,
     CHECK(na_obj, "getting pd.NA failed");
 
     for (int64_t i = 0; i < no_strings; ++i) {
-        PyObject* s = PyUnicode_FromStringAndSize(
-            buffer + offset_table[i], offset_table[i + 1] - offset_table[i]);
-        CHECK(s, "creating Python string/unicode object failed");
         auto p = PyArray_GETPTR1((PyArrayObject*)ret, i);
         CHECK(p, "getting offset in numpy array failed");
-        if (!is_na(null_bitmap, i))
-            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
-        else
+        if (is_na(null_bitmap, i)) {
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, na_obj);
+        } else {
+            PyObject* s = PyUnicode_FromStringAndSize(
+            buffer + offset_table[i], offset_table[i + 1] - offset_table[i]);
+            CHECK(s, "creating Python string/unicode object failed");
+            err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
+            Py_DECREF(s);
+        }
         CHECK(err == 0, "setting item in numpy array failed");
-        Py_DECREF(s);
     }
 
     PyObject* str_arr_obj =
