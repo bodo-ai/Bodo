@@ -678,11 +678,13 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     # NOTE: unliteral of LiteralList is Poison type in Numba
     data = types.unliteral(data) if not isinstance(data, types.LiteralList) else data
 
-    data_dtype = getattr(data, "dtype", None)
     if not is_overload_none(dtype):
         elem_type = parse_dtype(dtype, "pandas.Index")
+        # Specifies whether the dtype was provided
+        dtype_provided = False
     else:
-        elem_type = data_dtype
+        elem_type = getattr(data, "dtype", None)
+        dtype_provided = True
 
     # Add a special error message for object dtypes
     if isinstance(elem_type, types.misc.PyObject):
@@ -730,13 +732,24 @@ def pd_index_overload(data=None, dtype=None, copy=False, name=None, tupleize_col
     ):
         # Numeric Indices:
         if isinstance(elem_type, (types.Integer, types.Float, types.Boolean)):
+            if dtype_provided:
 
-            def impl(
-                data=None, dtype=None, copy=False, name=None, tupleize_cols=True
-            ):  # pragma: no cover
-                data_arr = bodo.utils.conversion.coerce_to_array(data)
-                data_coerced = bodo.utils.conversion.fix_arr_dtype(data_arr, elem_type)
-                return bodo.hiframes.pd_index_ext.init_numeric_index(data_coerced, name)
+                def impl(
+                    data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+                ):  # pragma: no cover
+                    data_arr = bodo.utils.conversion.coerce_to_array(data)
+                    return bodo.hiframes.pd_index_ext.init_numeric_index(data_arr, name)
+
+            else:
+
+                def impl(
+                    data=None, dtype=None, copy=False, name=None, tupleize_cols=True
+                ):  # pragma: no cover
+                    data_arr = bodo.utils.conversion.coerce_to_array(data)
+                    fixed_arr = bodo.utils.conversion.fix_arr_dtype(data_arr, elem_type)
+                    return bodo.hiframes.pd_index_ext.init_numeric_index(
+                        fixed_arr, name
+                    )
 
         # String/Binary index:
         elif elem_type in [types.string, bytes_type]:
