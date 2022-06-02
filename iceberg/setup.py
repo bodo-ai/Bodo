@@ -18,6 +18,7 @@ else:
     from versioneer import get_version
 
     version = get_version()
+    version += "alpha"
 
 
 # Automatically Build Java Project on `python setup.py develop`
@@ -59,7 +60,7 @@ class CustomBuildCommand(build_py):
 
 setup(
     name="bodo-iceberg-connector",
-    version=f"{version}alpha",
+    version=version,
     description="Bodo Connector for Iceberg",
     long_description="Bodo Connector for Iceberg",
     classifiers=[

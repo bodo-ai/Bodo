@@ -24,6 +24,7 @@ ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '
 
 # Get the Connector Version
 export CONNECTOR_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+CONNECTOR_VERSION+="alpha"
 export IS_RELEASE=`git tag --points-at HEAD`
 
 # We follow the following convention for release:
