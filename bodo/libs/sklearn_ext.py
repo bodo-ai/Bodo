@@ -1289,6 +1289,89 @@ def overload_mean_absolute_error(
 
             return _mae_impl
 
+#----------------------------------log_loss-------------------------------------
+
+def log_loss_dist_helper(y_true, y_pred, eps, normalize, sample_weight, labels):
+    """
+    Helper for distributed log_loss computation.
+    Call sklearn on each rank with normalize=False to get
+    counts (i.e. sum(accuracy_bits))
+    (or sample_weight.T @ accuracy_bits when sample_weight != None
+    """
+    loss = sklearn.metrics.log_loss(
+        y_true, y_pred, eps=eps, normalize=False,
+        sample_weight=sample_weight, labels=labels
+    )
+    comm = MPI.COMM_WORLD
+    loss = comm.allreduce(loss, op=MPI.SUM)
+    if normalize:
+        sum_of_weights = (
+            np.sum(sample_weight) if (sample_weight is not None) else len(y_true)
+        )
+        sum_of_weights = comm.allreduce(sum_of_weights, op=MPI.SUM)
+        loss = loss / sum_of_weights
+
+    return loss
+
+
+@overload(sklearn.metrics.log_loss, no_unliteral=True)
+def overload_log_loss(
+    y_true,
+    y_pred,
+    eps=1e-15,
+    normalize=True,
+    sample_weight=None,
+    labels=None,
+    _is_data_distributed=False,
+):
+    """Provide implementations for the log_loss computation.
+    If data is not distributed, we simply call sklearn on each rank.
+    Else we compute in a distributed way.
+    Provide separate impl for case where sample_weight is provided
+    vs not provided for type unification purposes.
+    """
+    check_sklearn_version()
+
+    func_text = "def _log_loss_impl(\n"
+    func_text += "    y_true,\n"
+    func_text += "    y_pred,\n"
+    func_text += "    eps=1e-15,\n"
+    func_text += "    normalize=True,\n"
+    func_text += "    sample_weight=None,\n"
+    func_text += "    labels=None,\n"
+    func_text += "    _is_data_distributed=False,\n"
+    func_text += "):\n"
+    # User could pass lists and numba throws error if passing lists
+    # to object mode, so we convert to arrays
+    func_text += "    y_true = bodo.utils.conversion.coerce_to_array(y_true)\n"
+    func_text += "    y_pred = bodo.utils.conversion.coerce_to_array(y_pred)\n"
+    # Coerce optional args from lists to arrays if needed
+    if not is_overload_none(sample_weight):
+        func_text += "    sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)\n"
+    if not is_overload_none(labels):
+        func_text += "    labels = bodo.utils.conversion.coerce_to_array(labels)\n"
+
+    func_text += "    with numba.objmode(loss='float64'):\n"
+    if is_overload_false(_is_data_distributed):
+        # For replicated data, directly call sklearn
+        func_text += "        loss = sklearn.metrics.log_loss(\n"
+    else:
+        # For distributed data, pre-compute labels globally, then call our implementation
+        if is_overload_none(labels):
+            # No need to sort the labels here since LabelBinarizer sorts them anyways
+            # when we call sklearn.metrics.log_loss within log_loss_dist_helper
+            func_text += "        labels = bodo.libs.array_kernels.unique(y_true, parallel=True)\n"
+            func_text += "        labels = bodo.allgatherv(labels, False)\n"
+        func_text += "        loss = log_loss_dist_helper(\n"
+    func_text += "            y_true, y_pred, eps=eps, normalize=normalize,\n"
+    func_text += "            sample_weight=sample_weight, labels=labels\n"
+    func_text += "        )\n"
+    func_text += "        return loss\n"
+    loc_vars = {}
+    exec(func_text, globals(), loc_vars)
+    _log_loss_impl = loc_vars["_log_loss_impl"]
+    return _log_loss_impl
+
 
 def accuracy_score_dist_helper(y_true, y_pred, normalize, sample_weight):
     """

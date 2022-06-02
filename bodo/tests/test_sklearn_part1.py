@@ -10,6 +10,7 @@ from sklearn.metrics import (
     accuracy_score,
     confusion_matrix,
     f1_score,
+    log_loss,
     mean_absolute_error,
     mean_squared_error,
     precision_score,
@@ -162,6 +163,91 @@ def test_score(data, average):
     check_func(test_recall, tuple(data + [average]), is_out_distributed=False)
     check_func(test_f1, tuple(data + [average]), is_out_distributed=False)
     check_func(test_metrics_f1, tuple(data + [average]), is_out_distributed=False)
+
+
+@pytest.mark.parametrize(
+    "data",
+    # Examples taken from https://github.com/scikit-learn/scikit-learn/blob/632384f4314d84d55de1ba8f4234f7cdc8f37824/sklearn/metrics/tests/test_classification.py#L2466
+    [
+        (
+            np.array([0, 0, 0, 1, 1]),
+            np.array([[0.5, 0.5], [0.1, 0.9], [0.01, 0.99], [0.9, 0.1], [0.75, 0.25]]),
+            None,
+            None,
+        ),
+        (
+            np.array([1, 0, 2] * 3),
+            np.array([[0.2, 0.7, 0.1], [0.6, 0.2, 0.2], [0.6, 0.1, 0.3]] * 3),
+            None,
+            None,
+        ),
+        (
+            # We need to pass `y_true` and `y_pred` as np arrays here so that the
+            # input can be distributed, and we need to use dtype=object here because
+            # allgatherv doesn't yet support string arrays well [BE-2819]
+            np.array(["no", "no", "no", "yes", "yes"], dtype=object),
+            np.array([[0.5, 0.5], [0.1, 0.9], [0.01, 0.99], [0.9, 0.1], [0.75, 0.25]]),
+            None,
+            np.array([0.1, 0.1, 0.2, 0.3, 0.3]),
+        ),
+        (
+            # Checking that the labels arg works. Without passing in labels,
+            # there are only two classes in y_true but three classes in y_pred
+            np.array([1, 2, 2] * 3),
+            np.array([[0.2, 0.7, 0.1], [0.6, 0.2, 0.2], [0.6, 0.1, 0.3]] * 3),
+            [1, 2, 3], # Passing a list here so that the `labels` arg is replicated
+            None,
+        ),
+        (
+            pd.Series(np.array(["ham", "spam", "spam", "ham"] * 2)),
+            pd.DataFrame(np.array([[0.2, 0.7], [0.6, 0.5], [0.4, 0.1], [0.7, 0.2]] * 2)),
+            None,
+            None,
+        ),
+    ],
+)
+@pytest.mark.parametrize("normalize", [True, False])
+def test_log_loss(data, normalize, memory_leak_check):
+    """
+    Tests for the sklearn.metrics.log_loss implementation in Bodo.
+    """
+
+    def test_log_loss_0(y_true, y_pred, labels, sample_weight):
+        return log_loss(y_true, y_pred, labels=labels, sample_weight=sample_weight)
+
+    def test_log_loss_1(y_true, y_pred, labels, sample_weight):
+        return log_loss(y_true, y_pred, normalize=normalize,
+                        labels=labels, sample_weight=sample_weight)
+
+    check_func(test_log_loss_0, data, is_out_distributed=False)
+    check_func(test_log_loss_1, data, is_out_distributed=False)
+
+
+def test_log_loss_error(memory_leak_check):
+    def impl(y_true, y_pred):
+        return log_loss(y_true, y_pred)
+
+    dist_impl = bodo.jit(distributed=["y_true", "y_pred"])(impl)
+
+    # Number of classes are not equal
+    y_true = np.array([1, 0, 2] * 2)
+    y_pred = np.array([[0.2, 0.7], [0.6, 0.5], [0.4, 0.1]] * 2)
+    with pytest.raises(ValueError):
+        dist_impl(y_true, y_pred)
+
+    # Only one label is provided
+    y_true = np.array([2, 2] * 2)
+    y_pred = np.array([[0.2, 0.7], [0.6, 0.5]] * 2)
+    error_str = "The labels array needs to contain at least two labels for log_loss"
+    with pytest.raises(ValueError, match=error_str):
+        dist_impl(y_true, y_pred)
+
+    # Inconsistent number of samples
+    y_true = np.array([2, 2] * 2)
+    y_pred = np.array([[0.2, 0.7], [0.6, 0.5]] * 3)
+    error_str = "Found input variables with inconsistent numbers of samples"
+    with pytest.raises(ValueError, match=error_str):
+        dist_impl(y_true, y_pred)
 
 
 @pytest.mark.parametrize(
