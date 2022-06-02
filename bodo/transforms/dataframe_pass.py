@@ -1241,19 +1241,31 @@ class DataFramePass:
 
         left_keys = self._get_const_or_list(left_on_var)
         right_keys = self._get_const_or_list(right_on_var)
+
+        # While all of these variables use guard, they must not
+        # be None as they are all set internally by Bodo.
         how = guard(find_const, self.func_ir, how_var)
+        assert how is not None, "Internal error with Join IR node"
         suffix_x = guard(find_const, self.func_ir, suffix_x_var)
+        assert suffix_x is not None, "Internal error with Join IR node"
         suffix_y = guard(find_const, self.func_ir, suffix_y_var)
+        assert suffix_y is not None, "Internal error with Join IR node"
         is_join = guard(find_const, self.func_ir, is_join_var)
+        assert is_join is not None, "Internal error with Join IR node"
         is_indicator = guard(find_const, self.func_ir, is_indicator_var)
+        assert is_indicator is not None, "Internal error with Join IR node"
         is_na_equal = guard(find_const, self.func_ir, _bodo_na_equal_var)
+        assert is_na_equal is not None, "Internal error with Join IR node"
         gen_cond_expr = guard(find_const, self.func_ir, gen_cond_var)
+        assert gen_cond_expr is not None, "Internal error with Join IR node"
         out_typ = self.typemap[lhs.name]
         # convert right join to left join
         is_left = how in {"left", "outer"}
         is_right = how in {"right", "outer"}
 
         nodes = []
+
+        # Obtain the output and input IR variables
         out_data_vars = {
             c: ir.Var(lhs.scope, mk_unique_var(sanitize_varname(c)), lhs.loc)
             for c in out_typ.columns
@@ -1288,14 +1300,23 @@ class DataFramePass:
         left_df_index_name = self._get_index_name(left_df_index, nodes)
         left_index_var = self._gen_array_from_index(left_df, nodes)
 
-        if left_index and not right_index:
+        # If left_index=True or right_index=True the output index comes
+        # from an existing table. This matches the corresponding code
+        # at the end of JoinTyper (left_index_as_output is cases 1 and 3
+        # and right_index_as_output is case 2).
+        left_index_as_output = (left_index and right_index and how != "asof") or (
+            not left_index and right_index
+        )
+        right_index_as_output = left_index and not right_index
+
+        if right_index_as_output:
             out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
             self.typemap[out_index_var.name] = self.typemap[right_index_var.name]
             out_data_vars["$_bodo_index_"] = out_index_var
             left_vars["$_bodo_index_"] = left_index_var
             right_vars["$_bodo_index_"] = right_index_var
             in_df_index_name = right_df_index_name
-        if right_index:
+        elif left_index_as_output:
             out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
             self.typemap[out_index_var.name] = self.typemap[left_index_var.name]
             out_data_vars["$_bodo_index_"] = out_index_var
@@ -1329,6 +1350,7 @@ class DataFramePass:
 
         out_arrs = list(out_data_vars.values())
         if out_index_var is not None:
+            # Index does not come from the input so we generate a new index.
             out_index = self._gen_index_from_array(
                 out_index_var, in_df_index_name, nodes
             )
