@@ -634,6 +634,19 @@ def overload_str_method_find(S_str, sub, start=0, end=None):
     if not is_overload_none(end):
         int_arg_check("find", "end", end)
 
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_find_dict_impl(S_str, sub, start=0, end=None):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_find(arr, sub, start, end)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_find_dict_impl
+
     def impl(S_str, sub, start=0, end=None):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -673,42 +686,6 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
                 bodo.libs.array_kernels.setna(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].rfind(sub, start, end)
-        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
-
-    return impl
-
-
-@overload_method(SeriesStrMethodType, "center", inline="always", no_unliteral=True)
-def overload_str_method_center(S_str, width, fillchar=" "):
-    common_validate_padding("center", width, fillchar)
-
-    # optimized version for dictionary encoded arrays
-    if S_str.stype.data == bodo.dict_str_arr_type:
-
-        def _str_center_dict_impl(S_str, width, fillchar=" "):  # pragma: no cover
-            S = S_str._obj
-            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-            index = bodo.hiframes.pd_series_ext.get_series_index(S)
-            name = bodo.hiframes.pd_series_ext.get_series_name(S)
-            out_arr = bodo.libs.dict_arr_ext.str_center(arr, width, fillchar)
-            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
-
-        return _str_center_dict_impl
-
-    def impl(S_str, width, fillchar=" "):  # pragma: no cover
-        S = S_str._obj
-        str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        numba.parfors.parfor.init_prange()
-        l = len(str_arr)
-        out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
-        for j in numba.parfors.parfor.internal_prange(l):
-            if bodo.libs.array_kernels.isna(str_arr, j):
-                out_arr[j] = ""
-                bodo.libs.array_kernels.setna(out_arr, j)
-            else:
-                out_arr[j] = str_arr[j].center(width, fillchar)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
@@ -799,50 +776,59 @@ def overload_str_method_repeat(S_str, repeats):
         )
 
 
-@overload_method(SeriesStrMethodType, "ljust", inline="always", no_unliteral=True)
-def overload_str_method_ljust(S_str, width, fillchar=" "):
-    common_validate_padding("ljust", width, fillchar)
+def create_ljust_rjust_center_overload(func_name):
+    func_text = (
+        "def dict_impl(S_str, width, fillchar=' '):\n"
+        "    S = S_str._obj\n"
+        "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        f"    out_arr = bodo.libs.dict_arr_ext.str_{func_name}(arr, width, fillchar)\n"
+        "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+        "def impl(S_str, width, fillchar=' '):\n"
+        "    S = S_str._obj\n"
+        "    str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        "    numba.parfors.parfor.init_prange()\n"
+        "    l = len(str_arr)\n"
+        "    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)\n"
+        "    for j in numba.parfors.parfor.internal_prange(l):\n"
+        "        if bodo.libs.array_kernels.isna(str_arr, j):\n"
+        "            bodo.libs.array_kernels.setna(out_arr, j)\n"
+        "        else:\n"
+        f"            out_arr[j] = str_arr[j].{func_name}(width, fillchar)\n"
+        "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+    )
+    loc_vars = {}
+    glob_vals = {
+        "bodo": bodo,
+        "numba": numba,
+    }
+    exec(func_text, glob_vals, loc_vars)
+    impl = loc_vars["impl"]
+    dict_impl = loc_vars["dict_impl"]
 
-    def impl(S_str, width, fillchar=" "):  # pragma: no cover
-        S = S_str._obj
-        str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        numba.parfors.parfor.init_prange()
-        l = len(str_arr)
-        out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
-        for j in numba.parfors.parfor.internal_prange(l):
-            if bodo.libs.array_kernels.isna(str_arr, j):
-                out_arr[j] = ""
-                bodo.libs.array_kernels.setna(out_arr, j)
-            else:
-                out_arr[j] = str_arr[j].ljust(width, fillchar)
-        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+    def overload_ljust_rjust_center_method(S_str, width, fillchar=" "):
+        common_validate_padding(func_name, width, fillchar)
 
-    return impl
+        if S_str.stype.data == bodo.dict_str_arr_type:
+            return dict_impl
+        return impl
+
+    return overload_ljust_rjust_center_method
 
 
-@overload_method(SeriesStrMethodType, "rjust", inline="always", no_unliteral=True)
-def overload_str_method_rjust(S_str, width, fillchar=" "):
-    common_validate_padding("rjust", width, fillchar)
+def _install_ljust_rjust_center():
+    # install ljust/rjust/center
+    for func in ["ljust", "rjust", "center"]:
+        impl = create_ljust_rjust_center_overload(func)
+        overload_method(SeriesStrMethodType, func, inline="always", no_unliteral=True)(
+            impl
+        )
 
-    def impl(S_str, width, fillchar=" "):  # pragma: no cover
-        S = S_str._obj
-        str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
-        name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        numba.parfors.parfor.init_prange()
-        l = len(str_arr)
-        out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, -1)
-        for j in numba.parfors.parfor.internal_prange(l):
-            if bodo.libs.array_kernels.isna(str_arr, j):
-                out_arr[j] = ""
-                bodo.libs.array_kernels.setna(out_arr, j)
-            else:
-                out_arr[j] = str_arr[j].rjust(width, fillchar)
-        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
-    return impl
+_install_ljust_rjust_center()
 
 
 @overload_method(SeriesStrMethodType, "pad", no_unliteral=True)
@@ -857,6 +843,26 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
             raise BodoError("Series.str.pad(): Invalid Side")
     else:
         raise BodoError("Series.str.pad(): Invalid Side")
+
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_pad_dict_impl(
+            S_str, width, side="left", fillchar=" "
+        ):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            if side == "left":
+                out_arr = bodo.libs.dict_arr_ext.str_rjust(arr, width, fillchar)
+            elif side == "right":
+                out_arr = bodo.libs.dict_arr_ext.str_ljust(arr, width, fillchar)
+            elif side == "both":
+                out_arr = bodo.libs.dict_arr_ext.str_center(arr, width, fillchar)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_pad_dict_impl
 
     def impl(S_str, width, side="left", fillchar=" "):  # pragma: no cover
         S = S_str._obj
@@ -886,6 +892,19 @@ def overload_str_method_pad(S_str, width, side="left", fillchar=" "):
 def overload_str_method_zfill(S_str, width):
     int_arg_check("zfill", "width", width)
 
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_zfill_dict_impl(S_str, width):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_zfill(arr, width)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_zfill_dict_impl
+
     def impl(S_str, width):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -913,6 +932,21 @@ def overload_str_method_slice(S_str, start=None, stop=None, step=None):
         int_arg_check("slice", "stop", stop)
     if not is_overload_none(step):
         int_arg_check("slice", "step", step)
+
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_slice_dict_impl(
+            S_str, start=None, stop=None, step=None
+        ):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_slice(arr, start, stop, step)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_slice_dict_impl
 
     def impl(S_str, start=None, stop=None, step=None):  # pragma: no cover
         S = S_str._obj
@@ -1229,48 +1263,35 @@ def create_str2str_methods_overload(func_name):
     # return the function with two different overload declarations
 
     # func_text for regular string arrays
-    if func_name in ["lstrip", "rstrip", "strip"]:
-        func_text = "def f(S_str, to_strip=None):\n"
-    else:
-        func_text = "def f(S_str):\n"
-    func_text += "    S = S_str._obj\n"
-    func_text += "    str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-    func_text += "    str_arr = decode_if_dict_array(str_arr)\n"
-    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
-    func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
-    func_text += "    numba.parfors.parfor.init_prange()\n"
-    func_text += "    n = len(str_arr)\n"
-    # functions that don't change the number of characters
-    if func_name in ("capitalize", "lower", "swapcase", "title", "upper"):
-        func_text += "    num_chars = num_total_chars(str_arr)\n"
-    else:
-        func_text += "    num_chars = -1\n"
-    func_text += (
+    is_strip = func_name in ["lstrip", "rstrip", "strip"]
+    func_text = (
+        f"def f({'S_str, to_strip=None' if is_strip else 'S_str'}):\n"
+        "    S = S_str._obj\n"
+        "    str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        "    str_arr = decode_if_dict_array(str_arr)\n"
+        "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        "    numba.parfors.parfor.init_prange()\n"
+        "    n = len(str_arr)\n"
+        f"    num_chars = {'-1' if is_strip else 'num_total_chars(str_arr)'}\n"
         "    out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, num_chars)\n"
-    )
-    func_text += "    for j in numba.parfors.parfor.internal_prange(n):\n"
-    func_text += "        if bodo.libs.array_kernels.isna(str_arr, j):\n"
-    func_text += '            out_arr[j] = ""\n'
-    func_text += "            bodo.libs.array_kernels.setna(out_arr, j)\n"
-    func_text += "        else:\n"
-    if func_name in ["lstrip", "rstrip", "strip"]:
-        func_text += "            out_arr[j] = str_arr[j].{}(to_strip)\n".format(
-            func_name
-        )
-    else:
-        func_text += "            out_arr[j] = str_arr[j].{}()\n".format(func_name)
-    func_text += (
+        "    for j in numba.parfors.parfor.internal_prange(n):\n"
+        "        if bodo.libs.array_kernels.isna(str_arr, j):\n"
+        '            out_arr[j] = ""\n'
+        "            bodo.libs.array_kernels.setna(out_arr, j)\n"
+        "        else:\n"
+        f"            out_arr[j] = str_arr[j].{func_name}({'to_strip' if is_strip else ''})\n"
         "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
     )
 
     # func_text for dictionary-encoded string array
-    func_text += "def _dict_impl(S_str):\n"
-    func_text += "    S = S_str._obj\n"
-    func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
-    func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
-    func_text += f"    out_arr = bodo.libs.dict_arr_ext.str_{func_name}(arr)\n"
     func_text += (
+        f"def _dict_impl({'S_str, to_strip=None' if is_strip else 'S_str'}):\n"
+        "    S = S_str._obj\n"
+        "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        f"    out_arr = bodo.libs.dict_arr_ext.str_{func_name}({'arr, to_strip' if is_strip else 'arr'})\n"
         "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
     )
     loc_vars = {}
@@ -1288,11 +1309,13 @@ def create_str2str_methods_overload(func_name):
     f = loc_vars["f"]
     _dict_impl = loc_vars["_dict_impl"]
 
-    if func_name in ["lstrip", "rstrip", "strip"]:
+    if is_strip:
 
         def overload_strip_method(S_str, to_strip=None):
             if not is_overload_none(to_strip):
                 str_arg_check(func_name, "to_strip", to_strip)
+            if S_str.stype.data == bodo.dict_str_arr_type:
+                return _dict_impl
             return f
 
         return overload_strip_method
