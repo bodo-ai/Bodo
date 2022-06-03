@@ -4285,6 +4285,38 @@ def overload_range_index_unique(I):
     return impl
 
 
+@overload_method(NumericIndexType, "nunique", inline="always")
+@overload_method(BinaryIndexType, "nunique", inline="always")
+@overload_method(StringIndexType, "nunique", inline="always")
+@overload_method(CategoricalIndexType, "nunique", inline="always")
+@overload_method(DatetimeIndexType, "nunique", inline="always")
+@overload_method(TimedeltaIndexType, "nunique", inline="always")
+@overload_method(PeriodIndexType, "nunique", inline="always")
+def overload_index_nunique(I, dropna=True):
+    """Add support for Index.nunique() on tagged Index types"""
+
+    def impl(I, dropna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        n = bodo.libs.array_kernels.nunique(arr, dropna)
+        return n
+
+    return impl
+
+
+@overload_method(RangeIndexType, "nunique", inline="always")
+def overload_range_index_nunique(I, dropna=True):
+    """Add support for Index.nunique() on RangeIndex by calculating the
+    number of elements in the range."""
+
+    def impl(I, dropna=True):  # pragma: no cover
+        start = I._start
+        stop = I._stop
+        step = I._step
+        return max(0, -((-(stop - start)) // step))
+
+    return impl
+
+
 @overload_method(NumericIndexType, "isin", no_unliteral=True, inline="always")
 @overload_method(BinaryIndexType, "isin", no_unliteral=True, inline="always")
 @overload_method(StringIndexType, "isin", no_unliteral=True, inline="always")
@@ -4544,7 +4576,6 @@ index_unsupported_methods = [
     "item",
     "join",
     "memory_usage",
-    "nunique",
     "putmask",
     "ravel",
     "reindex",
@@ -4652,6 +4683,7 @@ interval_idx_unsupported_methods = [
     "isnull",
     "map",
     "isin",
+    "nunique",
 ]
 
 
@@ -4690,6 +4722,7 @@ multi_index_unsupported_methods = [
     "map",
     "isin",
     "unique",
+    "nunique",
 ]
 
 
@@ -4764,6 +4797,14 @@ period_index_unsupported_atrs = [
     "is_monotonic_decreasing",
 ]
 
+period_index_unsupported_methods = [
+    "asfreq",
+    "strftime",
+    "to_timestamp",
+    "isin",
+    "unique",
+]
+
 string_index_unsupported_atrs = [
     "is_monotonic",
     "is_monotonic_increasing",
@@ -4774,14 +4815,6 @@ binary_index_unsupported_atrs = [
     "is_monotonic",
     "is_monotonic_increasing",
     "is_monotonic_decreasing",
-]
-
-period_index_unsupported_methods = [
-    "asfreq",
-    "strftime",
-    "to_timestamp",
-    "isin",
-    "unique",
 ]
 
 index_types = [
