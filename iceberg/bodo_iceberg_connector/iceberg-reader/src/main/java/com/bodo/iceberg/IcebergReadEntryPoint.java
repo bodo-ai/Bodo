@@ -12,11 +12,13 @@ public class IcebergReadEntryPoint {
   }
 
   public static void main(String[] args) throws URISyntaxException {
-    BodoIcebergReader reader =
-        getBodoIcebergReader(
-            "https://nessie.dremio.cloud/v1/projects/50824e14-fd95-434c-a0cb-cc988e57969f?type=nessie&authentication.type=BEARER&authentication.token=...",
-            "",
-            "arc_test3");
+    BodoIcebergReader reader = getBodoIcebergReader("glue", "db1", "table1");
+    //    BodoIcebergReader reader =
+    //        getBodoIcebergReader(
+    //
+    // "https://nessie.dremio.cloud/v1/projects/50824e14-fd95-434c-a0cb-cc988e57969f?type=nessie&authentication.type=BEARER&authentication.token=...",
+    //            "",
+    //            "arc_test3");
     //    BodoIcebergReader reader = getBodoIcebergReader("thrift://localhost:9083", "db",
     // "table2");
     //    BodoIcebergReader reader =
