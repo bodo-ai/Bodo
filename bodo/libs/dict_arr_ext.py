@@ -778,9 +778,18 @@ def str_contains_non_regex(arr, pat, case):  # pragma: no cover
     return out_arr
 
 
-def create_simple_str2str_methods(func_name):
+def create_simple_str2str_methods(func_name, func_args):
+    """
+    Returns the dictionary-encoding optimized implementation for
+    capitalize, lower, swapcase, title, upper, lstrip, rstrip, strip
+    center, ljust, rjust, zfill
+    "func_name" is the name of the function to be created, and
+    "func_args" is a tuple whose elements are the arguments that the function
+    takes in.
+    For example: func_name = "center", func_args = ("arr", "width", "fillchar")
+    """
     func_text = (
-        f"def str_{func_name}(arr):\n"
+        f"def str_{func_name}({', '.join(func_args)}):\n"
         "    data_arr = arr._data\n"
         "    n_data = len(data_arr)\n"
         "    out_str_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n_data, -1)\n"
@@ -788,7 +797,7 @@ def create_simple_str2str_methods(func_name):
         "        if bodo.libs.array_kernels.isna(data_arr, i):\n"
         "            bodo.libs.array_kernels.setna(out_str_arr, i)\n"
         "            continue\n"
-        f"        out_str_arr[i] = data_arr[i].{func_name}()\n"
+        f"        out_str_arr[i] = data_arr[i].{func_name}({', '.join(func_args[1:])})\n"
         "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)\n"
     )
 
@@ -803,33 +812,67 @@ def create_simple_str2str_methods(func_name):
 
 def _register_simple_str2str_methods():
     # install simple string to string transformation functions
-    func_names = ["capitalize", "lower", "swapcase", "title", "upper"]
-    for func in func_names:
-        func_impl = create_simple_str2str_methods(func)
+
+    # a dictionary that maps function names to function arguments
+    args_dict = {
+        **dict.fromkeys(
+            ["capitalize", "lower", "swapcase", "title", "upper"], ("arr",)
+        ),
+        **dict.fromkeys(["lstrip", "rstrip", "strip"], ("arr", "to_strip")),
+        **dict.fromkeys(["center", "ljust", "rjust"], ("arr", "width", "fillchar")),
+        **dict.fromkeys(["zfill"], ("arr", "width")),
+    }
+    for func_name in args_dict.keys():
+        func_impl = create_simple_str2str_methods(func_name, args_dict[func_name])
         func_impl = register_jitable(func_impl)
-        globals()[f"str_{func}"] = func_impl
+        globals()[f"str_{func_name}"] = func_impl
 
 
 _register_simple_str2str_methods()
 
 
 @register_jitable
-def str_center(arr, width, fillchar):  # pragma: no cover
+def str_find(arr, sub, start, end):  # pragma: no cover
     """
-    Implement optimized string center for dictionary array.
-
+    Implement optimized string find for dictionary array.
+    Return lowest indexes on each dictionary element.
     """
-    # Pandas implementation:
-    # https://github.com/pandas-dev/pandas/blob/4bfe3d07b4858144c219b9346329027024102ab6/pandas/core/strings/accessor.py#L1601
     data_arr = arr._data
+    indices_arr = arr._indices
     n_data = len(data_arr)
-    out_str_arr = pre_alloc_string_array(n_data, -1)
-
+    n_indices = len(indices_arr)
+    tmp_dict_arr = bodo.libs.int_arr_ext.alloc_int_array(n_data, np.int64)
+    out_int_arr = bodo.libs.int_arr_ext.alloc_int_array(n_indices, np.int64)
+    # First iterate through the dictionary to get the lowest indices
     for i in range(n_data):
         if bodo.libs.array_kernels.isna(data_arr, i):
-            out_str_arr[i] = ""
+            bodo.libs.array_kernels.setna(tmp_dict_arr, i)
+            continue
+        tmp_dict_arr[i] = data_arr[i].find(sub, start, end)
+    # Populate the output array
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(arr, i) or bodo.libs.array_kernels.isna(
+            tmp_dict_arr, indices_arr[i]
+        ):
+            bodo.libs.array_kernels.setna(out_int_arr, i)
+        else:
+            out_int_arr[i] = tmp_dict_arr[indices_arr[i]]
+    return out_int_arr
+
+
+@register_jitable
+def str_slice(arr, start, stop, step):  # pragma: no cover
+    """
+    Implement optimized string slice for dictionary array.
+    Slice substrings from each element in the dictionary.
+    """
+    data_arr = arr._data
+    n_data = len(data_arr)
+    out_str_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n_data, -1)
+    for i in range(n_data):
+        if bodo.libs.array_kernels.isna(data_arr, i):
             bodo.libs.array_kernels.setna(out_str_arr, i)
             continue
-        out_str_arr[i] = data_arr[i].center(width, fillchar)
+        out_str_arr[i] = data_arr[i][start:stop:step]
 
     return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)
