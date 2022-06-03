@@ -26,7 +26,10 @@ def run_ci():
             "/" not in filename
             or filename.startswith("aws_scripts/")
             or filename.startswith("bodo/")
-            or filename.startswith("buildscripts/")
+            or (
+                filename.startswith("buildscripts/")
+                and not filename.startswith("buildscripts/azure/")
+            )
             or filename.startswith("iceberg/")
         ):
             return True
