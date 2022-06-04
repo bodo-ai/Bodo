@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """IR node for the join and merge"""
 from collections import defaultdict
+from typing import List, Literal, Union
 
 import numba
 import numpy as np
@@ -14,7 +15,7 @@ from numba.core.ir_utils import (
     replace_vars_inner,
     visit_vars_inner,
 )
-from numba.extending import intrinsic, overload
+from numba.extending import intrinsic
 
 import bodo
 from bodo.libs.array import (
@@ -117,45 +118,93 @@ def add_join_gen_cond_cfunc_sym(typingctx, func, sym):
 def get_join_cond_addr(name):
     """Resolve address of cfunc given by its symbol name"""
     with numba.objmode(addr="int64"):
+        # This loads the function pointer at runtime, preventing
+        # hardcoding the address into the IR.
         addr = join_gen_cond_cfunc_addr[name]
     return addr
+
+
+HOW_OPTIONS = Literal["inner", "left", "right", "outer", "asof"]
 
 
 class Join(ir.Stmt):
     def __init__(
         self,
-        df_out,
-        left_df,
-        right_df,
-        left_keys,
-        right_keys,
-        out_data_vars,
-        left_vars,
-        right_vars,
-        how,
-        suffix_x,
-        suffix_y,
-        loc,
-        is_left,
-        is_right,
-        is_join,
-        left_index,
-        right_index,
-        indicator,
-        is_na_equal,
-        gen_cond_expr,
+        df_out: str,
+        left_df: str,
+        right_df: str,
+        left_keys: Union[List[str], str],
+        right_keys: Union[List[str], str],
+        out_data_vars: List[ir.Var],
+        left_vars: List[ir.Var],
+        right_vars: List[ir.Var],
+        how: HOW_OPTIONS,
+        suffix_left: str,
+        suffix_right: str,
+        loc: ir.Loc,
+        is_left: bool,
+        is_right: bool,
+        is_join: bool,
+        left_index: bool,
+        right_index: bool,
+        indicator: bool,
+        is_na_equal: bool,
+        gen_cond_expr: str,
     ):
+        """
+        IR node used to represent join operations. These are produced
+        by pd.merge, pd.merge_asof, and DataFrame.join. The inputs
+        have the following values.
+
+        Keyword arguments:
+        df_out -- Name of the output IR variable. Just used for printing.
+        left_df -- Name of the left DataFrame's IR variable. Just used for printing.
+        right_df -- Name of the right DataFrame's IR variable. Just used for printing.
+        left_keys -- Label or list of labels used as the keys for the left DataFrame.
+        right_keys -- Label or list of labels used as the keys for the left DataFrame.
+        out_data_vars -- List of ir.Var used as the output arrays.
+        left_vars -- List of ir.Var used as the left DataFrame's used arrays.
+        right_vars -- List of ir.Var used as the right DataFrame's used arrays.
+        how -- String defining the type of merge. Must be one of the above defined
+               HOW_OPTIONS.
+        suffix_left -- String to append to the column name of the output columns
+                       from the left DataFrame if they are also found in the right DataFrame.
+                       One exception is that keys with an inner join can share a name and do
+                       not need a suffix.
+        suffix_right -- String to append to the column name of the output columns
+                        from the right DataFrame if they are also found in the left DataFrame.
+                        One exception is that keys with an inner join can share a name and do
+                        not need a suffix.
+        loc -- Location in the source code that contains this join. Used for error messages.
+        is_left -- Is this an outer join on the left side?
+        is_right -- Is this an outer join on the right side?
+        is_join -- Is this produced by DataFrame.join?
+        left_index -- Do we use the left DataFrame's index as a key column?
+        right_index -- Do we use the right DataFrame's index as a key column?
+        indicator -- Add an indicator column? This indicates if each row
+                     contains data from the left DataFrame, right DataFrame
+                     or both.
+        is_na_equal -- Should NA values be treated as equal when comparing keys?
+                       In Pandas this is True, but conforming with SQL behavior
+                       this is False.
+        gen_cond_expr -- String used to describe the general merge condition. This
+                         is used when a more general condition is needed than is
+                         provided by equality.
+        """
         self.df_out = df_out
         self.left_df = left_df
         self.right_df = right_df
         self.left_keys = left_keys
         self.right_keys = right_keys
+        # Create a set for future lookups
+        self.left_key_set = set(left_keys)
+        self.right_key_set = set(right_keys)
         self.out_data_vars = out_data_vars
         self.left_vars = left_vars
         self.right_vars = right_vars
         self.how = how
-        self.suffix_x = suffix_x
-        self.suffix_y = suffix_y
+        self.suffix_left = suffix_left
+        self.suffix_right = suffix_right
         self.loc = loc
         self.is_left = is_left
         self.is_right = is_right
@@ -165,16 +214,25 @@ class Join(ir.Stmt):
         self.indicator = indicator
         self.is_na_equal = is_na_equal
         self.gen_cond_expr = gen_cond_expr
-        # find columns used in general join condition to avoid removing them in rm dead
-        self.left_cond_cols = set(
-            c for c in left_vars.keys() if f"(left.{c})" in gen_cond_expr
-        )
-        self.right_cond_cols = set(
-            c for c in right_vars.keys() if f"(right.{c})" in gen_cond_expr
-        )
+
+        if gen_cond_expr:
+            # find columns used in general join condition to avoid removing them in rm dead
+            # Note: this generates code per key and also is not fully correct. An expression
+            # like (left.A)) != (right.B) will look like both A and A) are left key columns
+            # based on this check, even though only A) is. Fixing this requires a more detailed
+            # refactoring of the parsing.
+            self.left_cond_cols = set(
+                c for c in left_vars.keys() if f"(left.{c})" in gen_cond_expr
+            )
+            self.right_cond_cols = set(
+                c for c in right_vars.keys() if f"(right.{c})" in gen_cond_expr
+            )
+        else:
+            self.left_cond_cols = set()
+            self.right_cond_cols = set()
         # keep the origin of output columns to enable proper dead code elimination
         # columns with common name that are not common keys will get a suffix
-        comm_keys = set(left_keys) & set(right_keys)
+        comm_keys = self.left_key_set & self.right_key_set
         comm_data = set(left_vars.keys()) & set(right_vars.keys())
         add_suffix = comm_data - comm_keys
         # vect_same_key is a vector of boolean containing whether the key have the same
@@ -190,14 +248,14 @@ class Join(ir.Stmt):
             name_right = right_keys[iKey]
             vect_same_key.append(name_left == name_right)
         self.vect_same_key = vect_same_key
-        #
+        # Track column origins
         self.column_origins = {
-            (str(c) + suffix_x if c in add_suffix else c): ("left", c)
+            (str(c) + suffix_left if c in add_suffix else c): ("left", c)
             for c in left_vars.keys()
         }
         self.column_origins.update(
             {
-                (str(c) + suffix_y if c in add_suffix else c): ("right", c)
+                (str(c) + suffix_right if c in add_suffix else c): ("right", c)
                 for c in right_vars.keys()
             }
         )
@@ -232,6 +290,11 @@ class Join(ir.Stmt):
 
 
 def join_array_analysis(join_node, equiv_set, typemap, array_analysis):
+    """
+    Array analysis for the variables in the Join IR node. This states that
+    all arrays in the input share a dimension and all arrays in the output
+    share a dimension.
+    """
     post = []
     # empty join nodes should be deleted in remove dead
     assert len(join_node.out_data_vars) > 0, "empty join in array analysis"
@@ -280,8 +343,11 @@ numba.parfors.array_analysis.array_analysis_extensions[Join] = join_array_analys
 
 
 def join_distributed_analysis(join_node, array_dists):
+    """
+    Perform distributed analysis for the IR variables
+    contained in the Join IR node
+    """
 
-    # TODO: can columns of the same input table have diffrent dists?
     # left and right inputs can have 1D or 1D_Var seperately (q26 case)
     # input columns have same distribution
     left_dist = Distribution.OneD
@@ -330,9 +396,11 @@ distributed_analysis.distributed_analysis_extensions[Join] = join_distributed_an
 
 
 def join_typeinfer(join_node, typeinferer):
-    comm_keys = set(join_node.left_keys) & set(join_node.right_keys)
-    comm_data = set(join_node.left_vars.keys()) & set(join_node.right_vars.keys())
-    add_suffix = comm_data - comm_keys
+    """
+    Type inference for the Join IR node. This enforces typing
+    relationships between the inputs and the outputs.
+    """
+
     for out_col_name, out_col_var in join_node.out_data_vars.items():
         # left suffix
         if join_node.indicator and out_col_name == "_merge":
@@ -358,6 +426,10 @@ typeinfer.typeinfer_extensions[Join] = join_typeinfer
 
 
 def visit_vars_join(join_node, callback, cbdata):
+    """
+    Visit each variable in the Join IR node.
+    """
+
     if debug_prints():  # pragma: no cover
         print("visiting join vars for:", join_node)
         print("cbdata: ", sorted(cbdata.items()))
@@ -386,10 +458,17 @@ ir_utils.visit_vars_extensions[Join] = visit_vars_join
 def remove_dead_join(
     join_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
+    """
+    Dead code elimination for the Join IR node. This finds columns that
+    are dead data columns in the output and eliminates them from the
+    inputs.
+
+    This doesn't yet remove keys from the output (because those are still
+    needed to compute the result, although the output could be avoided).
+    """
     # if an output column is dead, the related input column is not needed
     # anymore in the join
     dead_cols = []
-    # TODO: remove output of dead keys
     all_cols_dead = True
 
     for col_name, col_var in join_node.out_data_vars.items():
@@ -409,14 +488,14 @@ def remove_dead_join(
         orig, orig_name = join_node.column_origins[col_name]
         if (
             orig == "left"
-            and orig_name not in join_node.left_keys
+            and orig_name not in join_node.left_key_set
             and orig_name not in join_node.left_cond_cols
         ):
             join_node.left_vars.pop(orig_name)
             dead_cols.append(col_name)
         if (
             orig == "right"
-            and orig_name not in join_node.right_keys
+            and orig_name not in join_node.right_key_set
             and orig_name not in join_node.right_cond_cols
         ):
             join_node.right_vars.pop(orig_name)
@@ -436,6 +515,11 @@ ir_utils.remove_dead_extensions[Join] = remove_dead_join
 
 
 def join_usedefs(join_node, use_set=None, def_set=None):
+    """
+    Tracks existing variables that are used (inputs) and new
+    variables that are defined (output) by the Join IR Node.
+    """
+
     if use_set is None:
         use_set = set()
     if def_set is None:
@@ -455,7 +539,11 @@ numba.core.analysis.ir_extension_usedefs[Join] = join_usedefs
 
 
 def get_copies_join(join_node, typemap):
-    # join doesn't generate copies, it just kills the output columns
+    """
+    Return gen and kill sets for a copy propagation
+    data flow analysis. Join doesn't generate any
+    copies, it just kills the output columns.
+    """
     kill_set = set(v.name for v in join_node.out_data_vars.values())
     return set(), kill_set
 
@@ -466,7 +554,8 @@ ir_utils.copy_propagate_extensions[Join] = get_copies_join
 def apply_copies_join(
     join_node, var_dict, name_var_table, typemap, calltypes, save_copies
 ):
-    """apply copy propagate in join node"""
+    """Apply copy propagate in join node by replacing the inputs
+    and the outputs."""
 
     # left
     for col_name in list(join_node.left_vars.keys()):
@@ -491,6 +580,10 @@ ir_utils.apply_copy_propagate_extensions[Join] = apply_copies_join
 
 
 def build_join_definitions(join_node, definitions=None):
+    """
+    Construct definitions for the output variables of the
+    join node.
+    """
     if definitions is None:
         definitions = defaultdict(list)
 
@@ -506,6 +599,10 @@ ir_utils.build_defs_extensions[Join] = build_join_definitions
 def join_distributed_run(
     join_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
+    """
+    Replace the join IR node with the distributed implementations. This
+    is called in distributed_pass and removes the Join from the IR.
+    """
     left_parallel, right_parallel = False, False
     if array_dists is not None:
         left_parallel, right_parallel = _get_table_parallel_flags(
@@ -518,8 +615,9 @@ def join_distributed_run(
     left_key_vars = tuple(join_node.left_vars[c] for c in join_node.left_keys)
     right_key_vars = tuple(join_node.right_vars[c] for c in join_node.right_keys)
 
-    left_columns = tuple(join_node.left_vars.keys())
-    right_columns = tuple(join_node.right_vars.keys())
+    left_vars = join_node.left_vars
+    right_vars = join_node.right_vars
+
     # Optional column refer: When doing a merge on column and index, the key
     # is put also in output, so we need one additional column in that case.
     optional_col_var = ()
@@ -527,14 +625,14 @@ def join_distributed_run(
     optional_column = False
     if join_node.left_index and not join_node.right_index and not join_node.is_join:
         optional_key = join_node.right_keys[0]
-        if optional_key in left_columns:
+        if optional_key in left_vars:
             optional_key_tuple = (optional_key,)
             optional_col_var = (join_node.right_vars[optional_key],)
             optional_column = True
 
     if join_node.right_index and not join_node.left_index and not join_node.is_join:
         optional_key = join_node.left_keys[0]
-        if optional_key in right_columns:
+        if optional_key in right_vars:
             optional_key_tuple = (optional_key,)
             optional_col_var = (join_node.left_vars[optional_key],)
             optional_column = True
@@ -553,18 +651,17 @@ def join_distributed_run(
     # ---If a key appears on same name on left and right then both columns are used
     #  and so the name will never have additional NaNs
 
-    out_optional_key_vars = tuple(
-        join_node.out_data_vars[cname] for cname in optional_key_tuple
-    )
+    # Add optional keys to the output first
+    merge_out = [join_node.out_data_vars[cname] for cname in optional_key_tuple]
     left_other_col_vars = tuple(
         v
         for (n, v) in sorted(join_node.left_vars.items(), key=lambda a: str(a[0]))
-        if n not in join_node.left_keys
+        if n not in join_node.left_key_set
     )
     right_other_col_vars = tuple(
         v
         for (n, v) in sorted(join_node.right_vars.items(), key=lambda a: str(a[0]))
-        if n not in join_node.right_keys
+        if n not in join_node.right_key_set
     )
     # get column types
     arg_vars = (
@@ -606,6 +703,7 @@ def join_distributed_run(
             left_key_types[i], right_key_types[i], loc
         )
 
+    # Cast the keys to a common dtype for comparison
     func_text += "    t1_keys = ({},)\n".format(
         ", ".join(
             f"bodo.utils.utils.astype({left_key_names[i]}, key_type_{i})"
@@ -619,54 +717,59 @@ def join_distributed_run(
         )
     )
 
+    # Extract the values as a tuple.
     func_text += "    data_left = ({}{})\n".format(
         ",".join(left_other_names), "," if len(left_other_names) != 0 else ""
     )
     func_text += "    data_right = ({}{})\n".format(
         ",".join(right_other_names), "," if len(right_other_names) != 0 else ""
     )
-    out_keys = []
 
+    # Add the keys to the output.
     for cname in join_node.left_keys:
         if cname in join_node.add_suffix:
-            cname_work = str(cname) + join_node.suffix_x
+            cname_work = str(cname) + join_node.suffix_left
         else:
             cname_work = cname
         assert cname_work in join_node.out_data_vars
-        out_keys.append(join_node.out_data_vars[cname_work])
+        merge_out.append(join_node.out_data_vars[cname_work])
     for i, cname in enumerate(join_node.right_keys):
         if not join_node.vect_same_key[i] and not join_node.is_join:
 
             if cname in join_node.add_suffix:
-                cname_work = str(cname) + join_node.suffix_y
+                cname_work = str(cname) + join_node.suffix_right
             else:
                 cname_work = cname
             assert cname_work in join_node.out_data_vars
-            out_keys.append(join_node.out_data_vars[cname_work])
+            merge_out.append(join_node.out_data_vars[cname_work])
 
     def _get_out_col_var(cname, is_left):
+        """
+        Get the output array variable for a given
+        input column name. Suffix names are resolved
+        via `is_left`.
+        """
         if cname in join_node.add_suffix:
             if is_left:
-                cname_work = str(cname) + join_node.suffix_x
+                cname_work = str(cname) + join_node.suffix_left
             else:
-                cname_work = str(cname) + join_node.suffix_y
+                cname_work = str(cname) + join_node.suffix_right
         else:
             cname_work = cname
         return join_node.out_data_vars[cname_work]
 
-    merge_out = out_optional_key_vars + tuple(out_keys)
-    merge_out += tuple(
-        _get_out_col_var(n, True)
-        for (n, v) in sorted(join_node.left_vars.items(), key=lambda a: str(a[0]))
-        if n not in join_node.left_keys
-    )
-    merge_out += tuple(
-        _get_out_col_var(n, False)
-        for (n, v) in sorted(join_node.right_vars.items(), key=lambda a: str(a[0]))
-        if n not in join_node.right_keys
-    )
+    # Append the data columns to merge out.
+    for n in sorted(join_node.left_vars.keys(), key=lambda a: str(a)):
+        if n not in join_node.left_key_set:
+            merge_out.append(_get_out_col_var(n, True))
+
+    for n in sorted(join_node.right_vars.keys(), key=lambda a: str(a)):
+        if n not in join_node.right_key_set:
+            merge_out.append(_get_out_col_var(n, False))
+
+    # Add the indicator variable.
     if join_node.indicator:
-        merge_out += (_get_out_col_var("_merge", False),)
+        merge_out.append(_get_out_col_var("_merge", False))
     out_names = ["t3_c" + str(i) for i in range(len(merge_out))]
 
     # Generate a general join condition function if it exists
@@ -678,7 +781,9 @@ def join_distributed_run(
 
     if join_node.how == "asof":
         if left_parallel or right_parallel:
-            assert left_parallel and right_parallel
+            assert (
+                left_parallel and right_parallel
+            ), "pd.merge_asof requires both left and right to be replicated or distributed"
             # only the right key needs to be aligned
             func_text += "    t2_keys, data_right = parallel_asof_comm(t1_keys, t2_keys, data_right)\n"
         func_text += (
@@ -711,6 +816,7 @@ def join_distributed_run(
             left_col_nums,
             right_col_nums,
         )
+    # Set the output variables.
     if join_node.how == "asof":
         for i in range(len(left_other_names)):
             func_text += "    left_{} = out_data_left[{}]\n".format(i, i)
@@ -778,6 +884,7 @@ def join_distributed_run(
     ).blocks.popitem()[1]
     replace_arg_nodes(f_block, arg_vars)
 
+    # Replace the return values with assignments to the output IR
     nodes = f_block.body[:-3]
     for i in range(len(merge_out)):
         nodes[-len(merge_out) + i].target = merge_out[i]
@@ -944,6 +1051,11 @@ def _match_join_key_types(t1, t2, loc):
     if t1 == t2:
         return t1
 
+    # Matching string + dictionary encoded arrays produces
+    # a string key.
+    if is_str_arr_type(t1) and is_str_arr_type(t2):
+        return bodo.string_array_type
+
     try:
         arr = dtype_to_array_type(find_common_np_dtype([t1, t2]))
         # output should be nullable if any input is nullable
@@ -953,13 +1065,15 @@ def _match_join_key_types(t1, t2, loc):
             else arr
         )
     except Exception:
-        # Different forms of string arrays should still match.
-        if is_str_arr_type(t1) and is_str_arr_type(t2):
-            return bodo.string_array_type
         raise BodoError(f"Join key types {t1} and {t2} do not match", loc=loc)
 
 
 def _get_table_parallel_flags(join_node, array_dists):
+    """
+    Determine if the input Tables are parallel. This verifies
+    that if either of the inputs is parallel, the output is
+    also parallel.
+    """
     par_dists = (
         distributed_pass.Distribution.OneD,
         distributed_pass.Distribution.OneD_Var,
@@ -1013,6 +1127,9 @@ def _gen_local_hash_join(
     left_col_nums,
     right_col_nums,
 ):
+    """
+    Generate the code need to compute a hash join in C++
+    """
     # In some case the column in output has a type different from the one in input.
     # TODO: Unify those type changes between all cases.
     def needs_typechange(in_type, need_nullable, is_same_key):
@@ -1056,6 +1173,10 @@ def _gen_local_hash_join(
         )
 
     def get_out_type(idx, in_type, in_name, need_nullable, is_same_key):
+        """
+        Construct a dummy array with a given type for passing to info_to_array.
+        If an array is unchanged between input and output we reuse the same array.
+        """
         if (
             isinstance(in_type, types.Array)
             and not is_dtype_nullable(in_type.dtype)
@@ -1143,29 +1264,23 @@ def _gen_local_hash_join(
     func_text += "    delete_table(table_left)\n"
     func_text += "    delete_table(table_right)\n"
     idx = 0
+    # Load the output optional column
     if optional_column:
         rec_typ = get_out_type(idx, out_types[idx], "opti_c0", False, False)
         func_text += rec_typ[0]
         glbs[f"out_type_{idx}"] = out_types[idx]
         func_text += f"    opti_0 = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
         idx += 1
+    # Load the left keys
     for i, t in enumerate(left_key_names):
         key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
         rec_typ = get_out_type(
             idx, key_type, f"t1_keys[{i}]", is_right, vect_same_key[i]
         )
         func_text += rec_typ[0]
-        glbs[f"out_type_{idx}"] = out_types[idx]
-        # use astype only if necessary due to Index handling bugs
-        # see: test_merge_index_column_second"[df22-df10]" TODO(ehsan): fix
-        if (
-            key_type != left_key_types[i]
-            and left_key_types[i] != bodo.dict_str_arr_type
-        ):
-            func_text += f"    t1_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
-        else:
-            func_text += f"    t1_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
+        func_text += f"    t1_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
         idx += 1
+    # Load the left data arrays
     for i, t in enumerate(left_other_names):
         rec_typ = get_out_type(idx, left_other_types[i], t, is_right, False)
         func_text += rec_typ[0]
@@ -1175,22 +1290,15 @@ def _gen_local_hash_join(
             )
         )
         idx += 1
+    # Load the right keys
     for i, t in enumerate(right_key_names):
         if not vect_same_key[i] and not is_join:
             key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
             rec_typ = get_out_type(idx, key_type, f"t2_keys[{i}]", is_left, False)
             func_text += rec_typ[0]
-            # NOTE: subtracting len(left_other_names) since output right keys are
-            # generated before left_other_names
-            glbs[f"out_type_{idx}"] = out_types[idx - len(left_other_names)]
-            if (
-                key_type != right_key_types[i]
-                and right_key_types[i] != bodo.dict_str_arr_type
-            ):
-                func_text += f"    t2_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
-            else:
-                func_text += f"    t2_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
+            func_text += f"    t2_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
             idx += 1
+    # Load the right data arrays
     for i, t in enumerate(right_other_names):
         rec_typ = get_out_type(idx, right_other_types[i], t, is_left, False)
         func_text += rec_typ[0]
@@ -1200,6 +1308,7 @@ def _gen_local_hash_join(
             )
         )
         idx += 1
+    # Load the indicator column
     if indicator:
         func_text += f"    typ_{idx} = pd.Categorical(values=['both'], categories=('left_only', 'right_only', 'both'))\n"
         func_text += f"    indicator_col = info_to_array(info_from_table(out_table, {idx}), typ_{idx})\n"
@@ -1338,21 +1447,3 @@ def local_merge_asof(left_keys, right_keys, data_left, data_right):  # pragma: n
             bodo.libs.array_kernels.setna_tup(out_data_right, left_ind)
 
     return out_left_keys, out_right_keys, out_data_left, out_data_right
-
-
-def copy_arr_tup(arrs):  # pragma: no cover
-    return tuple(a.copy() for a in arrs)
-
-
-@overload(copy_arr_tup, no_unliteral=True)
-def copy_arr_tup_overload(arrs):
-    count = arrs.count
-    func_text = "def f(arrs):\n"
-    func_text += "  return ({},)\n".format(
-        ",".join("arrs[{}].copy()".format(i) for i in range(count))
-    )
-
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["f"]
-    return impl

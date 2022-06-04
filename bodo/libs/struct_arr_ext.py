@@ -1455,9 +1455,30 @@ def overload_struct_arr_copy(A):
     def copy_impl(A):  # pragma: no cover
         data = get_data(A)
         null_bitmap = get_null_bitmap(A)
-        out_data_arrs = bodo.ir.join.copy_arr_tup(data)
+        out_data_arrs = bodo.libs.struct_arr_ext.copy_arr_tup(data)
         out_null_bitmap = null_bitmap.copy()
 
         return init_struct_arr(out_data_arrs, out_null_bitmap, names)
 
     return copy_impl
+
+
+def copy_arr_tup(arrs):  # pragma: no cover
+    return tuple(a.copy() for a in arrs)
+
+
+@overload(copy_arr_tup, no_unliteral=True)
+def copy_arr_tup_overload(arrs):
+    """
+    Generate copy on a tuple of arrays and return the result.
+    """
+    count = arrs.count
+    func_text = "def f(arrs):\n"
+    func_text += "  return ({},)\n".format(
+        ",".join("arrs[{}].copy()".format(i) for i in range(count))
+    )
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    impl = loc_vars["f"]
+    return impl
