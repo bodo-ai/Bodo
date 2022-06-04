@@ -3229,15 +3229,19 @@ def pivot_impl(
             func_text += (
                 "            if not bodo.libs.array_kernels.isna(values_arr, i):\n"
             )
-            func_text += "                len_arr[row_idx] = len(values_arr[i])\n"
-            func_text += "                total_lens_0[col_idx] += len(values_arr[i])\n"
+            func_text += "                str_val_len = bodo.libs.str_arr_ext.get_str_arr_item_length(values_arr, i)\n"
+            func_text += "                len_arr[row_idx] = str_val_len\n"
+            func_text += "                total_lens_0[col_idx] += str_val_len\n"
         else:
             # If we need to generate multiple lists, generate code per list
             for i, data_arr_typ in enumerate(data_arr_typs):
                 if is_str_arr_type(data_arr_typ):
                     func_text += f"        if not bodo.libs.array_kernels.isna(values_tup[{i}], i):\n"
-                    func_text += f"            len_arrs_{i}[pivot_idx][row_idx] = len(values_tup[{i}][i])\n"
-                    func_text += f"            total_lens_{i}[pivot_idx] += len(values_tup[{i}][i])\n"
+                    func_text += f"            str_val_len_{i} = bodo.libs.str_arr_ext.get_str_arr_item_length(values_tup[{i}], i)\n"
+                    func_text += f"            len_arrs_{i}[pivot_idx][row_idx] = str_val_len_{i}\n"
+                    func_text += (
+                        f"            total_lens_{i}[pivot_idx] += str_val_len_{i}\n"
+                    )
 
     # Allocate the data arrays. If we have string data we use the info from the first pass
     for i, data_arr_typ in enumerate(data_arr_typs):
@@ -3308,7 +3312,8 @@ def pivot_impl(
         if is_str_arr_type(value_names):
             func_text += "    total_chars = 0\n"
             func_text += "    for i in range(len(value_names)):\n"
-            func_text += "        total_chars += len(value_names[i])\n"
+            func_text += "        value_name_str_len = bodo.libs.str_arr_ext.get_str_arr_item_length(value_names, i)\n"
+            func_text += "        total_chars += value_name_str_len\n"
             func_text += "    new_value_names = bodo.libs.str_arr_ext.pre_alloc_string_array(num_rows, total_chars * len(pivot_values))\n"
         else:
             func_text += "    new_value_names = bodo.utils.utils.alloc_type(num_rows, value_names, (-1,))\n"
@@ -3316,7 +3321,8 @@ def pivot_impl(
         if is_str_arr_type(pivot_values):
             func_text += "    total_chars = 0\n"
             func_text += "    for i in range(len(pivot_values)):\n"
-            func_text += "        total_chars += len(pivot_values[i])\n"
+            func_text += "        pivot_val_str_len = bodo.libs.str_arr_ext.get_str_arr_item_length(pivot_values, i)\n"
+            func_text += "        total_chars += pivot_val_str_len\n"
             func_text += "    new_pivot_values = bodo.libs.str_arr_ext.pre_alloc_string_array(num_rows, total_chars * len(value_names))\n"
         else:
             func_text += "    new_pivot_values = bodo.utils.utils.alloc_type(num_rows, pivot_values, (-1,))\n"

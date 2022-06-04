@@ -698,9 +698,7 @@ def array_unique_vector_map(in_arr_tup):
             func_text += f"      null_in_lst_{i}.append(nulls_tup[{i}])\n"
             if is_str_arr_type(in_arr):
                 # If the data is null nulls_tup[i] == 0, so we multiply here
-                func_text += (
-                    f"      total_len_{i}  += nulls_tup[{i}] * len(values_tup[{i}])\n"
-                )
+                func_text += f"      total_len_{i}  += nulls_tup[{i}] * bodo.libs.str_arr_ext.get_utf8_size(values_tup[{i}])\n"
         func_text += "      arr_map[data_val] = len(arr_map)\n"
         func_text += "    else:\n"
         func_text += "      set_val = arr_map[data_val]\n"
@@ -746,7 +744,9 @@ def array_unique_vector_map(in_arr_tup):
         # Add the data to index info
         func_text += "        in_lst.append(data_val)\n"
         if is_str_arr_type(arr_typ_list[0]):
-            func_text += "        total_len += len(data_val)\n"
+            func_text += (
+                "        total_len += bodo.libs.str_arr_ext.get_utf8_size(data_val)\n"
+            )
         func_text += "        arr_map[data_val] = len(arr_map)\n"
         func_text += "      else:\n"
         func_text += "        set_val = arr_map[data_val]\n"

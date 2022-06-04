@@ -840,7 +840,7 @@ def overload_full_type(n, val, t):
     if typ == string_array_type:
 
         def impl_str(n, val, t):  # pragma: no cover
-            n_chars = n * len(val)
+            n_chars = n * bodo.libs.str_arr_ext.get_utf8_size(val)
             A = pre_alloc_string_array(n, n_chars)
             for i in range(n):
                 A[i] = val
