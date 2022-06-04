@@ -6,6 +6,12 @@ package:
 source:
   path: ../../../iceberg
 
+target_platform:
+  - osx-arm64
+
+SDKROOT:
+  - /opt
+
 requirements:
   host:
     - setuptools
