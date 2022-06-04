@@ -1677,3 +1677,56 @@ def test_pivot_to_parquet(df, memory_leak_check):
             n_passed == bodo.get_size()
         ), f"Output doesn't match Pandas with {data_dist} data"
         bodo.barrier()
+
+
+def test_pivot_table_non_ascii(memory_leak_check):
+    """
+    Tests DataFrame.pivot_table with string values for index,
+    columns, and values that contain non-ascii strings.
+    """
+
+    def impl1(df):
+        return df.pivot_table(index="C", columns="B", values="A", aggfunc="min")
+
+    def impl2(df):
+        return df.pivot_table(
+            index=["C", "D"], columns="B", values=["A", "E"], aggfunc="min"
+        )
+
+    df = pd.DataFrame(
+        {
+            "A": ["Õabf3e", "Õ", "Õ32r23", "Õr3", "Õe32"] * 20,
+            "B": ["россия очень, холодная страна", "россия очень"] * 50,
+            "C": [
+                "🢇🄐,🏈𠆶💑😅",
+                "한국,가,고싶다ㅠ",
+                "مرحبا, العالم ، هذا هو بودو",
+                "🢇🄐,",
+                "한국,가",
+                "🢇🄐💑😅",
+                "한국싶다ㅠ",
+                "مرحبا, ",
+                "🢇,",
+                ",가",
+            ]
+            * 10,
+            "D": ["Õfv43", "Õ3323"] * 50,
+            "E": ["한국,가,고싶다ㅠ"] * 100,
+        }
+    )
+    check_func(
+        impl1,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )
+    check_func(
+        impl2,
+        (df,),
+        check_names=False,
+        check_dtype=False,
+        sort_output=True,
+        reorder_columns=True,
+    )

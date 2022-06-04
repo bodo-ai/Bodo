@@ -74,7 +74,7 @@ utf8_str_type = types.ArrayCTypes(types.Array(types.uint8, 1, "C"))
 
 
 @intrinsic
-def unicode_to_utf8_and_len(typingctx, str_typ=None):
+def unicode_to_utf8_and_len(typingctx, str_typ):
     """convert unicode string to utf8 string and return its utf8 length.
     If input is ascii, just wrap its data and meminfo. Otherwise, allocate
     a new buffer and call encoder.
