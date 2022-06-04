@@ -876,3 +876,50 @@ def str_slice(arr, start, stop, step):  # pragma: no cover
         out_str_arr[i] = data_arr[i][start:stop:step]
 
     return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)
+
+
+@register_jitable
+def str_get(arr, i):  # pragma: no cover
+    """
+    Implement optimized string get for dictionary array
+    """
+    data_arr = arr._data
+    indices_arr = arr._indices
+    n_data = len(data_arr)
+    n_indices = len(indices_arr)
+    out_str_arr = pre_alloc_string_array(n_data, -1)
+    out_arr = pre_alloc_string_array(n_indices, -1)
+    for j in range(n_data):
+        if bodo.libs.array_kernels.isna(data_arr, j) or not (
+            -len(data_arr[j]) <= i < len(data_arr[j])
+        ):
+            bodo.libs.array_kernels.setna(out_str_arr, j)
+            continue
+        out_str_arr[j] = data_arr[j][i]
+
+    for j in range(n_indices):
+        if bodo.libs.array_kernels.isna(indices_arr, j) or bodo.libs.array_kernels.isna(
+            out_str_arr, indices_arr[j]
+        ):
+            bodo.libs.array_kernels.setna(out_arr, j)
+            continue
+        out_arr[j] = out_str_arr[indices_arr[j]]
+    return out_arr
+
+
+@register_jitable
+def str_repeat_int(arr, repeats):  # pragma: no cover
+    """
+    Implement string repeat for dictionary array
+    when repeats is integer
+    """
+    data_arr = arr._data
+    n_data = len(data_arr)
+    out_str_arr = pre_alloc_string_array(n_data, -1)
+
+    for i in range(n_data):
+        if bodo.libs.array_kernels.isna(data_arr, i):
+            bodo.libs.array_kernels.setna(out_str_arr, i)
+            continue
+        out_str_arr[i] = data_arr[i] * repeats
+    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)

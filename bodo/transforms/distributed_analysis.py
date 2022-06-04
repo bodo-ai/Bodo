@@ -1251,6 +1251,8 @@ class DistributedAnalysis:
             "str_title",
             "str_upper",
             "str_center",
+            "str_get",
+            "str_repeat_int",
             "str_lstrip",
             "str_rstrip",
             "str_strip",
