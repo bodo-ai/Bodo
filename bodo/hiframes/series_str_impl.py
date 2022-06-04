@@ -288,6 +288,19 @@ def overload_str_method_get(S_str, i):
 
         return _str_get_split_impl
 
+    # optimized version for dictionary encode arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_get_dict_impl(S_str, i):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_get(arr, i)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_get_dict_impl
+
     def _str_get_impl(S_str, i):  # pragma: no cover
         S = S_str._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -725,6 +738,18 @@ def overload_str_method_slice_replace(S_str, start=0, stop=None, repl=""):
 @overload_method(SeriesStrMethodType, "repeat", inline="always", no_unliteral=True)
 def overload_str_method_repeat(S_str, repeats):
     if isinstance(repeats, types.Integer) or is_overload_constant_int(repeats):
+        # optimized version for dictionary encode arrays
+        if S_str.stype.data == bodo.dict_str_arr_type:
+
+            def _str_repeat_int_dict_impl(S_str, repeats):  # pragma: no cover
+                S = S_str._obj
+                arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+                index = bodo.hiframes.pd_series_ext.get_series_index(S)
+                name = bodo.hiframes.pd_series_ext.get_series_name(S)
+                out_arr = bodo.libs.dict_arr_ext.str_repeat_int(arr, repeats)
+                return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+            return _str_repeat_int_dict_impl
 
         def impl(S_str, repeats):  # pragma: no cover
             S = S_str._obj
@@ -751,7 +776,9 @@ def overload_str_method_repeat(S_str, repeats):
         legal_array_input = False
 
     if legal_array_input:
-
+        # when S_str is a heterogeneous sequence of integers, dictionary encoding array
+        # does not provide any benefits over regular arrays, thus
+        # str_repeat_seq is not implemented.
         def impl(S_str, repeats):  # pragma: no cover
             S = S_str._obj
             str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)

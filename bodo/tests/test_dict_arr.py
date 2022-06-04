@@ -689,6 +689,47 @@ def test_str_strip(test_strip_dict_arr_value, memory_leak_check, method):
     assert dist_IR_contains(f_ir, f"str_{method}")
 
 
+def test_str_get(test_unicode_dict_str_arr):
+    """
+    test optimization of Series.str.get for dict array
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.get(1)
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.get(1),
+    )
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_get")
+
+
+def test_str_repeat(test_unicode_dict_str_arr):
+    """
+    test optimization of Series.str.repeat for dict array
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.repeat(3)
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.repeat(3),
+    )
+
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_repeat_int")
+
+
 @pytest.mark.parametrize("case", [True, False])
 def test_str_contains_regex(memory_leak_check, test_unicode_dict_str_arr, case):
     """

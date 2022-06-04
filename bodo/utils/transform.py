@@ -271,6 +271,8 @@ no_side_effect_call_tuples = {
     ("str_title", "dict_arr_ext", "libs", bodo),
     ("str_upper", "dict_arr_ext", "libs", bodo),
     ("str_center", "dict_arr_ext", "libs", bodo),
+    ("str_get", "dict_arr_ext", "libs", bodo),
+    ("str_repeat_int", "dict_arr_ext", "libs", bodo),
     ("str_lstrip", "dict_arr_ext", "libs", bodo),
     ("str_rstrip", "dict_arr_ext", "libs", bodo),
     ("str_strip", "dict_arr_ext", "libs", bodo),
