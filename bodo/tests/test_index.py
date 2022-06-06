@@ -584,6 +584,88 @@ def test_index_get_loc_error_checking():
 
 
 @pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([1, 5, 2, 1, 0, 3, 1, 2, 5, 1]),
+        pd.Index(pd.array([1, None, None, 5, None, 2, 1, 0, 3, 1, 2, None, 1, None])),
+        pd.Index(
+            [
+                0.7573456092417888,
+                0.21589999967248008,
+                0.8671567646182514,
+                0.383775019426454,
+                0.21589999967248008,
+                0.5937443415123859,
+                0.5583538962837552,
+                0.5583538962837552,
+                0.6448399071221529,
+                0.383775019426454,
+            ]
+        ),
+        pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1], ordered=True),
+        pytest.param(
+            pd.CategoricalIndex([True, True, False, True, False], ordered=True),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex([1.0, 1.1, 1.2, 1.8, 1.5], ordered=True),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(["A", "B", "C", "A", "A", "C", "A", "B"], ordered=True),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [b"a", b"", bytes(4), b"a", b"A", b"Z", b"j", b"a"], ordered=True
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [
+                    pd.Timestamp("2018-03-01"),
+                    pd.Timestamp("2018-06-01"),
+                    pd.Timestamp("2018-03-01"),
+                    pd.Timestamp("2018-01-01"),
+                    pd.Timestamp("2018-03-01"),
+                ],
+                ordered=True,
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pd.RangeIndex(start=-3, stop=4, step=1),
+        pytest.param(pd.RangeIndex(start=0, stop=10, step=2), marks=pytest.mark.slow),
+        pytest.param(
+            pd.RangeIndex(start=100, stop=-100, step=-5), marks=pytest.mark.slow
+        ),
+        pytest.param(pd.RangeIndex(start=100, stop=0, step=-7), marks=pytest.mark.slow),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
+        pd.TimedeltaIndex(
+            ["1 days", "2 days", "3 days", "2 days", "3 hours", "2 minutes"]
+        ),
+        pd.PeriodIndex(
+            year=[2000, 2000, 2001, 2001, 2000, 2004], quarter=[2, 2, 2, 3, 1, 1]
+        ),
+        pd.period_range(start="2017-01-01", end="2018-01-01", freq="M"),
+    ],
+)
+def test_index_argminmax(index, memory_leak_check):
+    def impl1(index):
+        return index.argmin()
+
+    def impl2(index):
+        return index.argmax()
+
+    # Descending RangeIndex distributed any/all not supported yet [BE-2944]
+    dist_test = not (isinstance(index, pd.RangeIndex) and (index.step < 0))
+    check_func(impl1, (index,), only_seq=True)
+    check_func(impl2, (index,), only_seq=True)
+    check_func(impl1, (index,), only_1D=True, dist_test=dist_test)
+    check_func(impl2, (index,), only_1D=True, dist_test=dist_test)
+
+
+@pytest.mark.parametrize(
     "args",
     [
         (pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9]), 1),
@@ -2374,18 +2456,6 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_append)(idx=pd.Index(data))
-
-    def test_argmax(idx):
-        return idx.argmax()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_argmax)(idx=pd.Index(data))
-
-    def test_argmin(idx):
-        return idx.argmin()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_argmin)(idx=pd.Index(data))
 
     def test_argsort(idx):
         return idx.argsort()

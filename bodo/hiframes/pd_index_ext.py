@@ -4258,6 +4258,115 @@ def get_index_constructor(I):
     )  # pragma: no cover
 
 
+@overload_method(NumericIndexType, "argmin", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "argmin", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "argmin", no_unliteral=True, inline="always")
+@overload_method(DatetimeIndexType, "argmin", no_unliteral=True, inline="always")
+@overload_method(TimedeltaIndexType, "argmin", no_unliteral=True, inline="always")
+@overload_method(CategoricalIndexType, "argmin", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "argmin", no_unliteral=True, inline="always")
+@overload_method(PeriodIndexType, "argmin", no_unliteral=True, inline="always")
+def overload_index_argmin(I, axis=0, skipna=True):
+    """Support for Index.argmin() on tagged Index types
+
+    Args:
+        I (pd.Index): the Index whose argmin is being found.
+        axis (int, optional): Not supported. Defaults to 0.
+        skipna (bool, optional): Not supported. Defaults to True.
+
+    Raises:
+        BodoError: if an unordered CategoricalIndex is provided.
+
+    Returns:
+        int: the location of the minimum value of the index
+    """
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=0, skipna=True)
+    check_unsupported_args(
+        "Index.argmin",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    # TODO [BE-2453]: Better errorchecking in general?
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.argmin()")
+
+    if isinstance(I, RangeIndexType):
+
+        def impl(I, axis=0, skipna=True):  # pragma: no cover
+            # If step is positive, returns zero. If step is negative, returns size-1.
+            return (I._step < 0) * (len(I) - 1)
+
+        return impl
+
+    if isinstance(I, CategoricalIndexType) and not I.dtype.ordered:
+        raise BodoError("Index.argmin(): only ordered categoricals are possible")
+
+    def impl(I, axis=0, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        index = init_numeric_index(np.arange(len(arr)))
+        return bodo.libs.array_ops.array_op_idxmin(arr, index)
+
+    return impl
+
+
+@overload_method(NumericIndexType, "argmax", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "argmax", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "argmax", no_unliteral=True, inline="always")
+@overload_method(DatetimeIndexType, "argmax", no_unliteral=True, inline="always")
+@overload_method(TimedeltaIndexType, "argmax", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "argmax", no_unliteral=True, inline="always")
+@overload_method(CategoricalIndexType, "argmax", no_unliteral=True, inline="always")
+@overload_method(PeriodIndexType, "argmax", no_unliteral=True, inline="always")
+def overload_index_argmax(I, axis=0, skipna=True):
+    """Support for Index.argmax() on tagged Index types
+
+    Args:
+        I (pd.Index): the Index whose argmax is being found.
+        axis (int, optional): Not supported. Defaults to 0.
+        skipna (bool, optional): Not supported. Defaults to True.
+
+    Raises:
+        BodoError: if an unordered CategoricalIndex is provided.
+
+    Returns:
+        int: the location of the maximum value of the index
+    """
+
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=0, skipna=True)
+    check_unsupported_args(
+        "Index.argmax",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    # TODO [BE-2453]: Better errorchecking in general?
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.argmax()")
+
+    if isinstance(I, RangeIndexType):
+
+        def impl(I, axis=0, skipna=True):  # pragma: no cover
+            # If step is negative, returns zero. If step is positive, returns size-1.
+            return (I._step > 0) * (len(I) - 1)
+
+        return impl
+
+    if isinstance(I, CategoricalIndexType) and not I.dtype.ordered:
+        raise BodoError("Index.argmax(): only ordered categoricals are possible")
+
+    def impl(I, axis=0, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        index = np.arange(len(arr))
+        return bodo.libs.array_ops.array_op_idxmax(arr, index)
+
+    return impl
+
+
 @overload_method(NumericIndexType, "unique", no_unliteral=True, inline="always")
 @overload_method(BinaryIndexType, "unique", no_unliteral=True, inline="always")
 @overload_method(StringIndexType, "unique", no_unliteral=True, inline="always")
@@ -4652,8 +4761,6 @@ index_unsupported_methods = [
     "all",
     "any",
     "append",
-    "argmax",
-    "argmin",
     "argsort",
     "asof",
     "asof_locs",
@@ -4796,6 +4903,8 @@ interval_idx_unsupported_methods = [
     "isnull",
     "map",
     "isin",
+    "argmax",
+    "argmin",
     "where",
     "putmask",
     "nunique",
@@ -4837,6 +4946,8 @@ multi_index_unsupported_methods = [
     "map",
     "isin",
     "unique",
+    "argmax",
+    "argmin",
     "where",
     "putmask",
     "nunique",
