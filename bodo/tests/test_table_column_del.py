@@ -1,3 +1,4 @@
+import io
 import os
 import shutil
 
@@ -8,6 +9,11 @@ import pytest
 from numba.core import ir
 
 import bodo
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
     ColumnDelTestPipeline,
     _create_many_column_file,
@@ -98,8 +104,9 @@ def test_table_filter_dead_columns(memory_leak_check):
     """
     Test table filter with no used column (just length)
     """
+    file_type = "parquet"
     try:
-        _create_many_column_file("parquet")
+        _create_many_column_file(file_type)
 
         # no columns used (just length needed)
         def impl(idx):
@@ -1402,3 +1409,38 @@ def test_table_dead_csv(memory_leak_check):
         _check_column_dels(bodo_func, [])
     finally:
         _del_many_column_file(file_type)
+
+
+@pytest.mark.parametrize("file_type", ["csv", "parquet"])
+def test_table_column_del_past_setitem(memory_leak_check, file_type):
+    """
+    Tests that dead setitems on tables are correctly converted to set_table_column_null, which
+    allows for column pruning at the IO node.
+    """
+    num_layers = 10
+
+    func_text = ""
+    func_text += "def impl():\n"
+    if file_type == "csv":
+        func_text += f"    df = pd.read_csv('many_columns.csv')\n"
+    else:
+        func_text += f"    df = pd.read_parquet('many_columns.parquet')\n"
+    for i in range(num_layers):
+        func_text += f"    df['Column{i+1}'] = df['Column{i}']\n"
+
+    func_text += f"    return df['Column{num_layers + 1}']\n"
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "pd": pd}, loc_vars)
+    impl = loc_vars["impl"]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 1):
+        try:
+            _create_many_column_file(file_type)
+            check_func(impl, (), check_dtype=False)
+            check_logger_msg(stream, f"Columns loaded ['Column{num_layers + 1}']")
+        finally:
+            _del_many_column_file(file_type)

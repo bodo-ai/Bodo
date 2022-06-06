@@ -376,7 +376,8 @@ def base_connector_remove_dead_columns(
 
             node.type_usecol_offset = used_columns
             # Return that this table was updated
-            return True
+
+    """We return flase in all cases, as no changes performed in the file will allow for dead code elimination to do work."""
     return False
 
 
