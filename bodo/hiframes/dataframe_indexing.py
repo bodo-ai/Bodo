@@ -403,7 +403,10 @@ def df_getitem_overload(df, ind):
                 for c in df.columns
             )
         return bodo.hiframes.dataframe_impl._gen_init_df(
-            func_text, df.columns, new_data, index, out_df_type=df
+            func_text,
+            df.columns,
+            new_data,
+            index,
         )
 
     # TODO: error-checking test

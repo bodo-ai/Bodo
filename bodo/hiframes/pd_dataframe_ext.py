@@ -79,14 +79,11 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.conversion import fix_arr_dtype, index_to_array
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
-from bodo.utils.transform import (
-    gen_const_tup,
-    get_const_func_output_type,
-    get_const_tup_vals,
-)
+from bodo.utils.transform import get_const_func_output_type, get_const_tup_vals
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
+    ColNamesMetaType,
     check_unsupported_args,
     create_unsupported_overload,
     decode_if_dict_array,
@@ -1117,7 +1114,7 @@ def init_runtime_cols_dataframe(
 
 
 @intrinsic
-def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
+def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
     """Create a DataFrame with provided data, index and columns values.
     Used as a single constructor for DataFrame and assigning its data, so that
     optimization passes can look for init_dataframe() to see if underlying
@@ -1131,15 +1128,24 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ=None):
     n_cols = len(data_tup_typ.types)
     if n_cols == 0:
         column_names = ()
-    # col_names_typ can be a TypeRef of the output dataframe type (new format to avoid
-    # passing a large tuple)
-    # NOTE: only column names of output dataframe type are used and have to be accurate
-    elif isinstance(col_names_typ, types.TypeRef):
-        column_names = col_names_typ.instance_type.columns
+
+    untyperefed_col_names_typ = (
+        col_names_typ.instance_type
+        if isinstance(col_names_typ, types.TypeRef)
+        else col_names_typ
+    )
+
+    # currently, col_names_typ should always be a metadata type,
+    # from which we can infer the column names.
+    # TODO: the two second branches should be removes durring the PR freese prior to the
+    # following the next major release (2022.6)
+    if isinstance(untyperefed_col_names_typ, ColNamesMetaType):
+        assert isinstance(untyperefed_col_names_typ.meta, tuple)
+        column_names = untyperefed_col_names_typ.meta
+    elif isinstance(untyperefed_col_names_typ, DataFrameType):
+        column_names = untyperefed_col_names_typ.columns
     else:
-        # using 'get_const_tup_vals' since column names are generated using
-        # 'gen_const_tup' which requires special handling for nested tuples
-        column_names = get_const_tup_vals(col_names_typ)
+        column_names = get_const_tup_vals(untyperefed_col_names_typ)
 
     # handle the new table format
     if n_cols == 1 and isinstance(data_tup_typ.types[0], TableType):
@@ -2151,18 +2157,20 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
     copy = get_overload_const(copy)
 
     col_args, data_args, index_arg = _get_df_args(data, index, columns, dtype, copy)
-    col_var = gen_const_tup(col_args)
+    col_var = ColNamesMetaType(tuple(col_args))
 
     func_text = (
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     )
-    func_text += (
-        "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, {})\n".format(
-            data_args, index_arg, col_var
-        )
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, __col_name_meta_value_pd_overload)\n".format(
+        data_args, index_arg, col_var
     )
     loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+    exec(
+        func_text,
+        {"bodo": bodo, "np": np, "__col_name_meta_value_pd_overload": col_var},
+        loc_vars,
+    )
     _init_df = loc_vars["_init_df"]
     return _init_df
 

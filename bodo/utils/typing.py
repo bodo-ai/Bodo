@@ -118,7 +118,6 @@ def decode_if_dict_array_overload(A):
             data_args,
             "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(A)",
             extra_globals={"decode_if_dict_array": decode_if_dict_array, "bodo": bodo},
-            out_df_type=to_str_arr_if_dict_array(A),
         )
         return impl
 
@@ -1219,6 +1218,16 @@ class MetaType(types.Type):
 
 
 register_model(MetaType)(models.OpaqueModel)
+
+# A subclass of MetaType that is used to pass around column names
+# This has no differences with MetaType, it exists purely to make the code more readable
+class ColNamesMetaType(MetaType):
+    def __init__(self, meta):
+        self.meta = meta
+        types.Type.__init__(self, f"ColNamesMetaType({meta})")
+
+
+register_model(ColNamesMetaType)(models.OpaqueModel)
 
 
 def is_literal_type(t):

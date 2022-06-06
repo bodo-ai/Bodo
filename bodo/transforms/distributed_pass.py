@@ -688,7 +688,8 @@ class DistributedPass:
                     extra_globals={"sklearn": sklearn},
                 )
 
-        if (func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
+        if (
+            func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
             and func_name == "log_loss"
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
@@ -714,9 +715,7 @@ class DistributedPass:
             nodes.append(ir.Assign(ir.Const(1e-15, rhs.loc), eps_var, rhs.loc))
             self.typemap[eps_var.name] = types.float64
             # eps cannot be specified positionally
-            eps = get_call_expr_arg(
-                "log_loss", rhs.args, kws, 1e6, "eps", eps_var
-            )
+            eps = get_call_expr_arg("log_loss", rhs.args, kws, 1e6, "eps", eps_var)
 
             # normalize argument
             normalize_var = ir.Var(
@@ -737,9 +736,7 @@ class DistributedPass:
                 mk_unique_var("log_loss_sample_weight"),
                 rhs.loc,
             )
-            nodes.append(
-                ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc)
-            )
+            nodes.append(ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc))
             self.typemap[sample_weight_var.name] = types.none
             # sample_weight cannot be specified positionally
             sample_weight = get_call_expr_arg(
@@ -752,9 +749,7 @@ class DistributedPass:
                 mk_unique_var("log_loss_labels"),
                 rhs.loc,
             )
-            nodes.append(
-                ir.Assign(ir.Const(None, rhs.loc), labels_var, rhs.loc)
-            )
+            nodes.append(ir.Assign(ir.Const(None, rhs.loc), labels_var, rhs.loc))
             self.typemap[labels_var.name] = types.none
             # labels cannot be specified positionally
             labels = get_call_expr_arg(
@@ -780,8 +775,8 @@ class DistributedPass:
                 extra_globals={"sklearn": sklearn},
             )
 
-
-        if (func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
+        if (
+            func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
             and func_name == "accuracy_score"
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
@@ -817,9 +812,7 @@ class DistributedPass:
                 mk_unique_var("accuracy_score_sample_weight"),
                 rhs.loc,
             )
-            nodes.append(
-                ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc)
-            )
+            nodes.append(ir.Assign(ir.Const(None, rhs.loc), sample_weight_var, rhs.loc))
             self.typemap[sample_weight_var.name] = types.none
             # sample_weight cannot be specified positionally
             sample_weight = get_call_expr_arg(
@@ -4062,7 +4055,7 @@ class DistributedPass:
 
         f_text = f"def f(s):\n  {pre_init_val}\n  return bodo.libs.distributed_api._root_rank_select(s, {init_val})"
         loc_vars = {}
-        exec(f_text, {}, loc_vars)
+        exec(f_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
         f = loc_vars["f"]
 
         return compile_func_single_block(

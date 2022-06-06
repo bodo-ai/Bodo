@@ -54,6 +54,7 @@ from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
+    ColNamesMetaType,
     decode_if_dict_array,
     is_overload_false,
     is_overload_none,
@@ -948,18 +949,20 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         n_cols = len(data.columns)
         # empty dataframe case
         if n_cols == 0:
+            __col_name_meta_value_gatherv_no_cols = ColNamesMetaType(())
 
             def impl(
                 data, allgather=False, warn_if_rep=True, root=MPI_ROOT
             ):  # pragma: no cover
                 index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)
                 g_index = bodo.gatherv(index, allgather, warn_if_rep, root)
-                return bodo.hiframes.pd_dataframe_ext.init_dataframe((), g_index, ())
+                return bodo.hiframes.pd_dataframe_ext.init_dataframe(
+                    (), g_index, __col_name_meta_value_gatherv_no_cols
+                )
 
             return impl
 
         data_args = ", ".join(f"g_data_{i}" for i in range(n_cols))
-        col_var = bodo.utils.transform.gen_const_tup(data.columns)
 
         func_text = (
             "def impl_df(data, allgather=False, warn_if_rep=True, root={}):\n".format(
@@ -979,18 +982,12 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                 Distribution.REP,
                 True,
             )
-            glbls = {
-                "bodo": bodo,
-                "df_type": out_df_type,
-            }
             data_args = "T2"
-            col_var = "df_type"
             func_text += (
                 "  T = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(data)\n"
             )
             func_text += "  T2 = bodo.gatherv(T, allgather, warn_if_rep, root)\n"
         else:
-            glbls = {"bodo": bodo}
             for i in range(n_cols):
                 func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(
                     i, i
@@ -1002,10 +999,14 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
         )
         func_text += "  g_index = bodo.gatherv(index, allgather, warn_if_rep, root)\n"
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, {})\n".format(
-            data_args, col_var
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, __col_name_meta_value_gatherv_with_cols)\n".format(
+            data_args
         )
         loc_vars = {}
+        glbls = {
+            "bodo": bodo,
+            "__col_name_meta_value_gatherv_with_cols": ColNamesMetaType(data.columns),
+        }
         exec(func_text, glbls, loc_vars)
         impl_df = loc_vars["impl_df"]
         return impl_df
@@ -1283,10 +1284,9 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
         func_text += "    if parallel:\n"
         func_text += "        delete_table(table_total)\n"
         data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
-        col_var = bodo.utils.transform.gen_const_tup(df.columns)
         index = "bodo.utils.conversion.index_from_array(out_arr_index)"
-        func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-            data_args, index, col_var
+        func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, __col_name_meta_value_rebalance)\n".format(
+            data_args, index
         )
     # Series case, create a table and pass to C++
     elif isinstance(data, bodo.hiframes.pd_series_ext.SeriesType):
@@ -1339,19 +1339,22 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
     else:
         raise BodoError(f"Type {data} not supported for bodo.rebalance")
     loc_vars = {}
+    glbls = {
+        "np": np,
+        "bodo": bodo,
+        "array_to_info": bodo.libs.array.array_to_info,
+        "shuffle_renormalization": bodo.libs.array.shuffle_renormalization,
+        "shuffle_renormalization_group": bodo.libs.array.shuffle_renormalization_group,
+        "arr_info_list_to_table": bodo.libs.array.arr_info_list_to_table,
+        "info_from_table": bodo.libs.array.info_from_table,
+        "info_to_array": bodo.libs.array.info_to_array,
+        "delete_table": bodo.libs.array.delete_table,
+    }
+    if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
+        glbls.update({"__col_name_meta_value_rebalance": ColNamesMetaType(df.columns)})
     exec(
         func_text,
-        {
-            "np": np,
-            "bodo": bodo,
-            "array_to_info": bodo.libs.array.array_to_info,
-            "shuffle_renormalization": bodo.libs.array.shuffle_renormalization,
-            "shuffle_renormalization_group": bodo.libs.array.shuffle_renormalization_group,
-            "arr_info_list_to_table": bodo.libs.array.arr_info_list_to_table,
-            "info_from_table": bodo.libs.array.info_from_table,
-            "info_to_array": bodo.libs.array.info_to_array,
-            "delete_table": bodo.libs.array.delete_table,
-        },
+        glbls,
         loc_vars,
     )
     impl = loc_vars["impl"]
@@ -2076,7 +2079,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         n_cols = len(data.columns)
         data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
-        col_var = bodo.utils.transform.gen_const_tup(data.columns)
+        __col_name_meta_scaterv_impl = ColNamesMetaType(data.columns)
 
         func_text = "def impl_df(data, send_counts=None, warn_if_dist=True):\n"
         for i in range(n_cols):
@@ -2092,11 +2095,16 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         func_text += (
             "  g_index = bodo.libs.distributed_api.scatterv_impl(index, send_counts)\n"
         )
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, {})\n".format(
-            data_args, col_var
-        )
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), g_index, __col_name_meta_scaterv_impl)\n"
         loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "__col_name_meta_scaterv_impl": __col_name_meta_scaterv_impl,
+            },
+            loc_vars,
+        )
         impl_df = loc_vars["impl_df"]
         return impl_df
 
@@ -3177,6 +3185,7 @@ def bcast_comm_impl(data, comm_ranks, nranks, root=MPI_ROOT):  # pragma: no cove
         n_cols = len(data.columns)
         data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
         col_var = bodo.utils.transform.gen_const_tup(data.columns)
+        ColNamesMetaType(("$_bodo_col2_",))
 
         func_text = f"def impl_df(data, comm_ranks, nranks, root={MPI_ROOT}):\n"
         for i in range(n_cols):

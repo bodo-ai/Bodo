@@ -57,6 +57,7 @@ from bodo.utils.typing import (
     BodoConstUpdatedError,
     BodoError,
     BodoWarning,
+    ColNamesMetaType,
     FilenameType,
     check_unsupported_args,
     get_literal_value,
@@ -1857,7 +1858,9 @@ class TypingTransforms:
             ", ".join("new_arg{}".format(i) for i in range(len(kws_key_val_list)))
         )
         impl = bodo.hiframes.dataframe_impl._gen_init_df(
-            header, tuple(name_col_total), data_args
+            header,
+            tuple(name_col_total),
+            data_args,
         )
 
         self.changed = True
@@ -2413,13 +2416,25 @@ class TypingTransforms:
         # Create the index + dataframe
         index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
         func_text = f"def _init_df({data_args[0]}, {data_args[1]}):\n"
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, df_type)\n"
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)\n"
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        exec(
+            func_text,
+            {"__col_name_meta_value_read_sql_table": ColNamesMetaType(df_type.columns)},
+            loc_vars,
+        )
         _init_df = loc_vars["_init_df"]
 
         nodes += compile_func_single_block(
-            _init_df, data_arrs, lhs, self, extra_globals={"df_type": df_type}
+            _init_df,
+            data_arrs,
+            lhs,
+            self,
+            extra_globals={
+                "__col_name_meta_value_read_sql_table": ColNamesMetaType(
+                    df_type.columns
+                )
+            },
         )
         # Mark the IR as changed
         self.changed = True

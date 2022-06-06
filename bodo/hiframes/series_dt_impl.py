@@ -28,6 +28,7 @@ from bodo.hiframes.pd_series_ext import (
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.utils.typing import (
     BodoError,
+    ColNamesMetaType,
     check_unsupported_args,
     create_unsupported_overload,
     raise_bodo_error,
@@ -345,12 +346,22 @@ def create_series_dt_df_output_overload(attr):
             )
         )
         arr_args = "(" + ", ".join(fields) + ")"
-        str_args = "('" + "', '".join(fields) + "')"
-        func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, index, {})\n".format(
-            arr_args, str_args
+        func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, index, __col_name_meta_value_series_dt_df_output)\n".format(
+            arr_args
         )
         loc_vars = {}
-        exec(func_text, {"bodo": bodo, "numba": numba, "np": np}, loc_vars)
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "numba": numba,
+                "np": np,
+                "__col_name_meta_value_series_dt_df_output": ColNamesMetaType(
+                    tuple(fields)
+                ),
+            },
+            loc_vars,
+        )
         impl = loc_vars["impl"]
         return impl
 

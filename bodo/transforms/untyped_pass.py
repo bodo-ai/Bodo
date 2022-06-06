@@ -48,6 +48,7 @@ from bodo.ir import csv_ext
 from bodo.ir import sql_ext
 from bodo.ir import json_ext
 from bodo.io.parquet_pio import ParquetHandler, _get_numba_typ_from_pa_typ
+from bodo.utils.typing import ColNamesMetaType
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
 import bodo.hiframes.pd_dataframe_ext
@@ -58,7 +59,6 @@ from bodo.utils.transform import (
     update_node_list_definitions,
     compile_func_single_block,
     get_call_expr_arg,
-    gen_const_tup,
     fix_struct_return,
     set_call_expr_arg,
 )
@@ -974,13 +974,22 @@ class UntypedPass:
         )
 
         func_text = f"def _init_df({data_args[0]}, {data_args[1]}):\n"
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, df_type)\n"
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_pd_read_sql)\n"
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        exec(
+            func_text,
+            {},
+            loc_vars,
+        )
         _init_df = loc_vars["_init_df"]
 
         nodes += compile_func_single_block(
-            _init_df, data_arrs, lhs, extra_globals={"df_type": df_type}
+            _init_df,
+            data_arrs,
+            lhs,
+            extra_globals={
+                "__col_name_meta_value_pd_read_sql": ColNamesMetaType(df_type.columns)
+            },
         )
         return nodes
 
@@ -1823,15 +1832,26 @@ class UntypedPass:
             nodes += [ir.Assign(data_arrs[0], lhs, lhs.loc)]
         else:
             func_text = f"def _type_func({data_args[0]}, {data_args[1]}):\n"
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((table_val,), {index_arg}, df_type)\n"
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((table_val,), {index_arg}, __col_name_meta_value_pd_read_csv)\n"
 
             loc_vars = {}
 
-            exec(func_text, {}, loc_vars)
+            exec(
+                func_text,
+                {},
+                loc_vars,
+            )
             _type_func = loc_vars["_type_func"]
 
             nodes += compile_func_single_block(
-                _type_func, data_arrs, lhs, extra_globals={"df_type": df_type}
+                _type_func,
+                data_arrs,
+                lhs,
+                extra_globals={
+                    "__col_name_meta_value_pd_read_csv": ColNamesMetaType(
+                        df_type.columns
+                    )
+                },
             )
         return nodes
 
@@ -2056,13 +2076,17 @@ class UntypedPass:
         )
 
         # Below we assume that the columns are strings
-        col_var = gen_const_tup(columns)
         func_text = "def _init_df({}):\n".format(", ".join(args))
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-            ", ".join(data_args), index_arg, col_var
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, __col_name_meta_value_pd_read_json)\n".format(
+            ", ".join(data_args),
+            index_arg,
         )
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        exec(
+            func_text,
+            {"__col_name_meta_value_pd_read_json": ColNamesMetaType(tuple(columns))},
+            loc_vars,
+        )
         _init_df = loc_vars["_init_df"]
 
         nodes += compile_func_single_block(_init_df, data_arrs, lhs)
@@ -2200,16 +2224,22 @@ class UntypedPass:
                 types.none if index_name is None else types.literal(index_name),
             )
 
-        out_df_type = DataFrameType(
-            tuple(col_types), index_typ, tuple(columns), is_table_format=True
-        )
         func_text = "def _init_df(T, index_arr):\n"
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, out_df_type)\n"
+        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, __col_name_meta_value_pq_read)\n"
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        exec(
+            func_text,
+            {},
+            loc_vars,
+        )
         _init_df = loc_vars["_init_df"]
         nodes += compile_func_single_block(
-            _init_df, data_arrs, lhs, extra_globals={"out_df_type": out_df_type}
+            _init_df,
+            data_arrs,
+            lhs,
+            extra_globals={
+                "__col_name_meta_value_pq_read": ColNamesMetaType(tuple(columns))
+            },
         )
         return nodes
 
