@@ -216,9 +216,37 @@ class DistributedPass:
 
         self.func_ir._definitions = build_definitions(self.func_ir.blocks)
 
-        # Run column pruning transformation from tables. This updates table source
-        # nodes.
-        remove_dead_table_columns(self.func_ir, self.typemap, self)
+        typing_info = bodo.compiler.TypingInfo(
+            self.typingctx,
+            self.targetctx,
+            self.typemap,
+            self.calltypes,
+            self.func_ir.loc,
+        )
+
+        # Run column pruning nd dead column elimination until there are no changes.
+        # This updates table source nodes. Iterative convergence between Dead Col Elimination and Dead Code Elimination
+        # is needed to enable pushing column pruning into IO nodes in some situations.
+        # See: https://bodo.atlassian.net/wiki/spaces/B/pages/1064927240/Removing+dead+setitem+s+and+iterative+convergence+between+Dead+code+elimination+and+dead+column+elimination+WIP
+        flag = True
+        while flag:
+            deadcode_elim_can_make_changes = remove_dead_table_columns(
+                self.func_ir, self.typemap, typing_info
+            )
+            deadcode_eliminated = False
+            # If dead columns are pruned, run dead code elimination until there are no changes
+            if deadcode_elim_can_make_changes:
+                # We extend numba's dead code eleminiation, through both remove_dead_extensions and in numba_compat.
+                # So we can use their remove_dead
+                while remove_dead(
+                    self.func_ir.blocks,
+                    self.func_ir.arg_names,
+                    self.func_ir,
+                    self.typemap,
+                ):
+                    deadcode_eliminated |= True
+            # If we eliminated dead code, run these two passes again
+            flag = deadcode_eliminated
 
         # transform
         self._gen_init_code(self.func_ir.blocks)

@@ -1449,6 +1449,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("set_table_data_null", "bodo.hiframes.table"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("sample_table_operation", "bodo.libs.array_kernels"):
             in_dist = Distribution(
                 min(

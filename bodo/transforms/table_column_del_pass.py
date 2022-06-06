@@ -18,7 +18,7 @@ from numba.core.ir_utils import find_topo_order, guard
 import bodo
 from bodo.hiframes.table import TableType, del_column, gen_table_filter
 from bodo.utils.transform import compile_func_single_block
-from bodo.utils.typing import is_list_like_index_type
+from bodo.utils.typing import get_overload_const_int, is_list_like_index_type
 from bodo.utils.utils import is_assign, is_expr
 
 
@@ -491,12 +491,18 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         col_num_set = block_use_map[table_var_name][0]
                         col_num_set.add(col_num)
                         continue
-                    elif fdef == ("set_table_data", "bodo.hiframes.table"):
-                        # set_table_data is treated like an alias
+                    elif fdef in (
+                        ("set_table_data", "bodo.hiframes.table"),
+                        (
+                            "set_table_data_null",
+                            "bodo.hiframes.table",
+                        ),
+                    ):
+                        # set_table_data and set_table_data_null is treated like an alias
                         rhs_name = rhs.args[0].name
                         assert isinstance(
                             typemap[rhs_name], TableType
-                        ), "Internal Error: Invalid set_table_data call"
+                        ), f"Internal Error: Invalid {fdef[0]} call"
                         if lhs_name not in equiv_vars:
                             equiv_vars[lhs_name] = set()
                         if rhs_name not in equiv_vars:
@@ -662,13 +668,16 @@ def _compute_table_column_live_map(cfg, blocks, typemap, column_uses):
 
 def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir):
     """remove dead table columns using liveness info."""
-    # List of tables that are updated at the source in this block.
+    # We return True if any changes were made that could
+    # allow for dead code elimination to make changes
     removed = False
+
+    # List of tables that are updated at the source in this block.
     # add statements in reverse order
     new_body = [block.terminator]
     for stmt in reversed(block.body[:-1]):
-        # Find all sources that create a table. Currently this is
-        # only written for read_csv support.
+        # Find all sources that create a table. Currently, this is only written for
+        # read_csv and read_parquet.
         if type(stmt) in remove_dead_column_extensions:
             f = remove_dead_column_extensions[type(stmt)]
             removed |= f(stmt, lives, equiv_vars, typemap)
@@ -687,11 +696,17 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir)
                     or isinstance(typemap[rhs.index.name], types.SliceType)
                 )
             ):
+                # In this case, we've encountered a getitem that filters
+                # the rows of a table. At this step, we can also
+                # filter out columns that are not live out of this statment.
+
                 # Compute all columns that are live at this statement.
                 used_columns = _find_used_columns(
                     lhs_name, typemap[rhs.value.name], lives, equiv_vars, typemap
                 )
                 if used_columns is None:
+                    # if used_columns is None it means all columns are used.
+                    # As such, we can't do any column pruning
                     new_body.append(stmt)
                     continue
                 filter_func = gen_table_filter(typemap[rhs.value.name], used_columns)
@@ -704,14 +719,21 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir)
                     extra_globals={"_filter_func": filter_func},
                 )
                 new_body += reversed(nodes)
+                # We do not set removed = True here, as this branch does not make
+                # any changes that could allow removal in dead code elimination.
                 continue
             elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "call":
                 fdef = guard(numba.core.ir_utils.find_callname, func_ir, rhs)
                 if fdef == ("generate_mappable_table_func", "bodo.utils.table_utils"):
+                    # In this case, if only a subset of the columns are live out of this maped table function,
+                    # we can pass this subset of columns to generate_mappable_table_func, which will allow generate_mappable_table_func
+                    # To ignore these columns when mapping the function onto the table.
                     used_columns = _find_used_columns(
                         lhs_name, typemap[rhs.args[0].name], lives, equiv_vars, typemap
                     )
                     if used_columns is None:
+                        # if used_columns is None it means all columns are used.
+                        # As such, we can't do any column pruning
                         new_body.append(stmt)
                         continue
                     args = rhs.args
@@ -725,7 +747,45 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir)
                         extra_globals={"used_columns": used_columns},
                     )
                     new_body += reversed(nodes)
+                    # We do not set removed = True here, as this branch does not make
+                    # any changes that could allow removal in dead code elimination.
                     continue
+                elif fdef == ("set_table_data", "bodo.hiframes.table"):
+                    # In this case, we have a set_table_data statement, where the set column is not used.
+                    # We can replace set_table_data with set_table_data_null, which is an equivalent statment that doesn't use the array
+                    # but still changes the type of the table. This will potentially allow for dead code elimination to do work
+
+                    # NOTE: In this case, we check the left hand table, because set_table_data can add new columns,
+                    # and check the right hand column would exclude any newly added columns from the used_columns list.
+                    # see test_table_extra_column
+                    used_columns = _find_used_columns(
+                        lhs_name, typemap[lhs_name], lives, equiv_vars, typemap
+                    )
+                    if used_columns is None:
+                        # if used_columns is None it means all columns are used.
+                        # As such, we can't do any column pruning
+                        new_body.append(stmt)
+                        continue
+                    set_col_num = get_overload_const_int(typemap[rhs.args[1].name])
+                    if set_col_num not in used_columns:
+                        nodes = compile_func_single_block(
+                            eval(
+                                "lambda table, idx: bodo.hiframes.table.set_table_data_null(table, idx, arr_typ)"
+                            ),
+                            [
+                                rhs.args[0],
+                                rhs.args[1],
+                            ],
+                            stmt.target,
+                            typing_info=typing_info,
+                            extra_globals={"arr_typ": typemap[rhs.args[2].name]},
+                        )
+                        new_body += reversed(nodes)
+                        removed = True
+                        continue
+                    else:
+                        new_body.append(stmt)
+                        continue
 
         new_body.append(stmt)
 
@@ -738,8 +798,11 @@ def remove_dead_table_columns(func_ir, typemap, typing_info):
     """
     Runs table liveness analysis and eliminates columns from TableType
     creation functions. This must be run before custom IR extensions are
-    transformed. Thie function returns if any columns were pruned.
+    transformed. Thie function returns if any changes were made that could
+    allow for dead code elimination to make changes.
     """
+    # We return True if any changes were made that could
+    # allow for dead code elimination to make changes
     removed = False
     # Only run remove_dead_columns if some table exists.
     run_dead_elim = False
@@ -762,7 +825,6 @@ def remove_dead_table_columns(func_ir, typemap, typing_info):
                 typing_info,
                 func_ir,
             )
-    # We return if anything is removed, but this is currently unused.
     return removed
 
 

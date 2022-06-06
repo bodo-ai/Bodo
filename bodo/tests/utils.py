@@ -1752,7 +1752,7 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
 
 def _create_many_column_file(filetype, indexcol=False, null_list=None):
     """
-    Helper function to create CSV file with 99 columns.
+    Helper function to create CSV or parquet file with 99 columns.
     """
     if bodo.get_rank() == 0:
         data_dict = {}
@@ -1771,11 +1771,13 @@ def _create_many_column_file(filetype, indexcol=False, null_list=None):
             df.iloc[null_list, :] = pd.NA
         if filetype == "csv":
             df.to_csv("many_columns.csv", index=indexcol)
-        elif filetype == "parquet":
+        elif filetype in ("parquet", "pq"):
             if isinstance(indexcol, str):
                 df.set_index(indexcol)
                 indexcol = True
             df.to_parquet("many_columns.parquet", index=indexcol)
+        else:
+            raise ValueError(f"filetype {filetype} not supported")
     bodo.barrier()
 
 
@@ -1791,6 +1793,8 @@ def _del_many_column_file(filetype):
             os.remove("many_columns.csv")
         elif filetype == "parquet":
             os.remove("many_columns.parquet")
+        else:
+            raise ValueError(f"filetype {filetype} not supported")
     bodo.barrier()
 
 

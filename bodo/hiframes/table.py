@@ -42,6 +42,7 @@ from bodo.utils.typing import (
     is_overload_true,
     to_str_arr_if_dict_array,
 )
+from bodo.utils.utils import is_array_typ
 
 
 class Table:
@@ -568,6 +569,7 @@ def set_table_data_codegen(
     NOTE: this assumes the input table is not used anymore so we can reuse its internal
     lists.
     """
+
     in_table = cgutils.create_struct_proxy(in_table_type)(context, builder, in_table)
     out_table = cgutils.create_struct_proxy(out_table_type)(context, builder)
     # Copy the length ptr
@@ -645,7 +647,7 @@ def set_table_data_codegen(
             offset = context.get_constant(
                 types.int64, out_table_type.block_offsets[col_ind]
             )
-            out_arr_list.setitem(offset, arr_arg, True)
+            out_arr_list.setitem(offset, arr_arg, incref=True)
         # case 5: remove old array value, insert new array value
         else:
             _rm_old_array(
@@ -731,6 +733,55 @@ def set_table_data(typingctx, table_type, ind_type, arr_type):
     return out_table_type(table_type, ind_type, arr_type), codegen
 
 
+@intrinsic
+def set_table_data_null(typingctx, table_type, ind_type, arr_type):
+    """Set input table colum to NULL and return a new table.
+    NOTE: this assumes the input table is not used anymore so we can reuse its internal
+    lists.
+    """
+    assert isinstance(table_type, TableType), "invalid input to set_table_data"
+    assert is_overload_constant_int(ind_type), "set_table_data_null expects const index"
+    assert isinstance(
+        arr_type, types.TypeRef
+    ), "invalid input to set_table_data_null, array type is not a typeref"
+    # Unwrap TypeRef
+    arr_type_unboxed = arr_type.instance_type
+    assert is_array_typ(
+        arr_type_unboxed
+    ), "invalid input to set_table_data_null, array type is not an array"
+
+    col_ind = get_overload_const_int(ind_type)
+    is_new_col = col_ind == len(table_type.arr_types)
+
+    out_arr_types = list(table_type.arr_types)
+    if is_new_col:
+        out_arr_types.append(arr_type_unboxed)
+    else:
+        out_arr_types[col_ind] = arr_type_unboxed
+    out_table_type = TableType(tuple(out_arr_types))
+
+    def codegen(context, builder, sig, args):
+        (
+            table_arg,
+            _,
+            _,
+        ) = args
+        out_table = set_table_data_codegen(
+            context,
+            builder,
+            table_type,
+            table_arg,
+            out_table_type,
+            arr_type_unboxed,
+            context.get_constant_null(arr_type_unboxed),
+            col_ind,
+            is_new_col,
+        )
+        return out_table
+
+    return out_table_type(table_type, ind_type, arr_type), codegen
+
+
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
     assert len(args) >= 1
     numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
@@ -754,7 +805,7 @@ def get_table_data_equiv(self, scope, equiv_set, loc, args, kws):
 
 ArrayAnalysis._analyze_op_call_bodo_hiframes_table_get_table_data = get_table_data_equiv
 
-# TODO: ArrayAnalysis for set_table_data?
+# TODO: ArrayAnalysis for set_table_data and set_table_data_null?
 
 
 @lower_constant(TableType)
