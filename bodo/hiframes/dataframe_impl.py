@@ -2498,23 +2498,24 @@ def _validate_arguments_mask_where(
             if df.columns[i] in other.column_index:
                 bodo.hiframes.series_impl._validate_self_other_mask_where(
                     func_name,
+                    "Series",
                     df.data[i],
                     other.data[other.column_index[df.columns[i]]],
                 )
             else:
                 # Essentially only validates df.data[i]
                 bodo.hiframes.series_impl._validate_self_other_mask_where(
-                    func_name, df.data[i], None, is_default=True
+                    func_name, "Series", df.data[i], None, is_default=True
                 )
     elif isinstance(other, SeriesType):
         for i in range(n_cols):
             bodo.hiframes.series_impl._validate_self_other_mask_where(
-                func_name, df.data[i], other.data
+                func_name, "Series", df.data[i], other.data
             )
     else:
         for i in range(n_cols):
             bodo.hiframes.series_impl._validate_self_other_mask_where(
-                func_name, df.data[i], other, max_ndim=2
+                func_name, "Series", df.data[i], other, max_ndim=2
             )
 
 

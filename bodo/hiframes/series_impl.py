@@ -3938,6 +3938,7 @@ def create_series_mask_where_overload(func_name):
         # Validate the inputs
         _validate_arguments_mask_where(
             f"Series.{func_name}",
+            "Series",
             S,
             cond,
             other,
@@ -3985,6 +3986,7 @@ _install_series_mask_where_overload()
 
 def _validate_arguments_mask_where(
     func_name,
+    module_name,
     S,
     cond,
     other,
@@ -3996,7 +3998,7 @@ def _validate_arguments_mask_where(
 ):
     """
     Helper function to perform the necessary error checking for
-    Series.where() and Series.mask().
+    Series.where(), Index.where(), Series.mask() and Index.putmask().
     """
     unsupported_args = dict(
         inplace=inplace, level=level, errors=errors, try_cast=try_cast
@@ -4007,16 +4009,23 @@ def _validate_arguments_mask_where(
         unsupported_args,
         arg_defaults,
         package_name="pandas",
-        module_name="Series",
+        module_name=module_name,
     )
     if not (is_overload_none(axis) or is_overload_zero(axis)):  # pragma: no cover
         raise_bodo_error(f"{func_name}(): axis argument not supported")
 
+    # Extracting the underlying array from the Series/Index, or making the
+    # implicit conversion to an integer array if it is a RangeIndex
+    if isinstance(S, bodo.hiframes.pd_index_ext.RangeIndexType):
+        arr = types.Array(types.int64, 1, "C")
+    else:
+        arr = S.data
+
     # Validating S and other:
     if isinstance(other, SeriesType):
-        _validate_self_other_mask_where(func_name, S.data, other.data)
+        _validate_self_other_mask_where(func_name, module_name, arr, other.data)
     else:
-        _validate_self_other_mask_where(func_name, S.data, other)
+        _validate_self_other_mask_where(func_name, module_name, arr, other)
 
     # Validating cond:
     # Check that cond is a supported array of booleans
@@ -4031,10 +4040,10 @@ def _validate_arguments_mask_where(
 
 
 def _validate_self_other_mask_where(
-    func_name, arr, other, max_ndim=1, is_default=False
+    func_name, module_name, arr, other, max_ndim=1, is_default=False
 ):  # should be arr
     """Helper function to perform the necessary error checking for
-    Series.where() and Series.mask()."""
+    Series.where(), Index.where(), Series.mask() and Index.putmask()."""
 
     # Bodo Limitation. Where/Mask is only supported for string/binary arrays, categorical + scalar, and numpy arrays
     if not (
@@ -4057,7 +4066,9 @@ def _validate_self_other_mask_where(
             ]
         )
     ):
-        raise BodoError(f"{func_name}() Series data with type {arr} not yet supported")
+        raise BodoError(
+            f"{func_name}() {module_name} data with type {arr} not yet supported"
+        )
 
     # Bodo Restriction: Strict typing limits the type of 'other'
     # Check that other is an accepted value and that its type matches.
@@ -4134,8 +4145,9 @@ def _validate_self_other_mask_where(
             and (isinstance(arr, BooleanArrayType) or isinstance(arr, IntegerArrayType))
         )
     ):
+
         raise BodoError(
-            f"{func_name}() 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Series."
+            f"{func_name}() 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for {module_name}."
         )
 
     # Check that the types match if not replacing with default value
@@ -4154,7 +4166,7 @@ def _validate_self_other_mask_where(
 
         if not val_is_nan and not (is_common_scalar_dtype([arr_typ, other_typ])):
             raise BodoError(
-                f"{func_name}() series and 'other' must share a common type."
+                f"{func_name}() {module_name.lower()} and 'other' must share a common type."
             )
 
 

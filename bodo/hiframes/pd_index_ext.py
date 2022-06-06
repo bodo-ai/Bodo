@@ -58,6 +58,7 @@ from bodo.utils.typing import (
     is_heterogeneous_tuple_type,
     is_iterable_type,
     is_overload_constant_int,
+    is_overload_constant_nan,
     is_overload_false,
     is_overload_none,
     is_overload_true,
@@ -4381,6 +4382,114 @@ def overload_range_index_isin(I, values):
     return impl
 
 
+@overload_method(NumericIndexType, "where", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "where", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "where", no_unliteral=True, inline="always")
+@overload_method(DatetimeIndexType, "where", no_unliteral=True, inline="always")
+@overload_method(TimedeltaIndexType, "where", no_unliteral=True, inline="always")
+# [BE-2910]: Only works if the elements from other are the same as (or a subset of) the categories
+@overload_method(CategoricalIndexType, "where", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "where", no_unliteral=True, inline="always")
+def overload_index_where(I, cond, other=np.nan):
+    """Add support for Index.where() on tagged Index types"""
+
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.where()")
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(other, "Index.where()")
+    bodo.hiframes.series_impl._validate_arguments_mask_where(
+        "where",
+        "Index",
+        I,
+        cond,
+        other,
+        inplace=False,
+        axis=None,
+        level=None,
+        errors="raise",
+        try_cast=False,
+    )
+
+    if is_overload_constant_nan(other):
+        other_str = "None"
+    else:
+        other_str = "other"
+
+    func_text = "def impl(I, cond, other=np.nan):\n"
+    if isinstance(I, RangeIndexType):
+        func_text += "  arr = np.arange(I._start, I._stop, I._step)\n"
+        constructor = "init_numeric_index"
+    else:
+        func_text += "  arr = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
+    func_text += "  name = bodo.hiframes.pd_index_ext.get_index_name(I)\n"
+    func_text += (
+        f"  out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, {other_str})\n"
+    )
+    func_text += f"  return constructor(out_arr, name)\n"
+    loc_vars = {}
+    constructor = (
+        init_numeric_index
+        if isinstance(I, RangeIndexType)
+        else get_index_constructor(I)
+    )
+    exec(func_text, {"bodo": bodo, "np": np, "constructor": constructor}, loc_vars)
+    impl = loc_vars["impl"]
+
+    return impl
+
+
+@overload_method(NumericIndexType, "putmask", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "putmask", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "putmask", no_unliteral=True, inline="always")
+@overload_method(DatetimeIndexType, "putmask", no_unliteral=True, inline="always")
+@overload_method(TimedeltaIndexType, "putmask", no_unliteral=True, inline="always")
+# [BE-2910]: Only works if the elements from other are the same as (or a subset of) the categories
+@overload_method(CategoricalIndexType, "putmask", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "putmask", no_unliteral=True, inline="always")
+def overload_index_putmask(I, cond, other):
+    """Add support for Index.putmask() on tagged Index types"""
+
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.putmask()")
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(other, "Index.putmask()")
+    bodo.hiframes.series_impl._validate_arguments_mask_where(
+        "putmask",
+        "Index",
+        I,
+        cond,
+        other,
+        inplace=False,
+        axis=None,
+        level=None,
+        errors="raise",
+        try_cast=False,
+    )
+
+    if is_overload_constant_nan(other):
+        other_str = "None"
+    else:
+        other_str = "other"
+
+    func_text = "def impl(I, cond, other):\n"
+    func_text += "  cond = ~cond\n"
+    if isinstance(I, RangeIndexType):
+        func_text += "  arr = np.arange(I._start, I._stop, I._step)\n"
+    else:
+        func_text += "  arr = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
+    func_text += "  name = bodo.hiframes.pd_index_ext.get_index_name(I)\n"
+    func_text += (
+        f"  out_arr = bodo.hiframes.series_impl.where_impl(cond, arr, {other_str})\n"
+    )
+    func_text += f"  return constructor(out_arr, name)\n"
+    loc_vars = {}
+    constructor = (
+        init_numeric_index
+        if isinstance(I, RangeIndexType)
+        else get_index_constructor(I)
+    )
+    exec(func_text, {"bodo": bodo, "np": np, "constructor": constructor}, loc_vars)
+    impl = loc_vars["impl"]
+
+    return impl
+
+
 # TODO(ehsan): test
 @overload(operator.getitem, no_unliteral=True)
 def overload_heter_index_getitem(I, ind):  # pragma: no cover
@@ -4576,7 +4685,6 @@ index_unsupported_methods = [
     "item",
     "join",
     "memory_usage",
-    "putmask",
     "ravel",
     "reindex",
     "repeat",
@@ -4602,7 +4710,6 @@ index_unsupported_methods = [
     "union",
     "value_counts",
     "view",
-    "where",
 ]
 
 index_unsupported_atrs = [
@@ -4683,6 +4790,8 @@ interval_idx_unsupported_methods = [
     "isnull",
     "map",
     "isin",
+    "where",
+    "putmask",
     "nunique",
 ]
 
@@ -4722,6 +4831,8 @@ multi_index_unsupported_methods = [
     "map",
     "isin",
     "unique",
+    "where",
+    "putmask",
     "nunique",
 ]
 
@@ -4815,6 +4926,16 @@ binary_index_unsupported_atrs = [
     "is_monotonic",
     "is_monotonic_increasing",
     "is_monotonic_decreasing",
+]
+
+period_index_unsupported_methods = [
+    "asfreq",
+    "strftime",
+    "to_timestamp",
+    "isin",
+    "unique",
+    "where",
+    "putmask",
 ]
 
 index_types = [
