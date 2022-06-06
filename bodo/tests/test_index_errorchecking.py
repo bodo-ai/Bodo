@@ -479,6 +479,58 @@ def test_interval_index_from_breaks():
         bodo.jit(impl)()
 
 
+def test_argmin_argmax_edgecases():
+    def impl1(I):
+        return I.argmin()
+
+    def impl2(I):
+        return I.argmax()
+
+    def impl3(I):
+        return I.argmin(axis=1)
+
+    def impl4(I):
+        return I.argmax(axis=1)
+
+    def impl5(I):
+        return I.argmin(skipna=False)
+
+    def impl6(I):
+        return I.argmax(skipna=False)
+
+    err_msg1 = re.escape("Index.argmin(): only ordered categoricals are possible")
+    err_msg2 = re.escape("Index.argmax(): only ordered categoricals are possible")
+    err_msg3 = re.escape("Index.argmin(): axis parameter only supports default value 0")
+    err_msg4 = re.escape("Index.argmax(): axis parameter only supports default value 0")
+    err_msg5 = re.escape(
+        "Index.argmin(): skipna parameter only supports default value True"
+    )
+    err_msg6 = re.escape(
+        "Index.argmax(): skipna parameter only supports default value True"
+    )
+
+    I1 = pd.CategoricalIndex(list("ABCAACAB"))
+    I2 = pd.Index([1, 5, 2, 1, 0, 1, 5, 2, 1, 3])
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl1)(I1)
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl2)(I1)
+
+    with pytest.raises(BodoError, match=err_msg3):
+        bodo.jit(impl3)(I2)
+
+    with pytest.raises(BodoError, match=err_msg4):
+        bodo.jit(impl4)(I2)
+
+    with pytest.raises(BodoError, match=err_msg5):
+        bodo.jit(impl5)(I2)
+
+    with pytest.raises(BodoError, match=err_msg6):
+        bodo.jit(impl6)(I2)
+
+
 @pytest.mark.slow
 def test_range_index_from_range():
     def impl():
