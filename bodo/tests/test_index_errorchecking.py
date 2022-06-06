@@ -493,6 +493,64 @@ def test_range_index_from_range():
         bodo.jit(impl)()
 
 
+@pytest.mark.slow
+def test_where_args():
+    def impl(I, C, O):
+        return I.where(C, O)
+
+    err_msg1 = re.escape("where() index and 'other' must share a common type.")
+    err_msg2 = re.escape(
+        "where() 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Index."
+    )
+
+    I = pd.Index([1, 8, -9, 0, 3, 1, 9, -8])
+    C = pd.array([True, False] * 4)
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl)(I, C, None)
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl)(I, C, "A")
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl)(I, C, list(range(8)))
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl)(I, C, I)
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl)(I, C, pd.Series(list("ABCDEFGH")))
+
+
+@pytest.mark.slow
+def test_putmask_args():
+    def impl(I, C, O):
+        return I.putmask(C, O)
+
+    err_msg1 = re.escape("putmask() index and 'other' must share a common type.")
+    err_msg2 = re.escape(
+        "putmask() 'other' must be a scalar, non-categorical series, 1-dim numpy array or StringArray with a matching type for Index."
+    )
+
+    I = pd.Index([1, 8, -9, 0, 3, 1, 9, -8])
+    C = pd.array([True, False] * 4)
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl)(I, C, None)
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl)(I, C, "A")
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl)(I, C, list(range(8)))
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl)(I, C, I)
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl)(I, C, pd.Series(list("ABCDEFGH")))
+
+
 def check_unsupported_atr(idx_format_str, idx_val, unsupported_atr):
     func_text = f"""
 def impl(I):

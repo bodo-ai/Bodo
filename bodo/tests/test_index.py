@@ -1911,6 +1911,224 @@ def test_index_unique(idx):
 
 
 @pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Index([1, 5, 2, 1, 0, 1, 5, 2, 1, 3]),
+                pd.array([True, False] * 5),
+                pd.Series([-1, -2, -3, -4, -5] * 2),
+            ),
+        ),
+        pytest.param(
+            (
+                pd.Index([1.0, 2.0, 3.0, 2.0, 1.0]),
+                pd.array([True, True, False, False, False]),
+                pd.Series([0.1, 0.2, 0.3, 0.4, 0.5]),
+            ),
+        ),
+        # Unskip after [BE-2811] Resolved
+        pytest.param(
+            (
+                pd.Index([bool((i % 3 == 0) or (i % 5 == 0)) for i in range(20)]),
+                pd.array([bool((i % 4 == 0) or (i % 7 == 0)) for i in range(20)]),
+                pd.Series([bool((i % 6 == 0) or (i % 9 == 0)) for i in range(20)]),
+            ),
+            marks=pytest.mark.skip,
+        ),
+        pytest.param(
+            (
+                pd.Index(list("ABCDEFGHIJ")),
+                pd.array([True, False, True, True, False] * 2),
+                pd.Series(list("abcdefghij")),
+            ),
+        ),
+        pytest.param(
+            (
+                pd.Index(
+                    [
+                        bytes(chr(i + k) + chr(j), "utf-8")
+                        for k in range(2)
+                        for i in range(65, 69)
+                        for j in range(66, 68)
+                    ]
+                ),
+                pd.array(
+                    [
+                        bool((i % 10 == 0) or (i % 7 == 0) or (i % 13 == 0))
+                        for i in range(16)
+                    ]
+                ),
+                pd.Series([bytes(chr(k), "utf-8") for k in range(49, 57)] * 2),
+            ),
+        ),
+        pytest.param(
+            (
+                pd.Index(pd.date_range("2018-01-01", "2019-01-01", periods=12)),
+                pd.array([True, False, False, True, True, False] * 2),
+                pd.Series([pd.Timestamp(f"200{i}-01-01") for i in range(6)] * 2),
+            ),
+        ),
+        pytest.param(
+            (
+                pd.TimedeltaIndex(
+                    [
+                        f"{amt} {unit}"
+                        for amt in range(1, 4)
+                        for unit in ["minutes", "hours"]
+                    ]
+                ),
+                pd.array([True, True, False, True, False, True]),
+                pd.Series(
+                    pd.TimedeltaIndex(
+                        [
+                            f"{amt} {unit}"
+                            for amt in range(1, 3)
+                            for unit in ["seconds", "minutes", "hours"]
+                        ]
+                    )
+                ),
+            ),
+        ),
+        pytest.param(
+            (
+                pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3, 1, 5, 2, 5, 1]),
+                pd.array([False, True, True, True, False] * 3),
+                pd.Series([0, 1, 2, 3, 5] * 3),
+            ),
+        ),
+        pytest.param(
+            (
+                pd.CategoricalIndex(list("abcaacab")),
+                pd.array([False, True, False, True] * 2),
+                pd.Series(list("cbcbbcbc")),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.CategoricalIndex(list("abcaacab")),
+                pd.array([False, False, True, True] * 2),
+                pd.Series(list("cabcabca")),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        # Unskip after [BE-2910] is resolved
+        pytest.param(
+            (
+                pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3, 1, 5, 2, 5, 1]),
+                pd.array([False, True, True, True, False] * 3),
+                pd.Series(list(range(12))),
+            ),
+            marks=pytest.mark.skip,
+        ),
+        # Unskip after [BE-2910] is resolved
+        pytest.param(
+            (
+                pd.CategoricalIndex(list("abcaacab")),
+                pd.array([False, True, False, True] * 2),
+                pd.Series(pd.CategoricalIndex(list("cacacaca"))),
+            ),
+            marks=pytest.mark.skip,
+        ),
+        # Unskip after [BE-2910] is resolved
+        pytest.param(
+            (
+                pd.CategoricalIndex(list("abcaacab")),
+                pd.array([False, True, False, True] * 2),
+                pd.Series(pd.CategoricalIndex(list("ABCABCAB"))),
+            ),
+            marks=pytest.mark.skip,
+        ),
+        pytest.param(
+            (
+                pd.RangeIndex(0, 10, 1),
+                pd.array([bool((i % 3 == 0) or (i % 4 == 0)) for i in range(10)]),
+                pd.Series(list(range(0, 20, 2))),
+            ),
+        ),
+        pytest.param(
+            (
+                pd.RangeIndex(0, 20, 2),
+                pd.array([bool((i % 3 == 0) or (i % 4 == 0)) for i in range(10)]),
+                pd.Series(list(range(-1, -11, -1))),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.RangeIndex(0, -100, -15),
+                pd.array([True, True, False, False, True, True, False]),
+                pd.Series(list(range(0, 100, 15))),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.RangeIndex(100, -101, -25),
+                pd.array([True, False, True] * 3),
+                pd.Series([42, 72, -16] * 3),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Index([1, 2, 3, 4, 5]),
+                pd.array([True, False, False, True, True]),
+                pd.Series([0.1, 0.2, 0.3, 0.4, 0.5]),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Index([0.1, 0.2, 0.3, 0.4, 0.5]),
+                pd.array([False, True, True, False, True]),
+                pd.Series([1, 2, 3, 4, 5]),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Index([1, 2, 3, 4, 5]),
+                pd.array([True, False, True, False, True]),
+                np.array([10, 20, 30, 40, 50]),
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_index_where_putmask(args):
+    def impl1(idx, con):
+        return idx.where(con)
+
+    def impl2(idx, con, oth):
+        return idx.where(con, oth)
+
+    def impl3(idx, con, oth):
+        return idx.putmask(con, oth)
+
+    idx, con, oth = args
+    # Non-simple RangeIndex distributed nunique not supported yet [BE-2944]
+    dist_test = not (
+        isinstance(idx, pd.RangeIndex) and (idx.start != 0 or idx.step != 1)
+    )
+    check_func(impl1, (idx, con), dist_test=dist_test)
+    if isinstance(
+        idx,
+        (
+            pd.core.indexes.numeric.Int64Index,
+            pd.core.indexes.numeric.Float64Index,
+            pd.RangeIndex,
+        ),
+    ):
+        check_func(impl2, (idx, con, np.nan), dist_test=dist_test)
+    check_func(impl2, (idx, con, oth), dist_test=dist_test)
+    check_func(impl2, (idx, con, oth[0]), dist_test=dist_test)
+    check_func(impl3, (idx, con, oth), dist_test=dist_test)
+    check_func(impl3, (idx, con, oth[0]), dist_test=dist_test)
+
+
+@pytest.mark.parametrize(
     "idx",
     [
         pd.Index([1, 2, 3, 4, 5]),
@@ -2391,12 +2609,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_memory_usage)(idx=pd.Index(data))
 
-    def test_putmask(idx):
-        return idx.putmask()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_putmask)(idx=pd.Index(data))
-
     def test_ravel(idx):
         return idx.ravel()
 
@@ -2546,12 +2758,6 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_view)(idx=pd.Index(data))
-
-    def test_where(idx):
-        return idx.where()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_where)(idx=pd.Index(data))
 
 
 def test_heter_index_binop():
