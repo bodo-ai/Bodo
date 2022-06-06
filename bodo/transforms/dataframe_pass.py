@@ -50,6 +50,7 @@ from bodo.utils.transform import (
 )
 from bodo.utils.typing import (
     BodoError,
+    ColNamesMetaType,
     get_literal_value,
     get_overload_const_func,
     get_overload_const_list,
@@ -234,7 +235,7 @@ class DataFramePass:
                 # TODO: test more than 2 levels
                 new_names.append(v[1] if len(v) == 2 else v[1:])
                 new_data.append(self._get_dataframe_data(rhs.value, v, nodes))
-            _init_df = _gen_init_df(new_names, "index")
+            _init_df = _gen_init_df_dataframe_pass(new_names, "index")
             return nodes + compile_func_single_block(
                 _init_df, new_data + [index], assign.target, self
             )
@@ -682,15 +683,23 @@ class DataFramePass:
             )
         if is_df_output:
             data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
-            col_names = gen_const_tup(self.typemap[lhs.name].columns)
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), df_index, {col_names})\n"
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), df_index, __col_name_meta_value_dataframe_apply)\n"
         else:
             func_text += (
                 "  return bodo.hiframes.pd_series_ext.init_series(S0, df_index, None)\n"
             )
 
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        glbls = {}
+        if is_df_output:
+            glbls.update(
+                {
+                    "__col_name_meta_value_dataframe_apply": ColNamesMetaType(
+                        self.typemap[lhs.name].columns
+                    )
+                }
+            )
+        exec(func_text, glbls, loc_vars)
         f = loc_vars["f"]
 
         nodes = []
@@ -698,22 +707,24 @@ class DataFramePass:
         df_index_var = self._get_dataframe_index(df_var, nodes)
         map_func = bodo.compiler.udf_jit(func)
 
-        glbs = {
-            "numba": numba,
-            "np": np,
-            "bodo": bodo,
-            "map_func": map_func,
-            "init_nested_counts": bodo.utils.indexing.init_nested_counts,
-            "add_nested_counts": bodo.utils.indexing.add_nested_counts,
-        }
+        glbls.update(
+            {
+                "numba": numba,
+                "np": np,
+                "bodo": bodo,
+                "map_func": map_func,
+                "init_nested_counts": bodo.utils.indexing.init_nested_counts,
+                "add_nested_counts": bodo.utils.indexing.add_nested_counts,
+            }
+        )
         for i in range(n_out_cols):
-            glbs[f"_arr_typ{i}"] = out_arr_types[i]
+            glbls[f"_arr_typ{i}"] = out_arr_types[i]
 
         return replace_func(
             self,
             f,
             col_vars + [df_index_var] + extra_args,
-            extra_globals=glbs,
+            extra_globals=glbls,
             pre_nodes=nodes,
         )
 
@@ -828,7 +839,7 @@ class DataFramePass:
         in_df_index_name = self._get_index_name(in_df_index, nodes)
         out_index = self._gen_index_from_array(out_index_var, in_df_index_name, nodes)
 
-        _init_df = _gen_init_df(df_typ.columns, "index")
+        _init_df = _gen_init_df_dataframe_pass(df_typ.columns, "index")
 
         # XXX the order of output variables passed should match out_typ.columns
         out_arrs = []
@@ -1184,19 +1195,28 @@ class DataFramePass:
         func_text += f"  {new_arr_arg} = bodo.utils.conversion.coerce_to_array({new_arr_arg}, scalar_to_arr_len=len(df))\n"
         if df_typ.is_table_format:
             func_text += f"  T2 = bodo.hiframes.table.set_table_data(T1, {col_ind}, {new_arr_arg})\n"
-            func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), {df_index}, out_df_type)\n"
+            func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T2,), {df_index}, __col_name_meta_value_set_df_column)\n"
             func_text += f"  return df\n"
         else:
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), {df_index}, out_df_type)\n"
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args},), {df_index}, __col_name_meta_value_set_df_column)\n"
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        __col_name_meta_value_set_df_column = ColNamesMetaType(out_df_type.columns)
+        exec(
+            func_text,
+            {
+                "__col_name_meta_value_set_df_column": __col_name_meta_value_set_df_column
+            },
+            loc_vars,
+        )
         _init_df = loc_vars["_init_df"]
         return replace_func(
             self,
             _init_df,
             in_arrs + [df_index_var, df_var, new_arr],
             pre_nodes=nodes,
-            extra_globals={"out_df_type": out_df_type},
+            extra_globals={
+                "__col_name_meta_value_set_df_column": __col_name_meta_value_set_df_column
+            },
         )
 
     def _run_call_len(self, lhs, df_var, assign):
@@ -1356,9 +1376,9 @@ class DataFramePass:
             )
             out_arrs = [v for c, v in out_data_vars.items() if c != "$_bodo_index_"]
             out_arrs.append(out_index)
-            _init_df = _gen_init_df(out_typ.columns, "index")
+            _init_df = _gen_init_df_dataframe_pass(out_typ.columns, "index")
         else:
-            _init_df = _gen_init_df(out_typ.columns)
+            _init_df = _gen_init_df_dataframe_pass(out_typ.columns)
 
         return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
 
@@ -1605,7 +1625,7 @@ class DataFramePass:
                 pre_nodes=nodes,
             )
 
-        _init_df = _gen_init_df(out_typ.columns, "index")
+        _init_df = _gen_init_df_dataframe_pass(out_typ.columns, "index")
 
         # XXX the order of output variables passed should match out_typ.columns
         out_vars = []
@@ -1694,12 +1714,13 @@ class DataFramePass:
         for a in key_names + col_names:
             func_text += f"  {a} = decode_if_dict_array({a})\n"
 
-        func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, {gen_const_tup(used_cols)})\n"
+        func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, __col_name_meta_value_inner)\n"
 
         func_text += f"  return _bodo_groupby_apply_impl(({key_name_args},), in_df, {extra_arg_names})\n"
 
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        glbls = {"__col_name_meta_value_inner": ColNamesMetaType(tuple(used_cols))}
+        exec(func_text, glbls, loc_vars)
         f = loc_vars["f"]
 
         nodes = []
@@ -1733,6 +1754,14 @@ class DataFramePass:
             "dist_reduce": bodo.libs.distributed_api.dist_reduce,
             "map_func": map_func,
         }
+        if isinstance(out_typ, DataFrameType):
+            glbs.update(
+                {
+                    "__col_name_meta_value_groupby_apply": ColNamesMetaType(
+                        tuple(out_typ.columns)
+                    )
+                }
+            )
         out_arr_types = out_typ.data
         out_arr_types = (
             out_arr_types if isinstance(out_typ, DataFrameType) else [out_arr_types]
@@ -1891,7 +1920,8 @@ class DataFramePass:
         func_text += "  ev_apply.finalize()\n"
 
         if isinstance(out_typ, DataFrameType):
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
+            # This column name metadata value is generated at the point of execution of the functext in _run_call_groupby_apply when the out type is a dataframe
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, __col_name_meta_value_groupby_apply)\n"
         else:
             func_text += f"  return bodo.hiframes.pd_series_ext.init_series(arrs0, out_index, None)\n"
         return func_text
@@ -2016,7 +2046,8 @@ class DataFramePass:
         else:
             func_text += "  ev.finalize()\n"
             func_text += "  ev_apply.finalize()\n"
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(out_typ.columns)})\n"
+            # This column name metadata value is generated at the point of execution of the functext in _run_call_groupby_apply when the out type is a dataframe
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, __col_name_meta_value_groupby_apply)\n"
 
         return func_text
 
@@ -2112,7 +2143,7 @@ class DataFramePass:
         )
         index_var = nodes[-1].target
 
-        _init_df = _gen_init_df(out_typ.columns, "index")
+        _init_df = _gen_init_df_dataframe_pass(out_typ.columns, "index")
 
         # XXX the order of output variables passed should match out_typ.columns
         out_vars = [df_out_vars[c] for c in out_typ.columns]
@@ -2198,7 +2229,7 @@ class DataFramePass:
         )
         nodes.append(agg_node)
 
-        _init_df = _gen_init_df(out_typ.columns, "index")
+        _init_df = _gen_init_df_dataframe_pass(out_typ.columns, "index")
 
         # XXX the order of output variables passed should match out_typ.columns
         out_vars = [df_out_vars[c] for c in out_typ.columns]
@@ -2442,7 +2473,7 @@ exec(func_text)
 numba.extending.register_jitable(globals()["_check_query_series_bool"])
 
 
-def _gen_init_df(columns, index=None):
+def _gen_init_df_dataframe_pass(columns, index=None):
     n_cols = len(columns)
     data_args = ", ".join("data{}".format(i) for i in range(n_cols))
     args = data_args
@@ -2453,15 +2484,20 @@ def _gen_init_df(columns, index=None):
     else:
         args += ", " + index
 
-    col_var = gen_const_tup(columns)
     func_text = "def _init_df({}):\n".format(args)
-    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, {})\n".format(
-        data_args, index, col_var
+    func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), {}, __col_name_meta_value_gen_init_df_2)\n".format(
+        data_args, index
     )
     loc_vars = {}
-    exec(func_text, {}, loc_vars)
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "__col_name_meta_value_gen_init_df_2": ColNamesMetaType(columns),
+        },
+        loc_vars,
+    )
     _init_df = loc_vars["_init_df"]
-
     return _init_df
 
 

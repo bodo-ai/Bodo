@@ -40,6 +40,7 @@ from bodo.hiframes.pd_dataframe_ext import (
 )
 from bodo.utils.typing import (
     BodoError,
+    ColNamesMetaType,
     check_unsupported_args,
     dtype_to_array_type,
     get_overload_const_list,
@@ -386,11 +387,14 @@ def overload_create_df(
     func_text += (
         "  index = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
     )
-    func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, {columns})\n"
+    func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, __col_name_meta_value_create_df)\n"
     func_text += f"  pdf = bodo.scatterv(pdf)\n"
     func_text += f"  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
     loc_vars = {}
-    _global = {"bodo": bodo}
+    _global = {
+        "bodo": bodo,
+        "__col_name_meta_value_create_df": ColNamesMetaType(tuple(columns)),
+    }
     for i in range(n_cols):
         # NOTE: may not work for categorical arrays
         _global[f"arr_typ{i}"] = arr_types[i]
@@ -539,10 +543,15 @@ def _gen_init_spark_df(func_text, out_data, out_col_names):
     func_text += (
         "  index = bodo.hiframes.pd_index_ext.init_range_index(0, n, 1, None)\n"
     )
-    func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, {tuple(out_col_names)})\n"
+    func_text += f"  pdf = bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, index, __col_name_meta_value_init_spark_df)\n"
     func_text += f"  return bodo.libs.pyspark_ext.init_spark_df(pdf)\n"
+
     loc_vars = {}
-    _global = {"bodo": bodo, "np": np}
+    _global = {
+        "bodo": bodo,
+        "np": np,
+        "__col_name_meta_value_init_spark_df": ColNamesMetaType(tuple(out_col_names)),
+    }
     exec(func_text, _global, loc_vars)
     impl = loc_vars["impl"]
     return impl

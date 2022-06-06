@@ -340,15 +340,10 @@ def test_pd_get_dummies(cat_arr_value, memory_leak_check):
     def test_impl(A):
         return pd.get_dummies(A)
 
-    # TODO: Support using pd.Timestamp, pd.Timedelta, float as a column name.
-    if isinstance(cat_arr_value[0], (pd.Timestamp, pd.Timedelta, float)):
-        py_output = test_impl(cat_arr_value)
-        py_output.columns = [str(c) for c in py_output.columns]
-    else:
-        py_output = None
-
     check_func(
-        test_impl, (cat_arr_value,), check_categorical=False, py_output=py_output
+        test_impl,
+        (cat_arr_value,),
+        check_categorical=False,
     )
 
 
@@ -357,15 +352,8 @@ def test_pd_get_dummies_series(cat_arr_value, memory_leak_check):
     def test_impl(S):
         return pd.get_dummies(S)
 
-    # TODO: Support using pd.Timestamp, pd.Timedelta, float as a column name.
-    if isinstance(cat_arr_value[0], (pd.Timestamp, pd.Timedelta, float)):
-        py_output = test_impl(cat_arr_value)
-        py_output.columns = [str(c) for c in py_output.columns]
-    else:
-        py_output = None
-
     S = pd.Series(cat_arr_value)
-    check_func(test_impl, (S,), check_categorical=False, py_output=py_output)
+    check_func(test_impl, (S,), check_categorical=False)
 
 
 # TODO(ehsan): add memory_leak_check when leaks in the literal case are resolved

@@ -93,13 +93,13 @@ from bodo.utils.transform import (
     avoid_udf_inline,
     compile_func_single_block,
     extract_keyvals_from_struct_map,
-    gen_const_tup,
     get_call_expr_arg,
     replace_func,
     update_locs,
 )
 from bodo.utils.typing import (
     BodoError,
+    ColNamesMetaType,
     MetaType,
     get_literal_value,
     get_overload_const_func,
@@ -3315,36 +3315,45 @@ class SeriesPass:
             func_text += (
                 f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"
             )
+        glbls = {}
         if is_df_output:
             data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
-            col_names = gen_const_tup(self.typemap[lhs.name].columns)
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), index, {col_names})\n"
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), index, __col_name_meta_value_series_map)\n"
+            glbls.update(
+                {
+                    "__col_name_meta_value_series_map": ColNamesMetaType(
+                        self.typemap[lhs.name].columns
+                    )
+                }
+            )
         else:
             func_text += (
                 "  return bodo.hiframes.pd_series_ext.init_series(S0, index, name)\n"
             )
 
         loc_vars = {}
-        exec(func_text, {}, loc_vars)
+        exec(func_text, glbls, loc_vars)
         f = loc_vars["f"]
         map_func = bodo.compiler.udf_jit(func)
-        glbs = {
-            "numba": numba,
-            "bodo": bodo,
-            "map_func": map_func,
-            "init_nested_counts": bodo.utils.indexing.init_nested_counts,
-            "add_nested_counts": bodo.utils.indexing.add_nested_counts,
-        }
+        glbls.update(
+            {
+                "numba": numba,
+                "bodo": bodo,
+                "map_func": map_func,
+                "init_nested_counts": bodo.utils.indexing.init_nested_counts,
+                "add_nested_counts": bodo.utils.indexing.add_nested_counts,
+            }
+        )
         for i in range(n_out_cols):
-            glbs[f"_arr_typ{i}"] = out_arr_types[i]
-            glbs[f"data_arr_type{i}"] = out_arr_types[i].dtype
+            glbls[f"_arr_typ{i}"] = out_arr_types[i]
+            glbls[f"data_arr_type{i}"] = out_arr_types[i].dtype
 
         args = [data, index, name] + extra_args
         return replace_func(
             self,
             f,
             args,
-            extra_globals=glbs,
+            extra_globals=glbls,
             pre_nodes=nodes,
         )
 

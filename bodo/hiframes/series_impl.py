@@ -50,9 +50,10 @@ from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArrayType
 from bodo.libs.str_ext import string_type
-from bodo.utils.transform import gen_const_tup, is_var_size_item_array_type
+from bodo.utils.transform import is_var_size_item_array_type
 from bodo.utils.typing import (
     BodoError,
+    ColNamesMetaType,
     can_replace,
     check_unsupported_args,
     dtype_to_array_type,
@@ -347,13 +348,15 @@ def overload_series_reset_index(S, level=None, drop=False, name=None, inplace=Fa
             "    index_arrs = bodo.hiframes.pd_index_ext.get_index_data(index)\n"
         )
     func_text += "    df_index = bodo.hiframes.pd_index_ext.init_range_index(0, len(S), 1, None)\n"
-    func_text += "    col_var = {}\n".format(gen_const_tup(columns))
-    func_text += f"    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({ind_arrs}, arr), df_index, col_var)\n"
+    func_text += f"    return bodo.hiframes.pd_dataframe_ext.init_dataframe(({ind_arrs}, arr), df_index, __col_name_meta_value_series_reset_index)\n"
     loc_vars = {}
     exec(
         func_text,
         {
             "bodo": bodo,
+            "__col_name_meta_value_series_reset_index": ColNamesMetaType(
+                tuple(columns)
+            ),
         },
         loc_vars,
     )
@@ -1902,6 +1905,8 @@ def overload_series_sort_index(
             "Series.sort_index(): 'na_position' should either be 'first' or 'last'"
         )
 
+    __col_name_meta_value_series_sort_index = ColNamesMetaType(("$_bodo_col3_",))
+
     # reusing dataframe sort_index() in implementation.
     # TODO(ehsan): use a direct kernel to avoid compilation overhead
     def impl(
@@ -1920,7 +1925,9 @@ def overload_series_sort_index(
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-            (arr,), index, ("$_bodo_col3_",)
+            (arr,),
+            index,
+            __col_name_meta_value_series_sort_index,
         )
         sorted_df = df.sort_index(
             ascending=ascending, inplace=inplace, na_position=na_position
@@ -1977,6 +1984,7 @@ def overload_series_sort_values(
             "Series.sort_values(): 'na_position' should either be 'first' or 'last'"
         )
 
+    __col_name_meta_value_series_sort_values = ColNamesMetaType(("$_bodo_col_",))
     # reusing dataframe sort_values() in implementation.
     # TODO(ehsan): use a direct kernel to avoid compilation overhead
     def impl(
@@ -1993,7 +2001,7 @@ def overload_series_sort_values(
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-            (arr,), index, ("$_bodo_col_",)
+            (arr,), index, __col_name_meta_value_series_sort_values
         )
         sorted_df = df.sort_values(
             ["$_bodo_col_"],
@@ -2265,7 +2273,7 @@ def overload_series_value_counts(
 
     # create a dummy dataframe to use groupby/count and sort_values
     func_text += "    in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(\n"
-    func_text += "        (arr,), index, ('$_bodo_col2_',)\n"
+    func_text += "        (arr,), index, __col_name_meta_value_series_value_counts\n"
     func_text += "    )\n"
     func_text += "    count_series = in_df.groupby('$_bodo_col2_').size()\n"
 
@@ -2307,6 +2315,9 @@ def overload_series_value_counts(
             "get_bin_labels": get_bin_labels,
             "get_output_bin_counts": get_output_bin_counts,
             "compute_bins": compute_bins,
+            "__col_name_meta_value_series_value_counts": ColNamesMetaType(
+                ("$_bodo_col2_",)
+            ),
         },
         loc_vars,
     )
@@ -2579,6 +2590,8 @@ def overload_series_groupby(
                 "Series.groupby(): MultiIndex case or 'level' other than 0 not supported yet"
             )
 
+        __col_name_meta_value_series_groupby = ColNamesMetaType((" ", ""))
+
         def impl_index(
             S,
             by=None,
@@ -2599,7 +2612,9 @@ def overload_series_groupby(
             # we use empty/single-space to simplify
             # TODO: FIX This. If there is a name Pandas copies it.
             df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-                (keys, arr), index, (" ", "")
+                (keys, arr),
+                index,
+                __col_name_meta_value_series_groupby,
             )
             return df.groupby(" ")[""]
 
@@ -2622,6 +2637,8 @@ def overload_series_groupby(
             "Series.groupby(): by argument with categorical type is not supported yet."
         )
 
+    __col_name_meta_value_series_groupby2 = ColNamesMetaType((" ", ""))
+
     def impl(
         S,
         by=None,
@@ -2642,7 +2659,9 @@ def overload_series_groupby(
         # we use empty/single-space to simplify
         # TODO: FIX This. If there is a name Pandas copies it.
         df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-            (keys, arr), index, (" ", "")
+            (keys, arr),
+            index,
+            __col_name_meta_value_series_groupby2,
         )
         return df.groupby(" ")[""]
 
@@ -5492,11 +5511,14 @@ def overload_series_to_frame(S, name=None):
 
     # Pandas sets output name to 0 if it is None
     out_name = 0 if out_name is None else out_name
+    __col_name_meta_value_series_to_frame = ColNamesMetaType((out_name,))
 
     def impl(S, name=None):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
-        return bodo.hiframes.pd_dataframe_ext.init_dataframe((arr,), index, (out_name,))
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (arr,), index, __col_name_meta_value_series_to_frame
+        )
 
     return impl
 

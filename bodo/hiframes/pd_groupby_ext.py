@@ -53,13 +53,10 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
-from bodo.utils.transform import (
-    gen_const_tup,
-    get_call_expr_arg,
-    get_const_func_output_type,
-)
+from bodo.utils.transform import get_call_expr_arg, get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
+    ColNamesMetaType,
     check_unsupported_args,
     create_unsupported_overload,
     dtype_to_array_type,
@@ -1829,7 +1826,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
 
     out_data = ", ".join(f"out_arr{i}" for i in range(n_cols))
     func_text += "  out_index = bodo.utils.conversion.index_from_array(out_arr_index)\n"
-    func_text += f"  out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, {gen_const_tup(df.columns)})\n"
+    func_text += f"  out_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({out_data},), out_index, __col_name_meta_value_df_shuffle)\n"
 
     func_text += "  return out_df, ({},), shuffle_info\n".format(
         ", ".join(f"out_key{i}" for i in range(n_keys))
@@ -1844,6 +1841,7 @@ def gen_shuffle_dataframe(df, keys, _is_parallel):
         "info_to_array": info_to_array,
         "delete_table": delete_table,
         "get_shuffle_info": get_shuffle_info,
+        "__col_name_meta_value_df_shuffle": ColNamesMetaType(df.columns),
         "ind_arr_typ": types.Array(types.int64, 1, "C")
         if isinstance(df.index, RangeIndexType)
         else df.index.data,

@@ -22,6 +22,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.io import csv_cpp
 from bodo.ir.csv_ext import _gen_read_csv_objmode, astype  # noqa
+from bodo.utils.typing import ColNamesMetaType
 from bodo.utils.utils import check_java_installation  # noqa
 from bodo.utils.utils import sanitize_varname
 
@@ -261,14 +262,16 @@ def gen_read_csv_objmode(csv_iterator_type):
         # Total is garbage if we have an index column but must be returned
         wrapper_func_text += "  total_size = 0\n"
         index_arg = f"bodo.utils.conversion.convert_to_index({total_names[1]}, {csv_iterator_type._index_name!r})"
-    wrapper_func_text += f"  return (bodo.hiframes.pd_dataframe_ext.init_dataframe(({total_names[0]},), {index_arg}, out_df_typ), total_size)\n"
+    wrapper_func_text += f"  return (bodo.hiframes.pd_dataframe_ext.init_dataframe(({total_names[0]},), {index_arg}, __col_name_meta_value_read_csv_objmode), total_size)\n"
     exec(
         wrapper_func_text,
         {
             "bodo": bodo,
             "objmode_func": objmode_func,
             "_op": np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value),
-            "out_df_typ": csv_iterator_type.yield_type,
+            "__col_name_meta_value_read_csv_objmode": ColNamesMetaType(
+                csv_iterator_type.yield_type.columns
+            ),
         },
         loc_vars,
     )

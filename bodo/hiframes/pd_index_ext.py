@@ -45,6 +45,7 @@ from bodo.libs.str_ext import string_type
 from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
+    ColNamesMetaType,
     check_unsupported_args,
     create_unsupported_overload,
     dtype_to_array_type,
@@ -1146,6 +1147,11 @@ def pd_timedelta_range_overload(
 
 @overload_method(DatetimeIndexType, "isocalendar", inline="always", no_unliteral=True)
 def overload_pd_timestamp_isocalendar(idx):
+
+    __col_name_meta_value_pd_timestamp_isocalendar = ColNamesMetaType(
+        ("year", "week", "day")
+    )
+
     def impl(idx):  # pragma: no cover
         A = bodo.hiframes.pd_index_ext.get_index_data(idx)
         numba.parfors.parfor.init_prange()
@@ -1165,7 +1171,7 @@ def overload_pd_timestamp_isocalendar(idx):
                 days[i],
             ) = bodo.utils.conversion.box_if_dt64(A[i]).isocalendar()
         return bodo.hiframes.pd_dataframe_ext.init_dataframe(
-            (years, weeks, days), idx, ("year", "week", "day")
+            (years, weeks, days), idx, __col_name_meta_value_pd_timestamp_isocalendar
         )
 
     return impl

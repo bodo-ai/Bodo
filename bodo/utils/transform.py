@@ -395,7 +395,8 @@ def compile_func_single_block(
     infer_types=True,
     run_untyped_pass=False,
     flags=None,
-    replace_globals=True,
+    replace_globals=False,
+    add_default_globals=True,
 ):
     """compiles functions that are just a single basic block.
     Does not handle defaults, freevars etc.
@@ -403,11 +404,22 @@ def compile_func_single_block(
     (could be the pass itself since not mutated).
     """
     # TODO: support recursive processing of compile function if necessary
-    glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd, "math": math}
+    if replace_globals:
+        glbls = {"numba": numba, "np": np, "bodo": bodo, "pd": pd, "math": math}
+    else:
+        glbls = func.__globals__
     if extra_globals is not None:
         glbls.update(extra_globals)
-    if not replace_globals:
-        glbls = func.__globals__
+    if add_default_globals:
+        glbls.update(
+            {
+                "numba": numba,
+                "np": np,
+                "bodo": bodo,
+                "pd": pd,
+                "math": math,
+            }
+        )
     loc = ir.Loc("", 0)
     if ret_var:
         loc = ret_var.loc

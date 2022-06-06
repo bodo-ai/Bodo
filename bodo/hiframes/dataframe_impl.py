@@ -78,6 +78,7 @@ from bodo.utils.transform import (
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
+    ColNamesMetaType,
     check_unsupported_args,
     dtype_to_array_type,
     ensure_constant_arg,
@@ -523,7 +524,6 @@ def overload_dataframe_copy(df, deep=True):
         df.columns,
         data_args,
         extra_globals=extra_globals,
-        out_df_type=out_df_type,
     )
 
 
@@ -656,7 +656,6 @@ def overload_dataframe_rename(
         new_cols,
         data_args,
         extra_globals=extra_globals,
-        out_df_type=out_df_type,
     )
 
 
@@ -802,7 +801,6 @@ def overload_dataframe_isna(df):
         df.columns,
         data_args,
         extra_globals=extra_globals,
-        out_df_type=out_df_type,
     )
 
 
@@ -928,7 +926,6 @@ def overload_dataframe_notna(df):
         df.columns,
         data_args,
         extra_globals=extra_globals,
-        out_df_type=out_df_type,
     )
 
 
@@ -1435,7 +1432,6 @@ def overload_dataframe_min(df, axis=None, skipna=None, level=None, numeric_only=
         module_name="DataFrame",
     )
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.min()")
-
     return _gen_reduce_impl(df, "min", axis=axis)
 
 
@@ -2520,7 +2516,11 @@ def _validate_arguments_mask_where(
 
 
 def _gen_init_df(
-    header, columns, data_args, index=None, extra_globals=None, out_df_type=None
+    header,
+    columns,
+    data_args,
+    index=None,
+    extra_globals=None,
 ):
     """generate a function that initializes a dataframe.
     'header' is the initial parts of the function text (defines data arrays etc.)
@@ -2533,18 +2533,21 @@ def _gen_init_df(
     if extra_globals is None:
         extra_globals = {}
 
-    if out_df_type is not None:
-        extra_globals["out_df_type"] = out_df_type
-        col_var = "out_df_type"
-    else:
-        col_var = gen_const_tup(columns)
+    meta_data = ColNamesMetaType(tuple(columns))
 
     data_args = "({}{})".format(data_args, "," if data_args else "")
 
-    func_text = f"{header}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, {index}, {col_var})\n"
+    func_text = f"{header}  return bodo.hiframes.pd_dataframe_ext.init_dataframe({data_args}, {index}, __col_name_meta_value_gen_init_df)\n"
     loc_vars = {}
-    _global = {"bodo": bodo, "np": np, "pd": pd, "numba": numba}
+    _global = {
+        "bodo": bodo,
+        "np": np,
+        "pd": pd,
+        "numba": numba,
+        "__col_name_meta_value_gen_init_df": meta_data,
+    }
     _global.update(extra_globals)
+
     exec(func_text, _global, loc_vars)
     impl = loc_vars["impl"]
     return impl
