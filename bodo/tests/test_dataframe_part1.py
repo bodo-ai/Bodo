@@ -17,6 +17,7 @@ import bodo
 from bodo.tests.dataframe_common import *  # noqa
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
+    _get_dist_arg,
     _test_equal,
     check_func,
     count_array_OneDs,
@@ -810,6 +811,31 @@ def test_random_shuffle(seed, data, memory_leak_check):
                 raise AssertionError
 
             _test_equal(res, data, sort_output=True)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("nitems, niters", [(13, 10000)])
+def test_random_shuffle_uniform(nitems, niters, memory_leak_check):
+    """Test that bodo.random_shuffle's output follows a uniform distribution"""
+
+    def impl(data):
+        return bodo.random_shuffle(data)
+
+    dist_impl = bodo.jit(distributed=["data"])(impl)
+
+    data = np.arange(nitems)
+    # Entry (i, j) indicates the frequency of element i moving to index j
+    output_freqs = np.zeros((nitems, nitems))
+
+    for _ in range(niters):
+        x = _get_dist_arg(data)
+        x = impl(x)
+        x = bodo.allgatherv(x)
+        for i in range(nitems):
+            output_freqs[i, x[i]] += 1
+    expected_freq = niters / nitems
+    assert np.all(3 / 4 * expected_freq < output_freqs)
+    assert np.all(output_freqs < 4 / 3 * expected_freq)
 
 
 @pytest.mark.parametrize(

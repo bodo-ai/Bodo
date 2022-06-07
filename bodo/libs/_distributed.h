@@ -761,29 +761,33 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
                       element_t, MPI_COMM_WORLD);
 
         // Let us assume that the global data array is [a b c d e f g h] and the
-        // permutation array that we would like to apply to it is [2 7 5 6 4 3 1
-        // 0]. Hence, the resultant permutation is [c h f g e d b a].  Assuming
-        // that there are two ranks, each receiving 4 data items, and we are
-        // rank 0, after MPI_Alltoallv returns, we receive the chunk [c f g h]
-        // that corresponds to the sorted chunk of our permutation, which is [2
-        // 5 6 7]. In order to recover the positions of [c f g h] in the target
-        // permutation we first argsort our chunk of permutation array:
-        auto begin = p + dist_get_start(p_len, num_ranks, rank);
-        int64_t size_after_shuffle =
-            dist_get_node_portion(p_len, num_ranks, rank);
-        auto p1 = arg_sort(begin, size_after_shuffle);
+        // permutation array that we want to apply is [2 7 5 6 4 3 1 0]. Then,
+        // the target output is [h g a f e c d b], where 'a' goes to the 2nd
+        // position, 'b' goes to the 7th position, and so on.
+        //
+        // Assuming that there are two ranks, each receiving 4 data items, and
+        // we are rank 1, after MPI_Alltoallv returns, we receive our chunk
+        // [b c d e] of the target output, where the elements are in the same
+        // order as the input.
+        //
+        // To transform [b c d e] into [e c d b], we filter the permutation
+        // array for elements in our chunk, then subtract the starting index
+        // of our chunk, to get a local permutation with values between 0 and
+        // chunk_size: [ 2 (7) (5) (6) (4) 3 1 0 ] => [7 5 6 4] => [3 1 2 0].
+        std::vector<size_t> my_p;
+        int64_t chunk_size = dist_get_node_portion(p_len, num_ranks, rank);
+        int64_t chunk_start = dist_get_start(p_len, num_ranks, rank);
+        my_p.reserve(chunk_size);
 
-        // The result of the argsort, stored in p1, is [0 2 3 1].  This tells us
-        // how the chunk we have received is different from the target
-        // permutation we want to achieve.  Hence, to achieve the target
-        // permutation, we need to sort our data chunk based on p1.  One way of
-        // sorting array A based on the values of array B, is to argsort array B
-        // and apply the permutation to array A.  Therefore, we argsort p1:
-        auto p2 = arg_sort(p1.data(), size_after_shuffle);
+        for (size_t i = 0; i < p_len; ++i) {
+            if (chunk_start <= p[i] && p[i] < chunk_start + chunk_size) {
+                my_p.push_back(p[i] - chunk_start);
+            }
+        }
 
-        // which gives us [0 3 1 2], and apply the resultant permutation to our
-        // data chunk to obtain the target permutation.
-        apply_permutation(lhs, elem_size, p2);
+        // We then apply the local permutation [3 1 2 0] to our data chunk
+        // [b c d e] to obtain the target output [e c d b].
+        apply_permutation(lhs, elem_size, my_p);
 
         MPI_Type_free(&element_t);
     } catch (const std::exception& e) {
