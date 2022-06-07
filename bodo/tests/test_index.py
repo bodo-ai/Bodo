@@ -2729,18 +2729,6 @@ def test_index_unsupported(data):
     Index methods
     """
 
-    def test_all(idx):
-        return idx.all()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_all)(idx=pd.Index(data))
-
-    def test_any(idx):
-        return idx.any()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_any)(idx=pd.Index(data))
-
     def test_append(idx):
         return idx.append()
 
@@ -3126,6 +3114,88 @@ def test_heter_index_binop():
     check_func(impl1, (), dist_test=False)
     check_func(impl2, (), dist_test=False)
     check_func(impl3, (), dist_test=False)
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([1, 3, 0, 3, 2]),
+        pd.Index([-2, -1, 0, 0, 0, 1, 2]),
+        pd.Index([0, 0, 0, 0, 0]),
+        pd.Index([5, 4, 3, 2, 1]),
+        pd.Index(pd.array([5, 4, None, 2, 1, None, None])),
+        pd.Index(pd.array([5, 0, None, 2, 1, 0, None])),
+        pd.Index(pd.array([0, 0, None, 0, 0, 0, None])),
+        pytest.param(pd.Index([0, -4, 2, -1, 3, 0, 0]), marks=pytest.mark.slow),
+        pytest.param(pd.Index([0, 1, 2, 3, 4, 5]), marks=pytest.mark.slow),
+        pytest.param(pd.Index([-2, -1]), marks=pytest.mark.slow),
+        pytest.param(pd.Index([-2, -1, 0]), marks=pytest.mark.slow),
+        pytest.param(pd.Index([-2, -1, 0, 1]), marks=pytest.mark.slow),
+        pytest.param(pd.Index([2, 1, 0]), marks=pytest.mark.slow),
+        pytest.param(pd.Index([2, 1, 0, 1, 2]), marks=pytest.mark.slow),
+        pd.Index([True, True, True, True, True]),
+        pd.Index([True, False, True, True, True]),
+        pd.Index([False, False, False, False, False]),
+        pd.Index([]),
+        pd.Index(["", "", "", "A", "B", "C"]),
+        pd.Index(["alpha", "beta", "gamma", "delta"]),
+        pd.Index(["", ""]),
+        pytest.param(
+            pd.Index(["cab", "ab", "b", "", "b", "ba", "bac"]), marks=pytest.mark.slow
+        ),
+        pd.Index([b"", b"", b"", b"A", b"B", b"C"]),
+        pd.Index([b"pi", b"theta", b"mu", b"kappa"]),
+        pd.Index([b"", b""]),
+        pytest.param(
+            pd.Index([b"cab", b"ab", b"b", b"", b"b", b"ba", b"bac"]),
+            marks=pytest.mark.slow,
+        ),
+        pd.RangeIndex(0, 10, 1),
+        pd.RangeIndex(-5, 5, 1),
+        pd.RangeIndex(-5, 5, 2),
+        pd.RangeIndex(-5, 0, 1),
+        pytest.param(pd.RangeIndex(0, 10, 3), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(0, 10, 50), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, 1), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, 3), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, 50), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(0, 10, -1), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(0, 10, -3), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(0, 10, -30), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, -1), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, -3), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, -30), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(5, -5, -1), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(5, -5, -2), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(5, 0, -1), marks=pytest.mark.slow),
+    ],
+)
+def test_index_any_all(index):
+    def impl1(index):
+        return index.any()
+
+    def impl2(index):
+        return index.all()
+
+    # Non-simple RangeIndex distributed any/all not supported yet [BE-2944]
+    dist_test = not (
+        isinstance(index, pd.RangeIndex) and (index.start != 0 or index.step != 1)
+    )
+
+    # Bodo diverges from the Pandas API for String & Binary Index by returning
+    # a boolean instead of a string.
+    if not isinstance(index.dtype, pd.Int64Dtype):
+        boolean_any = any(list(index))
+        boolean_all = all(list(index))
+        check_func(impl1, (index,), dist_test=dist_test, py_output=boolean_any)
+        check_func(impl2, (index,), dist_test=dist_test, py_output=boolean_all)
+        check_func(impl1, (index,), dist_test=dist_test, py_output=boolean_any)
+        check_func(impl2, (index,), dist_test=dist_test, py_output=boolean_all)
+    else:
+        check_func(impl1, (index,), dist_test=dist_test)
+        check_func(impl2, (index,), dist_test=dist_test)
+        check_func(impl1, (index,), dist_test=dist_test)
+        check_func(impl2, (index,), dist_test=dist_test)
 
 
 @pytest.mark.slow

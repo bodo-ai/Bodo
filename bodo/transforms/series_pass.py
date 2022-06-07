@@ -2695,6 +2695,8 @@ class SeriesPass:
         op = func_name.split("_")[-1]
 
         if op in (
+            "any",
+            "all",
             "isna",
             "count",
             "min",
