@@ -4027,8 +4027,252 @@ def overload_preprocessing_standard_scaler_inverse_transform(
     return _preprocessing_standard_scaler_inverse_transform_impl
 
 
-# -----------------------------------------------------------------------------
-# ---------------------------train_test_split--------------------------------------------------
+# ----------------------------------------------------------------------------------------
+# ------------------------------------ Max-Abs-Scaler ------------------------------------
+# Support for sklearn.preprocessing.MaxAbsScaler.
+# Currently only fit, partial_fit, transform, and inverse_transform are supported.
+# We use sklearn's transform and inverse_transform directly in their Bodo implementation.
+# For fit and partial_fit, we use a combination of sklearn's fit function and a native
+# implementation. We compute the max_abs and num_samples_seen on each rank using
+# sklearn's fit implementation, then we compute the global values for these using MPI.
+# ----------------------------------------------------------------------------------------
+
+
+class BodoPreprocessingMaxAbsScalerType(types.Opaque):
+    def __init__(self):
+        super(BodoPreprocessingMaxAbsScalerType, self).__init__(
+            name="BodoPreprocessingMaxAbsScalerType"
+        )
+
+
+preprocessing_max_abs_scaler_type = BodoPreprocessingMaxAbsScalerType()
+types.preprocessing_max_abs_scaler_type = preprocessing_max_abs_scaler_type
+
+register_model(BodoPreprocessingMaxAbsScalerType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.preprocessing.MaxAbsScaler)
+def typeof_preprocessing_max_abs_scaler(val, c):
+    return preprocessing_max_abs_scaler_type
+
+
+@box(BodoPreprocessingMaxAbsScalerType)
+def box_preprocessing_max_abs_scaler(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoPreprocessingMaxAbsScalerType)
+def unbox_preprocessing_max_abs_scaler(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload_attribute(BodoPreprocessingMaxAbsScalerType, "scale_")
+def get_max_abs_scaler_scale_(m):
+    """Overload scale_ attribute to be accessible inside bodo.jit"""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="float64[:]"):
+            result = m.scale_
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingMaxAbsScalerType, "max_abs_")
+def get_max_abs_scaler_max_abs_(m):
+    """Overload max_abs_ attribute to be accessible inside bodo.jit"""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="float64[:]"):
+            result = m.max_abs_
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingMaxAbsScalerType, "n_samples_seen_")
+def get_max_abs_scaler_n_samples_seen_(m):
+    """Overload n_samples_seen_ attribute to be accessible inside bodo.jit"""
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="int64"):
+            result = m.n_samples_seen_
+        return result
+
+    return impl
+
+
+@overload(sklearn.preprocessing.MaxAbsScaler, no_unliteral=True)
+def sklearn_preprocessing_max_abs_scaler_overload(copy=True):
+    """
+    Provide implementation for __init__ functions of MaxAbsScaler.
+    We simply call sklearn in objmode.
+    """
+
+    check_sklearn_version()
+
+    def _sklearn_preprocessing_max_abs_scaler_impl(copy=True):  # pragma: no cover
+        with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+            m = sklearn.preprocessing.MaxAbsScaler(copy=copy)
+        return m
+
+    return _sklearn_preprocessing_max_abs_scaler_impl
+
+
+def sklearn_preprocessing_max_abs_scaler_fit_dist_helper(m, X, partial=False):
+    """
+    Distributed calculation of max_abs for max abs scaler.
+    We use sklearn to calculate max_abs and n_samples_seen, then combine
+    the results appropriately to get the global max_abs and n_samples_seen.
+    """
+
+    comm = MPI.COMM_WORLD
+    num_pes = comm.Get_size()
+
+    # Call to get the max_abs and n_samples_seen
+    if partial:
+        m = m.partial_fit(X)
+    else:
+        m = m.fit(X)
+
+    # Compute global n_samples_seen
+    global_n_samples_seen = comm.allreduce(m.n_samples_seen_, op=MPI.SUM)
+    m.n_samples_seen_ = global_n_samples_seen
+
+    # Compute global max_abs
+    local_max_abs_by_rank = np.zeros(
+        (num_pes, *m.max_abs_.shape), dtype=m.max_abs_.dtype
+    )
+    comm.Allgather(m.max_abs_, local_max_abs_by_rank)
+    global_max_abs = np.nanmax(local_max_abs_by_rank, axis=0)
+
+    # Re-compute the rest of the attributes
+    m.scale_ = sklearn_handle_zeros_in_scale(global_max_abs)
+    m.max_abs_ = global_max_abs
+
+    return m
+
+
+@overload_method(BodoPreprocessingMaxAbsScalerType, "fit", no_unliteral=True)
+def overload_preprocessing_max_abs_scaler_fit(
+    m,
+    X,
+    y=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """
+    Provide implementations for the fit function.
+    In case input is replicated, we simply call sklearn,
+    else we use our native implementation.
+    """
+    if _is_data_distributed:
+        # If distributed, then use native implementation
+        def _preprocessing_max_abs_scaler_fit_impl(
+            m, X, y=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+                m = sklearn_preprocessing_max_abs_scaler_fit_dist_helper(
+                    m, X, partial=False
+                )
+            return m
+
+    else:
+        # If replicated, then just call sklearn
+        def _preprocessing_max_abs_scaler_fit_impl(
+            m, X, y=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+                m = m.fit(X, y)
+            return m
+
+    return _preprocessing_max_abs_scaler_fit_impl
+
+
+@overload_method(BodoPreprocessingMaxAbsScalerType, "partial_fit", no_unliteral=True)
+def overload_preprocessing_max_abs_scaler_partial_fit(
+    m,
+    X,
+    y=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """
+    Provide implementations for the partial_fit function.
+    In case input is replicated, we simply call sklearn,
+    else we use our native implementation.
+    """
+    if _is_data_distributed:
+        # If distributed, then use native implementation
+        def _preprocessing_max_abs_scaler_partial_fit_impl(
+            m, X, y=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+                m = sklearn_preprocessing_max_abs_scaler_fit_dist_helper(
+                    m, X, partial=True
+                )
+            return m
+
+    else:
+        # If replicated, then just call sklearn
+        def _preprocessing_max_abs_scaler_partial_fit_impl(
+            m, X, y=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="preprocessing_max_abs_scaler_type"):
+                m = m.partial_fit(X, y)
+            return m
+
+    return _preprocessing_max_abs_scaler_partial_fit_impl
+
+
+@overload_method(BodoPreprocessingMaxAbsScalerType, "transform", no_unliteral=True)
+def overload_preprocessing_max_abs_scaler_transform(
+    m,
+    X,
+):
+    """
+    Provide implementation for the transform function.
+    We simply call sklearn's transform on each rank.
+    """
+
+    def _preprocessing_max_abs_scaler_transform_impl(
+        m,
+        X,
+    ):  # pragma: no cover
+        with numba.objmode(transformed_X="float64[:,:]"):
+            transformed_X = m.transform(X)
+        return transformed_X
+
+    return _preprocessing_max_abs_scaler_transform_impl
+
+
+@overload_method(
+    BodoPreprocessingMaxAbsScalerType, "inverse_transform", no_unliteral=True
+)
+def overload_preprocessing_max_abs_scaler_inverse_transform(
+    m,
+    X,
+):
+    """
+    Provide implementation for the inverse_transform function.
+    We simply call sklearn's inverse_transform on each rank.
+    """
+
+    def _preprocessing_max_abs_scaler_inverse_transform_impl(
+        m,
+        X,
+    ):  # pragma: no cover
+        with numba.objmode(inverse_transformed_X="float64[:,:]"):
+            inverse_transformed_X = m.inverse_transform(X)
+        return inverse_transformed_X
+
+    return _preprocessing_max_abs_scaler_inverse_transform_impl
+
+
+# ----------------------------------------------------------------------------------------
+# ------------------------------------train_test_split------------------------------------
 def get_data_slice_parallel(data, labels, len_train):  # pragma: no cover
     """When shuffle=False, just split the data/labels using slicing.
     Run in bodo.jit to do it across ranks"""

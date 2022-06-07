@@ -982,13 +982,16 @@ class DistributedAnalysis:
             return
 
         if (
-            func_name in {"fit", "transform", "inverse_transform", "fit_transform"}
+            func_name in {
+                "fit", "partial_fit", "transform", "inverse_transform", "fit_transform"
+            }
             and "bodo.libs.sklearn_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
                 (
                     bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
+                    bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingRobustScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingLabelEncoderType,
@@ -2236,8 +2239,7 @@ class DistributedAnalysis:
     ):
         """
         Analyze distribution of sklearn.preprocessing.StandardScaler,
-        sklearn.preprocessing.MinMaxScaler, sklearn.preprocessing.RobustScaler functions
-        and sklearn.preprocessing.LabelEncoder functions.
+        MaxAbsScaler, MinMaxScaler, RobustScaler, and LabelEncoder functions.
         Only need to handle fit_transform, transform and inverse_transform. fit is handled automatically.
         """
 
