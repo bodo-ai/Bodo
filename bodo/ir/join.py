@@ -1278,7 +1278,16 @@ def _gen_local_hash_join(
             idx, key_type, f"t1_keys[{i}]", is_right, vect_same_key[i]
         )
         func_text += rec_typ[0]
-        func_text += f"    t1_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
+        glbs[f"out_type_{idx}"] = out_types[idx]
+        # use astype only if necessary due to merge bugs
+        # see: test_merge_match_key_types"
+        if (
+            key_type != left_key_types[i]
+            and left_key_types[i] != bodo.dict_str_arr_type
+        ):
+            func_text += f"    t1_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
+        else:
+            func_text += f"    t1_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
         idx += 1
     # Load the left data arrays
     for i, t in enumerate(left_other_names):
@@ -1296,7 +1305,18 @@ def _gen_local_hash_join(
             key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
             rec_typ = get_out_type(idx, key_type, f"t2_keys[{i}]", is_left, False)
             func_text += rec_typ[0]
-            func_text += f"    t2_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
+            # use astype only if necessary due to merge bugs
+            # see: test_merge_match_key_types"
+            # NOTE: subtracting len(left_other_names) since output right keys are
+            # generated before left_other_names
+            glbs[f"out_type_{idx}"] = out_types[idx - len(left_other_names)]
+            if (
+                key_type != right_key_types[i]
+                and right_key_types[i] != bodo.dict_str_arr_type
+            ):
+                func_text += f"    t2_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
+            else:
+                func_text += f"    t2_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
             idx += 1
     # Load the right data arrays
     for i, t in enumerate(right_other_names):
