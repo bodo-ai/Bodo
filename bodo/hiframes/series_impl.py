@@ -491,14 +491,7 @@ def overload_series_any(S, axis=0, bool_only=None, skipna=True, level=None):
 
     def impl(S, axis=0, bool_only=None, skipna=True, level=None):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        count = 0
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = 0
-            if not bodo.libs.array_kernels.isna(A, i):
-                val = int(A[i])
-            count += val
-        return count != 0
+        return bodo.libs.array_ops.array_op_any(A)
 
     return impl
 
@@ -570,14 +563,7 @@ def overload_series_all(S, axis=0, bool_only=None, skipna=True, level=None):
 
     def impl(S, axis=0, bool_only=None, skipna=True, level=None):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
-        numba.parfors.parfor.init_prange()
-        count = 0
-        for i in numba.parfors.parfor.internal_prange(len(A)):
-            val = 0
-            if not bodo.libs.array_kernels.isna(A, i):
-                val = int(not A[i])
-            count += val
-        return count == 0
+        return bodo.libs.array_ops.array_op_all(A)
 
     return impl
 

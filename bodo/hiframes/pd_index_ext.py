@@ -3598,6 +3598,60 @@ def overload_index_duplicated(I, keep="first"):
     return impl
 
 
+@overload_method(NumericIndexType, "any", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "any", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "any", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "any", no_unliteral=True, inline="always")
+def overload_index_any(I):
+    if isinstance(I, RangeIndexType):
+
+        def impl(I):  # pragma: no cover
+            # Must not be empty, and if the start is 0 then its length must be > 1
+            return len(I) > 0 and (I._start != 0 or len(I) > 1)
+
+        return impl
+
+    def impl(I):  # pragma: no cover
+        A = bodo.hiframes.pd_index_ext.get_index_data(I)
+        return bodo.libs.array_ops.array_op_any(A)
+
+    return impl
+
+
+@overload_method(NumericIndexType, "all", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "all", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "all", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "all", no_unliteral=True, inline="always")
+def overload_index_all(I):
+    if isinstance(I, RangeIndexType):
+
+        def impl(I):  # pragma: no cover
+            # Must be empty or not contain zero
+            return (
+                # If the range is empty, then it does not contain zero
+                len(I) == 0
+                or
+                # If the step is positive and 0 is not between start and stop,
+                # then it does not contain zero
+                (I._step > 0 and (I._start > 0 or I._stop <= 0))
+                or
+                # If the step is negative and 0 is not between stop and start,
+                # then it does not contain zero
+                (I._step < 0 and (I._start < 0 or I._stop >= 0))
+                or
+                # If the start is not a multiple of the step, then it does not contain zero
+                (I._start % I._step) != 0
+            )
+
+        return impl
+
+    def impl(I):  # pragma: no cover
+        A = bodo.hiframes.pd_index_ext.get_index_data(I)
+        return bodo.libs.array_ops.array_op_all(A)
+
+    return impl
+
+
 @overload_method(RangeIndexType, "drop_duplicates", no_unliteral=True, inline="always")
 @overload_method(
     NumericIndexType, "drop_duplicates", no_unliteral=True, inline="always"
@@ -4950,12 +5004,7 @@ def _install_index_getiter():
 _install_index_getiter()
 
 index_unsupported_methods = [
-    "all",
-    "any",
     "append",
-    "argmax",
-    "argmin",
-    "argsort",
     "asof",
     "asof_locs",
     "astype",
@@ -5058,6 +5107,8 @@ cat_idx_unsupported_methods = [
     "as_unordered",
     "get_loc",
     "isin",
+    "all",
+    "any",
 ]
 
 
@@ -5096,6 +5147,8 @@ interval_idx_unsupported_methods = [
     "isnull",
     "map",
     "isin",
+    "all",
+    "any",
     "argsort",
     "sort_values",
     "argmax",
@@ -5141,6 +5194,8 @@ multi_index_unsupported_methods = [
     "map",
     "isin",
     "unique",
+    "all",
+    "any",
     "argsort",
     "sort_values",
     "argmax",
@@ -5177,6 +5232,8 @@ dt_index_unsupported_methods = [
     "indexer_at_time",
     "indexer_between",
     "indexer_between_time",
+    "all",
+    "any",
 ]
 
 
@@ -5191,6 +5248,8 @@ td_index_unsupported_methods = [
     "floor",
     "ceil",
     "mean",
+    "all",
+    "any",
 ]
 
 
@@ -5249,6 +5308,8 @@ period_index_unsupported_methods = [
     "to_timestamp",
     "isin",
     "unique",
+    "all",
+    "any",
     "where",
     "putmask",
 ]

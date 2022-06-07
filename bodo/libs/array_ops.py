@@ -24,6 +24,106 @@ from bodo.utils.typing import (
 )
 
 
+def array_op_any(arr, skipna=True):  # pragma: no cover
+    # Create an overload for manual inlining in Series pass.
+    pass
+
+
+# TODO: implement skipna
+@overload(array_op_any)
+def overload_array_op_any(A, skipna=True):
+    """Returns whether an array contains any truthy values.
+
+    Args:
+        A (np.ndarray): an array of values that can be integers, booleans,
+        strings or bytes.
+        skipna (bool, optional): not supported. Defaults to True.
+
+    Raises:
+        BodoError: if an unsupported array type is provided.
+
+    Returns:
+        boolean: whether the array contains at least 1 truthy value.
+    """
+    if (
+        isinstance(A, types.Array) and isinstance(A.dtype, types.Integer)
+    ) or isinstance(A, bodo.libs.int_arr_ext.IntegerArrayType):
+        zero_value = 0
+    elif (isinstance(A, bodo.libs.bool_arr_ext.BooleanArrayType)) or (
+        isinstance(A, types.Array) and A.dtype == types.bool_
+    ):
+        zero_value = False
+    elif A == bodo.string_array_type:
+        zero_value = ""
+    elif A == bodo.binary_array_type:
+        zero_value = b""
+    else:
+        raise bodo.utils.typing.BodoError(
+            f"Cannot perform any with this array type: {A}"
+        )
+
+    def impl(A, skipna=True):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        count = 0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            if not bodo.libs.array_kernels.isna(A, i):
+                if A[i] != zero_value:
+                    count += 1
+        return count != 0
+
+    return impl
+
+
+def array_op_all(arr, skipna=True):  # pragma: no cover
+    # Create an overload for manual inlining in Series pass.
+    pass
+
+
+# TODO: implement skipna
+@overload(array_op_all)
+def overload_array_op_all(A, skipna=True):
+    """Returns whether an array contains only truthy values.
+
+    Args:
+        A (np.ndarray): an array of values that can be integers, booleans,
+        strings or bytes.
+        skipna (bool, optional): not supported. Defaults to True.
+
+    Raises:
+        BodoError: if an unsupported array type is provided.
+
+    Returns:
+        boolean: whether the array contains at only truthy value.
+    """
+    if (
+        isinstance(A, types.Array) and isinstance(A.dtype, types.Integer)
+    ) or isinstance(A, bodo.libs.int_arr_ext.IntegerArrayType):
+        zero_value = 0
+    elif (isinstance(A, bodo.libs.bool_arr_ext.BooleanArrayType)) or (
+        isinstance(A, types.Array) and A.dtype == types.bool_
+    ):
+        zero_value = False
+    elif A == bodo.string_array_type:
+        zero_value = ""
+    elif A == bodo.binary_array_type:
+        zero_value = b""
+    else:
+        raise bodo.utils.typing.BodoError(
+            f"Cannot perform all with this array type: {A}"
+        )
+
+    def impl(A, skipna=True):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        count = 0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            if not bodo.libs.array_kernels.isna(A, i):
+                if A[i] == zero_value:
+                    count += 1
+        return count == 0
+
+    return impl
+
+
 @numba.njit
 def array_op_median(arr, skipna=True, parallel=False):  # pragma: no cover
     # TODO: check return types, e.g. float32 -> float32
