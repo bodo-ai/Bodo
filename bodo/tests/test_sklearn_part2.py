@@ -17,6 +17,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import (
     LabelEncoder,
+    MaxAbsScaler,
     MinMaxScaler,
     RobustScaler,
     StandardScaler,
@@ -521,6 +522,126 @@ def test_standard_scaler(data, copy, with_mean, with_std, memory_leak_check):
         atol=1e-4,
         copy_input=True,
     )
+
+
+# ---------------------MaxAbsScaler Tests--------------------
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        # Test one with numpy array and one with df
+        (
+            gen_sklearn_scalers_random_data(15, 5, 0.2, 4),
+            gen_sklearn_scalers_random_data(60, 5, 0.5, 2),
+        ),
+        (
+            pd.DataFrame(gen_sklearn_scalers_random_data(20, 3)),
+            gen_sklearn_scalers_random_data(100, 3),
+        ),
+        # The other combinations are marked slow
+        pytest.param(
+            (
+                gen_sklearn_scalers_random_data(20, 3),
+                gen_sklearn_scalers_random_data(100, 3),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                gen_sklearn_scalers_random_data(20, 3),
+                pd.DataFrame(gen_sklearn_scalers_random_data(100, 3)),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.DataFrame(gen_sklearn_scalers_random_data(20, 3)),
+                pd.DataFrame(gen_sklearn_scalers_random_data(100, 3)),
+            ),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+@pytest.mark.parametrize("copy", [True, False])
+def test_max_abs_scaler(data, copy, memory_leak_check):
+    """
+    Tests for sklearn.preprocessing.MaxAbsScaler implementation in Bodo.
+    """
+
+    def test_fit(X):
+        m = MaxAbsScaler(copy=copy)
+        m = m.fit(X)
+        return m
+
+    py_output = test_fit(data[0])
+    bodo_output = bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
+
+    assert np.array_equal(py_output.n_samples_seen_, bodo_output.n_samples_seen_)
+    assert np.allclose(
+        py_output.max_abs_, bodo_output.max_abs_, atol=1e-4, equal_nan=True
+    )
+
+    def test_partial_fit(X, X1):
+        m = MaxAbsScaler(copy=copy)
+        m = m.partial_fit(X)
+        m = m.partial_fit(X1)
+        return m
+
+    py_output = test_partial_fit(data[0], data[1])
+    bodo_output = bodo.jit(distributed=["X", "X1"])(test_partial_fit)(
+        _get_dist_arg(data[0]), _get_dist_arg(data[1])
+    )
+
+    assert np.array_equal(py_output.n_samples_seen_, bodo_output.n_samples_seen_)
+    assert np.allclose(
+        py_output.max_abs_, bodo_output.max_abs_, atol=1e-4, equal_nan=True
+    )
+
+    def test_transform(X, X1):
+        m = MaxAbsScaler(copy=copy)
+        m = m.fit(X)
+        X1_transformed = m.transform(X1)
+        return X1_transformed
+
+    check_func(
+        test_transform, data, is_out_distributed=True, atol=1e-4, copy_input=True
+    )
+
+    def test_inverse_transform(X, X1):
+        m = MaxAbsScaler(copy=copy)
+        m = m.fit(X)
+        X1_inverse_transformed = m.inverse_transform(X1)
+        return X1_inverse_transformed
+
+    check_func(
+        test_inverse_transform,
+        data,
+        is_out_distributed=True,
+        atol=1e-4,
+        copy_input=True,
+    )
+
+
+def test_max_abs_scaler_attrs(memory_leak_check):
+    """
+    Tests for attributes of sklearn.preprocessing.MaxAbsScaler in Bodo.
+    """
+
+    data = gen_sklearn_scalers_random_data(20, 5)
+
+    def impl_scale_(X):
+        m = MaxAbsScaler()
+        m.fit(X)
+        return m.scale_
+
+    def impl_max_abs_(X):
+        m = MaxAbsScaler()
+        m.fit(X)
+        return m.max_abs_
+
+    check_func(impl_scale_, (data,), is_out_distributed=False)
+    check_func(impl_max_abs_, (data,), is_out_distributed=False)
 
 
 # ---------------------MinMaxScaler Tests--------------------
