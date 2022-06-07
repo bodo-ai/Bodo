@@ -851,6 +851,7 @@ class DistributedAnalysis:
                 ):
                     self._handle_dispatcher(func_type.dispatcher, lhs, rhs, array_dists)
                     return
+
                 warnings.warn(
                     "function call couldn't be found for distributed analysis"
                 )
@@ -1772,6 +1773,10 @@ class DistributedAnalysis:
             return
 
         if fdef == ("get_index_name", "bodo.hiframes.pd_index_ext"):
+            return
+
+        if fdef == ("order_range", "bodo.hiframes.pd_index_ext"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         # dummy hiframes functions

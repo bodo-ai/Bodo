@@ -58,8 +58,10 @@ from bodo.utils.typing import (
     is_const_func_type,
     is_heterogeneous_tuple_type,
     is_iterable_type,
+    is_overload_bool,
     is_overload_constant_int,
     is_overload_constant_nan,
+    is_overload_constant_str,
     is_overload_false,
     is_overload_none,
     is_overload_true,
@@ -4391,7 +4393,7 @@ def overload_index_unique(I):
     return impl
 
 
-@overload_method(RangeIndexType, "unique", no_unliteral=True)
+@overload_method(RangeIndexType, "unique", no_unliteral=True, inline="always")
 def overload_range_index_unique(I):
     """Add support for Index.unique() on RangeIndex"""
 
@@ -4465,7 +4467,7 @@ def overload_index_isin(I, values):
     return impl
 
 
-@overload_method(RangeIndexType, "isin", no_unliteral=True)
+@overload_method(RangeIndexType, "isin", no_unliteral=True, inline="always")
 def overload_range_index_isin(I, values):
     # if input is Series or array, special implementation is necessary since it may
     # require hash-based shuffling of both inputs for parallelization
@@ -4497,6 +4499,167 @@ def overload_range_index_isin(I, values):
     return impl
 
 
+@register_jitable
+def order_range(I, ascending):  # pragma: no cover
+    """If I is a RangeIndex that is increasing and ascending is True, or if
+    it is descending and ascending is False, then the RangeIndex is cloned.
+    Otherwise, its direction is flipped."""
+    step = I._step
+    # If the range is already sorted in the correct direction, leave alone
+    if ascending == (step > 0):
+        return I.copy()
+    # Otherwise, flip the step sign and calculate new start/end points
+    else:
+        start = I._start
+        stop = I._stop
+        name = get_index_name(I)
+        size = len(I)
+        last_value = start + step * (size - 1)
+        new_stop = last_value - step * size
+        return init_range_index(last_value, new_stop, -step, name)
+
+
+@overload_method(NumericIndexType, "sort_values", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "sort_values", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "sort_values", no_unliteral=True, inline="always")
+@overload_method(
+    CategoricalIndexType, "sort_values", no_unliteral=True, inline="always"
+)
+@overload_method(DatetimeIndexType, "sort_values", no_unliteral=True, inline="always")
+@overload_method(TimedeltaIndexType, "sort_values", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "sort_values", no_unliteral=True, inline="always")
+def overload_index_sort_values(
+    I, return_indexer=False, ascending=True, na_position="last", key=None
+):
+    """Supports pd.sort_values() on tagged Index types.
+
+    Args:
+        I (pd.Index): the Index that is being sorted
+        return_indexer (bool, optional): not supported. Defaults to False.
+        ascending (bool, optional): whether the values should be sorted in
+        increasing or decreasing order. Defaults to True.
+        na_position (str, optional): whether null values should be placed
+        at the begining or end of the Index. Defaults to "last".
+        key (function, optional): not supported. Defaults to None.
+
+    Raises:
+        BodoError: if unsupported arguments are provided.
+
+    Returns:
+        pd.Index: the Index with its values sorted.
+    """
+    unsupported_args = dict(
+        return_indexer=return_indexer,
+        key=key,
+    )
+    arg_defaults = dict(
+        return_indexer=False,
+        key=None,
+    )
+    check_unsupported_args(
+        "Index.sort_values",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    if not is_overload_bool(ascending):
+        raise BodoError(
+            "Index.sort_values(): 'ascending' parameter must be of type bool"
+        )
+
+    if not is_overload_constant_str(na_position) or get_overload_const_str(
+        na_position
+    ) not in ("first", "last"):
+        raise_bodo_error(
+            "Index.sort_values(): 'na_position' should either be 'first' or 'last'"
+        )
+
+    if isinstance(I, RangeIndexType):
+
+        def impl(
+            I, return_indexer=False, ascending=True, na_position="last", key=None
+        ):  # pragma: no cover
+            return order_range(I, ascending)
+
+        return impl
+
+    constructor = get_index_constructor(I)
+
+    # reusing dataframe sort_values() in implementation.
+    def impl(
+        I, return_indexer=False, ascending=True, na_position="last", key=None
+    ):  # pragma: no cover
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        name = get_index_name(I)
+        index = init_range_index(0, len(arr), 1, None)
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
+            (arr,), index, ("$_bodo_col_",)
+        )
+        sorted_df = df.sort_values(
+            ["$_bodo_col_"],
+            ascending=ascending,
+            inplace=False,
+            na_position=na_position,
+        )
+        out_arr = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(sorted_df, 0)
+        return constructor(out_arr, name)
+
+    return impl
+
+
+@overload_method(NumericIndexType, "argsort", no_unliteral=True, inline="always")
+@overload_method(BinaryIndexType, "argsort", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "argsort", no_unliteral=True, inline="always")
+@overload_method(CategoricalIndexType, "argsort", no_unliteral=True, inline="always")
+@overload_method(DatetimeIndexType, "argsort", no_unliteral=True, inline="always")
+@overload_method(TimedeltaIndexType, "argsort", no_unliteral=True, inline="always")
+@overload_method(PeriodIndexType, "argsort", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "argsort", no_unliteral=True, inline="always")
+def overload_index_argsort(I, axis=0, kind="quicksort", order=None):
+    """Supports pd.argsort() on tagged Index types.
+
+    Args:
+        I (pd.Index): the Index that is being sorted
+        axis (int, optional): Not supported. Defaults to 0.
+        kind (str, optional): Not supported. Defaults to "quicksort".
+        order (str, optional): Not supported. Defaults to None.
+
+    Returns:
+        np.ndarray: the locations of each element in the original index
+        if they were to be sorted.
+    """
+    unsupported_args = dict(axis=axis, kind=kind, order=order)
+    arg_defaults = dict(axis=0, kind="quicksort", order=None)
+    check_unsupported_args(
+        "Index.argsort",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    if isinstance(I, RangeIndexType):
+
+        def impl(I, axis=0, kind="quicksort", order=None):  # pragma: no cover
+            # If the range is already sorted, construct a regular enumeration
+            if I._step > 0:
+                return np.arange(0, len(I), 1)
+            # Otherwise, flip the direction of the enumeration
+            else:
+                return np.arange(len(I) - 1, -1, -1)
+
+        return impl
+
+    def impl(I, axis=0, kind="quicksort", order=None):  # pragma: no cover
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        out_arr = bodo.hiframes.series_impl.argsort(arr)
+        return out_arr
+
+    return impl
+
+
 @overload_method(NumericIndexType, "where", no_unliteral=True, inline="always")
 @overload_method(StringIndexType, "where", no_unliteral=True, inline="always")
 @overload_method(BinaryIndexType, "where", no_unliteral=True, inline="always")
@@ -4506,7 +4669,22 @@ def overload_range_index_isin(I, values):
 @overload_method(CategoricalIndexType, "where", no_unliteral=True, inline="always")
 @overload_method(RangeIndexType, "where", no_unliteral=True, inline="always")
 def overload_index_where(I, cond, other=np.nan):
-    """Add support for Index.where() on tagged Index types"""
+
+    """Supports pd.Index.where() on tagged Index types.
+
+    Args:
+        I (pd.Index): the Index that is being transformed
+        cond (boolean array): specifies which locations in I to replace with other
+        other (iterbale): a scalar/array/Index/array with the values that are injected
+        into I if the corresponding location of cond is True. Must have an
+        underlying type that can be reconciled with the type of I. If a scalar
+        is provided, then all values that are replaced are replaced with that
+        value. Defaults to np.nan.
+
+    Returns:
+        pd.Index: a copy of I with locations that are False in cond replaced with
+        the corresponding value from other.
+    """
 
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.where()")
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(other, "Index.where()")
@@ -4560,7 +4738,21 @@ def overload_index_where(I, cond, other=np.nan):
 @overload_method(CategoricalIndexType, "putmask", no_unliteral=True, inline="always")
 @overload_method(RangeIndexType, "putmask", no_unliteral=True, inline="always")
 def overload_index_putmask(I, cond, other):
-    """Add support for Index.putmask() on tagged Index types"""
+    """Supports pd.Index.putmask() on tagged Index types.
+
+    Args:
+        I (pd.Index): the Index that is being transformed
+        cond (boolean array): specifies which locations in I to replace with other
+        other (iterbale): a scalar/array/Index/array with the values that are injected
+        into I if the corresponding location of cond is True. Must have an
+        underlying type that can be reconciled with the type of I. If a scalar
+        is provided, then all values that are replaced are replaced with that
+        value.
+
+    Returns:
+        pd.Index: a copy of I with locations that are True in cond replaced with
+        the corresponding value from other.
+    """
 
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.putmask()")
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(other, "Index.putmask()")
@@ -4761,6 +4953,8 @@ index_unsupported_methods = [
     "all",
     "any",
     "append",
+    "argmax",
+    "argmin",
     "argsort",
     "asof",
     "asof_locs",
@@ -4808,7 +5002,6 @@ index_unsupported_methods = [
     "slice_indexer",
     "slice_locs",
     "sort",
-    "sort_values",
     "sortlevel",
     "str",
     "symmetric_difference",
@@ -4903,6 +5096,8 @@ interval_idx_unsupported_methods = [
     "isnull",
     "map",
     "isin",
+    "argsort",
+    "sort_values",
     "argmax",
     "argmin",
     "where",
@@ -4946,6 +5141,8 @@ multi_index_unsupported_methods = [
     "map",
     "isin",
     "unique",
+    "argsort",
+    "sort_values",
     "argmax",
     "argmin",
     "where",
@@ -5031,6 +5228,7 @@ period_index_unsupported_methods = [
     "to_timestamp",
     "isin",
     "unique",
+    "sort_values",
 ]
 
 string_index_unsupported_atrs = [
