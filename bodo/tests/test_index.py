@@ -507,6 +507,276 @@ def test_index_slice_name(index, memory_leak_check):
     check_func(impl, (index,), only_seq=True)
 
 
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([13, -21, 0, 1, 1, 34, -2, 3, 55, 5, 88, -8]),
+        pd.Index(
+            pd.array(
+                [
+                    0,
+                    1,
+                    3,
+                    None,
+                    2,
+                    7,
+                    13,
+                    None,
+                    12,
+                    None,
+                    11,
+                    22,
+                    None,
+                    23,
+                    9,
+                    24,
+                    8,
+                    None,
+                    43,
+                    None,
+                    42,
+                ]
+            )
+        ),
+        pd.Index(
+            [
+                0.005780190596061163,
+                0.23944886595871595,
+                0.3463438965210339,
+                0.4604841251734305,
+                0.6825334098773845,
+            ]
+        ),
+        # Unskip after [BE-2811] is resolved (boolean index issues)
+        pytest.param(
+            pd.Index([True, True, True, True, False, False, True]),
+            marks=pytest.mark.skip,
+        ),
+        pd.Index(["a", "A", "alpha", "AAA", "a", "aaa", "alphabet", ""]),
+        pd.Index(
+            [
+                b"c",
+                b"cookie",
+                b"CCC",
+                b"cookies",
+                b"COOKIE",
+                b"cookie",
+                b"CoOkIe",
+                b"ccc",
+            ]
+        ),
+        pd.RangeIndex(0, 10, 1),
+        pd.RangeIndex(0, 10, 3),
+        pytest.param(pd.RangeIndex(0, 10, 50), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, 1), marks=pytest.mark.slow),
+        pd.RangeIndex(10, 0, 3),
+        pytest.param(pd.RangeIndex(10, 0, 50), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(0, 10, -1), marks=pytest.mark.slow),
+        pd.RangeIndex(0, 10, -3),
+        pytest.param(pd.RangeIndex(0, 10, -30), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, -1), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, -3), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, -30), marks=pytest.mark.slow),
+        pd.TimedeltaIndex(
+            [
+                "2 days",
+                "2 hours",
+                "2 minutes",
+                "2 seconds",
+                "10 minutes",
+                "10 days",
+                "10 minutes",
+                "5 seconds",
+            ]
+        ),
+        pd.date_range(start="2018-01-10", end="2019-01-10", periods=13),
+        pd.DatetimeIndex(
+            pd.array(
+                [
+                    pd.Timestamp("2004-03-14"),
+                    pd.Timestamp("2007-02-27"),
+                    pd.Timestamp("2004-03-03"),
+                    pd.Timestamp("2007-01-27"),
+                    pd.Timestamp("2006-01-27"),
+                ]
+            )
+        ),
+        pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3, 1, 5, 2, 5, 1]),
+        pd.CategoricalIndex(pd.array([None, 15, 14, 14, 14, 11, 12, 10, 15, None])),
+        pytest.param(
+            pd.CategoricalIndex(
+                [0.5, 0.18, 0.5, 0.18, 0.07, 0.46, 0.46, 0.5, 0.72, 0.5]
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(["A", "B", "c", "a", "a", "C", "A", "B"]),
+            marks=pytest.mark.slow,
+        ),
+        # Unskip after [BE-2811] is resolved (boolean index issues)
+        pytest.param(
+            pd.CategoricalIndex([True, False, False, False, False]),
+            marks=pytest.mark.skip,
+        ),
+    ],
+)
+def test_index_sort_values(index):
+    def impl1(index):
+        return index.sort_values(ascending=True, na_position="first")
+
+    def impl2(index):
+        return index.sort_values(ascending=False, na_position="first")
+
+    def impl3(index):
+        return index.sort_values(ascending=True, na_position="last")
+
+    def impl4(index):
+        return index.sort_values(ascending=False, na_position="last")
+
+    # Verifying that sorting does not alter the original index
+    def impl5(index):
+        index2 = index.sort_values()
+        return list(index + index2)
+
+    # RangeIndex distributed sort_values not supported yet [BE-2944]
+    dist_test = not isinstance(index, pd.RangeIndex)
+    check_func(impl1, (index,), dist_test=dist_test)
+    check_func(impl2, (index,), dist_test=dist_test)
+    # If the Index is numerical, test alternative placement of nulls and
+    # verify nondestructiveness
+    if isinstance(index, pd.core.indexes.numeric.Int64Index):
+        check_func(impl3, (index,), dist_test=dist_test)
+        check_func(impl4, (index,), dist_test=dist_test)
+        check_func(impl5, (index,), dist_test=False)
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([13, -21, 0, 1, 1, 34, -2, 3, 55, 5, 88, -8]),
+        pd.Index(
+            pd.array(
+                [
+                    0,
+                    1,
+                    3,
+                    None,
+                    2,
+                    7,
+                    13,
+                    None,
+                    12,
+                    None,
+                    11,
+                    22,
+                    None,
+                    23,
+                    9,
+                    24,
+                    8,
+                    None,
+                    43,
+                    None,
+                    42,
+                ]
+            )
+        ),
+        pd.Index(
+            [
+                0.005780190596061163,
+                0.23944886595871595,
+                0.3463438965210339,
+                0.4604841251734305,
+                0.6825334098773845,
+            ]
+        ),
+        pd.Index([True, True, True, True, False, False, True]),
+        pd.Index(["a", "A", "alpha", "AAA", "a", "aaa", "alphabet", ""]),
+        pd.Index(
+            [
+                b"c",
+                b"cookie",
+                b"CCC",
+                b"cookies",
+                b"COOKIE",
+                b"cookie",
+                b"CoOkIe",
+                b"ccc",
+            ]
+        ),
+        pd.RangeIndex(0, 10, 1),
+        pd.RangeIndex(0, 10, 3),
+        pytest.param(pd.RangeIndex(0, 10, 50), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, 1), marks=pytest.mark.slow),
+        pd.RangeIndex(10, 0, 3),
+        pytest.param(pd.RangeIndex(10, 0, 50), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(0, 10, -1), marks=pytest.mark.slow),
+        pd.RangeIndex(0, 10, -3),
+        pytest.param(pd.RangeIndex(0, 10, -30), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, -1), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, -3), marks=pytest.mark.slow),
+        pytest.param(pd.RangeIndex(10, 0, -30), marks=pytest.mark.slow),
+        pd.TimedeltaIndex(
+            [
+                "2 days",
+                "2 hours",
+                "2 minutes",
+                "2 seconds",
+                "10 minutes",
+                "10 days",
+                "10 minutes",
+                "5 seconds",
+            ]
+        ),
+        pd.date_range(start="2018-01-10", end="2019-01-10", periods=13),
+        pd.DatetimeIndex(
+            pd.array(
+                [
+                    pd.Timestamp("2004-03-15"),
+                    pd.Timestamp("2004-03-14"),
+                    pd.Timestamp("2007-02-27"),
+                    pd.Timestamp("2004-03-03"),
+                    pd.Timestamp("2007-01-27"),
+                ]
+            )
+        ),
+        pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3, 1, 5, 2, 5, 1]),
+        pytest.param(
+            pd.CategoricalIndex(pd.array([None, 15, 14, 14, 14, 11, 12, 10, 15, None])),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(
+                [0.5, 0.18, 0.5, 0.18, 0.07, 0.46, 0.46, 0.5, 0.72, 0.5]
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex(["A", "B", "c", "a", "a", "C", "A", "B"]),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex([True, False, False, False, False]),
+            marks=pytest.mark.slow,
+        ),
+        pd.PeriodIndex(
+            year=[2000, 2002, 2001, 2001, 2001, 2004], quarter=[1, 1, 1, 3, 2, 1]
+        ),
+        pytest.param(
+            pd.period_range(start="2017-01-01", end="2018-01-01", freq="M"),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_index_argsort(index):
+    def impl(index):
+        return index.argsort()
+
+    # RangeIndex distributed argsort not supported yet [BE-2944]
+    dist_test = not isinstance(index, pd.RangeIndex)
+    check_func(impl, (index,), dist_test=dist_test)
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "index, key",
@@ -726,7 +996,9 @@ def test_index_argminmax(index, memory_leak_check):
             (pd.Index([True, True, True, True, False, True, False, False]), True),
             marks=pytest.mark.slow,
         ),
-        pytest.param((pd.Index([True, True, True]), False), marks=pytest.mark.slow),
+        pytest.param(
+            (pd.Index([True, True, True, True, True]), False), marks=pytest.mark.slow
+        ),
         (pd.Index(["A", "L", "P", "H", "A", "B", "E", "T"]), "A"),
         (pd.Index(["A", "L", "P", "H", "A", "B", "E", "T"]), "a"),
         pytest.param(
@@ -745,20 +1017,20 @@ def test_index_argminmax(index, memory_leak_check):
         (pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]), 4),
         # Unskip after [BE-2811] resolved
         pytest.param(
-            (pd.CategoricalIndex([True, True, True]), True),
+            (pd.CategoricalIndex([True, True, True, True, True]), True),
             marks=(pytest.mark.slow, pytest.mark.skip),
         ),
         # Unskip after [BE-2811] resolved
         pytest.param(
-            (pd.CategoricalIndex([True, True, True]), False),
+            (pd.CategoricalIndex([True, True, True, True, True]), False),
             marks=(pytest.mark.slow, pytest.mark.skip),
         ),
         pytest.param(
-            (pd.CategoricalIndex([1.0, 1.1, 1.2, 1.8, 1.5]), 1.5),
+            (pd.CategoricalIndex([1.0, 1.1, 1.2, 1.8, 1.5, 1.1]), 1.5),
             marks=pytest.mark.slow,
         ),
         pytest.param(
-            (pd.CategoricalIndex([1.0, 1.1, 1.2, 1.8, 1.5]), 1.6),
+            (pd.CategoricalIndex([1.0, 1.1, 1.2, 1.8, 1.5, 1.1]), 1.6),
             marks=pytest.mark.slow,
         ),
         pytest.param(
@@ -772,7 +1044,13 @@ def test_index_argminmax(index, memory_leak_check):
         pytest.param(
             (
                 pd.CategoricalIndex(
-                    [pd.Timestamp("2018-01-01"), pd.Timestamp("2018-02-01")]
+                    [
+                        pd.Timestamp("2018-01-01"),
+                        pd.Timestamp("2018-02-01"),
+                        pd.Timestamp("2018-04-01"),
+                        pd.Timestamp("2018-05-01"),
+                        pd.Timestamp("2018-06-01"),
+                    ]
                 ),
                 pd.Timestamp("2018-02-01"),
             ),
@@ -781,7 +1059,13 @@ def test_index_argminmax(index, memory_leak_check):
         pytest.param(
             (
                 pd.CategoricalIndex(
-                    [pd.Timestamp("2018-01-01"), pd.Timestamp("2018-02-01")]
+                    [
+                        pd.Timestamp("2018-01-01"),
+                        pd.Timestamp("2018-02-01"),
+                        pd.Timestamp("2018-04-01"),
+                        pd.Timestamp("2018-05-01"),
+                        pd.Timestamp("2018-06-01"),
+                    ]
                 ),
                 pd.Timestamp("2018-03-01"),
             ),
@@ -790,11 +1074,11 @@ def test_index_argminmax(index, memory_leak_check):
         (pd.RangeIndex(start=0, stop=10, step=2), 4),
         (pd.RangeIndex(start=0, stop=10, step=2), 5),
         (
-            pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
             pd.Timestamp("2018-04-24"),
         ),
         (
-            pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
             pd.Timestamp("2018-04-26"),
         ),
         (
@@ -1584,8 +1868,8 @@ def test_index_iter(index, memory_leak_check):
         ),
         (pd.RangeIndex(start=0, stop=100, step=10), pd.Series([0, 25, 50, 75])),
         (
-            pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
-            pd.date_range(start="2018-04-25", end="2018-04-28", periods=3),
+            pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
+            pd.date_range(start="2018-04-25", end="2018-04-28", periods=5),
         ),
         (
             pd.TimedeltaIndex(
@@ -1602,15 +1886,17 @@ def test_index_isin(args, memory_leak_check):
         return idx.isin(elems)
 
     idx, elems = args
-    check_func(impl, (idx, elems), dist_test=False)
+    # RangeIndex distributed isin not supported yet [BE-2944]
+    dist_test = not isinstance(idx, pd.RangeIndex)
+    check_func(impl, (idx, elems), dist_test=dist_test)
     # TODO: fix casting certain types of series to list or set
     if (
         not isinstance(idx, (pd.TimedeltaIndex, pd.DatetimeIndex))
         and idx.dtype != "object"
     ):
-        check_func(impl, (idx, list(elems)), dist_test=False)
-        check_func(impl, (idx, set(elems)), dist_test=False)
-    check_func(impl, (idx, pd.Index(elems)), dist_test=False)
+        check_func(impl, (idx, list(elems)), dist_test=dist_test)
+        check_func(impl, (idx, set(elems)), dist_test=dist_test)
+    check_func(impl, (idx, pd.Index(elems)), dist_test=dist_test)
 
 
 @pytest.mark.parametrize(
@@ -1871,12 +2157,12 @@ def test_range_index_dce(memory_leak_check):
             ]
         ),
         pd.Index(pd.array([1, 1, 2, 1, None, None, 1, 2, 3, 2, 1, 1, None])),
-        # Unskip after [BE-2811] is resolved
+        # Unskip after [BE-2811] is resolved (boolean index issues)
         pytest.param(
             pd.Index([True, True, True, True, False, True, False, False]),
             marks=pytest.mark.skip,
         ),
-        # Unskip after [BE-2811] is resolved
+        # Unskip after [BE-2811] is resolved (boolean index issues)
         pytest.param(
             pd.Index([False, False, False]),
             marks=pytest.mark.skip,
@@ -1920,12 +2206,12 @@ def test_range_index_dce(memory_leak_check):
         pd.CategoricalIndex(["A", "B", "C", "A", "A", "C", "A", "B"]),
         pd.CategoricalIndex([1, 5, 1, 2, 0, 1, 1, 1, 0, 5, 9]),
         pd.CategoricalIndex([0.0, 0.25, 0.5, 0.75, 0.25, 0.25, 0.75, 0.25]),
-        # Unskip after [BE-2811] is resolved (.unique() on boolean index)
+        # Unskip after [BE-2811] is resolved (boolean index issues)
         pytest.param(
             pd.CategoricalIndex([True, True, True, True, False, True, False, False]),
             marks=pytest.mark.skip,
         ),
-        # Unskip after [BE-2811] is resolved (.unique() on boolean index)
+        # Unskip after [BE-2811] is resolved (boolean index issues)
         pytest.param(
             pd.CategoricalIndex([True, True, True]),
             marks=pytest.mark.skip,
@@ -1989,7 +2275,11 @@ def test_index_unique(idx):
     def impl(idx):
         return idx.unique()
 
-    check_func(impl, (idx,), dist_test=False)
+    # Un-case after [BE-2813] is resolved
+    if isinstance(idx, pd.IntervalIndex):
+        check_func(impl, (idx,), dist_test=False)
+    else:
+        check_func(impl, (idx,), dist_test=True)
 
 
 @pytest.mark.parametrize(
@@ -2457,12 +2747,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_append)(idx=pd.Index(data))
 
-    def test_argsort(idx):
-        return idx.argsort()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_argsort)(idx=pd.Index(data))
-
     def test_asof(idx):
         return idx.asof()
 
@@ -2738,12 +3022,6 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_sort)(idx=pd.Index(data))
-
-    def test_sort_values(idx):
-        return idx.sort_values()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_sort_values)(idx=pd.Index(data))
 
     def test_sortlevel(idx):
         return idx.sortlevel()

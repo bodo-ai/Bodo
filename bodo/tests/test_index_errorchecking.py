@@ -546,6 +546,51 @@ def test_range_index_from_range():
 
 
 @pytest.mark.slow
+def test_sort_values_args():
+    def impl1(I):
+        return I.sort_values(return_indexer=True)
+
+    def impl2(I):
+        return I.sort_values(key=lambda x: x + 1)
+
+    def impl3(I):
+        return I.sort_values(ascending=42)
+
+    def impl4(I, na_position):
+        return I.sort_values(na_position=na_position)
+
+    err_msg1 = re.escape(
+        "Index.sort_values(): return_indexer parameter only supports default value False"
+    )
+    err_msg2 = re.escape(
+        "Index.sort_values(): key parameter only supports default value None"
+    )
+    err_msg3 = re.escape(
+        "Index.sort_values(): 'ascending' parameter must be of type bool"
+    )
+    err_msg4 = re.escape(
+        "Index.sort_values(): 'na_position' should either be 'first' or 'last'"
+    )
+
+    I = pd.Index([1, 8, -9, 0, 3, 1, 9, -8])
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl1)(I)
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl2)(I)
+
+    with pytest.raises(BodoError, match=err_msg3):
+        bodo.jit(impl3)(I)
+
+    with pytest.raises(BodoError, match=err_msg4):
+        bodo.jit(impl4)(I, "start")
+
+    with pytest.raises(BodoError, match=err_msg4):
+        bodo.jit(impl4)(I, 42)
+
+
+@pytest.mark.slow
 def test_where_args():
     def impl(I, C, O):
         return I.where(C, O)
