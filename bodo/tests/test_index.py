@@ -2135,7 +2135,7 @@ def test_range_index_dce(memory_leak_check):
 @pytest.mark.parametrize(
     "idx",
     [
-        pd.Index([1, 2, 3]),
+        pd.Index([1, 2, 3, 4, 5]),
         pd.Index([1, 1, 2, 1, 1, 2, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1]),
         pd.Index(
             [
@@ -2159,48 +2159,57 @@ def test_range_index_dce(memory_leak_check):
         ),
         # Unskip after [BE-2811] is resolved (boolean index issues)
         pytest.param(
-            pd.Index([False, False, False]),
+            pd.Index([False, False, False, False, False]),
             marks=pytest.mark.skip,
         ),
         pd.Index(["A", "B"] * 4),
-        pd.Index(
-            [
-                "blue",
-                "green",
-                "yellow",
-                "purple",
-                "red",
-                "green",
-                "blue",
-                "purple",
-                "yellow",
-                "green",
-                "blue",
-                "yellow",
-                "yellow",
-                "purple",
-                "orange",
-                "purple",
-                "purple",
-                "red",
-                "orange",
-                "purple",
-                "red",
-                "yellow",
-                "green",
-                "orange",
-                "blue",
-                "purple",
-                "blue",
-                "orange",
-                "red",
-                "blue",
-            ]
+        pytest.param(
+            pd.Index(
+                [
+                    "blue",
+                    "green",
+                    "yellow",
+                    "purple",
+                    "red",
+                    "green",
+                    "blue",
+                    "purple",
+                    "yellow",
+                    "green",
+                    "blue",
+                    "yellow",
+                    "yellow",
+                    "purple",
+                    "orange",
+                    "purple",
+                    "purple",
+                    "red",
+                    "orange",
+                    "purple",
+                    "red",
+                    "yellow",
+                    "green",
+                    "orange",
+                    "blue",
+                    "purple",
+                    "blue",
+                    "orange",
+                    "red",
+                    "blue",
+                ]
+            ),
+            marks=pytest.mark.slow,
         ),
         pd.Index(["alpha", "Alpha", "alpha", "ALPHA", "alphonse", "a", "A"]),
         pd.CategoricalIndex(["A", "B", "C", "A", "A", "C", "A", "B"]),
-        pd.CategoricalIndex([1, 5, 1, 2, 0, 1, 1, 1, 0, 5, 9]),
-        pd.CategoricalIndex([0.0, 0.25, 0.5, 0.75, 0.25, 0.25, 0.75, 0.25]),
+        pytest.param(
+            pd.CategoricalIndex([1, 5, 1, 2, 0, 1, 1, 1, 0, 5, 9]),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.CategoricalIndex([0.0, 0.25, 0.5, 0.75, 0.25, 0.25, 0.75, 0.25]),
+            marks=pytest.mark.slow,
+        ),
         # Unskip after [BE-2811] is resolved (boolean index issues)
         pytest.param(
             pd.CategoricalIndex([True, True, True, True, False, True, False, False]),
@@ -2208,14 +2217,17 @@ def test_range_index_dce(memory_leak_check):
         ),
         # Unskip after [BE-2811] is resolved (boolean index issues)
         pytest.param(
-            pd.CategoricalIndex([True, True, True]),
+            pd.CategoricalIndex([True, True, True, True, True]),
             marks=pytest.mark.skip,
         ),
+        pd.RangeIndex(start=0, stop=7, step=1),
         pd.RangeIndex(start=0, stop=10, step=2),
         pd.RangeIndex(start=100, stop=0, step=-10),
         # Unskip after [BE-2812] is resolved (PeriodIndex.unique())
         pytest.param(
-            pd.PeriodIndex(year=[2000, 2000, 2001, 2001], quarter=[1, 1, 1, 3]),
+            pd.PeriodIndex(
+                year=[2000, 2000, 2001, 2001, 2001], quarter=[1, 1, 1, 3, 2]
+            ),
             marks=pytest.mark.skip,
         ),
         # Unskip after [BE-2811] is resolved (PeriodIndex.unique())
@@ -2225,9 +2237,17 @@ def test_range_index_dce(memory_leak_check):
         ),
         pd.interval_range(0, 5),
         pd.IntervalIndex.from_tuples([(0, 1), (3, 4), (2, 3), (1, 2)]),
-        pd.IntervalIndex.from_tuples([(1.0, 1.5), (1.5, 3.0), (3.0, 4.0), (4.0, 10.1)]),
-        pd.IntervalIndex.from_tuples(
-            [(0, 1), (3, 4), (2, 3), (0, 1), (0, 1), (1, 2), (2, 3)]
+        pytest.param(
+            pd.IntervalIndex.from_tuples(
+                [(1.0, 1.5), (1.5, 3.0), (3.0, 4.0), (4.0, 10.1)]
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.IntervalIndex.from_tuples(
+                [(0, 1), (3, 4), (2, 3), (0, 1), (0, 1), (1, 2), (2, 3)]
+            ),
+            marks=pytest.mark.slow,
         ),
         # Unskip after [BE-2813] is resolved (intervals of datetime values)
         pytest.param(
@@ -2243,26 +2263,35 @@ def test_range_index_dce(memory_leak_check):
             ),
             marks=pytest.mark.skip,
         ),
-        pd.IntervalIndex.from_tuples([(1, 5), (2, 6), (3, 7)]),
-        pd.IntervalIndex.from_tuples([(1, 5), (2, 5), (3, 7)]),
-        pd.date_range(start="2018-04-24", end="2018-04-27", periods=3),
+        pytest.param(
+            pd.IntervalIndex.from_tuples([(1, 6), (2, 7), (3, 8), (4, 9), (5, 10)]),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.IntervalIndex.from_tuples([(1, 5), (2, 5), (3, 7), (4, 7), (5, 7)]),
+            marks=pytest.mark.slow,
+        ),
+        pd.date_range(start="2018-04-24", end="2018-04-27", periods=5),
         pd.TimedeltaIndex(
             ["1 days", "2 days", "3 days", "2 days", "3 hours", "2 minutes"]
         ),
         pd.Index([b"asdga", b"asdga", b"", b"oihjb", bytes(2), b"CC", b"asdfl"]),
-        pd.Index(
-            [
-                b"alpha",
-                b"beta",
-                b"gamma",
-                b"delta",
-                b"ALPHA",
-                b"a",
-                b"A",
-                b"A",
-                b"beta",
-                b"ALPHA",
-            ]
+        pytest.param(
+            pd.Index(
+                [
+                    b"alpha",
+                    b"beta",
+                    b"gamma",
+                    b"delta",
+                    b"ALPHA",
+                    b"a",
+                    b"A",
+                    b"A",
+                    b"beta",
+                    b"ALPHA",
+                ]
+            ),
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -2270,11 +2299,12 @@ def test_index_unique(idx):
     def impl(idx):
         return idx.unique()
 
-    # Un-case after [BE-2813] is resolved
-    if isinstance(idx, pd.IntervalIndex):
-        check_func(impl, (idx,), dist_test=False)
-    else:
-        check_func(impl, (idx,), dist_test=True)
+    # Descending RangeIndex distributed unique not supported yet [BE-2944]
+    # IntervalIndex distributed unique not supported yet (related to [BE-2813])
+    dist_test = not isinstance(idx, pd.IntervalIndex) and not (
+        isinstance(idx, pd.RangeIndex) and idx.step < 0
+    )
+    check_func(impl, (idx,), dist_test=dist_test, sort_output=True)
 
 
 @pytest.mark.parametrize(
