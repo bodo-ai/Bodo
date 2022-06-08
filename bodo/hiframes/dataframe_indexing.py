@@ -893,7 +893,7 @@ def overload_iat_getitem(I, idx):
         def impl_col_ind(I, idx):  # pragma: no cover
             df = I._obj
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
-            return data[idx[0]]
+            return bodo.utils.conversion.box_if_dt64(data[idx[0]])
 
         return impl_col_ind
 

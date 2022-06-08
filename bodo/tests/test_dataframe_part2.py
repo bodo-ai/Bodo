@@ -2235,11 +2235,6 @@ def test_loc_setitem_str(memory_leak_check):
 def test_iat_getitem(df_value, memory_leak_check):
     """test df.iat[] getitem (single value)"""
 
-    series = df_value[df_value.columns[0]]
-    if series.dtype == np.dtype("datetime64[ns]"):
-        # Unskip after [BE-497] is resolved
-        pytest.skip()
-
     def impl(df, n):
         return df.iat[n - 1, 0]
 
@@ -2251,17 +2246,7 @@ def test_iat_getitem(df_value, memory_leak_check):
     if pd.isna(df.iat[n - 1, 0]):
         df[df.columns[0]] = df[df.columns[0]].fillna(1)
 
-    # Bodo Limitation: Distributed Version not supported for Categorical Arrays or
-    # nullable integer arrays.
-    # TODO: [BE-319] support it.
-    if isinstance(
-        df.dtypes.iat[0], (pd.CategoricalDtype, pd.core.arrays.integer._IntegerDtype)
-    ):
-        dist_test = False
-    else:
-        dist_test = True
-
-    check_func(impl, (df, n), dist_test=dist_test)
+    check_func(impl, (df, n))
 
 
 @pytest.mark.skipif(

@@ -178,7 +178,11 @@ class DatetimeIndexType(types.IterableType, types.ArrayCompatible):
 
     @property
     def iterator_type(self):
-        return bodo.utils.typing.BodoArrayIterator(self)
+        # The underlying array is a datetime64, but the data is
+        # (and should be) boxed as a pd.Timestamp
+        return bodo.utils.typing.BodoArrayIterator(
+            self, bodo.hiframes.pd_timestamp_ext.PandasTimestampType(self.tzval)
+        )
 
     @property
     def pandas_type_name(self):
@@ -1218,7 +1222,9 @@ class TimedeltaIndexType(types.IterableType, types.ArrayCompatible):
 
     @property
     def iterator_type(self):
-        return bodo.utils.typing.BodoArrayIterator(self)
+        # The underlying array is a timedelta64, but the data is
+        # (and should be) boxed as a pd.Timedelta
+        return bodo.utils.typing.BodoArrayIterator(self, bodo.pd_timedelta_type)
 
     @property
     def pandas_type_name(self):
