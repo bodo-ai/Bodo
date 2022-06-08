@@ -1777,15 +1777,10 @@ def test_init_binary_array_bad_numpy_arr(memory_leak_check):
         pd.RangeIndex(-4, 8, 4),
         pd.RangeIndex(-10, -1, -3),
         pd.RangeIndex(-4, 8, -4),
-        # Unskip after [BE-497] is resolved
         pytest.param(
             pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
-            marks=pytest.mark.skip,
         ),
-        # Unskip after [BE-497] is resolved
-        pytest.param(
-            pd.timedelta_range(start="1D", end="3D", name="A"), marks=pytest.mark.skip
-        ),
+        pytest.param(pd.timedelta_range(start="1D", end="6D", name="A")),
         # Note: only functional for homogenous Index types
         pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
         pd.CategoricalIndex(["a", "b", "c", "a", "b", "c"]),
