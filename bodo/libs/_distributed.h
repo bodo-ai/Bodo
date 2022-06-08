@@ -614,7 +614,6 @@ static void c_alltoall(void* send_data, void* recv_data, int count,
                  MPI_COMM_WORLD);
 }
 
-
 static int finalize() {
     int is_initialized;
     MPI_Initialized(&is_initialized);

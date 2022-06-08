@@ -24,10 +24,11 @@
  *   The content is four 32-bit ints: max core count, expiration year,
  *   expiration month, expiration day
  * - Type 1 (Bodo Platform on AWS):
- *   The content is the EC2 Instance ID (19 ASCII characters) licensed to run Bodo
+ *   The content is the EC2 Instance ID (19 ASCII characters) licensed to run
+ * Bodo
  * - Type 2 (Bodo Platform on Azure):
- *   The content is the Azure VM Unique ID (36 ASCII characters) licensed to run Bodo
- * The signature is obtained by getting a SHA-256 digest of the license
+ *   The content is the Azure VM Unique ID (36 ASCII characters) licensed to run
+ * Bodo The signature is obtained by getting a SHA-256 digest of the license
  * content and signing with a private key using RSA. The license that is
  * provided to customers is encoded in Base64
  */
@@ -35,6 +36,9 @@
 #define REGULAR_LIC_TYPE 0
 #define PLATFORM_LIC_TYPE_AWS 1
 #define PLATFORM_LIC_TYPE_AZURE 2
+
+#define PLATFORM_LIC_CHECK_MAX_RETRIES 10
+#define PLATFORM_LIC_CHECK_RETRY_MAX_DELAY 5.0
 
 #define HEADER_LEN_MASK \
     0xffff  // mask to get the total license length from license header
@@ -237,63 +241,74 @@ static int verify_license_aws(std::string &lic_instance_id) {
     const std::string url(
         "http://169.254.169.254/latest/dynamic/instance-identity/document");
 
-    CURL *curl = curl_easy_init();
+    // Even though the check only takes place on one rank,
+    // we do the check PLATFORM_LIC_CHECK_MAX_RETRIES+1 times for
+    // better resilience.
+    for (int i = 0; i <= PLATFORM_LIC_CHECK_MAX_RETRIES; i++) {
+        CURL *curl = curl_easy_init();
 
-    // Set remote URL
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        // Set remote URL
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 
-    // Don't use IPv6, which would increase DNS resolution time
-    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        // Don't use IPv6, which would increase DNS resolution time
+        curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
-    // Time out after 10 seconds
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
+        // Time out after 10 seconds
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
 
-    // Response information
-    int http_code = 0;
-    std::string http_data;
+        // Response information
+        int http_code = 0;
+        std::string http_data;
 
-    // Set data handling function
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
+        // Set data handling function
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
 
-    // Set data container (will be passed as the last parameter to the
-    // callback handling function)
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &http_data);
+        // Set data container (will be passed as the last parameter to the
+        // callback handling function)
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &http_data);
 
-    // Run HTTP GET command, capture HTTP response code, and clean up
-    curl_easy_perform(curl);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    curl_easy_cleanup(curl);
+        // Run HTTP GET command, capture HTTP response code, and clean up
+        curl_easy_perform(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        curl_easy_cleanup(curl);
 
-    if (http_code == 200) {
-        char *endptr;
-        JsonValue value;
-        JsonAllocator allocator;
-        int status =
-            jsonParse((char *)http_data.c_str(), &endptr, &value, allocator);
-        if (status != JSON_OK) {
-            fprintf(stderr, "Could not verify license. Code %d\n",
-                    LICENSE_ERR_JSON_PARSE);
-            return 0;
-        }
-        for (auto i : value) {
-            if (strcmp(i->key, "instanceId") == 0) {
-                std::string cur_instance_id = i->value.toString();
-                if (cur_instance_id != lic_instance_id) {
-                    fprintf(stderr, "Could not verify license. Code %d\n",
-                            LICENSE_ERR_INVALID_INSTANCE);
-                    return 0;
-                }
-                return 1;
+        if (http_code == 200) {
+            char *endptr;
+            JsonValue value;
+            JsonAllocator allocator;
+            int status = jsonParse((char *)http_data.c_str(), &endptr, &value,
+                                   allocator);
+            if (status != JSON_OK) {
+                fprintf(stderr, "Could not verify license. Code %d\n",
+                        LICENSE_ERR_JSON_PARSE);
+                return 0;
             }
+            for (auto i : value) {
+                if (strcmp(i->key, "instanceId") == 0) {
+                    std::string cur_instance_id = i->value.toString();
+                    if (cur_instance_id != lic_instance_id) {
+                        fprintf(stderr, "Could not verify license. Code %d\n",
+                                LICENSE_ERR_INVALID_INSTANCE);
+                        return 0;
+                    }
+                    return 1;
+                }
+            }
+            fprintf(stderr, "Could not verify license. Code %d\n",
+                    LICENSE_ERR_INSTANCE_ID_NOT_FOUND);
+            return 0;
+        } else {
+            // Sleep and retry
+            // Simple exponential backoff.
+            const double sleep_secs =
+                std::min((std::exp2(i) * 0.25) + ((std::rand() % 10) / 100.0),
+                         PLATFORM_LIC_CHECK_RETRY_MAX_DELAY);
+            sleep(sleep_secs);
         }
-        fprintf(stderr, "Could not verify license. Code %d\n",
-                LICENSE_ERR_INSTANCE_ID_NOT_FOUND);
-        return 0;
-    } else {
-        fprintf(stderr, "Could not verify license. Code %d\n",
-                LICENSE_ERR_DOWNLOAD);
-        return 0;
     }
+    fprintf(stderr, "Could not verify license. Code %d\n",
+            LICENSE_ERR_DOWNLOAD);
+    return 0;
 }
 
 /**
@@ -310,66 +325,95 @@ static int verify_license_azure(std::string &lic_instance_id) {
         "http://169.254.169.254/metadata/instance/compute/"
         "vmId?api-version=2017-08-01&format=text");
 
-    CURL *curl = curl_easy_init();
+    // Even though the check only takes place on one rank,
+    // we do the check PLATFORM_LIC_CHECK_MAX_RETRIES+1 times for
+    // better resilience.
+    for (int i = 0; i <= PLATFORM_LIC_CHECK_MAX_RETRIES; i++) {
+        CURL *curl = curl_easy_init();
 
-    // Set remote URL
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        // Set remote URL
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 
-    // Don't use IPv6, which would increase DNS resolution time
-    curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        // Don't use IPv6, which would increase DNS resolution time
+        curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
-    // Time out after 10 seconds
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
+        // Time out after 10 seconds
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10);
 
-    // set custom header "Metadata:true"
-    struct curl_slist *list = NULL;
-    list = curl_slist_append(list, "Metadata:true");
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+        // set custom header "Metadata:true"
+        struct curl_slist *list = NULL;
+        list = curl_slist_append(list, "Metadata:true");
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
 
-    // --noproxy "*"
-    curl_easy_setopt(curl, CURLOPT_NOPROXY, "*");
+        // --noproxy "*"
+        curl_easy_setopt(curl, CURLOPT_NOPROXY, "*");
 
-    // Response information
-    int http_code = 0;
-    std::string http_data;
+        // Response information
+        int http_code = 0;
+        std::string http_data;
 
-    // Set data handling function
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
+        // Set data handling function
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, callback);
 
-    // Set data container (will be passed as the last parameter to the
-    // callback handling function)
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &http_data);
+        // Set data container (will be passed as the last parameter to the
+        // callback handling function)
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &http_data);
 
-    // Run HTTP GET command, capture HTTP response code, and clean up
-    curl_easy_perform(curl);
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    curl_easy_cleanup(curl);
-    curl_slist_free_all(list);
+        // Run HTTP GET command, capture HTTP response code, and clean up
+        curl_easy_perform(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+        curl_easy_cleanup(curl);
+        curl_slist_free_all(list);
 
-    if (http_code == 200) {
-        if (http_data != lic_instance_id) {
-            fprintf(stderr, "Could not verify license. Code %d\n",
-                    LICENSE_ERR_INVALID_INSTANCE);
-            return 0;
+        if (http_code == 200) {
+            if (http_data != lic_instance_id) {
+                fprintf(stderr, "Could not verify license. Code %d\n",
+                        LICENSE_ERR_INVALID_INSTANCE);
+                return 0;
+            }
+            return 1;
+        } else {
+            // Sleep and retry
+            // Simple exponential backoff.
+            const double sleep_secs =
+                std::min((std::exp2(i) * 0.25) + ((std::rand() % 10) / 100.0),
+                         PLATFORM_LIC_CHECK_RETRY_MAX_DELAY);
+            sleep(sleep_secs);
         }
-        return 1;
-    } else {
-        fprintf(stderr, "Could not verify license. Code %d\n",
-                LICENSE_ERR_DOWNLOAD);
-        return 0;
     }
+    fprintf(stderr, "Could not verify license. Code %d\n",
+            LICENSE_ERR_DOWNLOAD);
+    return 0;
 }
 
 static int verify_license_platform() {
-    int license_type;
-    std::string instance_id;
-    int rc = get_license_platform(license_type, instance_id);
-    if (rc == 0) return 0;
-
-    if (license_type == PLATFORM_LIC_TYPE_AWS)
-        return verify_license_aws(instance_id);
-    if (license_type == PLATFORM_LIC_TYPE_AZURE)
-        return verify_license_azure(instance_id);
+    /**
+     * We only perform the license check on rank 0.
+     * Instance Metadata Services have API limits per
+     * node per second. In case of Azure this is very low (5)
+     * and hence it's essential to only do the check as few times as possible.
+     * Technically, we could be doing the check on one rank
+     * for each node, but that would only be useful in very
+     * malicious use cases (e.g. someone uses one node
+     * that was provisioned by the platform and has the license,
+     * but the rest don't.)
+     */
+    int success = 0;
+    if (dist_get_rank() == 0) {
+        int license_type;
+        std::string instance_id;
+        int rc = get_license_platform(license_type, instance_id);
+        if (rc == 0) {
+            success = 0;
+        } else {
+            if (license_type == PLATFORM_LIC_TYPE_AWS)
+                success = verify_license_aws(instance_id);
+            if (license_type == PLATFORM_LIC_TYPE_AZURE)
+                success = verify_license_azure(instance_id);
+        }
+    }
+    MPI_Bcast(&success, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    return success;
 }
 
 #endif  // CHECK_LICENSE_PLATFORM
