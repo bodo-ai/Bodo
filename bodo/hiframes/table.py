@@ -412,7 +412,6 @@ def box_table(typ, val, c, ensure_unboxed=None):
                     c.pyapi.list_setitem(
                         table_arr_list_obj, arr_ind, c.builder.load(arr_obj)
                     )
-
     cls_obj = c.pyapi.unserialize(c.pyapi.serialize_object(Table))
     out_table_obj = c.pyapi.call_function_objargs(cls_obj, (table_arr_list_obj,))
 
@@ -837,15 +836,20 @@ def init_table(typingctx, table_type, to_str_if_dict_t):
     """initialize a table object with same structure as input table without setting it's
     array blocks (to be set later)
     """
-    assert isinstance(table_type, TableType), "table type expected"
+    table_type_val = (
+        table_type.instance_type
+        if isinstance(table_type, types.TypeRef)
+        else table_type
+    )
+    assert isinstance(table_type_val, TableType), "table type or typeref expected"
     assert is_overload_constant_bool(
         to_str_if_dict_t
     ), "constant to_str_if_dict_t expected"
-    out_table_type = table_type
+    out_table_type = table_type_val
 
     # convert dictionary-encoded string arrays to regular string arrays
     if is_overload_true(to_str_if_dict_t):
-        out_table_type = to_str_arr_if_dict_array(table_type)
+        out_table_type = to_str_arr_if_dict_array(table_type_val)
 
     def codegen(context, builder, sig, args):
         table = cgutils.create_struct_proxy(out_table_type)(context, builder)

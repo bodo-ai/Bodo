@@ -957,8 +957,8 @@ class UntypedPass:
         if index_ind is not None:
             # Convert the output array to index
             index_arg = f"bodo.utils.conversion.convert_to_index({data_args[1]}, {index_col_name!r})"
-            index_type = bodo.utils.typing.index_typ_from_dtype_name(
-                index_arr_typ.dtype, index_col_name
+            index_type = bodo.utils.typing.index_typ_from_dtype_name_arr(
+                index_arr_typ.dtype, index_col_name, index_arr_typ
             )
         else:
             # generate RangeIndex as default index
@@ -1747,8 +1747,8 @@ class UntypedPass:
 
             index_elem_dtype = index_arr_typ.dtype
             index_name = index_col
-            index_typ = bodo.utils.typing.index_typ_from_dtype_name(
-                index_elem_dtype, index_name
+            index_typ = bodo.utils.typing.index_typ_from_dtype_name_arr(
+                index_elem_dtype, index_name, index_arr_typ
             )
 
             columns.remove(index_col)

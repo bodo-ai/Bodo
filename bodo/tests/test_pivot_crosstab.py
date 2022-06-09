@@ -153,29 +153,26 @@ def test_pivot_random_int_count_sum_prod_min_max(add_args, memory_leak_check):
         set_columns_name_to_none=True,
         reorder_columns=True,
     )
-    # The pivot table infrastructure when annotating output columns only
-    # supports a subset of operations, but without annotation all functions
-    # supported by groupby apply are supported.
-    # TODO: Unify these infrastructures.
-    if add_args is None:
-        check_func(
-            f6,
-            (df,),
-            sort_output=True,
-            check_dtype=False,
-            set_columns_name_to_none=True,
-            reorder_columns=True,
-        )
-        # Add an extra column to verify the selcted indices are correct.
-        df = pd.DataFrame({"A": list_A, "C": list_C, "B": list_C, "D": list_D})
-        check_func(
-            f6,
-            (df,),
-            sort_output=True,
-            check_dtype=False,
-            set_columns_name_to_none=True,
-            reorder_columns=True,
-        )
+    check_func(
+        f6,
+        (df,),
+        additional_compiler_arguments=add_args,
+        sort_output=True,
+        check_dtype=False,
+        set_columns_name_to_none=True,
+        reorder_columns=True,
+    )
+    # Add an extra column to verify the selcted indices are correct.
+    df = pd.DataFrame({"A": list_A, "C": list_C, "B": list_C, "D": list_D})
+    check_func(
+        f6,
+        (df,),
+        additional_compiler_arguments=add_args,
+        sort_output=True,
+        check_dtype=False,
+        set_columns_name_to_none=True,
+        reorder_columns=True,
+    )
 
 
 @pytest.mark.slow
@@ -771,10 +768,6 @@ def test_pivot_na_index(df, memory_leak_check):
     # We don't capture the name field of the columns index,
     # so we set check_names=False.
 
-    # Pivot produces nullable float values instead of nullable int
-    # values for the data. As a result, since we don't support Float64,
-    # we set check_dtype=False.
-
     # sort_output becuase row order isn't maintained by pivot.
     # reorder_columns because the column order is consistent but not defined.
     check_func(
@@ -784,6 +777,9 @@ def test_pivot_na_index(df, memory_leak_check):
         check_dtype=False,
         sort_output=True,
         reorder_columns=True,
+        # Use py_output because Bodo keeps the values an int64, but Pandas
+        # uses a float
+        py_output=impl(df).astype("Int64"),
     )
 
 
@@ -1641,9 +1637,9 @@ def test_pivot_to_parquet(df, memory_leak_check):
                     py_output.index.name
                 ]
                 cols_metadata = bodo_table.schema.pandas_metadata.get("columns")
-                # Generate expected typenames for float64 and string
-                pd_type = "float64" if py_output.b.dtype == np.float64 else "unicode"
-                np_type = "float64" if py_output.b.dtype == np.float64 else "object"
+                # Generate expected typenames for Int64 and string
+                pd_type = "Int64" if py_output.b.dtype == np.float64 else "unicode"
+                np_type = "int64" if py_output.b.dtype == np.float64 else "object"
                 total_columns = py_output.columns.to_list() + [py_output.index.name]
                 for col_metadata in cols_metadata:
                     assert col_metadata["name"] in total_columns, "Name doesn't match"
@@ -1676,6 +1672,101 @@ def test_pivot_to_parquet(df, memory_leak_check):
         assert (
             n_passed == bodo.get_size()
         ), f"Output doesn't match Pandas with {data_dist} data"
+        bodo.barrier()
+
+
+def test_pivot_table_dict_encoded(memory_leak_check):
+    """
+    Tests support for df.pivot_table with dictionary
+    encoded string columns.
+
+    This won't output a final DataFrame with dictionary encoded
+    arrays because the groupby operation will remove any
+    dictionary encoding in the reduction. When dictionary encoding
+    is supported with groupby pivot may need further updates.
+    """
+
+    temp_filename = "pivot_temp.pq"
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame(
+            {
+                "A": [str(i) for i in range(1000)] * 10,
+                "D": [str(i) for i in range(2000, 3000)] * 10,
+                "B": [str(i) for i in range(10)] * 1000,
+                "C": [str(i) for i in range(1000, 2000)] * 10,
+            }
+        )
+        df.to_parquet(temp_filename)
+    bodo.barrier()
+
+    def impl():
+        df = pd.read_parquet(temp_filename, _bodo_read_as_dict=["A", "B", "C", "D"])
+        return df.pivot_table(index=["B", "C"], columns="D", values="A", aggfunc="min")
+
+    try:
+        py_output = pd.read_parquet(temp_filename)
+        py_output = py_output.pivot_table(
+            index=["B", "C"], columns="D", values="A", aggfunc="min"
+        )
+        check_func(
+            impl,
+            (),
+            py_output=py_output,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+            reorder_columns=True,
+        )
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove(temp_filename)
+        bodo.barrier()
+
+
+def test_pivot_dict_encoded(memory_leak_check):
+    """
+    Tests support for df.pivot_table with dictionary
+    encoded string columns.
+
+    This won't output a final DataFrame with dictionary encoded
+    arrays because the groupby operation will remove any
+    dictionary encoding in the reduction. When dictionary encoding
+    is supported with groupby pivot may need further updates.
+    """
+
+    temp_filename = "pivot_temp.pq"
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame(
+            {
+                "A": [str(i) for i in range(100)] * 1000,
+                "D": [str(i) for i in range(200000, 300000)],
+                "B": [str(i) for i in range(10)] * 1000 * 10,
+                "C": [str(i) for i in range(100, 200)] * 1000,
+            }
+        )
+        df.to_parquet(temp_filename)
+    bodo.barrier()
+
+    def impl():
+        df = pd.read_parquet(temp_filename, _bodo_read_as_dict=["A", "B", "C", "D"])
+        return df.pivot(index=["D", "C"], columns="A", values="B")
+
+    try:
+        py_output = pd.read_parquet(temp_filename)
+        py_output = py_output.pivot(index=["D", "C"], columns="A", values="B")
+        check_func(
+            impl,
+            (),
+            py_output=py_output,
+            check_names=False,
+            check_dtype=False,
+            sort_output=True,
+            reorder_columns=True,
+            dist_test=False,
+        )
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove(temp_filename)
         bodo.barrier()
 
 

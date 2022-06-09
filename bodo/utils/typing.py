@@ -1021,7 +1021,11 @@ def get_index_type_from_dtype(t):
         TimedeltaIndexType,
     )
 
-    if t in [bodo.hiframes.pd_timestamp_ext.pd_timestamp_type, bodo.datetime64ns]:
+    if t in [
+        bodo.hiframes.pd_timestamp_ext.pd_timestamp_type,
+        bodo.datetime64ns,
+        bodo.datetime_date_type,
+    ]:
         return DatetimeIndexType(types.none)
 
     # Timezone-aware timestamp
@@ -1215,6 +1219,10 @@ class MetaType(types.Type):
         https://github.com/numba/numba/blob/8e6fa5690fbe4138abf69263363be85987891e8b/numba/core/itanium_mangler.py#L219
         """
         return self.__class__.__name__, (self._code,)
+
+    def __len__(self):
+        # determine len based on the meta values.
+        return len(self.meta)
 
 
 register_model(MetaType)(models.OpaqueModel)
@@ -2096,10 +2104,10 @@ def iternext_bodo_array(context, builder, sig, args, result):
         builder.store(nindex, iterobj.index)
 
 
-def index_typ_from_dtype_name(elem_dtype, name):
+def index_typ_from_dtype_name_arr(elem_dtype, name, arr_typ):
     """
-    Given a dtype and a name (which is either None or a string),
-    returns a matching index type.
+    Given a dtype, name (which is either None or a string),
+    and possibly an array type, returns a matching index type.
     """
     index_class = type(get_index_type_from_dtype(elem_dtype))
     if name is None:
@@ -2108,12 +2116,14 @@ def index_typ_from_dtype_name(elem_dtype, name):
         name_typ = types.StringLiteral(name)
     if index_class == bodo.hiframes.pd_index_ext.NumericIndexType:
         # Numeric requires the size
-        index_typ = index_class(elem_dtype, name_typ)
+        index_typ = index_class(elem_dtype, name_typ, arr_typ)
     elif index_class == bodo.hiframes.pd_index_ext.CategoricalIndexType:
         # Categorical requires the categorical array
-        index_typ = index_class(bodo.CategoricalArrayType(elem_dtype), name_typ)
+        index_typ = index_class(
+            bodo.CategoricalArrayType(elem_dtype), name_typ, arr_typ
+        )
     else:
-        index_typ = index_class(name_typ)
+        index_typ = index_class(name_typ, arr_typ)
     return index_typ
 
 

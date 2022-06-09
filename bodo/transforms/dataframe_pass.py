@@ -442,9 +442,6 @@ class DataFramePass:
                 assign, assign.target, rhs, func_mod, func_name
             )
 
-        if fdef == ("pivot_table_dummy", "bodo.hiframes.pd_groupby_ext"):
-            return self._run_call_pivot_table(assign, lhs, rhs)
-
         if fdef == ("crosstab_dummy", "bodo.hiframes.pd_groupby_ext"):
             return self._run_call_crosstab(assign, lhs, rhs)
 
@@ -2070,86 +2067,6 @@ class DataFramePass:
             pysig=numba.core.utils.pysignature(func),
             run_full_pipeline=True,
         )
-
-    def _run_call_pivot_table(self, assign, lhs, rhs):
-        df_var, values, index, columns, aggfunc, _pivot_values = rhs.args
-        func_name = self.typemap[aggfunc.name].literal_value
-        values = self.typemap[values.name].literal_value
-        index = self.typemap[index.name].literal_value
-        columns = self.typemap[columns.name].literal_value
-        pivot_values = self.typemap[_pivot_values.name].meta
-        df_type = self.typemap[df_var.name]
-        out_typ = self.typemap[lhs.name]
-
-        nodes = []
-        df_in_vars = {values: self._get_dataframe_data(df_var, values, nodes)}
-
-        df_out_vars = {
-            col: ir.Var(lhs.scope, mk_unique_var(sanitize_varname(col)), lhs.loc)
-            for col in pivot_values
-        }
-        for v in df_out_vars.values():
-            self.typemap[v.name] = out_typ.data[0]
-
-        pivot_arr = self._get_dataframe_data(df_var, columns, nodes)
-        index_arr = self._get_dataframe_data(df_var, index, nodes)
-        agg_func = get_agg_func(self.func_ir, func_name, rhs, typemap=self.typemap)
-        gb_info_in = {}
-        # TODO: multiple functions
-        assert not isinstance(agg_func, list)
-        # values is a string (single column name)
-        gb_info_in[values] = [(agg_func, list(pivot_values))]
-        gb_info_out = {col: (values, agg_func) for col in pivot_values}
-
-        out_key_vars = []
-        out_index_var = ir.Var(
-            lhs.scope, mk_unique_var(sanitize_varname(index)), lhs.loc
-        )
-        ind = df_type.columns.index(index)
-        self.typemap[out_index_var.name] = to_str_arr_if_dict_array(df_type.data[ind])
-        out_key_vars.append(out_index_var)
-
-        input_has_index = False
-        same_index = False
-        return_key = True
-        dropna = True
-        agg_node = bodo.ir.aggregate.Aggregate(
-            lhs.name,
-            df_var.name,
-            [index],
-            gb_info_in,
-            gb_info_out,
-            out_key_vars,
-            df_out_vars,
-            df_in_vars,
-            [index_arr],
-            input_has_index,
-            same_index,
-            return_key,
-            lhs.loc,
-            func_name,
-            dropna,
-            pivot_arr,
-            pivot_values,
-        )
-        nodes.append(agg_node)
-
-        nodes += compile_func_single_block(
-            eval("lambda A: bodo.utils.conversion.index_from_array(A, _index_name)"),
-            (out_index_var,),
-            None,
-            self,
-            extra_globals={"_index_name": index},
-        )
-        index_var = nodes[-1].target
-
-        _init_df = _gen_init_df_dataframe_pass(out_typ.columns, "index")
-
-        # XXX the order of output variables passed should match out_typ.columns
-        out_vars = [df_out_vars[c] for c in out_typ.columns]
-        out_vars.append(index_var)
-
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _run_call_crosstab(self, assign, lhs, rhs):
         index, columns, _pivot_values = rhs.args

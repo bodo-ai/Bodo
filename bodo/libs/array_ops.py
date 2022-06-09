@@ -797,8 +797,10 @@ def array_unique_vector_map(in_arr_tup):
             func_text += f"      in_lst_{i}.append(values_tup[{i}])\n"
             func_text += f"      null_in_lst_{i}.append(nulls_tup[{i}])\n"
             if is_str_arr_type(in_arr):
-                # If the data is null nulls_tup[i] == 0, so we multiply here
-                func_text += f"      total_len_{i}  += nulls_tup[{i}] * bodo.libs.str_arr_ext.get_utf8_size(values_tup[{i}])\n"
+                # If the data is null nulls_tup[i] == 0, so we multiply here.
+                # To avoid extra string allocations to convert to utf8
+                # we use the offset in the original array.
+                func_text += f"      total_len_{i}  += nulls_tup[{i}] * bodo.libs.str_arr_ext.get_str_arr_item_length(in_arr_tup[{i}], i)\n"
         func_text += "      arr_map[data_val] = len(arr_map)\n"
         func_text += "    else:\n"
         func_text += "      set_val = arr_map[data_val]\n"
@@ -829,14 +831,16 @@ def array_unique_vector_map(in_arr_tup):
         func_text += "  map_vector = np.empty(n, np.int64)\n"
         func_text += "  is_na = 0\n"
         func_text += "  in_lst = []\n"
+        func_text += "  na_idxs = []\n"
         if is_str_arr_type(arr_typ_list[0]):
             func_text += "  total_len = 0\n"
         func_text += "  for i in range(n):\n"
         func_text += "    if bodo.libs.array_kernels.isna(in_arr, i):\n"
         func_text += "      is_na = 1\n"
-        func_text += "      # Always put NA in the last location. We can safely use\n"
-        func_text += "      # -1 because in_arr[-1] == in_arr[len(in_arr) - 1]\n"
+        func_text += "      # Always put NA in the last location.\n"
+        func_text += "      # We use -1 as a placeholder\n"
         func_text += "      set_val = -1\n"
+        func_text += "      na_idxs.append(i)\n"
         func_text += "    else:\n"
         func_text += "      data_val = in_arr[i]\n"
         func_text += "      if data_val not in arr_map:\n"
@@ -844,13 +848,15 @@ def array_unique_vector_map(in_arr_tup):
         # Add the data to index info
         func_text += "        in_lst.append(data_val)\n"
         if is_str_arr_type(arr_typ_list[0]):
-            func_text += (
-                "        total_len += bodo.libs.str_arr_ext.get_utf8_size(data_val)\n"
-            )
+            # To avoid extra string allocations to convert to utf8
+            # we use the offset in the original array.
+            func_text += "        total_len += bodo.libs.str_arr_ext.get_str_arr_item_length(in_arr, i)\n"
         func_text += "        arr_map[data_val] = len(arr_map)\n"
         func_text += "      else:\n"
         func_text += "        set_val = arr_map[data_val]\n"
         func_text += "    map_vector[i] = set_val\n"
+        # Replace -1 with the actual row value.
+        func_text += "  map_vector[na_idxs] = len(arr_map)\n"
         # Compute the output arrays for the index.
         func_text += "  n_rows = len(arr_map) + is_na\n"
         if is_str_arr_type(arr_typ_list[0]):

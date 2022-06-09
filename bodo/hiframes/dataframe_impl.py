@@ -4149,16 +4149,6 @@ def pivot_error_checking(df, index, columns, values, func_name):
                 )
             values_idxs.append(df.column_index[val])
 
-    # Convert values_lit to an array for lowering
-    if all(isinstance(c, int) for c in values_lit):
-        values_lit = np.array(values_lit, "int64")
-    elif all(isinstance(c, str) for c in values_lit):
-        values_lit = pd.array(values_lit, "string")
-    else:
-        raise BodoError(
-            f"{func_name}(): column names selected for 'values' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"
-        )
-
     # Verify that none of the columns are the same.
     index_set = set(values_idxs) | set(index_idxs) | {columns_idx}
     if len(index_set) != (len(values_idxs) + len(index_idxs) + 1):
@@ -4284,19 +4274,15 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
     ) = pivot_error_checking(data, index, columns, values, "DataFrame.pivot")
     if len(index_lit) == 0:
         if is_overload_none(data.index.name_typ):
-            index_lit = [None]
+            index_name_val = (None,)
         else:
             # Checking for literal type is done in pivot_error_checking
-            index_lit = [get_literal_value(data.index.name_typ)]
-    # If len(values_lit) == 1, the names aren't needed because we create a
-    # regular index instead of a multi-index. Since we lower an array, we pass
-    # None if this case to make sure we can determine multi-index at compile
-    # time.
-    if len(values_lit) == 1:
-        values_name_const = None
+            index_name_val = (get_literal_value(data.index.name_typ),)
     else:
-        values_name_const = values_lit
-
+        index_name_val = tuple(index_lit)
+    index_lit = ColNamesMetaType(index_name_val)
+    values_lit = ColNamesMetaType(tuple(values_lit))
+    columns_lit = ColNamesMetaType((columns_lit,))
     # TODO: Provide a Bodo specific optional argument for specifying pivot_values
     # without requiring communication. If this value is constant at compile time
     # we don't need table format.
@@ -4321,18 +4307,18 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
         func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {val_idx}),\n"
     func_text += "        ),\n"
     func_text += "        pivot_values,\n"
-    func_text += "        index_lit_tup,\n"
+    func_text += "        index_lit,\n"
     func_text += "        columns_lit,\n"
-    func_text += "        values_name_const,\n"
+    func_text += "        values_lit,\n"
     func_text += "    )\n"
     loc_vars = {}
     exec(
         func_text,
         {
             "bodo": bodo,
-            "index_lit_tup": tuple(index_lit),
+            "index_lit": index_lit,
             "columns_lit": columns_lit,
-            "values_name_const": values_name_const,
+            "values_lit": values_lit,
         },
         loc_vars,
     )
@@ -4386,133 +4372,113 @@ def overload_dataframe_pivot_table(
     if not isinstance(data, DataFrameType):
         raise BodoError("pandas.pivot_table(): 'data' argument must be a DataFrame")
 
-    if _pivot_values is None:
-        # If we don't know columns at compile time we reuse pivot.
-        # TODO: Reuse pivot even if we know the columns at compile time.
+    # TODO: Add error checking for supported aggfunc?
+    (
+        index_lit,
+        columns_lit,
+        values_lit,
+        index_idx,
+        columns_idx,
+        values_idx,
+    ) = pivot_error_checking(data, index, columns, values, "DataFrame.pivot_table")
 
-        # TODO: Add error checking or supported aggfunc?
-        (
-            index_lit,
-            columns_lit,
-            values_lit,
-            index_idx,
-            columns_idx,
-            values_idx,
-        ) = pivot_error_checking(data, index, columns, values, "DataFrame.pivot_table")
+    # If len(values_lit) == 1, the names aren't needed because we create a
+    # regular index instead of a multi-index. Since we lower an array, we pass
+    # None if this case to make sure we can determine multi-index at compile
+    # time.
+    index_lit_orig = index_lit
+    index_lit = ColNamesMetaType(tuple(index_lit))
+    values_lit = ColNamesMetaType(tuple(values_lit))
+    columns_lit_org = columns_lit
+    columns_lit = ColNamesMetaType((columns_lit,))
 
-        # If len(values_lit) == 1, the names aren't needed because we create a
-        # regular index instead of a multi-index. Since we lower an array, we pass
-        # None if this case to make sure we can determine multi-index at compile
-        # time.
-        if len(values_lit) == 1:
-            values_name_const = None
-        else:
-            values_name_const = values_lit
+    func_text = "def impl(\n"
+    func_text += "    data,\n"
+    func_text += "    values=None,\n"
+    func_text += "    index=None,\n"
+    func_text += "    columns=None,\n"
+    func_text += '    aggfunc="mean",\n'
+    func_text += "    fill_value=None,\n"
+    func_text += "    margins=False,\n"
+    func_text += "    dropna=True,\n"
+    func_text += '    margins_name="All",\n'
+    func_text += "    observed=False,\n"
+    func_text += "    sort=True,\n"
+    func_text += "    _pivot_values=None,\n"
+    func_text += "):\n"
+    # Truncate the dataframe to just the columns in question.
+    total_idx = index_idx + [columns_idx] + values_idx
+    func_text += f"    data = data.iloc[:, {total_idx}]\n"
+    groupby_lit = index_lit_orig + [columns_lit_org]
 
-        func_text = "def impl(\n"
-        func_text += "    data,\n"
-        func_text += "    values=None,\n"
-        func_text += "    index=None,\n"
-        func_text += "    columns=None,\n"
-        func_text += '    aggfunc="mean",\n'
-        func_text += "    fill_value=None,\n"
-        func_text += "    margins=False,\n"
-        func_text += "    dropna=True,\n"
-        func_text += '    margins_name="All",\n'
-        func_text += "    observed=False,\n"
-        func_text += "    sort=True,\n"
-        func_text += "    _pivot_values=None,\n"
-        func_text += "):\n"
-        # Truncate the dataframe to just the columns in question.
-        total_idx = index_idx + [columns_idx] + values_idx
-        func_text += f"    data = data.iloc[:, {total_idx}]\n"
-        groupby_lit = index_lit + [columns_lit]
-        # Perform the groupby with the agg function
+    if not is_overload_none(_pivot_values):
+        # Sort to be consistent with the runtime columns assumption.
+        _pivot_values_tup = tuple(sorted(_pivot_values.meta))
+        _pivot_values = ColNamesMetaType(_pivot_values_tup)
+        func_text += "    pivot_values = _pivot_values_arr\n"
+        # Filter the unique values column. This is now always column number
+        # len(index_idx), since we have done an iloc on the DataFrame.
         func_text += (
-            f"    data = data.groupby({groupby_lit!r}, as_index=False).agg(aggfunc)\n"
+            f"    data = data[data.iloc[:, {len(index_idx)}].isin(pivot_values)]\n"
         )
-        # Compute the unique columns. This is now always index 1, since we have done an
-        # iloc on the DataFrame
-        func_text += f"    pivot_values = data.iloc[:, {len(index_idx)}].unique()\n"
-        # Call the main pivot_impl
-        func_text += "    return bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
-        # Select all of the arrays. Since we have applied an iloc/groupby the new
-        # locations are now always [0-m), m, [m+1, n)
-        func_text += "        (\n"
-        for i in range(0, len(index_idx)):
-            func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i}),\n"
-        func_text += "        ),\n"
-        func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {len(index_idx)}),),\n"
-        func_text += "        (\n"
-        for i in range(len(index_idx) + 1, len(values_idx) + len(index_idx) + 1):
-            func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i}),\n"
-        func_text += "        ),\n"
-        func_text += "        pivot_values,\n"
-        func_text += "        index_lit_tup,\n"
-        func_text += "        columns_lit,\n"
-        func_text += "        values_name_const,\n"
-        # We don't need to check for duplicates because we have already
-        # done an aggregation.
-        func_text += "        check_duplicates=False,\n"
-        func_text += "    )\n"
-        loc_vars = {}
-        exec(
-            func_text,
-            {
-                "bodo": bodo,
-                "numba": numba,
-                "index_lit_tup": tuple(index_lit),
-                "columns_lit": columns_lit,
-                "values_name_const": values_name_const,
-            },
-            loc_vars,
-        )
-        impl = loc_vars["impl"]
-        return impl
-
-    if aggfunc == "mean":
-
-        def _impl(
-            data,
-            values=None,
-            index=None,
-            columns=None,
-            aggfunc="mean",
-            fill_value=None,
-            margins=False,
-            dropna=True,
-            margins_name="All",
-            observed=False,
-            sort=True,
-            _pivot_values=None,
-        ):  # pragma: no cover
-
-            return bodo.hiframes.pd_groupby_ext.pivot_table_dummy(
-                data, values, index, columns, "mean", _pivot_values
+        if all(isinstance(c, int) for c in _pivot_values_tup):
+            _pivot_values_arr = np.array(_pivot_values_tup, "int64")
+        elif all(isinstance(c, str) for c in _pivot_values_tup):
+            _pivot_values_arr = pd.array(_pivot_values_tup, "string")
+        else:  # pragma: no cover
+            # This should be unreachable
+            raise BodoError(
+                f"pivot(): pivot values selcected via pivot JIT argument must all share a common int or string type."
             )
+    else:
+        _pivot_values_arr = None
 
-        return _impl
-
-    def _impl(
-        data,
-        values=None,
-        index=None,
-        columns=None,
-        aggfunc="mean",
-        fill_value=None,
-        margins=False,
-        dropna=True,
-        margins_name="All",
-        observed=False,
-        sort=True,
-        _pivot_values=None,
-    ):  # pragma: no cover
-
-        return bodo.hiframes.pd_groupby_ext.pivot_table_dummy(
-            data, values, index, columns, aggfunc, _pivot_values
-        )
-
-    return _impl
+    # Perform the groupby with the agg function
+    func_text += (
+        f"    data = data.groupby({groupby_lit!r}, as_index=False).agg(aggfunc)\n"
+    )
+    if is_overload_none(_pivot_values):
+        # Compute the unique columns. This is now always column number
+        # len(index_idx), since we have done an iloc on the DataFrame.
+        func_text += f"    pivot_values = data.iloc[:, {len(index_idx)}].unique()\n"
+    # Call the main pivot_impl
+    func_text += "    return bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
+    # Select all of the arrays. Since we have applied an iloc/groupby the new
+    # locations are now always [0-m), m, [m+1, n)
+    func_text += "        (\n"
+    for i in range(0, len(index_idx)):
+        func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i}),\n"
+    func_text += "        ),\n"
+    func_text += f"        (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {len(index_idx)}),),\n"
+    func_text += "        (\n"
+    for i in range(len(index_idx) + 1, len(values_idx) + len(index_idx) + 1):
+        func_text += f"            bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i}),\n"
+    func_text += "        ),\n"
+    func_text += "        pivot_values,\n"
+    func_text += "        index_lit,\n"
+    func_text += "        columns_lit,\n"
+    func_text += "        values_lit,\n"
+    # We don't need to check for duplicates because we have already
+    # done an aggregation.
+    func_text += "        check_duplicates=False,\n"
+    func_text += "        _constant_pivot_values=_constant_pivot_values,\n"
+    func_text += "    )\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "index_lit": index_lit,
+            "columns_lit": columns_lit,
+            "values_lit": values_lit,
+            "_pivot_values_arr": _pivot_values_arr,
+            "_constant_pivot_values": _pivot_values,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
 
 
 @overload(pd.melt, inline="always", no_unliteral=True)
