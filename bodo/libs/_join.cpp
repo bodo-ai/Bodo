@@ -24,13 +24,12 @@
 table_info* hash_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
     bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
-    int64_t n_data_right_t, int64_t* vect_same_key,
+    int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* vect_need_typechange, bool is_left, bool is_right, bool is_join,
     bool optional_col, bool indicator, bool is_na_equal,
     cond_expr_fn_t cond_func, int64_t* cond_func_left_columns,
     int64_t cond_func_left_column_len, int64_t* cond_func_right_columns,
     int64_t cond_func_right_column_len) {
-
     // XXX Not sure if this is needed. has_global_dictionary
     // should be set by the compiler automatically for
     // replicated data
@@ -137,7 +136,8 @@ table_info* hash_join_table(
             if (ev.is_tracing()) {
                 ev.add_attribute("g_left_total_memory", left_total_memory);
                 ev.add_attribute("g_right_total_memory", right_total_memory);
-                ev.add_attribute("g_bloom_filter_supported", bloom_filter_supported());
+                ev.add_attribute("g_bloom_filter_supported",
+                                 bloom_filter_supported());
                 ev.add_attribute("CritMemorySize", CritMemorySize);
             }
             bool all_gather = true;
@@ -160,7 +160,8 @@ table_info* hash_join_table(
                 left_total_memory < CritMemorySize &&
                 left_total_memory < (right_total_memory / double(n_pes) *
                                      global_short_to_local_long_ratio_limit)) {
-                work_left_table = gather_table(left_table, -1, all_gather, parallel_trace);
+                work_left_table =
+                    gather_table(left_table, -1, all_gather, parallel_trace);
                 free_work_left = true;
                 work_right_table = right_table;
                 left_replicated = true;
@@ -170,7 +171,8 @@ table_info* hash_join_table(
                            (left_total_memory / double(n_pes) *
                             global_short_to_local_long_ratio_limit)) {
                 work_left_table = left_table;
-                work_right_table = gather_table(right_table, -1, all_gather, parallel_trace);
+                work_right_table =
+                    gather_table(right_table, -1, all_gather, parallel_trace);
                 free_work_right = true;
                 right_replicated = true;
             } else {
@@ -267,7 +269,8 @@ table_info* hash_join_table(
                     if (make_bloom_right) {
                         right_cardinality =
                             std::get<1>(get_nunique_hashes_global(
-                                hashes_right, right_table_nrows, parallel_trace));
+                                hashes_right, right_table_nrows,
+                                parallel_trace));
                         size_t bloom_right_bytes =
                             bloom_size_bytes(right_cardinality);
                         if ((bloom_right_bytes > MAX_BLOOM_SIZE) ||
@@ -295,8 +298,9 @@ table_info* hash_join_table(
                         bloom_left->union_reduction();
                         ev_bloom.add_attribute("input_len", left_table_nrows);
                         ev_bloom.add_attribute("g_size", left_cardinality);
-                        ev_bloom.add_attribute("g_size_bytes",
-                                               static_cast<size_t>(bloom_left->SizeInBytes()));
+                        ev_bloom.add_attribute(
+                            "g_size_bytes",
+                            static_cast<size_t>(bloom_left->SizeInBytes()));
                         ev_bloom.add_attribute("which", "left");
                     }
                     if (make_bloom_right) {
@@ -306,8 +310,9 @@ table_info* hash_join_table(
                         bloom_right->union_reduction();
                         ev_bloom.add_attribute("input_len", right_table_nrows);
                         ev_bloom.add_attribute("g_size", right_cardinality);
-                        ev_bloom.add_attribute("g_size_bytes",
-                                               static_cast<size_t>(bloom_right->SizeInBytes()));
+                        ev_bloom.add_attribute(
+                            "g_size_bytes",
+                            static_cast<size_t>(bloom_right->SizeInBytes()));
                         ev_bloom.add_attribute("which", "right");
                     }
                 }
@@ -380,6 +385,16 @@ table_info* hash_join_table(
                 unify_dictionaries(arr1, arr2);
             }
         }
+
+        // Create sets for cond func columns. These columns act
+        // like key columns and are contained inside of key_in_output,
+        // so we need an efficient lookup.
+        UNORD_SET_CONTAINER<int64_t> left_cond_func_cols_set;
+        left_cond_func_cols_set.reserve(cond_func_left_column_len);
+
+        UNORD_SET_CONTAINER<int64_t> right_cond_func_cols_set;
+        right_cond_func_cols_set.reserve(cond_func_right_column_len);
+
         // Non-keys used in cond_func need global dictionaries
         // for hashing, but no unifying is necessary.
         for (auto i = 0; i < cond_func_left_column_len; i++) {
@@ -390,6 +405,7 @@ table_info* hash_join_table(
                     if (!arr->has_global_dictionary)
                         convert_local_dictionary_to_global(arr);
                 }
+                left_cond_func_cols_set.insert(col_num);
             }
         }
         for (auto i = 0; i < cond_func_right_column_len; i++) {
@@ -400,6 +416,7 @@ table_info* hash_join_table(
                     if (!arr->has_global_dictionary)
                         convert_local_dictionary_to_global(arr);
                 }
+                right_cond_func_cols_set.insert(col_num);
             }
         }
 
@@ -746,11 +763,11 @@ table_info* hash_join_table(
                                 left_ind = i_long;
                                 right_ind = cmp_row;
                             }
-                            bool match =
-                                cond_func(left_table_infos.data(), right_table_infos.data(),
-                                          col_ptrs_left.data(), col_ptrs_right.data(),
-                                          null_bitmap_left.data(), null_bitmap_right.data(),
-                                          left_ind, right_ind);
+                            bool match = cond_func(
+                                left_table_infos.data(),
+                                right_table_infos.data(), col_ptrs_left.data(),
+                                col_ptrs_right.data(), null_bitmap_left.data(),
+                                null_bitmap_right.data(), left_ind, right_ind);
                             if (match) {
                                 // If our group matches, add every row and
                                 // update the bitmap
@@ -942,11 +959,11 @@ table_info* hash_join_table(
                                 left_ind = i_long;
                                 right_ind = cmp_row;
                             }
-                            bool match =
-                                cond_func(left_table_infos.data(), right_table_infos.data(),
-                                          col_ptrs_left.data(), col_ptrs_right.data(),
-                                          null_bitmap_left.data(), null_bitmap_right.data(),
-                                          left_ind, right_ind);
+                            bool match = cond_func(
+                                left_table_infos.data(),
+                                right_table_infos.data(), col_ptrs_left.data(),
+                                col_ptrs_right.data(), null_bitmap_left.data(),
+                                null_bitmap_right.data(), left_ind, right_ind);
                             if (match) {
                                 // If our group matches, add every row
                                 has_match = true;
@@ -1058,7 +1075,7 @@ table_info* hash_join_table(
             last_col_use_right[i] = 1;
         }
         for (size_t i = 0; i < n_tot_left; i++) {
-            if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
+            if (i < n_key && vect_same_key[i] == 1) {
                 // Key is shared by both tables
                 last_col_use_left[i] = 2;
                 last_col_use_right[i] = 2;
@@ -1120,24 +1137,31 @@ table_info* hash_join_table(
             }
         }
 
+        // Where to check in key_in_output if we have a key or
+        // a general merge condition.
+        offset_t key_in_output_idx = 0;
+
         // Inserting the Left side of the table
         tracing::Event ev_fill_left("fill_left", parallel_trace);
         int idx = 0;
         for (size_t i = 0; i < n_tot_left; i++) {
-            if (i < n_key && vect_same_key[i < n_key ? i : 0] == 1) {
+            if (i < n_key && vect_same_key[i] == 1) {
                 // We are in the case of a key that has the same name on left
                 // and right. This means that additional NaNs cannot happen.
-                bool map_integer_type = false;
                 array_info* left_arr = work_left_table->columns[i];
                 array_info* right_arr = work_right_table->columns[i];
-                if (ChoiceOpt == 0) {
-                    out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                        left_arr, right_arr, ListPairWrite, 2,
-                        map_integer_type));
-                } else {
-                    out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                        right_arr, left_arr, ListPairWrite, 2,
-                        map_integer_type));
+                if (key_in_output[key_in_output_idx]) {
+                    bool map_integer_type = false;
+                    if (ChoiceOpt == 0) {
+                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
+                            left_arr, right_arr, ListPairWrite, 2,
+                            map_integer_type));
+                    } else {
+                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
+                            right_arr, left_arr, ListPairWrite, 2,
+                            map_integer_type));
+                    }
+                    idx++;
                 }
                 // Decref columns that are no longer used
                 if (last_col_use_left[i] == 2) {
@@ -1146,29 +1170,40 @@ table_info* hash_join_table(
                 if (last_col_use_right[i] == 2) {
                     decref_array(right_arr);
                 }
+                key_in_output_idx++;
             } else {
+                // Check if a column may be eliminated from the output
+                bool check_key_in_output =
+                    (i < n_key) || (left_cond_func_cols_set.count(i));
+                array_info* left_arr = work_left_table->columns[i];
                 // We are in data case or in the case of a key that is taken
                 // only from one side. Therefore we have to plan for the
                 // possibility of additional NaN.
-                bool map_integer_type = vect_need_typechange[idx];
-                array_info* left_arr = work_left_table->columns[i];
-                array_info* right_arr = nullptr;
-                if (ChoiceOpt == 0) {
-                    out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                        left_arr, right_arr, ListPairWrite, 0,
-                        map_integer_type));
-                } else {
-                    out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                        right_arr, left_arr, ListPairWrite, 1,
-                        map_integer_type));
+                if (!check_key_in_output || key_in_output[key_in_output_idx]) {
+                    bool map_integer_type = vect_need_typechange[idx];
+                    array_info* right_arr = nullptr;
+                    if (ChoiceOpt == 0) {
+                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
+                            left_arr, right_arr, ListPairWrite, 0,
+                            map_integer_type));
+                    } else {
+                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
+                            right_arr, left_arr, ListPairWrite, 1,
+                            map_integer_type));
+                    }
+                    idx++;
                 }
                 // Decref columns that are no longer used
                 if (last_col_use_left[i] == 3) {
                     decref_array(left_arr);
                 }
+                if (check_key_in_output) {
+                    key_in_output_idx++;
+                }
             }
-            idx++;
         }
+        // Clear to free memory
+        left_cond_func_cols_set.clear();
         ev_fill_left.finalize();
         tracing::Event ev_fill_right("fill_right", parallel_trace);
         // Inserting the right side of the table.
@@ -1176,28 +1211,38 @@ table_info* hash_join_table(
             // There are two cases where we put the column in output:
             // ---It is a right key column with different name from the left.
             // ---It is a right data column
-            if (i >= n_key ||
-                (i < n_key && vect_same_key[i < n_key ? i : 0] == 0 &&
-                 !is_join)) {
-                bool map_integer_type = vect_need_typechange[idx];
-                array_info* left_arr = nullptr;
+            bool is_new_key =
+                i < n_key && vect_same_key[i < n_key ? i : 0] == 0 && !is_join;
+            if (i >= n_key || is_new_key) {
                 array_info* right_arr = work_right_table->columns[i];
-                if (ChoiceOpt == 0) {
-                    out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                        left_arr, right_arr, ListPairWrite, 1,
-                        map_integer_type));
-                } else {
-                    out_arrs.emplace_back(RetrieveArray_TwoColumns(
-                        right_arr, left_arr, ListPairWrite, 0,
-                        map_integer_type));
+                // Check if a column may be eliminated from the output.
+                bool check_key_in_output =
+                    is_new_key || (right_cond_func_cols_set.count(i));
+                if (!check_key_in_output || key_in_output[key_in_output_idx]) {
+                    bool map_integer_type = vect_need_typechange[idx];
+                    array_info* left_arr = nullptr;
+                    if (ChoiceOpt == 0) {
+                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
+                            left_arr, right_arr, ListPairWrite, 1,
+                            map_integer_type));
+                    } else {
+                        out_arrs.emplace_back(RetrieveArray_TwoColumns(
+                            right_arr, left_arr, ListPairWrite, 0,
+                            map_integer_type));
+                    }
+                    idx++;
                 }
-                idx++;
                 // Decref columns that are no longer used
                 if (last_col_use_right[i] == 4) {
                     decref_array(right_arr);
                 }
+                if (check_key_in_output) {
+                    key_in_output_idx++;
+                }
             }
         }
+        // Clear to free memory
+        right_cond_func_cols_set.clear();
         ev_fill_right.finalize();
         // Create indicator column if indicator=True
         size_t num_rows = ListPairWrite.size();
