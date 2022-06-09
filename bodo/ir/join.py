@@ -249,16 +249,31 @@ class Join(ir.Stmt):
             vect_same_key.append(name_left == name_right)
         self.vect_same_key = vect_same_key
         # Track column origins
-        self.column_origins = {
-            (str(c) + suffix_left if c in add_suffix else c): ("left", c)
-            for c in left_vars.keys()
-        }
-        self.column_origins.update(
-            {
-                (str(c) + suffix_right if c in add_suffix else c): ("right", c)
-                for c in right_vars.keys()
-            }
-        )
+        self.column_origins = {}
+        for c in left_vars.keys():
+            rhs = ("left", c)
+            if c in add_suffix:
+                self.column_origins[str(c) + suffix_left] = rhs
+                # If a column is both a data column and a key,
+                # add it twice. This should only happen if
+                # right_index=True
+                if c in self.left_key_set:
+                    self.column_origins[c] = rhs
+            else:
+                self.column_origins[c] = rhs
+
+        for c in right_vars.keys():
+            rhs = ("right", c)
+            if c in add_suffix:
+                self.column_origins[str(c) + suffix_right] = rhs
+                # If a column is both a data column and a key,
+                # add it twice. This should only happen if
+                # left_index=True. See test_merge_left_index_dce
+                if c in self.right_key_set:
+                    self.column_origins[c] = rhs
+            else:
+                self.column_origins[c] = rhs
+
         # Keep the suffix to track possible collisions
         # See test_join::test_merge_suffix_included
         # and test_join::test_merge_suffix_collision
@@ -462,9 +477,6 @@ def remove_dead_join(
     Dead code elimination for the Join IR node. This finds columns that
     are dead data columns in the output and eliminates them from the
     inputs.
-
-    This doesn't yet remove keys from the output (because those are still
-    needed to compute the result, although the output could be avoided).
     """
     # if an output column is dead, the related input column is not needed
     # anymore in the join
@@ -475,31 +487,35 @@ def remove_dead_join(
         if col_var.name in lives:
             all_cols_dead = False
             continue
-        # avoid index sentinel (that is not in column_origins)
-        if col_name == "$_bodo_index_":
-            continue
+        # Set the column to delete
+        dead_cols.append(col_name)
         # avoid indicator (that is not in column_origins)
         if join_node.indicator and col_name == "_merge":
-            dead_cols.append("_merge")
             # If _merge is removed, switch indicator to False so we don't expect
             # to generate indicator code.
             join_node.indicator = False
             continue
         orig, orig_name = join_node.column_origins[col_name]
+        if col_name == "$_bodo_index_" and col_name in join_node.left_vars:
+            # $_bodo_index_ may be in left and right so column_origins may
+            # be wrong (as the dictionary can only store one orig)
+            orig = "left"
         if (
             orig == "left"
             and orig_name not in join_node.left_key_set
             and orig_name not in join_node.left_cond_cols
         ):
             join_node.left_vars.pop(orig_name)
-            dead_cols.append(col_name)
+        if col_name == "$_bodo_index_" and col_name in join_node.right_vars:
+            # $_bodo_index_ may be in left and right so column_origins may
+            # be wrong (as the dictionary can only store one orig)
+            orig = "right"
         if (
             orig == "right"
             and orig_name not in join_node.right_key_set
             and orig_name not in join_node.right_cond_cols
         ):
             join_node.right_vars.pop(orig_name)
-            dead_cols.append(col_name)
 
     for cname in dead_cols:
         join_node.out_data_vars.pop(cname)
@@ -615,9 +631,6 @@ def join_distributed_run(
     left_key_vars = tuple(join_node.left_vars[c] for c in join_node.left_keys)
     right_key_vars = tuple(join_node.right_vars[c] for c in join_node.right_keys)
 
-    left_vars = join_node.left_vars
-    right_vars = join_node.right_vars
-
     # Optional column refer: When doing a merge on column and index, the key
     # is put also in output, so we need one additional column in that case.
     optional_col_var = ()
@@ -625,14 +638,30 @@ def join_distributed_run(
     optional_column = False
     if join_node.left_index and not join_node.right_index and not join_node.is_join:
         optional_key = join_node.right_keys[0]
-        if optional_key in left_vars:
+        # We only need to generate the optional output key if
+        # it hasn't been eliminated from the out_vars. We have
+        # an optional_column when a column is both a key and
+        # a data column. We check this with add_suffix because
+        # the data columns may be removed via DCE.
+        if (
+            optional_key in join_node.add_suffix
+            and optional_key in join_node.out_data_vars
+        ):
             optional_key_tuple = (optional_key,)
             optional_col_var = (join_node.right_vars[optional_key],)
             optional_column = True
 
     if join_node.right_index and not join_node.left_index and not join_node.is_join:
         optional_key = join_node.left_keys[0]
-        if optional_key in right_vars:
+        # We only need to generate the optional output key if
+        # it hasn't been eliminated from the out_vars. We have
+        # an optional_column when a column is both a key and
+        # a data column. We check this with add_suffix because
+        # the data columns may be removed via DCE.
+        if (
+            optional_key in join_node.add_suffix
+            and optional_key in join_node.out_data_vars
+        ):
             optional_key_tuple = (optional_key,)
             optional_col_var = (join_node.left_vars[optional_key],)
             optional_column = True
@@ -725,14 +754,31 @@ def join_distributed_run(
         ",".join(right_other_names), "," if len(right_other_names) != 0 else ""
     )
 
+    # For each key and data column used in the condition function,
+    # keep track of it should be live in the output. This is
+    # a list of boolean values, one per key/data column.
+
+    # After the lists are populated the final lengths will be
+    # len(left_key_in_output) = nkeys + num data_cols used in general cond func
+    # len(right_key_in_output) = nkeys - (nshared_keys) + num data_cols used in general cond func
+    # where nshared_keys == len(self.left_key_set & self.right_key_set)
+    left_key_in_output = []
+    right_key_in_output = []
+
     # Add the keys to the output.
     for cname in join_node.left_keys:
         if cname in join_node.add_suffix:
             cname_work = str(cname) + join_node.suffix_left
         else:
             cname_work = cname
-        assert cname_work in join_node.out_data_vars
-        merge_out.append(join_node.out_data_vars[cname_work])
+        # If cname_work is not in the out_data_vars the column is
+        # dead in the output.
+        if cname_work in join_node.out_data_vars:
+            merge_out.append(join_node.out_data_vars[cname_work])
+            is_live = 1
+        else:
+            is_live = 0
+        left_key_in_output.append(is_live)
     for i, cname in enumerate(join_node.right_keys):
         if not join_node.vect_same_key[i] and not join_node.is_join:
 
@@ -740,14 +786,26 @@ def join_distributed_run(
                 cname_work = str(cname) + join_node.suffix_right
             else:
                 cname_work = cname
-            assert cname_work in join_node.out_data_vars
-            merge_out.append(join_node.out_data_vars[cname_work])
+            # If cname_work is not in the out_data_vars the column is
+            # dead in the output.
+            if cname_work in join_node.out_data_vars:
+                merge_out.append(join_node.out_data_vars[cname_work])
+                is_live = 1
+            else:
+                is_live = 0
+            right_key_in_output.append(is_live)
 
-    def _get_out_col_var(cname, is_left):
-        """
-        Get the output array variable for a given
-        input column name. Suffix names are resolved
-        via `is_left`.
+    def _get_out_col_name(cname, is_left):
+        """Return the name in the output variables
+        for an input column.
+
+        Args:
+            cname (str): name in the input
+            is_left (bool): is the source the left or right table.
+
+        Returns:
+            str: Name of the column in join_node.out_data_vars
+                 if it is alive.
         """
         if cname in join_node.add_suffix:
             if is_left:
@@ -756,16 +814,51 @@ def join_distributed_run(
                 cname_work = str(cname) + join_node.suffix_right
         else:
             cname_work = cname
+        return cname_work
+
+    def _get_out_col_var(cname, is_left):
+        """Get the output array variable for a given
+        input column name. Suffix names are resolved
+        via `is_left`
+
+        Args:
+            cname (str): Name of the column in the input vars.
+            is_left (bool): Is the input var the left or right table.
+
+        Returns:
+            ir.Var: Returns the output variable that corresponds
+            to this input column name.
+        """
+
+        cname_work = _get_out_col_name(cname, is_left)
         return join_node.out_data_vars[cname_work]
 
     # Append the data columns to merge out.
     for n in sorted(join_node.left_vars.keys(), key=lambda a: str(a)):
         if n not in join_node.left_key_set:
-            merge_out.append(_get_out_col_var(n, True))
+            is_live = 1
+            if n in join_node.left_cond_cols:
+                cname_work = _get_out_col_name(n, True)
+                # If cname_work is not in the out_data_vars the column is
+                # dead in the output.
+                if cname_work not in join_node.out_data_vars:
+                    is_live = 0
+                left_key_in_output.append(is_live)
+            if is_live:
+                merge_out.append(_get_out_col_var(n, True))
 
     for n in sorted(join_node.right_vars.keys(), key=lambda a: str(a)):
         if n not in join_node.right_key_set:
-            merge_out.append(_get_out_col_var(n, False))
+            is_live = 1
+            if n in join_node.right_cond_cols:
+                # If cname_work is not in the out_data_vars the column is
+                # dead in the output.
+                cname_work = _get_out_col_name(n, False)
+                if cname_work not in join_node.out_data_vars:
+                    is_live = 0
+                right_key_in_output.append(is_live)
+            if is_live:
+                merge_out.append(_get_out_col_var(n, False))
 
     # Add the indicator variable.
     if join_node.indicator:
@@ -802,6 +895,8 @@ def join_distributed_run(
             left_other_types,
             right_other_types,
             join_node.vect_same_key,
+            left_key_in_output,
+            right_key_in_output,
             join_node.is_left,
             join_node.is_right,
             join_node.is_join,
@@ -831,19 +926,64 @@ def join_distributed_run(
     if optional_column:
         func_text += f"    {out_names[idx]} = opti_0\n"
         idx += 1
+    # Track the offset in right_key_in_output.
+    # This is necessary because cond func columns may not be at the
+    # front of the table and right will skip keys repeated in the
+    # left table.
+    right_key_idx = 0
+
+    # Get the set of locations for condition columns.
+    left_cond_col_nums_set = set(left_col_nums)
+    right_cond_col_nums_set = set(right_col_nums)
+
+    # Compute the key outputs
     for i in range(n_keys):
-        func_text += f"    {out_names[idx]} = t1_keys_{i}\n"
-        idx += 1
+        if left_key_in_output[i]:
+            func_text += f"    {out_names[idx]} = t1_keys_{i}\n"
+            idx += 1
     for i in range(n_keys):
         if not join_node.vect_same_key[i] and not join_node.is_join:
-            func_text += f"    {out_names[idx]} = t2_keys_{i}\n"
-            idx += 1
+            if right_key_in_output[right_key_idx]:
+                func_text += f"    {out_names[idx]} = t2_keys_{i}\n"
+                idx += 1
+            right_key_idx += 1
+
+    # Track the offset in left_key_in_output. All of the left keys
+    # must be included, so we only track this for the data columns.
+    # This is necessary because cond func columns may not be at the
+    # front of the table.
+    left_key_idx = n_keys
+
+    # Compute the offsets used to determine the colnums
+    # for general merge conditions
+    left_key_offset = left_key_idx
+    right_key_offset = right_key_idx
+
+    # Compute the data outputs
     for i in range(len(left_other_names)):
-        func_text += f"    {out_names[idx]} = left_{i}\n"
-        idx += 1
+        load_arr = True
+        # Data columns may be used in the non-equality
+        # condition function. If so they are treated
+        # like a key and can be eliminated from the output
+        # but not the input.
+        if i + left_key_offset in left_cond_col_nums_set:
+            load_arr = left_key_in_output[left_key_idx]
+            left_key_idx += 1
+        if load_arr:
+            func_text += f"    {out_names[idx]} = left_{i}\n"
+            idx += 1
     for i in range(len(right_other_names)):
-        func_text += f"    {out_names[idx]} = right_{i}\n"
-        idx += 1
+        load_arr = True
+        # Data columns may be used in the non-equality
+        # condition function. If so they are treated
+        # like a key and can be eliminated from the output
+        # but not the input.
+        if i + right_key_offset in right_cond_col_nums_set:
+            load_arr = right_key_in_output[right_key_idx]
+            right_key_idx += 1
+        if load_arr:
+            func_text += f"    {out_names[idx]} = right_{i}\n"
+            idx += 1
     if join_node.indicator:
         func_text += f"    {out_names[idx]} = indicator_col\n"
         idx += 1
@@ -868,6 +1008,11 @@ def join_distributed_run(
             "delete_table_decref_arrays": delete_table_decref_arrays,
             "add_join_gen_cond_cfunc_sym": add_join_gen_cond_cfunc_sym,
             "get_join_cond_addr": get_join_cond_addr,
+            # key_in_output is defined to contain left_table then right_table
+            # to match the iteration order in C++
+            "key_in_output": np.array(
+                left_key_in_output + right_key_in_output, dtype=np.bool_
+            ),
         }
     )
     if general_cond_cfunc:
@@ -1113,6 +1258,8 @@ def _gen_local_hash_join(
     left_other_types,
     right_other_types,
     vect_same_key,
+    left_key_in_output,
+    right_key_in_output,
     is_left,
     is_right,
     is_join,
@@ -1153,24 +1300,67 @@ def _gen_local_hash_join(
     # ---For categorical array data, the input is integer and we do not change the type.
     #   We may have to change this if missing data in categorical gets treated differently.
 
+    # Sets for determining dead outputs for general condition columns
+    left_cond_col_nums_set = set(left_col_nums)
+    right_cond_col_nums_set = set(right_col_nums)
+
+    # List of columns in the output that need to be cast.
     vect_need_typechange = []
     for i in range(len(left_key_names)):
-        key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
-        vect_need_typechange.append(
-            needs_typechange(key_type, is_right, vect_same_key[i])
-        )
+        if left_key_in_output[i]:
+            key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
+            vect_need_typechange.append(
+                needs_typechange(key_type, is_right, vect_same_key[i])
+            )
+
+    # Offset for left and right table inside the key in output
+    # lists. Every left key is always included so we only count
+    # the left table for data columns.
+    left_key_in_output_idx = len(left_key_names)
+    right_key_in_output_idx = 0
+
+    # Determine the number of keys in the left table
+    left_key_offset = left_key_in_output_idx
+
     for i in range(len(left_other_names)):
-        vect_need_typechange.append(
-            needs_typechange(left_other_types[i], is_right, False)
-        )
+        load_arr = True
+        # Data columns may be used in the non-equality
+        # condition function. If so they are treated
+        # like a key and can be eliminated from the output
+        # but not the input.
+        if i + left_key_offset in left_cond_col_nums_set:
+            load_arr = left_key_in_output[left_key_in_output_idx]
+            left_key_in_output_idx += 1
+        if load_arr:
+            vect_need_typechange.append(
+                needs_typechange(left_other_types[i], is_right, False)
+            )
+
     for i in range(len(right_key_names)):
         if not vect_same_key[i] and not is_join:
-            key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
-            vect_need_typechange.append(needs_typechange(key_type, is_left, False))
+            if right_key_in_output[right_key_in_output_idx]:
+                key_type = _match_join_key_types(
+                    left_key_types[i], right_key_types[i], loc
+                )
+                vect_need_typechange.append(needs_typechange(key_type, is_left, False))
+            right_key_in_output_idx += 1
+
+    # Determine the number of keys in the right table
+    right_key_offset = right_key_in_output_idx
+
     for i in range(len(right_other_names)):
-        vect_need_typechange.append(
-            needs_typechange(right_other_types[i], is_left, False)
-        )
+        load_arr = True
+        # Data columns may be used in the non-equality
+        # condition function. If so they are treated
+        # like a key and can be eliminated from the output
+        # but not the input.
+        if i + right_key_offset in right_cond_col_nums_set:
+            load_arr = right_key_in_output[right_key_in_output_idx]
+            right_key_in_output_idx += 1
+        if load_arr:
+            vect_need_typechange.append(
+                needs_typechange(right_other_types[i], is_left, False)
+            )
 
     def get_out_type(idx, in_type, in_name, need_nullable, is_same_key):
         """
@@ -1246,7 +1436,7 @@ def _gen_local_hash_join(
     else:
         func_text += "    cfunc_cond = 0\n"
 
-    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {}, {}, cfunc_cond, left_table_cond_columns.ctypes, {}, right_table_cond_columns.ctypes, {})\n".format(
+    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, key_in_output.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {}, {}, cfunc_cond, left_table_cond_columns.ctypes, {}, right_table_cond_columns.ctypes, {})\n".format(
         left_parallel,
         right_parallel,
         n_keys,
@@ -1271,63 +1461,92 @@ def _gen_local_hash_join(
         glbs[f"out_type_{idx}"] = out_types[idx]
         func_text += f"    opti_0 = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
         idx += 1
+
     # Load the left keys
     for i, t in enumerate(left_key_names):
-        key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
-        rec_typ = get_out_type(
-            idx, key_type, f"t1_keys[{i}]", is_right, vect_same_key[i]
-        )
-        func_text += rec_typ[0]
-        glbs[f"out_type_{idx}"] = out_types[idx]
-        # use astype only if necessary due to merge bugs
-        # see: test_merge_match_key_types"
-        if (
-            key_type != left_key_types[i]
-            and left_key_types[i] != bodo.dict_str_arr_type
-        ):
-            func_text += f"    t1_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
-        else:
-            func_text += f"    t1_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
-        idx += 1
+        if left_key_in_output[i]:
+            key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
+            rec_typ = get_out_type(
+                idx, key_type, f"t1_keys[{i}]", is_right, vect_same_key[i]
+            )
+            func_text += rec_typ[0]
+            glbs[f"out_type_{idx}"] = out_types[idx]
+            # use astype only if necessary due to merge bugs
+            # see: test_merge_match_key_types"
+            if (
+                key_type != left_key_types[i]
+                and left_key_types[i] != bodo.dict_str_arr_type
+            ):
+                func_text += f"    t1_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
+            else:
+                func_text += f"    t1_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
+            idx += 1
+
+    # Reset the indices for determining if outputs are live.
+    # Again all keys in left_key are always in left_key_in_output,
+    # so we just track for the data columns.
+    left_key_idx = len(left_key_names)
+    right_key_idx = 0
+
     # Load the left data arrays
     for i, t in enumerate(left_other_names):
-        rec_typ = get_out_type(idx, left_other_types[i], t, is_right, False)
-        func_text += rec_typ[0]
-        func_text += (
-            "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+        load_arr = True
+        # Data columns may be used in the non-equality
+        # condition function. If so they are treated
+        # like a key and can be eliminated from the output
+        # but not the input.
+        if i + left_key_offset in left_cond_col_nums_set:
+            load_arr = left_key_in_output[left_key_idx]
+            left_key_idx += 1
+        if load_arr:
+            rec_typ = get_out_type(idx, left_other_types[i], t, is_right, False)
+            func_text += rec_typ[0]
+            func_text += "    left_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
                 i, idx, rec_typ[1]
             )
-        )
-        idx += 1
+            idx += 1
+
     # Load the right keys
     for i, t in enumerate(right_key_names):
         if not vect_same_key[i] and not is_join:
-            key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
-            rec_typ = get_out_type(idx, key_type, f"t2_keys[{i}]", is_left, False)
-            func_text += rec_typ[0]
-            # use astype only if necessary due to merge bugs
-            # see: test_merge_match_key_types"
-            # NOTE: subtracting len(left_other_names) since output right keys are
-            # generated before left_other_names
-            glbs[f"out_type_{idx}"] = out_types[idx - len(left_other_names)]
-            if (
-                key_type != right_key_types[i]
-                and right_key_types[i] != bodo.dict_str_arr_type
-            ):
-                func_text += f"    t2_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
-            else:
-                func_text += f"    t2_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
-            idx += 1
+            if right_key_in_output[right_key_idx]:
+                key_type = _match_join_key_types(
+                    left_key_types[i], right_key_types[i], loc
+                )
+                rec_typ = get_out_type(idx, key_type, f"t2_keys[{i}]", is_left, False)
+                func_text += rec_typ[0]
+                # use astype only if necessary due to merge bugs
+                # see: test_merge_match_key_types"
+                # NOTE: subtracting len(left_other_names) since output right keys are
+                # generated before left_other_names
+                glbs[f"out_type_{idx}"] = out_types[idx - len(left_other_names)]
+                if (
+                    key_type != right_key_types[i]
+                    and right_key_types[i] != bodo.dict_str_arr_type
+                ):
+                    func_text += f"    t2_keys_{i} = bodo.utils.utils.astype(info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]}), out_type_{idx})\n"
+                else:
+                    func_text += f"    t2_keys_{i} = info_to_array(info_from_table(out_table, {idx}), {rec_typ[1]})\n"
+                idx += 1
+            right_key_idx += 1
+
     # Load the right data arrays
     for i, t in enumerate(right_other_names):
-        rec_typ = get_out_type(idx, right_other_types[i], t, is_left, False)
-        func_text += rec_typ[0]
-        func_text += (
-            "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
+        load_arr = True
+        # Data columns may be used in the non-equality
+        # condition function. If so they are treated
+        # like a key and can be eliminated from the output
+        # but not the input.
+        if i + right_key_offset in right_cond_col_nums_set:
+            load_arr = right_key_in_output[right_key_idx]
+            right_key_idx += 1
+        if load_arr:
+            rec_typ = get_out_type(idx, right_other_types[i], t, is_left, False)
+            func_text += rec_typ[0]
+            func_text += "    right_{} = info_to_array(info_from_table(out_table, {}), {})\n".format(
                 i, idx, rec_typ[1]
             )
-        )
-        idx += 1
+            idx += 1
     # Load the indicator column
     if indicator:
         func_text += f"    typ_{idx} = pd.Categorical(values=['both'], categories=('left_only', 'right_only', 'both'))\n"
