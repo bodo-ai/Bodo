@@ -733,12 +733,26 @@ def str_copy_ptr(typingctx, ptr_typ, ind_typ, str_typ, len_typ=None):
     return types.void(types.voidptr, types.intp, types.voidptr, types.intp), codegen
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.generated_jit(nopython=True)
 def get_str_arr_item_length(A, i):  # pragma: no cover
     """return the number of bytes in the string at index i.
     Note: may not be the same as the length of the string for non-ascii unicode.
     """
-    return np.int64(getitem_str_offset(A, i + 1) - getitem_str_offset(A, i))
+    if A == bodo.dict_str_arr_type:
+        # For dictionary encoded arrays we recurse on the dictionary.
+        def impl(A, i):  # pragma: no cover
+            idx = A._indices[i]
+            dict_arr = A._data
+            return np.int64(
+                getitem_str_offset(dict_arr, idx + 1)
+                - getitem_str_offset(dict_arr, idx)
+            )
+
+        return impl
+    else:
+        return lambda A, i: np.int64(
+            getitem_str_offset(A, i + 1) - getitem_str_offset(A, i)
+        )  # pragma: no cover
 
 
 @numba.njit(no_cpython_wrapper=True)

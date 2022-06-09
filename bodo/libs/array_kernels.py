@@ -2046,7 +2046,9 @@ def overload_gen_na_array(n, arr):
 
     # array of np.nan values if 'arr' is float or int Numpy array
     # TODO: use nullable int array
-    if isinstance(dtype, (types.Integer, types.Float)):
+    if not isinstance(arr, IntegerArrayType) and isinstance(
+        dtype, (types.Integer, types.Float)
+    ):
         dtype = dtype if isinstance(dtype, types.Float) else types.float64
 
         def impl_float(n, arr):  # pragma: no cover
