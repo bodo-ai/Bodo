@@ -1289,7 +1289,9 @@ def overload_mean_absolute_error(
 
             return _mae_impl
 
-#----------------------------------log_loss-------------------------------------
+
+# ----------------------------------log_loss-------------------------------------
+
 
 def log_loss_dist_helper(y_true, y_pred, eps, normalize, sample_weight, labels):
     """
@@ -1299,8 +1301,12 @@ def log_loss_dist_helper(y_true, y_pred, eps, normalize, sample_weight, labels):
     (or sample_weight.T @ accuracy_bits when sample_weight != None
     """
     loss = sklearn.metrics.log_loss(
-        y_true, y_pred, eps=eps, normalize=False,
-        sample_weight=sample_weight, labels=labels
+        y_true,
+        y_pred,
+        eps=eps,
+        normalize=False,
+        sample_weight=sample_weight,
+        labels=labels,
     )
     comm = MPI.COMM_WORLD
     loss = comm.allreduce(loss, op=MPI.SUM)
@@ -1347,7 +1353,9 @@ def overload_log_loss(
     func_text += "    y_pred = bodo.utils.conversion.coerce_to_array(y_pred)\n"
     # Coerce optional args from lists to arrays if needed
     if not is_overload_none(sample_weight):
-        func_text += "    sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)\n"
+        func_text += (
+            "    sample_weight = bodo.utils.conversion.coerce_to_array(sample_weight)\n"
+        )
     if not is_overload_none(labels):
         func_text += "    labels = bodo.utils.conversion.coerce_to_array(labels)\n"
 
@@ -4133,6 +4141,12 @@ def sklearn_preprocessing_max_abs_scaler_fit_dist_helper(m, X, partial=False):
     comm = MPI.COMM_WORLD
     num_pes = comm.Get_size()
 
+    # Save old n_samples_seen_
+    if hasattr(m, "n_samples_seen_"):
+        old_n_samples_seen_ = m.n_samples_seen_
+    else:
+        old_n_samples_seen_ = 0
+
     # Call to get the max_abs and n_samples_seen
     if partial:
         m = m.partial_fit(X)
@@ -4140,8 +4154,10 @@ def sklearn_preprocessing_max_abs_scaler_fit_dist_helper(m, X, partial=False):
         m = m.fit(X)
 
     # Compute global n_samples_seen
-    global_n_samples_seen = comm.allreduce(m.n_samples_seen_, op=MPI.SUM)
-    m.n_samples_seen_ = global_n_samples_seen
+    global_n_samples_seen = comm.allreduce(
+        m.n_samples_seen_ - old_n_samples_seen_, op=MPI.SUM
+    )
+    m.n_samples_seen_ = global_n_samples_seen + old_n_samples_seen_
 
     # Compute global max_abs
     local_max_abs_by_rank = np.zeros(
