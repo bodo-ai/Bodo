@@ -385,6 +385,69 @@ def test_merge_decimal(memory_leak_check):
     check_func(f, (df1, df2), sort_output=True, reset_index=True)
 
 
+def test_merge_empty_suffix_keys(memory_leak_check):
+    """
+    Test merge(): merging on keys and having an empty sufix.
+    """
+
+    def f1(df1, df2):
+        df3 = df1.merge(df2, left_on="A", right_on="C", suffixes=("", "_t"))
+        return df3
+
+    def f2(df1, df2):
+        df3 = df1.merge(df2, left_on="A", right_on="C", suffixes=("", "_t"))
+        return df3[["A", "C"]]
+
+    def f3(df1, df2):
+        df3 = df1.merge(df2, left_on="A", right_on="C", suffixes=("", "_t"))
+        return df3[["A_t", "B"]]
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5, 11, 3, 8] * 2,
+            "C": ["a", "b", "A", "C", "CC", "A", "LL", "D"] * 2,
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [1, 2, 4, 3, 5, 11, 8, 3] * 2,
+            "B": ["c", "d", "VV", "DD", "", "D", "SS", "A"] * 2,
+            "C": [1, 2, 4, 3, 5, 11, 8, 3] * 2,
+        }
+    )
+    check_func(f1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(f2, (df1, df2), sort_output=True, reset_index=True)
+    check_func(f3, (df1, df2), sort_output=True, reset_index=True)
+
+    merge_func1 = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f1)
+    merge_func2 = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f2)
+    merge_func3 = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f3)
+
+    # calling the functions to get function IR
+    merge_func1(df1, df2)
+    merge_func2(df1, df2)
+    merge_func3(df1, df2)
+    func_sigs = [merge_func1, merge_func2, merge_func3]
+    expected_columns = [
+        ["A", "C", "A_t", "B", "C_t"],
+        ["A", "C"],
+        ["A_t", "B"],
+    ]
+    for i, func_sig in enumerate(func_sigs):
+        fir = func_sig.overloads[func_sig.signatures[0]].metadata["preserved_ir"]
+
+        expected_cols = expected_columns[i]
+
+        for block in fir.blocks.values():
+            for statement in block.body:
+                if isinstance(statement, bodo.ir.join.Join):
+                    output_vars = statement.out_data_vars
+                    # Ensure that the output df has only one column: value_x
+                    assert len(output_vars) == len(expected_cols) and all(
+                        c in output_vars for c in expected_cols
+                    ), "Output columns don't match expectations after dead code elimination"
+
+
 def test_merge_left_right_index(memory_leak_check):
     """
     Test merge(): merging on index and use of suffices on output.
