@@ -60,7 +60,6 @@ MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
     lhs = std::move(res).ValueOrDie();
 
 std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
-std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
 
 std::string gen_pieces_file_name(int myrank, int num_ranks,
                                  const std::string &suffix) {
@@ -275,6 +274,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
 
         std::shared_ptr<::arrow::io::HdfsOutputStream> hdfs_out_stream;
         arrow::Status status;
+        std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
         hdfs_get_fs(orig_path, &hdfs_fs);
         if (is_parallel) {
             if (myrank == 0) {
