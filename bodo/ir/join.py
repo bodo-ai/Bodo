@@ -253,11 +253,13 @@ class Join(ir.Stmt):
         for c in left_vars.keys():
             rhs = ("left", c)
             if c in add_suffix:
-                self.column_origins[str(c) + suffix_left] = rhs
-                # If a column is both a data column and a key,
-                # add it twice. This should only happen if
-                # right_index=True
-                if c in self.left_key_set:
+                suffixed_left_name = str(c) + suffix_left
+                self.column_origins[suffixed_left_name] = rhs
+                # If a column is both a data column and a key
+                # from left, we add it twice. This should only
+                # happen if right_index=True.
+                # See test_merge_right_index_dce
+                if right_index and not left_index and c in self.left_key_set:
                     self.column_origins[c] = rhs
             else:
                 self.column_origins[c] = rhs
@@ -265,11 +267,13 @@ class Join(ir.Stmt):
         for c in right_vars.keys():
             rhs = ("right", c)
             if c in add_suffix:
-                self.column_origins[str(c) + suffix_right] = rhs
+                suffixed_right_name = str(c) + suffix_right
+                self.column_origins[suffixed_right_name] = rhs
                 # If a column is both a data column and a key,
-                # add it twice. This should only happen if
-                # left_index=True. See test_merge_left_index_dce
-                if c in self.right_key_set:
+                # from right, we add it twice. This should only
+                # happen if left_index=True.
+                # See test_merge_left_index_dce
+                if left_index and not right_index and c in self.right_key_set:
                     self.column_origins[c] = rhs
             else:
                 self.column_origins[c] = rhs
@@ -495,7 +499,12 @@ def remove_dead_join(
             # to generate indicator code.
             join_node.indicator = False
             continue
-        orig, orig_name = join_node.column_origins[col_name]
+        if col_name == "$_bodo_index_":
+            # index sentinel is not found in the column_origins
+            # but may still need to be removed.
+            orig_name = col_name
+        else:
+            orig, orig_name = join_node.column_origins[col_name]
         if col_name == "$_bodo_index_" and col_name in join_node.left_vars:
             # $_bodo_index_ may be in left and right so column_origins may
             # be wrong (as the dictionary can only store one orig)
