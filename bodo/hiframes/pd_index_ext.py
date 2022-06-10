@@ -4857,6 +4857,69 @@ def overload_index_putmask(I, cond, other):
     return impl
 
 
+@overload_method(NumericIndexType, "repeat", no_unliteral=True, inline="always")
+@overload_method(StringIndexType, "repeat", no_unliteral=True, inline="always")
+@overload_method(CategoricalIndexType, "repeat", no_unliteral=True, inline="always")
+@overload_method(DatetimeIndexType, "repeat", no_unliteral=True, inline="always")
+@overload_method(TimedeltaIndexType, "repeat", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "repeat", no_unliteral=True, inline="always")
+def overload_index_repeat(I, repeats, axis=None):
+    """Supports pd.Index.repeats() on tagged index type
+
+    Args:
+        I (pd.Index): the Index whose elements are going to be repeated
+        repeats (int or int iterable): the number of times each element is repeated
+        (must be non-negative). If iterable, then each element specifies the
+        number of times a specific value of I is repeated.
+        axis (any, optional): not supported. Defaults to None.
+
+    Returns:
+        pd.Index: a version of I with its values repeated
+    """
+
+    unsupported_args = dict(axis=axis)
+    arg_defaults = dict(axis=None)
+    check_unsupported_args(
+        "Index.repeat",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "Index.repeat()")
+
+    # Repeats can be int or array of int
+    if not (
+        isinstance(repeats, types.Integer)
+        or (is_iterable_type(repeats) and isinstance(repeats.dtype, types.Integer))
+    ):  # pragma: no cover
+        raise BodoError(
+            "Index.repeat(): 'repeats' should be an integer or array of integers"
+        )
+
+    func_text = "def impl(I, repeats, axis=None):\n"
+    if not isinstance(repeats, types.Integer):
+        func_text += "    repeats = bodo.utils.conversion.coerce_to_array(repeats)\n"
+    if isinstance(I, RangeIndexType):
+        func_text += "    arr = np.arange(I._start, I._stop, I._step)\n"
+    else:
+        func_text += "    arr = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
+    func_text += "    name = bodo.hiframes.pd_index_ext.get_index_name(I)\n"
+    func_text += "    out_arr = bodo.libs.array_kernels.repeat_kernel(arr, repeats)\n"
+    func_text += "    return constructor(out_arr, name)"
+
+    loc_vars = {}
+    constructor = (
+        init_numeric_index
+        if isinstance(I, RangeIndexType)
+        else get_index_constructor(I)
+    )
+    exec(func_text, {"bodo": bodo, "np": np, "constructor": constructor}, loc_vars)
+    impl = loc_vars["impl"]
+
+    return impl
+
+
 # TODO(ehsan): test
 @overload(operator.getitem, no_unliteral=True)
 def overload_heter_index_getitem(I, ind):  # pragma: no cover
@@ -5049,7 +5112,6 @@ index_unsupported_methods = [
     "memory_usage",
     "ravel",
     "reindex",
-    "repeat",
     "searchsorted",
     "set_names",
     "set_value",
@@ -5162,6 +5224,7 @@ interval_idx_unsupported_methods = [
     "where",
     "putmask",
     "nunique",
+    "repeat",
 ]
 
 
@@ -5209,6 +5272,7 @@ multi_index_unsupported_methods = [
     "where",
     "putmask",
     "nunique",
+    "repeat",
 ]
 
 
@@ -5294,6 +5358,12 @@ period_index_unsupported_methods = [
     "isin",
     "unique",
     "sort_values",
+    "repeat",
+    "all",
+    "any",
+    "where",
+    "putmask",
+    "repeat",
 ]
 
 string_index_unsupported_atrs = [
@@ -5308,16 +5378,8 @@ binary_index_unsupported_atrs = [
     "is_monotonic_decreasing",
 ]
 
-period_index_unsupported_methods = [
-    "asfreq",
-    "strftime",
-    "to_timestamp",
-    "isin",
-    "unique",
-    "all",
-    "any",
-    "where",
-    "putmask",
+binary_index_unsupported_methods = [
+    "repeat",
 ]
 
 index_types = [
@@ -5381,6 +5443,7 @@ def _install_index_unsupported():
         (DatetimeIndexType, dt_index_unsupported_methods),
         (TimedeltaIndexType, td_index_unsupported_methods),
         (PeriodIndexType, period_index_unsupported_methods),
+        (BinaryIndexType, binary_index_unsupported_methods),
     ]
 
     # install unsupported methods for the individual idx types

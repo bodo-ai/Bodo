@@ -648,6 +648,26 @@ def test_putmask_args():
         bodo.jit(impl)(I, C, pd.Series(list("ABCDEFGH")))
 
 
+# TODO: handle cases where n is not the same length as I
+@pytest.mark.slow
+def test_repeat_malformed():
+    def impl(I, n):
+        return I.repeat(n)
+
+    err_msg1 = re.escape("negative dimensions not allowed")
+    err_msg2 = re.escape(
+        "Index.repeat(): 'repeats' should be an integer or array of integers"
+    )
+
+    I = pd.Index([1, 2, 3])
+
+    with pytest.raises(ValueError, match=err_msg1):
+        bodo.jit(impl)(I, -4)
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl)(I, "ABC")
+
+
 def check_unsupported_atr(idx_format_str, idx_val, unsupported_atr):
     func_text = f"""
 def impl(I):
