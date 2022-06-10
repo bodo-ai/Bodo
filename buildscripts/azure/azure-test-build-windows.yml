@@ -32,23 +32,23 @@ jobs:
       flake8 bodo
     displayName: 'Flake8'
 
-  - bash: |
-      conda create -y -n bodo_build conda-build anaconda-client conda-verify conda=4.12
-    displayName: 'Create Conda Env'
-
-  - bash: |
-      set -eo pipefail
-      source activate bodo_build
-      export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
-      cd buildscripts/bodo-conda-recipe/
-      conda build . -c bodo.ai -c conda-forge --no-test --output-folder ../../
-    displayName: 'Conda build Bodo'
-
-  - bash: |
-      set -eo pipefail
-      source activate bodo_build
-      mkdir bodo-inc
-      mkdir bodo-inc/windows-64
-      cp ./win-64/bodo*.tar.bz2 bodo-inc/windows-64/
-      conda index bodo-inc/
-    displayName: 'index bodo-inc'
+#  - bash: |
+#      conda create -y -n bodo_build conda-build anaconda-client conda-verify conda=4.12
+#    displayName: 'Create Conda Env'
+#
+#  - bash: |
+#      set -eo pipefail
+#      source activate bodo_build
+#      export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+#      cd buildscripts/bodo-conda-recipe/
+#      conda build . -c bodo.ai -c conda-forge --no-test --output-folder ../../
+#    displayName: 'Conda build Bodo'
+#
+#  - bash: |
+#      set -eo pipefail
+#      source activate bodo_build
+#      mkdir bodo-inc
+#      mkdir bodo-inc/windows-64
+#      cp ./win-64/bodo*.tar.bz2 bodo-inc/windows-64/
+#      conda index bodo-inc/
+#    displayName: 'index bodo-inc'
