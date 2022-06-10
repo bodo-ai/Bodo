@@ -2988,12 +2988,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_reindex)(idx=pd.Index(data))
 
-    def test_repeat(idx):
-        return idx.repeat()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_repeat)(idx=pd.Index(data))
-
     def test_searchsorted(idx):
         return idx.searchsorted()
 
@@ -3382,6 +3376,43 @@ def test_timedelta_max_all_na():
         return I.max()
 
     check_func(impl, (idx,))
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([1, 2, 3, 4, 5]),
+        pd.Index([-5.0, -6.1, -7.2, 3.8, -6.1], name="f"),
+        pd.date_range("2018-01-01", "2018-06-01", freq="M"),
+        pd.timedelta_range("1D", "7D"),
+        pd.Index(["A", "E", "I", "O", "U", "A"]),
+        pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
+        pd.CategoricalIndex(list("abcaacab")),
+        pd.RangeIndex(0, 6, 1),
+        pd.RangeIndex(5, -1, -1),
+        pd.RangeIndex(0, 10, 2),
+        pd.RangeIndex(-3, 30, 7),
+        # Unskip after [BE-3016] resolved
+        pytest.param(pd.Index([b"a", b"b", b"c", b"a", b"b"]), marks=pytest.mark.skip),
+        # Unskip after [BE-711] has made progress including (at the very least):
+        # - alloc_type for IntervalArray
+        # - isna for IntervalArray
+        # - IntervalArray getitem (integer scalar)
+        # - IntervalArray setitem (slice)
+        pytest.param(pd.interval_range(0, 5), marks=pytest.mark.skip),
+    ],
+)
+def test_index_repeat(index):
+    def impl(index, n):
+        return index.repeat(n)
+
+    dist_test = not (isinstance(index, pd.RangeIndex) and index.step < 0)
+    check_func(impl, (index, 1), dist_test=dist_test)
+    check_func(impl, (index, 3), dist_test=dist_test)
+    check_func(impl, (index, 0), dist_test=dist_test)
+    check_func(
+        impl, (index, np.array([i % 3 for i in range(len(index))])), dist_test=dist_test
+    )
 
 
 @pytest.mark.parametrize(

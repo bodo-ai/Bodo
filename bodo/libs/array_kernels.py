@@ -2537,6 +2537,7 @@ def repeat_kernel_overload(A, repeats):
         A = decode_if_dict_array(A)
         l = len(A)
         # TODO(ehsan): Add a check to ensure non-negative repeat values
+        # and that l is 1 (in which case, broadcast) or equal to len(A)
         out_arr = bodo.utils.utils.alloc_type(repeats.sum(), _dtype, (-1,))
         idx = 0
         for i in range(l):
