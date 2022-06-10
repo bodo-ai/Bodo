@@ -38,11 +38,11 @@ stages:
       vmImage: macOS-latest
       useNumbaDev: false
       platformBuild: false
-  - template: buildscripts/azure/azure-build-binary-windows.yml
-    parameters:
-      name: Windows
-      vmImage: windows-2019
-      useNumbaDev: false
+#  - template: buildscripts/azure/azure-build-binary-windows.yml
+#    parameters:
+#      name: Windows
+#      vmImage: windows-2019
+#      useNumbaDev: false
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: macOS_ARM
@@ -55,12 +55,12 @@ stages:
       vmImage: ubuntu-latest
       useNumbaDev: false
       platformBuild: false
-  - template: buildscripts/azure/azure-build-binary-windows-pip.yml
-    parameters:
-      name: Windows_pip
-      vmImage: windows-2019
-      useNumbaDev: false
-      platformBuild: false
+#  - template: buildscripts/azure/azure-build-binary-windows-pip.yml
+#    parameters:
+#      name: Windows_pip
+#      vmImage: windows-2019
+#      useNumbaDev: false
+#      platformBuild: false
   - template: buildscripts/azure/azure-build-binary-macos-x86-pip.yml
     parameters:
       name: macOS_x86_pip
