@@ -3117,6 +3117,14 @@ def call_finalize():  # pragma: no cover
     finalize_s3()
     finalize_fsspec()
     _check_for_cpp_errors()
+
+
+@numba.njit
+def finalize_hdfs():  # pragma: no cover
+    """Removes hdfs. This is done separate from call_finalize
+    because any JPype dependency will need to reorder this function
+    and cannot reorder call_finalize
+    """
     disconnect_hdfs()
 
 
@@ -3128,6 +3136,7 @@ def flush_stdout():
 
 
 atexit.register(call_finalize)
+atexit.register(finalize_hdfs)
 # flush output before finalize
 atexit.register(flush_stdout)
 
