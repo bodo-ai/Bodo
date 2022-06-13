@@ -231,7 +231,10 @@ class DistributedPass:
         flag = True
         while flag:
             deadcode_elim_can_make_changes = remove_dead_table_columns(
-                self.func_ir, self.typemap, typing_info
+                self.func_ir,
+                self.typemap,
+                typing_info,
+                allow_liveness_breaking_changes=False,
             )
             deadcode_eliminated = False
             # If dead columns are pruned, run dead code elimination until there are no changes
@@ -245,8 +248,12 @@ class DistributedPass:
                     self.typemap,
                 ):
                     deadcode_eliminated |= True
-            # If we eliminated dead code, run these two passes again
+            # If we eliminated dead code, run these two passes again, and mark that we may need to
+            # rerun typing pass to perfrom filter pushdown
             flag = deadcode_eliminated
+
+        # run remove_dead_table_columns a final time, to allow for liveness breaking optimizations
+        remove_dead_table_columns(self.func_ir, self.typemap, typing_info)
 
         # transform
         self._gen_init_code(self.func_ir.blocks)
@@ -521,9 +528,7 @@ class DistributedPass:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                (
-                    bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
-                ),
+                (bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,),
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):

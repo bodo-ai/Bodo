@@ -19,7 +19,7 @@ def set_logging_stream(logger, verbose_level):
         yield
     except Exception as e:
         # Print the error message
-        print(e)
+        print(e, flush=True)
         passed = 0
     finally:
         bodo.user_logging.restore_default_bodo_verbose_level()

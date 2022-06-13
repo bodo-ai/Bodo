@@ -389,7 +389,6 @@ def check_func_seq(
         bodo_out.columns.name = None
     if reorder_columns:
         bodo_out.sort_index(axis=1, inplace=True)
-
     passed = _test_equal_guard(
         bodo_out,
         py_output,

@@ -33,6 +33,7 @@ from numba.core.ir_utils import (
     analysis,
     build_definitions,
     find_callname,
+    get_definition,
     guard,
     has_no_side_effect,
     mk_unique_var,
@@ -1599,13 +1600,33 @@ def bodo_remove_dead_block(
 
         # ignore assignments that their lhs is not live or lhs==rhs
         if isinstance(stmt, ir.Assign):
+
             lhs = stmt.target
             rhs = stmt.value
-            if lhs.name not in lives and has_no_side_effect(
-                rhs, lives_n_aliases, call_table
-            ):
-                removed = True
-                continue
+
+            if lhs.name not in lives:
+                if has_no_side_effect(rhs, lives_n_aliases, call_table):
+                    removed = True
+                    continue
+                if (
+                    isinstance(rhs, ir.Expr)
+                    and rhs.op == "call"
+                    and call_table[rhs.func.name] == ["astype"]
+                ):
+                    # Check if we can eliminate an np.array.astype call.  All other astypes should be handled within bodo, via inlining.
+                    # This is needed for dead column elimination with BodoSQL
+                    # This cannot be done within remove_hiframes, as we need access to the typing
+
+                    fn_def = guard(get_definition, func_ir, rhs.func)
+                    if (
+                        fn_def is not None
+                        and fn_def.op == "getattr"
+                        and isinstance(typemap[fn_def.value.name], types.Array)
+                        and fn_def.attr == "astype"
+                    ):
+                        removed = True
+                        continue
+
             # replace dead array in array.shape with a live alternative equivalent array
             # this happens for CSV/Parquet read nodes where the first array is used
             # for forming RangeIndex but some other arrays may be used in the

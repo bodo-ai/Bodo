@@ -3102,6 +3102,7 @@ class DistributedAnalysis:
                 mod = str(self.typemap[mod.name])
             fname = mod + "." + name
         if len(arrs) > 0:
+
             info = (
                 "Distributed analysis set '{}' as replicated due "
                 "to call to function '{}' (unsupported function or usage)"
