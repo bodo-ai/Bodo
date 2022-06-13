@@ -1444,3 +1444,68 @@ def test_table_column_del_past_setitem(memory_leak_check, file_type):
             check_logger_msg(stream, f"Columns loaded ['Column{num_layers + 1}']")
         finally:
             _del_many_column_file(file_type)
+
+
+@pytest.mark.parametrize("num_layers", [3, pytest.param(10, marks=pytest.mark.slow)])
+def test_table_column_filter_past_setitem(memory_leak_check, num_layers):
+    """
+    Tests that dead setitems on tables are correctly converted to set_table_column_null, which
+    allows for column pruning and filtering at the IO node.
+    """
+    file_type = "parquet"
+
+    func_text = ""
+    func_text += "def impl():\n"
+    func_text += f"    df = pd.read_parquet('many_columns.parquet')\n"
+    for i in range(num_layers):
+        func_text += f"    df['Column{i+1}'] = df['Column{i}']\n"
+    func_text += f"    df2 = df[df['Column96'] > 10]\n"
+    # func_text += f"    df2 = df\n"
+    func_text += f"    return df2['Column{num_layers + 1}']\n"
+
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "pd": pd}, loc_vars)
+    impl = loc_vars["impl"]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 1):
+        try:
+            _create_many_column_file(file_type)
+            check_func(impl, (), check_dtype=False, reset_index=True)
+            # TODO: update filter pushdown to be able to push column 96
+            check_logger_msg(
+                stream, f"Columns loaded ['Column{num_layers + 1}', 'Column96']"
+            )
+        finally:
+            _del_many_column_file(file_type)
+
+
+def test_table_column_pruing_past_atype_setitem(memory_leak_check):
+    """
+    Tests that dead setitems on tables are correctly converted to set_table_column_null, which
+    allows for column pruning at the IO node.
+
+    This case checks that the setiem is converted even when using funtions that have no side
+    effects.
+    """
+    file_type = "parquet"
+
+    def impl():
+        df = pd.read_parquet("many_columns.parquet")
+        df["Column0"] = df["Column0"].astype(float)
+        df["Column1"] = df["Column1"].astype(str)
+        df["Column0"] = df["Column0"] + 1
+        return df["Column3"]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 1):
+        try:
+            _create_many_column_file(file_type)
+            check_func(impl, (), check_dtype=False, reset_index=True)
+            check_logger_msg(stream, f"Columns loaded ['Column3']")
+        finally:
+            _del_many_column_file(file_type)

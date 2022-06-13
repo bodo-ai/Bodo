@@ -66,6 +66,7 @@ from bodo.utils.typing import (
     to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import (
+    find_build_tuple,
     get_getsetitem_index_var,
     is_array_typ,
     is_assign,
@@ -353,6 +354,12 @@ class DataFramePass:
 
         if fdef == ("set_df_col", "bodo.hiframes.dataframe_impl"):
             return self._run_call_set_df_column(assign, lhs, rhs)
+
+        if fdef == (
+            "__bodosql_replace_columns_dummy",
+            "bodo.hiframes.dataframe_impl",
+        ):  # pragma: no cover
+            return self._df_pass_run_call_bodosql_replace_columns(assign, lhs, rhs)
 
         if fdef == ("get_dataframe_table", "bodo.hiframes.pd_dataframe_ext"):
             # If we loaded the table from a DataFrame we may be able to eliminate
@@ -1215,6 +1222,124 @@ class DataFramePass:
             extra_globals={
                 "__col_name_meta_value_set_df_column": __col_name_meta_value_set_df_column
             },
+        )
+
+    def _df_pass_run_call_bodosql_replace_columns(
+        self, assign, lhs, rhs
+    ):  # pragma: no cover
+        """
+        transforms __bodosql_replace_columns_dummy. This is heavily copied from _run_call_set_df_column. However, we only need to handle a subset of the cases found here,
+        as we have some assurances due to the way that bodosql handles code generation, namely:
+        1. The input dataframe is has at least one column
+        2. All of the columns that are being set are already present in the input dataframe
+        3. We don't have to handle reflection and/or updating in place
+        """
+
+        df_var = rhs.args[0]
+        col_indicies = guard(find_build_tuple, self.func_ir, rhs.args[1])
+        assert (
+            col_indicies is not None
+        ), "Internal error, unable to find build tuple for arg1 of __bodosql_replace_columns_dummy"
+        # column names must be consts
+        col_names_to_replace = [
+            guard(find_const, self.func_ir, col_indicie) for col_indicie in col_indicies
+        ]
+
+        for name in col_names_to_replace:
+            assert (
+                name is not None
+            ), "Internal error, unable to find build tuple for arg1 of __bodosql_replace_columns_dummy"
+
+        new_arrs = guard(find_build_tuple, self.func_ir, rhs.args[2])
+        assert (
+            new_arrs is not None
+        ), "Internal error, unable to find build tuple for arg2 of __bodosql_replace_columns_dummy"
+
+        in_df_typ = self.typemap[df_var.name]
+        out_df_typ = self.typemap[assign.target.name]
+        nodes = []
+
+        # This shouldn't be possible given our codegen, but better safe than sorry
+        for col_name in col_names_to_replace:
+            if col_name not in in_df_typ.column_index:
+                raise BodoError(
+                    "Internal error, invalid code generated for __bodosql_replace_columns_dummy: column name that is not present in the input dataframe passed into arg1",
+                    loc=rhs.loc,
+                )
+
+        # We only generate a __bodosql_replace_columns_dummy call if there are columns that need to be converted
+        # Therefore, we should always have at least one column in the input
+        n_cols = len(in_df_typ.columns)
+        if n_cols == 0:
+            raise BodoError(
+                "Internal error, invalid code generated for __bodosql_replace_columns_dummy: df in arg0 has no columns",
+                loc=rhs.loc,
+            )
+        df_index_var = self._get_dataframe_index(df_var, nodes)
+
+        if in_df_typ.is_table_format:
+            # in this case, output dominates the input so we can reuse its internal data
+            # see _run_df_set_column()
+            nodes += compile_func_single_block(
+                eval(
+                    "lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)"
+                ),
+                [df_var],
+                None,
+                self,
+            )
+            in_table_var = nodes[-1].target
+            in_arrs = [in_table_var]
+            data_args = ["T0"]
+            # Note: col_inds is only defined/used in tableformat path
+            col_inds = []
+            for i in range(len(col_names_to_replace)):
+                col_name = col_names_to_replace[i]
+                new_arr = new_arrs[i]
+                col_inds.append(in_df_typ.column_index[col_name])
+                data_args.append(f"data{i}")
+                in_arrs.append(new_arr)
+        else:
+            in_arrs = [
+                self._get_dataframe_data(df_var, c, nodes) for c in in_df_typ.columns
+            ]
+            data_args = ["data{}".format(i) for i in range(n_cols)]
+            for i in range(len(col_names_to_replace)):
+                new_arr = new_arrs[i]
+                col_name = col_names_to_replace[i]
+                # we should always updating existing column
+                col_ind = in_df_typ.column_index[col_name]
+                data_args[col_ind] = f"bodo.utils.conversion.coerce_to_array({col_ind})"
+                in_arrs[col_ind] = new_arr
+
+        data_args_full_string = ", ".join(data_args)
+        func_text = f"def _init_df({data_args_full_string}, df_index):\n"
+        if in_df_typ.is_table_format:
+            # For now, we're just going to generate a list of set_table_data's. IE:
+            #
+            # T1 = bodo.hiframes.table.set_table_data(T0, 0, bodo.utils.conversion.coerce_to_array(data_args0))
+            # T2 = bodo.hiframes.table.set_table_data(T1, 1, bodo.utils.conversion.coerce_to_array(data_args1))
+            # ...
+            # df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T10, ), df_index, out_df_type)
+            # return df
+            #
+            # In the future, we could likely restructure set_table_data to allow multiple simultaneous set actions
+            for i in range(len(col_inds)):
+                col_ind = col_inds[i]
+                func_text += f"  T{i+1} = bodo.hiframes.table.set_table_data(T{i}, {col_ind}, bodo.utils.conversion.coerce_to_array({data_args[i+1]}))\n"
+            func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T{len(col_names_to_replace)},), df_index, out_df_type)\n"
+            func_text += f"  return df\n"
+        else:
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args_full_string},), df_index, out_df_type)\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        _init_df = loc_vars["_init_df"]
+        return replace_func(
+            self,
+            _init_df,
+            in_arrs + [df_index_var],
+            pre_nodes=nodes,
+            extra_globals={"out_df_type": out_df_typ},
         )
 
     def _run_call_len(self, lhs, df_var, assign):

@@ -91,6 +91,22 @@ class TableColumnDelPass:
         column_live_map, equiv_vars = compute_column_liveness(
             cfg, f_ir.blocks, f_ir, typemap, False
         )
+
+        # TableColumnDelPass operates under the assumption that aliases are transitive,
+        # but this assumption has since been changed. For right now, we simply convert
+        # this aliases to a transitive representation.
+        # See https://bodo.atlassian.net/jira/software/projects/BE/boards/4/backlog?selectedIssue=BE-3028
+
+        # copy to avoid changing size during iteration
+        old_alias_map = copy.deepcopy(equiv_vars)
+        # combine all aliases transitively
+        for v in old_alias_map:
+            equiv_vars[v].add(v)
+            for w in old_alias_map[v]:
+                equiv_vars[v] |= equiv_vars[w]
+            for w in old_alias_map[v]:
+                equiv_vars[w] = equiv_vars[v]
+
         # Step 2: Alias Grouping. Determine which variables are the same table
         # and ensure they share live columns.
         alias_sets, alias_set_liveness_map = self.compute_alias_grouping(
@@ -109,6 +125,7 @@ class TableColumnDelPass:
             alias_sets,
             alias_set_liveness_map,
         )
+        updated = False
         # Step 4: Remove columns. Compute the actual columns decrefs and
         # update the IR.
         updated = self.insert_column_dels(
@@ -498,7 +515,12 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                             "bodo.hiframes.table",
                         ),
                     ):
-                        # set_table_data and set_table_data_null is treated like an alias
+                        # set_table_data and set_table_data_null both reuse lists from the input table.
+                        # IE, the table rhs table cannot be reused anywhere in the CFG after the setitem
+                        # Therefore, for the purposes of determing column uses/liveness,
+                        # the lhs table is an alias of the rhs table, and the rhs table needs to consider
+                        # the lhs's uses, but the rhs table is not an
+                        # alias of the lhs table, and ths lhs does not need to consider the rhs's uses.
                         rhs_name = rhs.args[0].name
                         assert isinstance(
                             typemap[rhs_name], TableType
@@ -507,9 +529,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                             equiv_vars[lhs_name] = set()
                         if rhs_name not in equiv_vars:
                             equiv_vars[rhs_name] = set()
-                        equiv_vars[lhs_name].add(rhs_name)
                         equiv_vars[rhs_name].add(lhs_name)
-                        equiv_vars[lhs_name] |= equiv_vars[rhs_name]
                         equiv_vars[rhs_name] |= equiv_vars[lhs_name]
                         continue
                     elif fdef == ("len", "builtins"):
@@ -580,14 +600,6 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                     # If a statement is used in any ordinary way (i.e returned)
                     # then we mark all columns as used. We use a boolean as a shortcut.
                     block_use_map[var.name] = (block_use_map[var.name][0], True)
-
-    # combine all aliases transitively
-    old_equiv_vars = copy.deepcopy(equiv_vars)
-    for v in old_equiv_vars:
-        for w in old_equiv_vars[v]:
-            equiv_vars[v] |= equiv_vars[w]
-        for w in old_equiv_vars[v]:
-            equiv_vars[w] = equiv_vars[v]
 
     return table_col_use_map, equiv_vars
 
@@ -666,7 +678,15 @@ def _compute_table_column_live_map(cfg, blocks, typemap, column_uses):
     return live_map
 
 
-def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir):
+def remove_dead_columns(
+    block,
+    lives,
+    equiv_vars,
+    typemap,
+    typing_info,
+    func_ir,
+    allow_liveness_breaking_changes,
+):
     """remove dead table columns using liveness info."""
     # We return True if any changes were made that could
     # allow for dead code elimination to make changes
@@ -685,7 +705,7 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir)
         elif is_assign(stmt):
             lhs_name = stmt.target.name
             rhs = stmt.value
-            if (
+            if allow_liveness_breaking_changes and (
                 is_expr(rhs, "getitem")
                 and isinstance(typemap[rhs.value.name], TableType)
                 and (
@@ -699,6 +719,9 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir)
                 # In this case, we've encountered a getitem that filters
                 # the rows of a table. At this step, we can also
                 # filter out columns that are not live out of this statment.
+                # Because we generate a custom lambda function, change will make us lose
+                # liveness information, as the liveness analysis will be forced to mark
+                # all columns in the input table as being used
 
                 # Compute all columns that are live at this statement.
                 used_columns = _find_used_columns(
@@ -731,6 +754,7 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir)
                     used_columns = _find_used_columns(
                         lhs_name, typemap[rhs.args[0].name], lives, equiv_vars, typemap
                     )
+
                     if used_columns is None:
                         # if used_columns is None it means all columns are used.
                         # As such, we can't do any column pruning
@@ -756,13 +780,14 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir)
                     # but still changes the type of the table. This will potentially allow for dead code elimination to do work
 
                     # NOTE: In this case, we check the left hand table, because set_table_data can add new columns,
-                    # and check the right hand column would exclude any newly added columns from the used_columns list.
-                    # see test_table_extra_column
+                    # and checking the right hand column would exclude any newly added columns from the used_columns list.
+
                     used_columns = _find_used_columns(
                         lhs_name, typemap[lhs_name], lives, equiv_vars, typemap
                     )
+
                     if used_columns is None:
-                        # if used_columns is None it means all columns are used.
+                        # if used_columns_for_current_table is None it means all columns are used.
                         # As such, we can't do any column pruning
                         new_body.append(stmt)
                         continue
@@ -794,7 +819,9 @@ def remove_dead_columns(block, lives, equiv_vars, typemap, typing_info, func_ir)
     return removed
 
 
-def remove_dead_table_columns(func_ir, typemap, typing_info):
+def remove_dead_table_columns(
+    func_ir, typemap, typing_info, allow_liveness_breaking_changes=True
+):
     """
     Runs table liveness analysis and eliminates columns from TableType
     creation functions. This must be run before custom IR extensions are
@@ -824,6 +851,7 @@ def remove_dead_table_columns(func_ir, typemap, typing_info):
                 typemap,
                 typing_info,
                 func_ir,
+                allow_liveness_breaking_changes,
             )
     return removed
 
@@ -833,7 +861,6 @@ def get_live_column_nums_block(block_lives, equiv_vars, table_name):
     column numbers that are used by the table. For efficiency this returns
     two values, a sorted list of column numbers and a use_all flag.
     If use_all=True the column numbers are garbage."""
-
     total_used_columns, use_all = block_lives.get(table_name, (set(), False))
     if use_all:
         return [], True
@@ -883,7 +910,6 @@ def _generate_rhs_use_effective_alias(
         return set(), True
     # Make a copy in case the set is shared.
     used_columns = used_columns.copy()
-    update_with_columns = True
     for other_block_use_map in table_col_use_map.values():
         used_col_local, use_all = get_live_column_nums_block(
             other_block_use_map, equiv_vars, lhs_name
