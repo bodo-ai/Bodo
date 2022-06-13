@@ -49,6 +49,7 @@ from bodo.utils.transform import (
     replace_func,
 )
 from bodo.utils.typing import (
+    INDEX_SENTINEL,
     BodoError,
     ColNamesMetaType,
     get_literal_value,
@@ -756,9 +757,9 @@ class DataFramePass:
             valid_keys_set.add(index_name)
             if index_name in key_names:
                 index_is_key = True
-        if "$_bodo_index_" in key_names:
+        if INDEX_SENTINEL in key_names:
             index_is_key = True
-            index_name = "$_bodo_index_"
+            index_name = INDEX_SENTINEL
             valid_keys_set.add(index_name)
         # "A" is equivalent to ("A", "")
         key_names = [(k, "") if (k, "") in valid_keys_set else k for k in key_names]
@@ -777,7 +778,7 @@ class DataFramePass:
             c: self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns
         }
         in_index_var = self._gen_array_from_index(df_var, nodes)
-        in_vars["$_bodo_index_"] = in_index_var
+        in_vars[INDEX_SENTINEL] = in_index_var
 
         # remove key from dfs (only data is kept)
         def get_value(c):
@@ -809,7 +810,7 @@ class DataFramePass:
             self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
             out_key_vars = []
             if not index_is_key:
-                out_vars["$_bodo_index_"] = out_index_var
+                out_vars[INDEX_SENTINEL] = out_index_var
             for k in key_names:
                 if index_is_key and k == index_name:
                     out_key_vars.append(out_index_var)
@@ -1307,8 +1308,8 @@ class DataFramePass:
 
         out_index_var = None
         in_df_index_name = None
-        right_index = "$_bodo_index_" in right_keys
-        left_index = "$_bodo_index_" in left_keys
+        right_index = INDEX_SENTINEL in right_keys
+        left_index = INDEX_SENTINEL in left_keys
         # The index variables
         right_df_index = self._get_dataframe_index(right_df, nodes)
         right_df_index_name = self._get_index_name(right_df_index, nodes)
@@ -1329,16 +1330,16 @@ class DataFramePass:
         if right_index_as_output:
             out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
             self.typemap[out_index_var.name] = self.typemap[right_index_var.name]
-            out_data_vars["$_bodo_index_"] = out_index_var
-            left_vars["$_bodo_index_"] = left_index_var
-            right_vars["$_bodo_index_"] = right_index_var
+            out_data_vars[INDEX_SENTINEL] = out_index_var
+            left_vars[INDEX_SENTINEL] = left_index_var
+            right_vars[INDEX_SENTINEL] = right_index_var
             in_df_index_name = right_df_index_name
         elif left_index_as_output:
             out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
             self.typemap[out_index_var.name] = self.typemap[left_index_var.name]
-            out_data_vars["$_bodo_index_"] = out_index_var
-            left_vars["$_bodo_index_"] = left_index_var
-            right_vars["$_bodo_index_"] = right_index_var
+            out_data_vars[INDEX_SENTINEL] = out_index_var
+            left_vars[INDEX_SENTINEL] = left_index_var
+            right_vars[INDEX_SENTINEL] = right_index_var
             in_df_index_name = left_df_index_name
         nodes.append(
             bodo.ir.join.Join(
@@ -1371,7 +1372,7 @@ class DataFramePass:
             out_index = self._gen_index_from_array(
                 out_index_var, in_df_index_name, nodes
             )
-            out_arrs = [v for c, v in out_data_vars.items() if c != "$_bodo_index_"]
+            out_arrs = [v for c, v in out_data_vars.items() if c != INDEX_SENTINEL]
             out_arrs.append(out_index)
             _init_df = _gen_init_df_dataframe_pass(out_typ.columns, "index")
         else:
@@ -1480,7 +1481,7 @@ class DataFramePass:
 
         if input_has_index:
             in_index_var = self._gen_array_from_index(df_var, nodes)
-            df_in_vars["$_bodo_index_"] = in_index_var
+            df_in_vars[INDEX_SENTINEL] = in_index_var
 
         if same_index:
             out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
