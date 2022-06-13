@@ -923,3 +923,51 @@ def str_repeat_int(arr, repeats):  # pragma: no cover
             continue
         out_str_arr[i] = data_arr[i] * repeats
     return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)
+
+
+def create_str2bool_methods(func_name):
+    """
+    Returns the dictionary-encoding optimized implementation for
+    isalnum, isalpha, isdigit, isspae, islower, isupper, istitle, isnumeric, isdecimal
+    """
+    func_text = (
+        f"def str_{func_name}(arr):\n"
+        "    data_arr = arr._data\n"
+        "    indices_arr = arr._indices\n"
+        "    n_data = len(data_arr)\n"
+        "    n_indices = len(indices_arr)\n"
+        "    out_dict_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_data)\n"
+        "    out_bool_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)\n"
+        "    for i in range(n_data):\n"
+        "        if bodo.libs.array_kernels.isna(data_arr, i):\n"
+        "            bodo.libs.array_kernels.setna(out_dict_arr, i)\n"
+        "            continue\n"
+        f"        out_dict_arr[i] = np.bool_(data_arr[i].{func_name}())\n"
+        "    for i in range(n_indices):\n"
+        "        if bodo.libs.array_kernels.isna(indices_arr, i) or bodo.libs.array_kernels.isna(\n"
+        "            data_arr, indices_arr[i]"
+        "        ):\n"
+        "            bodo.libs.array_kernels.setna(out_bool_arr, i)\n"
+        "        else:\n"
+        "            out_bool_arr[i] = out_dict_arr[indices_arr[i]]\n"
+        "    return out_bool_arr"
+    )
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {"bodo": bodo, "numba": numba, "np": np, "init_dict_arr": init_dict_arr},
+        loc_vars,
+    )
+    return loc_vars[f"str_{func_name}"]
+
+
+def _register_str2bool_methods():
+    # install str2bool functions
+    for func_name in bodo.hiframes.pd_series_ext.str2bool_methods:
+        func_impl = create_str2bool_methods(func_name)
+        func_impl = register_jitable(func_impl)
+        globals()[f"str_{func_name}"] = func_impl
+
+
+_register_str2bool_methods()

@@ -884,3 +884,34 @@ def test_dict_array_unify(dict_arr_value):
     bodo_out[pd.isna(bodo_out)] = None
     py_output = dict_arr_value.to_numpy(False)
     np.testing.assert_array_equal(py_output, bodo_out)
+
+
+@pytest.mark.parametrize("method", bodo.hiframes.pd_series_ext.str2bool_methods)
+def test_str_str2bool_methods(test_unicode_dict_str_arr, memory_leak_check, method):
+    """
+    test optimization of Series.str.isalnum/isalpha/isdigit/isspae/islower/
+    isupper/istitle/isnumeric/isdecimal for dict array
+    """
+    func_text = (
+        "def impl1(A):\n"
+        f"    return pd.Series(A).str.{method}()\n"
+        f"py_output=pd.Series(test_unicode_dict_str_arr).str.{method}()"
+    )
+
+    loc_vars = {}
+    global_vars = {"pd": pd, "test_unicode_dict_str_arr": test_unicode_dict_str_arr}
+    exec(func_text, global_vars, loc_vars)
+    impl1 = loc_vars["impl1"]
+    py_output = loc_vars["py_output"]
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=py_output,
+    )
+
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, f"str_{method}")
