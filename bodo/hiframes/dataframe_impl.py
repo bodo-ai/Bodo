@@ -4421,10 +4421,10 @@ def overload_dataframe_pivot_table(
         func_text += (
             f"    data = data[data.iloc[:, {len(index_idx)}].isin(pivot_values)]\n"
         )
-        if all(isinstance(c, int) for c in _pivot_values_tup):
-            _pivot_values_arr = np.array(_pivot_values_tup, "int64")
-        elif all(isinstance(c, str) for c in _pivot_values_tup):
+        if all(isinstance(c, str) for c in _pivot_values_tup):
             _pivot_values_arr = pd.array(_pivot_values_tup, "string")
+        elif all(isinstance(c, int) for c in _pivot_values_tup):
+            _pivot_values_arr = np.array(_pivot_values_tup, "int64")
         else:  # pragma: no cover
             # This should be unreachable
             raise BodoError(

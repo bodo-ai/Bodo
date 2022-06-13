@@ -3368,10 +3368,10 @@ def pivot_impl(
             # If we have a multi-index we have to update value_names and pivot_values for each entry.
             func_text += f"    num_rows = {len(value_names)} * len(pivot_values)\n"
             value_names_lit = value_names.meta
-            if all(isinstance(c, int) for c in value_names_lit):
-                value_names_lit = np.array(value_names_lit, "int64")
-            elif all(isinstance(c, str) for c in value_names_lit):
+            if all(isinstance(c, str) for c in value_names_lit):
                 value_names_lit = pd.array(value_names_lit, "string")
+            elif all(isinstance(c, int) for c in value_names_lit):
+                value_names_lit = np.array(value_names_lit, "int64")
             else:
                 raise BodoError(
                     f"pivot(): column names selected for 'values' must all share a common int or string type. Please convert your names to a common type using DataFrame.rename()"

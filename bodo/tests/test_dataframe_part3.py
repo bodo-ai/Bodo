@@ -1330,7 +1330,8 @@ def test_unify_dict_string_dataframes():
         check_func(impl1, (df,))
         check_func(impl2, (temp_file,), py_output=df)
         check_func(impl3, (temp_file,))
-        check_func(impl4, (df,), py_output=df)
+        if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD > len(df.columns):
+            check_func(impl4, (df,), py_output=df)
     finally:
         bodo.hiframes.boxing._use_dict_str_type = saved_dict_arr_flag
         bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = saved_read_as_dict_threshold

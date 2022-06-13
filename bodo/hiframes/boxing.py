@@ -896,10 +896,10 @@ def _get_df_columns_obj(c, builder, context, pyapi, df_typ, dataframe_payload):
 
     # avoid generating large tuples and lower a constant array if possible
     # (int and string types currently, TODO: support other types)
-    if all(isinstance(c, int) for c in df_typ.columns):
-        columns_vals = np.array(df_typ.columns, "int64")
-    elif all(isinstance(c, str) for c in df_typ.columns):
+    if all(isinstance(c, str) for c in df_typ.columns):
         columns_vals = pd.array(df_typ.columns, "string")
+    elif all(isinstance(c, int) for c in df_typ.columns):
+        columns_vals = np.array(df_typ.columns, "int64")
     else:
         columns_vals = df_typ.columns
 
