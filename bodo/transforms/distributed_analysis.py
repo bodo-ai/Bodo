@@ -983,9 +983,8 @@ class DistributedAnalysis:
             return
 
         if (
-            func_name in {
-                "fit", "partial_fit", "transform", "inverse_transform", "fit_transform"
-            }
+            func_name
+            in {"fit", "partial_fit", "transform", "inverse_transform", "fit_transform"}
             and "bodo.libs.sklearn_ext" in sys.modules
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
@@ -1265,6 +1264,15 @@ class DistributedAnalysis:
             "str_zfill",
             "str_find",
             "str_slice",
+            "str_isalnum",
+            "str_isalpha",
+            "str_isdigit",
+            "str_isspace",
+            "str_islower",
+            "str_isupper",
+            "str_istitle",
+            "str_isnumeric",
+            "str_isdecimal",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return

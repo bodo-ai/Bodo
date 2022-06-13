@@ -1357,36 +1357,49 @@ def create_str2str_methods_overload(func_name):
 
 
 def create_str2bool_methods_overload(func_name):
+    func_text = "def dict_impl(S_str):\n"
+    func_text += "    S = S_str._obj\n"
+    func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+    func_text += f"    out_arr = bodo.libs.dict_arr_ext.str_{func_name}(arr)\n"
+    func_text += (
+        "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+    )
+    func_text += "def impl(S_str):\n"
+    func_text += "    S = S_str._obj\n"
+    func_text += "    str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+    func_text += "    numba.parfors.parfor.init_prange()\n"
+    func_text += "    l = len(str_arr)\n"
+    func_text += "    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
+    func_text += "    for i in numba.parfors.parfor.internal_prange(l):\n"
+    func_text += "        if bodo.libs.array_kernels.isna(str_arr, i):\n"
+    func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
+    func_text += "        else:\n"
+    func_text += "            out_arr[i] = np.bool_(str_arr[i].{}())\n".format(
+        func_name
+    )
+    func_text += "    return bodo.hiframes.pd_series_ext.init_series(\n"
+    func_text += "      out_arr,index, name)\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    dict_impl = loc_vars["dict_impl"]
+
     def overload_str2bool_methods(S_str):
-        func_text = "def f(S_str):\n"
-        func_text += "    S = S_str._obj\n"
-        func_text += "    str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-        func_text += "    index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
-        func_text += "    name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
-        func_text += "    numba.parfors.parfor.init_prange()\n"
-        func_text += "    l = len(str_arr)\n"
-        func_text += "    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
-        func_text += "    for i in numba.parfors.parfor.internal_prange(l):\n"
-        func_text += "        if bodo.libs.array_kernels.isna(str_arr, i):\n"
-        func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
-        func_text += "        else:\n"
-        func_text += "            out_arr[i] = np.bool_(str_arr[i].{}())\n".format(
-            func_name
-        )
-        func_text += "    return bodo.hiframes.pd_series_ext.init_series(\n"
-        func_text += "      out_arr,index, name)\n"
-        loc_vars = {}
-        exec(
-            func_text,
-            {
-                "bodo": bodo,
-                "numba": numba,
-                "np": np,
-            },
-            loc_vars,
-        )
-        f = loc_vars["f"]
-        return f
+        if S_str.stype.data == bodo.dict_str_arr_type:
+            return dict_impl
+        return impl
 
     return overload_str2bool_methods
 
