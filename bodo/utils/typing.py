@@ -40,6 +40,9 @@ import bodo
 # const tuple is used since there is no literal type for dict
 CONST_DICT_SENTINEL = "$_bodo_const_dict_$"
 
+# sentinel string used to indicate a dataframe Index (usually where column names used)
+INDEX_SENTINEL = "$_bodo_index_"
+
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
 

@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """IR node for the data sorting"""
 from collections import defaultdict
+from typing import Dict, List, Union
 
 import numba
 import numpy as np
@@ -27,29 +28,45 @@ from bodo.libs.array import (
 from bodo.libs.str_arr_ext import cp_str_list_to_array, to_list_if_immutable_arr
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
-from bodo.utils.utils import debug_prints, gen_getitem
-
-MIN_SAMPLES = 1000000
-# MIN_SAMPLES = 100
-samplePointsPerPartitionHint = 20
-MPI_ROOT = 0
+from bodo.utils.utils import gen_getitem
 
 
 class Sort(ir.Stmt):
     def __init__(
         self,
-        df_in,
-        df_out,
-        key_arrs,
-        out_key_arrs,
-        df_in_vars,
-        df_out_vars,
-        inplace,
-        loc,
-        ascending_list=True,
-        na_position="last",
+        df_in: str,
+        df_out: str,
+        key_arrs: List[ir.Var],
+        out_key_arrs: List[ir.Var],
+        df_in_vars: Dict[str, ir.Var],
+        df_out_vars: Dict[str, ir.Var],
+        inplace: bool,
+        loc: ir.Loc,
+        ascending_list: Union[List[bool], bool] = True,
+        na_position: Union[List[str], str] = "last",
     ):
-        # for printing only
+        """IR node for sort operations. Produced by several sort operations like
+        df/Series.sort_values and df/Series.sort_index.
+        Sort IR node allows analysis and optimization throughout the compiler pipeline
+        such as removing dead columns. The implementation calls Timsort in the C++
+        runtime.
+
+        Args:
+            df_in (str): name of input dataframe (for printing Sort node only)
+            df_out (str): name of output dataframe (for printing Sort node only)
+            key_arrs (list[ir.Var]): key arrays for sorting
+            out_key_arrs (list[ir.Var]): output key arrays after sorting
+            df_in_vars (dict[str, ir.Var]): dict mapping column names to input variables
+            df_out_vars (dict[str, ir.Var]): dict mapping column names to output
+                variables
+            inplace (bool): sort values inplace (avoid creating new arrays)
+            loc (ir.Loc): location object of this IR node
+            ascending_list (bool|list[bool], optional): Ascending or descending sort
+                order (can be set per key). Defaults to True.
+            na_position (str|list[str], optional): Place null values first or last in
+                output array. Can be set per key. Defaults to "last".
+        """
+
         self.df_in = df_in
         self.df_out = df_out
         self.key_arrs = key_arrs
@@ -57,6 +74,8 @@ class Sort(ir.Stmt):
         self.df_in_vars = df_in_vars
         self.df_out_vars = df_out_vars
         self.inplace = inplace
+
+        # normalize na_position to list of bools (per key)
         if isinstance(na_position, str):
             if na_position == "last":
                 self.na_position_b = (True,) * len(key_arrs)
@@ -69,8 +88,11 @@ class Sort(ir.Stmt):
                     for col_na_position in na_position
                 ]
             )
+
+        # normalize ascending to list of bools (per key)
         if isinstance(ascending_list, bool):
             ascending_list = (ascending_list,) * len(key_arrs)
+
         self.ascending_list = ascending_list
         self.loc = loc
 
@@ -92,6 +114,22 @@ class Sort(ir.Stmt):
 
 
 def sort_array_analysis(sort_node, equiv_set, typemap, array_analysis):
+    """Array analysis for Sort IR node. Input arrays have the same size. Output arrays
+    have the same size as well.
+    Inputs and outputs may not have the same local size after shuffling in parallel sort
+    so we avoid adding equivalence for them to be conservative (1D_Var handling is
+    challenging so the gains don't seem worth it).
+
+    Args:
+        sort_node (ir.Sort): input Sort node
+        equiv_set (SymbolicEquivSet): equivalence set object of Numba array analysis
+        typemap (dict[str, types.Type]): typemap from analysis pass
+        array_analysis (ArrayAnalysis): array analysis object for the pass
+
+    Returns:
+        tuple(list(ir.Stmt), list(ir.Stmt)): lists of IR statements to add to IR before
+        this node and after this node.
+    """
 
     # arrays of input df have same size in first dimension
     all_shapes = []
@@ -128,6 +166,14 @@ numba.parfors.array_analysis.array_analysis_extensions[Sort] = sort_array_analys
 
 
 def sort_distributed_analysis(sort_node, array_dists):
+    """Distributed analysis for Sort IR node. Inputs and outputs have the same
+    distribution, except that output of 1D is 1D_Var due to shuffling.
+
+    Args:
+        sort_node (Sort): Sort IR node
+        array_dists (dict[str, Distribution]): distributions of arrays in the IR
+            (variable name -> Distribution)
+    """
 
     in_arrs = sort_node.key_arrs + list(sort_node.df_in_vars.values())
     out_arrs = sort_node.out_key_arrs + list(sort_node.df_out_vars.values())
@@ -156,15 +202,19 @@ def sort_distributed_analysis(sort_node, array_dists):
     for col_var in out_arrs:
         array_dists[col_var.name] = out_dist
 
-    # TODO: handle rebalance
-    # assert not (in_dist == Distribution.OneD and out_dist == Distribution.OneD_Var)
-    return
-
 
 distributed_analysis.distributed_analysis_extensions[Sort] = sort_distributed_analysis
 
 
 def sort_typeinfer(sort_node, typeinferer):
+    """Type inference extension for Sort IR nodes. Corresponding input and output
+    variables have the same type.
+
+    Args:
+        sort_node (Sort): Sort IR node
+        typeinferer (TypeInferer): type inference pass object
+    """
+
     # input and output arrays have the same type
     for in_key, out_key in zip(sort_node.key_arrs, sort_node.out_key_arrs):
         typeinferer.constraints.append(
@@ -177,13 +227,23 @@ def sort_typeinfer(sort_node, typeinferer):
                 dst=out_col_var.name, src=col_var.name, loc=sort_node.loc
             )
         )
-    return
 
 
 typeinfer.typeinfer_extensions[Sort] = sort_typeinfer
 
 
 def build_sort_definitions(sort_node, definitions=None):
+    """Sort IR node extension for building varibale definitions pass
+
+    Args:
+        sort_node (Sort): Sort IR node
+        definitions (defaultdict(list), optional): Existing definitions list. Defaults
+            to None.
+
+    Returns:
+        defaultdict(list): updated definitions
+    """
+
     if definitions is None:
         definitions = defaultdict(list)
 
@@ -199,9 +259,13 @@ ir_utils.build_defs_extensions[Sort] = build_sort_definitions
 
 
 def visit_vars_sort(sort_node, callback, cbdata):
-    if debug_prints():  # pragma: no cover
-        print("visiting sort vars for:", sort_node)
-        print("cbdata: ", sorted(cbdata.items()))
+    """Sort IR node extension for visiting variables pass
+
+    Args:
+        sort_node (Sort): Sort IR node
+        callback (function): callback to call on each variable (just passed along here)
+        cbdata (object): data to pass to callback (just passed along here)
+    """
 
     for i in range(len(sort_node.key_arrs)):
         sort_node.key_arrs[i] = visit_vars_inner(
@@ -222,13 +286,26 @@ def visit_vars_sort(sort_node, callback, cbdata):
         )
 
 
-# add call to visit sort variable
 ir_utils.visit_vars_extensions[Sort] = visit_vars_sort
 
 
 def remove_dead_sort(
     sort_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
+    """Dead code elimination for Sort IR node
+
+    Args:
+        sort_node (Sort): Sort IR node
+        lives_no_aliases (set(str)): live variable names without their aliases
+        lives (set(str)): live variable names with their aliases
+        arg_aliases (set(str)): variables that are function arguments or alias them
+        alias_map (dict(str, set(str))): mapping of variables names and their aliases
+        func_ir (FunctionIR): full function IR
+        typemap (dict(str, types.Type)): typemap of variables
+
+    Returns:
+        (Sort, optional): Sort IR node if not fully dead, None otherwise
+    """
 
     # TODO: arg aliases for inplace case?
     dead_cols = []
@@ -254,6 +331,17 @@ ir_utils.remove_dead_extensions[Sort] = remove_dead_sort
 
 
 def sort_usedefs(sort_node, use_set=None, def_set=None):
+    """use/def analysis extension for Sort IR node
+
+    Args:
+        sort_node (Sort): Sort IR node
+        use_set (set(str), optional): Existing set of used variables. Defaults to None.
+        def_set (set(str), optional): Existing set of defined variables. Defaults to
+            None.
+
+    Returns:
+        namedtuple('use_defs_result', 'usemap,defmap'): use/def sets
+    """
     if use_set is None:
         use_set = set()
     if def_set is None:
@@ -275,6 +363,15 @@ numba.core.analysis.ir_extension_usedefs[Sort] = sort_usedefs
 
 
 def get_copies_sort(sort_node, typemap):
+    """Sort IR node extension for variable copy analysis
+
+    Args:
+        sort_node (Sort): Sort IR node
+        typemap (dict(str, ir.Var)): typemap of variables
+
+    Returns:
+        tuple(set(str), set(str)): set of copies generated or killed
+    """
     # sort doesn't generate copies, it just kills the output columns
     kill_set = set()
     if not sort_node.inplace:
@@ -289,7 +386,16 @@ ir_utils.copy_propagate_extensions[Sort] = get_copies_sort
 def apply_copies_sort(
     sort_node, var_dict, name_var_table, typemap, calltypes, save_copies
 ):
-    """apply copy propagate in sort node"""
+    """Sort IR node extension for applying variable copies pass
+
+    Args:
+        sort_node (Sort): Sort IR node
+        var_dict (dict(str, ir.Var)): dictionary of variables to replace
+        name_var_table (dict(str, ir.Var)): map variable name to its ir.Var object
+        typemap (dict(str, ir.Var)): typemap of variables
+        calltypes (dict[ir.Inst, Signature]): signature of callable nodes
+        save_copies (list(tuple(str, ir.Var))): copies that were applied
+    """
     for i in range(len(sort_node.key_arrs)):
         sort_node.key_arrs[i] = replace_vars_inner(sort_node.key_arrs[i], var_dict)
         sort_node.out_key_arrs[i] = replace_vars_inner(
@@ -306,8 +412,6 @@ def apply_copies_sort(
             sort_node.df_out_vars[col_name], var_dict
         )
 
-    return
-
 
 ir_utils.apply_copy_propagate_extensions[Sort] = apply_copies_sort
 
@@ -315,6 +419,20 @@ ir_utils.apply_copy_propagate_extensions[Sort] = apply_copies_sort
 def sort_distributed_run(
     sort_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
+    """lowers Sort IR node to regular IR nodes. Uses the C++ Timsort implementation
+
+    Args:
+        sort_node (Sort): Sort IR node to lower
+        array_dists (dict(str, Distribution)): distribution of arrays
+        typemap (dict(str, ir.Var)): typemap of variables
+        calltypes (dict[ir.Inst, Signature]): signature of callable nodes
+        typingctx (typing.Context): typing context for compiler pipeline
+        targetctx (cpu.CPUContext): target context for compiler pipeline
+
+    Returns:
+        list(ir.Stmt): list of IR nodes that implement the input Sort IR node
+    """
+
     parallel = False
     in_vars = list(sort_node.df_in_vars.values())
     out_vars = list(sort_node.df_out_vars.values())
@@ -350,8 +468,8 @@ def sort_distributed_run(
     key_name_args_join = ", ".join(key_name_args)
     col_name_args = [f"c{i}" for i in range(len(in_vars))]
     col_name_args_join = ", ".join(col_name_args)
-    # TODO: use *args
-    func_text = "def f({}, {}):\n".format(key_name_args_join, col_name_args_join)
+
+    func_text = f"def f({key_name_args_join}, {col_name_args_join}):\n"
     func_text += get_sort_cpp_section(
         key_name_args,
         col_name_args,
@@ -413,6 +531,17 @@ distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
 
 
 def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes):
+    """generate IR nodes for copying an array
+
+    Args:
+        var (ir.Var): variable of array to copy
+        nodes (list[ir.Stmt]): list of IR nodes to add output to
+        typingctx (typing.Context): typing context for compiler pipeline
+        targetctx (cpu.CPUContext): target context for compiler pipeline
+        typemap (dict(str, ir.Var)): typemap of variables
+        calltypes (dict[ir.Inst, Signature]): signature of callable nodes
+    """
+
     def _impl(arr):  # pragma: no cover
         return arr.copy()
 
@@ -431,37 +560,45 @@ def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes):
 
 
 def get_sort_cpp_section(
-    key_name_args, col_name_args, ascending_list, na_position_b, parallel_b
+    key_name_args, col_name_args, ascending_list, na_position_b, parallel
 ):
+    """generate function text for pass arrays to C++ and calling sort.
+
+    Args:
+        key_name_args (list(str)): list of argument names for key inputs
+        col_name_args (list(str)): list of argument names for data inputs
+        ascending_list (list(bool)): list of ascending/descending order for each key
+        na_position_b (list(bool)): list of first/list null position for each key
+        parallel (bool): flag for parallel sort
+
+    Returns:
+        str: function text for calling C++ sort.
+    """
     func_text = ""
     key_count = len(key_name_args)
-    total_list = ["array_to_info({})".format(name) for name in key_name_args] + [
-        "array_to_info({})".format(name) for name in col_name_args
+    total_list = [f"array_to_info({name})" for name in key_name_args] + [
+        f"array_to_info({name})" for name in col_name_args
     ]
     func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
     func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
-    func_text += "  vect_ascending = np.array([{}])\n".format(
+    func_text += "  vect_ascending = np.array([{}], np.int64)\n".format(
         ",".join("1" if x else "0" for x in ascending_list)
     )
-    func_text += "  na_position = np.array([{}])\n".format(
+    func_text += "  na_position = np.array([{}], np.int64)\n".format(
         ",".join("1" if x else "0" for x in na_position_b)
     )
-    func_text += "  out_table = sort_values_table(table_total, {}, vect_ascending.ctypes, na_position.ctypes, {})\n".format(
-        key_count, parallel_b
-    )
+    func_text += f"  out_table = sort_values_table(table_total, {key_count}, vect_ascending.ctypes, na_position.ctypes, {parallel})\n"
     idx = 0
     list_key_str = []
     for name in key_name_args:
-        list_key_str.append(
-            "info_to_array(info_from_table(out_table, {}), {})".format(idx, name)
-        )
+        list_key_str.append(f"info_to_array(info_from_table(out_table, {idx}), {name})")
         idx += 1
     func_text += "  key_arrs = ({},)\n".format(",".join(list_key_str))
 
     list_data_str = []
     for name in col_name_args:
         list_data_str.append(
-            "info_to_array(info_from_table(out_table, {}), {})".format(idx, name)
+            f"info_to_array(info_from_table(out_table, {idx}), {name})"
         )
         idx += 1
     if len(list_data_str) > 0:

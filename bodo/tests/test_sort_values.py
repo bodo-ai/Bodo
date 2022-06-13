@@ -237,7 +237,6 @@ def test_sort_datetime_missing(is_slow_run, memory_leak_check):
 def test_single_col(memory_leak_check):
     """
     sorts a dataframe that has only one column
-    modify bodo.ir.sort.MIN_SAMPLES to test sampling
     """
     fname = os.path.join("bodo", "tests", "data", "kde.parquet")
 
@@ -247,15 +246,10 @@ def test_single_col(memory_leak_check):
         res = df.points.values
         return res
 
-    save_min_samples = bodo.ir.sort.MIN_SAMPLES
-    try:
-        bodo.ir.sort.MIN_SAMPLES = 10
-        check_func(
-            test_impl,
-            (),
-        )
-    finally:
-        bodo.ir.sort.MIN_SAMPLES = save_min_samples  # restore global val
+    check_func(
+        test_impl,
+        (),
+    )
 
 
 @pytest.mark.slow

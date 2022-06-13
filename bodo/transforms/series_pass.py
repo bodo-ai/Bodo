@@ -2021,48 +2021,6 @@ class SeriesPass:
 
             return nodes
 
-        if fdef == ("sort", "bodo.hiframes.series_impl"):
-            lhs = assign.target
-            data = rhs.args[0]
-            index_arr = rhs.args[1]
-            ascending = find_const(self.func_ir, rhs.args[2])
-            inplace = find_const(self.func_ir, rhs.args[3])
-
-            nodes = []
-
-            out_data = ir.Var(lhs.scope, mk_unique_var(data.name + "_data"), lhs.loc)
-            self.typemap[out_data.name] = self.typemap[data.name]
-            out_index = ir.Var(
-                lhs.scope, mk_unique_var(index_arr.name + "_index"), lhs.loc
-            )
-            self.typemap[out_index.name] = self.typemap[index_arr.name]
-
-            in_df = {"inds": index_arr}
-            out_df = {"inds": out_index}
-            in_keys = [data]
-            out_keys = [out_data]
-            na_position = "last"
-
-            # Sort node
-            nodes.append(
-                bodo.ir.sort.Sort(
-                    data.name,
-                    lhs.name,
-                    in_keys,
-                    out_keys,
-                    in_df,
-                    out_df,
-                    inplace,
-                    lhs.loc,
-                    ascending,
-                    na_position,
-                )
-            )
-
-            return nodes + compile_func_single_block(
-                eval("lambda A, B: (A, B)"), (out_data, out_index), lhs, self
-            )
-
         # inline StringArray.astype()
         if (
             isinstance(func_mod, ir.Var)

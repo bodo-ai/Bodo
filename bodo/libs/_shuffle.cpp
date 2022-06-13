@@ -2013,16 +2013,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
     int mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-#ifdef DEBUG_BROADCAST
-    std::cout << "INPUT of broadcast_table. ref_table=\n";
-    DEBUG_PrintRefct(std::cout, ref_table->columns);
-    DEBUG_PrintSetOfColumn(std::cout, ref_table->columns);
-    if (myrank == mpi_root) {
-        std::cout << "in_table=\n";
-        DEBUG_PrintRefct(std::cout, in_table->columns);
-        DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-    }
-#endif
+
     std::vector<array_info*> out_arrs;
     for (size_t i_col = 0; i_col < n_cols; i_col++) {
         int64_t arr_bcast[6];
@@ -2165,11 +2156,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         // discussion. The table is not-null only on mpi_root.
         if (myrank == mpi_root) decref_array(in_arr);
     }
-#ifdef DEBUG_BROADCAST
-    std::cout << "OUTPUT of broadcast_table. out_arrs=\n";
-    DEBUG_PrintRefct(std::cout, out_arrs);
-    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
-#endif
+
     return new table_info(out_arrs);
 }
 

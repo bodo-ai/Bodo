@@ -233,16 +233,18 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             }
         }
 
-        int64_t n_local = in_table->nrows();
         table_info* local_sort = sort_values_table_local(
             in_table, n_key_t, vect_ascending, na_position, parallel);
         if (!parallel) return local_sort;
+
         // preliminary definitions.
         tracing::Event ev_sample("sort sampling", parallel);
         int n_pes, myrank;
         int mpi_root = 0;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+        int64_t n_local = in_table->nrows();
         int64_t n_total;
         MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
                       MPI_COMM_WORLD);
