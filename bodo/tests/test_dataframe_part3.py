@@ -20,8 +20,6 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
-    _create_many_column_file,
-    _del_many_column_file,
     _ensure_func_calls_optimized_out,
     _get_dist_arg,
     _test_equal_guard,
@@ -805,34 +803,30 @@ def test_df_merge_col_key_bodo_only(key):
         pytest.param("notnull", marks=pytest.mark.slow),
     ],
 )
-def test_table_isna(method_name, memory_leak_check):
+def test_table_isna(method_name, datapath, memory_leak_check):
     """
     Tests df.isna, df.isnull, df.notna, and df.notnull with
     a DataFrame in table format.
     """
-    file_type = "csv"
-    try:
-        _create_many_column_file(file_type, null_list=[0, 14, 21, 57])
+    filename = datapath("many_columns.csv")
 
-        func_text = f"""def impl():
-            df = pd.read_csv("many_columns.csv")
-            df1 = df.{method_name}()
-            return df1[["Column1", "Column3"]]
-            """
+    func_text = f"""def impl():
+        df = pd.read_csv({filename!r})
+        df1 = df.{method_name}()
+        return df1[["Column1", "Column3"]]
+        """
 
-        local_vars = {}
-        exec(func_text, globals(), local_vars)
-        impl = local_vars["impl"]
+    local_vars = {}
+    exec(func_text, globals(), local_vars)
+    impl = local_vars["impl"]
 
-        check_func(impl, ())
-        stream = io.StringIO()
-        logger = create_string_io_logger(stream)
-        with set_logging_stream(logger, 1):
-            bodo.jit(impl)()
-            # Check the columns were pruned
-            check_logger_msg(stream, "Columns loaded ['Column1', 'Column3']")
-    finally:
-        _del_many_column_file(file_type)
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)()
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['Column1', 'Column3']")
 
 
 def test_astype_dtypes_optimization(memory_leak_check):
@@ -1499,114 +1493,110 @@ def test_df_melt_many_columns(memory_leak_check):
 
 
 @pytest.mark.parametrize("use_index", [True, False])
-def test_df_table_memory_usage(use_index, memory_leak_check):
+def test_df_table_memory_usage(use_index, datapath, memory_leak_check):
     """
     Test memory usage when using table format on distributed data.
     """
 
+    filename = datapath("many_columns.parquet")
+
     @bodo.jit
     def memory_usage_table(use_index):
-        df = pd.read_parquet("many_columns.parquet")
+        df = pd.read_parquet(filename)
         return df.memory_usage(use_index)
 
-    file_type = "parquet"
-    try:
-        _create_many_column_file(file_type)
-        # Precompute the py_output for distributed data. These
-        # numbers are taken from nbytes_no_table
-        num_rows = 1000
-        num_cols = 99
-        total_int_data = 8 * num_rows
-        total_float_data = 8 * num_rows
-        # Number of bytes in the null bitmap is a function of nranks.
-        # Here data is loaded as 1D, so we repeat the calculation here.
-        # Each rank is ceil(my_chunk / 8)
-        # my_chunk = num_rows // num_ranks + 1 if remainder
-        string_null_bytes = 0
-        for i in range(bodo.get_size()):
-            # Compute bits evenly distributed
-            my_chunk = num_rows // bodo.get_size()
-            # Address remainder
-            if i > num_rows % bodo.get_size():
-                my_chunk += 1
-            string_null_bytes += np.int64(np.ceil(my_chunk / 8))
-        nbytes_list = []
-        if use_index:
-            # Append the index num bytes, which should just be a range index,
-            # so 3 integers per rank.
-            nbytes_list.append((8 * 3 * bodo.get_size()))
-        for i in range(33):
-            nbytes_list.append(total_int_data)
-            nbytes_list.append(total_float_data)
-            # Calculate the data field
-            total_string_data = sum(
-                [len(f"value{k}") for k in (np.arange(num_rows) * (i + 1))]
-            )
-            # Offsets has an value on every rank but otherwise are filled with 64bit integers
-            total_offset_size = 8 * (num_rows + bodo.get_size())
-            nbytes_list.append(
-                total_string_data + total_offset_size + string_null_bytes
-            )
-        col_names = [f"Column{i}" for i in range(num_cols)]
-        if use_index:
-            col_names = ["Index"] + col_names
-        py_output = pd.Series(nbytes_list, index=pd.Index(col_names))
-        bodo_out = memory_usage_table(use_index)
-        pd.testing.assert_series_equal(
-            bodo_out,
-            py_output,
+    # Precompute the py_output for distributed data. These
+    # numbers are taken from nbytes_no_table
+    num_rows = 1000
+    num_cols = 99
+    total_int_data = 8 * num_rows
+    total_float_data = 8 * num_rows
+    # Number of bytes in the null bitmap is a function of nranks.
+    # Here data is loaded as 1D, so we repeat the calculation here.
+    # Each rank is ceil(my_chunk / 8)
+    # my_chunk = num_rows // num_ranks + 1 if remainder
+    null_bytes = 0
+    for i in range(bodo.get_size()):
+        # Compute bits evenly distributed
+        my_chunk = num_rows // bodo.get_size()
+        # Address remainder
+        if i > num_rows % bodo.get_size():
+            my_chunk += 1
+        null_bytes += np.int64(np.ceil(my_chunk / 8))
+    nbytes_list = []
+    if use_index:
+        # Append the index num bytes, which should just be a range index,
+        # so 3 integers per rank.
+        nbytes_list.append((8 * 3 * bodo.get_size()))
+    for i in range(33):
+        # Int columns are nullable integers
+        nbytes_list.append(total_int_data + null_bytes)
+        nbytes_list.append(total_float_data)
+        # Rows: 0, 14, 21, 57 contain null data
+        null_data_rows = set([0, 14, 21, 57])
+        # Calculate the data field
+        total_string_data = sum(
+            [
+                len(f"value{k}")
+                for j, k in enumerate((np.arange(num_rows) * (i + 1)))
+                if j not in null_data_rows
+            ]
         )
-    finally:
-        _del_many_column_file(file_type)
+        # Offsets has an value on every rank but otherwise are filled with 64bit integers
+        total_offset_size = 8 * (num_rows + bodo.get_size())
+        nbytes_list.append(total_string_data + total_offset_size + null_bytes)
+    col_names = [f"Column{i}" for i in range(num_cols)]
+    if use_index:
+        col_names = ["Index"] + col_names
+    py_output = pd.Series(nbytes_list, index=pd.Index(col_names))
+    bodo_out = memory_usage_table(use_index)
+    pd.testing.assert_series_equal(
+        bodo_out,
+        py_output,
+    )
 
 
 @pytest.mark.parametrize("use_deep", [True, False])
-def test_df_table_copy(use_deep, memory_leak_check):
+def test_df_table_copy(use_deep, datapath, memory_leak_check):
     """
     Test copy when using table format.
     """
 
+    filename = datapath("many_columns.parquet")
+
     def copy_table(use_deep):
-        df = pd.read_parquet("many_columns.parquet")
+        df = pd.read_parquet(filename)
         df = df.copy(deep=use_deep)
         return df[["Column1", "Column3"]]
 
-    file_type = "parquet"
-    try:
-        _create_many_column_file(file_type)
-        check_func(copy_table, (use_deep,))
-        stream = io.StringIO()
-        logger = create_string_io_logger(stream)
-        with set_logging_stream(logger, 1):
-            bodo.jit(copy_table)(use_deep)
-            # Check the columns were pruned
-            check_logger_msg(stream, "Columns loaded ['Column1', 'Column3']")
-    finally:
-        _del_many_column_file(file_type)
+    check_func(copy_table, (use_deep,))
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(copy_table)(use_deep)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['Column1', 'Column3']")
 
 
 @pytest.mark.parametrize("use_copy", [True, False])
-def test_df_table_rename(use_copy, memory_leak_check):
+def test_df_table_rename(use_copy, datapath, memory_leak_check):
     """
     Test rename when using table format.
     """
 
+    filename = datapath("many_columns.parquet")
+
     def rename_table(use_copy):
-        df = pd.read_parquet("many_columns.parquet")
+        df = pd.read_parquet(filename)
         df = df.rename(
             copy=use_copy, columns={"Column1": "Columnx23", "Column5": "Column1"}
         )
         return df[["Column1", "Columnx23"]]
 
-    file_type = "parquet"
-    try:
-        _create_many_column_file(file_type)
-        check_func(rename_table, (use_copy,))
-        stream = io.StringIO()
-        logger = create_string_io_logger(stream)
-        with set_logging_stream(logger, 1):
-            bodo.jit(rename_table)(use_copy)
-            # Check the columns were pruned
-            check_logger_msg(stream, "Columns loaded ['Column1', 'Column5']")
-    finally:
-        _del_many_column_file(file_type)
+    check_func(rename_table, (use_copy,))
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(rename_table)(use_copy)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['Column1', 'Column5']")

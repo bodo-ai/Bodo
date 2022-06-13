@@ -381,7 +381,9 @@ def csv_distributed_run(
         csv_cols = []
         dict_encoded_cols = []
         if final_usecols:
-            for i in final_usecols:
+            # We use csv_node.type_usecol_offset because this is the actual
+            # offset into the type.
+            for i in csv_node.type_usecol_offset:
                 colname = csv_node.df_colnames[i]
                 csv_cols.append(colname)
                 if isinstance(

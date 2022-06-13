@@ -863,14 +863,20 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         return df.C
 
     check_func(impl, (), only_seq=True)
-    # TODO [BE-2440]: check for the number of columns actually loaded. CsvReader
-    # node no longer contains the loaded columns in df.colnames
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit()(impl)()
+        check_logger_msg(stream, "Columns loaded ['C']")
 
     if bodo.get_rank() == 0:
         subprocess.run(["gzip", "-k", "-f", fname])
     bodo.barrier()
     with ensure_clean(fname_gzipped):
         check_func(impl2, (), only_seq=True)
+        with set_logging_stream(logger, 1):
+            bodo.jit()(impl2)()
+            check_logger_msg(stream, "Columns loaded ['C']")
 
 
 @pytest.mark.slow
@@ -1549,10 +1555,13 @@ def test_read_partitions_predicate_dead_column(memory_leak_check):
         # TODO(ehsan): match Index
         check_func(impl1, ("pq_data",), reset_index=True)
         # make sure the ParquetReader node has filters parameter set
-        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
-        bodo_func("pq_data")
-        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
-        # TODO [BE-2440]: Test that we only load column b.
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+            bodo_func("pq_data")
+            _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+            check_logger_msg(stream, "Columns loaded ['b']")
         bodo.barrier()
     finally:
         if bodo.get_rank() == 0:
