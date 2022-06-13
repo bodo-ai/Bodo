@@ -552,7 +552,24 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         )
                         block_use_map[rhs_table] = (used_cols, use_all)
                         continue
-
+                    elif fdef == (
+                        "table_astype",
+                        "bodo.utils.table_utils",
+                    ):
+                        # While astype may or may not make a copy, the
+                        # actual astype operation never modifies the contents
+                        # of the columns. This operation matches the input and
+                        # output tables, but it does not use any additional columns.
+                        rhs_table = rhs.args[0].name
+                        used_cols, use_all = _generate_rhs_use_effective_alias(
+                            rhs_table,
+                            block_use_map,
+                            table_col_use_map,
+                            equiv_vars,
+                            lhs_name,
+                        )
+                        block_use_map[rhs_table] = (used_cols, use_all)
+                        continue
                 elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "getattr":
                     if stmt.value.attr == "shape":
                         # Skip ops that shouldn't impact the number of columns. Shape
@@ -696,8 +713,7 @@ def remove_dead_columns(
     # add statements in reverse order
     new_body = [block.terminator]
     for stmt in reversed(block.body[:-1]):
-        # Find all sources that create a table. Currently, this is only written for
-        # read_csv and read_parquet.
+        # Find all sources that create a table.
         if type(stmt) in remove_dead_column_extensions:
             f = remove_dead_column_extensions[type(stmt)]
             removed |= f(stmt, lives, equiv_vars, typemap)
@@ -766,7 +782,6 @@ def remove_dead_columns(
                         # As such, we can't do any column pruning
                         new_body.append(stmt)
                         continue
-                    args = rhs.args
                     nodes = compile_func_single_block(
                         eval(
                             "lambda table, func_name, out_arr_typ, is_method: bodo.utils.table_utils.generate_mappable_table_func(table, func_name, out_arr_typ, is_method, used_cols=used_columns)"
@@ -817,6 +832,30 @@ def remove_dead_columns(
                     else:
                         new_body.append(stmt)
                         continue
+                elif fdef == ("table_astype", "bodo.utils.table_utils"):
+                    # In this case, if only a subset of the columns are live
+                    # we can skip converting the other columns
+                    used_columns = _find_used_columns(
+                        lhs_name, typemap[lhs_name], lives, equiv_vars, typemap
+                    )
+                    if used_columns is None:
+                        # if used_columns is None it means all columns are used.
+                        # As such, we can't do any column pruning
+                        new_body.append(stmt)
+                        continue
+                    nodes = compile_func_single_block(
+                        eval(
+                            "lambda table, new_table_typ, copy, _bodo_nan_to_str: bodo.utils.table_utils.table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=used_columns)"
+                        ),
+                        rhs.args,
+                        stmt.target,
+                        typing_info=typing_info,
+                        extra_globals={"used_columns": used_columns},
+                    )
+                    new_body += reversed(nodes)
+                    # We do not set removed = True here, as this branch does not make
+                    # any changes that could allow removal in dead code elimination.
+                    continue
 
         new_body.append(stmt)
 

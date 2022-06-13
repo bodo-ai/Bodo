@@ -1490,6 +1490,30 @@ def test_table_column_pruing_past_atype_setitem(datapath, memory_leak_check):
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
 
+    check_func(impl, (), check_dtype=False, reset_index=True)
+    bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        check_func(impl, (), check_dtype=False, reset_index=True)
-        check_logger_msg(stream, f"Columns loaded ['Column3']")
+        bodo_func()
+        check_logger_msg(stream, "Columns loaded ['Column3']")
+
+
+def test_table_del_astype(datapath, memory_leak_check):
+    """
+    Test dead column elimination works with an astype
+    cast.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df = pd.read_parquet(filename)
+        df1 = df.astype({"Column3": np.float32, "Column36": pd.Int8Dtype()})
+        return df1[["Column3", "Column37", "Column59"]]
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)()
+        check_logger_msg(stream, "Columns loaded ['Column3', 'Column37', 'Column59']")

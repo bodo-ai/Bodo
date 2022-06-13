@@ -351,6 +351,11 @@ def _get_dtype_str(dtype):
             return "bool"
         else:
             raise BodoError(f"invalid dtype: {dtype}")
+    # Handle Pandas Int type directly. This can occur when
+    # we have a LiteralStrKeyDict so the type is the actual
+    # Pandas dtype. See test_table_del_astype.
+    if type(dtype) in bodo.libs.int_arr_ext.pd_int_dtype_classes:
+        return dtype.name
 
     # e.g. dtype(int64)
     if isinstance(dtype, types.DTypeSpec):
@@ -414,6 +419,14 @@ def overload_dataframe_astype(
     # just call astype() on all column arrays
     # TODO: support categorical, dt64, etc.
     extra_globals = None
+    header = "def impl(df, dtype, copy=True, errors='raise', _bodo_nan_to_str=True, _bodo_object_typeref=None):\n"
+    if df.is_table_format:
+        # Table format must always pass the final table as its output.
+        extra_globals = {}
+        header += "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
+        # With table format we just generate the output table type in each case.
+        arr_typ_list = []
+
     if _bodo_object_typeref is not None:
         # If _bodo_object_typeref is provided then we have a typeref that should be used to generate the appropriate
         # schema
@@ -424,45 +437,76 @@ def overload_dataframe_astype(
         assert isinstance(
             schema_type, DataFrameType
         ), "Bodo schema used in DataFrame.astype is only supported for DataFrame schemas"
-        extra_globals = {}
-        name_map = {}
-        # Generate the global variables for the types. To match the existing astype
-        # implementation we convert each to a valid scalar type.
-        for i, name in enumerate(schema_type.columns):
-            arr_typ = schema_type.data[i]
-            if isinstance(arr_typ, IntegerArrayType):
-                scalar_type = bodo.libs.int_arr_ext.IntDtype(arr_typ.dtype)
-            elif arr_typ == boolean_array:
-                scalar_type = boolean_dtype
-            else:
-                scalar_type = arr_typ.dtype
-            extra_globals[f"_bodo_schema{i}"] = scalar_type
-            name_map[name] = f"_bodo_schema{i}"
-        data_args = ", ".join(
-            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {name_map[c]}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
-            if c in name_map
-            else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
-            for i, c in enumerate(df.columns)
-        )
+        if df.is_table_format:
+            # Find the names in the new schema and convert those.
+            for i, name in enumerate(df.columns):
+                if name in schema_type.column_index:
+                    # We cast this column
+                    idx = schema_type.column_index[name]
+                    arr_typ = schema_type.data[idx]
+                else:
+                    arr_typ = df.data[i]
+                arr_typ_list.append(arr_typ)
+        else:
+            extra_globals = {}
+            name_map = {}
+            # Generate the global variables for the types. To match the existing astype
+            # implementation we convert each to a valid scalar type.
+            for i, name in enumerate(schema_type.columns):
+                arr_typ = schema_type.data[i]
+                if isinstance(arr_typ, IntegerArrayType):
+                    scalar_type = bodo.libs.int_arr_ext.IntDtype(arr_typ.dtype)
+                elif arr_typ == boolean_array:
+                    scalar_type = boolean_dtype
+                else:
+                    scalar_type = arr_typ.dtype
+                extra_globals[f"_bodo_schema{i}"] = scalar_type
+                name_map[name] = f"_bodo_schema{i}"
+            data_args = ", ".join(
+                f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {name_map[c]}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
+                if c in name_map
+                else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+                for i, c in enumerate(df.columns)
+            )
     elif is_overload_constant_dict(dtype) or is_overload_constant_series(dtype):
         dtype_const = (
             get_overload_constant_dict(dtype)
             if is_overload_constant_dict(dtype)
             else dict(get_overload_constant_series(dtype))
         )
-        data_args = ", ".join(
-            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {_get_dtype_str(dtype_const[c])}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
-            if c in dtype_const
-            else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
-            for i, c in enumerate(df.columns)
-        )
+        if df.is_table_format:
+            dtype_const = {
+                name: dtype_to_array_type(parse_dtype(dtype))
+                for name, dtype in dtype_const.items()
+            }
+            for i, name in enumerate(df.columns):
+                if name in dtype_const:
+                    # We cast this column
+                    arr_typ = dtype_const[name]
+                else:
+                    arr_typ = df.data[i]
+                arr_typ_list.append(arr_typ)
+        else:
+            data_args = ", ".join(
+                f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {_get_dtype_str(dtype_const[c])}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
+                if c in dtype_const
+                else f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+                for i, c in enumerate(df.columns)
+            )
     else:
-        data_args = ", ".join(
-            f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), dtype, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
-            for i in range(len(df.columns))
-        )
+        if df.is_table_format:
+            arr_typ = dtype_to_array_type(parse_dtype(dtype))
+            arr_typ_list = [arr_typ] * len(df.columns)
+        else:
+            data_args = ", ".join(
+                f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), dtype, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
+                for i in range(len(df.columns))
+            )
+    if df.is_table_format:
+        table_type = bodo.TableType(tuple(arr_typ_list))
+        extra_globals["out_table_typ"] = table_type
+        data_args = "bodo.utils.table_utils.table_astype(table, out_table_typ, copy, _bodo_nan_to_str)"
 
-    header = "def impl(df, dtype, copy=True, errors='raise', _bodo_nan_to_str=True, _bodo_object_typeref=None):\n"
     return _gen_init_df(header, df.columns, data_args, extra_globals=extra_globals)
 
 
