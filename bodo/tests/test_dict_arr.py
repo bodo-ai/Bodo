@@ -1,6 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 
 
+import re
+
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -583,54 +585,64 @@ def test_str_slice(test_unicode_dict_str_arr, memory_leak_check):
     assert dist_IR_contains(f_ir, "str_slice")
 
 
-def test_str_find(test_unicode_dict_str_arr, memory_leak_check):
+@pytest.mark.parametrize("method", ["find", "rfind"])
+def test_str_find(test_unicode_dict_str_arr, memory_leak_check, method):
     """
-    test optimization of Series.str.slice for dict array
+    test optimization of Series.str.find/rfind
     """
-
-    def impl1(A):
-        return pd.Series(A).str.find("AB")
-
-    def impl2(A):
-        return pd.Series(A).str.find("🍔")
-
-    def impl3(A):
-        return pd.Series(A).str.find("*", start=3)
-
-    def impl4(A):
-        return pd.Series(A).str.find("着", end=5)
-
-    def impl5(A):
-        return pd.Series(A).str.find("ん", start=2, end=8)
+    func_dict = {
+        "find": pd.Series(test_unicode_dict_str_arr).str.find,
+        "rfind": pd.Series(test_unicode_dict_str_arr).str.rfind,
+    }
+    func_text = (
+        "def impl1(A):\n"
+        f"    return pd.Series(A).str.{method}('AB')\n"
+        "def impl2(A):\n"
+        f"    return pd.Series(A).str.{method}('🍔')\n"
+        "def impl3(A):\n"
+        f"    return pd.Series(A).str.{method}('*', start=3)\n"
+        "def impl4(A):\n"
+        f"    return pd.Series(A).str.{method}('着', end=5)\n"
+        "def impl5(A):\n"
+        f"    return pd.Series(A).str.{method}('ん', start=2, end=8)\n"
+    )
+    loc_vars = {}
+    global_vars = {"pd": pd}
+    exec(func_text, global_vars, loc_vars)
+    impl1 = loc_vars["impl1"]
+    impl2 = loc_vars["impl2"]
+    impl3 = loc_vars["impl3"]
+    impl4 = loc_vars["impl4"]
+    impl5 = loc_vars["impl5"]
 
     check_func(
         impl1,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.find("AB"),
+        py_output=func_dict[method]("AB"),
         check_dtype=False,
     )
     check_func(
         impl2,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.find("🍔"),
+        py_output=func_dict[method]("🍔"),
         check_dtype=False,
     )
     check_func(
         impl3,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.find("*", start=3),
+        py_output=func_dict[method]("*", start=3),
         check_dtype=False,
     )
     check_func(
         impl4,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.find("着", end=5),
+        py_output=func_dict[method]("着", end=5),
         check_dtype=False,
     )
     check_func(
         impl5,
         (test_unicode_dict_str_arr,),
-        py_output=pd.Series(test_unicode_dict_str_arr).str.find("ん", start=2, end=8),
+        py_output=func_dict[method]("ん", start=2, end=8),
         check_dtype=False,
     )
 
@@ -638,7 +650,7 @@ def test_str_find(test_unicode_dict_str_arr, memory_leak_check):
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
     bodo_func(test_unicode_dict_str_arr)
     f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert dist_IR_contains(f_ir, "str_find")
+    assert dist_IR_contains(f_ir, f"str_{method}")
 
 
 @pytest.mark.parametrize("method", ["lstrip", "rstrip", "strip"])
@@ -884,6 +896,76 @@ def test_dict_array_unify(dict_arr_value):
     bodo_out[pd.isna(bodo_out)] = None
     py_output = dict_arr_value.to_numpy(False)
     np.testing.assert_array_equal(py_output, bodo_out)
+
+
+def test_str_len(test_unicode_dict_str_arr, memory_leak_check):
+    """
+    test optimization of Series.str.len for dict array
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.len()
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.len(),
+        check_dtype=False,
+    )
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_len")
+
+
+def test_str_count(test_unicode_dict_str_arr, memory_leak_check):
+    """
+    test optimization of Series.str.capitalize/upper/lower/swapcase/title for dict array
+    """
+    flag = re.IGNORECASE.value
+
+    def impl1(A):
+        return pd.Series(A).str.count("A")
+
+    def impl2(A):
+        return pd.Series(A).str.count("피츠")
+
+    def impl3(A):
+        return pd.Series(A).str.count("A", flag)
+
+    def impl4(A):
+        return pd.Series(A).str.count("피츠", flag)
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.count("A"),
+        check_dtype=False,
+    )
+    check_func(
+        impl2,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.count("피츠"),
+        check_dtype=False,
+    )
+    check_func(
+        impl3,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.count("A", flag),
+        check_dtype=False,
+    )
+    check_func(
+        impl4,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.count("피츠", flag),
+        check_dtype=False,
+    )
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_count")
 
 
 @pytest.mark.parametrize("method", bodo.hiframes.pd_series_ext.str2bool_methods)
