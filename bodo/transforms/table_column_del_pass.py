@@ -719,9 +719,15 @@ def remove_dead_columns(
                 # In this case, we've encountered a getitem that filters
                 # the rows of a table. At this step, we can also
                 # filter out columns that are not live out of this statment.
-                # Because we generate a custom lambda function, change will make us lose
-                # liveness information, as the liveness analysis will be forced to mark
-                # all columns in the input table as being used
+
+                # Note that we are replaceing this getitem with a custom generated filter function.
+                # Therefore, on subsequent passes, liveness analysis will only see a call to a function,
+                # and conservativly assume that all columns in the argument table are live. This will result
+                # in reduced liveness information, which impacts our ability to perform other optimizations.
+                # Therefore, we only perform this optimization on the last pass of table column elimination,
+                # when allow_liveness_breaking_changes is True.
+                # TODO: fix this workaround for better clarity, see
+                # https://bodo.atlassian.net/jira/software/projects/BE/boards/4/backlog?selectedIssue=BE-3033
 
                 # Compute all columns that are live at this statement.
                 used_columns = _find_used_columns(
