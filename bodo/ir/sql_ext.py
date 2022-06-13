@@ -5,6 +5,7 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
+from typing import List
 from urllib.parse import urlparse
 
 import numba
@@ -661,11 +662,11 @@ def req_limit(sql_request):
 
 
 def _gen_sql_reader_py(
-    col_names: list[str],
+    col_names: List[str],
     col_typs,
     index_column_name: str,
     index_column_type,
-    type_usecol_offset: list[int],
+    type_usecol_offset: List[int],
     typingctx,
     targetctx,
     db_type,
@@ -772,7 +773,7 @@ def _gen_sql_reader_py(
         # Determine selected columns (and thus nullable) from Iceberg
         # schema, assuming that Iceberg and Parquet field ordering is the same
         # TODO: Update for schema evolution, when Iceberg Schema != Parquet Schema
-        selected_cols: list[int] = [
+        selected_cols: List[int] = [
             pyarrow_table_schema.get_field_index(col_names[i])
             for i in type_usecol_offset
         ]

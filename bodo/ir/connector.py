@@ -3,7 +3,7 @@
 Common IR extension functions for connectors such as CSV, Parquet and JSON readers.
 """
 from collections import defaultdict
-from typing import Literal
+from typing import Literal, Tuple
 
 import numba
 from numba.core import ir, types
@@ -419,7 +419,7 @@ def generate_arrow_filters(
     original_out_types,
     typemap,
     source: Literal["parquet", "iceberg"],
-) -> tuple[str, str]:
+) -> Tuple[str, str]:
     """
     Generate Arrow DNF filters and expression filters with the
     given filter_map and filter_vars.
