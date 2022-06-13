@@ -174,6 +174,19 @@ def overload_series_str(S):
 
 @overload_method(SeriesStrMethodType, "len", inline="always", no_unliteral=True)
 def overload_str_method_len(S_str):
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_len_dict_impl(S_str):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_len(arr)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_len_dict_impl
+
     def impl(S_str):  # pragma: no cover
         S = S_str._obj
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -621,6 +634,19 @@ def overload_str_method_count(S_str, pat, flags=0):
     str_arg_check("count", "pat", pat)
     int_arg_check("count", "flags", flags)
 
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_count_dict_impl(S_str, pat, flags=0):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_count(arr, pat, flags)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_count_dict_impl
+
     def impl(S_str, pat, flags=0):  # pragma: no cover
         S = S_str._obj
         str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
@@ -685,6 +711,19 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
         int_arg_check("rfind", "start", start)
     if not is_overload_none(end):
         int_arg_check("rfind", "end", end)
+
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_rfind_dict_impl(S_str, sub, start=0, end=None):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_rfind(arr, sub, start, end)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_rfind_dict_impl
 
     def impl(S_str, sub, start=0, end=None):  # pragma: no cover
         S = S_str._obj

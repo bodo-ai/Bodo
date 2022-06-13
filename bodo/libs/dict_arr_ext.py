@@ -831,32 +831,104 @@ def _register_simple_str2str_methods():
 _register_simple_str2str_methods()
 
 
-@register_jitable
-def str_find(arr, sub, start, end):  # pragma: no cover
+def create_find_methods(func_name):
     """
-    Implement optimized string find for dictionary array.
-    Return lowest indexes on each dictionary element.
+    Returns the dictionary-encoding optimized implementation for find, rfind
+    Returns lowest/highest indexes on each dictionary element
+    """
+    func_text = (
+        f"def str_{func_name}(arr, sub, start, end):\n"
+        "  data_arr = arr._data\n"
+        "  indices_arr = arr._indices\n"
+        "  n_data = len(data_arr)\n"
+        "  n_indices = len(indices_arr)\n"
+        "  tmp_dict_arr = bodo.libs.int_arr_ext.alloc_int_array(n_data, np.int64)\n"
+        "  out_int_arr = bodo.libs.int_arr_ext.alloc_int_array(n_indices, np.int64)\n"
+        # First iterate through the dictionary
+        "  for i in range(n_data):\n"
+        "    if bodo.libs.array_kernels.isna(data_arr, i):\n"
+        "      bodo.libs.array_kernels.setna(tmp_dict_arr, i)\n"
+        "      continue\n"
+        f"    tmp_dict_arr[i] = data_arr[i].{func_name}(sub, start, end)\n"
+        # Populate the output array
+        "  for i in range(n_indices):\n"
+        "    if bodo.libs.array_kernels.isna(indices_arr, i) or bodo.libs.array_kernels.isna(\n"
+        "      tmp_dict_arr, indices_arr[i]\n"
+        "    ):\n"
+        "      bodo.libs.array_kernels.setna(out_int_arr, i)\n"
+        "    else:\n"
+        "      out_int_arr[i] = tmp_dict_arr[indices_arr[i]]\n"
+        "  return out_int_arr"
+    )
+    loc_vars = {}
+    exec(
+        func_text,
+        {"bodo": bodo, "numba": numba, "init_dict_arr": init_dict_arr, "np": np},
+        loc_vars,
+    )
+    return loc_vars[f"str_{func_name}"]
+
+
+def _register_find_methods():
+    # install str_find/rfind
+    func_names = ["find", "rfind"]
+    for func_name in func_names:
+        func_impl = create_find_methods(func_name)
+        func_impl = register_jitable(func_impl)
+        globals()[f"str_{func_name}"] = func_impl
+
+
+_register_find_methods()
+
+
+@register_jitable
+def str_count(arr, pat, flags):  # pragma: no cover
+    """
+    Implement optimized string count for dictionary array
+    Count the number of occurences of pattern in each string
     """
     data_arr = arr._data
     indices_arr = arr._indices
     n_data = len(data_arr)
     n_indices = len(indices_arr)
-    tmp_dict_arr = bodo.libs.int_arr_ext.alloc_int_array(n_data, np.int64)
+    out_dict_arr = bodo.libs.int_arr_ext.alloc_int_array(n_data, np.int64)
     out_int_arr = bodo.libs.int_arr_ext.alloc_int_array(n_indices, np.int64)
-    # First iterate through the dictionary to get the lowest indices
+    regex = re.compile(pat, flags)
     for i in range(n_data):
         if bodo.libs.array_kernels.isna(data_arr, i):
-            bodo.libs.array_kernels.setna(tmp_dict_arr, i)
+            bodo.libs.array_kernels.setna(out_dict_arr, i)
             continue
-        tmp_dict_arr[i] = data_arr[i].find(sub, start, end)
-    # Populate the output array
+        out_dict_arr[i] = bodo.libs.str_ext.str_findall_count(regex, data_arr[i])
     for i in range(n_indices):
-        if bodo.libs.array_kernels.isna(arr, i) or bodo.libs.array_kernels.isna(
-            tmp_dict_arr, indices_arr[i]
+        if bodo.libs.array_kernels.isna(indices_arr, i) or bodo.libs.array_kernels.isna(
+            out_dict_arr, indices_arr[i]
         ):
             bodo.libs.array_kernels.setna(out_int_arr, i)
         else:
-            out_int_arr[i] = tmp_dict_arr[indices_arr[i]]
+            out_int_arr[i] = out_dict_arr[indices_arr[i]]
+    return out_int_arr
+
+
+@register_jitable
+def str_len(arr):  # pragma: no cover
+    """
+    Implement optimized string len for dictionary array
+    Return the length of each string
+    """
+    data_arr = arr._data
+    indices_arr = arr._indices
+    n_indices = len(indices_arr)
+    # na_empty_as_one is set to false as we want to
+    # manually set na.
+    out_dict_arr = bodo.libs.array_kernels.get_arr_lens(data_arr, False)
+    out_int_arr = bodo.libs.int_arr_ext.alloc_int_array(n_indices, np.int64)
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(indices_arr, i) or bodo.libs.array_kernels.isna(
+            out_dict_arr, indices_arr[i]
+        ):
+            bodo.libs.array_kernels.setna(out_int_arr, i)
+        else:
+            out_int_arr[i] = out_dict_arr[indices_arr[i]]
     return out_int_arr
 
 
