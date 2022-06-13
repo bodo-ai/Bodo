@@ -6,20 +6,23 @@ package:
 source:
   path: ../../../iceberg
 
+build:
+  noarch: python
+
 requirements:
   host:
-    - python
+    - python >=3.8,<3.11
     - setuptools
     - openjdk >=9.0
     - maven
     - ninja
-    - bodo >=2022.4
+    - bodo >=2022.05
 
   run:
     - openjdk >=9.0
-    - bodo >=2022.4
+    - bodo >=2022.05
     - jpype1
-    - python
+    - python >=3.8,<3.11
 
 build:
   script_env:

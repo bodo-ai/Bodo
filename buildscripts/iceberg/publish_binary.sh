@@ -1,21 +1,16 @@
 #!/bin/bash
-# Copied from BodoSQL
+# Copied from BodoSQL with micromamba changes
 set -xeo pipefail
 
-export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-10.15}
-export CONDA_BUILD_SYSROOT="/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
-if [[ $TARGET_NAME = "macOS_ARM" ]]; then
-    export PATH=$HOME/miniforge3/bin:$PATH
-else
-    export PATH=$HOME/miniconda3/bin:$PATH
-fi
-source activate build_iceberg_connector
 
-# Upload to artifactory
-conda install -y conda-build anaconda-client conda-verify curl -c conda-forge
+# Package Setup
+eval "$(./bin/micromamba shell hook -s posix)"
+micromamba activate
+micromamba install -q -y conda-build anaconda-client conda-verify curl -c conda-forge 
 
+
+# Build Pakcage
 CHANNEL_NAME=${1:-bodo-binary}
-OS_DIR=${2:-linux-64}
 
 echo "********** Publishing to Artifactory **********"
 USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
@@ -48,20 +43,17 @@ elif [[ "$CHANNEL_NAME" == "bodo.ai" ]] && [[ -n "$IS_RELEASE" ]]; then
     label="dev"
 fi
 
-if [[ "$TARGET_NAME" == "macOS_ARM" ]]; then
-    cd buildscripts/iceberg/m1-conda-recipe/
-else
-    cd buildscripts/iceberg/conda-recipe/
-fi
-conda-build . -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge --no-test
+cd buildscripts/iceberg/conda-recipe/
+conda-build . --no-test -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge 
 
-for package in `ls $CONDA_PREFIX/conda-bld/$OS_DIR/bodo-iceberg-connector*.tar.bz2`; do
+# Upload to Anaconda
+for package in `ls $CONDA_PREFIX/conda-bld/linux-64/bodo-iceberg-connector*.tar.bz2`; do
     package_name=`basename $package`
-    curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/${OS_DIR}/$package_name"
+    curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/noarch/$package_name"
     if [[ ! -z "$label" ]]; then
         anaconda -t $ANACONDA_TOKEN upload -u bodo.ai -c bodo.ai $package --label $label
     fi
 done
 
-# reindex conda
-curl -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex
+# Reindex Conda
+curl -s -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex
