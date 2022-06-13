@@ -105,9 +105,9 @@ class ArrowDataframeReader {
                          int* is_nullable)
         : parallel(parallel),
           tot_rows_to_read(tot_rows_to_read),
+          is_nullable(is_nullable, is_nullable + num_selected_fields),
           selected_fields(selected_fields,
-                          selected_fields + num_selected_fields),
-          is_nullable(is_nullable, is_nullable + num_selected_fields) {}
+                          selected_fields + num_selected_fields) {}
 
     virtual ~ArrowDataframeReader() { release_gil(); }
 

@@ -20,12 +20,12 @@ class ParquetReader : public ArrowDataframeReader {
                   int32_t* is_nullable, bool _input_file_name_col)
         : ArrowDataframeReader(_parallel, _tot_rows_to_read, _selected_fields,
                                num_selected_fields, is_nullable),
-          path(_path),
-          bucket_region(_bucket_region),
           dnf_filters(_dnf_filters),
           expr_filters(_expr_filters),
+          path(_path),
           storage_options(_storage_options),
-          input_file_name_col(_input_file_name_col) {
+          input_file_name_col(_input_file_name_col),
+          bucket_region(_bucket_region) {
         if (storage_options == Py_None)
             throw std::runtime_error("ParquetReader: storage_options is None");
 
@@ -94,7 +94,7 @@ class ParquetReader : public ArrowDataframeReader {
     virtual ~ParquetReader() {}
 
     /// a piece is a single parquet file in the context of parquet
-    virtual size_t get_num_pieces() const { return file_paths.size(); }
+    virtual size_t get_num_pieces() const override { return file_paths.size(); }
 
     /// returns output partition columns
     std::vector<array_info*>& get_partition_cols() { return part_cols; }
@@ -103,13 +103,14 @@ class ParquetReader : public ArrowDataframeReader {
 
    protected:
     virtual void add_piece(PyObject* piece, int64_t num_rows,
-                           int64_t total_rows);
+                           int64_t total_rows) override;
 
-    virtual PyObject* get_dataset();
+    virtual PyObject* get_dataset() override;
 
-    virtual std::shared_ptr<arrow::Schema> get_schema(PyObject* dataset);
+    virtual std::shared_ptr<arrow::Schema> get_schema(
+        PyObject* dataset) override;
 
-    virtual void read_all(TableBuilder& builder);
+    virtual void read_all(TableBuilder& builder) override;
 
     PyObject* dnf_filters = nullptr;
     PyObject* expr_filters = nullptr;

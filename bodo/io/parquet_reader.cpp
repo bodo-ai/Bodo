@@ -99,7 +99,7 @@ static void fill_input_file_name_col_dict(
     const std::vector<std::string>& file_paths, const std::string& prefix,
     char* data, char* offsets) {
     offset_t* col_offsets = (offset_t*)offsets;
-    for (int64_t i = 0; i < file_paths.size(); i++) {
+    for (size_t i = 0; i < file_paths.size(); i++) {
         std::string fname = prefix + file_paths[i];
         memcpy(data + col_offsets[i], fname.c_str(), fname.length());
         col_offsets[i + 1] = col_offsets[i] + fname.length();
@@ -177,7 +177,7 @@ std::shared_ptr<arrow::Schema> ParquetReader::get_schema(PyObject* dataset) {
     }
     Py_DECREF(pq_mod);
     // see
-    // https://arrow.apache.org/docs/python/extending.html#using-pyarrow-from-c-and-cython-code
+    // https://arrow.apache.org/docs/7.0/python/integration/extending.html?highlight=unwrap_schema
     auto schema_ = arrow::py::unwrap_schema(schema_py).ValueOrDie();
     // calculate selected columns (not fields)
     int col = 0;
@@ -273,7 +273,7 @@ void ParquetReader::read_all(TableBuilder& builder) {
                     rows_left_cur_piece -= rows_read_from_piece;
                     length -= rows_read_from_piece;
                     // fill partition cols
-                    for (auto i = 0; i < part_cols.size(); i++) {
+                    for (size_t i = 0; i < part_cols.size(); i++) {
                         int64_t part_val =
                             part_vals[cur_piece][selected_part_cols[i]];
                         fill_partition_column(

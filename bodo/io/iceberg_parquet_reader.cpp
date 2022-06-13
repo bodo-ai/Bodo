@@ -44,21 +44,21 @@ class IcebergParquetReader : public ParquetReader {
                          PyObject* _dnf_filters, PyObject* _expr_filters,
                          int32_t* _selected_fields, int32_t num_selected_fields,
                          int32_t* is_nullable, PyObject* _pyarrow_table_schema)
-        : ParquetReader(nullptr, _parallel, "", _dnf_filters, _expr_filters,
+        : ParquetReader(/*path*/ nullptr, _parallel,
+                        /*_bucket_region*/ (char*)"", _dnf_filters,
+                        _expr_filters,
                         /*storage_options*/ PyDict_New(),
                         /*tot_rows_to_read*/ -1, _selected_fields,
                         num_selected_fields, is_nullable,
                         /*input_file_name_col*/ false),
+          pyarrow_table_schema(_pyarrow_table_schema),
           conn(_conn),
           database_schema(_database_schema),
-          table_name(_table_name),
-          pyarrow_table_schema(_pyarrow_table_schema) {}
+          table_name(_table_name) {}
 
     virtual ~IcebergParquetReader() {}
 
-    virtual void init() {
-        ParquetReader::init(nullptr, 0, nullptr, nullptr, 0);
-    }
+    virtual void init() { ParquetReader::init(nullptr, 0, nullptr, nullptr, 0); }
 
    protected:
     // We don't need a special implementation yet and can re-use
@@ -101,7 +101,7 @@ class IcebergParquetReader : public ParquetReader {
     virtual std::shared_ptr<arrow::Schema> get_schema(PyObject* dataset) {
         PyObject* schema_py = PyObject_GetAttrString(dataset, "schema");
         // see
-        // https://arrow.apache.org/docs/python/extending.html#using-pyarrow-from-c-and-cython-code
+        // https://arrow.apache.org/docs/7.0/python/integration/extending.html?highlight=unwrap_schema
         auto schema_ = arrow::py::unwrap_schema(schema_py).ValueOrDie();
         // calculate selected columns (not fields)
         int col = 0;

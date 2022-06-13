@@ -715,6 +715,15 @@ def _gen_pq_reader_py(
         index_arr = f"info_to_array(info_from_table(out_table, {index_arr_ind}), index_arr_type)"
     func_text += f"    index_arr = {index_arr}\n"
 
+    # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
+    # For a list column, the value is an integer which is the location of the column in the C++ Table.
+    # Dead columns have the value -1.
+
+    # For example if the Table Type is mapped like this: Table(arr0, arr1, arr2, arr3) and the
+    # C++ representation is CPPTable(arr1, arr2), then table_idx = [-1, 0, 1, -1]
+
+    # Note: By construction arrays will never be reordered (e.g. CPPTable(arr2, arr1)) in Iceberg
+    # because we pass the col_names ordering.
     if is_dead_table:
         # If a table is dead we can skip the array for the table
         table_idx = None

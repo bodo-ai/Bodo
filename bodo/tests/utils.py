@@ -689,13 +689,14 @@ def _test_equal(
         if reset_index:
             py_out.reset_index(inplace=True, drop=True)
             bodo_out.reset_index(inplace=True, drop=True)
-        # we return typed extension arrays like StringArray for all APIs but Pandas
-        # doesn't return them by default in all APIs yet.
-        if (
-            object in py_out.dtypes.values.tolist()
-            or np.bool_ in py_out.dtypes.values.tolist()
-        ):
+
+        # We return typed extension arrays like StringArray for all APIs but Pandas
+        # & Spark doesn't return them by default in all APIs yet.
+        py_out_dtypes = py_out.dtypes.values.tolist()
+
+        if object in py_out_dtypes or np.bool_ in py_out_dtypes:
             check_dtype = False
+
         pd.testing.assert_frame_equal(
             bodo_out,
             py_out,
@@ -1326,6 +1327,48 @@ def convert_non_pandas_columns(df):
                 e_list_float.append(np.nan)
         df_copy[e_col_name] = e_list_float
     return df_copy
+
+
+# Mapping Between Numpy Dtype and Equivalent Pandas Extension Dtype
+# Bodo returns the Pandas Dtype while other implementations like Pandas and Spark
+# return the Numpy equivalent. Need to convert during testing.
+np_to_pd_dtype: dict[np.dtype, pd.api.extensions.ExtensionDtype] = {
+    np.dtype(np.int8): pd.Int8Dtype,
+    np.dtype(np.int16): pd.Int16Dtype,
+    np.dtype(np.int32): pd.Int32Dtype,
+    np.dtype(np.int64): pd.Int64Dtype,
+    np.dtype(np.uint8): pd.UInt8Dtype,
+    np.dtype(np.uint16): pd.UInt16Dtype,
+    np.dtype(np.uint32): pd.UInt32Dtype,
+    np.dtype(np.uint64): pd.UInt64Dtype,
+    np.dtype(np.string_): pd.StringDtype,
+    np.dtype(np.bool_): pd.BooleanDtype,
+}
+
+
+def sync_dtypes(py_out, bodo_out_dtypes):
+    py_out_dtypes = py_out.dtypes.values.tolist()
+
+    if any(
+        isinstance(dtype, pd.api.extensions.ExtensionDtype) for dtype in bodo_out_dtypes
+    ):
+        for i, (py_dtype, bodo_dtype) in enumerate(zip(py_out_dtypes, bodo_out_dtypes)):
+
+            if isinstance(bodo_dtype, np.dtype) and py_dtype == bodo_dtype:
+                continue
+            if (
+                isinstance(py_dtype, pd.api.extensions.ExtensionDtype)
+                and py_dtype == bodo_dtype
+            ):
+                continue
+            elif (
+                isinstance(bodo_dtype, pd.api.extensions.ExtensionDtype)
+                and isinstance(py_dtype, np.dtype)
+                and py_dtype in np_to_pd_dtype
+                and np_to_pd_dtype[py_dtype]() == bodo_dtype
+            ):
+                py_out[py_out.columns[i]] = py_out[py_out.columns[i]].astype(bodo_dtype)
+    return py_out
 
 
 # This function allows to check the coherency of parallel output.
