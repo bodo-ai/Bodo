@@ -1,4 +1,5 @@
 import datetime
+import io
 
 import pandas as pd
 import pytest
@@ -6,7 +7,12 @@ import pytest
 import bodo
 from bodo.tests.iceberg_database_helpers import spark_reader
 from bodo.tests.iceberg_database_helpers.utils import get_spark
-from bodo.tests.utils import check_func
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
+from bodo.tests.utils import check_func, sync_dtypes
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.iceberg
@@ -41,7 +47,6 @@ def test_simple_table_read(iceberg_database, iceberg_table_conn, table_name):
         return df
 
     py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
-
     check_func(
         impl,
         (table_name, conn, db_schema),
@@ -133,6 +138,35 @@ def test_simple_struct_table_read(iceberg_database, iceberg_table_conn):
         py_output=py_out,
         reset_index=True,
     )
+
+
+def test_column_pruning(iceberg_database, iceberg_table_conn):
+    """
+    Test simple read operation on test table simple_numeric_table
+    with column pruning.
+    """
+
+    table_name = "simple_numeric_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        df = df[["A", "D"]]
+        return df
+
+    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = py_out[["A", "D"]]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    res = None
+    with set_logging_stream(logger, 1):
+        res = bodo.jit()(impl)(table_name, conn, db_schema)
+        check_logger_msg(stream, "Columns loaded ['A', 'D']")
+
+    py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
+    check_func(impl, (table_name, conn, db_schema), py_output=py_out)
 
 
 def test_no_files_after_filter_pushdown(iceberg_database, iceberg_table_conn):

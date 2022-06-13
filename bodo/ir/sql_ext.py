@@ -661,11 +661,11 @@ def req_limit(sql_request):
 
 
 def _gen_sql_reader_py(
-    col_names,
+    col_names: list[str],
     col_typs,
-    index_column_name,
+    index_column_name: str,
     index_column_type,
-    type_usecol_offset,
+    type_usecol_offset: list[int],
     typingctx,
     targetctx,
     db_type,
@@ -673,7 +673,7 @@ def _gen_sql_reader_py(
     parallel,
     typemap,
     filters,
-    pyarrow_table_schema,
+    pyarrow_table_schema: "Optional[pyarrow.Schema]",
 ):
     """
     Function that generates the main SQL implementation. There are
@@ -742,11 +742,8 @@ def _gen_sql_reader_py(
 
     table_idx = None
     type_usecols_offsets_arr = None
-    py_table_type = types.none
-    pq_reader_py = None
-    if type_usecol_offset:
-        # Create the table type.
-        py_table_type = TableType(tuple(col_typs))
+    py_table_type = TableType(tuple(col_typs)) if type_usecol_offset else types.none
+
     # Handle filter information because we may need to update the function header
     filter_args = ""
     filter_map = {}
@@ -771,6 +768,17 @@ def _gen_sql_reader_py(
             typemap,
             "iceberg",
         )
+
+        # Determine selected columns (and thus nullable) from Iceberg
+        # schema, assuming that Iceberg and Parquet field ordering is the same
+        # TODO: Update for schema evolution, when Iceberg Schema != Parquet Schema
+        selected_cols: list[int] = [
+            pyarrow_table_schema.get_field_index(col_names[i])
+            for i in type_usecol_offset
+        ]
+        selected_cols_map = {c: i for i, c in enumerate(selected_cols)}
+        nullable_cols = [int(is_nullable(col_typs[i])) for i in selected_cols]
+
         comma = "," if filter_args else ""
         func_text += f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
         func_text += f'  dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
@@ -780,23 +788,13 @@ def _gen_sql_reader_py(
         # TODO Confirm that we're computing selected_cols correctly
         func_text += f"    expr_filters, selected_cols_arr_{call_id}.ctypes,\n"
         # TODO Confirm that we're computing is_nullable correctly
-        func_text += f"    {len(col_names)}, nullable_cols_arr_{call_id}.ctypes,\n"
+        func_text += f"    {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes,\n"
         func_text += f"    pyarrow_table_schema_{call_id},\n"
         func_text += f"  )\n"
         func_text += f"  check_and_propagate_cpp_exception()\n"
 
         # Mostly copied over from _gen_pq_reader_py
         # TODO XXX Refactor?
-
-        col_nums = list(range(len(col_names)))
-        # Create map for efficient index lookups.
-        selected_cols_map = {c: i for i, c in enumerate(col_nums)}
-
-        # Tell C++ which columns in the parquet file are nullable, since there
-        # are some types like integer which Arrow always considers to be nullable
-        # but pandas might not. This is mainly intended to tell C++ which Int/Bool
-        # arrays require null bitmap and which don't
-        nullable_cols = [int(is_nullable(col_typs[i])) for i in type_usecol_offset]
 
         # If we aren't loading any column the table is dead
         is_dead_table = not type_usecol_offset
@@ -816,14 +814,28 @@ def _gen_sql_reader_py(
         func_text += f"  index_var = {index_var}\n"
 
         # Copied from _gen_pq_reader_py and simplified (no partitions or input_file_name)
+        # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
+        # For a list column, the value is an integer which is the location of the column in the C++ Table.
+        # Dead columns have the value -1.
+
+        # For example if the Table Type is mapped like this: Table(arr0, arr1, arr2, arr3) and the
+        # C++ representation is CPPTable(arr1, arr2), then table_idx = [-1, 0, 1, -1]
+
+        # Note: By construction arrays will never be reordered (e.g. CPPTable(arr2, arr1)) in Iceberg
+        # because we pass the col_names ordering.
+
         # If a table is dead we can skip the array for the table
         table_idx = None
         if not is_dead_table:
             table_idx = []
             j = 0
-            for i, col_num in enumerate(col_nums):
+            for i in range(len(col_names)):
+                # Should be same as from _gen_pq_reader_py
+                # for i, col_num in enumerate(range(col_idxs)):
+                # But we're assuming that the iceberg schema ordering is the same as the parquet ordering
+                # TODO: Will change with schema evolution
                 if j < len(type_usecol_offset) and i == type_usecol_offset[j]:
-                    table_idx.append(selected_cols_map[col_num])
+                    table_idx.append(selected_cols_map[i])
                     j += 1
                 else:
                     table_idx.append(-1)
@@ -940,7 +952,6 @@ def _gen_sql_reader_py(
             "bodo": bodo,
             f"py_table_type_{call_id}": py_table_type,
             "index_col_typ": index_column_type,
-            "_pq_reader_py": pq_reader_py,
         }
     )
     if db_type in ("iceberg", "snowflake"):
@@ -959,7 +970,7 @@ def _gen_sql_reader_py(
     if db_type == "iceberg":
         glbls.update(
             {
-                f"selected_cols_arr_{call_id}": np.array(col_nums, np.int32),
+                f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
                 f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
                 f"py_table_type_{call_id}": py_table_type,
                 f"pyarrow_table_schema_{call_id}": pyarrow_table_schema,
