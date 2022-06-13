@@ -10,6 +10,7 @@ import types as pytypes
 import warnings
 from decimal import Decimal
 from enum import Enum
+from typing import Dict
 
 import numba
 import numpy as np
@@ -1332,7 +1333,7 @@ def convert_non_pandas_columns(df):
 # Mapping Between Numpy Dtype and Equivalent Pandas Extension Dtype
 # Bodo returns the Pandas Dtype while other implementations like Pandas and Spark
 # return the Numpy equivalent. Need to convert during testing.
-np_to_pd_dtype: dict[np.dtype, pd.api.extensions.ExtensionDtype] = {
+np_to_pd_dtype: Dict[np.dtype, pd.api.extensions.ExtensionDtype] = {
     np.dtype(np.int8): pd.Int8Dtype,
     np.dtype(np.int16): pd.Int16Dtype,
     np.dtype(np.int32): pd.Int32Dtype,
