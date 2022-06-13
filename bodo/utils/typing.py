@@ -890,6 +890,12 @@ def parse_dtype(dtype, func_name=None):
         elif dtype.key[0] == str:
             dtype = bodo.string_type
 
+    # Handle Pandas Int type directly. This can occur when
+    # we have a LiteralStrKeyDict so the type is the actual
+    # Pandas dtype. See test_table_del_astype.
+    if type(dtype) in bodo.libs.int_arr_ext.pd_int_dtype_classes:
+        dtype = types.StringLiteral(dtype.name)
+
     if isinstance(dtype, types.DTypeSpec):
         return dtype.dtype
 

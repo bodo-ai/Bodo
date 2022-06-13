@@ -924,9 +924,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                 data.block_to_arr_ind[blk], dtype=np.int64
             )
             func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
-            func_text += (
-                f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, True)\n"
-            )
+            func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), True)\n"
             func_text += f"  for i in range(len(arr_list_{blk})):\n"
             func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
             func_text += (

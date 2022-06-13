@@ -1,6 +1,9 @@
 # Copyright (C) 2021 Bodo Inc. All rights reserved.
 """File containing utility functions for supporting DataFrame operations with Table Format."""
 
+from collections import defaultdict
+from typing import Dict, Set
+
 import numba
 import numpy as np
 from numba.core import types
@@ -12,7 +15,9 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_overload_constant_bool,
     is_overload_constant_str,
+    is_overload_false,
     is_overload_none,
+    is_overload_true,
     raise_bodo_error,
 )
 
@@ -105,7 +110,7 @@ def generate_mappable_table_func(
         )
         if keep_input_typ:
             # If we are maintaining the same types, output each list.
-            func_text += f"  out_list_{blk} = bodo.hiframes.table.alloc_list_like(blk_{blk}, False)\n"
+            func_text += f"  out_list_{blk} = bodo.hiframes.table.alloc_list_like(blk_{blk}, len(blk_{blk}), False)\n"
         func_text += f"  for i in range(len(blk_{blk})):\n"
         # Since we have one list, store each element in its original column location
         func_text += f"    col_loc = col_indices_{blk}[i]\n"
@@ -136,11 +141,9 @@ def generate_mappable_table_func(
 
     if keep_input_typ:
         func_text += f"  out_table = bodo.hiframes.table.set_table_len(out_table, l)\n"
-        func_text += "  return out_table"
+        func_text += "  return out_table\n"
     else:
-        func_text += (
-            "  return bodo.hiframes.table.init_table_from_lists((out_list,), table_typ)"
-        )
+        func_text += "  return bodo.hiframes.table.init_table_from_lists((out_list,), table_typ)\n"
 
     local_vars = {}
     exec(func_text, glbls, local_vars)
@@ -251,3 +254,175 @@ def table_concat(table, col_nums, arr_type):
     impl = loc_vars["impl"]
 
     return impl
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
+    """Table kernel to perform an astype operations, which
+    converts (possibly) the input table to a new output table.
+    This generates code per type pair (old_type, new_type) to
+    try efficiently convert arrays. For more information on the
+    overall design of this kernel, please refer to this
+    confluence document:
+
+    https://bodo.atlassian.net/wiki/spaces/B/pages/1069776999/Table+astype
+
+    Args:
+        table (TableType): Input table that needs to be converted
+        new_table_typ (TypeRef(TableType)): Type that the output table
+            should correspond to.
+        copy (types.bool_ | types.BooleanLiteral): Should the arrays in
+            the table be copied. Even arrays that do not have their type
+            changed must obey this parameter.
+            https://github.com/pandas-dev/pandas/blob/4bfe3d07b4858144c219b9346329027024102ab6/pandas/core/generic.py#L5896
+        _bodo_nan_to_str (types.bool_ | types.BooleanLiteral): Should string NA
+            values be a proper NA or the string NaN
+        used_cols (types.Array(int64, 1, "C") | None): Array of columns that
+            are actually used. If the kernel is inlined into the main IR, then this
+            should not be passed directly. If used in the body of a custom IR node,
+            then this can be passed directly. A default of None means all columns
+            are used.
+
+    Returns:
+        TableType: The output table with types corresponding to new_table_typ.
+    """
+
+    # Get the underlying type for the typeref
+    new_table_typ = (
+        new_table_typ.instance_type
+        if isinstance(new_table_typ, types.TypeRef)
+        else new_table_typ
+    )
+
+    # Determine if we can avoid the copy
+    may_copy = not is_overload_false(copy)
+    must_copy = is_overload_true(copy)
+
+    # Define the globals for this kernel. These
+    # will be updated throughout codegen.
+    glbls = {"bodo": bodo}
+
+    # Compute the types that must be copied. Every column
+    # should be updated in the same location.
+    old_arr_typs = table.arr_types
+    new_arr_typs = new_table_typ.arr_types
+    # Track the DF column numbers that changed
+    changed_cols: Set[int] = set()
+    # Track the type changes that occurs. We keep the output
+    # types as the key to slighly simplify the code.
+    changed_types: Dict[types.Type, Set[types.Type]] = defaultdict(set)
+    # Which types contain columns that aren't converted
+    kept_types: Set[types.Type] = set()
+    for i, old_typ in enumerate(old_arr_typs):
+        new_typ = new_arr_typs[i]
+        if old_typ == new_typ:
+            kept_types.add(old_typ)
+        else:
+            changed_cols.add(i)
+            changed_types[new_typ].add(old_typ)
+
+    # Generate the code
+    func_text = (
+        "def impl(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):\n"
+    )
+    # Allocate the new table and set its length
+    func_text += f"  out_table = bodo.hiframes.table.init_table(new_table_typ, False)\n"
+    func_text += (
+        f"  out_table = bodo.hiframes.table.set_table_len(out_table, len(table))\n"
+    )
+    # Create the set of kept columns and changed cols.
+    possible_cols = set(range(len(old_arr_typs)))
+    copied_cols = possible_cols - changed_cols
+    # Lowering the sets as a global causes them to be set as
+    # reflected sets. This causes a type mismatch when used_cols
+    # is not None, so we lower an array.
+    # TODO: Disable reflection and lower sets.
+    glbls["cast_cols"] = np.array(list(changed_cols), dtype=np.int64)
+    glbls["copied_cols"] = np.array(list(copied_cols), dtype=np.int64)
+    func_text += f"  copied_cols_set = set(copied_cols)\n"
+    func_text += f"  cast_cols_set = set(cast_cols)\n"
+    if not is_overload_none(used_cols):
+        # If used_cols is not None we filter additional columns.
+        func_text += f"  used_cols_set = set(used_cols)\n"
+        func_text += f"  copied_cols_set = copied_cols_set & used_cols_set\n"
+        func_text += f"  cast_cols_set = cast_cols_set & used_cols_set\n"
+
+    # Generate the initial blocks for the output table.
+    for typ, blk in new_table_typ.type_to_blk.items():
+        glbls[f"typ_list_{blk}"] = types.List(typ)
+        func_text += f"  out_arr_list_{blk} = bodo.hiframes.table.alloc_list_like(typ_list_{blk}, {len(new_table_typ.block_to_arr_ind[blk])}, False)\n"
+        if typ in kept_types:
+            # Create the mapping from old table to new table
+            orig_table_blk = table.type_to_blk[typ]
+            old_idx = table.block_to_arr_ind[orig_table_blk]
+            idxs = [new_table_typ.block_offsets[idx] for idx in old_idx]
+            glbls[f"new_idx_{orig_table_blk}"] = np.array(idxs, np.int64)
+            glbls[f"orig_arr_inds_{orig_table_blk}"] = np.array(old_idx, np.int64)
+            # If some array may be/is copied, we need to iterate over the old block.
+            func_text += f"  arr_list_{orig_table_blk} = bodo.hiframes.table.get_table_block(table, {orig_table_blk})\n"
+            func_text += f"  for i in range(len(arr_list_{orig_table_blk})):\n"
+            func_text += (
+                f"    arr_ind_{orig_table_blk} = orig_arr_inds_{orig_table_blk}[i]\n"
+            )
+            func_text += f"    if arr_ind_{orig_table_blk} not in copied_cols_set:\n"
+            func_text += f"      continue\n"
+            func_text += f"    bodo.hiframes.table.ensure_column_unboxed(table, arr_list_{orig_table_blk}, i, arr_ind_{orig_table_blk})\n"
+            # Map to the new physical location.
+            func_text += (
+                f"    out_idx_{blk}_{orig_table_blk} = new_idx_{orig_table_blk}[i]\n"
+            )
+            func_text += (
+                f"    arr_val_{orig_table_blk} = arr_list_{orig_table_blk}[i]\n"
+            )
+            if must_copy:
+                func_text += (
+                    f"    arr_val_{orig_table_blk} = arr_val_{orig_table_blk}.copy()\n"
+                )
+            elif may_copy:
+                func_text += f"    arr_val_{orig_table_blk} = arr_val_{orig_table_blk}.copy() if copy else arr_val_{blk}\n"
+            func_text += f"    out_arr_list_{blk}[out_idx_{blk}_{orig_table_blk}] = arr_val_{orig_table_blk}\n"
+
+    # Generate the code for the types that must be converted.
+    # Here we reuse the out_arr_list_{blk} from the previous
+    # section and arr_list_{blk} if it was already loaded.
+    # We add seen_types to track those input types that get
+    # converted to another type.
+    seen_types = set()
+    for typ, blk in new_table_typ.type_to_blk.items():
+        if typ in changed_types:
+            # Most types are represented by their scalar values
+            if isinstance(typ, bodo.IntegerArrayType):
+                cast_typ = typ.get_pandas_scalar_type_instance.name
+            else:
+                cast_typ = typ.dtype
+            glbls[f"typ_{blk}"] = cast_typ
+            orig_types = changed_types[typ]
+            for orig_typ in orig_types:
+                orig_table_blk = table.type_to_blk[orig_typ]
+                if orig_typ not in kept_types and orig_typ not in seen_types:
+                    # Create the mapping from old table to new table if
+                    # they don't already exist
+                    old_idx = table.block_to_arr_ind[orig_table_blk]
+                    idxs = [new_table_typ.block_offsets[idx] for idx in old_idx]
+                    glbls[f"new_idx_{orig_table_blk}"] = np.array(idxs, np.int64)
+                    glbls[f"orig_arr_inds_{orig_table_blk}"] = np.array(
+                        old_idx, np.int64
+                    )
+                    func_text += f"  arr_list_{orig_table_blk} = bodo.hiframes.table.get_table_block(table, {orig_table_blk})\n"
+                seen_types.add(orig_typ)
+                func_text += f"  for i in range(len(arr_list_{orig_table_blk})):\n"
+                func_text += f"    arr_ind_{orig_table_blk} = orig_arr_inds_{orig_table_blk}[i]\n"
+                func_text += f"    if arr_ind_{orig_table_blk} not in cast_cols_set:\n"
+                func_text += f"      continue\n"
+                func_text += f"    bodo.hiframes.table.ensure_column_unboxed(table, arr_list_{orig_table_blk}, i, arr_ind_{orig_table_blk})\n"
+                # Map to the new physical location.
+                func_text += f"    out_idx_{blk}_{orig_table_blk} = new_idx_{orig_table_blk}[i]\n"
+                func_text += f"    arr_val_{blk} =  bodo.utils.conversion.fix_arr_dtype(arr_list_{orig_table_blk}[i], typ_{blk}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)\n"
+                func_text += f"    out_arr_list_{blk}[out_idx_{blk}_{orig_table_blk}] = arr_val_{blk}\n"
+
+        # Append the list to the output now that we are done with this output type.
+        func_text += f"  out_table = bodo.hiframes.table.set_table_block(out_table, out_arr_list_{blk}, {blk})\n"
+    func_text += "  return out_table\n"
+    local_vars = {}
+    exec(func_text, glbls, local_vars)
+    return local_vars["impl"]

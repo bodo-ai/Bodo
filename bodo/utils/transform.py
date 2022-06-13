@@ -306,6 +306,7 @@ no_side_effect_call_tuples = {
     ("build_nullable_tuple", "nullable_tuple_ext", "libs", bodo),
     # Table
     ("generate_mappable_table_func", "table_utils", "utils", bodo),
+    ("table_astype", "table_utils", "utils", bodo),
 }
 
 

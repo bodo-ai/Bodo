@@ -891,6 +891,13 @@ class DistributedAnalysis:
         ) and self._analyze_mappable_table_funcs(lhs, rhs, kws, array_dists):
             return
 
+        if fdef == (
+            "table_astype",
+            "bodo.utils.table_utils",
+        ):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("table_concat", "bodo.utils.table_utils"):
             table = args[0].name
             col_nums = args[1].name

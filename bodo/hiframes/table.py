@@ -836,20 +836,19 @@ def init_table(typingctx, table_type, to_str_if_dict_t):
     """initialize a table object with same structure as input table without setting it's
     array blocks (to be set later)
     """
-    table_type_val = (
+    out_table_type = (
         table_type.instance_type
         if isinstance(table_type, types.TypeRef)
         else table_type
     )
-    assert isinstance(table_type_val, TableType), "table type or typeref expected"
+    assert isinstance(out_table_type, TableType), "table type or typeref expected"
     assert is_overload_constant_bool(
         to_str_if_dict_t
     ), "constant to_str_if_dict_t expected"
-    out_table_type = table_type_val
 
     # convert dictionary-encoded string arrays to regular string arrays
     if is_overload_true(to_str_if_dict_t):
-        out_table_type = to_str_arr_if_dict_array(table_type_val)
+        out_table_type = to_str_arr_if_dict_array(out_table_type)
 
     def codegen(context, builder, sig, args):
         table = cgutils.create_struct_proxy(out_table_type)(context, builder)
@@ -1086,30 +1085,32 @@ def set_table_len(typingctx, table_type, l_type):
 
 
 @intrinsic
-def alloc_list_like(typingctx, list_type, to_str_if_dict_t):
+def alloc_list_like(typingctx, list_type, len_type, to_str_if_dict_t):
     """
     allocate a list with same type and size as input list but filled with null values
     """
-    assert isinstance(list_type, types.List), "list type expected"
+    out_list_type = (
+        list_type.instance_type if isinstance(list_type, types.TypeRef) else list_type
+    )
+    assert isinstance(out_list_type, types.List), "list type or typeref expected"
+    assert isinstance(len_type, types.Integer), "integer type expected"
     assert is_overload_constant_bool(
         to_str_if_dict_t
     ), "constant to_str_if_dict_t expected"
-    out_list_type = list_type
 
     # convert dictionary-encoded string arrays to regular string arrays
     if is_overload_true(to_str_if_dict_t):
-        out_list_type = types.List(to_str_arr_if_dict_array(list_type.dtype))
+        out_list_type = types.List(to_str_arr_if_dict_array(out_list_type.dtype))
 
     def codegen(context, builder, sig, args):
-        in_list = ListInstance(context, builder, list_type, args[0])
-        size = in_list.size
+        size = args[1]
         _, out_arr_list = ListInstance.allocate_ex(
             context, builder, out_list_type, size
         )
         out_arr_list.size = size
         return out_arr_list.value
 
-    sig = out_list_type(list_type, to_str_if_dict_t)
+    sig = out_list_type(list_type, len_type, to_str_if_dict_t)
     return sig, codegen
 
 
@@ -1191,7 +1192,7 @@ def gen_table_filter(T, used_cols=None):
     for blk in T.type_to_blk.values():
         glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk], dtype=np.int64)
         func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
-        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, False)\n"
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), False)\n"
         func_text += f"  for i in range(len(arr_list_{blk})):\n"
         func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
         if used_cols is not None:
@@ -1238,7 +1239,7 @@ def decode_if_dict_table(T):
     for blk in T.type_to_blk.values():
         glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk], dtype=np.int64)
         func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
-        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, True)\n"
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), True)\n"
         func_text += f"  for i in range(len(arr_list_{blk})):\n"
         func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
         func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
