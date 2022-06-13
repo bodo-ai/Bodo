@@ -1,0 +1,45 @@
+# Copied from BodoSQL
+parameters:
+    name: ''
+    vmImage: ''
+    pythonVersion: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  timeoutInMinutes: 240
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: ${{ parameters.pythonVersion }}
+    displayName: 'Use Python ${{ parameters.pythonVersion }}'
+
+  - script: |
+      set -eo pipefail
+      buildscripts/iceberg/install.sh
+    env:
+      CONDA_ENV:  build_iceberg_connector
+      PYTHON_VERSION: ${{ parameters.pythonVersion }}
+      TARGET_NAME: ${{ parameters.name }}
+    displayName: 'Setup Conda Installation + Dependencies'
+
+  - task: DownloadSecureFile@1
+    name: secret_file
+    displayName: 'Download Secrets File'
+    inputs:
+      secureFile: 'publish_binary_secrets'
+
+  - script: |
+      set -eo pipefail
+      sudo chmod a+r $(secret_file.secureFilePath)
+      sudo cp $(secret_file.secureFilePath) $HOME/secret_file
+
+      artifactory_channel=`./buildscripts/iceberg/get_channel.sh`
+      echo "artifactory_channel: $artifactory_channel"
+      ./buildscripts/iceberg/publish_binary.sh $artifactory_channel
+    env:
+      BODO_CHANNEL_NAME: 'bodo.ai'
+      TARGET_NAME: ${{ parameters.name }}
+    displayName: 'Conda Build and Publish Iceberg Binary to Artifactory'

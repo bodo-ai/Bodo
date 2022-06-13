@@ -3,7 +3,6 @@ import sys
 from distutils.errors import DistutilsExecError
 
 from setuptools import find_packages, setup
-from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
 # ----- Trick to pass the Bodo Version in CI -----
@@ -50,14 +49,6 @@ class CustomDevelopCommand(develop):
         super().run()
 
 
-class CustomBuildCommand(build_py):
-    """Custom command to build the jars with python setup.py build"""
-
-    def run(self):
-        build_libs(self)
-        super().run()
-
-
 setup(
     name="bodo-iceberg-connector",
     version=version,
@@ -82,5 +73,5 @@ setup(
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install bodo in development mode, and it will also break CI
     install_requires=[] if development_mode else ["bodo"],
-    cmdclass={"build_py": CustomBuildCommand, "develop": CustomDevelopCommand},
+    cmdclass={"develop": CustomDevelopCommand},
 )

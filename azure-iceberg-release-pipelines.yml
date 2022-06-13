@@ -14,15 +14,8 @@ stages:
 - stage: Build_Iceberg_Connector_Binary
   displayName: 'Build Iceberg Connector Binary'
   jobs:
-  - template: buildscripts/iceberg/azure-build-binary-linux-macos.yml
+  - template: buildscripts/iceberg/azure-build-binary.yml
     parameters:
-      name: Linux
+      name: Noarch
       vmImage: ubuntu-latest
-  - template: buildscripts/iceberg/azure-build-binary-linux-macos.yml
-    parameters:
-      name: macOS
-      vmImage: macOS-latest
-  - template: buildscripts/iceberg/azure-build-binary-linux-macos.yml
-    parameters:
-      name: macOS_ARM
-      vmImage: macOS-latest
+      pythonVersion: '3.9'
