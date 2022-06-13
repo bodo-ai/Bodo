@@ -1792,54 +1792,6 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
                 ), f"{call_name} found in IR when it should be optimized out"
 
 
-def _create_many_column_file(filetype, indexcol=False, null_list=None):
-    """
-    Helper function to create CSV or parquet file with 99 columns.
-    """
-    if bodo.get_rank() == 0:
-        data_dict = {}
-        for i in range(33):
-            for j in range(3):
-                modulo = j % 3
-                if modulo == 0:
-                    arr = np.arange(1000) * (i + 1)
-                if modulo == 1:
-                    arr = np.arange(1000) * 0.5 * (i + 1)
-                if modulo == 2:
-                    arr = [f"value{k}" for k in (np.arange(1000) * (i + 1))]
-                data_dict[f"Column{(i * 3) + j}"] = arr
-        df = pd.DataFrame(data_dict)
-        if null_list:
-            df.iloc[null_list, :] = pd.NA
-        if filetype == "csv":
-            df.to_csv("many_columns.csv", index=indexcol)
-        elif filetype in ("parquet", "pq"):
-            if isinstance(indexcol, str):
-                df.set_index(indexcol)
-                indexcol = True
-            df.to_parquet("many_columns.parquet", index=indexcol)
-        else:
-            raise ValueError(f"filetype {filetype} not supported")
-    bodo.barrier()
-
-
-def _del_many_column_file(filetype):
-    """
-    Helper function to remove the CSV file with 99 columns.
-    """
-    # Include a barrier so rank 0 doesn't delete the file
-    # before all columns have finished using it.
-    bodo.barrier()
-    if bodo.get_rank() == 0:
-        if filetype == "csv":
-            os.remove("many_columns.csv")
-        elif filetype == "parquet":
-            os.remove("many_columns.parquet")
-        else:
-            raise ValueError(f"filetype {filetype} not supported")
-    bodo.barrier()
-
-
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
 # are stored there (to avoid failing on AWS or our local machines)
 def get_snowflake_connection_string(db, schema, user=1):
