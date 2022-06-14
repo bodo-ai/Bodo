@@ -375,7 +375,7 @@ def pq_distributed_run(
         pq_source = pq_node.loc.strformat()
         pq_cols = []
         dict_encoded_cols = []
-        for i in pq_node.type_usecol_offset:
+        for i in pq_node.out_used_cols:
             colname = pq_node.df_colnames[i]
             pq_cols.append(colname)
             if isinstance(
@@ -408,7 +408,7 @@ def pq_distributed_run(
 
     # Check for any unsupported columns still remaining
     if pq_node.unsupported_columns:
-        used_cols_set = set(pq_node.type_usecol_offset)
+        used_cols_set = set(pq_node.out_used_cols)
         unsupported_cols_set = set(pq_node.unsupported_columns)
         remaining_unsupported = used_cols_set & unsupported_cols_set
         if remaining_unsupported:
@@ -434,7 +434,7 @@ def pq_distributed_run(
     pq_reader_py = _gen_pq_reader_py(
         pq_node.df_colnames,
         pq_node.col_indices,
-        pq_node.type_usecol_offset,
+        pq_node.out_used_cols,
         pq_node.out_types,
         pq_node.storage_options,
         pq_node.partition_names,
@@ -476,12 +476,12 @@ def pq_distributed_run(
     # can be dead because otherwise the whole
     # node should have already been removed.
     assert not (
-        pq_node.index_column_index is None and not pq_node.type_usecol_offset
+        pq_node.index_column_index is None and not pq_node.out_used_cols
     ), "At most one of table and index should be dead if the Parquet IR node is live"
     if pq_node.index_column_index is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
-    elif not pq_node.type_usecol_offset:
+    elif not pq_node.out_used_cols:
         # If the table is dead, remove the node
         nodes.pop(-2)
 
@@ -527,7 +527,7 @@ def get_fname_pyobject(fname):
 def _gen_pq_reader_py(
     col_names,
     col_indices,
-    type_usecol_offset,
+    out_used_cols,
     out_types,
     storage_options,
     partition_names,
@@ -568,7 +568,7 @@ def _gen_pq_reader_py(
     # the output of read_parquet)
 
     # If we aren't loading any column the table is dead
-    is_dead_table = not type_usecol_offset
+    is_dead_table = not out_used_cols
 
     sanitized_col_names = [sanitize_varname(c) for c in col_names]
     partition_names = [sanitize_varname(c) for c in partition_names]
@@ -583,7 +583,7 @@ def _gen_pq_reader_py(
     input_file_name_col = (
         sanitize_varname(input_file_name_col)
         if (input_file_name_col is not None)
-        and (col_names.index(input_file_name_col) in type_usecol_offset)
+        and (col_names.index(input_file_name_col) in out_used_cols)
         else None
     )
 
@@ -597,11 +597,11 @@ def _gen_pq_reader_py(
     # the code we will pass the indices of columns in the parquet file sorted.
     # C++ code will add partition columns to the end of its output table.
     # Here because columns may have been eliminated by 'pq_remove_dead_column',
-    # we only load the indices in type_usecol_offset.
+    # we only load the indices in out_used_cols.
     selected_cols = []
     partition_indices = set()
     cols_to_skip = partition_names + [input_file_name_col]
-    for i in type_usecol_offset:
+    for i in out_used_cols:
         if sanitized_col_names[i] not in cols_to_skip:
             selected_cols.append(col_indices[i])
         elif (not input_file_name_col) or (
@@ -739,7 +739,7 @@ def _gen_pq_reader_py(
             else None
         )
         for i, col_num in enumerate(col_indices):
-            if j < len(type_usecol_offset) and i == type_usecol_offset[j]:
+            if j < len(out_used_cols) and i == out_used_cols[j]:
                 col_idx = col_indices[i]
                 if input_file_name_col_idx and col_idx == input_file_name_col_idx:
                     # input_file_name column goes at the end
