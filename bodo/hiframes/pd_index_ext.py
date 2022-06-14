@@ -4920,6 +4920,112 @@ def overload_index_repeat(I, repeats, axis=None):
     return impl
 
 
+@overload_method(NumericIndexType, "is_integer", inline="always")
+def overload_is_integer_numeric(I):
+    truth = isinstance(I.dtype, types.Integer)
+    return lambda I: truth  # pragma: no cover
+
+
+@overload_method(NumericIndexType, "is_floating", inline="always")
+def overload_is_floating_numeric(I):
+    truth = isinstance(I.dtype, types.Float)
+    return lambda I: truth  # pragma: no cover
+
+
+@overload_method(NumericIndexType, "is_boolean", inline="always")
+def overload_is_boolean_numeric(I):
+    truth = isinstance(I.dtype, types.Boolean)
+    return lambda I: truth  # pragma: no cover
+
+
+@overload_method(NumericIndexType, "is_numeric", inline="always")
+def overload_is_numeric_numeric(I):
+    truth = not isinstance(I.dtype, types.Boolean)
+    return lambda I: truth  # pragma: no cover
+
+
+# TODO: fix for cases where I came from a pd.array of booleans
+
+
+@overload_method(NumericIndexType, "is_object", inline="always")
+def overload_is_object_numeric(I):
+    truth = isinstance(I.dtype, types.Boolean)
+    return lambda I: truth  # pragma: no cover
+
+
+@overload_method(StringIndexType, "is_object", inline="always")
+@overload_method(BinaryIndexType, "is_object", inline="always")
+@overload_method(RangeIndexType, "is_numeric", inline="always")
+@overload_method(RangeIndexType, "is_integer", inline="always")
+@overload_method(CategoricalIndexType, "is_categorical", inline="always")
+@overload_method(IntervalIndexType, "is_interval", inline="always")
+@overload_method(MultiIndexType, "is_object", inline="always")
+def overload_is_methods_true(I):
+    return lambda I: True  # pragma: no cover
+
+
+@overload_method(NumericIndexType, "is_categorical", inline="always")
+@overload_method(NumericIndexType, "is_interval", inline="always")
+@overload_method(StringIndexType, "is_boolean", inline="always")
+@overload_method(StringIndexType, "is_floating", inline="always")
+@overload_method(StringIndexType, "is_categorical", inline="always")
+@overload_method(StringIndexType, "is_integer", inline="always")
+@overload_method(StringIndexType, "is_interval", inline="always")
+@overload_method(StringIndexType, "is_numeric", inline="always")
+@overload_method(BinaryIndexType, "is_boolean", inline="always")
+@overload_method(BinaryIndexType, "is_floating", inline="always")
+@overload_method(BinaryIndexType, "is_categorical", inline="always")
+@overload_method(BinaryIndexType, "is_integer", inline="always")
+@overload_method(BinaryIndexType, "is_interval", inline="always")
+@overload_method(BinaryIndexType, "is_numeric", inline="always")
+@overload_method(DatetimeIndexType, "is_boolean", inline="always")
+@overload_method(DatetimeIndexType, "is_floating", inline="always")
+@overload_method(DatetimeIndexType, "is_categorical", inline="always")
+@overload_method(DatetimeIndexType, "is_integer", inline="always")
+@overload_method(DatetimeIndexType, "is_interval", inline="always")
+@overload_method(DatetimeIndexType, "is_numeric", inline="always")
+@overload_method(DatetimeIndexType, "is_object", inline="always")
+@overload_method(TimedeltaIndexType, "is_boolean", inline="always")
+@overload_method(TimedeltaIndexType, "is_floating", inline="always")
+@overload_method(TimedeltaIndexType, "is_categorical", inline="always")
+@overload_method(TimedeltaIndexType, "is_integer", inline="always")
+@overload_method(TimedeltaIndexType, "is_interval", inline="always")
+@overload_method(TimedeltaIndexType, "is_numeric", inline="always")
+@overload_method(TimedeltaIndexType, "is_object", inline="always")
+@overload_method(RangeIndexType, "is_boolean", inline="always")
+@overload_method(RangeIndexType, "is_floating", inline="always")
+@overload_method(RangeIndexType, "is_categorical", inline="always")
+@overload_method(RangeIndexType, "is_interval", inline="always")
+@overload_method(RangeIndexType, "is_object", inline="always")
+@overload_method(IntervalIndexType, "is_boolean", inline="always")
+@overload_method(IntervalIndexType, "is_floating", inline="always")
+@overload_method(IntervalIndexType, "is_categorical", inline="always")
+@overload_method(IntervalIndexType, "is_integer", inline="always")
+@overload_method(IntervalIndexType, "is_numeric", inline="always")
+@overload_method(IntervalIndexType, "is_object", inline="always")
+@overload_method(CategoricalIndexType, "is_boolean", inline="always")
+@overload_method(CategoricalIndexType, "is_floating", inline="always")
+@overload_method(CategoricalIndexType, "is_integer", inline="always")
+@overload_method(CategoricalIndexType, "is_interval", inline="always")
+@overload_method(CategoricalIndexType, "is_numeric", inline="always")
+@overload_method(CategoricalIndexType, "is_object", inline="always")
+@overload_method(PeriodIndexType, "is_boolean", inline="always")
+@overload_method(PeriodIndexType, "is_floating", inline="always")
+@overload_method(PeriodIndexType, "is_categorical", inline="always")
+@overload_method(PeriodIndexType, "is_integer", inline="always")
+@overload_method(PeriodIndexType, "is_interval", inline="always")
+@overload_method(PeriodIndexType, "is_numeric", inline="always")
+@overload_method(PeriodIndexType, "is_object", inline="always")
+@overload_method(MultiIndexType, "is_boolean", inline="always")
+@overload_method(MultiIndexType, "is_floating", inline="always")
+@overload_method(MultiIndexType, "is_categorical", inline="always")
+@overload_method(MultiIndexType, "is_integer", inline="always")
+@overload_method(MultiIndexType, "is_interval", inline="always")
+@overload_method(MultiIndexType, "is_numeric", inline="always")
+def overload_is_methods_false(I):
+    return lambda I: False  # pragma: no cover
+
+
 # TODO(ehsan): test
 @overload(operator.getitem, no_unliteral=True)
 def overload_heter_index_getitem(I, ind):  # pragma: no cover
@@ -5098,14 +5204,7 @@ index_unsupported_methods = [
     "insert",
     "intersection",
     "is_",
-    "is_boolean",
-    "is_categorical",
-    "is_floating",
-    "is_integer",
-    "is_interval",
     "is_mixed",
-    "is_numeric",
-    "is_object",
     "is_type_compatible",
     "item",
     "join",
