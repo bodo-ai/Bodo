@@ -14,7 +14,7 @@ import scipy
 from pandas.testing import assert_frame_equal
 from sklearn import datasets
 from sklearn.metrics import precision_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import (
     LabelEncoder,
@@ -514,6 +514,145 @@ def test_train_test_split_unsupported(memory_leak_check):
         match=err_msg,
     ):
         bodo.jit(impl)(train, train_labels, train_size, test_size)
+
+
+# ----------------------- KFold -----------------------------
+
+
+@pytest.mark.parametrize(
+    "X, y, groups",
+    [
+        (
+            np.arange(100).reshape((20, 5)).astype(np.int64),
+            np.arange(20).astype(np.int64),
+            None,
+        ),
+        (
+            np.arange(110).reshape((22, 5)).astype(np.float64),
+            np.arange(22).astype(np.float64),
+            None,
+        ),
+        (
+            np.arange(100).reshape((20, 5)).astype(np.int64),
+            np.arange(20).astype(np.int64),
+            np.array([0, 1] * 10).astype(np.int64),
+        ),
+    ],
+)
+@pytest.mark.parametrize("n_splits", [2, 3, 5])
+@pytest.mark.parametrize("shuffle", [True, False])
+def test_kfold(X, y, groups, n_splits, shuffle, memory_leak_check):
+    """Test sklearn.model_selection.KFold's split method."""
+
+    if shuffle:
+
+        def test_split(X, y, groups, n_splits, random_state):
+            m = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+            out = m.split(X, y, groups)
+            return out
+
+    else:
+
+        def test_split(X, y, groups, n_splits, random_state):
+            m = KFold(n_splits=n_splits, shuffle=False)
+            out = m.split(X, y, groups)
+            return out
+
+    dist_impl = bodo.jit(distributed=["X", "y", "groups"])(test_split)
+    rep_impl = bodo.jit(replicated=True)(test_split)
+
+    # Test that all indices are returned in distributed split
+    test_idxs_dist = []
+    for train_idxs, test_idxs in dist_impl(
+        _get_dist_arg(X), _get_dist_arg(y), groups, n_splits, 0
+    ):
+        train_idxs = bodo.allgatherv(train_idxs)
+        test_idxs = bodo.allgatherv(test_idxs)
+        test_idxs_dist.append(test_idxs)
+
+        idxs = np.sort(np.concatenate((train_idxs, test_idxs), axis=0), axis=0)
+        assert_array_equal(idxs, np.arange(X.shape[0]))
+
+    assert n_splits == len(test_idxs_dist)
+    all_test_idxs_dist = np.sort(np.concatenate(test_idxs_dist, axis=0), axis=0)
+    assert_array_equal(all_test_idxs_dist, np.arange(X.shape[0]))
+
+    # Test that all indices are returned in replicated split
+    test_idxs_rep = []
+    for train_idxs, test_idxs in rep_impl(X, y, groups, n_splits, 0):
+        test_idxs_rep.append(test_idxs)
+
+        idxs = np.sort(np.concatenate((train_idxs, test_idxs), axis=0), axis=0)
+        assert_array_equal(idxs, np.arange(X.shape[0]))
+
+    assert n_splits == len(test_idxs_rep)
+    all_test_idxs_rep = np.sort(np.concatenate(test_idxs_rep, axis=0), axis=0)
+    assert_array_equal(all_test_idxs_rep, np.arange(X.shape[0]))
+
+    # Test that bodo's fold sizes are equivalent to sklearn's
+    test_idxs_sklearn = []
+    for train_idxs, test_idxs in test_split(X, y, groups, n_splits, 0):
+        test_idxs_sklearn.append(test_idxs)
+
+    for dist_idxs, rep_idxs, sklearn_idxs in zip(
+        test_idxs_dist, test_idxs_rep, test_idxs_sklearn
+    ):
+        assert len(dist_idxs) == len(sklearn_idxs)
+        assert len(rep_idxs) == len(sklearn_idxs)
+
+    # Test that get_n_splits returns the correct number of folds
+    def test_n_splits():
+        m = KFold(n_splits=n_splits)
+        out = m.get_n_splits()
+        return out
+
+    check_func(test_n_splits, ())
+
+
+@pytest.mark.parametrize("n_splits", [2, 3, 5])
+def test_kfold_random_state(n_splits, memory_leak_check):
+    """Test that KFold.split() gives deterministic outputs when random_state is passed"""
+
+    def test_split(X, n_splits, random_state):
+        m = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
+        out = m.split(X)
+        return out
+
+    dist_impl = bodo.jit(distributed=["X", "y", "groups"])(test_split)
+
+    X = np.arange(100)
+    for (train1, test1), (train2, test2), (train3, test3) in zip(
+        dist_impl(X, n_splits, 0),
+        dist_impl(X, n_splits, 0),
+        dist_impl(X, n_splits, None),
+    ):
+        # Check that train1/train2 and test1/test2 are equal
+        assert_array_equal(train1, train2)
+        assert_array_equal(test1, test2)
+        # Check that train1/train3 and test1/test3 are not equal
+        assert_raises(AssertionError, assert_array_equal, train1, train3)
+        assert_raises(AssertionError, assert_array_equal, test1, test3)
+
+
+def test_kfold_error():
+    """Test error handling of KFold.split()"""
+
+    def test_split(X, n_splits):
+        m = KFold(n_splits=n_splits, shuffle=False)
+        out = m.split(X)
+        return out
+
+    dist_impl = bodo.jit(distributed=["X"])(test_split)
+
+    # X has too few items for 4-way fold
+    X = np.array([[1, 2], [3, 4], [5, 6]])
+    error_str = "number of splits n_splits=4 greater than the number of samples"
+    with pytest.raises(ValueError, match=error_str):
+        for train_idxs, test_idxs in dist_impl(_get_dist_arg(X), 4):
+            pass
+
+
+# ---------------------- LabelEncoder -----------------------
 
 
 @pytest.mark.parametrize(
