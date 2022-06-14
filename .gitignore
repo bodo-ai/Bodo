@@ -59,5 +59,4 @@ bodo/io/_hdfs.cpp
 bodo/utils/tracing.c
 
 # Iceberg Connector
-iceberg/test-dataset-creation/iceberg_db
 iceberg/bodo_iceberg_connector/iceberg-reader/target
