@@ -1116,6 +1116,21 @@ class DistributedAnalysis:
                 )
 
             return
+
+        if (
+            func_name in {"split"}
+            and "bodo.libs.sklearn_ext" in sys.modules
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                (bodo.libs.sklearn_ext.BodoModelSelectionKFoldType,),
+            )
+        ):
+            self._analyze_call_sklearn_cross_validators(
+                lhs, func_name, rhs, kws, array_dists
+            )
+            return
+
         if func_mod in ("sklearn.model_selection._split", "sklearn.model_selection"):
             if func_name == "train_test_split":
                 arg0 = rhs.args[0].name
@@ -2278,11 +2293,33 @@ class DistributedAnalysis:
 
         return
 
+    def _analyze_call_sklearn_cross_validators(
+        self, lhs, func_name, rhs, kws, array_dists
+    ):
+        """
+        Analyze distribution of sklearn.model_selection.KFold functions.
+        """
+
+        if func_name in {"split"}:
+            # match dist of X and groups (if provided)
+            X_arg_name = rhs.args[0].name
+            if len(rhs.args) >= 3:
+                groups_arg_name = rhs.args[2].name
+            elif "groups" in kws:
+                groups_arg_name = kws["groups"].name
+            else:
+                groups_arg_name = None
+
+            if groups_arg_name:
+                self._meet_array_dists(X_arg_name, groups_arg_name, array_dists)
+
     def _analyze_call_sklearn_cluster_kmeans(
         self, lhs, func_name, rhs, kws, array_dists
     ):
-        """analyze distribution of sklearn cluster kmeans
-        functions (sklearn.cluster.kmeans.func_name"""
+        """
+        Analyze distribution of sklearn cluster kmeans
+        functions (sklearn.cluster.kmeans.func_name)
+        """
         if func_name == "fit":
             # match dist of X and sample_weight (if provided)
             X_arg_name = rhs.args[0].name

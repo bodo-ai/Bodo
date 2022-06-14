@@ -4288,7 +4288,265 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
 
 
 # ----------------------------------------------------------------------------------------
-# ------------------------------------train_test_split------------------------------------
+# ---------------------------------------- KFold -----------------------------------------
+# Support for sklearn.model_selection.KFold.
+# Both get_n_splits and split functions are supported.
+# For split, if data is distributed and shuffle=False, use sklearn individually
+# on each rank then add a rank offset. If data is distributed and shuffle=True,
+# use sklearn on each rank individually, add a rank offset, then permute the output.
+#
+# Our implementation differs from sklearn's to ensure both train and test data are
+# evenly distributed across ranks if possible. For example, if X=range(8), nprocs=2,
+# and n_splits=4, then our first fold is test = [0,4] and train = [1,2,3,5,6,7],
+# while sklearn's first fold is test = [0,1] and train = [2,3,4,5,6,7].
+# ----------------------------------------------------------------------------------------
+
+
+class BodoModelSelectionKFoldType(types.Opaque):
+    def __init__(self):
+        super(BodoModelSelectionKFoldType, self).__init__(
+            name="BodoModelSelectionKFoldType"
+        )
+
+
+model_selection_kfold_type = BodoModelSelectionKFoldType()
+types.model_selection_kfold_type = model_selection_kfold_type
+
+register_model(BodoModelSelectionKFoldType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.model_selection.KFold)
+def typeof_model_selection_kfold(val, c):
+    return model_selection_kfold_type
+
+
+@box(BodoModelSelectionKFoldType)
+def box_model_selection_kfold(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoModelSelectionKFoldType)
+def unbox_model_selection_kfold(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+class BodoModelSelectionKFoldSplitType(types.Opaque):
+    """
+    Type for the generator that's returned by KFold split().
+    """
+
+    def __init__(self):
+        super(BodoModelSelectionKFoldSplitType, self).__init__(
+            name="BodoModelSelectionKFoldSplitType"
+        )
+
+
+model_selection_kfold_split_type = BodoModelSelectionKFoldSplitType()
+types.model_selection_kfold_split_type = model_selection_kfold_split_type
+
+register_model(BodoModelSelectionKFoldSplitType)(models.OpaqueModel)
+
+
+@box(BodoModelSelectionKFoldSplitType)
+def box_model_selection_kfold_split(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoModelSelectionKFoldSplitType)
+def unbox_model_selection_kfold_split(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.model_selection.KFold, no_unliteral=True)
+def sklearn_model_selection_kfold_overload(
+    n_splits=5,
+    shuffle=False,
+    random_state=None,
+):
+    """
+    Provide implementation for __init__ function of KFold.
+    We simply call sklearn in objmode.
+    """
+
+    check_sklearn_version()
+
+    def _sklearn_model_selection_kfold_impl(
+        n_splits=5,
+        shuffle=False,
+        random_state=None,
+    ):  # pragma: no cover
+
+        with numba.objmode(m="model_selection_kfold_type"):
+            m = sklearn.model_selection.KFold(
+                n_splits=n_splits,
+                shuffle=shuffle,
+                random_state=random_state,
+            )
+        return m
+
+    return _sklearn_model_selection_kfold_impl
+
+
+def sklearn_model_selection_kfold_split_dist_helper(m, X, y=None, groups=None):
+    """
+    Distributed calculation of train/test split indices for KFold.
+    We use sklearn on the indices assigned to each individual rank,
+    then add the rank offset afterwards.
+    """
+    # Compute index offset of each rank
+    my_rank = bodo.get_rank()
+    nranks = bodo.get_size()
+    rank_data_len = np.empty(nranks, np.int64)
+    bodo.libs.distributed_api.allgather(rank_data_len, len(X))
+    if my_rank > 0:
+        rank_start = np.sum(rank_data_len[:my_rank])
+    else:
+        rank_start = 0
+    rank_end = rank_start + len(X)
+
+    # Compute total data size and global/local indices
+    global_data_size = np.sum(rank_data_len)
+
+    if global_data_size < m.n_splits:
+        raise ValueError(
+            f"number of splits n_splits={m.n_splits} greater than the number of samples {global_data_size}"
+        )
+
+    global_indices = np.arange(global_data_size)
+    if m.shuffle:
+        if m.random_state is None:
+            seed = bodo.libs.distributed_api.bcast_scalar(np.random.randint(0, 2**31))
+            np.random.seed(seed)
+        else:
+            np.random.seed(m.random_state)
+        np.random.shuffle(global_indices)
+
+    local_indices = global_indices[rank_start:rank_end]
+
+    # Compute local fold sizes so that global fold sizes match sklearn's.
+    # Suppose that m.n_splits = 3, global_data_size = 22 and nranks = 4, so
+    # len(X) = [6, 6, 5, 5] on each rank. We want our global fold sizes to
+    # be [8, 7, 7] to match sklearn, which yields these local fold sizes:
+    #
+    #       fold0  fold1  fold2
+    # rank0   2      2      2
+    # rank1   2      2      2
+    # rank2   2      2      1
+    # rank3   2      1      2
+    #
+    # Assuming that data is evenly distributed, each local fold has exactly
+    # `global_data_size // (nranks * m.n_splits)` elements or maybe one more.
+    # First, we compute the number of extra elements per fold, and further
+    # subdivide into [4, 3, 3] extra elements for folds 0, 1, and 2. We use
+    # np.repeat() to expand this into [0, 0, 0, 0, 1, 1, 1, 2, 2, 2]. Now,
+    # slicing this array by `my_rank::n_ranks` tells us which local folds get
+    # an extra element in the current rank. Example: In rank 0, arr[0::4] gives
+    # [arr[0], arr[4], arr[8]] which is [0, 1, 2]; while in rank 2, arr[2::4]
+    # gives [arr[2], arr[6]] which is [0, 1].
+
+    local_fold_sizes = np.full(
+        m.n_splits, global_data_size // (nranks * m.n_splits), dtype=np.int32
+    )
+
+    n_extras = global_data_size % (nranks * m.n_splits)
+    extras_per_local_fold = np.full(m.n_splits, n_extras // m.n_splits, dtype=int)
+    extras_per_local_fold[: n_extras % m.n_splits] += 1
+
+    global_extra_locs = np.repeat(np.arange(m.n_splits), extras_per_local_fold)
+    local_extra_locs = global_extra_locs[my_rank::nranks]
+    local_fold_sizes[local_extra_locs] += 1
+
+    def _kfold_split_dist_generator(X, y=None, groups=None):
+        start = 0
+        for fold_size in local_fold_sizes:
+            stop = start + fold_size
+            test_index = local_indices[start:stop]
+            train_index = np.concatenate(
+                (local_indices[:start], local_indices[stop:]), axis=0
+            )
+            yield train_index, test_index
+            start = stop
+
+    return _kfold_split_dist_generator(X, y=y, groups=groups)
+
+
+@overload_method(BodoModelSelectionKFoldType, "split", no_unliteral=True)
+def overload_model_selection_kfold_split(
+    m,
+    X,
+    y=None,
+    groups=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """
+    Provide implementations for the split function, which is a generator.
+    In case input is replicated, we simply call sklearn,
+    else we use our native implementation.
+    """
+
+    if is_overload_true(_is_data_distributed):
+        # If distributed, then use native implementation
+
+        def _model_selection_kfold_split_impl(
+            m, X, y=None, groups=None, _is_data_distributed=False
+        ):  # pragma: no cover
+
+            with numba.objmode(gen="model_selection_kfold_split_type"):
+                gen = sklearn_model_selection_kfold_split_dist_helper(
+                    m, X, y=None, groups=None
+                )
+
+            return gen
+
+    else:
+        # If replicated, then just call sklearn
+
+        def _model_selection_kfold_split_impl(
+            m, X, y=None, groups=None, _is_data_distributed=False
+        ):  # pragma: no cover
+
+            with numba.objmode(gen="model_selection_kfold_split_type"):
+                gen = m.split(X, y=y, groups=groups)
+
+            return gen
+
+    return _model_selection_kfold_split_impl
+
+
+@overload_method(BodoModelSelectionKFoldType, "get_n_splits", no_unliteral=True)
+def overload_model_selection_kfold_get_n_splits(
+    m,
+    X=None,
+    y=None,
+    groups=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """
+    Provide implementations for the get_n_splits function.
+    We simply return the model's value of n_splits.
+    """
+
+    def _model_selection_kfold_get_n_splits_impl(
+        m, X=None, y=None, groups=None, _is_data_distributed=False
+    ):  # pragma: no cover
+
+        with numba.objmode(out="int64"):
+            out = m.n_splits
+        return out
+
+    return _model_selection_kfold_get_n_splits_impl
+
+
+# ---------------------------------------------------------------------------------------
+# -----------------------------------train_test_split------------------------------------
 def get_data_slice_parallel(data, labels, len_train):  # pragma: no cover
     """When shuffle=False, just split the data/labels using slicing.
     Run in bodo.jit to do it across ranks"""

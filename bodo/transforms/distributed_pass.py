@@ -1172,6 +1172,20 @@ class DistributedPass:
                     self,
                     extra_globals={"sklearn": sklearn},
                 )
+
+        if (
+            func_name == "split"
+            and "bodo.libs.sklearn_ext" in sys.modules
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                (bodo.libs.sklearn_ext.BodoModelSelectionKFoldType,),
+            )
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
         if (
             func_mod in ("sklearn.model_selection._split", "sklearn.model_selection")
             and func_name == "train_test_split"
