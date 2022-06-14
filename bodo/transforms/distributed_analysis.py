@@ -1028,6 +1028,12 @@ class DistributedAnalysis:
 
             return
 
+        if func_mod == "sklearn.utils" and func_name == "shuffle":
+            # match input and output distributions
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+
+            return
+
         if func_mod in ("sklearn.metrics._classification", "sklearn.metrics"):
             if func_name in {"precision_score", "recall_score", "f1_score"}:
                 # output is always replicated, and the output can be an array

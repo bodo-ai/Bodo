@@ -1360,8 +1360,10 @@ def rebalance(data, dests=None, random=False, random_seed=None, parallel=False):
 
 
 @numba.generated_jit(nopython=True)
-def random_shuffle(data, seed=None, dests=None, parallel=False):
-    func_text = "def impl(data, seed=None, dests=None, parallel=False):\n"
+def random_shuffle(data, seed=None, dests=None, n_samples=None, parallel=False):
+    func_text = (
+        "def impl(data, seed=None, dests=None, n_samples=None, parallel=False):\n"
+    )
     if isinstance(data, types.Array):
         if not is_overload_none(dests):
             raise BodoError("not supported")
@@ -1371,18 +1373,39 @@ def random_shuffle(data, seed=None, dests=None, parallel=False):
         func_text += "    if not parallel:\n"
         func_text += "        data = data.copy()\n"
         func_text += "        np.random.shuffle(data)\n"
+        if not is_overload_none(n_samples):
+            func_text += "        data = data[:n_samples]\n"
         func_text += "        return data\n"
         func_text += "    else:\n"
         func_text += "        dim0_global_size = bodo.libs.distributed_api.dist_reduce(data.shape[0], np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value))\n"
         func_text += "        permutation = np.arange(dim0_global_size)\n"
         func_text += "        np.random.shuffle(permutation)\n"
+        if not is_overload_none(n_samples):
+            func_text += (
+                "        n_samples = max(0, min(dim0_global_size, n_samples))\n"
+            )
+        else:
+            func_text += "        n_samples = dim0_global_size\n"
         func_text += "        dim0_local_size = bodo.libs.distributed_api.get_node_portion(dim0_global_size, bodo.get_size(), bodo.get_rank())\n"
-        func_text += "        output = np.empty((dim0_local_size,) + tuple(data.shape[1:]), dtype=data.dtype)\n"
+        func_text += "        dim0_output_size = bodo.libs.distributed_api.get_node_portion(n_samples, bodo.get_size(), bodo.get_rank())\n"
+        func_text += "        output = np.empty((dim0_output_size,) + tuple(data.shape[1:]), dtype=data.dtype)\n"
         func_text += "        dtype_size = bodo.io.np_io.get_dtype_size(data.dtype)\n"
-        func_text += "        bodo.libs.distributed_api.dist_permutation_array_index(output, dim0_global_size, dtype_size, data, permutation, len(permutation))\n"
+        func_text += "        bodo.libs.distributed_api.dist_permutation_array_index(output, dim0_global_size, dtype_size, data, permutation, len(permutation), n_samples)\n"
         func_text += "        return output\n"
     else:
-        func_text += "    return bodo.libs.distributed_api.rebalance(data, dests=dests, random=True, random_seed=seed, parallel=parallel)\n"
+        func_text += "    output = bodo.libs.distributed_api.rebalance(data, dests=dests, random=True, random_seed=seed, parallel=parallel)\n"
+        # Add support for `n_samples` argument used in sklearn.utils.shuffle:
+        # Since the output is already distributed, to avoid the need to
+        # communicate across ranks, we take the first `n_samples // num_procs`
+        # items from each rank. This differs from sklearn's implementation
+        # of n_samples, which just takes the first n_samples items of the
+        # output as in `output = output[:n_samples]`.
+        if not is_overload_none(n_samples):
+            # Compute local number of samples. E.g. for n_samples = 11 and
+            # mpi_size = 3, ranks (0,1,2) would sample (4,4,3) items, respectively
+            func_text += "    local_n_samples = bodo.libs.distributed_api.get_node_portion(n_samples, bodo.get_size(), bodo.get_rank())\n"
+            func_text += "    output = output[:local_n_samples]\n"
+        func_text += "    return output\n"
     loc_vars = {}
     exec(
         func_text,
@@ -3062,19 +3085,27 @@ permutation_array_index = types.ExternalFunction(
         types.int64,
         types.voidptr,
         types.intp,
+        types.int64,
     ),
 )
 
 
 @numba.njit
 def dist_permutation_array_index(
-    lhs, lhs_len, dtype_size, rhs, p, p_len
+    lhs, lhs_len, dtype_size, rhs, p, p_len, n_samples
 ):  # pragma: no cover
     c_rhs = np.ascontiguousarray(rhs)
     lower_dims_size = get_tuple_prod(c_rhs.shape[1:])
     elem_size = dtype_size * lower_dims_size
     permutation_array_index(
-        lhs.ctypes, lhs_len, elem_size, c_rhs.ctypes, c_rhs.shape[0], p.ctypes, p_len
+        lhs.ctypes,
+        lhs_len,
+        elem_size,
+        c_rhs.ctypes,
+        c_rhs.shape[0],
+        p.ctypes,
+        p_len,
+        n_samples,
     )
     check_and_propagate_cpp_exception()
 

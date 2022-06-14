@@ -120,7 +120,8 @@ static void permutation_int(int64_t* output, int n) __UNUSED__;
 static void permutation_array_index(unsigned char* lhs, int64_t len,
                                     int64_t elem_size, unsigned char* rhs,
                                     int64_t n_elems_rhs, int64_t* p,
-                                    int64_t p_len) __UNUSED__;
+                                    int64_t p_len,
+                                    int64_t n_samples) __UNUSED__;
 static int finalize() __UNUSED__;
 static int hpat_dummy_ptr[64] __UNUSED__;
 
@@ -636,11 +637,21 @@ static void permutation_int(int64_t* output, int n) {
 // Given the permutation index |p| and |rank|, and the number of ranks
 // |num_ranks|, finds the destination ranks of indices of the |rank|.  For
 // example, if |rank| is 1, |num_ranks| is 3, |p_len| is 12, and |p| is the
-// following array [ 9, 8, 6, 4, 11, 7, 2, 3, 5, 0, 1, 10], the function returns
-// [0, 2, 0, 1].
+// following array [9, 8, 6, 4, 11, 7, 2, 3, 5, 0, 1, 10], the function returns
+// [2, 1, 0, 0] which are the ranks corresponding to [11, 7, 2, 3] because
+// indices [0, 1, 2, 3] go to rank 0, [4, 5, 6, 7] go to rank 1, and
+// [8, 9, 10, 11] go to rank 2.
+//
+// When |n_samples| != |p_len|, only the first |n_samples| elements of the
+// permuted output are considered, and the remaining samples are dropped.
+// The number of local samples per rank is |n_samples // num_ranks|, and
+// the function returns -1 for dropped samples with no destination rank.
+// For example, if |n_samples| is 9 using the same example as above, then
+// the function returns [-1, 2, 0, 1] because indices [0, 1, 2] go to rank 0,
+// [3, 4, 5] go to rank 1, and [6, 7, 8] go to rank 2.
 static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t n_elems_local,
                                             int64_t num_ranks, int64_t* p,
-                                            int64_t p_len) {
+                                            int64_t p_len, int64_t n_samples) {
     // find global start offset of my current chunk of data
     int64_t my_chunk_start = 0;
     // get current chunk sizes of all ranks
@@ -650,9 +661,16 @@ static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t n_elems_local,
     for (int i = 0; i < rank; i++) my_chunk_start += AllSizes[i];
 
     std::vector<int64_t> dest_ranks(n_elems_local);
-    // find destination of every element in my chunk based on the permutation
+    // find destination of every element in my chunk based on the permutation,
+    // or -1 when there is no destination because p[my_chunk_start + i] >=
+    // n_samples
     for (int64_t i = 0; i < n_elems_local; i++) {
-        dest_ranks[i] = index_rank(p_len, num_ranks, p[my_chunk_start + i]);
+        if (p[my_chunk_start + i] >= n_samples) {
+            dest_ranks[i] = -1;
+        } else {
+            dest_ranks[i] =
+                index_rank(n_samples, num_ranks, p[my_chunk_start + i]);
+        }
     }
     return dest_ranks;
 }
@@ -660,7 +678,11 @@ static std::vector<int64_t> find_dest_ranks(int64_t rank, int64_t n_elems_local,
 static std::vector<int> find_send_counts(const std::vector<int64_t>& dest_ranks,
                                          int64_t num_ranks, int64_t elem_size) {
     std::vector<int> send_counts(num_ranks);
-    for (auto dest : dest_ranks) ++send_counts[dest];
+    for (auto dest : dest_ranks) {
+        if (dest != -1) {
+            ++send_counts[dest];
+        }
+    }
     return send_counts;
 }
 
@@ -721,10 +743,11 @@ static void apply_permutation(unsigned char* v, int64_t elem_size,
 
 // Applies the permutation represented by |p| of size |p_len| to the array |rhs|
 // of elements of size |elem_size| and stores the result in |lhs|.
+// Only take the first |n_samples| elements of the output.
 static void permutation_array_index(unsigned char* lhs, int64_t len,
                                     int64_t elem_size, unsigned char* rhs,
                                     int64_t n_elems_rhs, int64_t* p,
-                                    int64_t p_len) {
+                                    int64_t p_len, int64_t n_samples) {
     try {
         if (len != p_len) {
             throw std::runtime_error(
@@ -738,9 +761,11 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
 
         auto num_ranks = dist_get_size();
         auto rank = dist_get_rank();
-        // dest_ranks contains the destination rank for each element i in rhs
+        // dest_ranks contains the destination rank for each element i in rhs,
+        // or -1 for elements with no destination because num_samples < p_len
+        // (for cases such as calling random_shuffle with n_samples)
         auto dest_ranks =
-            find_dest_ranks(rank, n_elems_rhs, num_ranks, p, p_len);
+            find_dest_ranks(rank, n_elems_rhs, num_ranks, p, p_len, n_samples);
         auto send_counts = find_send_counts(dest_ranks, num_ranks, elem_size);
         auto send_disps = find_disps(send_counts);
         auto recv_counts = find_recv_counts(num_ranks, send_counts);
@@ -749,6 +774,7 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
         auto offsets = send_disps;
         std::vector<unsigned char> send_buf(dest_ranks.size() * elem_size);
         for (size_t i = 0; i < dest_ranks.size(); ++i) {
+            if (dest_ranks[i] == -1) continue;
             auto send_buf_offset = offsets[dest_ranks[i]]++ * elem_size;
             auto* send_buf_begin = send_buf.data() + send_buf_offset;
             auto* rhs_begin = rhs + i * elem_size;
@@ -774,8 +800,8 @@ static void permutation_array_index(unsigned char* lhs, int64_t len,
         // of our chunk, to get a local permutation with values between 0 and
         // chunk_size: [ 2 (7) (5) (6) (4) 3 1 0 ] => [7 5 6 4] => [3 1 2 0].
         std::vector<size_t> my_p;
-        int64_t chunk_size = dist_get_node_portion(p_len, num_ranks, rank);
-        int64_t chunk_start = dist_get_start(p_len, num_ranks, rank);
+        int64_t chunk_size = dist_get_node_portion(n_samples, num_ranks, rank);
+        int64_t chunk_start = dist_get_start(n_samples, num_ranks, rank);
         my_p.reserve(chunk_size);
 
         for (size_t i = 0; i < p_len; ++i) {

@@ -577,6 +577,58 @@ class DistributedPass:
                 return [assign]
 
         if (
+            func_mod == "sklearn.utils"
+            and func_name == "shuffle"
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            import sklearn
+
+            rhs = assign.value
+            kws = dict(rhs.kws)
+            nodes = []
+
+            data = get_call_expr_arg("sklearn.utils.shuffle", rhs.args, kws, 0, "data")
+
+            # random_state argument
+            random_state_var = ir.Var(
+                assign.target.scope,
+                mk_unique_var("shuffle_random_state"),
+                rhs.loc,
+            )
+            nodes.append(ir.Assign(ir.Const(None, rhs.loc), random_state_var, rhs.loc))
+            self.typemap[random_state_var.name] = types.none
+            # random_state cannot be specified positionally
+            random_state = get_call_expr_arg(
+                "shuffle", rhs.args, kws, 1e6, "random_state", random_state_var
+            )
+
+            # n_samples argument
+            n_samples_var = ir.Var(
+                assign.target.scope,
+                mk_unique_var("shuffle_n_samples"),
+                rhs.loc,
+            )
+            nodes.append(ir.Assign(ir.Const(None, rhs.loc), n_samples_var, rhs.loc))
+            self.typemap[n_samples_var.name] = types.none
+            # n_samples cannot be specified positionally
+            n_samples = get_call_expr_arg(
+                "shuffle", rhs.args, kws, 1e6, "n_samples", n_samples_var
+            )
+
+            f = eval(
+                "lambda data, random_state, n_samples: sklearn.utils.shuffle("
+                "    data, random_state=random_state, n_samples=n_samples, _is_data_distributed=True"
+                ")"
+            )
+            return nodes + compile_func_single_block(
+                f,
+                [data, random_state, n_samples],
+                assign.target,
+                self,
+                extra_globals={"sklearn": sklearn},
+            )
+
+        if (
             func_mod in ("sklearn.metrics._classification", "sklearn.metrics")
             and func_name == "precision_score"
         ):
