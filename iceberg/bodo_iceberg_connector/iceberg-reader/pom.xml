@@ -22,7 +22,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.10.9.2</version>
+      <version>0.10.9.5</version>
     </dependency>
 
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-api -->
@@ -79,16 +79,17 @@
       <artifactId>iceberg-bundled-guava</artifactId>
       <version>0.13.1</version>
     </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>23.6-jre</version>
-    </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.hive/hive-metastore -->
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-metastore</artifactId>
       <version>3.1.3</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/org.apache.httpcomponents.core5/httpcore5 -->
+    <dependency>
+      <groupId>org.apache.httpcomponents.core5</groupId>
+      <artifactId>httpcore5</artifactId>
+      <version>5.1.3</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-common -->
     <dependency>
@@ -120,24 +121,60 @@
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-aws</artifactId>
       <version>3.3.3</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.amazonaws</groupId>
+          <artifactId>aws-java-sdk-bundle</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
-    <!-- https://mvnrepository.com/artifact/org.apache.httpcomponents.core5/httpcore5 -->
+    <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-core -->
     <dependency>
-      <groupId>org.apache.httpcomponents.core5</groupId>
-      <artifactId>httpcore5</artifactId>
-      <version>5.1.3</version>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-core</artifactId>
+      <version>1.11.1026</version>
     </dependency>
-    <!-- https://mvnrepository.com/artifact/org.apache.arrow/arrow-vector -->
+    <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-s3 -->
     <dependency>
-      <groupId>org.apache.arrow</groupId>
-      <artifactId>arrow-vector</artifactId>
-      <version>7.0.0</version>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-s3</artifactId>
+      <version>1.11.1026</version>
     </dependency>
-    <!-- https://mvnrepository.com/artifact/software.amazon.awssdk/bundle -->
+    <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-sts -->
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-sts</artifactId>
+      <version>1.11.1026</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-dynamodb -->
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-dynamodb</artifactId>
+      <version>1.11.1026</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/software.amazon.awssdk/s3 -->
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
-      <artifactId>bundle</artifactId>
-      <version>2.17.202</version>
+      <artifactId>s3</artifactId>
+      <version>2.17.206</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/software.amazon.awssdk/glue -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>glue</artifactId>
+      <version>2.17.206</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/software.amazon.awssdk/dynamodb -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>dynamodb</artifactId>
+      <version>2.17.206</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/software.amazon.awssdk/kms -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>kms</artifactId>
+      <version>2.17.206</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/software.amazon.awssdk/url-connection-client -->
     <dependency>
@@ -145,8 +182,24 @@
       <artifactId>url-connection-client</artifactId>
       <version>2.17.202</version>
     </dependency>
-
-
+    <!-- https://mvnrepository.com/artifact/software.amazon.awssdk/apache-client -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>apache-client</artifactId>
+      <version>2.17.202</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/software.amazon.awssdk/sts -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>sts</artifactId>
+      <version>2.17.202</version>
+    </dependency>
+    <!-- https://mvnrepository.com/artifact/software.amazon.awssdk/lakeformation -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>lakeformation</artifactId>
+      <version>2.17.202</version>
+    </dependency>
   </dependencies>
 
   <build>
