@@ -3306,6 +3306,157 @@ def test_index_nbytes(index, memory_leak_check):
         check_func(impl, (index,))
 
 
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([1, 5, 2, 1, 0], name="I1"),
+        pd.Index(pd.array([2, 4, 6, 8, 10], dtype="int8")),
+        pd.Index([1, 4, 9, 16, 32], dtype="uint16", name="I3"),
+        pd.Index([True, False, False, False, True]),
+        pd.Index([0.5, 0.9, 1.3, 0.5, 0.5], name="I5"),
+        pd.Index(pd.array([1, 2, None, 3, None, None, 4])),
+        pd.Index([], name="I7"),
+        pd.Index(list("sternrents")),
+        pd.Index([b"A", b"B", b"C", b"D", b"E"], name="I9"),
+        pd.date_range("2018-01-01", "2018-01-06"),
+        pd.date_range("2018-01-01", "2017-01-06", name="I11"),
+        pd.timedelta_range("1D", "7D"),
+        pd.timedelta_range("7D", "1D", name="I13"),
+        pd.CategoricalIndex([1, 1, 2, 1, 1, 2, 3, 2, 1]),
+        pd.CategoricalIndex(list("AAEAAEIOUOIEA"), ordered=True, name="I15"),
+        pd.CategoricalIndex([], name="I16"),
+        pd.RangeIndex(0, 26, 5, name="I17"),
+        pd.RangeIndex(30, -1, -10),
+        pd.RangeIndex(0, 10, -1, name="I19"),
+        pd.MultiIndex.from_product([[1, 2, 3], [4, 5, 6]], names=("I20A", "I20B")),
+        pd.MultiIndex.from_arrays([[1, 2, 1, 2, 1, 2], list("AAABBB"), list("CECEDE")]),
+        pd.MultiIndex.from_product([pd.array([], dtype="int64")]),
+    ],
+)
+def test_index_simple_attributes(index):
+    """Tests simple Index attributes"""
+
+    def impl1(idx):
+        return idx.T
+
+    # Return several attributes at once in a tuple to reduce the number of
+    # functions that need to be compiled and run with check_func
+    def impl2(idx):
+        return (
+            idx.size,
+            idx.shape,
+            idx.ndim,
+            idx.nlevels,
+            idx.empty,
+            idx.is_all_dates,
+            idx.inferred_type,
+            idx.name,
+            idx.names,
+        )
+
+    def impl3(idx):
+        return idx.dtype
+
+    # Distributed descending RangeIndex not supported [BE-2944]
+    dist_test = not (isinstance(index, pd.RangeIndex) and index.step < 0)
+
+    # Cannot return or boolean index (see [BE-2811])
+    if index.inferred_type != "boolean":
+        # 1D_Var transpose banned
+        check_func(impl1, (index,), only_seq=True)
+        if dist_test:
+            check_func(impl1, (index,), only_1D=True)
+
+    check_func(impl2, (index,), dist_test=dist_test)
+
+    # Bodo diverges from the Pandas API by always returning the numpy dtype in
+    # ambiguous cases.
+    if isinstance(index.dtype, np.dtype) or isinstance(index, pd.CategoricalIndex):
+        check_func(impl3, (index,), dist_test=dist_test)
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.interval_range(0, 5, name="I1"),
+        pd.interval_range(0.5, 5.5),
+        pd.interval_range(0, 5, closed="left", name="I3"),
+        pd.interval_range(0, 5, closed="both"),
+        pd.interval_range(0, 5, closed="neither", name="I5"),
+    ],
+)
+def test_interval_index_simple_attributes(index):
+    """Tests simple IntervalIndex attributes"""
+
+    def impl1(idx):
+        return idx.T
+
+    # Return several attributes at once in a tuple to reduce the number of
+    # functions that need to be compiled and run with check_func
+    def impl2(idx):
+        return (
+            idx.size,
+            idx.shape,
+            idx.ndim,
+            idx.nlevels,
+            idx.empty,
+            idx.is_all_dates,
+            idx.inferred_type,
+            idx.name,
+            idx.names,
+        )
+
+    # Currently unable to return an IntervalIndex where closed != right
+    if index.closed == "right":
+        # 1D_Var transpose banned
+        check_func(impl1, (index,), only_seq=True)
+        check_func(impl1, (index,), only_1D=True)
+
+    check_func(
+        impl2,
+        (index,),
+    )
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.period_range("2018-01-01", "2018-01-06", freq="D", name="P1"),
+        pd.period_range("2018-01-01", "2018-06-01", freq="M"),
+        pd.period_range("2018-01-01", "2017-06-01", freq="Y", name="P3"),
+    ],
+)
+def test_period_index_simple_attributes(index):
+    """Tests simple PeriodIndex attributes"""
+
+    def impl1(idx):
+        return idx.T
+
+    # Return several attributes at once in a tuple to reduce the number of
+    # functions that need to be compiled and run with check_func
+    def impl2(idx):
+        return (
+            idx.size,
+            idx.shape,
+            idx.ndim,
+            idx.nlevels,
+            idx.empty,
+            idx.is_all_dates,
+            idx.inferred_type,
+            idx.name,
+            idx.names,
+        )
+
+    # 1D_Var transpose banned
+    check_func(impl1, (index,), only_seq=True)
+    check_func(impl1, (index,), only_1D=True)
+
+    check_func(
+        impl2,
+        (index,),
+    )
+
+
 def test_boolean_index(memory_leak_check):
     def impl1(arr):
         idx = pd.Index(arr)

@@ -3494,6 +3494,14 @@ def overload_index_len(I):
         )  # pragma: no cover
 
 
+@overload(len, no_unliteral=True)
+def overload_multi_index_len(I):
+    if isinstance(I, MultiIndexType):
+        return lambda I: len(
+            bodo.hiframes.pd_index_ext.get_index_data(I)[0]
+        )  # pragma: no cover
+
+
 @overload_attribute(DatetimeIndexType, "shape")
 @overload_attribute(NumericIndexType, "shape")
 @overload_attribute(StringIndexType, "shape")
@@ -3511,6 +3519,13 @@ def overload_index_shape(s):
 @overload_attribute(RangeIndexType, "shape")
 def overload_range_index_shape(s):
     return lambda s: (len(s),)  # pragma: no cover
+
+
+@overload_attribute(MultiIndexType, "shape")
+def overload_index_shape(s):
+    return lambda s: (
+        len(bodo.hiframes.pd_index_ext.get_index_data(s)[0]),
+    )  # pragma: no cover
 
 
 @overload_attribute(NumericIndexType, "is_monotonic", inline="always")
@@ -4233,6 +4248,266 @@ def overload_nbytes(I):
             return I._data.nbytes
 
         return _impl_nbytes
+
+
+@overload_attribute(NumericIndexType, "T")
+@overload_attribute(DatetimeIndexType, "T")
+@overload_attribute(TimedeltaIndexType, "T")
+@overload_attribute(RangeIndexType, "T")
+@overload_attribute(StringIndexType, "T")
+@overload_attribute(BinaryIndexType, "T")
+@overload_attribute(CategoricalIndexType, "T")
+@overload_attribute(PeriodIndexType, "T")
+@overload_attribute(MultiIndexType, "T")
+@overload_attribute(IntervalIndexType, "T")
+def overload_T(I):
+    """Adds support for Index.T
+
+    Args:
+        I (pd.Index): the index whose transpose is being found
+
+    Returns:
+        pd.Index: an the same index
+    """
+
+    return lambda I: I  # pragma: no cover
+
+
+@overload_attribute(NumericIndexType, "size")
+@overload_attribute(DatetimeIndexType, "size")
+@overload_attribute(TimedeltaIndexType, "size")
+@overload_attribute(RangeIndexType, "size")
+@overload_attribute(StringIndexType, "size")
+@overload_attribute(BinaryIndexType, "size")
+@overload_attribute(CategoricalIndexType, "size")
+@overload_attribute(PeriodIndexType, "size")
+@overload_attribute(MultiIndexType, "size")
+@overload_attribute(IntervalIndexType, "size")
+def overload_size(I):
+    """Adds support for Index.size
+
+    Args:
+        I (pd.Index): the index whose size is being found
+
+    Returns:
+        integer: the length of the index
+    """
+    return lambda I: len(I)  # pragma: no cover
+
+
+@overload_attribute(NumericIndexType, "ndim")
+@overload_attribute(DatetimeIndexType, "ndim")
+@overload_attribute(TimedeltaIndexType, "ndim")
+@overload_attribute(RangeIndexType, "ndim")
+@overload_attribute(StringIndexType, "ndim")
+@overload_attribute(BinaryIndexType, "ndim")
+@overload_attribute(CategoricalIndexType, "ndim")
+@overload_attribute(PeriodIndexType, "ndim")
+@overload_attribute(MultiIndexType, "ndim")
+@overload_attribute(IntervalIndexType, "ndim")
+def overload_ndim(I):
+    """Adds support for Index.ndim
+
+    Args:
+        I (pd.Index): the index whose ndim is being found
+
+    Returns:
+        integer: the number of dimensions of the index
+    """
+
+    return lambda I: 1  # pragma: no cover
+
+
+@overload_attribute(NumericIndexType, "nlevels")
+@overload_attribute(DatetimeIndexType, "nlevels")
+@overload_attribute(TimedeltaIndexType, "nlevels")
+@overload_attribute(RangeIndexType, "nlevels")
+@overload_attribute(StringIndexType, "nlevels")
+@overload_attribute(BinaryIndexType, "nlevels")
+@overload_attribute(CategoricalIndexType, "nlevels")
+@overload_attribute(PeriodIndexType, "nlevels")
+@overload_attribute(MultiIndexType, "nlevels")
+@overload_attribute(IntervalIndexType, "nlevels")
+def overload_nlevels(I):
+    """Adds support for Index.nlevels
+
+    Args:
+        I (pd.Index): the index whose nlevels is being found
+
+    Returns:
+        integer: the number of levels of the index
+    """
+    if isinstance(I, MultiIndexType):
+        return lambda I: len(I._data)  # pragma: no cover
+
+    return lambda I: 1  # pragma: no cover
+
+
+@overload_attribute(NumericIndexType, "empty")
+@overload_attribute(DatetimeIndexType, "empty")
+@overload_attribute(TimedeltaIndexType, "empty")
+@overload_attribute(RangeIndexType, "empty")
+@overload_attribute(StringIndexType, "empty")
+@overload_attribute(BinaryIndexType, "empty")
+@overload_attribute(CategoricalIndexType, "empty")
+@overload_attribute(PeriodIndexType, "empty")
+@overload_attribute(MultiIndexType, "empty")
+@overload_attribute(IntervalIndexType, "empty")
+def overload_empty(I):
+    """Adds support for Index.empty
+
+    Args:
+        I (pd.Index): the index whose empty status is being found
+
+    Returns:
+        boolean: whether or not the index is empty
+    """
+    return lambda I: len(I) == 0  # pragma: no cover
+
+
+@overload_attribute(NumericIndexType, "is_all_dates")
+@overload_attribute(DatetimeIndexType, "is_all_dates")
+@overload_attribute(TimedeltaIndexType, "is_all_dates")
+@overload_attribute(RangeIndexType, "is_all_dates")
+@overload_attribute(StringIndexType, "is_all_dates")
+@overload_attribute(BinaryIndexType, "is_all_dates")
+@overload_attribute(CategoricalIndexType, "is_all_dates")
+@overload_attribute(PeriodIndexType, "is_all_dates")
+@overload_attribute(MultiIndexType, "is_all_dates")
+@overload_attribute(IntervalIndexType, "is_all_dates")
+def overload_is_all_dates(I):
+    """Adds support for Index.is_all_dates
+
+    Args:
+        I (pd.Index): the index whose is_all_dates status is being found
+
+    Returns:
+        boolean: whether or not the index only contains dates
+    """
+
+    if isinstance(I, (DatetimeIndexType, TimedeltaIndexType, PeriodIndexType)):
+        return lambda I: True  # pragma: no cover
+    else:
+        return lambda I: False  # pragma: no cover
+
+
+@overload_attribute(NumericIndexType, "inferred_type")
+@overload_attribute(DatetimeIndexType, "inferred_type")
+@overload_attribute(TimedeltaIndexType, "inferred_type")
+@overload_attribute(RangeIndexType, "inferred_type")
+@overload_attribute(StringIndexType, "inferred_type")
+@overload_attribute(BinaryIndexType, "inferred_type")
+@overload_attribute(CategoricalIndexType, "inferred_type")
+@overload_attribute(PeriodIndexType, "inferred_type")
+@overload_attribute(MultiIndexType, "inferred_type")
+@overload_attribute(IntervalIndexType, "inferred_type")
+def overload_inferred_type(I):
+    """Adds support for Index.inferred_type
+
+    Args:
+        I (pd.Index): the index whose inferred type is being found
+
+    Returns:
+        string: a user-friendly representation of the underlying type of the Index
+    """
+    if isinstance(I, NumericIndexType):
+        if isinstance(I.dtype, types.Integer):
+            return lambda I: "integer"  # pragma: no cover
+        elif isinstance(I.dtype, types.Float):
+            return lambda I: "floating"  # pragma: no cover
+        elif isinstance(I.dtype, types.Boolean):
+            return lambda I: "boolean"  # pragma: no cover
+        return
+
+    if isinstance(I, StringIndexType):
+
+        def impl(I):  # pragma: no cover
+            if len(I._data) == 0:
+                return "empty"
+            return "string"
+
+        return impl
+
+    inferred_types_map = {
+        DatetimeIndexType: "datetime64",
+        TimedeltaIndexType: "timedelta64",
+        RangeIndexType: "integer",
+        BinaryIndexType: "bytes",
+        CategoricalIndexType: "categorical",
+        PeriodIndexType: "period",
+        IntervalIndexType: "interval",
+        MultiIndexType: "mixed",
+    }
+    inferred_type = inferred_types_map[type(I)]
+    return lambda I: inferred_type  # pragma: no cover
+
+
+@overload_attribute(NumericIndexType, "dtype")
+@overload_attribute(DatetimeIndexType, "dtype")
+@overload_attribute(TimedeltaIndexType, "dtype")
+@overload_attribute(RangeIndexType, "dtype")
+@overload_attribute(StringIndexType, "dtype")
+@overload_attribute(BinaryIndexType, "dtype")
+@overload_attribute(CategoricalIndexType, "dtype")
+@overload_attribute(MultiIndexType, "dtype")
+def overload_inferred_type(I):
+    """Adds support for Index.dtype
+
+    Args:
+        I (pd.Index): the index whose dtype type is being found
+
+    Returns:
+        np.dtype: the dtype of the Index's data
+    """
+    # Note: does not return the correct type if the underlying data came
+    # from a pd.array
+    if isinstance(I, NumericIndexType):
+        if isinstance(I.dtype, types.Boolean):
+            return lambda I: np.dtype("O")  # pragma: no cover
+        dtype = I.dtype
+        return lambda I: dtype  # pragma: no cover
+
+    if isinstance(I, CategoricalIndexType):
+        dtype = pd.CategoricalDtype(I.dtype.categories, I.dtype.ordered)
+        return lambda I: dtype  # pragma: no cover
+
+    dtype_map = {
+        DatetimeIndexType: np.dtype("datetime64[ns]"),
+        TimedeltaIndexType: np.dtype("timedelta64[ns]"),
+        RangeIndexType: np.dtype("int64"),
+        StringIndexType: np.dtype("O"),
+        BinaryIndexType: np.dtype("O"),
+        MultiIndexType: np.dtype("O"),
+    }
+    dtype = dtype_map[type(I)]
+    return lambda I: dtype  # pragma: no cover
+
+
+@overload_attribute(NumericIndexType, "names")
+@overload_attribute(DatetimeIndexType, "names")
+@overload_attribute(TimedeltaIndexType, "names")
+@overload_attribute(RangeIndexType, "names")
+@overload_attribute(StringIndexType, "names")
+@overload_attribute(BinaryIndexType, "names")
+@overload_attribute(CategoricalIndexType, "names")
+@overload_attribute(IntervalIndexType, "names")
+@overload_attribute(PeriodIndexType, "names")
+@overload_attribute(MultiIndexType, "names")
+def overload_names(I):
+    """Adds support for Index.names. Diverges from the pandas API by returning
+       a tuple instead of a FrozenList.
+
+    Args:
+        I (pd.Index): the Index whose name(s) are being extracted.
+
+    Returns:
+        (string option tuple): tuple of all the names (or of Nones)
+    """
+
+    if isinstance(I, MultiIndexType):
+        return lambda I: I._names  # pragma: no cover
+
+    return lambda I: (I._name,)  # pragma: no cover
 
 
 @overload_method(NumericIndexType, "rename", inline="always")
@@ -5235,20 +5510,11 @@ index_unsupported_methods = [
 ]
 
 index_unsupported_atrs = [
-    "T",
     "array",
     "asi8",
-    "dtype",
     "has_duplicates",
     "hasnans",
-    "inferred_type",
-    "is_all_dates",
     "is_unique",
-    "ndim",
-    "nlevels",
-    "size",
-    "names",
-    "empty",
 ]
 
 # unsupported RangeIndex class methods (handled in untyped pass)
@@ -5289,11 +5555,11 @@ interval_idx_unsupported_atrs = [
     "mid",
     "length",
     "values",
-    "shape",
     "nbytes",
     "is_monotonic",
     "is_monotonic_increasing",
     "is_monotonic_decreasing",
+    "dtype",
 ]
 
 # unsupported Interval class methods (handled in untyped pass)
@@ -5333,7 +5599,6 @@ multi_index_unsupported_atrs = [
     "codes",
     "dtypes",
     "values",
-    "shape",
     "nbytes",
     "is_monotonic",
     "is_monotonic_increasing",
@@ -5448,6 +5713,7 @@ period_index_unsupported_atrs = [
     "is_monotonic",
     "is_monotonic_increasing",
     "is_monotonic_decreasing",
+    "dtype",
 ]
 
 period_index_unsupported_methods = [
@@ -5462,7 +5728,6 @@ period_index_unsupported_methods = [
     "any",
     "where",
     "putmask",
-    "repeat",
 ]
 
 string_index_unsupported_atrs = [
