@@ -1,7 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """ Test miscellaneous supported sklearn models and methods
     Currently this file tests:
-    train_test_split, MultinomialNB, LinearSVC, 
+    train_test_split, shuffle, MultinomialNB, LinearSVC, 
     LabelEncoder, MinMaxScaler, StandardScaler
 """
 
@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import scipy
+from pandas.testing import assert_frame_equal
 from sklearn import datasets
 from sklearn.metrics import precision_score
 from sklearn.model_selection import train_test_split
@@ -23,7 +24,8 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 from sklearn.svm import LinearSVC
-from sklearn.utils._testing import assert_array_equal
+from sklearn.utils import shuffle
+from sklearn.utils._testing import assert_array_equal, assert_raises
 from sklearn.utils.validation import check_random_state
 
 import bodo
@@ -170,6 +172,185 @@ def test_svm_linear_svc(memory_leak_check):
     np.allclose(sklearn_score_result, bodo_score_result, atol=0.1)
 
 
+# ----------------------------shuffle-----------------------------
+@pytest.mark.parametrize(
+    "data",
+    [
+        np.arange(100).reshape((10, 10)).astype(np.int64),
+        np.arange(100).reshape((10, 10)).astype(np.float64),
+    ],
+)
+def test_shuffle_np(data, memory_leak_check):
+    """
+    Test sklearn.utils.shuffle for np arrays. For each test, check that the
+    output is a permutation of the input (i.e. didn't lose/duplicate data),
+    and not equal to the input (i.e. the order actually changed).
+    """
+
+    def impl(data):
+        out = shuffle(data, n_samples=None)
+        return out
+
+    dist_impl = bodo.jit(distributed=["data"])(impl)
+    rep_impl = bodo.jit(replicated=True)(impl)
+
+    # Test distributed shuffle using np arrays
+    bodo_shuffle_1 = dist_impl(_get_dist_arg(data))
+    bodo_shuffle_1 = bodo.allgatherv(bodo_shuffle_1)
+    bodo_shuffle_1_sorted = np.sort(bodo_shuffle_1.flatten())
+    bodo_shuffle_2 = dist_impl(_get_dist_arg(data))
+    bodo_shuffle_2 = bodo.allgatherv(bodo_shuffle_2)
+
+    # Check that we didn't lose or duplicate any data
+    assert_array_equal(bodo_shuffle_1_sorted, data.flatten())
+    # Check that shuffled output is different from original data
+    assert_raises(AssertionError, assert_array_equal, bodo_shuffle_1, data)
+    # Check that different shuffles give different results
+    assert_raises(AssertionError, assert_array_equal, bodo_shuffle_1, bodo_shuffle_2)
+
+    # Test replicated shuffle using np arrays
+    bodo_shuffle_1 = rep_impl(data)
+    bodo_shuffle_1_sorted = np.sort(bodo_shuffle_1.flatten())
+    bodo_shuffle_2 = rep_impl(data)
+
+    # Check that we didn't lose or duplicate any data
+    assert_array_equal(bodo_shuffle_1_sorted, data.flatten())
+    # Check that shuffled output is different from original data
+    assert_raises(AssertionError, assert_array_equal, bodo_shuffle_1, data)
+    # Check that different shuffles give different results
+    assert_raises(AssertionError, assert_array_equal, bodo_shuffle_1, bodo_shuffle_2)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pd.DataFrame(
+            {
+                "A": np.arange(20).astype(np.int64),
+                "B": np.arange(100, 120).astype(np.int64),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": np.arange(20).astype(np.float64),
+                "B": np.arange(100, 120).astype(np.float64),
+            }
+        ),
+    ],
+)
+def test_shuffle_pd(data, memory_leak_check):
+    """
+    Test sklearn.utils.shuffle for dataframes. For each test, check that the
+    output is a permutation of the input (i.e. didn't lose/duplicate data),
+    and not equal to the input (i.e. the order actually changed).
+    """
+
+    def impl(data):
+        out = shuffle(data, n_samples=None)
+        return out
+
+    dist_impl = bodo.jit(distributed=["data"])(impl)
+    rep_impl = bodo.jit(replicated=True)(impl)
+
+    # Test distributed shuffle using dataframes
+    bodo_shuffle_1 = dist_impl(_get_dist_arg(data))
+    bodo_shuffle_1 = bodo.allgatherv(bodo_shuffle_1)
+    bodo_shuffle_1_sorted = bodo_shuffle_1.sort_values("A")
+    bodo_shuffle_2 = dist_impl(_get_dist_arg(data))
+    bodo_shuffle_2 = bodo.allgatherv(bodo_shuffle_2)
+
+    # Check that we didn't lose or duplicate any data
+    assert_frame_equal(bodo_shuffle_1_sorted, data)
+    # Check that shuffled output is different from original data
+    assert_raises(AssertionError, assert_frame_equal, bodo_shuffle_1, data)
+    # Check that different shuffles give different results
+    assert_raises(AssertionError, assert_frame_equal, bodo_shuffle_1, bodo_shuffle_2)
+
+    # Test replicated shuffle using dataframes
+    bodo_shuffle_1 = rep_impl(data)
+    bodo_shuffle_1_sorted = bodo_shuffle_1.sort_values("A")
+    bodo_shuffle_2 = rep_impl(data)
+
+    # Check that we didn't lose or duplicate any data
+    assert_frame_equal(bodo_shuffle_1_sorted, data)
+    # Check that shuffled output is different from original data
+    assert_raises(AssertionError, assert_frame_equal, bodo_shuffle_1, data)
+    # Check that different shuffles give different results
+    assert_raises(AssertionError, assert_frame_equal, bodo_shuffle_1, bodo_shuffle_2)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        np.arange(100).reshape((10, 10)).astype(np.int64),
+        np.arange(100).reshape((10, 10)).astype(np.float64),
+    ],
+)
+@pytest.mark.parametrize("random_state", [0, 1, 2])
+def test_shuffle_random_state(data, random_state, memory_leak_check):
+    """
+    Test that shuffle returns deterministic results with given random states
+    """
+
+    def impl(data, random_state):
+        out = shuffle(data, random_state=random_state)
+
+    dist_impl = bodo.jit(distributed=["data"], cache=True)(impl)
+
+    bodo_shuffle_1 = dist_impl(_get_dist_arg(data), random_state)
+    bodo_shuffle_1 = bodo.allgatherv(bodo_shuffle_1)
+    bodo_shuffle_2 = dist_impl(_get_dist_arg(data), random_state)
+    bodo_shuffle_2 = bodo.allgatherv(bodo_shuffle_2)
+
+    assert_array_equal(bodo_shuffle_1, bodo_shuffle_2)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("n_samples", [0, 1, 8, 14, 15])
+@pytest.mark.parametrize("nitems, niters", [(15, 10000)])
+def test_shuffle_n_samples(nitems, niters, n_samples, memory_leak_check):
+    """
+    Test the `n_samples` argument to sklearn.utils.shuffle
+    """
+
+    def impl(data, n_samples, random_state):
+        out = shuffle(data, n_samples=n_samples, random_state=random_state)
+        return out
+
+    dist_impl = bodo.jit(distributed=["data"])(impl)
+
+    data = np.arange(nitems)
+
+    bodo_shuffle_n = dist_impl(_get_dist_arg(data), n_samples, 0)
+    bodo_shuffle_n = bodo.allgatherv(bodo_shuffle_n)
+    bodo_shuffle_all = dist_impl(_get_dist_arg(data), None, 0)
+    bodo_shuffle_all = bodo.allgatherv(bodo_shuffle_all)
+
+    # Check that number of samples is correct
+    assert bodo_shuffle_n.shape[0] == min(n_samples, data.shape[0])
+
+    # Check that our samples are a subset of `data` with no repetitions
+    bodo_shuffle_n_elts = set(bodo_shuffle_n.flatten())
+    bodo_shuffle_all_elts = set(bodo_shuffle_all.flatten())
+    assert len(bodo_shuffle_n_elts) == bodo_shuffle_n.shape[0] * np.prod(data.shape[1:])
+    assert bodo_shuffle_n_elts.issubset(bodo_shuffle_all_elts)
+
+    # Check that output is close to a uniform distribution
+    if n_samples > 0:
+        # output_freqs[i, j] indicates the number of times that
+        # element i gets moved to index j
+        output_freqs = np.zeros((n_samples, nitems))
+        for i in range(niters):
+            output = dist_impl(_get_dist_arg(data), n_samples, i)
+            output = bodo.allgatherv(output)
+            for j in range(n_samples):
+                output_freqs[j, output[j]] += 1
+
+        expected_freq = niters / nitems
+        assert np.all(3 / 4 * expected_freq < output_freqs)
+        assert np.all(output_freqs < 4 / 3 * expected_freq)
+
+
 # ------------------------train_test_split------------------------
 def test_train_test_split(memory_leak_check):
     def impl_shuffle(X, y):
@@ -313,7 +494,7 @@ def test_train_test_split_df(train_size, test_size, memory_leak_check):
 
 def test_train_test_split_unsupported(memory_leak_check):
     """
-    Test an supported argument to train_test_split
+    Test an unsupported argument to train_test_split
     """
 
     def impl(X, y, train_size, test_size):

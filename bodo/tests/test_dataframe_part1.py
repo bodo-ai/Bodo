@@ -829,7 +829,7 @@ def test_random_shuffle_uniform(nitems, niters, memory_leak_check):
 
     for _ in range(niters):
         x = _get_dist_arg(data)
-        x = impl(x)
+        x = dist_impl(x)
         x = bodo.allgatherv(x)
         for i in range(nitems):
             output_freqs[i, x[i]] += 1
