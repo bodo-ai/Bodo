@@ -326,7 +326,7 @@ def base_connector_remove_dead_columns(
 ):
     """
     Function that tracks which columns to prune from a connector IR node.
-    This updates type_usecol_offset which stores which arrays in the
+    This updates out_used_cols which stores which arrays in the
     types will need to actually be loaded.
 
     This is mapped to the used columns during distributed pass.
@@ -355,7 +355,7 @@ def base_connector_remove_dead_columns(
             # code elimination will remove the entire IR var in 'remove_dead_parquet'.
             #
             used_columns = [0]
-        if not use_all and len(used_columns) != len(node.type_usecol_offset):
+        if not use_all and len(used_columns) != len(node.out_used_cols):
             # Update the type offset. If an index column its not included in
             # the original table. If we have code like
             #
@@ -375,7 +375,7 @@ def base_connector_remove_dead_columns(
             # For more information see:
             # https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns#User-Provided-Column-Pruning-at-the-Source
 
-            node.type_usecol_offset = used_columns
+            node.out_used_cols = used_columns
             # Return that this table was updated
 
     """We return flase in all cases, as no changes performed in the file will allow for dead code elimination to do work."""

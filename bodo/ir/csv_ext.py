@@ -87,10 +87,10 @@ class CsvReader(ir.Stmt):
         # These will be updated during optimzations and do not contain
         # the actual columns numbers that should be loaded. For more
         # information see 'csv_remove_dead_column'.
-        self.type_usecol_offset = list(range(len(usecols)))
+        self.out_used_cols = list(range(len(usecols)))
 
     def __repr__(self):  # pragma: no cover
-        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, chunksize={}, is_skiprows_list={}, pd_low_memory={}, escapechar={}, storage_options={}, index_column_index={}, index_colum_typ = {}, type_usecol_offsets={})".format(
+        return "{} = ReadCsv(file={}, col_names={}, types={}, vars={}, nrows={}, skiprows={}, chunksize={}, is_skiprows_list={}, pd_low_memory={}, escapechar={}, storage_options={}, index_column_index={}, index_colum_typ = {}, out_used_colss={})".format(
             self.df_out,
             self.file_name,
             self.df_colnames,
@@ -105,7 +105,7 @@ class CsvReader(ir.Stmt):
             self.storage_options,
             self.index_column_index,
             self.index_column_typ,
-            self.type_usecol_offset,
+            self.out_used_cols,
         )
 
 
@@ -220,7 +220,7 @@ def remove_dead_csv(
         elif table_var.name not in lives:
             csv_node.usecols = []
             csv_node.out_types = []
-            csv_node.type_usecol_offset = []
+            csv_node.out_used_cols = []
 
     return csv_node
 
@@ -353,7 +353,7 @@ def csv_distributed_run(
     exec(func_text, {}, loc_vars)
     csv_impl = loc_vars["csv_impl"]
 
-    # Use the type_usecol_offset information to determine the final columns
+    # Use the out_used_cols information to determine the final columns
     # to actualy load. For example, if we have the code.
     #
     # T = read_csv(table(0, 1, 2, 3), usecols=[1, 2])
@@ -361,7 +361,7 @@ def csv_distributed_run(
     #
     # Then after optimizations:
     # usecols = [1, 2]
-    # type_usecol_offset = [1]
+    # out_used_cols = [1]
     #
     # This computes the columns to actually load based on the offsets:
     # final_usecols = [2]
@@ -373,7 +373,7 @@ def csv_distributed_run(
     # see 'remove_dead_csv' for more information.
     final_usecols = csv_node.usecols
     if final_usecols:
-        final_usecols = [csv_node.usecols[i] for i in csv_node.type_usecol_offset]
+        final_usecols = [csv_node.usecols[i] for i in csv_node.out_used_cols]
     # Add debug info about column pruning
     if bodo.user_logging.get_verbose_level() >= 1:
         msg = "Finish column pruning on read_csv node:\n%s\nColumns loaded %s\n"
@@ -381,9 +381,9 @@ def csv_distributed_run(
         csv_cols = []
         dict_encoded_cols = []
         if final_usecols:
-            # We use csv_node.type_usecol_offset because this is the actual
+            # We use csv_node.out_used_cols because this is the actual
             # offset into the type.
-            for i in csv_node.type_usecol_offset:
+            for i in csv_node.out_used_cols:
                 colname = csv_node.df_colnames[i]
                 csv_cols.append(colname)
                 if isinstance(
@@ -405,7 +405,7 @@ def csv_distributed_run(
         csv_node.df_colnames,
         csv_node.out_types,
         final_usecols,
-        csv_node.type_usecol_offset,
+        csv_node.out_used_cols,
         csv_node.sep,
         parallel,
         csv_node.header,
@@ -463,7 +463,7 @@ def csv_distributed_run(
 def csv_remove_dead_column(csv_node, column_live_map, equiv_vars, typemap):
     """
     Function that tracks which columns to prune from the CSV node.
-    This updates type_usecol_offset which stores which arrays in the
+    This updates out_used_cols which stores which arrays in the
     types will need to actually be loaded.
 
     This is mapped to the actual file columns in 'csv_distributed_run'.
@@ -713,7 +713,7 @@ def _gen_read_csv_objmode(
     sanitized_cnames,
     col_typs,
     usecols,
-    type_usecol_offset,
+    out_used_cols,
     sep,
     escapechar,
     storage_options,
@@ -758,12 +758,12 @@ def _gen_read_csv_objmode(
 
     # NOTE: after optimization
     # usecols refers to the global column indices of the columns being selected whereas
-    # type_usecol_offset refers to the index into the col_names/col_types being chosen.
+    # out_used_cols refers to the index into the col_names/col_types being chosen.
     # this should be column position in usecols list not w.r.t. original columns
     date_inds_strs = [
         str(i)
         for i, col_num in enumerate(usecols)
-        if col_typs[type_usecol_offset[i]].dtype == types.NPDatetime("ns")
+        if col_typs[out_used_cols[i]].dtype == types.NPDatetime("ns")
     ]
 
     # add idx col if needed
@@ -783,12 +783,12 @@ def _gen_read_csv_objmode(
     # using a global array (constant lowered) for faster compilation for many columns
 
     # get column type from original column type list
-    # type_usecol_offset includes index of column(s) used from col_typs list
+    # out_used_cols includes index of column(s) used from col_typs list
     # col_typs contains datatype of each column in the df
-    # use type_usecol_offset to find which column from usecols is actually used
+    # use out_used_cols to find which column from usecols is actually used
     # then, use that to index into column types and get original datatype
     usecol_pd_dtypes = [
-        _get_pd_dtype_str(col_typs[type_usecol_offset[i]]) for i in range(len(usecols))
+        _get_pd_dtype_str(col_typs[out_used_cols[i]]) for i in range(len(usecols))
     ]
     index_pd_dtype = None if idx_col_index is None else _get_pd_dtype_str(idx_col_typ)
 
@@ -815,7 +815,7 @@ def _gen_read_csv_objmode(
     glbs[f"usecols_arr_{call_id}"] = use_cols_arr
     func_text += f"  usecols_arr_{call_id}_2 = usecols_arr_{call_id}\n"
     # Array of offsets within the type used for creating the table.
-    usecol_type_offset_arr = np.array(type_usecol_offset, dtype=np.int64)
+    usecol_type_offset_arr = np.array(out_used_cols, dtype=np.int64)
     if usecols:
         glbs[f"type_usecols_offsets_arr_{call_id}"] = usecol_type_offset_arr
         func_text += f"  type_usecols_offsets_arr_{call_id}_2 = type_usecols_offsets_arr_{call_id}\n"
@@ -915,7 +915,7 @@ def _gen_csv_reader_py(
     col_names,
     col_typs,
     usecols,
-    type_usecol_offset,
+    out_used_cols,
     sep,
     parallel,
     header,
@@ -966,7 +966,7 @@ def _gen_csv_reader_py(
         sanitized_cnames,
         col_typs,
         usecols,
-        type_usecol_offset,
+        out_used_cols,
         sep,
         escapechar,
         storage_options,

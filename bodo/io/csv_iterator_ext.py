@@ -210,13 +210,13 @@ def gen_read_csv_objmode(csv_iterator_type):
     glbls[f"table_type_{call_id}"] = TableType(tuple(out_types))
     glbls[f"idx_array_typ"] = csv_iterator_type._index_arr_typ
     # We don't yet support removing columns from the source in the chunksize case
-    type_usecol_offset = list(range(len(csv_iterator_type._usecols)))
+    out_used_cols = list(range(len(csv_iterator_type._usecols)))
     func_text += _gen_read_csv_objmode(
         csv_iterator_type._out_colnames,
         santized_cnames,
         out_types,
         csv_iterator_type._usecols,
-        type_usecol_offset,
+        out_used_cols,
         csv_iterator_type._sep,
         csv_iterator_type._escapechar,
         csv_iterator_type._storage_options,

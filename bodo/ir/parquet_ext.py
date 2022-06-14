@@ -64,7 +64,7 @@ class ParquetReader(ir.Stmt):
         # These will be updated during optimzations and do not contain
         # the actual columns numbers that should be loaded. For more
         # information see 'pq_remove_dead_column'.
-        self.type_usecol_offset = list(range(len(col_indices)))
+        self.out_used_cols = list(range(len(col_indices)))
         # Name of the column where we insert the name of file that the row comes from
         self.input_file_name_col = input_file_name_col
         # These fields are used to enable compilation if unsupported columns
@@ -88,7 +88,7 @@ class ParquetReader(ir.Stmt):
             self.storage_options,
             self.index_column_index,
             self.index_column_type,
-            self.type_usecol_offset,
+            self.out_used_cols,
             self.input_file_name_col,
             self.unsupported_columns,
             self.unsupported_arrow_types,
@@ -112,7 +112,7 @@ def remove_dead_pq(
         # To do this we should mark the col_indices as empty
         pq_node.col_indices = []
         pq_node.df_colnames = []
-        pq_node.type_usecol_offset = []
+        pq_node.out_used_cols = []
     elif index_var not in lives:
         # If the index_var not in lives we don't load the index.
         # To do this we mark the index_column_index as None
@@ -125,7 +125,7 @@ def remove_dead_pq(
 def pq_remove_dead_column(pq_node, column_live_map, equiv_vars, typemap):
     """
     Function that tracks which columns to prune from the Parquet node.
-    This updates type_usecol_offset which stores which arrays in the
+    This updates out_used_cols which stores which arrays in the
     types will need to actually be loaded.
 
     This is mapped to the actual file columns in during distributed pass.

@@ -97,7 +97,7 @@ class SqlReader(ir.Stmt):
         # List of indices within the table name that are used.
         # df_colnames is unchanged unless the table is deleted,
         # so this is used to track dead columns.
-        self.type_usecol_offset = list(range(len(df_colnames)))
+        self.out_used_cols = list(range(len(df_colnames)))
         # The database schema used to load data. This is currently only
         # supported/required for snowflake and must be provided
         # at compile time.
@@ -108,7 +108,7 @@ class SqlReader(ir.Stmt):
         self.pyarrow_table_schema = pyarrow_table_schema
 
     def __repr__(self):  # pragma: no cover
-        return f"{self.df_out} = ReadSql(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, vars={self.out_vars}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, type_usecol_offset={self.type_usecol_offset}, database_schema={self.database_schema}, pyarrow_table_schema={self.pyarrow_table_schema})"
+        return f"{self.df_out} = ReadSql(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, vars={self.out_vars}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_table_schema={self.pyarrow_table_schema})"
 
 
 def parse_dbtype(con_str):
@@ -159,7 +159,7 @@ def remove_dead_sql(
         # To do this we should mark the df_colnames as empty
         sql_node.out_types = []
         sql_node.df_colnames = []
-        sql_node.type_usecol_offset = []
+        sql_node.out_used_cols = []
     elif index_var not in lives:
         # If the index_var not in lives we don't load the index.
         # To do this we mark the index_column_name as None
@@ -176,7 +176,7 @@ def sql_distributed_run(
         pruning_msg = "Finish column pruning on read_sql node:\n%s\nColumns loaded %s\n"
         sql_cols = []
         dict_encoded_cols = []
-        for i in sql_node.type_usecol_offset:
+        for i in sql_node.out_used_cols:
             colname = sql_node.df_colnames[i]
             sql_cols.append(colname)
             if isinstance(
@@ -216,7 +216,7 @@ def sql_distributed_run(
     if sql_node.unsupported_columns:
         # Determine the columns that were eliminated.
         unsupported_cols_set = set(sql_node.unsupported_columns)
-        used_cols_set = set(sql_node.type_usecol_offset)
+        used_cols_set = set(sql_node.out_used_cols)
         # Compute the intersection of what was kept.
         remaining_unsupported = used_cols_set & unsupported_cols_set
 
@@ -295,7 +295,7 @@ def sql_distributed_run(
         sql_node.out_types,
         sql_node.index_column_name,
         sql_node.index_column_type,
-        sql_node.type_usecol_offset,
+        sql_node.out_used_cols,
         typingctx,
         targetctx,
         sql_node.db_type,
@@ -326,7 +326,7 @@ def sql_distributed_run(
     if sql_node.is_select_query and sql_node.db_type != "iceberg":
         # Prune the columns to only those that are used.
         # Note: Iceberg skips this step as pruning is done in parquet.
-        used_col_names = [sql_node.df_colnames[i] for i in sql_node.type_usecol_offset]
+        used_col_names = [sql_node.df_colnames[i] for i in sql_node.out_used_cols]
         if sql_node.index_column_name:
             used_col_names.append(sql_node.index_column_name)
         # Update the SQL request to remove any unused columns. This is both
@@ -365,12 +365,12 @@ def sql_distributed_run(
     # can be dead because otherwise the whole
     # node should have already been removed.
     assert not (
-        sql_node.index_column_name is None and not sql_node.type_usecol_offset
+        sql_node.index_column_name is None and not sql_node.out_used_cols
     ), "At most one of table and index should be dead if the SQL IR node is live"
     if sql_node.index_column_name is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
-    elif not sql_node.type_usecol_offset:
+    elif not sql_node.out_used_cols:
         # If the table is dead, remove the node
         nodes.pop(-2)
 
@@ -510,7 +510,7 @@ def _get_snowflake_sql_literal(filter_value):
 def sql_remove_dead_column(sql_node, column_live_map, equiv_vars, typemap):
     """
     Function that tracks which columns to prune from the SQL node.
-    This updates type_usecol_offset which stores which arrays in the
+    This updates out_used_cols which stores which arrays in the
     types will need to actually be loaded.
 
     This is mapped to the used column names during distributed pass.
@@ -666,7 +666,7 @@ def _gen_sql_reader_py(
     col_typs,
     index_column_name: str,
     index_column_type,
-    type_usecol_offset: List[int],
+    out_used_cols: List[int],
     typingctx,
     targetctx,
     db_type,
@@ -692,7 +692,7 @@ def _gen_sql_reader_py(
                          if no column should be loaded.
     index_column_type -- Type of column used as the index var or
                          types.none if no column should be loaded.
-    type_usecol_offset -- List holding the values of columns that
+    out_used_cols -- List holding the values of columns that
                           are live. For example if this is [0, 1, 3]
                           it means all columns except for col_names[0],
                           col_names[1], and col_names[3] are dead and
@@ -713,8 +713,8 @@ def _gen_sql_reader_py(
     call_id = next_label()
 
     # Prune the columns to only those that are used.
-    used_col_names = [col_names[i] for i in type_usecol_offset]
-    used_col_types = [col_typs[i] for i in type_usecol_offset]
+    used_col_names = [col_names[i] for i in out_used_cols]
+    used_col_types = [col_typs[i] for i in out_used_cols]
     if index_column_name:
         used_col_names.append(index_column_name)
         used_col_types.append(index_column_type)
@@ -743,7 +743,7 @@ def _gen_sql_reader_py(
 
     table_idx = None
     type_usecols_offsets_arr = None
-    py_table_type = TableType(tuple(col_typs)) if type_usecol_offset else types.none
+    py_table_type = TableType(tuple(col_typs)) if out_used_cols else types.none
 
     # Handle filter information because we may need to update the function header
     filter_args = ""
@@ -774,8 +774,7 @@ def _gen_sql_reader_py(
         # schema, assuming that Iceberg and Parquet field ordering is the same
         # TODO: Update for schema evolution, when Iceberg Schema != Parquet Schema
         selected_cols: List[int] = [
-            pyarrow_table_schema.get_field_index(col_names[i])
-            for i in type_usecol_offset
+            pyarrow_table_schema.get_field_index(col_names[i]) for i in out_used_cols
         ]
         selected_cols_map = {c: i for i, c in enumerate(selected_cols)}
         nullable_cols = [int(is_nullable(col_typs[i])) for i in selected_cols]
@@ -798,7 +797,7 @@ def _gen_sql_reader_py(
         # TODO XXX Refactor?
 
         # If we aren't loading any column the table is dead
-        is_dead_table = not type_usecol_offset
+        is_dead_table = not out_used_cols
 
         # Table type
         py_table_type = TableType(tuple(col_typs))
@@ -810,7 +809,7 @@ def _gen_sql_reader_py(
         if index_column_name is not None:
             # The index column is defined by the SQLReader to always be placed at the end of the query.
             # Since we don't support `index_col`` with iceberg yet, we can't test this yet.
-            index_arr_ind = (len(type_usecol_offset) + 1) if not is_dead_table else 0
+            index_arr_ind = (len(out_used_cols) + 1) if not is_dead_table else 0
             index_var = f"info_to_array(info_from_table(out_table, {index_arr_ind}), index_col_typ)"
         func_text += f"  index_var = {index_var}\n"
 
@@ -835,7 +834,7 @@ def _gen_sql_reader_py(
                 # for i, col_num in enumerate(range(col_idxs)):
                 # But we're assuming that the iceberg schema ordering is the same as the parquet ordering
                 # TODO: Will change with schema evolution
-                if j < len(type_usecol_offset) and i == type_usecol_offset[j]:
+                if j < len(out_used_cols) and i == out_used_cols[j]:
                     table_idx.append(selected_cols_map[i])
                     j += 1
                 else:
@@ -851,7 +850,7 @@ def _gen_sql_reader_py(
     elif db_type == "snowflake":
         func_text += f"  ev = bodo.utils.tracing.Event('read_snowflake', {parallel})\n"
 
-        nullable_cols = [int(is_nullable(col_typs[i])) for i in type_usecol_offset]
+        nullable_cols = [int(is_nullable(col_typs[i])) for i in out_used_cols]
         # Handle if we need to append an index
         if index_column_name:
             nullable_cols.append(int(is_nullable(index_column_type)))
@@ -859,17 +858,17 @@ def _gen_sql_reader_py(
         func_text += "  check_and_propagate_cpp_exception()\n"
         if index_column_name:
             # The index is always placed in the last slot of the query if it exists.
-            func_text += f"  index_var = info_to_array(info_from_table(out_table, {len(type_usecol_offset)}), index_col_typ)\n"
+            func_text += f"  index_var = info_to_array(info_from_table(out_table, {len(out_used_cols)}), index_col_typ)\n"
         else:
             # There is no index to load
             func_text += "  index_var = None\n"
-        if type_usecol_offset:
+        if out_used_cols:
             # Map each logical column in the table to its location
             # in the input SQL table
             idx = []
             j = 0
             for i in range(len(col_names)):
-                if j < len(type_usecol_offset) and i == type_usecol_offset[j]:
+                if j < len(out_used_cols) and i == out_used_cols[j]:
                     idx.append(j)
                     j += 1
                 else:
@@ -882,10 +881,10 @@ def _gen_sql_reader_py(
         func_text += "  delete_table(out_table)\n"
         func_text += f"  ev.finalize()\n"
     else:
-        if type_usecol_offset:
+        if out_used_cols:
             # Indicate which columns to load from the table
             func_text += f"  type_usecols_offsets_arr_{call_id}_2 = type_usecols_offsets_arr_{call_id}\n"
-            type_usecols_offsets_arr = np.array(type_usecol_offset, dtype=np.int64)
+            type_usecols_offsets_arr = np.array(out_used_cols, dtype=np.int64)
         func_text += "  df_typeref_2 = df_typeref\n"
         func_text += "  sqlalchemy_check()\n"
         if db_type == "mysql":
@@ -930,13 +929,13 @@ def _gen_sql_reader_py(
             )
         if index_column_name:
             func_text += (
-                f"    index_var = df_ret.iloc[:, {len(type_usecol_offset)}].values\n"
+                f"    index_var = df_ret.iloc[:, {len(out_used_cols)}].values\n"
             )
-            func_text += f"    df_ret.drop(columns=df_ret.columns[{len(type_usecol_offset)}], inplace=True)\n"
+            func_text += f"    df_ret.drop(columns=df_ret.columns[{len(out_used_cols)}], inplace=True)\n"
         else:
             # Dead Index
             func_text += "    index_var = None\n"
-        if type_usecol_offset:
+        if out_used_cols:
             func_text += f"    arrs = []\n"
             func_text += f"    for i in range(df_ret.shape[1]):\n"
             func_text += f"      arrs.append(df_ret.iloc[:, i].values)\n"
