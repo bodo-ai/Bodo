@@ -395,21 +395,21 @@ class DataFramePass:
                 "bodo.hiframes.pd_dataframe_ext",
             ):
                 seq_info = guard(find_build_sequence, self.func_ir, var_def.args[0])
-                assert seq_info is not None
-                if self.typemap[df_var.name].is_table_format:
-                    # If we have a table format we replace the get_dataframe_data
-                    # with a get_table_data call so we can perform dead column
-                    # elimination.
-                    table_var = seq_info[0][0]
-                    return compile_func_single_block(
-                        eval(
-                            "lambda table, ind: bodo.hiframes.table.get_table_data(table, ind)"
-                        ),
-                        (table_var, rhs.args[1]),
-                        lhs,
-                        self,
-                    )
-                assign.value = seq_info[0][ind]
+                if seq_info is not None:
+                    if self.typemap[df_var.name].is_table_format:
+                        # If we have a table format we replace the get_dataframe_data
+                        # with a get_table_data call so we can perform dead column
+                        # elimination.
+                        table_var = seq_info[0][0]
+                        return compile_func_single_block(
+                            eval(
+                                "lambda table, ind: bodo.hiframes.table.get_table_data(table, ind)"
+                            ),
+                            (table_var, rhs.args[1]),
+                            lhs,
+                            self,
+                        )
+                    assign.value = seq_info[0][ind]
 
         if fdef == ("get_dataframe_index", "bodo.hiframes.pd_dataframe_ext"):
             df_var = rhs.args[0]
@@ -2337,26 +2337,26 @@ class DataFramePass:
             "bodo.hiframes.pd_dataframe_ext",
         ):
             seq_info = guard(find_build_sequence, self.func_ir, var_def.args[0])
-            assert seq_info is not None
-            if self.typemap[df_var.name].is_table_format:
-                # If we have a table format we replace the get_dataframe_data
-                # with a get_table_data call so we can perform dead column
-                # elimination.
-                table_var = seq_info[0][0]
-                loc = df_var.loc
-                ind_var = ir.Var(df_var.scope, mk_unique_var("col_ind"), loc)
-                self.typemap[ind_var.name] = types.IntegerLiteral(ind)
-                nodes.append(ir.Assign(ir.Const(ind, loc), ind_var, loc))
-                nodes += compile_func_single_block(
-                    eval(
-                        "lambda table, ind: bodo.hiframes.table.get_table_data(table, ind)"
-                    ),
-                    (table_var, ind_var),
-                    None,
-                    self,
-                )
-                return nodes[-1].target
-            return seq_info[0][ind]
+            if seq_info is not None:
+                if self.typemap[df_var.name].is_table_format:
+                    # If we have a table format we replace the get_dataframe_data
+                    # with a get_table_data call so we can perform dead column
+                    # elimination.
+                    table_var = seq_info[0][0]
+                    loc = df_var.loc
+                    ind_var = ir.Var(df_var.scope, mk_unique_var("col_ind"), loc)
+                    self.typemap[ind_var.name] = types.IntegerLiteral(ind)
+                    nodes.append(ir.Assign(ir.Const(ind, loc), ind_var, loc))
+                    nodes += compile_func_single_block(
+                        eval(
+                            "lambda table, ind: bodo.hiframes.table.get_table_data(table, ind)"
+                        ),
+                        (table_var, ind_var),
+                        None,
+                        self,
+                    )
+                    return nodes[-1].target
+                return seq_info[0][ind]
 
         loc = df_var.loc
         ind_var = ir.Var(df_var.scope, mk_unique_var("col_ind"), loc)
