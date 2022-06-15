@@ -2425,20 +2425,32 @@ def get_local_slice_overload(idx, arr_start, total_len):
     length.
     """
 
-    def impl(idx, arr_start, total_len):
-        # normalize slice
-        slice_index = numba.cpython.unicode._normalize_slice(idx, total_len)
-        start = slice_index.start
-        step = slice_index.step
+    if not idx.has_step:  # pragma: no cover
+        # Generate a separate implement if there
+        # is no step so types match.
+        def impl(idx, arr_start, total_len):  # pragma: no cover
+            # normalize slice
+            slice_index = numba.cpython.unicode._normalize_slice(idx, total_len)
+            new_start = max(arr_start, slice_index.start) - arr_start
+            new_stop = max(slice_index.stop - arr_start, 0)
+            return slice(new_start, new_stop)
 
-        offset = (
-            0
-            if step == 1 or start > arr_start
-            else (abs(step - (arr_start % step)) % step)
-        )
-        new_start = max(arr_start, slice_index.start) - arr_start + offset
-        new_stop = max(slice_index.stop - arr_start, 0)
-        return slice(new_start, new_stop, step)
+    else:
+
+        def impl(idx, arr_start, total_len):  # pragma: no cover
+            # normalize slice
+            slice_index = numba.cpython.unicode._normalize_slice(idx, total_len)
+            start = slice_index.start
+            step = slice_index.step
+
+            offset = (
+                0
+                if step == 1 or start > arr_start
+                else (abs(step - (arr_start % step)) % step)
+            )
+            new_start = max(arr_start, slice_index.start) - arr_start + offset
+            new_stop = max(slice_index.stop - arr_start, 0)
+            return slice(new_start, new_stop, step)
 
     return impl
 

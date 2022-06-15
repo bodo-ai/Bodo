@@ -253,7 +253,9 @@ class DistributedPass:
             flag = deadcode_eliminated
 
         # run remove_dead_table_columns a final time, to allow for liveness breaking optimizations
-        remove_dead_table_columns(self.func_ir, self.typemap, typing_info)
+        remove_dead_table_columns(
+            self.func_ir, self.typemap, typing_info, dist_analysis=self._dist_analysis
+        )
 
         # transform
         self._gen_init_code(self.func_ir.blocks)
@@ -468,6 +470,40 @@ class DistributedPass:
             return out
         else:
             func_name, func_mod = fdef
+
+        if (
+            fdef == ("table_filter_func", "")
+            and self._is_1D_or_1D_Var_arr(lhs)
+            and isinstance(self.typemap[rhs.args[1].name], types.SliceType)
+        ):
+            # Code generated for the table filter function.
+            # If we have a distributed slice then we need to
+            # create a local slice.
+            in_table = rhs.args[0]
+            index_var = rhs.args[1]
+            # TODO: Handle the full set of slice options
+            start_var, nodes = self._get_dist_start_var(in_table, equiv_set, avail_vars)
+            size_var = self._get_dist_var_len(in_table, nodes, equiv_set, avail_vars)
+            new_nodes = compile_func_single_block(
+                eval(
+                    "lambda slice_index, start, tot_len: bodo.libs.distributed_api.get_local_slice("
+                    "    slice_index,"
+                    "    start,"
+                    "    tot_len,"
+                    ")"
+                ),
+                [index_var, start_var, size_var],
+                ret_var=None,
+                typing_info=self,
+            )
+            new_call = ir.Expr.call(
+                rhs.func, [in_table, new_nodes[-1].target], rhs.kws, rhs.loc
+            )
+            new_assign = ir.Assign(new_call, assign.target, loc)
+            # Update the call types
+            self.calltypes[new_call] = self.calltypes[rhs]
+            del self.calltypes[rhs]
+            return nodes + new_nodes + [new_assign]
 
         if fdef == (
             "generate_table_nbytes",

@@ -13,7 +13,7 @@ import numba
 import numpy as np
 from numba.core import ir, types
 from numba.core.analysis import compute_cfg_from_blocks
-from numba.core.ir_utils import find_topo_order, guard
+from numba.core.ir_utils import build_definitions, find_topo_order, guard
 
 import bodo
 from bodo.hiframes.table import TableType, del_column, gen_table_filter
@@ -702,6 +702,7 @@ def remove_dead_columns(
     typemap,
     typing_info,
     func_ir,
+    dist_analysis,
     allow_liveness_breaking_changes,
 ):
     """remove dead table columns using liveness info."""
@@ -759,17 +760,29 @@ def remove_dead_columns(
                 nodes = compile_func_single_block(
                     eval("lambda T, ind: _filter_func(T, ind)"),
                     (rhs.value, rhs.index),
-                    stmt.target,
+                    ret_var=None,
                     typing_info=typing_info,
                     extra_globals={"_filter_func": filter_func},
                 )
-                new_body += reversed(nodes)
+                # Replace the variable in the return value to keep
+                # distributed analysis consistent.
+                nodes[-1].target = stmt.target
+                # Update distributed analysis for the replaced function
+                new_nodes = list(reversed(nodes))
+                if dist_analysis:
+                    bodo.transforms.distributed_analysis.propagate_assign(
+                        dist_analysis.array_dists, new_nodes
+                    )
+                new_body += new_nodes
                 # We do not set removed = True here, as this branch does not make
                 # any changes that could allow removal in dead code elimination.
                 continue
             elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "call":
                 fdef = guard(numba.core.ir_utils.find_callname, func_ir, rhs)
-                if fdef == ("generate_mappable_table_func", "bodo.utils.table_utils"):
+                if allow_liveness_breaking_changes and fdef == (
+                    "generate_mappable_table_func",
+                    "bodo.utils.table_utils",
+                ):
                     # In this case, if only a subset of the columns are live out of this maped table function,
                     # we can pass this subset of columns to generate_mappable_table_func, which will allow generate_mappable_table_func
                     # To ignore these columns when mapping the function onto the table.
@@ -791,7 +804,12 @@ def remove_dead_columns(
                         typing_info=typing_info,
                         extra_globals={"used_columns": used_columns},
                     )
-                    new_body += reversed(nodes)
+                    new_nodes = list(reversed(nodes))
+                    if dist_analysis:
+                        bodo.transforms.distributed_analysis.propagate_assign(
+                            dist_analysis.array_dists, new_nodes
+                        )
+                    new_body += new_nodes
                     # We do not set removed = True here, as this branch does not make
                     # any changes that could allow removal in dead code elimination.
                     continue
@@ -826,13 +844,21 @@ def remove_dead_columns(
                             typing_info=typing_info,
                             extra_globals={"arr_typ": typemap[rhs.args[2].name]},
                         )
-                        new_body += reversed(nodes)
+                        new_nodes = list(reversed(nodes))
+                        if dist_analysis:
+                            bodo.transforms.distributed_analysis.propagate_assign(
+                                dist_analysis.array_dists, new_nodes
+                            )
+                        new_body += new_nodes
                         removed = True
                         continue
                     else:
                         new_body.append(stmt)
                         continue
-                elif fdef == ("table_astype", "bodo.utils.table_utils"):
+                elif allow_liveness_breaking_changes and fdef == (
+                    "table_astype",
+                    "bodo.utils.table_utils",
+                ):
                     # In this case, if only a subset of the columns are live
                     # we can skip converting the other columns
                     used_columns = _find_used_columns(
@@ -852,7 +878,12 @@ def remove_dead_columns(
                         typing_info=typing_info,
                         extra_globals={"used_columns": used_columns},
                     )
-                    new_body += reversed(nodes)
+                    new_nodes = list(reversed(nodes))
+                    if dist_analysis:
+                        bodo.transforms.distributed_analysis.propagate_assign(
+                            dist_analysis.array_dists, new_nodes
+                        )
+                    new_body += new_nodes
                     # We do not set removed = True here, as this branch does not make
                     # any changes that could allow removal in dead code elimination.
                     continue
@@ -865,7 +896,11 @@ def remove_dead_columns(
 
 
 def remove_dead_table_columns(
-    func_ir, typemap, typing_info, allow_liveness_breaking_changes=True
+    func_ir,
+    typemap,
+    typing_info,
+    dist_analysis=None,
+    allow_liveness_breaking_changes=True,
 ):
     """
     Runs table liveness analysis and eliminates columns from TableType
@@ -896,8 +931,10 @@ def remove_dead_table_columns(
                 typemap,
                 typing_info,
                 func_ir,
+                dist_analysis,
                 allow_liveness_breaking_changes,
             )
+    func_ir._definitions = build_definitions(func_ir.blocks)
     return removed
 
 

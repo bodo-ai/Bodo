@@ -1173,7 +1173,7 @@ def gen_table_filter(T, used_cols=None):
         # Note: used_cols is always an array from remove_dead_columns
         glbls["used_cols"] = used_cols
 
-    func_text = "def impl(T, idx):\n"
+    func_text = "def table_filter_func(T, idx):\n"
     func_text += f"  T2 = init_table(T, False)\n"
     func_text += f"  l = 0\n"
 
@@ -1185,7 +1185,7 @@ def gen_table_filter(T, used_cols=None):
         func_text += f"  return T2\n"
         loc_vars = {}
         exec(func_text, glbls, loc_vars)
-        return loc_vars["impl"]
+        return loc_vars["table_filter_func"]
 
     if used_cols is not None:
         func_text += f"  used_set = set(used_cols)\n"
@@ -1209,7 +1209,7 @@ def gen_table_filter(T, used_cols=None):
 
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
-    return loc_vars["impl"]
+    return loc_vars["table_filter_func"]
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)

@@ -829,6 +829,39 @@ def test_table_isna(method_name, datapath, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['Column1', 'Column3']")
 
 
+@pytest.mark.parametrize(
+    "method_name",
+    [
+        "head",
+        "tail",
+    ],
+)
+def test_table_head_tail(method_name, datapath, memory_leak_check):
+    """
+    Tests df.head and df.tail with a DataFrame
+    in table format.
+    """
+    filename = datapath("many_columns.csv")
+
+    func_text = f"""def impl():
+        df = pd.read_csv({filename!r})
+        df1 = df.{method_name}()
+        return df1[["Column1", "Column3"]]
+        """
+
+    local_vars = {}
+    exec(func_text, globals(), local_vars)
+    impl = local_vars["impl"]
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)()
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['Column1', 'Column3']")
+
+
 def test_astype_dtypes_optimization(memory_leak_check):
     """
     Tests that doing df1.astype(df2.dtypes) is optimized

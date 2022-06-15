@@ -975,10 +975,13 @@ def overload_dataframe_notna(df):
 
 def overload_dataframe_head(df, n=5):
     # This function is called by the inlining in compiler.py
-    data_args = ", ".join(
-        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[:n]"
-        for i in range(len(df.columns))
-    )
+    if df.is_table_format:
+        data_args = "bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)[:n]"
+    else:
+        data_args = ", ".join(
+            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[:n]"
+            for i in range(len(df.columns))
+        )
     header = "def impl(df, n=5):\n"
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[:n]"
     return _gen_init_df(header, df.columns, data_args, index)
@@ -999,11 +1002,15 @@ def overload_dataframe_tail(df, n=5):
     # n must be an integer for indexing.
     if not is_overload_int(n):
         raise BodoError("Dataframe.tail(): 'n' must be an Integer")
-    # call tail() on column Series
-    data_args = ", ".join(
-        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[m:]"
-        for i in range(len(df.columns))
-    )
+    # call tail() on column arrays
+    if df.is_table_format:
+        data_args = "bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)[m:]"
+    else:
+        # call tail() on column arrays
+        data_args = ", ".join(
+            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})[m:]"
+            for i in range(len(df.columns))
+        )
     header = "def impl(df, n=5):\n"
     header += "  m = bodo.hiframes.series_impl.tail_slice(len(df), n)\n"
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[m:]"

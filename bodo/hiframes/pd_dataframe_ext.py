@@ -480,8 +480,7 @@ class DataFrameAttribute(OverloadedKeyAttributeTemplate):
 
         # Determine the return type
         # Return type is the same as the dataframe
-        # TODO(ehsan): support table format output for df.head()
-        ret = df.copy(is_table_format=False)
+        ret = df.copy()
         # Return the signature
         return ret(*folded_args).replace(pysig=pysig)
 
