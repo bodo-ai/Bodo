@@ -4595,6 +4595,102 @@ def get_index_constructor(I):
     )  # pragma: no cover
 
 
+@overload_method(NumericIndexType, "min", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "min", no_unliteral=True, inline="always")
+@overload_method(CategoricalIndexType, "min", no_unliteral=True, inline="always")
+def overload_index_min(I, axis=None, skipna=True):
+    """Supports pd.Index.min() on tagged Index types
+
+    Args:
+        I (pd.Index): the Index whose minimum value is being found
+        axis (int, optional): not supported. Defaults to None.
+        skipna (bool, optional): not supported. Defaults to True.
+
+    Returns:
+        any: the minimum value of the Index
+    """
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=None, skipna=True)
+    check_unsupported_args(
+        "Index.min",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    if isinstance(I, RangeIndexType):
+
+        def impl(I, axis=None, skipna=True):  # pragma: no cover
+            size = len(I)
+            if size == 0:
+                return np.nan
+            if I._step < 0:
+                return I._start + I._step * (size - 1)
+            else:
+                return I._start
+
+        return impl
+
+    if isinstance(I, CategoricalIndexType):
+        if not I.dtype.ordered:  # pragma: no cover
+            raise BodoError("Index.min(): only ordered categoricals are possible")
+
+    def impl(I, axis=None, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        return bodo.libs.array_ops.array_op_min(arr)
+
+    return impl
+
+
+@overload_method(NumericIndexType, "max", no_unliteral=True, inline="always")
+@overload_method(RangeIndexType, "max", no_unliteral=True, inline="always")
+@overload_method(CategoricalIndexType, "max", no_unliteral=True, inline="always")
+def overload_index_max(I, axis=None, skipna=True):
+    """Supports pd.Index.max() on tagged Index types
+
+    Args:
+        I (pd.Index): the Index whose maximum value is being found
+        axis (int, optional): not supported. Defaults to None.
+        skipna (bool, optional): not supported. Defaults to True.
+
+    Returns:
+        any: the maximum value of the Index
+    """
+    unsupported_args = dict(axis=axis, skipna=skipna)
+    arg_defaults = dict(axis=None, skipna=True)
+    check_unsupported_args(
+        "Index.max",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    if isinstance(I, RangeIndexType):
+
+        def impl(I, axis=None, skipna=True):  # pragma: no cover
+            size = len(I)
+            if size == 0:
+                return np.nan
+            if I._step > 0:
+                return I._start + I._step * (size - 1)
+            else:
+                return I._start
+
+        return impl
+
+    if isinstance(I, CategoricalIndexType):
+        if not I.dtype.ordered:  # pragma: no cover
+            raise BodoError("Index.max(): only ordered categoricals are possible")
+
+    def impl(I, axis=None, skipna=True):  # pragma: no cover
+        arr = bodo.hiframes.pd_index_ext.get_index_data(I)
+        return bodo.libs.array_ops.array_op_max(arr)
+
+    return impl
+
+
 @overload_method(NumericIndexType, "argmin", no_unliteral=True, inline="always")
 @overload_method(StringIndexType, "argmin", no_unliteral=True, inline="always")
 @overload_method(BinaryIndexType, "argmin", no_unliteral=True, inline="always")
@@ -5590,6 +5686,8 @@ interval_idx_unsupported_methods = [
     "putmask",
     "nunique",
     "repeat",
+    "min",
+    "max",
 ]
 
 
@@ -5637,6 +5735,8 @@ multi_index_unsupported_methods = [
     "putmask",
     "nunique",
     "repeat",
+    "min",
+    "max",
 ]
 
 
@@ -5728,6 +5828,9 @@ period_index_unsupported_methods = [
     "any",
     "where",
     "putmask",
+    "repeat",
+    "min",
+    "max",
 ]
 
 string_index_unsupported_atrs = [
@@ -5736,15 +5839,15 @@ string_index_unsupported_atrs = [
     "is_monotonic_decreasing",
 ]
 
+string_index_unsupported_methods = ["min", "max"]
+
 binary_index_unsupported_atrs = [
     "is_monotonic",
     "is_monotonic_increasing",
     "is_monotonic_decreasing",
 ]
 
-binary_index_unsupported_methods = [
-    "repeat",
-]
+binary_index_unsupported_methods = ["repeat", "min", "max"]
 
 index_types = [
     ("pandas.RangeIndex.{}", RangeIndexType),
@@ -5808,6 +5911,7 @@ def _install_index_unsupported():
         (TimedeltaIndexType, td_index_unsupported_methods),
         (PeriodIndexType, period_index_unsupported_methods),
         (BinaryIndexType, binary_index_unsupported_methods),
+        (StringIndexType, string_index_unsupported_methods),
     ]
 
     # install unsupported methods for the individual idx types
@@ -5824,23 +5928,6 @@ def _install_index_unsupported():
         for attr_name in cur_typ_unsupported_attrs_list:
             overload_attribute(typ, attr_name, no_unliteral=True)(
                 create_unsupported_overload(format_str.format(attr_name))
-            )
-
-    # max/min only supported for TimedeltaIndexType, DatetimeIndexType
-    for idx_typ in [
-        RangeIndexType,
-        NumericIndexType,
-        StringIndexType,
-        BinaryIndexType,
-        IntervalIndexType,
-        CategoricalIndexType,
-        PeriodIndexType,
-        MultiIndexType,
-    ]:
-        for fn_name in ["max", "min"]:
-            format_str = idx_typ_to_format_str_map[idx_typ]
-            overload_method(idx_typ, fn_name, no_unliteral=True)(
-                create_unsupported_overload(format_str.format(fn_name + "()"))
             )
 
 

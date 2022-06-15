@@ -973,6 +973,35 @@ def test_index_argminmax(index, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([1, 5, 2, 1, 0]),
+        pd.Index([0.5, -13.0, -0.5, 2.75, 0.5, 64.1]),
+        pd.Index(pd.array([None, 1, None, 5, 2, 1, 3, None, None])),
+        pd.Index([True, True, True, False, True]),
+        pd.Index(pd.array([True, True, True, False, True])),
+        pd.RangeIndex(0, 10, 1),
+        pd.RangeIndex(-100, 100, 7),
+        pd.RangeIndex(100, -100, -9),
+        pd.RangeIndex(0, 10, -1),
+        pd.CategoricalIndex([1, 5, 1, 1, 2, 1, 5, 2, 1, 3], ordered=True),
+        pd.CategoricalIndex(list("ZEBRALIBRARY"), ordered=True),
+    ],
+)
+def test_numeric_range_min_max(index):
+    def impl1(I):
+        return I.min()
+
+    def impl2(I):
+        return I.max()
+
+    # Descending RangeIndex distributed min/max not supported yet [BE-2944]
+    dist_test = not (isinstance(index, pd.RangeIndex) and (index.step < 0))
+    check_func(impl1, (index,), dist_test=dist_test)
+    check_func(impl2, (index,), dist_test=dist_test)
+
+
+@pytest.mark.parametrize(
     "args",
     [
         (pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9]), 1),
