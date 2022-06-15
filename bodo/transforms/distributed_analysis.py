@@ -10,6 +10,7 @@ import sys
 import warnings
 from collections import defaultdict, namedtuple
 from enum import Enum
+from typing import Dict, List
 
 import numba
 import numpy as np
@@ -4023,3 +4024,24 @@ def is_REP(d):
 def dprint(*s):  # pragma: no cover
     if debug_prints():
         print(*s)
+
+
+def propagate_assign(array_dists: Dict[str, Distribution], nodes: List[ir.Stmt]):
+    """Function that updates any assignments in a list of nodes
+    with matching array distributions for any existing variables.
+    This is run when replacing functions after distributed analysis
+    has finished, so there is only 1 pass in the forward direction.
+
+    Args:
+        array_dists (dict[str, Distribution]): distributed analysis for each variable
+        nodes (List[ir.Var]): List of IR node
+    """
+    for node in nodes:
+        if isinstance(node, ir.Assign) and isinstance(node.value, ir.Var):
+            lhs = node.target.name
+            rhs = node.value.name
+            if lhs in array_dists and rhs not in array_dists:
+                array_dists[rhs] = array_dists[lhs]
+            elif rhs in array_dists and lhs not in array_dists:
+                array_dists[lhs] = array_dists[rhs]
+    return
