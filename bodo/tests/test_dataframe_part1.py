@@ -819,7 +819,7 @@ def test_random_shuffle_uniform(nitems, niters, memory_leak_check):
     """Test that bodo.random_shuffle's output follows a uniform distribution"""
 
     def impl(data):
-        return bodo.random_shuffle(data, parallel=True)
+        return bodo.random_shuffle(data)
 
     dist_impl = bodo.jit(distributed=["data"])(impl)
 
