@@ -479,7 +479,7 @@ def test_interval_index_from_breaks():
         bodo.jit(impl)()
 
 
-def test_argmin_argmax_edgecases():
+def test_argmin_argmax_min_max_edgecases():
     def impl1(I):
         return I.argmin()
 
@@ -487,26 +487,54 @@ def test_argmin_argmax_edgecases():
         return I.argmax()
 
     def impl3(I):
-        return I.argmin(axis=1)
+        return I.min()
 
     def impl4(I):
-        return I.argmax(axis=1)
+        return I.max()
 
     def impl5(I):
-        return I.argmin(skipna=False)
+        return I.argmin(axis=1)
 
     def impl6(I):
+        return I.argmax(axis=1)
+
+    def impl7(I):
+        return I.min(axis=1)
+
+    def impl8(I):
+        return I.max(axis=1)
+
+    def impl9(I):
+        return I.argmin(skipna=False)
+
+    def impl10(I):
         return I.argmax(skipna=False)
+
+    def impl11(I):
+        return I.min(skipna=False)
+
+    def impl12(I):
+        return I.max(skipna=False)
 
     err_msg1 = re.escape("Index.argmin(): only ordered categoricals are possible")
     err_msg2 = re.escape("Index.argmax(): only ordered categoricals are possible")
-    err_msg3 = re.escape("Index.argmin(): axis parameter only supports default value 0")
-    err_msg4 = re.escape("Index.argmax(): axis parameter only supports default value 0")
-    err_msg5 = re.escape(
+    err_msg3 = re.escape("Index.min(): only ordered categoricals are possible")
+    err_msg4 = re.escape("Index.max(): only ordered categoricals are possible")
+    err_msg5 = re.escape("Index.argmin(): axis parameter only supports default value 0")
+    err_msg6 = re.escape("Index.argmax(): axis parameter only supports default value 0")
+    err_msg7 = re.escape("Index.min(): axis parameter only supports default value None")
+    err_msg8 = re.escape("Index.max(): axis parameter only supports default value None")
+    err_msg9 = re.escape(
         "Index.argmin(): skipna parameter only supports default value True"
     )
-    err_msg6 = re.escape(
+    err_msg10 = re.escape(
         "Index.argmax(): skipna parameter only supports default value True"
+    )
+    err_msg11 = re.escape(
+        "Index.min(): skipna parameter only supports default value True"
+    )
+    err_msg12 = re.escape(
+        "Index.max(): skipna parameter only supports default value True"
     )
 
     I1 = pd.CategoricalIndex(list("ABCAACAB"))
@@ -519,16 +547,34 @@ def test_argmin_argmax_edgecases():
         bodo.jit(impl2)(I1)
 
     with pytest.raises(BodoError, match=err_msg3):
-        bodo.jit(impl3)(I2)
+        bodo.jit(impl3)(I1)
 
     with pytest.raises(BodoError, match=err_msg4):
-        bodo.jit(impl4)(I2)
+        bodo.jit(impl4)(I1)
 
     with pytest.raises(BodoError, match=err_msg5):
         bodo.jit(impl5)(I2)
 
     with pytest.raises(BodoError, match=err_msg6):
         bodo.jit(impl6)(I2)
+
+    with pytest.raises(BodoError, match=err_msg7):
+        bodo.jit(impl7)(I2)
+
+    with pytest.raises(BodoError, match=err_msg8):
+        bodo.jit(impl8)(I2)
+
+    with pytest.raises(BodoError, match=err_msg9):
+        bodo.jit(impl9)(I2)
+
+    with pytest.raises(BodoError, match=err_msg10):
+        bodo.jit(impl10)(I2)
+
+    with pytest.raises(BodoError, match=err_msg11):
+        bodo.jit(impl11)(I2)
+
+    with pytest.raises(BodoError, match=err_msg12):
+        bodo.jit(impl12)(I2)
 
 
 @pytest.mark.slow
