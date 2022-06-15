@@ -165,7 +165,7 @@ def test_create_dataframe(memory_leak_check):
 
 @pytest.mark.slow
 def test_dataframe_distribution(memory_leak_check):
-    """make sure output of toPandas() is distributed if dist flag is et"""
+    """make sure output of toPandas() is distributed if dist flag is set"""
 
     @bodo.jit(distributed={"df", "df2"})
     def f(df):

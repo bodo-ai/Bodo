@@ -2013,10 +2013,11 @@ class DistributedPass:
         ):
             lhs_typ = self.typemap[assign.target.name]
             rhs_typ = self.typemap[rhs.args[0].name]
-            if lhs_typ == rhs_typ:
-                assign.value = rhs.args[0]
-                return [assign]
-            if to_str_arr_if_dict_array(lhs_typ) == to_str_arr_if_dict_array(rhs_typ):
+            if lhs_typ != rhs_typ and to_str_arr_if_dict_array(
+                lhs_typ
+            ) == to_str_arr_if_dict_array(rhs_typ):
+                # If the difference is table format we decode arrays as opposed to depending
+                # on a cast because cast isn't implemented yet.
                 return compile_func_single_block(
                     eval("lambda data: decode_if_dict_array(data)"),
                     (rhs.args[0],),
@@ -2024,6 +2025,12 @@ class DistributedPass:
                     self,
                     extra_globals={"decode_if_dict_array": decode_if_dict_array},
                 )
+
+            else:
+                # We also need to optimize out scatterv and depend on casting
+                # to handle any type mismatches (e.g. with/without table format)
+                assign.value = rhs.args[0]
+                return [assign]
 
         if fdef == ("dist_return", "bodo.libs.distributed_api"):
             assign.value = rhs.args[0]
