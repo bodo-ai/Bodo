@@ -1043,3 +1043,165 @@ def _register_str2bool_methods():
 
 
 _register_str2bool_methods()
+
+
+@register_jitable
+def str_extract(arr, pat, flags, n_cols):  # pragma: no cover
+    """
+    Implement optimized string extract for dictionary encoded array
+    Return a list of dictionary encoded arrays where each array
+    represents a capture group
+    """
+    data_arr = arr._data
+    indices_arr = arr._indices
+    n_data = len(data_arr)
+    n_indices = len(indices_arr)
+    regex = re.compile(pat, flags=flags)
+    # a list consists of the dictionary arrays for each output column
+    out_dict_arr_list = []
+    for _ in range(n_cols):
+        out_dict_arr_list.append(pre_alloc_string_array(n_data, -1))
+    is_out_na_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_data)
+    out_indices_arr = indices_arr.copy()
+    for i in range(n_data):
+        if bodo.libs.array_kernels.isna(data_arr, i):
+            is_out_na_arr[i] = True
+            for j in range(n_cols):
+                bodo.libs.array_kernels.setna(out_dict_arr_list[j], i)
+            continue
+        m = regex.search(data_arr[i])
+        if m:
+            is_out_na_arr[i] = False
+            g = m.groups()
+            for j in range(n_cols):
+                out_dict_arr_list[j][i] = g[j]
+        else:
+            is_out_na_arr[i] = True
+            for j in range(n_cols):
+                bodo.libs.array_kernels.setna(out_dict_arr_list[j], i)
+
+    for i in range(n_indices):
+        if is_out_na_arr[out_indices_arr[i]]:
+            bodo.libs.array_kernels.setna(out_indices_arr, i)
+
+    out_arr_list = [
+        init_dict_arr(
+            out_dict_arr_list[i], out_indices_arr.copy(), arr._has_global_dictionary
+        )
+        for i in range(n_cols)
+    ]
+
+    return out_arr_list
+
+
+def create_extractall_methods(is_multi_group):
+    """Returns the dictionary-encoding optimized implementations for
+    extractall
+
+    Args:
+        is_multi_group (bool): True if the regex pattern consists
+        of multiple groups, False otherwise
+
+        For example,
+        pd.Series(["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"] * 2,
+        ["е3", "не3", "н2с2", "AA", "C"] * 2).str.extractall(r"([чен]+)\d+([ст]+)\d+")
+        will invoke the implementation with is_multi_group set to true since
+        the regex expression has two capture groups.
+        On the other hand,
+        pd.Series(["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
+        [4, 3, 5, 1, 0, 2, 6, 11]).str.extractall(r"(?P<BBB>[abd]+)\d+")
+        will invoke the implementation with is_multi_group set to False,
+        as the regex consists of only one capture group.
+    """
+    # Two implementations will be generated:
+    # str_extractall: invoked when regex has single capture group
+    # str_extractall_multi: invoked when regex regex multiple capture groups
+    multi_group = "_multi" if is_multi_group else ""
+    func_text = (
+        f"def str_extractall{multi_group}(arr, regex, n_cols, index_arr):\n"
+        "    data_arr = arr._data\n"
+        "    indices_arr = arr._indices\n"
+        "    n_data = len(data_arr)\n"
+        "    n_indices = len(indices_arr)\n"
+        "    indices_count = [0 for _ in range(n_data)]\n"
+        "    for i in range(n_indices):\n"
+        "        if not bodo.libs.array_kernels.isna(indices_arr, i):\n"
+        "            indices_count[indices_arr[i]] += 1\n"
+        "    dict_group_count = []\n"
+        # calculate the total number of rows
+        # out_dict_len: the length of the output dictionary array
+        # out_ind_len: the length of the output indices array
+        "    out_dict_len = out_ind_len = 0\n"
+        # the first for-loop is for calculating the number of matches
+        # of each string
+        "    for i in range(n_data):\n"
+        "        if bodo.libs.array_kernels.isna(data_arr, i):\n"
+        "            continue\n"
+        "        m = regex.findall(data_arr[i])\n"
+        # len(m): the number of matches for each string
+        # dic_group_count[i] maps the old dict index to
+        # its new position and length
+        "        dict_group_count.append((out_dict_len, len(m)))\n"
+        "        out_dict_len += len(m)\n"
+        "        out_ind_len += indices_count[i] * len(m)\n"
+        "    out_dict_arr_list = []\n"
+        "    for _ in range(n_cols):\n"
+        "        out_dict_arr_list.append(pre_alloc_string_array(out_dict_len, -1))\n"
+        "    out_indices_arr = bodo.libs.int_arr_ext.alloc_int_array(out_ind_len, np.int32)\n"
+        "    out_ind_arr = bodo.utils.utils.alloc_type(out_ind_len, index_arr, (-1,))\n"
+        "    out_match_arr = np.empty(out_ind_len, np.int64)\n"
+        # the second for-loop is for generating the dictionary arrays
+        "    curr_ind = 0\n"
+        "    for i in range(n_data):\n"
+        "        if bodo.libs.array_kernels.isna(data_arr, i):\n"
+        "            continue\n"
+        "        m = regex.findall(data_arr[i])\n"
+        "        for s in m:\n"
+        "            for j in range(n_cols):\n"
+        f"                out_dict_arr_list[j][curr_ind] = s{'[j]' if is_multi_group else ''}\n"
+        "            curr_ind += 1\n"
+        # the third for-loop is for populating the index and match arrays
+        "    curr_ind = 0\n"
+        "    for i in range(n_indices):\n"
+        "        if bodo.libs.array_kernels.isna(indices_arr, i):\n"
+        "            continue\n"
+        "        n_rows = dict_group_count[indices_arr[i]][1]\n"
+        "        for k in range(n_rows):\n"
+        "            out_indices_arr[curr_ind] = dict_group_count[indices_arr[i]][0] + k\n"
+        "            out_ind_arr[curr_ind] = index_arr[i]\n"
+        "            out_match_arr[curr_ind] = k\n"
+        "            curr_ind += 1\n"
+        "    out_arr_list = [\n"
+        "        init_dict_arr(\n"
+        "            out_dict_arr_list[i], out_indices_arr.copy(), arr._has_global_dictionary\n"
+        "        )\n"
+        "        for i in range(n_cols)\n"
+        "    ]\n"
+        "    return (out_ind_arr, out_match_arr, out_arr_list) \n"
+    )
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+            "init_dict_arr": init_dict_arr,
+            "pre_alloc_string_array": pre_alloc_string_array,
+        },
+        loc_vars,
+    )
+    return loc_vars[f"str_extractall{multi_group}"]
+
+
+def _register_extractall_methods():
+    # install various implementations for extractall
+    for is_multi_group in [True, False]:
+        multi_group = "_multi" if is_multi_group else ""
+        func_impl = create_extractall_methods(is_multi_group)
+        func_impl = register_jitable(func_impl)
+        globals()[f"str_extractall{multi_group}"] = func_impl
+
+
+_register_extractall_methods()

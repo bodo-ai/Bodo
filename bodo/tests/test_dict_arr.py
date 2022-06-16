@@ -997,3 +997,155 @@ def test_str_str2bool_methods(test_unicode_dict_str_arr, memory_leak_check, meth
     bodo_func(test_unicode_dict_str_arr)
     f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     assert dist_IR_contains(f_ir, f"str_{method}")
+
+
+def test_str_extract(memory_leak_check, test_unicode_dict_str_arr):
+    """
+    tests optimization for Series.str.extract for dictionary arrays
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.extract(r"(?P<BBB>[abd])(?P<C>\d+)")
+
+    def impl2(A):
+        return pd.Series(A).str.extract(r"(?P<BBB>[아])(?P<C>\d+)")
+
+    def impl3(A):
+        return pd.Series(A).str.extract(r"(P<DD>[着])")
+
+    def impl4(A):
+        return pd.Series(A).str.extract(r"(P<DD>[着])", expand=False)
+
+    def impl5(A):
+        return pd.Series(A).str.extract(r"(?P<BBB>[아])(?P<C>\d+)", expand=False)
+
+    # when regex group has no name, Series name should be used
+    def impl6(A):
+        return pd.Series(A).str.extract(r"([abd]+)\d+", expand=False)
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.extract(
+            r"(?P<BBB>[abd])(?P<C>\d+)"
+        ),
+    )
+    check_func(
+        impl2,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.extract(
+            r"(?P<BBB>[아])(?P<C>\d+)"
+        ),
+    )
+    check_func(
+        impl3,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.extract(r"(P<DD>[着])"),
+    )
+    check_func(
+        impl4,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.extract(
+            r"(P<DD>[着])", expand=False
+        ),
+    )
+    check_func(
+        impl5,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.extract(
+            r"(?P<BBB>[아])(?P<C>\d+)", expand=False
+        ),
+    )
+    check_func(
+        impl6,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.extract(
+            r"([abd]+)\d+", expand=False
+        ),
+    )
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_extract")
+
+
+def test_str_extractall(memory_leak_check):
+    """test optimizaton of Series.str.extractall() for dict array"""
+    # non-string index, single group
+    def impl1(A):
+        return pd.Series(A, name="AA").str.extractall(r"(?P<BBB>[abd]+)\d+")
+
+    # non-string index, multiple groups
+    def impl2(A):
+        return pd.Series(A).str.extractall(r"([чен]+)\d+([ст]+)\d+")
+
+    # string index, single group
+    def impl3(A, I):
+        return pd.Series(data=A, index=I).str.extractall(r"(?P<BBB>[abd]+)\d+")
+
+    # string index, multiple groups
+    def impl4(A, I):
+        return pd.Series(data=A, index=I).str.extractall(r"([чен]+)\d+([ст]+)\d+")
+
+    S1 = pd.Series(
+        ["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
+        [4, 3, 5, 1, 0, 2, 6, 11],
+        name="AA",
+    )
+    S2 = pd.Series(
+        ["чьь1т33", "ьнн2с222", "странаст2", np.nan, "ьнне33ст3"] * 2,
+        ["е3", "не3", "н2с2", "AA", "C"] * 2,
+    )
+    A1 = pa.array(S1, type=pa.dictionary(pa.int32(), pa.string()))
+    A2 = pa.array(S2, type=pa.dictionary(pa.int32(), pa.string()))
+
+    I1 = pd.Index(["a", "b", "e", "好", "e2", "yun", "c", "dd"])
+    I2 = pd.Index(["е3", "не3", "н2с2", "AA", "C"] * 2)
+
+    check_func(
+        impl1,
+        (A1,),
+        py_output=pd.Series(A1, name="AA").str.extractall(r"(?P<BBB>[abd]+)\d+"),
+    )
+    check_func(
+        impl2,
+        (A2,),
+        py_output=pd.Series(A2).str.extractall(r"([чен]+)\d+([ст]+)\d+"),
+    )
+
+    check_func(
+        impl3,
+        (A1, I1),
+        py_output=pd.Series(
+            data=A1, index=["a", "b", "e", "好", "e2", "yun", "c", "dd"]
+        ).str.extractall(r"(?P<BBB>[abd]+)\d+"),
+    )
+    check_func(
+        impl4,
+        (A2, I2),
+        py_output=pd.Series(
+            data=A2, index=["е3", "не3", "н2с2", "AA", "C"] * 2
+        ).str.extractall(r"([чен]+)\d+([ст]+)\d+"),
+    )
+    # make sure IR has the optimized function
+
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(A1)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_extractall")
+
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl2)
+    bodo_func(A2)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_extractall_multi")
+
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl3)
+    bodo_func(A1, I1)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_extractall")
+
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl4)
+    bodo_func(A2, I2)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_extractall_multi")

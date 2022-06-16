@@ -1283,6 +1283,7 @@ class DistributedAnalysis:
             "str_title",
             "str_upper",
             "str_center",
+            "str_extract",
             "str_get",
             "str_repeat_int",
             "str_lstrip",
@@ -1307,6 +1308,42 @@ class DistributedAnalysis:
             "str_isdecimal",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        # dict-arr extractall
+        if func_mod == "bodo.libs.dict_arr_ext" and func_name in (
+            "str_extractall",
+            "str_extractall_multi",
+        ):
+            # default is set to 1D_var because there could be no matches
+            # for some strings
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+
+            in_dist = Distribution(
+                min(
+                    # the first argument is the dictionary encoded array
+                    array_dists[rhs.args[0].name].value,
+                    # the third argument is the index array
+                    array_dists[rhs.args[3].name].value,
+                )
+            )
+
+            # return is a tuple(array, array, list)
+            out_dist = Distribution(
+                min(
+                    array_dists[lhs][0].value,
+                    array_dists[lhs][1].value,
+                    array_dists[lhs][2].value,
+                    in_dist.value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, out_dist)
+
+            if out_dist != Distribution.OneD_Var:
+                in_dist = out_dist
+            self._set_var_dist(rhs.args[0].name, array_dists, in_dist)
+            self._set_var_dist(rhs.args[3].name, array_dists, in_dist)
             return
 
         # dict-arr concat
