@@ -1215,7 +1215,21 @@ class DistributedPass:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                (bodo.libs.sklearn_ext.BodoModelSelectionKFoldType,),
+                bodo.libs.sklearn_ext.BodoModelSelectionKFoldType,
+            )
+            and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
+        ):
+            # Not checking get_n_splits for KFold since it might not have a first arg
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
+        if (
+            func_name in ("split", "get_n_splits")
+            and "bodo.libs.sklearn_ext" in sys.modules
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                bodo.libs.sklearn_ext.BodoModelSelectionLeavePOutType,
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
