@@ -826,6 +826,118 @@ def test_putmask_args():
         bodo.jit(impl)(I, C, pd.Series(list("ABCDEFGH")))
 
 
+@pytest.mark.slow
+def test_set_operations_unsupported():
+    def impl1(I, J):
+        return I.union(J)
+
+    def impl2(I, J):
+        return I.intersection(J)
+
+    def impl3(I, J):
+        return I.difference(J)
+
+    def impl4(I, J):
+        return I.symmetric_difference(J)
+
+    def impl5(I, J):
+        return I.union(J, sort=False)
+
+    def impl6(I, J):
+        return I.intersection(J, sort=False)
+
+    def impl7(I, J):
+        return I.difference(J, sort=False)
+
+    def impl8(I, J):
+        return I.symmetric_difference(J, sort=False)
+
+    def impl9(I, J):
+        return I.symmetric_difference(J, result_name="sym")
+
+    err_msg1 = re.escape("Index.union(): incompatible types int64 and unicode_type")
+    err_msg2 = re.escape(
+        "Index.intersection(): incompatible types unicode_type and readonly bytes(uint8, 1d, C)"
+    )
+    err_msg3 = re.escape("Index.difference(): incompatible types int64 and float64")
+    err_msg4 = re.escape(
+        "Index.symmetric_difference(): incompatible types datetime64[ns] and timedelta64[ns]"
+    )
+    err_msg5 = re.escape(
+        "Index.union(): sort parameter only supports default value None"
+    )
+    err_msg6 = re.escape(
+        "Index.intersection(): sort parameter only supports default value None"
+    )
+    err_msg7 = re.escape(
+        "Index.difference(): sort parameter only supports default value None"
+    )
+    err_msg8 = re.escape(
+        "Index.symmetric_difference(): sort parameter only supports default value None"
+    )
+    err_msg9 = re.escape(
+        "Index.symmetric_difference(): result_name parameter only supports default value None"
+    )
+    err_msg10 = re.escape(
+        "pd.Index.union(): unsupported type for argument other: reflected list(int64)<iv=None>"
+    )
+    err_msg11 = re.escape(
+        "Index.union(): unsupported type for argument other: UniTuple(int64 x 4)"
+    )
+    err_msg12 = re.escape(
+        "pd.Index.union(): unsupported type for argument other: IntegerArrayType(int64)"
+    )
+    err_msg13 = re.escape(
+        "pd.Index.union(): unsupported type for argument other: unicode_type"
+    )
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl1)(pd.Index([1, 2, 3, 4, 5]), pd.Index(list("ABCDE")))
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl2)(
+            pd.Index(list("AEIOU")), pd.Index([b"A", b"E", b"I", b"O", b"U"])
+        )
+
+    with pytest.raises(BodoError, match=err_msg3):
+        bodo.jit(impl3)(pd.RangeIndex(0, 100, 7), pd.Index([1.0, 7.0, 20.0, 21.0]))
+
+    with pytest.raises(BodoError, match=err_msg4):
+        bodo.jit(impl4)(
+            pd.date_range("2018-01-01", "2018-12-01", freq="M"),
+            pd.TimedeltaIndex(
+                ["1 days", "2 days", "3 days", "4 days", "5 days", "6 days"]
+            ),
+        )
+
+    with pytest.raises(BodoError, match=err_msg5):
+        bodo.jit(impl5)(pd.Index([1, 2, 3, 4, 5]), pd.Index([2, 4, 6, 8, 10]))
+
+    with pytest.raises(BodoError, match=err_msg6):
+        bodo.jit(impl6)(pd.Index([1, 2, 3, 4, 5]), pd.Index([2, 4, 6, 8, 10]))
+
+    with pytest.raises(BodoError, match=err_msg7):
+        bodo.jit(impl7)(pd.Index([1, 2, 3, 4, 5]), pd.Index([2, 4, 6, 8, 10]))
+
+    with pytest.raises(BodoError, match=err_msg8):
+        bodo.jit(impl8)(pd.Index([1, 2, 3, 4, 5]), pd.Index([2, 4, 6, 8, 10]))
+
+    with pytest.raises(BodoError, match=err_msg9):
+        bodo.jit(impl9)(pd.Index([1, 2, 3, 4, 5]), pd.Index([2, 4, 6, 8, 10]))
+
+    with pytest.raises(BodoError, match=err_msg10):
+        bodo.jit(impl1)(pd.Index([1, 2, 3, 4, 5]), [1, 3, 5, 7])
+
+    with pytest.raises(BodoError, match=err_msg11):
+        bodo.jit(impl1)(pd.Index([1, 2, 3, 4, 5]), (1, 3, 5, 7))
+
+    with pytest.raises(BodoError, match=err_msg12):
+        bodo.jit(impl1)(pd.Index([1, 2, 3, 4, 5]), pd.array([3, 5, 7, 9, 11]))
+
+    with pytest.raises(BodoError, match=err_msg13):
+        bodo.jit(impl1)(pd.Index([1, 2, 3, 4, 5]), "foo")
+
+
 # TODO: handle cases where n is not the same length as I
 @pytest.mark.slow
 def test_repeat_malformed():

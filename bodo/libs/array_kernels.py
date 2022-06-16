@@ -2664,6 +2664,64 @@ def slice_array_intersect1d(arr):  # pragma: no cover
     return arr[:-1][mask]
 
 
+@register_jitable(cache=True)
+def intersection_mask_comm(arr, rank, n_pes):  # pragma: no cover
+    """Sends the first value of the current rank to the previous rank
+
+    Args:
+        arr (array): the array that is having its border values communicated
+        rank (int): the current rank number
+        n_pes (int): the number of ranks
+
+    Returns:
+        any: the first value from the next rank (undefined if this rank is the
+        last rank)
+    """
+    comm_tag = np.int32(bodo.hiframes.rolling.comm_border_tag)
+    left_buffer = bodo.utils.utils.alloc_type(1, arr, (-1,))
+    if rank != 0:
+        l_send_req = bodo.libs.distributed_api.isend(
+            arr[:1], 1, np.int32(rank - 1), comm_tag, True
+        )
+        bodo.libs.distributed_api.wait(l_send_req, True)
+    if rank == n_pes - 1:
+        return None
+    else:
+        r_recv_req = bodo.libs.distributed_api.irecv(
+            left_buffer, 1, np.int32(rank + 1), comm_tag, True
+        )
+        bodo.libs.distributed_api.wait(r_recv_req, True)
+        return left_buffer[0]
+
+
+@register_jitable(cache=True)
+def intersection_mask(arr, parallel=False):  # pragma: no cover
+    """Takes in an array containing the unique values from two arrays, sorted,
+       and returns a mask indicating which locations in the array correspond
+       to a distinct element that was in both of the original arrays.
+
+    Args:
+        arr (np.ndarray): a sorted array of unique values from the LHS and
+        RHS of an intersection operation
+
+    Returns:
+        boolean array: indicates which locations are identical to the one
+        after them, i.e. came from both the LHS and the RHS
+    """
+    n = len(arr)
+    mask = np.full(n, False)
+    for i in range(n - 1):
+        if arr[i] == arr[i + 1]:
+            mask[i] = True
+    if parallel:
+        rank = bodo.libs.distributed_api.get_rank()
+        n_pes = bodo.libs.distributed_api.get_size()
+        first_from_right = intersection_mask_comm(arr, rank, n_pes)
+        if rank != n_pes - 1 and arr[n - 1] == first_from_right:
+            mask[n - 1] = True
+    return mask
+
+
 @overload(np.setdiff1d, inline="always", no_unliteral=True)
 def overload_setdiff1d(A1, A2, assume_unique=False):
     if not bodo.utils.utils.is_array_typ(

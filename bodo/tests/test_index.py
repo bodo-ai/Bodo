@@ -485,6 +485,118 @@ def test_index_values(index, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "args",
+    [
+        (pd.Index([1, 5, 2, 1, 0, 1, 5, 2, 5, 1]), pd.Index([1, 5, 2, 1, 3])),
+        pytest.param(
+            (pd.Index([1, 2, 3, 4, 5]), pd.Index([6, 7, 8, 9, 10])),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.Index([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), pd.Index([6, 7, 8, 9, 10])),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.Index([1, 2, 3, 4, 5]), pd.Index([1, 2, 3, 4, 5])),
+            marks=pytest.mark.slow,
+        ),
+        (pd.Index([1.0, 1.5, 1.2, 1.7, 2.9, 1.2]), pd.Index([1.0, 1.1, 1.2, 1.3])),
+        (pd.Index(list("ABCDEFGHIJKLMNOPQRSTUVWX")), pd.Index(list("AEIOUY"))),  # FAILS
+        (
+            pd.date_range("2018-01-01", "2018-12-01", freq="M"),
+            pd.date_range("2018-06-01", "2019-06-01", freq="M"),
+        ),
+        (
+            pd.TimedeltaIndex(
+                ["1 days", "2 days", "3 days", "4 days", "5 days", "6 days"]
+            ),
+            pd.TimedeltaIndex(
+                [
+                    "6 seconds",
+                    "6 minutes",
+                    "6 hours",
+                    "6 days",
+                    "6 milliseconds",
+                    "6 nanoseconds",
+                ]
+            ),
+        ),
+        (
+            pd.Index([b"a", b"l", b"p", b"h", b"a"]),
+            pd.Index([b"p", b"l", b"e", b"a", b"sconesAreDelicious", b"e"]),
+        ),
+        (pd.RangeIndex(0, 10, 1), pd.RangeIndex(0, 5, 1)),
+        (pd.RangeIndex(0, 10, 1), pd.RangeIndex(0, 30, 5)),
+        pytest.param(
+            (pd.RangeIndex(100, -1, -25), pd.RangeIndex(-10, 30, 5)),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.RangeIndex(0, 100, 15), pd.Index([2, 4, 8, 16, 64, 15])),
+            marks=pytest.mark.slow,
+        ),
+        (pd.Index([1, 2, 3, 4, 5]), pd.Series([2, 4, 6, 8, 10])),
+        (pd.Index([1, 2, 3, 4, 5]), np.array([2, 4, 6, 8, 10])),
+        pytest.param(
+            (pd.Index(list(range(-5, 100000))), pd.Index(list(range(100005)))),
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_index_set_operations(args):
+    def impl1(I, J):
+        return I.union(J)
+
+    def impl2(I, J):
+        return I.intersection(J)
+
+    def impl3(I, J):
+        return I.difference(J)
+
+    def impl4(I, J):
+        return I.symmetric_difference(J)
+
+    I, J = args
+    # Descending RangeIndex distributed set methods not supported yet [BE-2944]
+    # BinaryIndex distributed set methods not supported yet [BE-3005]
+    dist_test = not (
+        (isinstance(I, pd.RangeIndex) and (I.step < 0))
+        or (isinstance(J, pd.RangeIndex) and (J.step < 0))
+        or isinstance(I[0], bytes)
+        or isinstance(J[0], bytes)
+    )
+
+    # Bodo diverges from the Pandas API for union by returning in a possibly different
+    # order and always removing duplicates.
+    check_func(
+        impl1,
+        (I, J),
+        py_output=I.append(pd.Index(J)).unique(),
+        sort_output=True,
+        dist_test=dist_test,
+    )
+
+    # Bodo diverges from the Pandas API for intersection by returning in a possibly
+    # different order, defaulting sort to None, and always converting RangeIndex
+    # to NumericIndex.
+    check_func(
+        impl2,
+        (I, J),
+        py_output=I.intersection(J, sort=None),
+        sort_output=True,
+        dist_test=dist_test,
+        only_1D=True,
+    )
+
+    # Bodo diverges from the Pandas API for difference and symmetric_difference
+    # by returning in a possibly different order, and always converting RangeIndex
+    # to NumericIndex.
+    check_func(impl3, (I, J), sort_output=True, dist_test=dist_test)
+    check_func(impl3, (pd.Index(J), I), sort_output=True, dist_test=dist_test)
+    check_func(impl4, (I, J), sort_output=True, dist_test=dist_test)
+
+
+@pytest.mark.parametrize(
     "index",
     [
         pd.Index([1, 2, 3, 4, 5]),
@@ -742,7 +854,7 @@ def test_index_to_list(index):
 @pytest.mark.parametrize(
     "index",
     [
-        pd.Index([13, -21, 0, 1, 1, 34, -2, 3, 55, 5, 88, -8]),
+        pd.Index([13, -21, 0, 1, 1, 34, -2, 3, 55, 5, 88, -8], name="F"),
         pd.Index(
             pd.array(
                 [
@@ -797,7 +909,7 @@ def test_index_to_list(index):
                 b"ccc",
             ]
         ),
-        pd.RangeIndex(0, 10, 1),
+        pd.RangeIndex(0, 10, 1, name="R"),
         pd.RangeIndex(0, 10, 3),
         pytest.param(pd.RangeIndex(0, 10, 50), marks=pytest.mark.slow),
         pytest.param(pd.RangeIndex(10, 0, 1), marks=pytest.mark.slow),
@@ -3047,12 +3159,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_delete)(idx=pd.Index(data))
 
-    def test_difference(idx):
-        return idx.difference()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_difference)(idx=pd.Index(data))
-
     def test_drop(idx):
         return idx.drop()
 
@@ -3154,12 +3260,6 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_insert)(idx=pd.Index(data))
-
-    def test_intersection(idx):
-        return idx.intersection()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_intersection)(idx=pd.Index(data))
 
     def test_is_(idx):
         return idx.is_()
@@ -3263,12 +3363,6 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_str)(idx=pd.Index(data))
 
-    def test_symmetric_difference(idx):
-        return idx.symmetric_difference()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_symmetric_difference)(idx=pd.Index(data))
-
     def test_to_flat_index(idx):
         return idx.to_flat_index()
 
@@ -3286,12 +3380,6 @@ def test_index_unsupported(data):
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_transpose)(idx=pd.Index(data))
-
-    def test_union(idx):
-        return idx.union()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_union)(idx=pd.Index(data))
 
     def test_value_counts(idx):
         return idx.value_counts()
