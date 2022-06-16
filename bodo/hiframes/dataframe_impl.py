@@ -5562,7 +5562,8 @@ def overload_dataframe_memory_usage(df, index=True, deep=False):
         column_vals = pd.array(columns, "string")
     else:
         column_vals = columns
-    if df.is_table_format:
+    if df.is_table_format and len(df.columns) > 0:
+        # Don't use table format if the table is unused.
         start_offset = int(use_index)
         num_cols = len(columns)
         func_text += f"  nbytes_arr = np.empty({num_cols}, np.int64)\n"
