@@ -1572,6 +1572,8 @@ def _infer_ndarray_obj_dtype(val):
     if isinstance(first_val, decimal.Decimal):
         # NOTE: converting decimal.Decimal objects to 38/18, same as Spark
         return DecimalArrayType(38, 18)
+    if isinstance(first_val, pd._libs.interval.Interval):
+        return bodo.libs.interval_arr_ext.IntervalArrayType
 
     raise BodoError(
         f"Unsupported object array with first value: {first_val}"

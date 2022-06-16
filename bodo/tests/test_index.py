@@ -545,6 +545,201 @@ def test_index_slice_name(index, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "args",
+    [
+        (pd.Index([1, 2, 3, 4, 5]), pd.RangeIndex(5, 0, -1)),
+        (
+            pd.Index([0.1, -0.3, 0.1, 0.7, -0.3], name="buzz"),
+            pd.Index([b"A", b"L", b"P", b"H", b"A"]),
+        ),
+        (pd.Index([1, 5, 4, 2, 1, 5], name="bar"), pd.Index(list("aeiouy"))),
+        (pd.date_range("2018-01-01", "2018-12-01", periods=6), pd.RangeIndex(0, 6, 1)),
+        (
+            pd.TimedeltaIndex(["1 days", "7 days", "3 days", "4 hours", "2 days"]),
+            pd.Index(list("98765")),
+        ),
+        (pd.CategoricalIndex(list("abcaacab")), pd.RangeIndex(8, 65, 8)),
+        (
+            pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3], name="fizz"),
+            pd.CategoricalIndex(list("aaeaaeieaa"), name="vowels"),
+        ),
+    ],
+)
+def test_index_to_series(args):
+    def impl1(index):
+        return index.to_series()
+
+    def impl2(index):
+        return index.to_series(name="foo")
+
+    def impl3(index, other):
+        return index.to_series(index=other)
+
+    def impl4(index, other):
+        return index.to_series(name=4, index=other)
+
+    index, other = args
+
+    # Descending RangeIndex distributed to_series not supported yet [BE-2944]
+    dist_test_A = isinstance(index, pd.RangeIndex) and index.step < 0
+    dist_test_B = isinstance(index, pd.RangeIndex) and index.step < 0
+
+    check_func(impl1, (index,), dist_test=dist_test_A)
+    check_func(impl2, (index,), dist_test=dist_test_A)
+    check_func(impl3, (index, other), dist_test=dist_test_A)
+    check_func(impl4, (index, other), dist_test=dist_test_A)
+    if not isinstance(other, pd.MultiIndex):
+        check_func(impl3, (other, index), dist_test=dist_test_B)
+
+    # Passing in other iterables for index not supported for Timedelta or Binary.
+    # Lists/tuples not supported for distributed tests.
+    if not isinstance(other[0], (bytes, pd._libs.tslibs.timedeltas.Timedelta)):
+        check_func(impl3, (index, list(other)), dist_test=False)
+        check_func(impl3, (index, pd.Series(other)), dist_test=dist_test_A)
+        check_func(impl3, (index, other.to_numpy()), dist_test=dist_test_A)
+    if not isinstance(index[0], (bytes, pd._libs.tslibs.timedeltas.Timedelta)):
+        check_func(impl3, (other, tuple(index)), dist_test=False)
+        if not isinstance(other, pd.MultiIndex):
+            check_func(impl4, (other, pd.Series(index)), dist_test=dist_test_B)
+            check_func(impl4, (other, index.to_numpy()), dist_test=dist_test_B)
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([1, 2, 3, 4, 5]),
+        pd.Index([1, 5, 4, 2, 1, 5], name="bar"),
+        pd.Index([0.1, -0.3, 0.1, 0.7, -0.3], name="buzz"),
+        pd.Index(list("aeiouy")),
+        pd.Index([b"A", b"L", b"P", b"H", b"A"]),
+        pd.RangeIndex(0, 10, 1),
+        pd.RangeIndex(5, 0, -1),
+        pd.RangeIndex(15, 100, 15, name="R"),
+        pd.date_range("2018-01-01", "2018-12-01", periods=6),
+        pd.TimedeltaIndex(["1 days", "7 days", "3 days", "4 hours", "2 days"]),
+        pd.CategoricalIndex(list("abcaacab")),
+        pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3], name="fizz"),
+        pd.CategoricalIndex(list("aaeaaeieaa"), name="vowels"),
+        # TODO: support cases where column names of the original MultiIndex
+        # have heterogeneous types (i.e. name = [42, "Z"])
+        pd.MultiIndex.from_product([[1, 2, 3], ["A", "B"]]),
+        pd.MultiIndex.from_product([[1, 2, 3], ["A", "B"]], names=["x", "y"]),
+        pd.MultiIndex.from_arrays(
+            [[1, 5, 2, 1, 0], [1, 5, 2, 1, 3], ["A", "A", "B", "A", "B"]],
+            names=[6, 7, 8],
+        ),
+    ],
+)
+def test_index_to_frame(index):
+    def impl1(index):
+        return index.to_frame()
+
+    def impl2(index):
+        return index.to_frame(index=False)
+
+    def impl3(index):
+        return index.to_frame(name="foo")
+
+    def impl4(index):
+        return index.to_frame(name=4, index=False)
+
+    def impl5(index):
+        return index.to_frame(name=["X", "Y"])
+
+    def impl6(index):
+        return index.to_frame(name=[64, 42], index=False)
+
+    def impl7(index):
+        return index.to_frame(name=("q", 9, "s"))
+
+    def impl8(index):
+        return index.to_frame(name=[7, "r", 13], index=False)
+
+    dist_test = not (isinstance(index, pd.RangeIndex) and index.step < 0)
+    check_func(impl1, (index,), dist_test=dist_test)
+    check_func(impl2, (index,), dist_test=dist_test)
+    if not isinstance(index, pd.MultiIndex):
+        check_func(impl3, (index,), dist_test=dist_test)
+        check_func(impl4, (index,), dist_test=dist_test)
+    else:
+        if len(index.levels) == 2:
+            check_func(impl5, (index,), dist_test=dist_test)
+            check_func(impl6, (index,), dist_test=dist_test)
+        elif len(index.levels) == 3:
+            check_func(impl7, (index,), dist_test=dist_test)
+            check_func(impl8, (index,), dist_test=dist_test)
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([1, 2, 3, 4, 5]),
+        pd.Index([0.1, -0.3, 0.1, 0.7, -0.3]),
+        pd.Index([True, False, False, False, False, True]),
+        pd.Index(pd.array([1, 2, 3, None, 5, None, None])),
+        pd.Index(list("aeiouy")),
+        pd.Index([b"A", b"L", b"P", b"H", b"A"]),
+        pd.RangeIndex(0, 10, 1),
+        pd.RangeIndex(5, 0, -1),
+        pd.RangeIndex(15, 100, 15),
+        pd.date_range("2018-01-01", "2018-12-01", periods=6),
+        pd.TimedeltaIndex(["1 days", "7 days", "3 days", "4 hours", "2 days"]),
+        pd.CategoricalIndex(list("abcaacab")),
+        pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3]),
+        pd.CategoricalIndex(list("aaeaaeieaa")),
+        pd.interval_range(0, 5),
+    ],
+)
+def test_index_to_numpy(index):
+    def impl1(index):
+        return index.to_numpy()
+
+    # Copy = True guarantees no alias. Copy = False is not tested because
+    # it does not guarantee anything.
+    def impl2(index):
+        A = index.to_numpy(copy=True)
+        B = index.to_numpy(copy=True)
+        B[0] = B[1]
+        return [A[0], A[1]]
+
+    # RangeIndex distributed to_numpy not supported yet [BE-2944]
+    dist_test = not isinstance(index, pd.RangeIndex)
+    check_func(impl1, (index,), dist_test=dist_test)
+
+    # IntervalArray getitem not supported yet (Related to [BE-2814])
+    # np.ndarray of strings has issues with setitem (see [BE-2981])
+    if not isinstance(index, pd.IntervalIndex) and not isinstance(index[0], str):
+        check_func(impl2, (index,), dist_test=dist_test)
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([1, 2, 3, 4, 5]),
+        pd.Index([0.1, -0.3, 0.1, 0.7, -0.3]),
+        pd.Index([True, False, False, False, False, True]),
+        pd.Index(list("aeiouy")),
+        pd.Index([b"A", b"L", b"P", b"H", b"A"]),
+        pd.RangeIndex(0, 6, 1),
+        pd.RangeIndex(5, 0, -1),
+        pd.RangeIndex(15, 100, 15),
+        pd.date_range("2018-01-01", "2018-12-01", periods=6),
+        pd.TimedeltaIndex(["1 days", "7 days", "3 days", "4 hours", "2 days"]),
+        pd.CategoricalIndex(list("abcaacab")),
+        pd.CategoricalIndex([1, 5, 2, 1, 0, 1, 5, 2, 1, 3]),
+        pd.CategoricalIndex(list("aaeaaeieaa")),
+    ],
+)
+def test_index_to_list(index):
+    def impl(index):
+        return index.to_list()
+
+    # RangeIndex distributed to_list not supported yet [BE-2944]
+    dist_test = not isinstance(index, pd.RangeIndex)
+    check_func(impl, (index,), dist_test=dist_test)
+
+
+@pytest.mark.parametrize(
     "index",
     [
         pd.Index([13, -21, 0, 1, 1, 34, -2, 3, 55, 5, 88, -8]),
@@ -676,9 +871,11 @@ def test_index_sort_values(index):
         return list(index + index2)
 
     # RangeIndex distributed sort_values not supported yet [BE-2944]
-    dist_test = not isinstance(index, pd.RangeIndex)
+    dist_test = not (
+        isinstance(index, pd.RangeIndex) and (index.start != 0 or index.step != 1)
+    )
     check_func(impl1, (index,), dist_test=dist_test)
-    check_func(impl2, (index,), dist_test=dist_test)
+    check_func(impl2, (index,), only_1DVar=dist_test)
     # If the Index is numerical, test alternative placement of nulls and
     # verify nondestructiveness
     if isinstance(index, pd.core.indexes.numeric.Int64Index):
@@ -941,6 +1138,7 @@ def test_index_get_loc_error_checking():
             ),
             marks=pytest.mark.slow,
         ),
+        pd.RangeIndex(start=0, stop=10, step=1),
         pd.RangeIndex(start=-3, stop=4, step=1),
         pytest.param(pd.RangeIndex(start=0, stop=10, step=2), marks=pytest.mark.slow),
         pytest.param(
@@ -964,12 +1162,11 @@ def test_index_argminmax(index, memory_leak_check):
     def impl2(index):
         return index.argmax()
 
-    # Descending RangeIndex distributed any/all not supported yet [BE-2944]
-    dist_test = not (isinstance(index, pd.RangeIndex) and (index.step < 0))
+    # TODO: support Index.argmin() / Index.argmax() 1D_Var
     check_func(impl1, (index,), only_seq=True)
     check_func(impl2, (index,), only_seq=True)
-    check_func(impl1, (index,), only_1D=True, dist_test=dist_test)
-    check_func(impl2, (index,), only_1D=True, dist_test=dist_test)
+    check_func(impl1, (index,), only_1D=True)
+    check_func(impl2, (index,), only_1D=True)
 
 
 @pytest.mark.parametrize(
@@ -3078,41 +3275,11 @@ def test_index_unsupported(data):
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_to_flat_index)(idx=pd.Index(data))
 
-    def test_to_frame(idx):
-        return idx.to_frame()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_to_frame)(idx=pd.Index(data))
-
-    def test_to_list(idx):
-        return idx.to_list()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_to_list)(idx=pd.Index(data))
-
     def test_to_native_types(idx):
         return idx.to_native_types()
 
     with pytest.raises(BodoError, match="not supported yet"):
         bodo.jit(test_to_native_types)(idx=pd.Index(data))
-
-    def test_to_numpy(idx):
-        return idx.to_numpy()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_to_numpy)(idx=pd.Index(data))
-
-    def test_to_series(idx):
-        return idx.to_series()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_to_series)(idx=pd.Index(data))
-
-    def test_tolist(idx):
-        return idx.tolist()
-
-    with pytest.raises(BodoError, match="not supported yet"):
-        bodo.jit(test_tolist)(idx=pd.Index(data))
 
     def test_transpose(idx):
         return idx.transpose()

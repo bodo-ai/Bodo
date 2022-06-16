@@ -466,6 +466,138 @@ def test_interval_index_from_tuples():
 
 
 @pytest.mark.slow
+def test_index_to_numpy_args():
+    def impl1(index):
+        return index.to_numpy(copy=len(index) > 4)
+
+    def impl2(index):
+        return index.to_numpy(dtype="unicode")
+
+    def impl3(index):
+        return index.to_numpy(na_value=42)
+
+    def impl4(index):
+        return index.to_numpy(copy=7.5)
+
+    err_msg1 = re.escape(
+        "Index.to_numpy(): copy argument must be a compile time constant"
+    )
+    err_msg2 = re.escape(
+        "Index.to_numpy(): dtype parameter only supports default value None"
+    )
+    err_msg3 = re.escape(
+        "Index.to_numpy(): na_value parameter only supports default value None"
+    )
+    err_msg4 = re.escape("Index.to_numpy(): copy argument must be a boolean")
+
+    I = pd.Index([1, 2, 3, 4, 5])
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl1)(I)
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl2)(I)
+
+    with pytest.raises(BodoError, match=err_msg3):
+        bodo.jit(impl3)(I)
+
+    with pytest.raises(BodoError, match=err_msg4):
+        bodo.jit(impl4)(I)
+
+
+@pytest.mark.slow
+def test_index_to_series_malformed():
+    def impl1(I, J):
+        return I.to_series(index=J)
+
+    def impl2(I, n):
+        return I.to_series(name=n)
+
+    err_msg1 = re.escape(
+        "Index.to_series(): unsupported type for argument index: UnicodeType"
+    )
+    err_msg2 = re.escape("Index.to_series(): unsupported type for argument index: Set")
+    err_msg3 = re.escape(
+        "Index.to_series(): unsupported type for argument index: DictType"
+    )
+    err_msg4 = re.escape(
+        "Index.to_series(): unsupported type for argument index: MultiIndexType"
+    )
+    err_msg5 = re.escape(
+        "Index.to_series(): only constant string/int are supported for argument name"
+    )
+
+    I = pd.Index([1, 2, 3, 4, 5])
+    J = "ABCDE"
+    K = {6, 7, 8, 9, 10}
+    L = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5}
+    M = pd.MultiIndex.from_product([[1, 2], ["A", "B", "C"]])
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl1)(I, J)
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl1)(I, K)
+
+    with pytest.raises(BodoError, match=err_msg3):
+        bodo.jit(impl1)(I, L)
+
+    with pytest.raises(BodoError, match=err_msg4):
+        bodo.jit(impl1)(I, M)
+
+    with pytest.raises(BodoError, match=err_msg5):
+        bodo.jit(impl2)(I, ["A", "B", "C"])
+
+
+@pytest.mark.slow
+def test_index_to_frame_malformed():
+    def impl1(I):
+        return I.to_frame(name=["Chocolate", "Vanilla"])
+
+    def impl2(I):
+        return I.to_frame(index=len(I) > 4)
+
+    def impl3(I):
+        return I.to_frame(index=I)
+
+    def impl4(I):
+        return I.to_frame(name=("x", "y", "z"))
+
+    def impl5(I, n):
+        return I.to_frame(name=n)
+
+    err_msg1 = re.escape(
+        "Index.to_frame(): only constant string/int are supported for argument name"
+    )
+    err_msg2 = re.escape(
+        "Index.to_frame(): index argument must be a compile time constant"
+    )
+    err_msg3 = re.escape("Index.to_frame(): index argument must be a constant boolean")
+    err_msg4 = re.escape("MultiIndex.to_frame(): expected 2 names, not 3")
+    err_msg5 = re.escape(
+        "MultiIndex.to_frame(): only constant string/int list/tuple are supported for argument name"
+    )
+
+    I = pd.Index([1, 2, 3, 4, 5])
+    M = pd.MultiIndex.from_product([["A", "B", "C"], [1, 2, 3]])
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl1)(I)
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl2)(I)
+
+    with pytest.raises(BodoError, match=err_msg3):
+        bodo.jit(impl3)(I)
+
+    with pytest.raises(BodoError, match=err_msg4):
+        bodo.jit(impl4)(M)
+
+    with pytest.raises(BodoError, match=err_msg5):
+        bodo.jit(impl5)(M, ("i", "ii", "iii"))
+
+
+@pytest.mark.slow
 def test_interval_index_from_breaks():
     def impl():
         return pd.IntervalIndex.from_breaks([0, 1, 2, 3])
