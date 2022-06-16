@@ -1124,7 +1124,22 @@ class DistributedAnalysis:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                (bodo.libs.sklearn_ext.BodoModelSelectionKFoldType,),
+                bodo.libs.sklearn_ext.BodoModelSelectionKFoldType,
+            )
+        ):
+            # Not checking get_n_splits for KFold since it might not have a first arg
+            self._analyze_call_sklearn_cross_validators(
+                lhs, func_name, rhs, kws, array_dists
+            )
+            return
+
+        if (
+            func_name in {"split", "get_n_splits"}
+            and "bodo.libs.sklearn_ext" in sys.modules
+            and isinstance(func_mod, numba.core.ir.Var)
+            and isinstance(
+                self.typemap[func_mod.name],
+                bodo.libs.sklearn_ext.BodoModelSelectionLeavePOutType,
             )
         ):
             self._analyze_call_sklearn_cross_validators(
@@ -2335,7 +2350,7 @@ class DistributedAnalysis:
         self, lhs, func_name, rhs, kws, array_dists
     ):
         """
-        Analyze distribution of sklearn.model_selection.KFold functions.
+        Analyze distribution of sklearn.model_selection.KFold and LeavePOut functions.
         """
 
         if func_name in {"split"}:

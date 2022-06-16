@@ -12,9 +12,10 @@ import pandas as pd
 import pytest
 import scipy
 from pandas.testing import assert_frame_equal
+from scipy.special import comb
 from sklearn import datasets
 from sklearn.metrics import precision_score
-from sklearn.model_selection import KFold, train_test_split
+from sklearn.model_selection import KFold, LeavePOut, train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.preprocessing import (
     LabelEncoder,
@@ -649,6 +650,105 @@ def test_kfold_error():
     error_str = "number of splits n_splits=4 greater than the number of samples"
     with pytest.raises(ValueError, match=error_str):
         for train_idxs, test_idxs in dist_impl(_get_dist_arg(X), 4):
+            pass
+
+
+# ----------------------- LeavePOut -----------------------------
+
+
+@pytest.mark.parametrize(
+    "X, y, groups",
+    [
+        (
+            np.arange(100).reshape((20, 5)).astype(np.int64),
+            np.arange(20).astype(np.int64),
+            None,
+        ),
+        (
+            np.arange(110).reshape((22, 5)).astype(np.float64),
+            np.arange(22).astype(np.float64),
+            None,
+        ),
+        (
+            np.arange(100).reshape((20, 5)).astype(np.int64),
+            np.arange(20).astype(np.int64),
+            np.array([0, 1] * 10).astype(np.int64),
+        ),
+    ],
+)
+@pytest.mark.parametrize("p", [1, 2, 5])
+def test_leave_p_out(X, y, groups, p, memory_leak_check):
+    """Test sklearn.model_selection.LeavePOut's split method."""
+    # Compute expected number of splits
+    n_splits = int(comb(len(X), p, exact=True))
+
+    def test_split(X, y, groups, p):
+        m = LeavePOut(p=p)
+        out = m.split(X, y, groups)
+        return out
+
+    dist_impl = bodo.jit(distributed=["X", "y", "groups"])(test_split)
+    rep_impl = bodo.jit(replicated=True)(test_split)
+
+    # Test that all indices are returned in distributed split
+    test_idxs_dist = []
+    for train_idxs, test_idxs in dist_impl(
+        _get_dist_arg(X), _get_dist_arg(y), groups, p
+    ):
+        train_idxs = bodo.allgatherv(train_idxs)
+        test_idxs = bodo.allgatherv(test_idxs)
+        test_idxs_dist.append(test_idxs)
+
+        idxs = np.sort(np.concatenate((train_idxs, test_idxs), axis=0), axis=0)
+        assert_array_equal(idxs, np.arange(X.shape[0]))
+
+    assert n_splits == len(test_idxs_dist)
+
+    # Test that all indices are returned in replicated split
+    test_idxs_rep = []
+    for train_idxs, test_idxs in rep_impl(X, y, groups, p):
+        test_idxs_rep.append(test_idxs)
+
+        idxs = np.sort(np.concatenate((train_idxs, test_idxs), axis=0), axis=0)
+        assert_array_equal(idxs, np.arange(X.shape[0]))
+
+    assert n_splits == len(test_idxs_rep)
+
+    # Test that bodo's folds are equivalent to sklearn's
+    test_idxs_sklearn = []
+    for train_idxs, test_idxs in test_split(X, y, groups, p):
+        test_idxs_sklearn.append(test_idxs)
+
+    for dist_idxs, rep_idxs, sklearn_idxs in zip(
+        test_idxs_dist, test_idxs_rep, test_idxs_sklearn
+    ):
+        assert_array_equal(dist_idxs, sklearn_idxs)
+        assert_array_equal(rep_idxs, sklearn_idxs)
+
+    # Test that get_n_splits returns the correct number of folds
+    def test_n_splits(X):
+        m = LeavePOut(p=p)
+        out = m.get_n_splits(X)
+        return out
+
+    check_func(test_n_splits, (X,))
+
+
+def test_leave_p_out_error():
+    """Test error handling of KFold.split()"""
+
+    def test_split(X, p):
+        m = LeavePOut(p=p)
+        out = m.split(X)
+        return out
+
+    dist_impl = bodo.jit(distributed=["X"])(test_split)
+
+    # X has too few items for p=3
+    X = np.array([[1, 2], [3, 4], [5, 6]])
+    error_str = "p=3 must be strictly less than the number of samples"
+    with pytest.raises(ValueError, match=error_str):
+        for train_idxs, test_idxs in dist_impl(_get_dist_arg(X), 3):
             pass
 
 

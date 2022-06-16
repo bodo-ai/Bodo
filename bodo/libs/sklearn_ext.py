@@ -3,6 +3,7 @@ import itertools
 import numbers
 import types as pytypes
 import warnings
+from itertools import combinations
 
 import numba
 import numpy as np
@@ -31,6 +32,7 @@ from numba.extending import (
     unbox,
 )
 from scipy import stats  # noqa
+from scipy.special import comb
 from sklearn.exceptions import UndefinedMetricWarning
 from sklearn.metrics import hinge_loss, log_loss, mean_squared_error
 from sklearn.preprocessing import LabelBinarizer
@@ -4285,6 +4287,218 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
         return inverse_transformed_X
 
     return _preprocessing_max_abs_scaler_inverse_transform_impl
+
+
+# ----------------------------------------------------------------------------------------
+# ----------------------------------------LeavePOut---------------------------------------
+# Support for sklearn.model_selection.LeavePOut.
+
+
+class BodoModelSelectionLeavePOutType(types.Opaque):
+    def __init__(self):
+        super(BodoModelSelectionLeavePOutType, self).__init__(
+            name="BodoModelSelectionLeavePOutType"
+        )
+
+
+model_selection_leave_p_out_type = BodoModelSelectionLeavePOutType()
+types.model_selection_leave_p_out_type = model_selection_leave_p_out_type
+
+register_model(BodoModelSelectionLeavePOutType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.model_selection.LeavePOut)
+def typeof_model_selection_leave_p_out(val, c):
+    return model_selection_leave_p_out_type
+
+
+@box(BodoModelSelectionLeavePOutType)
+def box_model_selection_leave_p_out(typ, val, c):
+    # See note in box_random_forest_classiier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoModelSelectionLeavePOutType)
+def unbox_model_selection_leave_p_out(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+class BodoModelSelectionLeavePOutSplitType(types.Opaque):
+    """
+    Type for the generator that's returned by LeavePOut split().
+    """
+
+    def __init__(self):
+        super(BodoModelSelectionLeavePOutSplitType, self).__init__(
+            name="BodoModelSelectionLeavePOutSplitType"
+        )
+
+
+model_selection_leave_p_out_split_type = BodoModelSelectionLeavePOutSplitType()
+types.model_selection_leave_p_out_split_type = model_selection_leave_p_out_split_type
+
+register_model(BodoModelSelectionLeavePOutSplitType)(models.OpaqueModel)
+
+
+@box(BodoModelSelectionLeavePOutSplitType)
+def box_model_selection_leave_p_out_split(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoModelSelectionLeavePOutSplitType)
+def unbox_model_selection_leave_p_out_split(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload(sklearn.model_selection.LeavePOut, no_unliteral=True)
+def sklearn_model_selection_leave_p_out_overload(
+    p,
+):
+    """
+    Provide implementation for __init__ function of LeavePOut.
+    We simply call sklearn in objmode.
+    """
+
+    check_sklearn_version()
+
+    def _sklearn_model_selection_leave_p_out_impl(
+        p,
+    ):  # pragma: no cover
+
+        with numba.objmode(m="model_selection_leave_p_out_type"):
+            m = sklearn.model_selection.LeavePOut(
+                p=p,
+            )
+        return m
+
+    return _sklearn_model_selection_leave_p_out_impl
+
+
+def sklearn_model_selection_leave_p_out_split_dist_helper(m, X):
+    """
+    Distributed calculation of train/test split indices for LeavePOut.
+    We use sklearn on all the indices, then filter out the indices assigned
+    to each individual rank.
+    """
+    # Compute index offset of each rank
+    my_rank = bodo.get_rank()
+    nranks = bodo.get_size()
+    rank_data_len = np.empty(nranks, np.int64)
+    bodo.libs.distributed_api.allgather(rank_data_len, len(X))
+    if my_rank > 0:
+        rank_start = np.sum(rank_data_len[:my_rank])
+    else:
+        rank_start = 0
+    rank_end = rank_start + rank_data_len[my_rank]
+
+    # Compute total data size
+    global_data_size = np.sum(rank_data_len)
+
+    # Raise error if dataset is too small
+    if global_data_size <= m.p:
+        raise ValueError(
+            f"p={m.p} must be strictly less than the number of samples={global_data_size}"
+        )
+
+    # For all possible test set combinations, compute train and test indices
+    # that belong to the current rank.
+    # Since `combinations` returns deterministic and fixed-ordered output,
+    # in lexicographic ordering according to the order of the input iterable,
+    # this is safe to do in parallel on all ranks at once
+    local_indices = np.arange(rank_start, rank_end)
+    for combination in combinations(range(global_data_size), m.p):
+        test_index = np.array(combination)
+        test_index = test_index[test_index >= rank_start]
+        test_index = test_index[test_index < rank_end]
+
+        test_mask = np.zeros(len(X), dtype=bool)
+        test_mask[test_index - rank_start] = True
+
+        train_index = local_indices[np.logical_not(test_mask)]
+        yield train_index, test_index
+
+
+@overload_method(BodoModelSelectionLeavePOutType, "split", no_unliteral=True)
+def overload_model_selection_leave_p_out_split(
+    m,
+    X,
+    y=None,
+    groups=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """
+    Provide implementations for the split function, which is a generator.
+    In case input is replicated, we simply call sklearn,
+    else we use our native implementation.
+    """
+
+    if is_overload_true(_is_data_distributed):
+        # If distributed, then use native implementation
+        def _model_selection_leave_p_out_split_impl(
+            m, X, y=None, groups=None, _is_data_distributed=False
+        ):  # pragma: no cover
+
+            with numba.objmode(gen="model_selection_leave_p_out_split_type"):
+                gen = sklearn_model_selection_leave_p_out_split_dist_helper(m, X)
+            return gen
+
+    else:
+        # If replicated, then just call sklearn
+        def _model_selection_leave_p_out_split_impl(
+            m, X, y=None, groups=None, _is_data_distributed=False
+        ):  # pragma: no cover
+
+            with numba.objmode(gen="model_selection_leave_p_out_split_type"):
+                gen = m.split(X, y=y, groups=groups)
+            return gen
+
+    return _model_selection_leave_p_out_split_impl
+
+
+@overload_method(BodoModelSelectionLeavePOutType, "get_n_splits", no_unliteral=True)
+def overload_model_selection_leave_p_out_get_n_splits(
+    m,
+    X,
+    y=None,
+    groups=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """
+    Provide implementations for the get_n_splits function.
+    """
+
+    if is_overload_true(_is_data_distributed):
+        # If distributed, then use native implementation
+        def _model_selection_leave_p_out_get_n_splits_impl(
+            m, X, y=None, groups=None, _is_data_distributed=False
+        ):  # pragma: no cover
+
+            with numba.objmode(out="int64"):
+                global_data_size = bodo.libs.distributed_api.dist_reduce(
+                    len(X), np.int32(Reduce_Type.Sum.value)
+                )
+                out = int(comb(global_data_size, m.p, exact=True))
+            return out
+
+    else:
+        # If replicated, then just call sklearn
+        def _model_selection_leave_p_out_get_n_splits_impl(
+            m, X, y=None, groups=None, _is_data_distributed=False
+        ):  # pragma: no cover
+
+            with numba.objmode(out="int64"):
+                out = m.get_n_splits(X)
+
+            return out
+
+    return _model_selection_leave_p_out_get_n_splits_impl
 
 
 # ----------------------------------------------------------------------------------------
