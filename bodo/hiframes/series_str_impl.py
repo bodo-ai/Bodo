@@ -1131,39 +1131,51 @@ def overload_str_method_extract(S_str, pat, flags=0, expand=True):
     columns, regex = _get_column_names_from_regex(pat, flags, "extract")
     n_cols = len(columns)
 
-    # generate one loop for finding character count and another for computation
-    # TODO: avoid multiple loops if possible, or even avoid inlined loops if needed
-    func_text = "def impl(S_str, pat, flags=0, expand=True):\n"
-    func_text += "  regex = re.compile(pat, flags=flags)\n"
-    func_text += "  S = S_str._obj\n"
-    func_text += "  str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-    func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
-    func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
-    func_text += "  numba.parfors.parfor.init_prange()\n"
-    func_text += "  n = len(str_arr)\n"
-    for i in range(n_cols):
-        func_text += "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n".format(
-            i
-        )
-    func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
-    func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
-    for i in range(n_cols):
-        func_text += "          out_arr_{}[j] = ''\n".format(i)
-        func_text += "          bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(
-            i
-        )
-    func_text += "      else:\n"
-    func_text += "          m = regex.search(str_arr[j])\n"
-    func_text += "          if m:\n"
-    func_text += "            g = m.groups()\n"
-    for i in range(n_cols):
-        func_text += "            out_arr_{0}[j] = g[{0}]\n".format(i)
-    func_text += "          else:\n"
-    for i in range(n_cols):
-        func_text += "            out_arr_{}[j] = ''\n".format(i)
-        func_text += (
-            "            bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
-        )
+    # check if the array is dictionary encoded
+    if S_str.stype.data == bodo.dict_str_arr_type:
+        # optimized version for dictionary encoded arrays
+        func_text = "def impl(S_str, pat, flags=0, expand=True):\n"
+        func_text += "  S = S_str._obj\n"
+        func_text += "  arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        func_text += f"  out_arr_list = bodo.libs.dict_arr_ext.str_extract(arr, pat, flags, {n_cols})\n"
+        for i in range(n_cols):
+            func_text += f"  out_arr_{i} = out_arr_list[{i}]\n"
+    else:
+        # generate one loop for finding character count and another for computation
+        # TODO: avoid multiple loops if possible, or even avoid inlined loops if needed
+        func_text = "def impl(S_str, pat, flags=0, expand=True):\n"
+        func_text += "  regex = re.compile(pat, flags=flags)\n"
+        func_text += "  S = S_str._obj\n"
+        func_text += "  str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        func_text += "  n = len(str_arr)\n"
+        for i in range(n_cols):
+            func_text += "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n".format(
+                i
+            )
+        func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
+        func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
+        for i in range(n_cols):
+            func_text += "          out_arr_{}[j] = ''\n".format(i)
+            func_text += (
+                "          bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
+            )
+        func_text += "      else:\n"
+        func_text += "          m = regex.search(str_arr[j])\n"
+        func_text += "          if m:\n"
+        func_text += "            g = m.groups()\n"
+        for i in range(n_cols):
+            func_text += "            out_arr_{0}[j] = g[{0}]\n".format(i)
+        func_text += "          else:\n"
+        for i in range(n_cols):
+            func_text += "            out_arr_{}[j] = ''\n".format(i)
+            func_text += (
+                "            bodo.libs.array_kernels.setna(out_arr_{}, j)\n".format(i)
+            )
 
     # no expand case
     if is_overload_false(expand) and regex.groups == 1:
@@ -1201,76 +1213,97 @@ def overload_str_method_extractall(S_str, pat, flags=0):
     columns, _ = _get_column_names_from_regex(pat, flags, "extractall")
     n_cols = len(columns)
     is_index_string = isinstance(S_str.stype.index, StringIndexType)
+    is_multi_group = n_cols > 1
+    multi_group = "_multi" if is_multi_group else ""
 
-    # generate one loop for finding character count and another for computation
-    # TODO: avoid multiple loops if possible, or even avoid inlined loops if needed
-    func_text = "def impl(S_str, pat, flags=0):\n"
-    func_text += "  regex = re.compile(pat, flags=flags)\n"
-    func_text += "  S = S_str._obj\n"
-    func_text += "  str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
-    func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
-    func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
-    # TODO: support MultiIndex in input Series
-    func_text += "  index_arr = bodo.utils.conversion.index_to_array(index)\n"
-    func_text += "  index_name = bodo.hiframes.pd_index_ext.get_index_name(index)\n"
-    # TODO: string index char count
-    func_text += "  numba.parfors.parfor.init_prange()\n"
-    func_text += "  n = len(str_arr)\n"
-    # using a list wrapper for integer to avoid reduction machinery (we need local size)
-    func_text += "  out_n_l = [0]\n"
-    for i in range(n_cols):
-        func_text += "  num_chars_{} = 0\n".format(i)
-    if is_index_string:
-        func_text += "  index_num_chars = 0\n"
-    func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-    if is_index_string:
-        func_text += "      index_num_chars += get_utf8_size(index_arr[i])\n"
-    func_text += "      if bodo.libs.array_kernels.isna(str_arr, i):\n"
-    func_text += "          continue\n"  # extractall just skips NAs
-    func_text += "      m = regex.findall(str_arr[i])\n"
-    func_text += "      out_n_l[0] += len(m)\n"
-    for i in range(n_cols):
-        func_text += "      l_{} = 0\n".format(i)
-    func_text += "      for s in m:\n"
-    for i in range(n_cols):
-        func_text += "        l_{} += get_utf8_size(s{})\n".format(
-            i, "[{}]".format(i) if n_cols > 1 else ""
+    # check if the string array is dictionary encoded
+    if S_str.stype.data == bodo.dict_str_arr_type:
+        # optimized version for dictionary encoded arrays
+        func_text = "def impl(S_str, pat, flags=0):\n"
+        func_text += "  S = S_str._obj\n"
+        func_text += "  arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        func_text += "  index_arr = bodo.utils.conversion.index_to_array(index)\n"
+        func_text += "  index_name = bodo.hiframes.pd_index_ext.get_index_name(index)\n"
+        func_text += "  regex = re.compile(pat, flags=flags)\n"
+        func_text += "  out_ind_arr, out_match_arr, out_arr_list = "
+        func_text += f"bodo.libs.dict_arr_ext.str_extractall{multi_group}(\n"
+        func_text += f"arr, regex, {n_cols}, index_arr)\n"
+        for i in range(n_cols):
+            func_text += f"  out_arr_{i} = out_arr_list[{i}]\n"
+        func_text += (
+            "  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(\n"
         )
-    for i in range(n_cols):
-        func_text += "      num_chars_{0} += l_{0}\n".format(i)
-    # TODO: refactor with arr_builder
-    # using a sentinel function to specify that the arrays are local and no need for
-    # distributed transformation
-    func_text += (
-        "  out_n = bodo.libs.distributed_api.local_alloc_size(out_n_l[0], str_arr)\n"
-    )
-    for i in range(n_cols):
-        func_text += "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, num_chars_{0})\n".format(
-            i
-        )
-    if is_index_string:
-        func_text += "  out_ind_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, index_num_chars)\n"
+        func_text += "    (out_ind_arr, out_match_arr), (index_name, 'match'))\n"
     else:
-        func_text += "  out_ind_arr = np.empty(out_n, index_arr.dtype)\n"
-    func_text += "  out_match_arr = np.empty(out_n, np.int64)\n"
-    func_text += "  out_ind = 0\n"
-    func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
-    func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
-    func_text += "          continue\n"  # extractall just skips NAs
-    func_text += "      m = regex.findall(str_arr[j])\n"
-    func_text += "      for k, s in enumerate(m):\n"
-    for i in range(n_cols):
-        # using set_arr_local() to avoid distributed transformation of setitem
-        func_text += "        bodo.libs.distributed_api.set_arr_local(out_arr_{}, out_ind, s{})\n".format(
-            i, "[{}]".format(i) if n_cols > 1 else ""
+        # generate one loop for finding character count and another for computation
+        # TODO: avoid multiple loops if possible, or even avoid inlined loops if needed
+        func_text = "def impl(S_str, pat, flags=0):\n"
+        func_text += "  regex = re.compile(pat, flags=flags)\n"
+        func_text += "  S = S_str._obj\n"
+        func_text += "  str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+        func_text += "  index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+        func_text += "  name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+        # TODO: support MultiIndex in input Series
+        func_text += "  index_arr = bodo.utils.conversion.index_to_array(index)\n"
+        func_text += "  index_name = bodo.hiframes.pd_index_ext.get_index_name(index)\n"
+        # TODO: string index char count
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        func_text += "  n = len(str_arr)\n"
+        # using a list wrapper for integer to avoid reduction machinery (we need local size)
+        func_text += "  out_n_l = [0]\n"
+        for i in range(n_cols):
+            func_text += "  num_chars_{} = 0\n".format(i)
+        if is_index_string:
+            func_text += "  index_num_chars = 0\n"
+        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+        if is_index_string:
+            func_text += "      index_num_chars += get_utf8_size(index_arr[i])\n"
+        func_text += "      if bodo.libs.array_kernels.isna(str_arr, i):\n"
+        func_text += "          continue\n"  # extractall just skips NAs
+        func_text += "      m = regex.findall(str_arr[i])\n"
+        func_text += "      out_n_l[0] += len(m)\n"
+        for i in range(n_cols):
+            func_text += "      l_{} = 0\n".format(i)
+        func_text += "      for s in m:\n"
+        for i in range(n_cols):
+            func_text += "        l_{} += get_utf8_size(s{})\n".format(
+                i, "[{}]".format(i) if n_cols > 1 else ""
+            )
+        for i in range(n_cols):
+            func_text += "      num_chars_{0} += l_{0}\n".format(i)
+        # TODO: refactor with arr_builder
+        # using a sentinel function to specify that the arrays are local and no need for
+        # distributed transformation
+        func_text += "  out_n = bodo.libs.distributed_api.local_alloc_size(out_n_l[0], str_arr)\n"
+        for i in range(n_cols):
+            func_text += "  out_arr_{0} = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, num_chars_{0})\n".format(
+                i
+            )
+        if is_index_string:
+            func_text += "  out_ind_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(out_n, index_num_chars)\n"
+        else:
+            func_text += "  out_ind_arr = np.empty(out_n, index_arr.dtype)\n"
+        func_text += "  out_match_arr = np.empty(out_n, np.int64)\n"
+        func_text += "  out_ind = 0\n"
+        func_text += "  for j in numba.parfors.parfor.internal_prange(n):\n"
+        func_text += "      if bodo.libs.array_kernels.isna(str_arr, j):\n"
+        func_text += "          continue\n"  # extractall just skips NAs
+        func_text += "      m = regex.findall(str_arr[j])\n"
+        func_text += "      for k, s in enumerate(m):\n"
+        for i in range(n_cols):
+            # using set_arr_local() to avoid distributed transformation of setitem
+            func_text += "        bodo.libs.distributed_api.set_arr_local(out_arr_{}, out_ind, s{})\n".format(
+                i, "[{}]".format(i) if n_cols > 1 else ""
+            )
+        func_text += "        bodo.libs.distributed_api.set_arr_local(out_ind_arr, out_ind, index_arr[j])\n"
+        func_text += "        bodo.libs.distributed_api.set_arr_local(out_match_arr, out_ind, k)\n"
+        func_text += "        out_ind += 1\n"
+        func_text += (
+            "  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(\n"
         )
-    func_text += "        bodo.libs.distributed_api.set_arr_local(out_ind_arr, out_ind, index_arr[j])\n"
-    func_text += (
-        "        bodo.libs.distributed_api.set_arr_local(out_match_arr, out_ind, k)\n"
-    )
-    func_text += "        out_ind += 1\n"
-    func_text += "  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(\n"
-    func_text += "    (out_ind_arr, out_match_arr), (index_name, 'match'))\n"
+        func_text += "    (out_ind_arr, out_match_arr), (index_name, 'match'))\n"
 
     # TODO: support dead code elimination with local distribution sentinels
     data_args = ", ".join("out_arr_{}".format(i) for i in range(n_cols))
