@@ -454,6 +454,7 @@ def check_func_1D(
 
     # only rank 0 should check if gatherv() called on output
     passed = 1
+
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
             bodo_output,
@@ -513,6 +514,7 @@ def check_func_1D_var(
         bodo_output.columns.name = None
     if reorder_columns:
         bodo_output.sort_index(axis=1, inplace=True)
+
     passed = 1
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(

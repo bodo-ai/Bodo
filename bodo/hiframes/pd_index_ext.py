@@ -51,7 +51,9 @@ from bodo.utils.typing import (
     dtype_to_array_type,
     get_overload_const_func,
     get_overload_const_int,
+    get_overload_const_list,
     get_overload_const_str,
+    get_overload_const_tuple,
     get_udf_error_msg,
     get_udf_out_arr_type,
     get_val_type_maybe_str_literal,
@@ -60,8 +62,10 @@ from bodo.utils.typing import (
     is_iterable_type,
     is_overload_bool,
     is_overload_constant_int,
+    is_overload_constant_list,
     is_overload_constant_nan,
     is_overload_constant_str,
+    is_overload_constant_tuple,
     is_overload_false,
     is_overload_none,
     is_overload_true,
@@ -4250,6 +4254,336 @@ def overload_nbytes(I):
         return _impl_nbytes
 
 
+@overload_method(NumericIndexType, "to_series", inline="always")
+@overload_method(DatetimeIndexType, "to_series", inline="always")
+@overload_method(TimedeltaIndexType, "to_series", inline="always")
+@overload_method(RangeIndexType, "to_series", inline="always")
+@overload_method(StringIndexType, "to_series", inline="always")
+@overload_method(BinaryIndexType, "to_series", inline="always")
+@overload_method(CategoricalIndexType, "to_series", inline="always")
+def overload_index_to_series(I, index=None, name=None):
+    """Supports pd.Index.to_series() on tagged Index types.
+
+    Args:
+        I (pd.Index): The Index that is being converted to a Series.
+        index (iterable, optional): The index for the new Series. Can be an Index,
+        list, tuple, or Series. If not provided, uses I as the index. Defaults to None.
+        name (string, optional): the name of the new Series. If not provided, uses
+        the name of I. Defaults to None.
+
+    Returns:
+        pd.Series: a Series with the Index values as its values
+    """
+
+    if not (
+        is_overload_constant_str(name)
+        or is_overload_constant_int(name)
+        or is_overload_none(name)
+    ):
+        raise_bodo_error(
+            f"Index.to_series(): only constant string/int are supported for argument name"
+        )
+
+    if is_overload_none(name):
+        name_str = "bodo.hiframes.pd_index_ext.get_index_name(I)"
+    else:
+        name_str = "name"
+
+    func_text = "def impl(I, index=None, name=None):\n"
+    func_text += "    data = bodo.utils.conversion.index_to_array(I)\n"
+    if is_overload_none(index):
+        func_text += "    new_index = I\n"
+    else:
+        if is_pd_index_type(index):
+            func_text += "    new_index = index\n"
+        elif isinstance(index, SeriesType):
+            func_text += "    arr = bodo.utils.conversion.coerce_to_array(index)\n"
+            func_text += (
+                "    index_name = bodo.hiframes.pd_series_ext.get_series_name(index)\n"
+            )
+            func_text += "    new_index = bodo.utils.conversion.index_from_array(arr, index_name)\n"
+        elif bodo.utils.utils.is_array_typ(index, False):
+            func_text += (
+                "    new_index = bodo.utils.conversion.index_from_array(index)\n"
+            )
+        elif isinstance(index, (types.List, types.BaseTuple)):
+            func_text += "    arr = bodo.utils.conversion.coerce_to_array(index)\n"
+            func_text += "    new_index = bodo.utils.conversion.index_from_array(arr)\n"
+        else:
+            raise_bodo_error(
+                f"Index.to_series(): unsupported type for argument index: {type(index).__name__}"
+            )
+
+    func_text += f"    new_name = {name_str}\n"
+    func_text += (
+        "    return bodo.hiframes.pd_series_ext.init_series(data, new_index, new_name)"
+    )
+    loc_vars = {}
+    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+    impl = loc_vars["impl"]
+
+    return impl
+
+
+@overload_method(NumericIndexType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(DatetimeIndexType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(TimedeltaIndexType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(RangeIndexType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(StringIndexType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(BinaryIndexType, "to_frame", inline="always", no_unliteral=True)
+@overload_method(CategoricalIndexType, "to_frame", inline="always", no_unliteral=True)
+def overload_index_to_frame(I, index=True, name=None):
+    """Supports pd.Index.to_frame() on tagged Index types.
+
+    Args:
+        I (pd.Index): the Index that is being converted to a DataFrame
+        index (bool, optional): if True, I is also the Index of the new DataFrame.
+        If False, the DataFrame's Index is a RangeIndex. Defaults to True.
+        name (string, optional): if provided, the name of the column of the new
+        DataFrame. If not provided, uses the name of the Index. If the Index's
+        name is also None, uses 0. Defaults to None.
+
+    Returns:
+        pd.DataFrame: a DataFrame with the Index's values as its only column.
+    """
+
+    if is_overload_true(index):
+        index_str = "I"
+    elif is_overload_false(index):
+        index_str = "bodo.hiframes.pd_index_ext.init_range_index(0, len(I), 1, None)"
+    elif not isinstance(index, types.Boolean):
+        raise_bodo_error("Index.to_frame(): index argument must be a constant boolean")
+    else:
+        raise_bodo_error(
+            "Index.to_frame(): index argument must be a compile time constant"
+        )
+
+    func_text = "def impl(I, index=True, name=None):\n"
+    func_text += "    data = bodo.utils.conversion.index_to_array(I)\n"
+    func_text += f"    new_index = {index_str}\n"
+
+    # If no name provided and the Index itself has no name, the column name is 0
+    if is_overload_none(name) and I.name_typ == types.none:
+        columns = ColNamesMetaType((0,))
+
+    # Otherwise, the column name is either the name provided or the name of the Index
+    else:
+        if is_overload_none(name):
+            columns = ColNamesMetaType((I.name_typ,))
+        elif is_overload_constant_str(name):
+            columns = ColNamesMetaType((get_overload_const_str(name),))
+        elif is_overload_constant_int(name):
+            columns = ColNamesMetaType((get_overload_const_int(name),))
+        else:
+            raise_bodo_error(
+                f"Index.to_frame(): only constant string/int are supported for argument name"
+            )
+
+    func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe((data,), new_index, __col_name_meta_value)\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "np": np,
+            "__col_name_meta_value": columns,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+
+    return impl
+
+
+@overload_method(MultiIndexType, "to_frame", inline="always", no_unliteral=True)
+def overload_multi_index_to_frame(I, index=True, name=None):
+    """Supports pd.Index.to_frame() for MultiIndex
+
+    Args:
+        I (pd.Index): the Index that is being converted to a DataFrame
+        index (bool, optional): if True, I is also the Index of the new DataFrame.
+        If False, the DataFrame's Index is a RangeIndex. Defaults to True.
+        name (string list, optional): if provided, the names of the columns of the
+        new DataFrame. If not provided, uses the name of the Index. If the Index's
+        names is also None, uses [0, 1, ...]. Defaults to None.
+
+    Returns:
+        pd.DataFrame: a DataFrame with each column of the Index as a column
+    """
+
+    if is_overload_true(index):
+        index_str = "I"
+    elif is_overload_false(index):
+        index_str = "bodo.hiframes.pd_index_ext.init_range_index(0, len(I), 1, None)"
+    elif not isinstance(index, types.Boolean):
+        raise_bodo_error(
+            "MultiIndex.to_frame(): index argument must be a constant boolean"
+        )
+    else:
+        raise_bodo_error(
+            "MultiIndex.to_frame(): index argument must be a compile time constant"
+        )
+
+    func_text = "def impl(I, index=True, name=None):\n"
+    func_text += "    data = bodo.hiframes.pd_index_ext.get_index_data(I)\n"
+    func_text += f"    new_index = {index_str}\n"
+
+    # If no name provided and the Index itself has no name, the column names
+    # are 0...n-1
+    n_fields = len(I.array_types)
+    if is_overload_none(name) and I.names_typ == (types.none,) * n_fields:
+        columns = ColNamesMetaType(tuple(range(n_fields)))
+
+    # Otherwise, the column name is either the name provided or the name of the Index
+    else:
+
+        if is_overload_none(name):
+            columns = ColNamesMetaType(I.names_typ)
+        else:
+            if is_overload_constant_tuple(name) or is_overload_constant_list(name):
+                if is_overload_constant_list(name):
+                    names = tuple(get_overload_const_list(name))
+                else:
+                    names = get_overload_const_tuple(name)
+                if n_fields != len(names):
+                    raise_bodo_error(
+                        f"MultiIndex.to_frame(): expected {n_fields} names, not {len(names)}"
+                    )
+                if all(
+                    is_overload_constant_str(v) or is_overload_constant_int(v)
+                    for v in names
+                ):
+                    columns = ColNamesMetaType(names)
+                else:
+                    raise_bodo_error(
+                        "MultiIndex.to_frame(): only constant string/int list/tuple are supported for argument name"
+                    )
+            else:
+                raise_bodo_error(
+                    "MultiIndex.to_frame(): only constant string/int list/tuple are supported for argument name"
+                )
+
+    func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(data, new_index, __col_name_meta_value,)\n"
+    loc_vars = {}
+    exec(
+        func_text, {"bodo": bodo, "np": np, "__col_name_meta_value": columns}, loc_vars
+    )
+    impl = loc_vars["impl"]
+
+    return impl
+
+
+@overload_method(NumericIndexType, "to_numpy", inline="always")
+@overload_method(DatetimeIndexType, "to_numpy", inline="always")
+@overload_method(TimedeltaIndexType, "to_numpy", inline="always")
+@overload_method(RangeIndexType, "to_numpy", inline="always")
+@overload_method(StringIndexType, "to_numpy", inline="always")
+@overload_method(BinaryIndexType, "to_numpy", inline="always")
+@overload_method(CategoricalIndexType, "to_numpy", inline="always")
+@overload_method(IntervalIndexType, "to_numpy", inline="always")
+def overload_index_to_numpy(I, dtype=None, copy=False, na_value=None):
+    """Supports pd.Index.to_numpy() on tagged Index types.
+
+    Args:
+        I (pd.Index): the Index that is being converted to a numpy array.
+        dtype (str or np.dtype, optional): not supported. Defaults to None.
+        copy (bool, optional): if True, guarantees that the returned array
+        does not alias to the underlying array of the index. Defaults to False.
+        na_value (any, optional): not supported Defaults to None.
+
+    Returns:
+        np.ndarray: a numpy array with the same underlying values as I.
+    """
+
+    unsupported_args = dict(dtype=dtype, na_value=na_value)
+    arg_defaults = dict(dtype=None, na_value=None)
+    check_unsupported_args(
+        "Index.to_numpy",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    if not is_overload_bool(copy):
+        raise_bodo_error("Index.to_numpy(): copy argument must be a boolean")
+
+    if isinstance(I, RangeIndexType):
+
+        def impl(I, dtype=None, copy=False, na_value=None):  # pragma: no cover
+            return np.arange(I._start, I._stop, I._step)
+
+        return impl
+
+    # Force copy to be True or False at runtime for other Index types (RangeIndex
+    # is always a copy so it doesn't matter)
+
+    if is_overload_true(copy):
+
+        def impl(I, dtype=None, copy=False, na_value=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.get_index_data(I).copy()
+
+        return impl
+
+    if is_overload_false(copy):
+
+        def impl(I, dtype=None, copy=False, na_value=None):  # pragma: no cover
+            return bodo.hiframes.pd_index_ext.get_index_data(I)
+
+        return impl
+
+    def impl(I, dtype=None, copy=False, na_value=None):  # pragma: no cover
+        data = bodo.hiframes.pd_index_ext.get_index_data(I)
+        return data.copy() if copy else data
+
+    return impl
+
+
+@overload_method(NumericIndexType, "to_list", inline="always")
+@overload_method(RangeIndexType, "to_list", inline="always")
+@overload_method(StringIndexType, "to_list", inline="always")
+@overload_method(BinaryIndexType, "to_list", inline="always")
+@overload_method(CategoricalIndexType, "to_list", inline="always")
+@overload_method(DatetimeIndexType, "to_list", inline="always")
+@overload_method(TimedeltaIndexType, "to_list", inline="always")
+@overload_method(NumericIndexType, "tolist", inline="always")
+@overload_method(RangeIndexType, "tolist", inline="always")
+@overload_method(StringIndexType, "tolist", inline="always")
+@overload_method(BinaryIndexType, "tolist", inline="always")
+@overload_method(CategoricalIndexType, "tolist", inline="always")
+@overload_method(DatetimeIndexType, "tolist", inline="always")
+@overload_method(TimedeltaIndexType, "tolist", inline="always")
+def overload_index_to_list(I):
+    """Supported pd.Index.to_list() on tagged Index types
+
+    Args:
+        I (pd.Index): the Index being converted to a list
+
+    Returns:
+        list: values of the Index in a Python list
+    """
+
+    if isinstance(I, RangeIndexType):
+
+        def impl(I):  # pragma: no cover
+            l = list()
+            for i in range(I._start, I._stop, I.step):
+                l.append(i)
+            return l
+
+        return impl
+
+    # Supported for all Index types that have a supported iterator
+    def impl(I):  # pragma: no cover
+        l = list()
+        for i in range(len(I)):
+            l.append(I[i])
+        return l
+
+    return impl
+
+
 @overload_attribute(NumericIndexType, "T")
 @overload_attribute(DatetimeIndexType, "T")
 @overload_attribute(TimedeltaIndexType, "T")
@@ -5593,12 +5927,7 @@ index_unsupported_methods = [
     "str",
     "symmetric_difference",
     "to_flat_index",
-    "to_frame",
-    "to_list",
     "to_native_types",
-    "to_numpy",
-    "to_series",
-    "tolist",
     "transpose",
     "union",
     "value_counts",
@@ -5685,6 +6014,10 @@ interval_idx_unsupported_methods = [
     "where",
     "putmask",
     "nunique",
+    "to_series",
+    "to_frame",
+    "to_list",
+    "tolist",
     "repeat",
     "min",
     "max",
@@ -5734,6 +6067,10 @@ multi_index_unsupported_methods = [
     "where",
     "putmask",
     "nunique",
+    "to_series",
+    "to_list",
+    "tolist",
+    "to_numpy",
     "repeat",
     "min",
     "max",
@@ -5822,7 +6159,14 @@ period_index_unsupported_methods = [
     "to_timestamp",
     "isin",
     "unique",
+    "to_series",
+    "to_frame",
+    "to_numpy",
+    "to_list",
+    "tolist",
     "sort_values",
+    "where",
+    "putmask",
     "repeat",
     "all",
     "any",

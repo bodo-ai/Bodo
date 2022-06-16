@@ -340,6 +340,7 @@ def is_array_typ(var_typ, include_index_series=True):
             bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type,
             boolean_array,
             bodo.libs.str_ext.random_access_string_array,
+            bodo.libs.interval_arr_ext.IntervalArrayType,
         )
         or isinstance(
             var_typ,
