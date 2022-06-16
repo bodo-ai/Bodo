@@ -3182,6 +3182,263 @@ def is_pd_index_type(t):
     )
 
 
+def _verify_setop_compatible(func_name, I, other):
+    """Verifies that index I and value other can be combined with the
+    set operation provided.
+
+    Args:
+        func_name (string): union, intersection, difference or symmetric difference
+        I (pd.Index): the Index that is to be combined with other
+        other (any): the value whose elements are trying to be combined with
+        I using a set operation
+
+    Raises:
+        BodoError: if other is unsupported or incompatible with I for set operations
+    """
+
+    if not is_pd_index_type(other) and not bodo.utils.utils.is_array_typ(other, True):
+        raise BodoError(
+            f"pd.Index.{func_name}(): unsupported type for argument other: {other}"
+        )
+
+    # Verify that the two values can be combined
+    # TODO: make more permissive, potentially with get_common_scalar_dtype [BE-3017]
+    t1 = I.dtype if not isinstance(I, RangeIndexType) else types.int64
+    t2 = other.dtype if not isinstance(other, RangeIndexType) else types.int64
+    if t1 != t2:
+        raise BodoError(f"Index.{func_name}(): incompatible types {t1} and {t2}")
+
+
+@overload_method(NumericIndexType, "union", inline="always")
+@overload_method(StringIndexType, "union", inline="always")
+@overload_method(BinaryIndexType, "union", inline="always")
+@overload_method(DatetimeIndexType, "union", inline="always")
+@overload_method(TimedeltaIndexType, "union", inline="always")
+@overload_method(RangeIndexType, "union", inline="always")
+def overload_index_union(I, other, sort=None):
+    """Adds support for a modified version of pd.Index.union() on tagged Index types.
+
+    Args:
+        I (pd.Index): the first index in the union
+        other (iterable with matching type): array/Index/Series with values that
+        are union-ed with I. Must have an underlying type that can be
+        reconciled with the type of I.
+        sort (boolean, optional): not supported. Defaults to None.
+
+    Raises:
+        BodoError: if I and other are not compatible for a union
+
+    Returns:
+        pd.Index: the elements of both indices, in the order that they first
+        ocurred, without any duplicates.
+    """
+    unsupported_args = dict(sort=sort)
+    default_args = dict(sort=None)
+    check_unsupported_args(
+        "Index.union",
+        unsupported_args,
+        default_args,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    _verify_setop_compatible("union", I, other)
+
+    constructor = (
+        get_index_constructor(I)
+        if not isinstance(I, RangeIndexType)
+        else init_numeric_index
+    )
+
+    # Recycles logic from bodo.libs.array_kernels.overload_union1d: concatenates
+    # the two underlying arrays and obtains the unique values from the result
+    def impl(I, other, sort=None):  # pragma: no cover
+        A1 = bodo.utils.conversion.coerce_to_array(I)
+        A2 = bodo.utils.conversion.coerce_to_array(other)
+        merged_array = bodo.libs.array_kernels.concat([A1, A2])
+        unique_array = bodo.libs.array_kernels.unique(merged_array)
+        return constructor(unique_array, None)
+
+    return impl
+
+
+@overload_method(NumericIndexType, "intersection", inline="always")
+@overload_method(StringIndexType, "intersection", inline="always")
+@overload_method(BinaryIndexType, "intersection", inline="always")
+@overload_method(DatetimeIndexType, "intersection", inline="always")
+@overload_method(TimedeltaIndexType, "intersection", inline="always")
+@overload_method(RangeIndexType, "intersection", inline="always")
+def overload_index_intersection(I, other, sort=None):
+    """Adds support for a modified version of pd.Index.intersection() on tagged Index types.
+
+    Args:
+        I (pd.Index): the first index in the intersection
+        other (iterable with matching type): array/Index/Series with values that
+        are intersection-ed with I. Must have an underlying type that can be
+        reconciled with the type of I.
+        sort (boolean, optional): not supported. Defaults to None.
+
+    Raises:
+        BodoError: if I and other are not compatible for a intersection
+
+    Returns:
+        pd.Index: the elements of both indices, in sorted order.
+    """
+    unsupported_args = dict(sort=sort)
+    default_args = dict(sort=None)
+    check_unsupported_args(
+        "Index.intersection",
+        unsupported_args,
+        default_args,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    _verify_setop_compatible("intersection", I, other)
+
+    constructor = (
+        get_index_constructor(I)
+        if not isinstance(I, RangeIndexType)
+        else init_numeric_index
+    )
+
+    # Recycles logic from bodo.libs.array_kernels.overload_intersect1d: obtains
+    # the unique values from each underlying array, combines and sorts them,
+    # and keeps each value that is the same as the value after it (since that
+    # means it appeared in both of the unique arrays)
+    def impl(I, other, sort=None):  # pragma: no cover
+        A1 = bodo.utils.conversion.coerce_to_array(I)
+        A2 = bodo.utils.conversion.coerce_to_array(other)
+        unique_A1 = bodo.libs.array_kernels.unique(A1)
+        unique_A2 = bodo.libs.array_kernels.unique(A2)
+        merged_array = bodo.libs.array_kernels.concat([unique_A1, unique_A2])
+        sorted_array = pd.Series(merged_array).sort_values().values
+        mask = bodo.libs.array_kernels.intersection_mask(sorted_array)
+        return constructor(sorted_array[mask], None)
+
+    return impl
+
+
+@overload_method(NumericIndexType, "difference", inline="always")
+@overload_method(StringIndexType, "difference", inline="always")
+@overload_method(BinaryIndexType, "difference", inline="always")
+@overload_method(DatetimeIndexType, "difference", inline="always")
+@overload_method(TimedeltaIndexType, "difference", inline="always")
+@overload_method(RangeIndexType, "difference", inline="always")
+def overload_index_difference(I, other, sort=None):
+    """Adds support for a modified version of pd.Index.difference() on tagged Index types.
+
+    Args:
+        I (pd.Index): the first index in the difference
+        other (iterable with matching type): array/Index/Series with values that
+        are differenced from I. Must have an underlying type that can be
+        reconciled with the type of I.
+        sort (boolean, optional): not supported. Defaults to None.
+
+    Raises:
+        BodoError: if I and other are not compatible for a difference
+
+    Returns:
+        pd.Index: the elements I that are not in other, in sorted order.
+    """
+    unsupported_args = dict(sort=sort)
+    default_args = dict(sort=None)
+    check_unsupported_args(
+        "Index.difference",
+        unsupported_args,
+        default_args,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    _verify_setop_compatible("difference", I, other)
+
+    constructor = (
+        get_index_constructor(I)
+        if not isinstance(I, RangeIndexType)
+        else init_numeric_index
+    )
+
+    # Modifies logic from overload_index_isin: obtains the unique values from
+    # the LHS, uses the isin utility to create a mask of all values from the
+    # RHS that are in the LHS array, uses the inverse mask to drop those elems
+    def impl(I, other, sort=None):  # pragma: no cover
+        A1 = bodo.utils.conversion.coerce_to_array(I)
+        A2 = bodo.utils.conversion.coerce_to_array(other)
+        # Obtains the unique values from A2 for consistency with symmetric_difference
+        # TODO: investigate whether this is better or worse for performance
+        # than just calling array_isin with A2.
+        unique_A1 = bodo.libs.array_kernels.unique(A1)
+        unique_A2 = bodo.libs.array_kernels.unique(A2)
+        mask = np.empty(len(unique_A1), np.bool_)
+        bodo.libs.array.array_isin(mask, unique_A1, unique_A2, False)
+        return constructor(unique_A1[~mask], None)
+
+    return impl
+
+
+@overload_method(NumericIndexType, "symmetric_difference", inline="always")
+@overload_method(StringIndexType, "symmetric_difference", inline="always")
+@overload_method(BinaryIndexType, "symmetric_difference", inline="always")
+@overload_method(DatetimeIndexType, "symmetric_difference", inline="always")
+@overload_method(TimedeltaIndexType, "symmetric_difference", inline="always")
+@overload_method(RangeIndexType, "symmetric_difference", inline="always")
+def overload_index_symmetric_difference(I, other, result_name=None, sort=None):
+    """Adds support for a modified version of pd.Index.difference() on tagged Index types.
+
+    Args:
+        I (pd.Index): the first index in the symmetric_difference
+        other (iterable with matching type): array/Index/Series with values that
+        are symmetric_differenced from I. Must have an underlying type that can be
+        reconciled with the type of I.
+        result_name (string, optional): not supported. Defaults to None.
+        sort (boolean, optional): not supported. Defaults to None.
+
+    Raises:
+        BodoError: if I and other are not compatible for a symmetric_difference
+
+    Returns:
+        pd.Index: the elements I that are not in other, in sorted order.
+    """
+    unsupported_args = dict(result_name=result_name, sort=sort)
+    default_args = dict(result_name=None, sort=None)
+    check_unsupported_args(
+        "Index.symmetric_difference",
+        unsupported_args,
+        default_args,
+        package_name="pandas",
+        module_name="Index",
+    )
+
+    _verify_setop_compatible("symmetric_difference", I, other)
+
+    constructor = (
+        get_index_constructor(I)
+        if not isinstance(I, RangeIndexType)
+        else init_numeric_index
+    )
+
+    # Modifies logic from overload_index_isin: obtains the unique values from
+    # the each array, uses the isin utility to create a mask of all values
+    # from each array that are in the other, uses the inverse masks to drop
+    # those elems from each array and combines the results
+    def impl(I, other, result_name=None, sort=None):  # pragma: no cover
+        A1 = bodo.utils.conversion.coerce_to_array(I)
+        A2 = bodo.utils.conversion.coerce_to_array(other)
+        unique_A1 = bodo.libs.array_kernels.unique(A1)
+        unique_A2 = bodo.libs.array_kernels.unique(A2)
+        mask1 = np.empty(len(unique_A1), np.bool_)
+        mask2 = np.empty(len(unique_A2), np.bool_)
+        bodo.libs.array.array_isin(mask1, unique_A1, unique_A2, False)
+        bodo.libs.array.array_isin(mask2, unique_A2, unique_A1, False)
+        combined_arr = bodo.libs.array_kernels.concat(
+            [unique_A1[~mask1], unique_A2[~mask2]]
+        )
+        return constructor(combined_arr, None)
+
+    return impl
+
+
 # TODO: test
 @overload_method(RangeIndexType, "take", no_unliteral=True)
 @overload_method(NumericIndexType, "take", no_unliteral=True)
@@ -5889,7 +6146,6 @@ index_unsupported_methods = [
     "asof_locs",
     "astype",
     "delete",
-    "difference",
     "drop",
     "droplevel",
     "dropna",
@@ -5907,7 +6163,6 @@ index_unsupported_methods = [
     "holds_integer",
     "identical",
     "insert",
-    "intersection",
     "is_",
     "is_mixed",
     "is_type_compatible",
@@ -5925,11 +6180,9 @@ index_unsupported_methods = [
     "sort",
     "sortlevel",
     "str",
-    "symmetric_difference",
     "to_flat_index",
     "to_native_types",
     "transpose",
-    "union",
     "value_counts",
     "view",
 ]
@@ -5967,6 +6220,10 @@ cat_idx_unsupported_methods = [
     "isin",
     "all",
     "any",
+    "union",
+    "intersection",
+    "difference",
+    "symmetric_difference",
 ]
 
 
@@ -6014,6 +6271,10 @@ interval_idx_unsupported_methods = [
     "where",
     "putmask",
     "nunique",
+    "union",
+    "intersection",
+    "difference",
+    "symmetric_difference",
     "to_series",
     "to_frame",
     "to_list",
@@ -6067,6 +6328,10 @@ multi_index_unsupported_methods = [
     "where",
     "putmask",
     "nunique",
+    "union",
+    "intersection",
+    "difference",
+    "symmetric_difference",
     "to_series",
     "to_list",
     "tolist",
@@ -6159,19 +6424,20 @@ period_index_unsupported_methods = [
     "to_timestamp",
     "isin",
     "unique",
+    "all",
+    "any",
+    "where",
+    "putmask",
+    "sort_values",
+    "union",
+    "intersection",
+    "difference",
+    "symmetric_difference",
     "to_series",
     "to_frame",
     "to_numpy",
     "to_list",
     "tolist",
-    "sort_values",
-    "where",
-    "putmask",
-    "repeat",
-    "all",
-    "any",
-    "where",
-    "putmask",
     "repeat",
     "min",
     "max",

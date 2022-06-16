@@ -1469,6 +1469,10 @@ class DistributedAnalysis:
             array_dists[lhs] = new_dist
             return
 
+        if fdef == ("intersection_mask", "bodo.libs.array_kernels"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("first_last_valid_index", "bodo.libs.array_kernels"):
             # doesn't affect distribution of either input or output
             return
