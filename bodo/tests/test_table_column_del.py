@@ -1843,9 +1843,7 @@ def test_filter_del_cols(datapath, memory_leak_check):
 
     def impl():
         df1 = pd.read_parquet(filename)
-        # TODO [BE-3056]: Investigtate segfault in SUM or += if some ranks
-        # have empty data
-        df2 = df1.head(1000)
+        df2 = df1.head()
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
         if df2["Column0"].sum() > 1000.0:
@@ -1889,7 +1887,7 @@ def test_filter_ret_df_input(datapath, memory_leak_check):
 
     def impl():
         df1 = pd.read_parquet(filename)
-        df2 = df1.head(1000)
+        df2 = df1.head()
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
         if df2["Column0"].sum() > 1000.0:
@@ -1927,7 +1925,7 @@ def test_table_filter_ret_df_output(datapath, memory_leak_check):
 
     def impl():
         df1 = pd.read_parquet(filename)
-        df2 = df1.head(1000)
+        df2 = df1.head()
         # Use both Column2 and Column5 so they don't get claimed by DCE.
         # These columns aren't part of table operations.
         if df2["Column0"].sum() > 1000.0:
