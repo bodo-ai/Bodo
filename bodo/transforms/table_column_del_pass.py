@@ -6,6 +6,7 @@ single columns when tables are represented by a single variable.
 """
 import copy
 from collections import defaultdict
+from typing import Dict
 
 import numba
 from numba.core import ir
@@ -323,6 +324,8 @@ class TableColumnDelPass:
                 ctr = 0
                 var_names = []
                 func_lines = []
+                # Track globals to pass for deleting columns
+                col_globals: Dict[str, bodo.utils.typing.MetaType] = {}
                 for table_name, columns in escaping_cols.items():
                     used_var_name = get_livevar_name(
                         table_name, alias_sets[table_name], block_livemap
@@ -332,16 +335,21 @@ class TableColumnDelPass:
                         # var and columns is not empty. See test_table_dead_var
                         updated = True
                         var_names.append(used_var_name)
-                        for column in sorted(columns):
-                            # Decref each column to remove.
-                            func_lines.append(f"    del_column(arg{ctr}, {column})\n")
+                        col_globals[
+                            f"cols_to_delete_{ctr}"
+                        ] = bodo.utils.typing.MetaType(tuple(sorted(columns)))
+                        func_lines.append(
+                            f"    del_column(arg{ctr}, cols_to_delete_{ctr})\n"
+                        )
                         ctr += 1
                 if var_names:
                     args = ", ".join([f"arg{i}" for i in range(len(var_names))])
                     func_text = f"def del_columns({args}):\n"
                     func_text += "".join(func_lines)
                     # Only compile the function if at least 1 table needs to be deleted.
-                    new_stmts = self._compile_del_column_function(func_text, var_names)
+                    new_stmts = self._compile_del_column_function(
+                        func_text, var_names, col_globals
+                    )
                     # Insert into the front of the block.
                     insert_front.extend(new_stmts)
 
@@ -380,24 +388,34 @@ class TableColumnDelPass:
                                 # we must prune all at this step as otherwise
                                 # an earlier operation could incorrectly attempt
                                 # to remove the column.
-                                col_nums = list(cols)
-                            for col_num in col_nums:
-                                # If we have already removed this column ignore it.
-                                # TODO: Remove several columns in a single IR call.
-                                if col_num in cols:
-                                    updated = True
-                                    func_text = f"def del_columns(table_arg):\n"
-                                    func_text += (
-                                        f"    del_column(table_arg, {col_num})\n"
+                                deleted_cols = cols
+                            else:
+                                deleted_cols = col_nums & cols
+                            if deleted_cols:
+                                updated = True
+                                func_text = f"def del_columns(table_arg):\n"
+                                # Track globals to pass for deleting columns. This
+                                # is one element but we pass a dict for consistency with
+                                # the block start case.
+                                col_globals: Dict[str, bodo.utils.typing.MetaType] = {
+                                    "cols_to_delete": bodo.utils.typing.MetaType(
+                                        tuple(sorted(deleted_cols))
                                     )
-                                    # Compile the function
-                                    new_stmts = self._compile_del_column_function(
-                                        func_text, [table_var_name]
-                                    )
-                                    # Insert stmts in reverse order because we reverse the block
-                                    new_body.extend(list(reversed(new_stmts)))
-                                    # Mark the column as removed
-                                    cols.remove(col_num)
+                                }
+                                func_text += (
+                                    f"    del_column(table_arg, cols_to_delete)\n"
+                                )
+                                # Compile the function
+                                new_stmts = self._compile_del_column_function(
+                                    func_text, [table_var_name], col_globals
+                                )
+                                # Insert stmts in reverse order because we reverse the block
+                                new_body.extend(list(reversed(new_stmts)))
+                                # Mark the column as removed. Note each alias set contains
+                                # a unique set per block that is not copied anywhere. We
+                                # update this set so we don't try remove a column earlier
+                                # in the block.
+                                cols.difference_update(deleted_cols)
 
                     new_body.append(stmt)
                 # We insert into the body in reverse order, so reverse it again.
@@ -405,7 +423,7 @@ class TableColumnDelPass:
             block.body = insert_front + new_body
         return updated
 
-    def _compile_del_column_function(self, func_text, var_names):
+    def _compile_del_column_function(self, func_text, var_names, col_globals):
         """
         Helper function to compile and return the statements
         from compile each decref function.
@@ -420,9 +438,7 @@ class TableColumnDelPass:
             tuple(arg_vars),
             None,
             typing_info=self,
-            extra_globals={
-                "del_column": del_column,
-            },
+            extra_globals={"del_column": del_column, **col_globals},
         )
 
 

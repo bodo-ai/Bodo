@@ -58,12 +58,12 @@ def get_table_used_columns(
             to types.
 
     Returns:
-        Optional[Sequence[int], None]: List of columns used by the operation
+        Optional[Set[int], None]: Set of columns used by the operation
             or None if it uses every column.
     """
     if fdef == ("get_table_data", "bodo.hiframes.table"):
         col_num = typemap[call_expr.args[1].name].literal_value
-        return [col_num]
+        return {col_num}
     elif fdef in {
         ("table_filter", "bodo.hiframes.table"),
         ("table_astype", "bodo.utils.table_utils"),
@@ -75,7 +75,7 @@ def get_table_used_columns(
             used_cols_typ = typemap[used_cols_var.name]
             used_cols_typ = used_cols_typ.instance_type
             if isinstance(used_cols_typ, bodo.utils.typing.MetaType):
-                return used_cols_typ.meta
+                return set(used_cols_typ.meta)
     elif fdef == ("table_concat", "bodo.utils.table_utils"):
         # Table concat passes the column numbers meta type
         # as argument 1.
@@ -85,7 +85,7 @@ def get_table_used_columns(
         used_cols_typ = typemap[used_cols_var.name]
         used_cols_typ = used_cols_typ.instance_type
         if isinstance(used_cols_typ, bodo.utils.typing.MetaType):
-            return used_cols_typ.meta
+            return set(used_cols_typ.meta)
 
     # If we don't have information about which columns this operation
     # kills, we return to None to indicate we must decref any remaining
