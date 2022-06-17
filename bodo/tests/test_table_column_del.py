@@ -18,7 +18,7 @@ from bodo.tests.utils import ColumnDelTestPipeline, check_func, reduce_sum
 from bodo.utils.utils import is_expr
 
 
-def _check_column_dels(bodo_func, col_del_lists):
+def _check_column_dels(bodo_func, col_del_lists, num_deletes=None):
     """
     Helper functions to check for the col_del calls inserted
     into the IR in BodoTableColumnDelPass. Since we don't know
@@ -32,6 +32,9 @@ def _check_column_dels(bodo_func, col_del_lists):
     columns, but we just verify that all elements of this list are
     encountered (and nothing outside this list).
 
+    In addition we can optionally pass num_deletes if we want to check
+    exactly how many "del_column" calls are generated.
+
     Note: We do not check the order in which the deletions are inserted
     within a block to simplify testing as some changes that could occur
     would be insignificant.
@@ -40,6 +43,7 @@ def _check_column_dels(bodo_func, col_del_lists):
     typemap = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_typemap"]
     # Ensure every input list is sorted
     col_del_lists = [list(sorted(x)) for x in col_del_lists]
+    found_deletes = 0
     for block in fir.blocks.values():
         block_del_cols = []
         for stmt in block.body:
@@ -49,8 +53,9 @@ def _check_column_dels(bodo_func, col_del_lists):
                     isinstance(typ, numba.core.types.functions.Function)
                     and typ.name == "Function(<intrinsic del_column>)"
                 ):
-                    col_num = typemap[stmt.value.args[1].name].literal_value
-                    block_del_cols.append(col_num)
+                    col_nums = typemap[stmt.value.args[1].name].instance_type.meta
+                    block_del_cols.extend(list(col_nums))
+                    found_deletes += 1
         if block_del_cols:
             block_del_cols = list(sorted(block_del_cols))
             removed = False
@@ -64,6 +69,10 @@ def _check_column_dels(bodo_func, col_del_lists):
     assert (
         not col_del_lists
     ), f"Some expected del columns were not encountered: {col_del_lists}"
+    if num_deletes is not None:
+        assert (
+            num_deletes == found_deletes
+        ), "Number of del_column calls doesn't match the expected number"
 
 
 @pytest.fixture(params=["csv", "parquet"])
@@ -2064,3 +2073,30 @@ def test_table_mappable_ret_df_output(datapath, memory_leak_check):
         # We prune columns from df1 after the copy.
         init_block_columns = list(sorted(set(range(99)) - {3, 6}))
         _check_column_dels(bodo_func, [init_block_columns, [3, 6], [3, 6]])
+
+
+def test_two_column_dels(datapath, memory_leak_check):
+    """
+    Test that when deleting a large number of columns we
+    delete columns in batches.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.memory_usage(index=False)
+        return df2.sum() > 100.0
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded.
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # We prune columns from the table after memory usage in
+        # 1 function call.
+        columns_to_delete = list(range(99))
+        _check_column_dels(bodo_func, [columns_to_delete], num_deletes=1)

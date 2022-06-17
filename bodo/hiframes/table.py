@@ -34,6 +34,7 @@ from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.typing import (
     BodoError,
+    MetaType,
     decode_if_dict_array,
     get_overload_const_int,
     is_list_like_index_type,
@@ -134,6 +135,9 @@ class TableType(types.ArrayCompatible):
         block_offsets = []
         # block number for each array type
         type_to_blk = {}
+        # array type to block number.
+        # reverse of type_to_blk
+        blk_to_type = {}
         # current number of arrays in the block
         blk_curr_ind = defaultdict(int)
         # indices of arrays in arr_types for each block
@@ -143,7 +147,10 @@ class TableType(types.ArrayCompatible):
         if not has_runtime_cols:
             for i, t in enumerate(arr_types):
                 if t not in type_to_blk:
-                    type_to_blk[t] = len(type_to_blk)
+                    next_blk = len(type_to_blk)
+                    type_to_blk[t] = next_blk
+                    blk_to_type[next_blk] = t
+
                 blk = type_to_blk[t]
                 block_nums.append(blk)
                 block_offsets.append(blk_curr_ind[blk])
@@ -153,6 +160,7 @@ class TableType(types.ArrayCompatible):
         self.block_nums = block_nums
         self.block_offsets = block_offsets
         self.type_to_blk = type_to_blk
+        self.blk_to_type = blk_to_type
         self.block_to_arr_ind = block_to_arr_ind
         super(TableType, self).__init__(
             name=f"TableType({arr_types}, {has_runtime_cols})"
@@ -528,27 +536,74 @@ def get_table_data(typingctx, table_type, ind_typ):
 
 @intrinsic
 def del_column(typingctx, table_type, ind_typ):
-    """Decrement the reference count by 1 for single column in a table."""
-    assert isinstance(table_type, TableType)
-    assert is_overload_constant_int(ind_typ)
-    col_ind = get_overload_const_int(ind_typ)
-    arr_type = table_type.arr_types[col_ind]
+    """Decrement the reference count by 1 for the columns in a table."""
+    assert isinstance(table_type, TableType), "Can only delete columns from a table"
+    assert isinstance(ind_typ, types.TypeRef) and isinstance(
+        ind_typ.instance_type, MetaType
+    ), "ind_typ must be a typeref for a meta type"
+    col_inds = list(ind_typ.instance_type.meta)
+    # Determine which blocks and column numbers need decrefs.
+    block_del_inds = defaultdict(list)
+    for ind in col_inds:
+        block_del_inds[table_type.block_nums[ind]].append(table_type.block_offsets[ind])
 
     def codegen(context, builder, sig, args):
         table_arg, _ = args
         table = cgutils.create_struct_proxy(table_type)(context, builder, table_arg)
-        # Extract the array from the table
-        blk = table_type.block_nums[col_ind]
-        blk_offset = table_type.block_offsets[col_ind]
-        arr_list = getattr(table, f"block_{blk}")
-        arr_list_inst = ListInstance(context, builder, types.List(arr_type), arr_list)
-        arr = arr_list_inst.getitem(blk_offset)
-        # Decref the array. This decref should ignore nulls, making
-        # the operation idempotent.
-        context.nrt.decref(builder, arr_type, arr)
-        # Set the list value to null to avoid future decref calls
-        null_ptr = context.get_constant_null(arr_type)
-        arr_list_inst.inititem(blk_offset, null_ptr, incref=False)
+        for blk, blk_offsets in block_del_inds.items():
+            arr_type = table_type.blk_to_type[blk]
+            arr_list = getattr(table, f"block_{blk}")
+            arr_list_inst = ListInstance(
+                context, builder, types.List(arr_type), arr_list
+            )
+            # Create a single null array for this type
+            null_ptr = context.get_constant_null(arr_type)
+            if len(blk_offsets) == 1:
+                # get_dataframe_data will select individual
+                # columns, so we need to generate more efficient
+                # code for the single column case.
+                # TODO: Determine a reasonable threshold?
+                blk_offset = blk_offsets[0]
+                # Extract the array from the table
+                arr = arr_list_inst.getitem(blk_offset)
+                # Decref the array. This decref should ignore nulls, making
+                # the operation idempotent.
+                context.nrt.decref(builder, arr_type, arr)
+                # Set the list value to null to avoid future decref calls
+                arr_list_inst.inititem(blk_offset, null_ptr, incref=False)
+            else:
+                # Generate a for loop for several decrefs in the same
+                # block.
+                n_arrs = context.get_constant(types.int64, len(blk_offsets))
+                # lower array of block offsets to use in the loop
+                blk_offset_arr = context.make_constant_array(
+                    builder,
+                    types.Array(types.int64, 1, "C"),
+                    # On windows np.array defaults to the np.int32 for integers.
+                    # As a result, we manually specify int64 during the array
+                    # creation to keep the lowered constant consistent with the
+                    # expected type.
+                    np.array(blk_offsets, dtype=np.int64),
+                )
+                blk_offset_arr_struct = context.make_array(
+                    types.Array(types.int64, 1, "C")
+                )(context, builder, blk_offset_arr)
+                with cgutils.for_range(builder, n_arrs) as loop:
+                    i = loop.index
+                    # get array index in "arrays"
+                    blk_offset = _getitem_array_single_int(
+                        context,
+                        builder,
+                        types.int64,
+                        types.Array(types.int64, 1, "C"),
+                        blk_offset_arr_struct,
+                        i,
+                    )
+                    # Extract the array from the table
+                    arr = arr_list_inst.getitem(blk_offset)
+                    context.nrt.decref(builder, arr_type, arr)
+                    # Set the list value to null to avoid future decref calls
+                    arr_list_inst.inititem(blk_offset, null_ptr, incref=False)
 
     sig = types.void(table_type, ind_typ)
     return sig, codegen
