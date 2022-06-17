@@ -418,10 +418,19 @@ class SeriesPass:
     def _run_getitem(self, assign, rhs):
         target = rhs.value
         target_typ = self.typemap[target.name]
+
         nodes = []
         idx = get_getsetitem_index_var(rhs, self.typemap, nodes)
         idx_typ = self.typemap[idx.name]
-        rhs_type = self.typemap[rhs.value.name]
+
+        # Start of Table Operations
+
+        if isinstance(target_typ, bodo.TableType):
+            # Inline all table getitems
+            impl = bodo.hiframes.table.overload_table_getitem(target_typ, idx_typ)
+            return nodes + compile_func_single_block(
+                impl, (target, idx), ret_var=assign.target, typing_info=self
+            )
 
         # Start of Series Operations
 
@@ -463,11 +472,11 @@ class SeriesPass:
         # simplify geitem on Series with constant Index values
         # used for df.apply() UDF optimization
         if (
-            isinstance(rhs_type, (SeriesType, HeterogeneousSeriesType))
-            and isinstance(rhs_type.index, HeterogeneousIndexType)
-            and is_overload_constant_tuple(rhs_type.index.data)
+            isinstance(target_typ, (SeriesType, HeterogeneousSeriesType))
+            and isinstance(target_typ.index, HeterogeneousIndexType)
+            and is_overload_constant_tuple(target_typ.index.data)
         ):
-            indices = get_overload_const_tuple(rhs_type.index.data)
+            indices = get_overload_const_tuple(target_typ.index.data)
             # Pandas falls back to positional indexing for int keys if index has no ints
             if isinstance(idx_typ, types.Integer) and not any(
                 isinstance(a, int) for a in indices
@@ -598,14 +607,14 @@ class SeriesPass:
         # replace namedtuple access with original value if possible
         # for example: r = Row(a, b); c = r["R1"] -> c = a
         # used for df.apply() UDF optimization
-        if isinstance(rhs_type, types.BaseNamedTuple) and isinstance(
+        if isinstance(target_typ, types.BaseNamedTuple) and isinstance(
             idx_typ, (types.StringLiteral, types.IntegerLiteral)
         ):
             named_tup_def = guard(get_definition, self.func_ir, rhs.value)
             # TODO: support kws
             if is_expr(named_tup_def, "call") and not named_tup_def.kws:
                 if isinstance(idx_typ, types.StringLiteral):
-                    arg_no = rhs_type.instance_class._fields.index(
+                    arg_no = target_typ.instance_class._fields.index(
                         idx_typ.literal_value
                     )
                 else:

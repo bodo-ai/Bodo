@@ -39,6 +39,7 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_none,
     is_overload_true,
     to_str_arr_if_dict_array,
 )
@@ -1153,9 +1154,21 @@ def overload_get_idx_length(idx, n):
     return impl
 
 
-def gen_table_filter(T, used_cols=None):
-    """Generate a function that filters table using input boolean array or slice.
-    If used_cols is passed, only used columns are written in output.
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def table_filter(T, idx, used_cols=None):
+    """Function that filters table using input boolean array or slice.
+       If used_cols is passed, only used columns are written in output.
+
+    Args:
+        T (TableType): Table to be filtered
+        idx (types.Array(types.bool_, 1, "C") | bodo.BooleanArrayType
+            | types.SliceType): Index for filtering
+        used_cols (types.TypeRef(bodo.MetaType)
+            | types.none): If not None, the columns that should be selected
+            to filter. This is filled by the table column deletion steps.
+
+    Returns:
+        TableType: The filtered table.
     """
     from bodo.utils.conversion import ensure_contig_if_np
 
@@ -1169,16 +1182,20 @@ def gen_table_filter(T, used_cols=None):
         "_get_idx_length": _get_idx_length,
         "ensure_contig_if_np": ensure_contig_if_np,
     }
-    if used_cols is not None:
-        # Note: used_cols is always an array from remove_dead_columns
-        glbls["used_cols"] = used_cols
+    if not is_overload_none(used_cols):
+        # Get the MetaType from the TypeRef
+        used_cols_type = used_cols.instance_type
+        used_cols_data = np.array(used_cols_type.meta, dtype=np.int64)
+        glbls["used_cols_vals"] = used_cols_data
+    else:
+        used_cols_data = None
 
-    func_text = "def table_filter_func(T, idx):\n"
+    func_text = "def table_filter_func(T, idx, used_cols=None):\n"
     func_text += f"  T2 = init_table(T, False)\n"
     func_text += f"  l = 0\n"
 
     # set table length using index value and return if no table column is used
-    if used_cols is not None and len(used_cols) == 0:
+    if used_cols_data is not None and len(used_cols_data) == 0:
         # avoiding _get_idx_length in the general case below since it has extra overhead
         func_text += f"  l = _get_idx_length(idx, len(T))\n"
         func_text += f"  T2 = set_table_len(T2, l)\n"
@@ -1187,15 +1204,15 @@ def gen_table_filter(T, used_cols=None):
         exec(func_text, glbls, loc_vars)
         return loc_vars["table_filter_func"]
 
-    if used_cols is not None:
-        func_text += f"  used_set = set(used_cols)\n"
+    if used_cols_data is not None:
+        func_text += f"  used_set = set(used_cols_vals)\n"
     for blk in T.type_to_blk.values():
         glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk], dtype=np.int64)
         func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
         func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), False)\n"
         func_text += f"  for i in range(len(arr_list_{blk})):\n"
         func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
-        if used_cols is not None:
+        if used_cols_data is not None:
             func_text += f"    if arr_ind_{blk} not in used_set: continue\n"
         func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
         func_text += (
@@ -1254,12 +1271,12 @@ def decode_if_dict_table(T):
     return loc_vars["impl"]
 
 
-@overload(operator.getitem, no_unliteral=True)
-def table_getitem(T, idx):
+@overload(operator.getitem, no_unliteral=True, inline="always")
+def overload_table_getitem(T, idx):
     if not isinstance(T, TableType):
         return
 
-    return gen_table_filter(T)
+    return lambda T, idx: table_filter(T, idx)  # pragma: no cover
 
 
 @intrinsic

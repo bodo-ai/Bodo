@@ -517,10 +517,8 @@ def overload_dataframe_copy(df, deep=True):
 
     header = "def impl(df, deep=True):\n"
     extra_globals = None
-    out_df_type = None
     if df.is_table_format:
         header += "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
-        out_df_type = df
         output_arr_typ = types.none
         extra_globals = {"output_arr_typ": output_arr_typ}
         if is_overload_false(deep):
@@ -4668,7 +4666,9 @@ def overload_dataframe_melt(
         "  dummy_id = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(frame, 0)\n"
     )
     if frame.is_table_format and all(v == val_type.dtype for v in value_dtypes):
-        extra_globals["value_idxs"] = value_idxs
+        # Use a meta type to make sure the column numbers are still
+        # available in the IR for optimizations.
+        extra_globals["value_idxs"] = bodo.utils.typing.MetaType(tuple(value_idxs))
         header += (
             "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(frame)\n"
         )

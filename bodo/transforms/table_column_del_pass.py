@@ -5,21 +5,22 @@ when they are no longer used. This enables garbage collecting
 single columns when tables are represented by a single variable.
 """
 import copy
-import functools
-import operator
 from collections import defaultdict
 
 import numba
-import numpy as np
-from numba.core import ir, types
+from numba.core import ir
 from numba.core.analysis import compute_cfg_from_blocks
 from numba.core.ir_utils import build_definitions, find_topo_order, guard
 
 import bodo
-from bodo.hiframes.table import TableType, del_column, gen_table_filter
+from bodo.hiframes.table import TableType, del_column
+from bodo.utils.del_column_utils import (
+    get_table_used_columns,
+    is_table_use_column_ops,
+)
 from bodo.utils.transform import compile_func_single_block
-from bodo.utils.typing import get_overload_const_int, is_list_like_index_type
-from bodo.utils.utils import is_assign, is_expr
+from bodo.utils.typing import get_overload_const_int
+from bodo.utils.utils import is_assign
 
 
 class TableColumnDelPass:
@@ -124,6 +125,7 @@ class TableColumnDelPass:
             f_ir.blocks,
             alias_sets,
             alias_set_liveness_map,
+            typemap,
         )
         updated = False
         # Step 4: Remove columns. Compute the actual columns decrefs and
@@ -175,10 +177,10 @@ class TableColumnDelPass:
         https://bodo.atlassian.net/wiki/spaces/B/pages/920354894/Table+Column+Decref+Pass#Alias-Grouping
         """
         # Compute the set of distinct alias groups.
-        # The source node will contain which variables use all columns, which
-        # we must omit.
+        # The source node will contain which variables use
+        # cannot_del_cols, which we must omit.
         source_live_cols = column_live_map[cfg.entry_point()]
-        alias_sets = _find_alias_sets(source_live_cols, equiv_vars)
+        alias_sets = _find_table_alias_sets(source_live_cols, equiv_vars)
         # {block_offset -> {table_name: set(used_columns)}}
         # The alias_sets and table_name in livecol_map share a common representative
         # variable.
@@ -188,16 +190,16 @@ class TableColumnDelPass:
             # Group live columns within an alias set.
             livecol_map[offset] = set_dict = {}
             for table_name in alias_sets.keys():
-                used_columns, _ = get_live_column_nums_block(
+                used_columns, use_all, _ = get_live_column_nums_block(
                     block_column_liveness, equiv_vars, table_name
                 )
                 # Convert back to a set for easier comparison between blocks.
-                set_dict[table_name] = set(used_columns)
+                set_dict[table_name] = (used_columns, use_all)
 
         return alias_sets, livecol_map
 
     def compute_column_del_locations(
-        self, cfg, blocks, alias_sets, alias_set_livecol_map
+        self, cfg, blocks, alias_sets, alias_set_livecol_map, typemap
     ):
         """
         Compute where to insert the decrefs. The algorithm for the steps here:
@@ -232,25 +234,55 @@ class TableColumnDelPass:
             block_livecols = alias_set_livecol_map[offset]
             for table_name, aliases in alias_sets.items():
                 # Determine the variables to delete in this block
-                curr_cols = block_livecols[table_name]
+                curr_cols, use_all = block_livecols[table_name]
                 # Find all columns that are live in any successor
-                succ_livecols = [
-                    alias_set_livecol_map[label][table_name]
-                    for label, _ in cfg.successors(offset)
-                ]
-                combined_succ_livecols = functools.reduce(
-                    operator.or_, succ_livecols, set()
-                )
-                # Delete columns that aren't live in any successor.
-                del_curr = curr_cols - combined_succ_livecols
-                col_back_map[table_name] = del_curr
-                escaping_live_set = curr_cols - del_curr
+                combined_succ_livecols = set()
+                # Does any successor use all
+                any_succ_use_all = False
+                # Do all successors use all
+                all_succ_use_all = True
                 for label, _ in cfg.successors(offset):
-                    # For each successor delete columns that only need
-                    # to be deleted from that column
-                    escaping_dead[label][table_name] |= (
-                        escaping_live_set - alias_set_livecol_map[label][table_name]
-                    )
+                    succ_livecols, succ_use_all = alias_set_livecol_map[label][
+                        table_name
+                    ]
+                    any_succ_use_all = any_succ_use_all or succ_use_all
+                    all_succ_use_all = all_succ_use_all and succ_use_all
+
+                    if not any_succ_use_all:
+                        combined_succ_livecols = combined_succ_livecols | succ_livecols
+
+                # Delete columns that aren't live in any successor.
+                if not any_succ_use_all:
+                    if use_all:
+                        # If we switch from use_all to use some
+                        # we need to generate the set.
+                        curr_cols = set(range(len(typemap[table_name].arr_types)))
+                    # Delete any columns not found in this block.
+                    del_curr = curr_cols - combined_succ_livecols
+                else:
+                    del_curr = set()
+                col_back_map[table_name] = del_curr
+
+                # Now determine which column can be deleted for each successor.
+                # Some blocks may still use all columns while others may not.
+                if not all_succ_use_all:
+                    if any_succ_use_all:
+                        # No columns were killed internally
+                        escaping_live_set = set(
+                            range(len(typemap[table_name].arr_types))
+                        )
+                    else:
+                        escaping_live_set = curr_cols - del_curr
+                    for label, _ in cfg.successors(offset):
+                        # For each successor delete columns that only need
+                        # to be deleted from that column
+                        succ_livecols, succ_use_all = alias_set_livecol_map[label][
+                            table_name
+                        ]
+                        if not succ_use_all:
+                            escaping_dead[label][table_name] |= (
+                                escaping_live_set - succ_livecols
+                            )
         return internal_dead, escaping_dead
 
     def insert_column_dels(
@@ -268,7 +300,8 @@ class TableColumnDelPass:
         """
         Insert the decrefs + set the column to NULL.
         If we have a internal dead column, we traverse backwards until
-        we find each get_dataframe_data and insert the del immediately afterwards.
+        we find each relevant table use (get_dataframe_data and table ops)
+        and insert the del immediately afterwards.
 
         If we have a escaping dead column we just insert at the front.
 
@@ -289,7 +322,7 @@ class TableColumnDelPass:
                 args = ", ".join([f"arg{i}" for i in range(len(escaping_cols.keys()))])
                 ctr = 0
                 var_names = []
-                func_text = f"def del_columns({args}):\n"
+                func_lines = []
                 for table_name, columns in escaping_cols.items():
                     used_var_name = get_livevar_name(
                         table_name, alias_sets[table_name], block_livemap
@@ -301,9 +334,12 @@ class TableColumnDelPass:
                         var_names.append(used_var_name)
                         for column in sorted(columns):
                             # Decref each column to remove.
-                            func_text += f"    del_column(arg{ctr}, {column})\n"
+                            func_lines.append(f"    del_column(arg{ctr}, {column})\n")
                         ctr += 1
                 if var_names:
+                    args = ", ".join([f"arg{i}" for i in range(len(var_names))])
+                    func_text = f"def del_columns({args}):\n"
+                    func_text += "".join(func_lines)
                     # Only compile the function if at least 1 table needs to be deleted.
                     new_stmts = self._compile_del_column_function(func_text, var_names)
                     # Insert into the front of the block.
@@ -324,9 +360,9 @@ class TableColumnDelPass:
                         rhs = stmt.value
                         fdef = guard(numba.core.ir_utils.find_callname, func_ir, rhs)
                         # Only eliminate columns once we find the get_table_data call
-                        if fdef == ("get_table_data", "bodo.hiframes.table"):
+                        if is_table_use_column_ops(fdef):
                             table_var_name = rhs.args[0].name
-                            col_num = typemap[rhs.args[1].name].literal_value
+                            col_nums = get_table_used_columns(fdef, rhs, typemap)
                             # Determine the table key.
                             if table_var_name in internal_cols:
                                 cols = internal_cols[table_var_name]
@@ -339,19 +375,30 @@ class TableColumnDelPass:
                                     if table_name in internal_cols:
                                         cols = internal_cols[table_name]
                                         break
-                            # If we have already removed this column ignore it.
-                            if col_num in cols:
-                                updated = True
-                                func_text = f"def del_columns(table_arg):\n"
-                                func_text += f"    del_column(table_arg, {col_num})\n"
-                                # Compile the function
-                                new_stmts = self._compile_del_column_function(
-                                    func_text, [table_var_name]
-                                )
-                                # Insert stmts in reverse order because we reverse the block
-                                new_body.extend(list(reversed(new_stmts)))
-                                # Mark the column as removed
-                                cols.remove(col_num)
+                            if col_nums is None:
+                                # If we cannot identify which columns to prune,
+                                # we must prune all at this step as otherwise
+                                # an earlier operation could incorrectly attempt
+                                # to remove the column.
+                                col_nums = list(cols)
+                            for col_num in col_nums:
+                                # If we have already removed this column ignore it.
+                                # TODO: Remove several columns in a single IR call.
+                                if col_num in cols:
+                                    updated = True
+                                    func_text = f"def del_columns(table_arg):\n"
+                                    func_text += (
+                                        f"    del_column(table_arg, {col_num})\n"
+                                    )
+                                    # Compile the function
+                                    new_stmts = self._compile_del_column_function(
+                                        func_text, [table_var_name]
+                                    )
+                                    # Insert stmts in reverse order because we reverse the block
+                                    new_body.extend(list(reversed(new_stmts)))
+                                    # Mark the column as removed
+                                    cols.remove(col_num)
+
                     new_body.append(stmt)
                 # We insert into the body in reverse order, so reverse it again.
                 new_body = list(reversed(new_body))
@@ -379,11 +426,18 @@ class TableColumnDelPass:
         )
 
 
-def _find_alias_sets(source_live_cols, equiv_vars):
+def _find_table_alias_sets(source_live_cols, equiv_vars):
     """
     Given a live map for the source block and the equiv_vars dictionary,
-    returns a dictionary of all unique alias sets, omitting any sets that
-    use all columns throughout the program.
+    returns a dictionary of all unique table alias sets. We remove any
+    sets in which a table data structure is shared with a DataFrame
+    (as indicated by the cannot_del_cols flag). This ensures that those
+    tables will never have columns deleted.
+
+    This is essential because we cannot remove columns from a table if
+    there is a DataFrame in the IR that reuses the table (as a DataFrame
+    does not support deleted columns). We do not keep tracks of the DataFrame
+    vars in the alias_sets, only tables.
     """
     seen_vars = set()
     alias_sets = {}
@@ -392,10 +446,10 @@ def _find_alias_sets(source_live_cols, equiv_vars):
             # Mark all members of the alias set as seen
             seen_vars.add(table_name)
             seen_vars.update(equiv_vars[table_name])
-            _, use_all = get_live_column_nums_block(
+            _, _, cannot_del_cols = get_live_column_nums_block(
                 source_live_cols, equiv_vars, table_name
             )
-            if not use_all:
+            if not cannot_del_cols:
                 # Only add the set if it doesn't use all column
                 alias_sets[table_name] = equiv_vars[table_name]
     return alias_sets
@@ -444,12 +498,14 @@ def _compute_table_column_use(blocks, func_ir, typemap):
     one that tracks columns used for each block, 'table_col_use_map'
     and a dictionary that tracks aliases 'equiv_vars'.
 
-    'table_col_use_map' values are a tuple of 2 values:
+    'table_col_use_map' values are a tuple of 3 values:
 
         1. A set of columns directly used.
         2. A boolean flag for if all column are used. This is an optimization
-        to reduce memory when there are operations that don't support
-        removing tables.
+        to reduce memory any operation requires all columns,
+        3. A boolean flag indicating if an operation is unknown and therefore
+        it is not safe to prune any columns. This is used when tables become
+        part of DataFrames.
 
     'equiv_vars' maps each table name to all other tables that function as an alias.
     """
@@ -457,11 +513,13 @@ def _compute_table_column_use(blocks, func_ir, typemap):
     equiv_vars = defaultdict(set)
     table_col_use_map = (
         {}
-    )  # { block offset -> dict(var_name -> tuple(set(used_column_numbers), use_all)}
+    )  # { block offset -> dict(var_name -> tuple(set(used_column_numbers), use_all, cannot_del_cols)}
     # See table filter note below regarding reverse order
     for offset in reversed(find_topo_order(blocks)):
         ir_block = blocks[offset]
-        table_col_use_map[offset] = block_use_map = defaultdict(lambda: (set(), False))
+        table_col_use_map[offset] = block_use_map = defaultdict(
+            lambda: (set(), False, False)
+        )
         for stmt in reversed(ir_block.body):
 
             # IR extensions that impact column uses.
@@ -508,6 +566,18 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         col_num_set = block_use_map[table_var_name][0]
                         col_num_set.add(col_num)
                         continue
+                    elif fdef == (
+                        "get_dataframe_table",
+                        "bodo.hiframes.pd_dataframe_ext",
+                    ):
+                        # If there is a get_dataframe_table in the IR then the source of
+                        # this table is a live DataFrame. As a result, it is not safe to
+                        # delete columns from this table or it aliases (although copies
+                        # that create a new list can have their columns deleted). This is
+                        # equivalent to the behavior with tuple format when we cannot
+                        # optimize out the DataFrame.
+                        block_use_map[lhs_name] = (set(), True, True)
+                        continue
                     elif fdef in (
                         ("set_table_data", "bodo.hiframes.table"),
                         (
@@ -515,12 +585,14 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                             "bodo.hiframes.table",
                         ),
                     ):
-                        # set_table_data and set_table_data_null both reuse lists from the input table.
-                        # IE, the table rhs table cannot be reused anywhere in the CFG after the setitem
-                        # Therefore, for the purposes of determing column uses/liveness,
-                        # the lhs table is an alias of the rhs table, and the rhs table needs to consider
-                        # the lhs's uses, but the rhs table is not an
-                        # alias of the lhs table, and ths lhs does not need to consider the rhs's uses.
+                        # set_table_data and set_table_data_null reuse the same underlying lists.
+                        # However, both of these are required to be the last use of the input (rhs)
+                        # table for type stablity reasons.
+                        #
+                        # Therefore, the output (lhs) table is an alias for the rhs table,
+                        # and any use of the rhs table is a use of the lhs table.
+                        # However, the rhs table is not an alias for the lhs as prior uses
+                        # by the rhs table are not needed for the lhs table.
                         rhs_name = rhs.args[0].name
                         assert isinstance(
                             typemap[rhs_name], TableType
@@ -543,14 +615,14 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         # Handle mappable operations table operations. These act like
                         # an alias.
                         rhs_table = rhs.args[0].name
-                        used_cols, use_all = _generate_rhs_use_effective_alias(
+                        used_cols, use_all, cannot_del_cols = _generate_rhs_use_map(
                             rhs_table,
                             block_use_map,
                             table_col_use_map,
                             equiv_vars,
                             lhs_name,
                         )
-                        block_use_map[rhs_table] = (used_cols, use_all)
+                        block_use_map[rhs_table] = (used_cols, use_all, cannot_del_cols)
                         continue
                     elif fdef == (
                         "table_astype",
@@ -561,15 +633,62 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         # of the columns. This operation matches the input and
                         # output tables, but it does not use any additional columns.
                         rhs_table = rhs.args[0].name
-                        used_cols, use_all = _generate_rhs_use_effective_alias(
+                        used_cols, use_all, cannot_del_cols = _generate_rhs_use_map(
                             rhs_table,
                             block_use_map,
                             table_col_use_map,
                             equiv_vars,
                             lhs_name,
                         )
-                        block_use_map[rhs_table] = (used_cols, use_all)
+                        block_use_map[rhs_table] = (used_cols, use_all, cannot_del_cols)
                         continue
+                    # handle table filter like T2 = T1[ind]
+                    elif fdef == ("table_filter", "bodo.hiframes.table"):
+
+                        # NOTE: column uses of input T1 are the same as output T2.
+                        # Here we simply traverse the IR in reversed order and update uses,
+                        # which works because table filter variables are internally
+                        # generated variables and have a single definition without control
+                        # flow. Otherwise, we'd need to update uses iteratively.
+
+                        # NOTE: We must search the entire table_col_use_map at this point
+                        # because we haven't updated column usage/use_all from successor
+                        # blocks yet.
+
+                        rhs_table = rhs.args[0].name
+                        used_cols, use_all, cannot_del_cols = _generate_rhs_use_map(
+                            rhs_table,
+                            block_use_map,
+                            table_col_use_map,
+                            equiv_vars,
+                            lhs_name,
+                        )
+                        block_use_map[rhs_table] = (used_cols, use_all, cannot_del_cols)
+                        continue
+
+                    # Table_concat is used by melt
+                    elif fdef == ("table_concat", "bodo.utils.table_utils"):
+                        rhs_table = rhs.args[0].name
+                        used_cols, use_all, cannot_del_cols = block_use_map[rhs_table]
+                        if not (use_all or cannot_del_cols):
+                            # The used columns cannot change for this operation
+                            # and are found in the type for argument 1.
+                            used_cols_type = typemap[rhs.args[1].name]
+                            used_cols_type = used_cols_type.instance_type
+                            block_use_map[rhs_table] = (
+                                used_cols | set(used_cols_type.meta),
+                                use_all,
+                                cannot_del_cols,
+                            )
+                        continue
+                    elif fdef == ("generate_table_nbytes", "bodo.utils.table_utils"):
+                        # generate_table_nbytes uses all columns. These columns
+                        # can still be deleted however.
+                        rhs_table = rhs.args[0].name
+                        used_cols, use_all, cannot_del_cols = block_use_map[rhs_table]
+                        block_use_map[rhs_table] = set(), True, cannot_del_cols
+                        continue
+
                 elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "getattr":
                     if stmt.value.attr == "shape":
                         # Skip ops that shouldn't impact the number of columns. Shape
@@ -578,45 +697,15 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         # because it is inserted by
                         continue
 
-                # handle table filter like T2 = T1[ind]
-                elif (
-                    is_expr(rhs, "getitem")
-                    and isinstance(typemap[rhs.value.name], TableType)
-                    and (
-                        (
-                            is_list_like_index_type(typemap[rhs.index.name])
-                            and typemap[rhs.index.name].dtype == types.bool_
-                        )
-                        or isinstance(typemap[rhs.index.name], types.SliceType)
-                    )
-                ):
-                    # NOTE: column uses of input T1 are the same as output T2.
-                    # Here we simply traverse the IR in reversed order and update uses,
-                    # which works because table filter variables are internally
-                    # generated variables and have a single definition without control
-                    # flow. Otherwise, we'd need to update uses iteratively.
-
-                    # NOTE: We must search the entire table_col_use_map at this point
-                    # because we haven't updated column usage/use_all from successor
-                    # blocks yet.
-
-                    rhs_table = rhs.value.name
-                    used_cols, use_all = _generate_rhs_use_effective_alias(
-                        rhs_table,
-                        block_use_map,
-                        table_col_use_map,
-                        equiv_vars,
-                        lhs_name,
-                    )
-                    block_use_map[rhs_table] = (used_cols, use_all)
-                    continue
-
             for var in stmt.list_vars():
-                # All unknown table uses should use all columns.
+                # All unknown table uses marks columns as being not
+                # safe to delete. This includes operations like inserting
+                # a table into a DataFrame via init_dataframe(build_tuple(table,))
+                # and operations like returns.
+                #
                 if var.name != lhs_name and isinstance(typemap[var.name], TableType):
-                    # If a statement is used in any ordinary way (i.e returned)
-                    # then we mark all columns as used. We use a boolean as a shortcut.
-                    block_use_map[var.name] = (block_use_map[var.name][0], True)
+                    # The table is used in an unexpect way so it is not safe to delete.
+                    block_use_map[var.name] = (set(), True, True)
 
     return table_col_use_map, equiv_vars
 
@@ -645,12 +734,12 @@ def _compute_table_column_live_map(cfg, blocks, typemap, column_uses):
 
     def fix_point_progress(dct):
         """Helper function to determine if a fix-point has been reached.
-        We detect this by determining the column numbers, use_all_flag
-        values haven't changed.
+        We detect this by determining the column numbers, use_all_flag,
+        and cannot_del_cols values haven't changed.
         """
         results = []
         for vals in dct.values():
-            results.append(tuple((len(v[0]), v[1]) for v in vals.values()))
+            results.append(tuple((len(v[0]), v[1], v[2]) for v in vals.values()))
         return tuple(results)
 
     def fix_point(fn, dct):
@@ -671,24 +760,29 @@ def _compute_table_column_live_map(cfg, blocks, typemap, column_uses):
             # Live columns here
             live_columns = dct[offset]
             for inc_blk, _data in cfg.predecessors(offset):
-                for df_name, liveness_tup in live_columns.items():
+                for df_name, (uses, use_all, cannot_del_cols) in live_columns.items():
                     # Initialize the df if it doesn't exist or if liveness_tup[1]=True.
                     if df_name not in dct[inc_blk]:
-                        dct[inc_blk][df_name] = (
-                            liveness_tup[0].copy(),
-                            liveness_tup[1],
-                        )
+                        dct[inc_blk][df_name] = (uses.copy(), use_all, cannot_del_cols)
                     else:
-                        pred_liveness_tup = dct[inc_blk][df_name]
-                        if liveness_tup[1] or pred_liveness_tup[1]:
-                            # If either use_all is true we can
-                            # remove any column numbers to save memory.
-                            dct[inc_blk][df_name] = (set(), True)
-                        else:
+                        pred_uses, pred_use_all, pred_cannot_del_cols = dct[inc_blk][
+                            df_name
+                        ]
+                        if (
+                            use_all
+                            or cannot_del_cols
+                            or pred_use_all
+                            or pred_cannot_del_cols
+                        ):
+                            # If either use_all or cannot_del_cols
+                            # we remove any column numbers to save memory.
                             dct[inc_blk][df_name] = (
-                                pred_liveness_tup[0] | liveness_tup[0],
-                                False,
+                                set(),
+                                use_all or pred_use_all,
+                                cannot_del_cols or pred_cannot_del_cols,
                             )
+                        else:
+                            dct[inc_blk][df_name] = (uses | pred_uses, False, False)
 
     live_map = copy.deepcopy(column_uses)
     fix_point(liveness, live_map)
@@ -703,7 +797,6 @@ def remove_dead_columns(
     typing_info,
     func_ir,
     dist_analysis,
-    allow_liveness_breaking_changes,
 ):
     """remove dead table columns using liveness info."""
     # We return True if any changes were made that could
@@ -722,64 +815,9 @@ def remove_dead_columns(
         elif is_assign(stmt):
             lhs_name = stmt.target.name
             rhs = stmt.value
-            if allow_liveness_breaking_changes and (
-                is_expr(rhs, "getitem")
-                and isinstance(typemap[rhs.value.name], TableType)
-                and (
-                    (
-                        is_list_like_index_type(typemap[rhs.index.name])
-                        and typemap[rhs.index.name].dtype == types.bool_
-                    )
-                    or isinstance(typemap[rhs.index.name], types.SliceType)
-                )
-            ):
-                # In this case, we've encountered a getitem that filters
-                # the rows of a table. At this step, we can also
-                # filter out columns that are not live out of this statment.
-
-                # Note that we are replaceing this getitem with a custom generated filter function.
-                # Therefore, on subsequent passes, liveness analysis will only see a call to a function,
-                # and conservativly assume that all columns in the argument table are live. This will result
-                # in reduced liveness information, which impacts our ability to perform other optimizations.
-                # Therefore, we only perform this optimization on the last pass of table column elimination,
-                # when allow_liveness_breaking_changes is True.
-                # TODO: fix this workaround for better clarity, see
-                # https://bodo.atlassian.net/jira/software/projects/BE/boards/4/backlog?selectedIssue=BE-3033
-
-                # Compute all columns that are live at this statement.
-                used_columns = _find_used_columns(
-                    lhs_name, typemap[rhs.value.name], lives, equiv_vars, typemap
-                )
-                if used_columns is None:
-                    # if used_columns is None it means all columns are used.
-                    # As such, we can't do any column pruning
-                    new_body.append(stmt)
-                    continue
-                filter_func = gen_table_filter(typemap[rhs.value.name], used_columns)
-                filter_func = numba.njit(filter_func, no_cpython_wrapper=True)
-                nodes = compile_func_single_block(
-                    eval("lambda T, ind: _filter_func(T, ind)"),
-                    (rhs.value, rhs.index),
-                    ret_var=None,
-                    typing_info=typing_info,
-                    extra_globals={"_filter_func": filter_func},
-                )
-                # Replace the variable in the return value to keep
-                # distributed analysis consistent.
-                nodes[-1].target = stmt.target
-                # Update distributed analysis for the replaced function
-                new_nodes = list(reversed(nodes))
-                if dist_analysis:
-                    bodo.transforms.distributed_analysis.propagate_assign(
-                        dist_analysis.array_dists, new_nodes
-                    )
-                new_body += new_nodes
-                # We do not set removed = True here, as this branch does not make
-                # any changes that could allow removal in dead code elimination.
-                continue
-            elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "call":
+            if isinstance(stmt.value, ir.Expr) and stmt.value.op == "call":
                 fdef = guard(numba.core.ir_utils.find_callname, func_ir, rhs)
-                if allow_liveness_breaking_changes and fdef == (
+                if fdef == (
                     "generate_mappable_table_func",
                     "bodo.utils.table_utils",
                 ):
@@ -802,7 +840,11 @@ def remove_dead_columns(
                         rhs.args,
                         stmt.target,
                         typing_info=typing_info,
-                        extra_globals={"used_columns": used_columns},
+                        extra_globals={
+                            "used_columns": bodo.utils.typing.MetaType(
+                                tuple(sorted(used_columns))
+                            )
+                        },
                     )
                     new_nodes = list(reversed(nodes))
                     if dist_analysis:
@@ -855,7 +897,7 @@ def remove_dead_columns(
                     else:
                         new_body.append(stmt)
                         continue
-                elif allow_liveness_breaking_changes and fdef == (
+                elif fdef == (
                     "table_astype",
                     "bodo.utils.table_utils",
                 ):
@@ -876,7 +918,11 @@ def remove_dead_columns(
                         rhs.args,
                         stmt.target,
                         typing_info=typing_info,
-                        extra_globals={"used_columns": used_columns},
+                        extra_globals={
+                            "used_columns": bodo.utils.typing.MetaType(
+                                tuple(sorted(used_columns))
+                            )
+                        },
                     )
                     new_nodes = list(reversed(nodes))
                     if dist_analysis:
@@ -887,7 +933,48 @@ def remove_dead_columns(
                     # We do not set removed = True here, as this branch does not make
                     # any changes that could allow removal in dead code elimination.
                     continue
+                elif fdef == ("table_filter", "bodo.hiframes.table"):
+                    # In this case, we've encountered a getitem that filters
+                    # the rows of a table. At this step, we can also
+                    # filter out columns that are not live out of this statment.
 
+                    # Compute all columns that are live at this statement.
+                    used_columns = _find_used_columns(
+                        lhs_name, typemap[rhs.args[0].name], lives, equiv_vars, typemap
+                    )
+                    if used_columns is None:
+                        # if used_columns is None it means all columns are used.
+                        # As such, we can't do any column pruning
+                        new_body.append(stmt)
+                        continue
+
+                    nodes = compile_func_single_block(
+                        eval(
+                            "lambda table, idx: bodo.hiframes.table.table_filter(table, idx, used_cols=used_columns)"
+                        ),
+                        rhs.args,
+                        stmt.target,
+                        typing_info=typing_info,
+                        extra_globals={
+                            "used_columns": bodo.utils.typing.MetaType(
+                                tuple(sorted(used_columns))
+                            )
+                        },
+                    )
+
+                    # Replace the variable in the return value to keep
+                    # distributed analysis consistent.
+                    nodes[-1].target = stmt.target
+                    # Update distributed analysis for the replaced function
+                    new_nodes = list(reversed(nodes))
+                    if dist_analysis:
+                        bodo.transforms.distributed_analysis.propagate_assign(
+                            dist_analysis.array_dists, new_nodes
+                        )
+                    new_body += new_nodes
+                    # We do not set removed = True here, as this branch does not make
+                    # any changes that could allow removal in dead code elimination.
+                    continue
         new_body.append(stmt)
 
     new_body.reverse()
@@ -900,7 +987,6 @@ def remove_dead_table_columns(
     typemap,
     typing_info,
     dist_analysis=None,
-    allow_liveness_breaking_changes=True,
 ):
     """
     Runs table liveness analysis and eliminates columns from TableType
@@ -932,7 +1018,6 @@ def remove_dead_table_columns(
                 typing_info,
                 func_ir,
                 dist_analysis,
-                allow_liveness_breaking_changes,
             )
     func_ir._definitions = build_definitions(func_ir.blocks)
     return removed
@@ -943,16 +1028,20 @@ def get_live_column_nums_block(block_lives, equiv_vars, table_name):
     column numbers that are used by the table. For efficiency this returns
     two values, a sorted list of column numbers and a use_all flag.
     If use_all=True the column numbers are garbage."""
-    total_used_columns, use_all = block_lives.get(table_name, (set(), False))
-    if use_all:
-        return [], True
+    total_used_columns, use_all, cannot_del_cols = block_lives.get(
+        table_name, (set(), False, False)
+    )
+    if use_all or cannot_del_cols:
+        return set(), use_all, cannot_del_cols
     aliases = equiv_vars[table_name]
     for var_name in aliases:
-        new_columns, use_all = block_lives.get(var_name, (set(), False))
-        if use_all:
-            return [], True
+        new_columns, use_all, cannot_del_cols = block_lives.get(
+            var_name, (set(), False, False)
+        )
+        if use_all or cannot_del_cols:
+            return set(), use_all, cannot_del_cols
         total_used_columns = total_used_columns | new_columns
-    return sorted(total_used_columns), False
+    return total_used_columns, False, False
 
 
 def _find_used_columns(lhs_name, table_type, lives, equiv_vars, typemap):
@@ -961,42 +1050,51 @@ def _find_used_columns(lhs_name, table_type, lives, equiv_vars, typemap):
     This is used for functions that update the code to include
     a "used_cols" in an optimization path.
 
-    Returns None if all columns are used, otherwise an np.array
+    Returns None if all columns are used, otherwise a set
     with the used columns.
     """
     # Compute all columns that are live at this statement.
-    used_columns, use_all = get_live_column_nums_block(lives, equiv_vars, lhs_name)
-    if use_all:
+    used_columns, use_all, cannot_del_cols = get_live_column_nums_block(
+        lives, equiv_vars, lhs_name
+    )
+    if use_all or cannot_del_cols:
         return None
     used_columns = bodo.ir.connector.trim_extra_used_columns(
         used_columns, len(table_type.arr_types)
     )
-    return np.array(used_columns, dtype=np.int64)
+    return used_columns
 
 
-def _generate_rhs_use_effective_alias(
+def _generate_rhs_use_map(
     rhs_table, block_use_map, table_col_use_map, equiv_vars, lhs_name
 ):
     """
-    Finds the uses from an operation that effectively acts like an alias
-    (e.g. filter). An operation acts like an alias when it doesn't directly
-    add any additional column uses and all column uses are a function of any
-    uses of its output.
+    Finds the uses from an operation that makes copies of the lists (so
+    it is not an alias), but all uses from the lhs table are uses for
+    the rhs table. (e.g. filter). An operation uses this when it doesn't
+    directly add any additional column uses and all column uses are a
+    function of any uses of its output table and any of its aliases.
 
-    Returns a pair of values:
+    Returns a triple of values:
         - used_columns: set of used columns
-        - use_all: Boolean. If true, used_columns will be the empty set.
+        - use_all (boolean): If true, used_columns will be the empty set.
+        - cannot_del_cols (boolean): If true we cannot prune
+          any columns for this table or any alias.
     """
-    used_columns, use_all = block_use_map[rhs_table]
-    if use_all:
-        return set(), True
+    used_columns, use_all, cannot_del_cols = block_use_map[rhs_table]
+    if use_all or cannot_del_cols:
+        return set(), use_all, cannot_del_cols
     # Make a copy in case the set is shared.
     used_columns = used_columns.copy()
     for other_block_use_map in table_col_use_map.values():
-        used_col_local, use_all = get_live_column_nums_block(
+        used_col_local, use_all, cannot_del_cols = get_live_column_nums_block(
             other_block_use_map, equiv_vars, lhs_name
         )
-        if use_all:
-            return set(), True
+        if use_all or cannot_del_cols:
+            # All map operations make a copy of the underlying
+            # table. As a result, every column is needed for this
+            # operation, but the columns can be safely deleted
+            # from the prior table.
+            return set(), True, False
         used_columns.update(used_col_local)
-    return used_columns, False
+    return used_columns, False, False

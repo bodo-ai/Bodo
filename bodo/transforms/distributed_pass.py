@@ -234,7 +234,6 @@ class DistributedPass:
                 self.func_ir,
                 self.typemap,
                 typing_info,
-                allow_liveness_breaking_changes=False,
             )
             deadcode_eliminated = False
             # If dead columns are pruned, run dead code elimination until there are no changes
@@ -251,11 +250,6 @@ class DistributedPass:
             # If we eliminated dead code, run these two passes again, and mark that we may need to
             # rerun typing pass to perfrom filter pushdown
             flag = deadcode_eliminated
-
-        # run remove_dead_table_columns a final time, to allow for liveness breaking optimizations
-        remove_dead_table_columns(
-            self.func_ir, self.typemap, typing_info, dist_analysis=self._dist_analysis
-        )
 
         # transform
         self._gen_init_code(self.func_ir.blocks)
@@ -472,7 +466,7 @@ class DistributedPass:
             func_name, func_mod = fdef
 
         if (
-            fdef == ("table_filter_func", "")
+            fdef == ("table_filter", "bodo.hiframes.table")
             and self._is_1D_or_1D_Var_arr(lhs)
             and isinstance(self.typemap[rhs.args[1].name], types.SliceType)
         ):
@@ -4421,9 +4415,11 @@ class DistributedPass:
                         shape_nodes.append(stmt)
                         continue
                     # arr[:11] match
-                    if is_expr(rhs, "getitem") and rhs.value.name in arr_varnames:
-                        # TODO(ehsan): Numba may produce static_getitem?
-                        index_def = get_definition(self.func_ir, rhs.index)
+                    if is_call(rhs) and guard(find_callname, self.func_ir, rhs) == (
+                        "table_filter",
+                        "bodo.hiframes.table",
+                    ):
+                        index_def = get_definition(self.func_ir, rhs.args[1])
                         require(
                             find_callname(self.func_ir, index_def)
                             == ("slice", "builtins")
