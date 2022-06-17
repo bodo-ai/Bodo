@@ -982,12 +982,10 @@ def test_index_sort_values(index):
         index2 = index.sort_values()
         return list(index + index2)
 
-    # RangeIndex distributed sort_values not supported yet [BE-2944]
-    dist_test = not (
-        isinstance(index, pd.RangeIndex) and (index.start != 0 or index.step != 1)
-    )
+    # RangeIndex distributed sort_values not supported yet [BE-2944] & [BE-3008]
+    dist_test = not (isinstance(index, pd.RangeIndex))
     check_func(impl1, (index,), dist_test=dist_test)
-    check_func(impl2, (index,), only_1DVar=dist_test)
+    check_func(impl2, (index,), dist_test=dist_test)
     # If the Index is numerical, test alternative placement of nulls and
     # verify nondestructiveness
     if isinstance(index, pd.core.indexes.numeric.Int64Index):

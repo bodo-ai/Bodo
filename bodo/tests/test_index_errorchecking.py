@@ -468,27 +468,21 @@ def test_interval_index_from_tuples():
 @pytest.mark.slow
 def test_index_to_numpy_args():
     def impl1(index):
-        return index.to_numpy(copy=len(index) > 4)
-
-    def impl2(index):
         return index.to_numpy(dtype="unicode")
 
-    def impl3(index):
+    def impl2(index):
         return index.to_numpy(na_value=42)
 
-    def impl4(index):
+    def impl3(index):
         return index.to_numpy(copy=7.5)
 
     err_msg1 = re.escape(
-        "Index.to_numpy(): copy argument must be a compile time constant"
-    )
-    err_msg2 = re.escape(
         "Index.to_numpy(): dtype parameter only supports default value None"
     )
-    err_msg3 = re.escape(
+    err_msg2 = re.escape(
         "Index.to_numpy(): na_value parameter only supports default value None"
     )
-    err_msg4 = re.escape("Index.to_numpy(): copy argument must be a boolean")
+    err_msg3 = re.escape("Index.to_numpy(): copy argument must be a boolean")
 
     I = pd.Index([1, 2, 3, 4, 5])
 
@@ -500,9 +494,6 @@ def test_index_to_numpy_args():
 
     with pytest.raises(BodoError, match=err_msg3):
         bodo.jit(impl3)(I)
-
-    with pytest.raises(BodoError, match=err_msg4):
-        bodo.jit(impl4)(I)
 
 
 @pytest.mark.slow
@@ -931,6 +922,7 @@ def test_set_operations_unsupported():
     with pytest.raises(BodoError, match=err_msg11):
         bodo.jit(impl1)(pd.Index([1, 2, 3, 4, 5]), (1, 3, 5, 7))
 
+    # TODO: allow pd.array [BE-3063]
     with pytest.raises(BodoError, match=err_msg12):
         bodo.jit(impl1)(pd.Index([1, 2, 3, 4, 5]), pd.array([3, 5, 7, 9, 11]))
 

@@ -3196,7 +3196,7 @@ def _verify_setop_compatible(func_name, I, other):
         BodoError: if other is unsupported or incompatible with I for set operations
     """
 
-    if not is_pd_index_type(other) and not bodo.utils.utils.is_array_typ(other, True):
+    if not is_pd_index_type(other) and not isinstance(other, (SeriesType, types.Array)):
         raise BodoError(
             f"pd.Index.{func_name}(): unsupported type for argument other: {other}"
         )
