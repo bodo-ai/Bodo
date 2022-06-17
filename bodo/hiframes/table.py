@@ -1242,6 +1242,7 @@ def table_filter(T, idx, used_cols=None):
         used_cols_type = used_cols.instance_type
         used_cols_data = np.array(used_cols_type.meta, dtype=np.int64)
         glbls["used_cols_vals"] = used_cols_data
+        kept_blks = set([T.block_nums[i] for i in used_cols_data])
     else:
         used_cols_data = None
 
@@ -1262,19 +1263,24 @@ def table_filter(T, idx, used_cols=None):
     if used_cols_data is not None:
         func_text += f"  used_set = set(used_cols_vals)\n"
     for blk in T.type_to_blk.values():
-        glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk], dtype=np.int64)
         func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
         func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), False)\n"
-        func_text += f"  for i in range(len(arr_list_{blk})):\n"
-        func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
-        if used_cols_data is not None:
-            func_text += f"    if arr_ind_{blk} not in used_set: continue\n"
-        func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
-        func_text += (
-            f"    out_arr_{blk} = ensure_contig_if_np(arr_list_{blk}[i][idx])\n"
-        )
-        func_text += f"    l = len(out_arr_{blk})\n"
-        func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
+        if used_cols_data is None or blk in kept_blks:
+            # Check if anything from this type is live. If not skip generating
+            # the loop code.
+            glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk], dtype=np.int64)
+            func_text += f"  for i in range(len(arr_list_{blk})):\n"
+            func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
+            if used_cols_data is not None:
+                func_text += f"    if arr_ind_{blk} not in used_set: continue\n"
+            func_text += (
+                f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
+            )
+            func_text += (
+                f"    out_arr_{blk} = ensure_contig_if_np(arr_list_{blk}[i][idx])\n"
+            )
+            func_text += f"    l = len(out_arr_{blk})\n"
+            func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
     func_text += f"  T2 = set_table_len(T2, l)\n"
     func_text += f"  return T2\n"
