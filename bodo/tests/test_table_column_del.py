@@ -31,9 +31,15 @@ def _check_column_dels(bodo_func, col_del_lists):
     [[1, 3], [2]]. There may be many other blocks that don't remove any
     columns, but we just verify that all elements of this list are
     encountered (and nothing outside this list).
+
+    Note: We do not check the order in which the deletions are inserted
+    within a block to simplify testing as some changes that could occur
+    would be insignificant.
     """
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     typemap = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_typemap"]
+    # Ensure every input list is sorted
+    col_del_lists = [list(sorted(x)) for x in col_del_lists]
     for block in fir.blocks.values():
         block_del_cols = []
         for stmt in block.body:
@@ -46,6 +52,7 @@ def _check_column_dels(bodo_func, col_del_lists):
                     col_num = typemap[stmt.value.args[1].name].literal_value
                     block_del_cols.append(col_num)
         if block_del_cols:
+            block_del_cols = list(sorted(block_del_cols))
             removed = False
             for i, col_list in enumerate(col_del_lists):
                 if col_list == block_del_cols:
@@ -1326,7 +1333,7 @@ def test_table_dead_pq_table_alias(datapath, memory_leak_check):
     """
     Test dead code elimination still works on a table with a used index
     and an alias.
-    TODO: add automatic check to insure that the table is marked as dead
+    TODO: add automatic check to ensure that the table is marked as dead
     """
     filename = datapath(f"many_columns_index.parquet")
 
@@ -1517,3 +1524,543 @@ def test_table_del_astype(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo.jit(impl)()
         check_logger_msg(stream, "Columns loaded ['Column3', 'Column37', 'Column59']")
+
+
+def test_table_nbytes_del_cols(datapath, memory_leak_check):
+    """
+    Test generate_table_nbytes properly creates del_column
+    calls inside the IR. This function should require all
+    columns to be loaded but it should be possible to delete
+    every column that isn't used later once the operation
+    finishes.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df = pd.read_parquet(filename)
+        total_bytes = df.memory_usage(index=False)
+        if total_bytes.sum() > 1000:
+            n = df["Column3"].sum()
+        else:
+            n = df["Column6"].sum()
+        return n
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # df.memory_usage uses every column, but those should be possible
+        # to delete in 1 block
+        init_block_columns = list(sorted(set(range(99)) - {3, 6}))
+        # The other blocks should then each decref the opposite column
+        # at the start and then the used column
+        _check_column_dels(bodo_func, [init_block_columns, [3, 6], [3, 6]])
+
+
+def test_table_nbytes_ret_df(datapath, memory_leak_check):
+    """
+    Test generate_table_nbytes doesn't creates del_column
+    calls inside the IR if we return a DataFrame with the
+    same table.
+
+    Because we return the DataFrame, this also tests that
+    when the source of a table is a DataFrame that we do
+    not prune columns.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df = pd.read_parquet(filename)
+        total_bytes = df.memory_usage(index=False)
+        if total_bytes.sum() > 1000:
+            df["Column0"] += 1
+        else:
+            df["Column0"] += 2
+        return df
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # Since we return a DF no columns should be deleted.
+        _check_column_dels(bodo_func, [])
+
+
+def test_table_concat_del_cols(datapath, memory_leak_check):
+    """
+    Test table_concat properly creates del_column
+    calls inside the IR. This function should enable
+    pruning any columns it needs that isn't used later
+    once the operation finishes.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df = pd.read_parquet(filename)
+        out_df = df.melt(
+            id_vars=["Column2", "Column5"], value_vars=["Column0", "Column3"]
+        )
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if (out_df["Column2"].nunique() + out_df["Column5"].nunique()) > 1000:
+            n = df["Column3"].sum()
+        else:
+            n = df["Column6"].sum()
+        return n
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        check_logger_msg(
+            stream,
+            f"Columns loaded ['Column0', 'Column2', 'Column3', 'Column5', 'Column6']",
+        )
+        # Melt uses but can then delete 0, 2 and 5.
+        # The other blocks delete the columns used in both branch
+        # options.
+        _check_column_dels(bodo_func, [[0, 2, 5], [3, 6], [3, 6]])
+
+
+def test_table_concat_ret_df(datapath, memory_leak_check):
+    """
+    Test table_concat doesn't creates del_column
+    calls inside the IR if we return a DataFrame with the
+    same table.
+
+    Because we return the DataFrame, this also tests that
+    when the source of a table is a DataFrame that we do
+    not prune columns.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df = pd.read_parquet(filename)
+        out_df = df.melt(
+            id_vars=["Column2", "Column5"], value_vars=["Column0", "Column3"]
+        )
+        if (out_df["Column2"].nunique() + out_df["Column5"].nunique()) > 1000:
+            df["Column0"] += 1
+        else:
+            df["Column0"] += 2
+        return df
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded as we have a source DataFrame.
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # Since we return a DF no columns should be deleted.
+        _check_column_dels(bodo_func, [])
+
+
+def test_table_set_data_reflection(memory_leak_check):
+    """
+    Tests that set_table_data works properly reflects columns
+    back to the parent and won't attempt to delete columns.
+    """
+
+    def impl(df):
+        df["G"] = np.arange(len(df))
+        return df["A"].sum()
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 2, 3] * 20,
+            "B": ["abc", "bc", "cd"] * 20,
+            "C": [5, 6, 7] * 20,
+            "D": [1.1, 2.2, 3.3] * 20,
+        }
+    )
+    # add a bunch of columns to trigger table format
+    for i in range(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD):
+        df[f"F{i}"] = 11
+
+    df2 = df.copy(deep=True)
+    df2["G"] = np.arange(len(df))
+
+    bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+    n = bodo_func(df)
+    # Verify the output + reflection
+    assert n == 120, "Incorrect sum computed"
+    pd.testing.assert_frame_equal(df, df2)
+    # Since the source is a DF, no columns should be deleted.
+    _check_column_dels(bodo_func, [])
+
+
+def test_table_astype_del_cols(datapath, memory_leak_check):
+    """
+    Test table_astype properly creates del_column
+    calls inside the IR and that calling table prunes
+    its columns as well.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.astype({"Column0": np.float32, "Column6": np.float32})
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if df2["Column0"].sum() > 1000.0:
+            n = df1["Column3"].sum()
+        else:
+            n = df1["Column6"].sum()
+        # TODO: Putting the df2["Column6"] inside the branch
+        # fails because clobbering df2 results in a phi node
+        # which prevents eliminating the intermediate
+        # DataFrame.
+        df2["Column6"] += n
+        return df2["Column6"]
+
+    # Set check_dtype=False becuase the += upcasts
+    # Column6 in Pandas despite always having an
+    # int output.
+    check_func(impl, (), check_dtype=False)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        check_logger_msg(
+            stream,
+            f"Columns loaded ['Column0', 'Column3', 'Column6']",
+        )
+        # In the first block df1 needs to load columns 0 and 6 for astype.
+        # Column 0 is no longer needed by df1 after the operation. Similarly
+        # df2 can remove column 0 after the getitem, so both delete the column
+        # in the first block.
+        _check_column_dels(bodo_func, [[0, 0], [3, 6], [3, 6], [6]])
+
+
+def test_table_astype_ret_df_input(datapath, memory_leak_check):
+    """
+    Test table_astype output creates del_column
+    calls inside the IR if we return a DataFrame with the
+    input table.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.astype({"Column0": np.float32, "Column6": np.float32})
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if df2["Column0"].sum() > 1000.0:
+            n = df1["Column3"].sum()
+        else:
+            n = df1["Column6"].sum()
+        # TODO: Putting the df2["Column6"] inside the branch
+        # fails because clobbering df2 results in a phi node
+        # which prevents eliminating the intermediate
+        # DataFrame.
+        df1["Column0"] += n
+        return df1
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded as we have a source DataFrame.
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # Since we return we only delete the columns from df2.
+        # Note: Column 6 will be pruned.
+        _check_column_dels(bodo_func, [[0]])
+
+
+def test_table_astype_ret_df_output(datapath, memory_leak_check):
+    """
+    Test table_astype output doesn't create del_column
+    calls inside the IR if we return the result DataFrame.
+    However, the del_column should still be created for the input.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.astype({"Column0": np.float32, "Column6": np.float32})
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if df2["Column0"].sum() > 1000.0:
+            n = df1["Column3"].sum()
+        else:
+            n = df1["Column6"].sum()
+        # TODO: Putting the df2["Column6"] inside the branch
+        # fails because clobbering df2 results in a phi node
+        # which prevents eliminating the intermediate
+        # DataFrame.
+        df2["Column6"] += n
+        return df2
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded as we have an output DataFrame.
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # We prune columns from df1 after the astype.
+        init_block_columns = list(sorted(set(range(99)) - {3, 6}))
+        _check_column_dels(bodo_func, [init_block_columns, [3, 6], [3, 6]])
+
+
+def test_filter_del_cols(datapath, memory_leak_check):
+    """
+    Test table_filter properly creates del_column
+    calls inside the IR and that calling table prunes
+    its columns as well.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        # TODO [BE-3056]: Investigtate segfault in SUM or += if some ranks
+        # have empty data
+        df2 = df1.head(1000)
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if df2["Column0"].sum() > 1000.0:
+            n = df1["Column3"].sum()
+        else:
+            n = df1["Column6"].sum()
+        # TODO: Putting the df2["Column6"] inside the branch
+        # fails because clobbering df2 results in a phi node
+        # which prevents eliminating the intermediate
+        # DataFrame.
+        df2["Column6"] += n
+        return df2["Column6"]
+
+    # Set check_dtype=False becuase the += upcasts
+    # Column6 in Pandas despite always having an
+    # int output.
+    check_func(impl, (), check_dtype=False)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        check_logger_msg(
+            stream,
+            f"Columns loaded ['Column0', 'Column3', 'Column6']",
+        )
+        # In the first block df1 needs to load columns 0 and 6 for astype.
+        # Column 0 is no longer needed by df1 after the operation. Similarly
+        # df2 can remove column 0 after the getitem, so both delete the column
+        # in the first block.
+        _check_column_dels(bodo_func, [[0, 0], [3, 6], [3, 6], [6]])
+
+
+def test_filter_ret_df_input(datapath, memory_leak_check):
+    """
+    Test table_filter output creates del_column
+    calls inside the IR if we return a DataFrame with the
+    input table.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.head(1000)
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if df2["Column0"].sum() > 1000.0:
+            n = df1["Column3"].sum()
+        else:
+            n = df1["Column6"].sum()
+        # TODO: Putting the df2["Column6"] inside the branch
+        # fails because clobbering df2 results in a phi node
+        # which prevents eliminating the intermediate
+        # DataFrame.
+        df1["Column0"] += n
+        return df1
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded as we have a source DataFrame.
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # Since we return we only delete the columns from df2.
+        # Note: Column 6 will be pruned.
+        _check_column_dels(bodo_func, [[0]])
+
+
+def test_table_filter_ret_df_output(datapath, memory_leak_check):
+    """
+    Test table_filter output doesn't create del_column
+    calls inside the IR if we return the result DataFrame.
+    However, the del_column should still be created for the input.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.head(1000)
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if df2["Column0"].sum() > 1000.0:
+            n = df1["Column3"].sum()
+        else:
+            n = df1["Column6"].sum()
+        # TODO: Putting the df2["Column6"] inside the branch
+        # fails because clobbering df2 results in a phi node
+        # which prevents eliminating the intermediate
+        # DataFrame.
+        df2["Column6"] += n
+        return df2
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded as we have an output DataFrame.
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # We prune columns from df1 after the filter.
+        init_block_columns = list(sorted(set(range(99)) - {3, 6}))
+        _check_column_dels(bodo_func, [init_block_columns, [3, 6], [3, 6]])
+
+
+def test_table_mappable_del_cols(datapath, memory_leak_check):
+    """
+    Test generate_mappable_table_func properly creates del_column
+    calls inside the IR and that calling table prunes
+    its columns as well.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.copy()
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if df2["Column0"].sum() > 1000.0:
+            n = df1["Column3"].sum()
+        else:
+            n = df1["Column6"].sum()
+        # TODO: Putting the df2["Column6"] inside the branch
+        # fails because clobbering df2 results in a phi node
+        # which prevents eliminating the intermediate
+        # DataFrame.
+        df2["Column6"] += n
+        return df2["Column6"]
+
+    # Set check_dtype=False becuase the += upcasts
+    # Column6 in Pandas despite always having an
+    # int output.
+    check_func(impl, (), check_dtype=False)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        check_logger_msg(
+            stream,
+            f"Columns loaded ['Column0', 'Column3', 'Column6']",
+        )
+        # In the first block df1 needs to load columns 0 and 6 for astype.
+        # Column 0 is no longer needed by df1 after the operation. Similarly
+        # df2 can remove column 0 after the getitem, so both delete the column
+        # in the first block.
+        _check_column_dels(bodo_func, [[0, 0], [3, 6], [3, 6], [6]])
+
+
+def test_table_mappable_ret_df_input(datapath, memory_leak_check):
+    """
+    Test generate_mappable_table_func output creates del_column
+    calls inside the IR if we return a DataFrame with the
+    input table.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.copy()
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if df2["Column0"].sum() > 1000.0:
+            n = df1["Column3"].sum()
+        else:
+            n = df1["Column6"].sum()
+        # TODO: Putting the df2["Column6"] inside the branch
+        # fails because clobbering df2 results in a phi node
+        # which prevents eliminating the intermediate
+        # DataFrame.
+        df1["Column0"] += n
+        return df1
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded as we have a source DataFrame.
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # Since we return we only delete the columns from df2.
+        # Note: Column 6 will be pruned.
+        _check_column_dels(bodo_func, [[0]])
+
+
+def test_table_mappable_ret_df_output(datapath, memory_leak_check):
+    """
+    Test generate_mappable_table_func output doesn't create del_column
+    calls inside the IR if we return the result DataFrame.
+    However, the del_column should still be created for the input.
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.copy()
+        # Use both Column2 and Column5 so they don't get claimed by DCE.
+        # These columns aren't part of table operations.
+        if df2["Column0"].sum() > 1000.0:
+            n = df1["Column3"].sum()
+        else:
+            n = df1["Column6"].sum()
+        # TODO: Putting the df2["Column6"] inside the branch
+        # fails because clobbering df2 results in a phi node
+        # which prevents eliminating the intermediate
+        # DataFrame.
+        df2["Column6"] += n
+        return df2
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # All columns should be loaded as we have an output DataFrame.
+        columns_list = [f"Column{i}" for i in range(99)]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        # We prune columns from df1 after the copy.
+        init_block_columns = list(sorted(set(range(99)) - {3, 6}))
+        _check_column_dels(bodo_func, [init_block_columns, [3, 6], [3, 6]])

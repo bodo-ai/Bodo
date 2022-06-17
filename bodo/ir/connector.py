@@ -3,7 +3,7 @@
 Common IR extension functions for connectors such as CSV, Parquet and JSON readers.
 """
 from collections import defaultdict
-from typing import Literal, Tuple
+from typing import Literal, Set, Tuple
 
 import numba
 from numba.core import ir, types
@@ -268,23 +268,24 @@ def box_stream_reader(typ, val, c):
     return val
 
 
-def trim_extra_used_columns(used_columns, num_columns):
+def trim_extra_used_columns(used_columns: Set, num_columns: int):
     """
     Trim a computed set of used columns to eliminate any columns
     beyond the num_columns available at the source. This is necessary
     because a set_table_data call could introduce new columns which
     would be initially included to load (see test_table_extra_column)
 
-    used_columns is assumed to be a sorted list in increasing order.
+
+    Args:
+        used_columns (Set): Set of used columns
+        num_columns (int): Total number of possible columns.
+            All columns >= num_columns should be removed.
+
+    Returns:
+        Set: Set of used columns after removing any out of
+            bounds columns.
     """
-    end = len(used_columns)
-    for i in range(len(used_columns) - 1, -1, -1):
-        # Columns are sorted in reverse order, so iterate backwards
-        # until we find a column within the original table bounds
-        if used_columns[i] < num_columns:
-            break
-        end = i
-    return used_columns[:end]
+    return {i for i in used_columns if i < num_columns}
 
 
 def cast_float_to_nullable(df, df_type):
@@ -341,42 +342,43 @@ def base_connector_remove_dead_columns(
     # the index. See 'remove_dead_sql' or 'remove_dead_pq' for examples.
     if possible_cols:
         # Compute all columns that are live at this statement.
-        used_columns, use_all = get_live_column_nums_block(
+        used_columns, use_all, cannot_del_cols = get_live_column_nums_block(
             column_live_map, equiv_vars, table_var_name
         )
-        used_columns = trim_extra_used_columns(used_columns, len(possible_cols))
-        if not use_all and not used_columns:
-            # If we see no specific column is need some operations need some
-            # column but no specific column. For example:
-            # T = read_parquet(table(0, 1, 2, 3))
-            # n = len(T)
-            #
-            # Here we just load column 0. If no columns are actually needed, dead
-            # code elimination will remove the entire IR var in 'remove_dead_parquet'.
-            #
-            used_columns = [0]
-        if not use_all and len(used_columns) != len(node.out_used_cols):
-            # Update the type offset. If an index column its not included in
-            # the original table. If we have code like
-            #
-            # T = read_csv(table(0, 1, 2, 3)) # Assume index column is column 2
-            #
-            # We type T without the index column as Table(arr0, arr1, arr3).
-            # As a result once we apply optimizations, all the column indices
-            # will refer to the index within that type, not the original file.
-            #
-            # i.e. T[2] == arr3
-            #
-            # This means that used_columns will track the offsets within the type,
-            # not the actual column numbers in the file. We keep these offsets separate
-            # while finalizing DCE and we will update the file with the actual columns later
-            # in distirbuted pass.
-            #
-            # For more information see:
-            # https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns#User-Provided-Column-Pruning-at-the-Source
+        if not (use_all or cannot_del_cols):
+            used_columns = trim_extra_used_columns(used_columns, len(possible_cols))
+            if not used_columns:
+                # If we see no specific column is need some operations need some
+                # column but no specific column. For example:
+                # T = read_parquet(table(0, 1, 2, 3))
+                # n = len(T)
+                #
+                # Here we just load column 0. If no columns are actually needed, dead
+                # code elimination will remove the entire IR var in 'remove_dead_parquet'.
+                #
+                used_columns = {0}
+            if len(used_columns) != len(node.out_used_cols):
+                # Update the type offset. If an index column its not included in
+                # the original table. If we have code like
+                #
+                # T = read_csv(table(0, 1, 2, 3)) # Assume index column is column 2
+                #
+                # We type T without the index column as Table(arr0, arr1, arr3).
+                # As a result once we apply optimizations, all the column indices
+                # will refer to the index within that type, not the original file.
+                #
+                # i.e. T[2] == arr3
+                #
+                # This means that used_columns will track the offsets within the type,
+                # not the actual column numbers in the file. We keep these offsets separate
+                # while finalizing DCE and we will update the file with the actual columns later
+                # in distirbuted pass.
+                #
+                # For more information see:
+                # https://bodo.atlassian.net/wiki/spaces/B/pages/921042953/Table+Structure+with+Dead+Columns#User-Provided-Column-Pruning-at-the-Source
 
-            node.out_used_cols = used_columns
-            # Return that this table was updated
+                node.out_used_cols = list(sorted(used_columns))
+                # Return that this table was updated
 
     """We return flase in all cases, as no changes performed in the file will allow for dead code elimination to do work."""
     return False

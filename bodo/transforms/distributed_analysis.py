@@ -473,7 +473,14 @@ class DistributedAnalysis:
             self._analyze_getattr(lhs, rhs, array_dists)
         elif is_expr(rhs, "call"):
             self._analyze_call(
-                lhs, rhs, rhs.func.name, rhs.args, dict(rhs.kws), equiv_set, array_dists
+                inst,
+                lhs,
+                rhs,
+                rhs.func.name,
+                rhs.args,
+                dict(rhs.kws),
+                equiv_set,
+                array_dists,
             )
         # handle both
         # for A in arr_container: ...
@@ -825,7 +832,9 @@ class DistributedAnalysis:
 
         return out_dist, non_concat_redvars
 
-    def _analyze_call(self, lhs, rhs, func_var, args, kws, equiv_set, array_dists):
+    def _analyze_call(
+        self, inst, lhs, rhs, func_var, args, kws, equiv_set, array_dists
+    ):
         """analyze array distributions in function calls"""
         func_name = ""
         func_mod = ""
@@ -899,9 +908,17 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("table_filter", "bodo.hiframes.table"):
+            in_var = rhs.args[0]
+            index_var = rhs.args[1]
+            # Filter code matches getitem code.
+            self._analyze_getitem_array_table_inputs(
+                inst, lhs, in_var, index_var, rhs.loc, equiv_set, array_dists
+            )
+            return
+
         if fdef == ("table_concat", "bodo.utils.table_utils"):
             table = args[0].name
-            col_nums = args[1].name
             out_dist = Distribution.OneD_Var
             if lhs in array_dists:
                 out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
@@ -909,13 +926,6 @@ class DistributedAnalysis:
             array_dists[lhs] = out_dist
             if out_dist != Distribution.OneD_Var:
                 array_dists[table] = out_dist
-            self._set_REP(
-                col_nums,
-                array_dists,
-                "col_nums in table_concat is REP",
-                rhs.loc,
-            )
-
             return
 
         if (
@@ -3227,6 +3237,119 @@ class DistributedAnalysis:
             ).format(", ".join(f"'{self._get_user_varname(a)}'" for a in arrs), fname)
             self._add_diag_info(info, loc)
 
+    def _analyze_getitem_array_table_inputs(
+        self, inst, lhs, in_var, index_var, rhs_loc, equiv_set, array_dists
+    ):
+        """analyze getitem nodes for arrays/tables
+        having determined the the variable and index value."""
+        in_typ = self.typemap[in_var.name]
+
+        if (in_var.name, index_var.name) in self._parallel_accesses:
+            # XXX: is this always valid? should be done second pass?
+            self._set_REP(
+                [inst.target],
+                array_dists,
+                "output of distributed getitem is REP",
+                rhs_loc,
+            )
+            return
+
+        # in multi-dimensional case, we only consider first dimension
+        # TODO: extend to 2D distribution
+        tup_list = guard(find_build_tuple, self.func_ir, index_var)
+        if tup_list is not None:
+            index_var = tup_list[0]
+            # rest of indices should be replicated if array
+            other_ind_vars = tup_list[1:]
+            self._set_REP(
+                other_ind_vars, array_dists, "getitem index variables are REP", rhs_loc
+            )
+
+        assert isinstance(index_var, ir.Var)
+        index_typ = self.typemap[index_var.name]
+
+        # array selection with boolean index
+        if (
+            is_np_array_typ(index_typ)
+            and index_typ.dtype == types.boolean
+            or index_typ == boolean_array
+        ):
+            # input array and bool index have the same distribution
+            new_dist = self._meet_array_dists(index_var.name, in_var.name, array_dists)
+            out_dist = Distribution.OneD_Var
+            if lhs in array_dists:
+                out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
+            out_dist = Distribution(min(out_dist.value, new_dist.value))
+            array_dists[lhs] = out_dist
+            # output can cause input REP
+            if out_dist != Distribution.OneD_Var:
+                self._meet_array_dists(
+                    index_var.name, in_var.name, array_dists, out_dist
+                )
+            return
+
+        # whole slice access, output has same distribution as input
+        # for example: A = X[:,5]
+        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
+            is_slice_equiv_arr,
+            # TODO(ehsan): inst.target instead of in_var results in invalid array
+            # analysis equivalence sometimes, see test_dataframe_columns_list
+            # inst.target,
+            in_var,
+            index_var,
+            self.func_ir,
+            equiv_set,
+        ):
+            self._meet_array_dists(lhs, in_var.name, array_dists)
+            return
+        # chunked slice or strided slice can be 1D_Var
+        # examples: A = X[:n//3], A = X[::2,5]
+        elif isinstance(index_typ, types.SliceType):
+            # output array is 1D_Var if input array is distributed
+            out_dist = Distribution.OneD_Var
+            if lhs in array_dists:
+                out_dist = self._min_dist(out_dist, array_dists[lhs])
+            out_dist = self._min_dist(out_dist, array_dists[in_var.name])
+            array_dists[lhs] = out_dist
+            # input can become REP
+            if out_dist != Distribution.OneD_Var:
+                array_dists[in_var.name] = out_dist
+            return
+
+        # avoid parallel scalar getitem when inside a parfor
+        # examples: test_np_dot, logistic_regression_rand
+        if self.in_parallel_parfor != -1:
+            self._set_REP(
+                inst.list_vars(),
+                array_dists,
+                "getitem inside parallel loop is REP",
+                rhs_loc,
+            )
+            return
+
+        # int index of dist array
+        if isinstance(index_typ, types.Integer):
+            # multi-dim not supported yet, TODO: support
+            if is_np_array_typ(in_typ) and in_typ.ndim > 1:
+                self._set_REP(
+                    inst.list_vars(),
+                    array_dists,
+                    "distributed getitem of multi-dimensional array with int index not supported yet",
+                    rhs_loc,
+                )
+            if is_distributable_typ(self.typemap[lhs]):
+                self._set_REP(
+                    lhs,
+                    array_dists,
+                    "output of distributed getitem with int index is REP",
+                    rhs_loc,
+                )
+            return
+
+        self._set_REP(
+            inst.list_vars(), array_dists, "unsupported getitem distribution", rhs_loc
+        )
+
     def _analyze_getitem(self, inst, lhs, rhs, equiv_set, array_dists):
         """analyze getitem nodes for distribution"""
         in_var = rhs.value
@@ -3272,112 +3395,8 @@ class DistributedAnalysis:
             )
             return
 
-        if (rhs.value.name, index_var.name) in self._parallel_accesses:
-            # XXX: is this always valid? should be done second pass?
-            self._set_REP(
-                [inst.target],
-                array_dists,
-                "output of distributed getitem is REP",
-                rhs.loc,
-            )
-            return
-
-        # in multi-dimensional case, we only consider first dimension
-        # TODO: extend to 2D distribution
-        tup_list = guard(find_build_tuple, self.func_ir, index_var)
-        if tup_list is not None:
-            index_var = tup_list[0]
-            # rest of indices should be replicated if array
-            other_ind_vars = tup_list[1:]
-            self._set_REP(
-                other_ind_vars, array_dists, "getitem index variables are REP", rhs.loc
-            )
-
-        assert isinstance(index_var, ir.Var)
-        index_typ = self.typemap[index_var.name]
-
-        # array selection with boolean index
-        if (
-            is_np_array_typ(index_typ)
-            and index_typ.dtype == types.boolean
-            or index_typ == boolean_array
-        ):
-            # input array and bool index have the same distribution
-            new_dist = self._meet_array_dists(
-                index_var.name, rhs.value.name, array_dists
-            )
-            out_dist = Distribution.OneD_Var
-            if lhs in array_dists:
-                out_dist = Distribution(min(out_dist.value, array_dists[lhs].value))
-            out_dist = Distribution(min(out_dist.value, new_dist.value))
-            array_dists[lhs] = out_dist
-            # output can cause input REP
-            if out_dist != Distribution.OneD_Var:
-                self._meet_array_dists(
-                    index_var.name, rhs.value.name, array_dists, out_dist
-                )
-            return
-
-        # whole slice access, output has same distribution as input
-        # for example: A = X[:,5]
-        if guard(is_whole_slice, self.typemap, self.func_ir, index_var) or guard(
-            is_slice_equiv_arr,
-            # TODO(ehsan): inst.target instead of in_var results in invalid array
-            # analysis equivalence sometimes, see test_dataframe_columns_list
-            # inst.target,
-            in_var,
-            index_var,
-            self.func_ir,
-            equiv_set,
-        ):
-            self._meet_array_dists(lhs, in_var.name, array_dists)
-            return
-        # chunked slice or strided slice can be 1D_Var
-        # examples: A = X[:n//3], A = X[::2,5]
-        elif isinstance(index_typ, types.SliceType):
-            # output array is 1D_Var if input array is distributed
-            out_dist = Distribution.OneD_Var
-            if lhs in array_dists:
-                out_dist = self._min_dist(out_dist, array_dists[lhs])
-            out_dist = self._min_dist(out_dist, array_dists[in_var.name])
-            array_dists[lhs] = out_dist
-            # input can become REP
-            if out_dist != Distribution.OneD_Var:
-                array_dists[in_var.name] = out_dist
-            return
-
-        # avoid parallel scalar getitem when inside a parfor
-        # examples: test_np_dot, logistic_regression_rand
-        if self.in_parallel_parfor != -1:
-            self._set_REP(
-                inst.list_vars(),
-                array_dists,
-                "getitem inside parallel loop is REP",
-                rhs.loc,
-            )
-            return
-
-        # int index of dist array
-        if isinstance(index_typ, types.Integer):
-            # multi-dim not supported yet, TODO: support
-            if is_np_array_typ(in_typ) and in_typ.ndim > 1:
-                self._set_REP(
-                    inst.list_vars(),
-                    array_dists,
-                    "distributed getitem of multi-dimensional array with int index not supported yet",
-                    rhs.loc,
-                )
-            if is_distributable_typ(self.typemap[lhs]):
-                self._set_REP(
-                    lhs,
-                    array_dists,
-                    "output of distributed getitem with int index is REP",
-                    rhs.loc,
-                )
-            return
-
-        self._set_REP(
-            inst.list_vars(), array_dists, "unsupported getitem distribution", rhs.loc
+        self._analyze_getitem_array_table_inputs(
+            inst, lhs, in_var, index_var, rhs.loc, equiv_set, array_dists
         )
 
     def _analyze_setitem(self, inst, equiv_set, array_dists):
@@ -4090,7 +4109,7 @@ def propagate_assign(array_dists: Dict[str, Distribution], nodes: List[ir.Stmt])
 
     Args:
         array_dists (dict[str, Distribution]): distributed analysis for each variable
-        nodes (List[ir.Var]): List of IR node
+        nodes (List[ir.Stmt]): List of IR nodes to check.
     """
     for node in nodes:
         if isinstance(node, ir.Assign) and isinstance(node.value, ir.Var):

@@ -94,7 +94,12 @@ def generate_mappable_table_func(
         func_text += f"  out_list = bodo.hiframes.table.alloc_empty_list_type({num_cols}, lst_dtype)\n"
     # Convert used_cols to a set if it exists
     if not is_overload_none(used_cols):
-        func_text += f"  used_cols_set = set(used_cols)\n"
+        # Get the actual MetaType from the TypeRef
+        used_cols_type = used_cols.instance_type
+        glbls["used_cols_glbl"] = np.array(used_cols_type.meta, dtype=np.int64)
+        # TODO: Generate less code based on the columns skipped
+        # by used_cols.
+        func_text += f"  used_cols_set = set(used_cols_glbl)\n"
     else:
         func_text += f"  used_cols_set = used_cols\n"
 
@@ -206,7 +211,7 @@ def generate_table_nbytes(table, out_arr, start_offset, parallel=False):
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def table_concat(table, col_nums, arr_type):
+def table_concat(table, col_nums_meta, arr_type):
     """
     Concatenates the columns from table corresponding to col_nums, which will be a list of column numbers. Requires
     that all column data in col_nums columns are of arr_type, that all column data comes from the same block and
@@ -219,7 +224,12 @@ def table_concat(table, col_nums, arr_type):
     glbls = {"bodo": bodo}
     glbls["col_indices"] = np.array(table.block_to_arr_ind[concat_blk], dtype=np.int64)
 
-    func_text = "def impl(table, col_nums, arr_type):\n"
+    # Get the actual Metatype from the TypeRef
+    col_nums = col_nums_meta.instance_type
+    # Lower the col_nums as an array. We do this to keep the used columns
+    # visible in the IR for table column deletion.
+    glbls["col_nums"] = np.array(col_nums.meta, np.int64)
+    func_text = "def impl(table, col_nums_meta, arr_type):\n"
     func_text += f"  blk = bodo.hiframes.table.get_table_block(table, {concat_blk})\n"
     func_text += (
         "  col_num_to_ind_in_blk = {c : i for i, c in enumerate(col_indices)}\n"
@@ -288,11 +298,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     """
 
     # Get the underlying type for the typeref
-    new_table_typ = (
-        new_table_typ.instance_type
-        if isinstance(new_table_typ, types.TypeRef)
-        else new_table_typ
-    )
+    new_table_typ = new_table_typ.instance_type
 
     # Determine if we can avoid the copy
     may_copy = not is_overload_false(copy)
@@ -333,20 +339,18 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     # Create the set of kept columns and changed cols.
     possible_cols = set(range(len(old_arr_typs)))
     copied_cols = possible_cols - changed_cols
-    # Lowering the sets as a global causes them to be set as
-    # reflected sets. This causes a type mismatch when used_cols
-    # is not None, so we lower an array.
-    # TODO: Disable reflection and lower sets.
+    if not is_overload_none(used_cols):
+        used_cols_type = used_cols.instance_type
+        used_cols_set = set(used_cols_type.meta)
+        # Only keep the columns that are selected via usecols
+        changed_cols = changed_cols & used_cols_set
+        copied_cols = copied_cols & used_cols_set
+    # TODO: Replace with sets when memory leak for lowering constant
+    # sets is fixed.
     glbls["cast_cols"] = np.array(list(changed_cols), dtype=np.int64)
     glbls["copied_cols"] = np.array(list(copied_cols), dtype=np.int64)
     func_text += f"  copied_cols_set = set(copied_cols)\n"
     func_text += f"  cast_cols_set = set(cast_cols)\n"
-    if not is_overload_none(used_cols):
-        # If used_cols is not None we filter additional columns.
-        func_text += f"  used_cols_set = set(used_cols)\n"
-        func_text += f"  copied_cols_set = copied_cols_set & used_cols_set\n"
-        func_text += f"  cast_cols_set = cast_cols_set & used_cols_set\n"
-
     # Generate the initial blocks for the output table.
     for typ, blk in new_table_typ.type_to_blk.items():
         glbls[f"typ_list_{blk}"] = types.List(typ)

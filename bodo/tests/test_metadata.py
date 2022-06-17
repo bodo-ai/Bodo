@@ -445,6 +445,11 @@ def test_df_return_metadata(gen_func, use_func):
     such a way that an error would be thrown if the dataframe's column's type was infered as the default (string).
     """
 
+    # Disable this test with table format as we don't
+    # have type metadata support with table format yet.
+    if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 1:
+        return
+
     out = gen_func()
 
     # sanity check to insure that gen_func does actually produce a distributed output
