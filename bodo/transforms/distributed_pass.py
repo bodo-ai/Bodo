@@ -234,6 +234,7 @@ class DistributedPass:
                 self.func_ir,
                 self.typemap,
                 typing_info,
+                self._dist_analysis,
             )
             deadcode_eliminated = False
             # If dead columns are pruned, run dead code elimination until there are no changes
