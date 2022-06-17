@@ -26,8 +26,14 @@ def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
     import bodo_iceberg_connector
     import numba.core
 
+    from bodo.io.parquet_pio import _get_numba_typ_from_pa_typ
+
     try:
-        schema = bodo_iceberg_connector.get_bodo_connector_typing_schema(
+        (
+            col_names,
+            col_types,
+            pyarrow_schema,
+        ) = bodo_iceberg_connector.get_iceberg_typing_schema(
             con, database_schema, table_name
         )
 
@@ -42,10 +48,14 @@ def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
         else:
             raise BodoError(e.message)
 
-    return schema
+    bodo_types = [
+        _get_numba_typ_from_pa_typ(typ, False, True, None)[0] for typ in col_types
+    ]
+
+    return (col_names, bodo_types, pyarrow_schema)
 
 
-def get_iceberg_file_list(table_name, conn, database_schema, filters):
+def get_iceberg_file_list(table_name: str, conn: str, database_schema: str, filters):
     """
     Gets the list of parquet data files that need to be read
     from an Iceberg table by calling objmode. We also pass

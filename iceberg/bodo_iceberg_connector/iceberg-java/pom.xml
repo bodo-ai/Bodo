@@ -4,10 +4,10 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.bodo.iceberg</groupId>
-  <artifactId>iceberg-reader</artifactId>
+  <artifactId>iceberg-java</artifactId>
   <version>1.0-SNAPSHOT</version>
 
-  <name>iceberg-reader</name>
+  <name>iceberg-java</name>
   <!-- FIXME change it to the project's website -->
   <url>http://www.example.com</url>
 

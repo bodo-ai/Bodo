@@ -11,7 +11,7 @@ import os
 import subprocess
 import time
 
-from bodo_apis.config import DEFAULT_PORT
+from bodo_iceberg_connector.config import DEFAULT_PORT
 from py4j.java_gateway import GatewayParameters, JavaGateway
 
 # Dictionary of port number -> gateway
@@ -39,7 +39,7 @@ def launch_java_process_async(port):
     iceberg_poc_dir = os.path.dirname(os.path.abspath(__file__))
     # Get the jar path
     full_path = (
-        iceberg_poc_dir + "/../iceberg-reader/target/iceberg-reader-1.0-SNAPSHOT.jar"
+        iceberg_poc_dir + "/../iceberg-java/target/iceberg-java-1.0-SNAPSHOT.jar"
     )
     jar_command = [f"java -jar {full_path} {port}"]
     java_process = subprocess.Popen(jar_command, shell=True)

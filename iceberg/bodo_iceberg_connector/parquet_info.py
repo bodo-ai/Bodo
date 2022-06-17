@@ -6,14 +6,10 @@ from collections import namedtuple
 from urllib.parse import urlparse
 
 import jpype
-from bodo_iceberg_connector.bodo_apis.config import DEFAULT_PORT
-from bodo_iceberg_connector.bodo_apis.errors import IcebergJavaError
-from bodo_iceberg_connector.bodo_apis.filter_to_java import (
-    convert_expr_to_java_parsable,
-)
-from bodo_iceberg_connector.bodo_apis.jpype_support import (
-    get_iceberg_java_table_reader,
-)
+from bodo_iceberg_connector.config import DEFAULT_PORT
+from bodo_iceberg_connector.errors import IcebergJavaError
+from bodo_iceberg_connector.filter_to_java import convert_expr_to_java_parsable
+from bodo_iceberg_connector.jpype_support import get_iceberg_java_table_reader
 
 # Named Tuple for Parquet info
 BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start length")
@@ -29,7 +25,7 @@ def bodo_connector_get_parquet_file_list(warehouse, schema, table, filters):
 
     # filepath is a URI (file:///User/sw/...) or a relative path that needs converted to
     # a full path
-    # replace Hadoop S3A URI scheme
+    # Replace Hadoop S3A URI scheme with regular S3 Scheme
     return [
         x.filepath.replace("s3a://", "s3://").removeprefix("file:")
         if _has_uri_scheme(x.filepath)

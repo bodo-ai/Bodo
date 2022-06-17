@@ -15,7 +15,5 @@ conda config --set remote_backoff_factor 60
 source activate $CONDA_ENV
 
 $CONDA_INSTALL -c conda-forge openjdk jpype1 maven pyspark=3.2
-cd iceberg/bodo_iceberg_connector/iceberg-reader
-mvn clean install -Dmaven.test.skip=true -f pom.xml
-cd ../..
+cd iceberg
 python setup.py develop

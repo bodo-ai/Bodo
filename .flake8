@@ -18,4 +18,4 @@ exclude =
 	*.cpp
 	*.c
 	*.h
-    *.java
+	*.java

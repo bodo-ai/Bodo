@@ -1,3 +1,3 @@
-import bodo_iceberg_connector.bodo_apis.gateway
+import bodo_iceberg_connector.py4j.gateway
 
 bodo_iceberg_connector.bodo_apis.gateway.launch_default_java_process_async()

@@ -11,8 +11,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
-
-from bodo_iceberg_connector.bodo_apis.jpype_support import (
+from bodo_iceberg_connector.jpype_support import (
     get_boolean_class,
     get_date_type_class,
     get_double_class,

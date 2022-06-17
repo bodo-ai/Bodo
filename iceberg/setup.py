@@ -28,7 +28,7 @@ def build_libs(obj):
     """Build maven and then calls the original run command"""
 
     try:
-        pom_dir = os.path.join("bodo_iceberg_connector", "iceberg-reader", "pom.xml")
+        pom_dir = os.path.join("bodo_iceberg_connector", "iceberg-java", "pom.xml")
         cmd_list = ["mvn", "install"]
         cmd_list += [
             "-Dmaven.test.skip=true",
@@ -69,9 +69,11 @@ setup(
     url="https://bodo.ai",
     author="Bodo.ai",
     packages=find_packages(),
+    package_data={"bodo_iceberg_connector": ["iceberg-java/target/*.jar"]},
     # When doing `python setup.py develop`, setuptools will try to install whatever is
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install bodo in development mode, and it will also break CI
-    install_requires=[] if development_mode else ["bodo"],
+    install_requires=[] if development_mode else ["jpype1==1.4.0"],
+    python_requires=">=3.8,<3.11",
     cmdclass={"develop": CustomDevelopCommand},
 )
