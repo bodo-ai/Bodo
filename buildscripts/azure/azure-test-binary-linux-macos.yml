@@ -168,11 +168,9 @@ jobs:
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
       conda install -y -c conda-forge openjdk jpype1 maven pyspark=3.2
-      cd iceberg/bodo_iceberg_connector/iceberg-reader
-      mvn clean install -Dmaven.test.skip=true -f pom.xml
-      cd ../..
+      cd iceberg
       python setup.py develop
-    displayName: "Setup Iceberg testing"
+    displayName: "Setup Iceberg Testing"
 
   - script: |
       set -eo pipefail

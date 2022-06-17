@@ -25,7 +25,7 @@ table_dict = {}
 
 def launch_jvm():
     my_dir = os.path.dirname(os.path.abspath(__file__))
-    base_jar_src = my_dir + "/../iceberg-reader/target/"
+    base_jar_src = my_dir + "/iceberg-java/target/"
     # TODO: Fix the path for a deployment
     class_path_list = [f"{base_jar_src}/{name}" for name in os.listdir(base_jar_src)]
     if jpype.isJVMStarted() and not jpype.isThreadAttachedToJVM():

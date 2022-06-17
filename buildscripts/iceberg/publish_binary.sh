@@ -6,7 +6,7 @@ set -xeo pipefail
 # Package Setup
 eval "$(./bin/micromamba shell hook -s posix)"
 micromamba activate
-micromamba install -q -y conda-build anaconda-client conda-verify curl -c conda-forge 
+micromamba install -q -y boa anaconda-client conda-verify curl -c conda-forge 
 
 
 # Build Pakcage
@@ -44,16 +44,21 @@ elif [[ "$CHANNEL_NAME" == "bodo.ai" ]] && [[ -n "$IS_RELEASE" ]]; then
 fi
 
 cd buildscripts/iceberg/conda-recipe/
-conda-build . --no-test -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge 
+conda mambabuild . --no-test -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge 
 
 # Upload to Anaconda
-for package in `ls $CONDA_PREFIX/conda-bld/linux-64/bodo-iceberg-connector*.tar.bz2`; do
-    package_name=`basename $package`
-    curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/noarch/$package_name"
-    if [[ ! -z "$label" ]]; then
-        anaconda -t $ANACONDA_TOKEN upload -u bodo.ai -c bodo.ai $package --label $label
-    fi
-done
+package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-iceberg-connector*.tar.bz2`
+if [[ -z "$package" ]]; then
+  echo "Unable to Find Package. Exiting ..."
+  exit 1
+fi
+
+package_name=`basename $package`
+echo "Package Name: $package_name"
+curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/noarch/$package_name"
+if [[ ! -z "$label" ]]; then
+    anaconda -t $ANACONDA_TOKEN upload -u bodo.ai -c bodo.ai $package --label $label
+fi
 
 # Reindex Conda
-curl -s -X POST https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex
+curl -s -X POST "https://$USERNAME:$TOKEN@bodo.jfrog.io/artifactory/api/conda/$CHANNEL_NAME/reindex?async=0"

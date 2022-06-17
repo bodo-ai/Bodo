@@ -6,10 +6,9 @@ from collections import namedtuple
 
 import jpype
 import pyarrow.jvm
-
-from bodo_iceberg_connector.bodo_apis.config import DEFAULT_PORT
-from bodo_iceberg_connector.bodo_apis.errors import IcebergError, IcebergJavaError
-from bodo_iceberg_connector.bodo_apis.jpype_support import get_iceberg_java_table_reader
+from bodo_iceberg_connector.config import DEFAULT_PORT
+from bodo_iceberg_connector.errors import IcebergError, IcebergJavaError
+from bodo_iceberg_connector.jpype_support import get_iceberg_java_table_reader
 
 # Types I didn't figure out how to test with Spark:
 #   FixedType
@@ -24,26 +23,28 @@ BodoIcebergSchema = namedtuple(
 )
 
 
-def get_bodo_connector_typing_schema(warehouse, schema, table):
+def get_iceberg_typing_schema(warehouse: str, schema: str, table: str):
     """
     Returns the table schema information for a given iceberg table
     used at typing. Also returns the pyarrow schema object.
     """
-    schemas, pyarrow_schema = get_bodo_schemas(DEFAULT_PORT, warehouse, schema, table)
+    schemas, pyarrow_schema = get_iceberg_schemas(
+        DEFAULT_PORT, warehouse, schema, table
+    )
     return (schemas.colnames, schemas.coltypes, pyarrow_schema)
 
 
-def get_bodo_connector_runtime_schema(warehouse, schema, table):
+def get_iceberg_runtime_schema(warehouse: str, schema: str, table: str):
     """
     Returns the table schema information for a given iceberg table
     used at runtime.
     """
-    schemas, _ = get_bodo_schemas(DEFAULT_PORT, warehouse, schema, table)
+    schemas, _ = get_iceberg_schemas(DEFAULT_PORT, warehouse, schema, table)
     return (schemas.field_ids, schemas.coltypes)
 
 
 def get_pyarrow_schema(
-    port, warehouse, schema, table, bodo_iceberg_table_reader=None
+    port: int, warehouse: str, schema: str, table: str, bodo_iceberg_table_reader=None
 ) -> "pyarrow.Schema":
     """
     Returns the pyarrow schemas for an iceberg table.
@@ -72,15 +73,13 @@ def get_pyarrow_schema(
     return pyarrow_schema
 
 
-def get_bodo_schemas(port, warehouse, schema, table):
+def get_iceberg_schemas(port: int, warehouse: str, schema: str, table: str):
     """
     Returns all of the necessary Bodo schemas for an iceberg table,
     both using field_id and names.
 
     Port is unused and kept in case we opt to switch back to py4j
     """
-    from bodo.io.parquet_pio import _get_numba_typ_from_pa_typ
-
     try:
         bodo_iceberg_table_reader = get_iceberg_java_table_reader(
             warehouse,
@@ -95,10 +94,7 @@ def get_bodo_schemas(port, warehouse, schema, table):
         pyarrow_schema = get_pyarrow_schema(
             port, warehouse, schema, table, bodo_iceberg_table_reader
         )
-        bodo_types = [
-            _get_numba_typ_from_pa_typ(pyarrow_schema.field(name), False, True, None)[0]
-            for name in pyarrow_schema.names
-        ]
+        bodo_types = [pyarrow_schema.field(name) for name in pyarrow_schema.names]
 
     except jpype.JException as e:
         raise IcebergJavaError.from_java_error(e)

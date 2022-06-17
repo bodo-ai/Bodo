@@ -8,6 +8,8 @@ source:
 
 build:
   noarch: python
+  script_env:
+    - CONNECTOR_VERSION
 
 requirements:
   host:
@@ -16,18 +18,11 @@ requirements:
     - openjdk >=9.0
     - maven
     - ninja
-    - bodo >=2022.05
 
   run:
-    - openjdk >=9.0
-    - bodo >=2022.05
-    - jpype1
     - python >=3.8,<3.11
-
-build:
-  script_env:
-    - CONNECTOR_VERSION
-
+    - openjdk >=9.0
+    - jpype1 =1.4.0
 
 about:
 home: https://bodo.ai/
