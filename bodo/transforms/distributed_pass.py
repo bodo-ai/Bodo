@@ -4415,12 +4415,23 @@ class DistributedPass:
                     ):
                         shape_nodes.append(stmt)
                         continue
-                    # arr[:11] match
-                    if is_call(rhs) and guard(find_callname, self.func_ir, rhs) == (
-                        "table_filter",
-                        "bodo.hiframes.table",
-                    ):
-                        index_def = get_definition(self.func_ir, rhs.args[1])
+                    # arr[:11] match for both array and table format
+                    if (
+                        is_call(rhs)
+                        and guard(find_callname, self.func_ir, rhs)
+                        == (
+                            "table_filter",
+                            "bodo.hiframes.table",
+                        )
+                    ) or (is_expr(rhs, "getitem") and rhs.value.name in arr_varnames):
+                        if is_call(rhs):
+                            # table_format
+                            index_def = get_definition(self.func_ir, rhs.args[1])
+                        else:
+                            # array_format
+                            # TODO(ehsan): Numba may produce static_getitem?
+                            index_def = get_definition(self.func_ir, rhs.index)
+
                         require(
                             find_callname(self.func_ir, index_def)
                             == ("slice", "builtins")

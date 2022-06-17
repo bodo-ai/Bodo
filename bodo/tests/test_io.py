@@ -2206,10 +2206,16 @@ def test_read_pq_head_only(datapath, memory_leak_check):
         df = pd.read_parquet(path)
         return df.head()
 
+    # head and shape without table format
+    def impl4(path):
+        df = pd.read_parquet(path).loc[:, ["A"]]
+        return df.shape, df.head(4)
+
     # large file
     fname = datapath("int_nulls_multi.pq")
     check_func(impl1, (fname,), check_dtype=False)
     check_func(impl2, (fname,), check_dtype=False)
+    check_func(impl4, (fname,), check_dtype=False)
     check_func(impl3, (fname,), check_dtype=False)
     # small file with Index data
     check_func(impl1, (datapath("index_test2.pq"),), check_dtype=False)
@@ -2221,6 +2227,9 @@ def test_read_pq_head_only(datapath, memory_leak_check):
     bodo_func(fname)
     _check_for_pq_read_head_only(bodo_func, has_read=False)
     bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl3)
+    bodo_func(fname)
+    _check_for_pq_read_head_only(bodo_func)
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl4)
     bodo_func(fname)
     _check_for_pq_read_head_only(bodo_func)
     # partitioned data
