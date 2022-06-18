@@ -1840,6 +1840,59 @@ def overload_series_argsort(S, axis=0, kind="quicksort", order=None):
     return impl
 
 
+@overload_method(SeriesType, "rank", inline="always", no_unliteral=True)
+def overload_series_rank(
+    S,
+    axis=0,
+    method="average",
+    numeric_only=None,
+    na_option="keep",
+    ascending=True,
+    pct=False,
+):
+    """
+    Support for Series.rank(). Currently only has replicated support because rank kernel from array_kernels
+    onyl has replicated support. This is the needed functionality for SQL since SQL does rank within groupby.apply.
+    """
+    unsupported_args = dict(
+        axis=axis,
+        numeric_only=numeric_only,
+    )
+    arg_defaults = dict(axis=0, numeric_only=None)
+    check_unsupported_args(
+        "Series.rank",
+        unsupported_args,
+        arg_defaults,
+        package_name="pandas",
+        module_name="Series",
+    )
+
+    if not is_overload_constant_str(method):
+        raise BodoError("Series.rank(): 'method' argument must be a constant string")
+
+    if not is_overload_constant_str(na_option):
+        raise BodoError("Series.rank(): 'na_option' argument must be a constant string")
+
+    def impl(
+        S,
+        axis=0,
+        method="average",
+        numeric_only=None,
+        na_option="keep",
+        ascending=True,
+        pct=False,
+    ):  # pragma: no cover
+        arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        out_arr = bodo.libs.array_kernels.rank(
+            arr, method=method, na_option=na_option, ascending=ascending, pct=pct
+        )
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
+
+
 @overload_method(SeriesType, "sort_index", inline="always", no_unliteral=True)
 def overload_series_sort_index(
     S,

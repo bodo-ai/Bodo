@@ -65,6 +65,8 @@ from bodo.utils.typing import (
     get_overload_const_bool,
     get_overload_const_list,
     get_overload_const_str,
+    is_overload_constant_bool,
+    is_overload_constant_str,
     is_overload_none,
     is_str_arr_type,
     raise_bodo_error,
@@ -705,6 +707,129 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
     ret = builder.call(fn, call_args)
     bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
     return ret
+
+
+def rank(arr, method="average", na_option="keep", ascending=True, pct=False):
+    return arr
+
+
+@overload(rank, no_unliteral=True, inline="always")
+def overload_rank(arr, method="average", na_option="keep", ascending=True, pct=False):
+    """
+    Returns array with rank of each element of array. Does not currently have distributed support;
+    replicated functionality needed for SQL since rank is performed within groupby.apply.
+    This function is currently inlined because argsort will only produce the correct C++ sort
+    if it is inlined into the IR and this should be refactored to directly call the C++ sort.
+    """
+    if not is_overload_constant_str(method):
+        raise_bodo_error("Series.rank(): 'method' argument must be a constant string")
+    method = get_overload_const_str(method)
+    if not is_overload_constant_str(na_option):
+        raise_bodo_error(
+            "Series.rank(): 'na_option' argument must be a constant string"
+        )
+    na_option = get_overload_const_str(na_option)
+    if not is_overload_constant_bool(ascending):
+        raise_bodo_error(
+            "Series.rank(): 'ascending' argument must be a constant boolean"
+        )
+    ascending = get_overload_const_bool(ascending)
+    if not is_overload_constant_bool(pct):
+        raise_bodo_error("Series.rank(): 'pct' argument must be a constant boolean")
+    pct = get_overload_const_bool(pct)
+
+    if method == "first" and not ascending:
+        raise BodoError(
+            "Series.rank(): method='first' with ascending=False is currently unsupported."
+        )
+
+    # To reduce complexity to that of argsort, the following is based of off of scipy.stats.rankdata
+    func_text = "def impl(arr, method='average', na_option='keep', ascending=True, pct=False):\n"
+    func_text += "  na_idxs = pd.isna(arr)\n"
+    # TODO [BE-3052]: implement C++ argsort with ascending argument (and NA option)
+    func_text += "  sorter = bodo.hiframes.series_impl.argsort(arr)\n"
+    func_text += "  nas = sum(na_idxs)\n"
+    if not ascending:
+        func_text += "  if nas and nas < (sorter.size - 1):\n"
+        func_text += "    sorter[:-nas] = sorter[-(nas + 1)::-1]\n"
+        func_text += "  else:\n"
+        func_text += "    sorter = sorter[::-1]\n"
+    # NOTE: assumes NAs will be at bottom
+    # TODO: optimizations using nas to get sorted_nas
+    if na_option == "top":
+        func_text += "  sorter = np.concatenate((sorter[-nas:], sorter[:-nas]))\n"
+    func_text += "  inv = np.empty(sorter.size, dtype=np.intp)\n"
+    func_text += "  inv[sorter] = np.arange(sorter.size)\n"
+    if method == "first":
+        func_text += "  ret = bodo.utils.conversion.fix_arr_dtype(\n"
+        func_text += "    inv,\n"
+        func_text += "    new_dtype=np.float64,\n"
+        func_text += "    copy=True,\n"
+        func_text += "    nan_to_str=False,\n"
+        func_text += "    from_series=True,\n"
+        func_text += "    ) + 1\n"
+    else:
+        func_text += "  arr = arr[sorter]\n"
+        func_text += "  sorted_nas = np.nonzero(pd.isna(arr))[0]\n"
+        # eq_arr will be a nullable boolean array rather than a non-nullable boolean and thus must be converted
+        func_text += "  eq_arr_na = arr[1:] != arr[:-1]\n"
+        # astype turns NAs to False but it is done explicitly here in case this changes
+        func_text += "  eq_arr_na[pd.isna(eq_arr_na)] = False\n"
+        func_text += "  eq_arr = eq_arr_na.astype(np.bool_)\n"
+        # the first NA entry should be marked True
+        func_text += "  obs = np.concatenate((np.array([True]), eq_arr))\n"
+        func_text += "  if sorted_nas.size:\n"
+        func_text += "    first_na, rep_nas = sorted_nas[0], sorted_nas[1:]\n"
+        func_text += "    obs[first_na] = True\n"
+        func_text += "    obs[rep_nas] = False\n"
+        func_text += "    if rep_nas.size and (rep_nas[-1] + 1) < obs.size:\n"
+        func_text += "      obs[rep_nas[-1] + 1] = True\n"
+        func_text += "  dense = obs.cumsum()[inv]\n"  # NOTE: replaced inv with sorter
+        if method == "dense":
+            func_text += "  ret = bodo.utils.conversion.fix_arr_dtype(\n"
+            func_text += "    dense,\n"
+            func_text += "    new_dtype=np.float64,\n"
+            func_text += "    copy=True,\n"
+            func_text += "    nan_to_str=False,\n"
+            func_text += "    from_series=True,\n"
+            func_text += "  )\n"
+        else:
+            # cumulative counts of each unique value
+            func_text += (
+                "  count = np.concatenate((np.nonzero(obs)[0], np.array([len(obs)])))\n"
+            )
+            func_text += "  count_float = bodo.utils.conversion.fix_arr_dtype(count, new_dtype=np.float64, copy=True, nan_to_str=False, from_series=True)\n"
+            if method == "max":
+                func_text += "  ret = count_float[dense]\n"
+            elif method == "min":
+                func_text += "  ret = count_float[dense - 1] + 1\n"
+            else:
+                # average
+                func_text += (
+                    "  ret = 0.5 * (count_float[dense] + count_float[dense - 1] + 1)\n"
+                )
+    if pct:
+        if method == "dense":
+            if na_option == "keep":
+                # currently na_idxs (may) hold the max value so it is set to -1 before finding max
+                func_text += "  ret[na_idxs] = -1\n"
+            # max element rather than arr.size necessary for "dense" arg
+            func_text += "  div_val = np.max(ret)\n"
+        elif na_option == "keep":
+            func_text += "  div_val = arr.size - nas\n"
+        else:
+            func_text += "  div_val = arr.size\n"
+        # NOTE: numba bug in dividing related to parfors, requires manual division
+        # TODO: replace with simple division when numba bug fixed
+        # [Numba Issue #8147]: https://github.com/numba/numba/pull/8147
+        func_text += "  for i in range(len(ret)):\n"
+        func_text += "    ret[i] = ret[i] / div_val\n"
+    if na_option == "keep":
+        func_text += "  ret[na_idxs] = np.nan\n"
+    func_text += "  return ret\n"
+    loc_vars = {}
+    exec(func_text, {"np": np, "pd": pd, "bodo": bodo}, loc_vars)
+    return loc_vars["impl"]
 
 
 ################################ nlargest ####################################
