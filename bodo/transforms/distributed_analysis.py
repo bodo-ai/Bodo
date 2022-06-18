@@ -1008,6 +1008,7 @@ class DistributedAnalysis:
             and isinstance(
                 self.typemap[func_mod.name],
                 (
+                    bodo.libs.sklearn_ext.BodoPreprocessingOneHotEncoderType,
                     bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
@@ -2349,7 +2350,7 @@ class DistributedAnalysis:
         array_dists,
     ):
         """
-        Analyze distribution of sklearn.preprocessing.StandardScaler,
+        Analyze distribution of sklearn.preprocessing.OneHotEncoder, StandardScaler,
         MaxAbsScaler, MinMaxScaler, RobustScaler, and LabelEncoder functions.
         Only need to handle fit_transform, transform and inverse_transform. fit is handled automatically.
         """

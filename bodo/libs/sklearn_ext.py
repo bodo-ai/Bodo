@@ -39,6 +39,7 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.preprocessing._data import (
     _handle_zeros_in_scale as sklearn_handle_zeros_in_scale,
 )
+from sklearn.utils._encode import _unique
 from sklearn.utils.extmath import (
     _safe_accumulator_op as sklearn_safe_accumulator_op,
 )
@@ -3791,6 +3792,498 @@ def overload_svm_linear_svc_score(
 ):
     """Overload LinearSVC score."""
     return parallel_score(m, X, y, sample_weight, _is_data_distributed)
+
+
+# ----------------------------------------------------------------------------------------
+# ------------------------------------ OneHotEncoder -------------------------------------
+# Support for sklearn.preprocessing.OneHotEncoder.
+# Currently, only fit, transform, and get_feature_names_out are supported, as well as the
+# categories_, drop_idx_, and n_features_in_ attributes.
+# Support for inverse_transform is not yet added, since its output type can't be
+# known at compile-time and depends on the most recent input to fit().
+# We use sklearn's transform and get_feature_names_out directly in their Bodo
+# implementation. For fit, we use a combination of sklearn's fit and a native
+# implementation. We compute the categories seen on each rank using sklearn's
+# fit implementation, then compute global values for these using MPI operations.
+# ----------------------------------------------------------------------------------------
+
+
+class BodoPreprocessingOneHotEncoderType(types.Opaque):
+    def __init__(self):
+        super(BodoPreprocessingOneHotEncoderType, self).__init__(
+            name="BodoPreprocessingOneHotEncoderType"
+        )
+
+
+preprocessing_one_hot_encoder_type = BodoPreprocessingOneHotEncoderType()
+types.preprocessing_one_hot_encoder_type = preprocessing_one_hot_encoder_type
+
+
+register_model(BodoPreprocessingOneHotEncoderType)(models.OpaqueModel)
+
+
+@typeof_impl.register(sklearn.preprocessing.OneHotEncoder)
+def typeof_preprocessing_one_hot_encoder(val, c):
+    return preprocessing_one_hot_encoder_type
+
+
+@box(BodoPreprocessingOneHotEncoderType)
+def box_preprocessing_one_hot_encoder(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoPreprocessingOneHotEncoderType)
+def unbox_preprocessing_one_hot_encoder(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+class BodoPreprocessingOneHotEncoderCategoriesType(types.Opaque):
+    """
+    A type for the m.categories_ attribute. Since this attribute's type
+    depends on the most recent call to OneHotEncoder.fit(), it cannot be known
+    at compile time, so we simply make it appear as an opaque type to numba.
+    """
+
+    def __init__(self):
+        super(BodoPreprocessingOneHotEncoderCategoriesType, self).__init__(
+            name="BodoPreprocessingOneHotEncoderCategoriesType"
+        )
+
+
+preprocessing_one_hot_encoder_categories_type = (
+    BodoPreprocessingOneHotEncoderCategoriesType()
+)
+types.preprocessing_one_hot_encoder_categories_type = (
+    preprocessing_one_hot_encoder_categories_type
+)
+
+
+register_model(BodoPreprocessingOneHotEncoderCategoriesType)(models.OpaqueModel)
+
+
+@box(BodoPreprocessingOneHotEncoderCategoriesType)
+def box_preprocessing_one_hot_encoder_categories(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoPreprocessingOneHotEncoderCategoriesType)
+def unbox_preprocessing_one_hot_encoder_categories(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+class BodoPreprocessingOneHotEncoderDropIdxType(types.Opaque):
+    """
+    A type for the m.drop_idx_ attribute. Since this attribute is either
+    None or a 1D array containing both integers and None, its type could be
+    represented as `optional(array(optional(int64))`. Because numba does not
+    support masked arrays, or arrays with element type `optional(int64)`
+    (https://github.com/numba/numba/issues/1834), we make this attribute
+    appear as an opaque type to numba.
+    """
+
+    def __init__(self):
+        super(BodoPreprocessingOneHotEncoderDropIdxType, self).__init__(
+            name="BodoPreprocessingOneHotEncoderDropIdxType"
+        )
+
+
+preprocessing_one_hot_encoder_drop_idx_type = (
+    BodoPreprocessingOneHotEncoderDropIdxType()
+)
+types.preprocessing_one_hot_encoder_drop_idx_type = (
+    preprocessing_one_hot_encoder_drop_idx_type
+)
+
+
+register_model(BodoPreprocessingOneHotEncoderDropIdxType)(models.OpaqueModel)
+
+
+@box(BodoPreprocessingOneHotEncoderDropIdxType)
+def box_preprocessing_one_hot_encoder_drop_idx(typ, val, c):
+    # See note in box_random_forest_classifier
+    c.pyapi.incref(val)
+    return val
+
+
+@unbox(BodoPreprocessingOneHotEncoderDropIdxType)
+def unbox_preprocessing_one_hot_encoder_drop_idx(typ, obj, c):
+    # borrow reference from Python
+    c.pyapi.incref(obj)
+    return NativeValue(obj)
+
+
+@overload_attribute(BodoPreprocessingOneHotEncoderType, "categories_")
+def get_one_hot_encoder_categories_(m):
+    """Overload OneHotEncoder's categories_ attribute to be accessible inside
+    bodo.jit.
+
+    Args:
+        m (sklearn.preprocessing.OneHotEncoder): The OneHotEncoder to access
+
+    Returns:
+        result: The categories_ attribute of the given OneHotEncoder
+    """
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="preprocessing_one_hot_encoder_categories_type"):
+            result = m.categories_
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingOneHotEncoderType, "drop_idx_")
+def get_one_hot_encoder_drop_idx_(m):
+    """Overload OneHotEncoder's drop_idx_ attribute to be accessible inside
+    bodo.jit.
+
+    Args:
+        m (sklearn.preprocessing.OneHotEncoder): The OneHotEncoder to access
+
+    Returns:
+        result: The drop_idx_ attribute of the given OneHotEncoder
+    """
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="preprocessing_one_hot_encoder_drop_idx_type"):
+            result = m.drop_idx_
+        return result
+
+    return impl
+
+
+@overload_attribute(BodoPreprocessingOneHotEncoderType, "n_features_in_")
+def get_one_hot_encoder_n_features_in_(m):
+    """Overload OneHotEncoder's n_features_in_ attribute to be accessible inside
+    bodo.jit.
+
+    Args:
+        m (sklearn.preprocessing.OneHotEncoder): The OneHotEncoder to access
+
+    Returns:
+        result: The n_features_in_ attribute of the given OneHotEncoder
+    """
+
+    def impl(m):  # pragma: no cover
+        with numba.objmode(result="int64"):
+            result = m.n_features_in_
+        return result
+
+    return impl
+
+
+@overload(sklearn.preprocessing.OneHotEncoder, no_unliteral=True)
+def sklearn_preprocessing_one_hot_encoder_overload(
+    categories="auto",
+    drop=None,
+    sparse=True,
+    dtype=np.float64,
+    handle_unknown="error",
+):
+    """Provide implementation for __init__ function of OneHotEncoder.
+    We simply call sklearn in objmode.
+
+    Args:
+        categories ('auto' or a list of array-like): Categories (unique values)
+          per unique feature.
+          - 'auto': Determine categories automatically from training data
+          - list: categories[i] holes the categories expected in the i-th
+            column. The passed categories should not mix strings and numeric
+            values within a single feature, and should be sorted in case of
+            numeric values.
+        drop ('first', 'if_binary', or an array-like of shape (n_features,)):
+          Specifies a methodology to use to drop one of the categories per
+          feature. This is useful in situations where perfectly collinear
+          features cause problems, such as when feeding the resulting data
+          into an unregularized linear regression model. However, dropping one
+          category breaks the symmetry of the original representation and can
+          therefore induce a bias in downstream models, for instance penalized
+          linear classification or regression models.
+          - None: Retain all features (the default)
+          - 'first': Drop the first category in each feature. If only one
+            category is present, the feature will be dropped entirely.
+          - 'if_binary': Drop the first category in each feature with two
+            categories. Features with 1 or more than 2 categories are left
+            intact.
+          - array: drop[i] is the category in feature X[:, i] that should be
+            dropped.
+        sparse (bool): Only sparse=False is supported. Will return sparse
+          if set True else will return an array.
+        dtype (number type): Only dtype=np.float64 is supported. Desired
+          datatype of output.
+        handle_unknown ('error', 'ignore'): Specifies the way unknown
+          categories are handled during transform.
+          - 'error': Raise an error if an unknown category is present during
+            transform.
+          - 'ignore': When an unknown category is encountered during transform,
+            the resulting one-hot-encoded columns for this feature will be all
+            zeros. In the inverse transform, an unknown category will be
+            denoted as None.
+    """
+
+    check_sklearn_version()
+
+    # Because we only support dense float64 matrix output for now, check that
+    # `sparse=False` and that `dtype=np.float64`. For compatibility with
+    # check_unsupported_args, we convert `dtype` to string representation
+    # since type classes aren't directly comparable.
+    #
+    # Adding support for additional output types would require more typing work
+    # to determine the proper output type of transform().
+    args_dict = {
+        "sparse": sparse,
+        "dtype": "float64" if "float64" in repr(dtype) else repr(dtype),
+    }
+
+    args_default_dict = {
+        "sparse": False,
+        "dtype": "float64",
+    }
+    check_unsupported_args("OneHotEncoder", args_dict, args_default_dict, "ml")
+
+    def _sklearn_preprocessing_one_hot_encoder_impl(
+        categories="auto",
+        drop=None,
+        sparse=True,
+        dtype=np.float64,
+        handle_unknown="error",
+    ):  # pragma: no cover
+
+        with numba.objmode(m="preprocessing_one_hot_encoder_type"):
+            m = sklearn.preprocessing.OneHotEncoder(
+                categories=categories,
+                drop=drop,
+                sparse=sparse,
+                dtype=dtype,
+                handle_unknown=handle_unknown,
+            )
+        return m
+
+    return _sklearn_preprocessing_one_hot_encoder_impl
+
+
+def sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X):
+    """
+    Distributed calculation of categories for one hot encoder.
+
+    We follow sklearn's implementation of fit() and compute local fit outputs
+    on each rank, before combining the results using allgatherv and reduction
+    to get global outputs.
+
+    Args:
+        m (sklearn.preprocessing.OneHotEncoder): A OneHotEncoder object to fit
+        X (array-like of shape (n_samples, n_features): The data to determine
+          the categories of each feature.
+
+    Returns:
+        m: Fitted encoder
+    """
+
+    comm = MPI.COMM_WORLD
+
+    # Compute local categories by using default sklearn implementation.
+    # This updates m.categories_ on each local rank
+    try:
+        fit_result_or_err = m._fit(
+            X, handle_unknown=m.handle_unknown, force_all_finite="allow-nan"
+        )
+    except ValueError as e:  # pragma: no cover
+        # Catch if any rank raises a ValueError for unknown categories,
+        # so that we can broadcast and re-raise that error on all ranks.
+        # Any other ValueErrors are re-raised
+        if "Found unknown categories" in e.args[0]:
+            fit_result_or_err = e
+        else:
+            raise e
+
+    # If any rank raises a ValueError for unknown categories, re-raise that
+    # error on all ranks to prevent deadlock on future MPI collective ops.
+    # Instead of running allreduce with MPI.LOR, we use MPI.MAXLOC so that
+    # the rank of the lowest failing process is also communicated. Then, we
+    # broadcast the error message across all ranks.
+    unknown_category_on_this_rank = int(isinstance(fit_result_or_err, ValueError))
+    unknown_category_on_any_rank, failing_rank = comm.allreduce(
+        (unknown_category_on_this_rank, comm.Get_rank()), op=MPI.MAXLOC
+    )
+    if unknown_category_on_any_rank:
+        # If there's an error on any rank, broadcast the lowest erroring
+        # rank's error to all ranks
+        if comm.Get_rank() == failing_rank:
+            err_msg = fit_result_or_err.args[0]
+        else:
+            err_msg = None
+        err_msg = comm.bcast(err_msg, root=failing_rank)
+
+        # Handle the case where multiple ranks raise an error. Each rank that
+        # already has an error will re-raise their own error, and any rank
+        # that does not have an error will re-raise the lowest rank's error.
+        if unknown_category_on_this_rank:
+            raise fit_result_or_err
+        else:
+            raise ValueError(err_msg)
+
+    # If categories are given, aggregate local categories to global values
+    # m.categories_ is a list of arrays where each array contains a list of
+    # categories from the local X-data of a feature. To compute the global
+    # categories for each feature, we want to allgather each rank's locally
+    # computed categories for that feature and take the unique items.
+    if m.categories == "auto":
+        local_values_per_feat = m.categories_
+        global_values_per_feat = []
+
+        for local_values in local_values_per_feat:
+            multi_local_values = bodo.allgatherv(local_values)
+            global_values = _unique(multi_local_values)
+            global_values_per_feat.append(global_values)
+
+        m.categories_ = global_values_per_feat
+
+    # Compute dropped indices. Since category info is now replicated,
+    # we can just call sklearn
+    m.drop_idx_ = m._compute_drop_idx()
+
+    return m
+
+
+@overload_method(BodoPreprocessingOneHotEncoderType, "fit", no_unliteral=True)
+def overload_preprocessing_one_hot_encoder_fit(
+    m,
+    X,
+    y=None,
+    _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
+):
+    """Provide implementations for OneHotEncoder's fit function.
+
+    In case input is replicated, we simply call sklearn, else we use our native
+    implementation.
+
+    Args:
+        m (sklearn.preprocessing.OneHotEncoder): A OneHotEncoder object to fit
+        X (array-like of shape (n_samples, n_features): The data to determine
+          the categories of each feature.
+        y (ignored): Always ignored. Exists for compatibility with Pipeline
+        _is_data_distributed (bool): Whether X is distributed or replicated
+
+    Returns:
+        m: Fitted encoder
+    """
+
+    if is_overload_true(_is_data_distributed):
+        # If distributed, then use native implementation
+
+        def _preprocessing_one_hot_encoder_fit_impl(
+            m, X, y=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="preprocessing_one_hot_encoder_type"):
+                # sklearn.fit() expects a 2D array as input, but Bodo does not support
+                # 2D string arrays - these are instead typed as 1D arrays of object
+                # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
+                if X.ndim == 1 and isinstance(X[0], np.ndarray):
+                    X = np.vstack(X)
+
+                m = sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X)
+
+            return m
+
+    else:
+        # If replicated, then just call sklearn
+
+        def _preprocessing_one_hot_encoder_fit_impl(
+            m, X, y=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="preprocessing_one_hot_encoder_type"):
+                # sklearn.fit() expects a 2D array as input, but Bodo does not support
+                # 2D string arrays - these are instead typed as 1D arrays of object
+                # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
+                if X.ndim == 1 and isinstance(X[0], np.ndarray):
+                    X = np.vstack(X)
+
+                m = m.fit(X, y)
+
+            return m
+
+    return _preprocessing_one_hot_encoder_fit_impl
+
+
+@overload_method(BodoPreprocessingOneHotEncoderType, "transform", no_unliteral=True)
+def overload_preprocessing_one_hot_encoder_transform(
+    m,
+    X,
+):
+    """Provide implementation for OneHotEncoder's transform function.
+    We simply call sklearn's transform on each rank.
+
+    Args:
+        m (sklearn.preprocessing.OneHotEncoder): A OneHotEncoder object to use
+        X (array-like of shape (n_samples, n_features)): The data to encode
+
+    Returns:
+        transformed_X (ndarray of shape (n_samples, n_encoded_features)):
+          Transformed input.
+    """
+
+    def _preprocessing_one_hot_encoder_transform_impl(
+        m,
+        X,
+    ):  # pragma: no cover
+
+        with numba.objmode(transformed_X="float64[:,:]"):
+            # sklearn.fit() expects a 2D array as input, but Bodo does not support
+            # 2D string arrays - these are instead typed as 1D arrays of object
+            # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
+            if X.ndim == 1 and isinstance(X[0], np.ndarray):
+                X = np.vstack(X)
+
+            transformed_X = m.transform(X)
+
+        return transformed_X
+
+    return _preprocessing_one_hot_encoder_transform_impl
+
+
+@overload_method(
+    BodoPreprocessingOneHotEncoderType, "get_feature_names_out", no_unliteral=True
+)
+def overload_preprocessing_one_hot_encoder_get_feature_names_out(
+    m,
+    input_features=None,
+):
+    """Provide implementation for the get_feature_names_out function.
+    We simply call sklearn's get_feature_names_out on each rank.
+
+    Args:
+        m (sklearn.preprocessing.OneHotEncoder): A OneHotEncoder object to use
+        input_features (array-like of string or None): Input features.
+          If input_features is None, then feature_names_in_ is used as feature
+          names in. If feature_names_in_ is not defined, then the following
+          input feature names are generated:
+          ["x0", "x1", ..., "x(n_features_in_ - 1)"].
+          If input_features is an array-like, then input_features must match
+          feature_names_in_ if feature_names_in_ is defined.
+        X (array-like of shape (n_samples, n_features)): The data to encode
+
+    Returns:
+        transformed_X (ndarray of shape (n_samples, n_encoded_features)):
+          Transformed input.
+    """
+
+    def _preprocessing_one_hot_encoder_get_feature_names_out_impl(
+        m,
+        input_features=None,
+    ):  # pragma: no cover
+        with numba.objmode(out_features="string[:]"):
+            out_features = get_feature_names_out(input_features)
+        return out_features
+
+    return _preprocessing_one_hot_encoder_get_feature_names_out_impl
 
 
 # ----------------------------------------------------------------------------------------

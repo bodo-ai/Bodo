@@ -1,8 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """ Test miscellaneous supported sklearn models and methods
     Currently this file tests:
-    train_test_split, shuffle, MultinomialNB, LinearSVC, 
-    LabelEncoder, MinMaxScaler, StandardScaler
+    train_test_split, MultinomialNB, LinearSVC, 
+    OneHotEncoder, LabelEncoder, MinMaxScaler, StandardScaler
 """
 
 import random
@@ -21,6 +21,7 @@ from sklearn.preprocessing import (
     LabelEncoder,
     MaxAbsScaler,
     MinMaxScaler,
+    OneHotEncoder,
     RobustScaler,
     StandardScaler,
 )
@@ -830,6 +831,188 @@ def test_naive_mnnb_csr():
     assert_array_equal(y_pred, y2)
 
     check_func(test_mnnb, (X, y2))
+
+
+# ----------------------- OneHotEncoder -----------------------
+
+
+@pytest.mark.parametrize(
+    "X",
+    [
+        np.array([["a", "a"], ["ac", "b"]] * 5 + [["b", "a"]], dtype=object),
+        np.array([[0, 0], [2, 1]] * 5 + [[1, 0]], dtype=np.int64),
+        pd.DataFrame({"A": ["a", "b", "a"] * 5 + ["c"], "B": [1, np.nan, 3] * 5 + [2]}),
+    ],
+)
+def test_one_hot_encoder(X):
+    """
+    Test OneHotEncoder's fit and transform methods, as well as the categories_
+    attribute.
+    """
+
+    def test_fit(X):
+        m = OneHotEncoder(sparse=False)
+        m.fit(X)
+        result = m.categories_
+        return result
+
+    check_func(test_fit, (X,), is_out_distributed=False)
+
+    def test_transform(X):
+        m = OneHotEncoder(sparse=False)
+        m.fit(X)
+        result = m.transform(X)
+        return result
+
+    check_func(test_transform, (X,))
+
+
+@pytest.mark.parametrize(
+    "X, categories",
+    [
+        (
+            np.array([[0, 0], [2, 1]] * 5 + [[1, 0]], dtype=np.int64),
+            [[0, 2], [0, 1]],
+        ),
+        (
+            pd.DataFrame(
+                {"A": ["a", "b", "a"] * 5 + ["c"], "B": ["1", "1", "3"] * 5 + ["2"]}
+            ),
+            [["a", "b"], ["1", "2"]],
+        ),
+        (
+            # Unknown categories only on last rank
+            pd.DataFrame(
+                {"A": ["a", "b", "a"] * 5 + ["c"], "B": ["1", "1", "2"] * 5 + ["3"]}
+            ),
+            [["a", "b"], ["1", "2"]],
+        ),
+    ],
+)
+def test_one_hot_encoder_categories(X, categories):
+    """Test OneHotEncoder's categories and handle_unknown parameters."""
+
+    def test_transform_error(X):
+        m = OneHotEncoder(sparse=False, categories=categories, handle_unknown="error")
+        m.fit(X)
+        result = m.transform(X)
+        return result
+
+    dist_impl_error = bodo.jit(distributed=["X"])(test_transform_error)
+    rep_impl_error = bodo.jit(replicated=True)(test_transform_error)
+
+    error_str = "Found unknown categories"
+    with pytest.raises(ValueError, match=error_str):
+        dist_impl_error(X)
+    with pytest.raises(ValueError, match=error_str):
+        rep_impl_error(X)
+
+    def test_transform_ignore(X):
+        m = OneHotEncoder(sparse=False, categories=categories, handle_unknown="ignore")
+        m.fit(X)
+        result = m.transform(X)
+        return result
+
+    check_func(test_transform_ignore, (X,))
+
+
+@pytest.mark.parametrize(
+    "X, drop",
+    [
+        (
+            pd.DataFrame(
+                {"A": ["a", "b", "a"] * 5 + ["c"], "B": ["1", "1", "3"] * 5 + ["2"]}
+            ),
+            ["c", "3"],
+        ),
+        (
+            np.array([[0, 0], [2, 1]] * 5 + [[1, 0]], dtype=np.int64),
+            [2, 1],
+        ),
+        (
+            np.array([["a", "a"], ["ac", "b"]] * 5 + [["b", "a"]], dtype=object),
+            ["ac", "a"],
+        ),
+    ],
+)
+def test_one_hot_encoder_attributes(X, drop):
+    """Test OneHotEncoder's drop_idx_ and n_features_in_ attributes."""
+
+    def test_drop_idx_1(X):
+        m = OneHotEncoder(sparse=False, dtype=np.float64)
+        m.fit(X)
+        result = m.drop_idx_
+        return result
+
+    def test_drop_idx_2(X):
+        m = OneHotEncoder(sparse=False, drop="first")
+        m.fit(X)
+        result = m.drop_idx_
+        return result
+
+    def test_drop_idx_3(X):
+        m = OneHotEncoder(sparse=False, drop="if_binary")
+        m.fit(X)
+        result = m.drop_idx_
+        return result
+
+    def test_drop_idx_4(X):
+        m = OneHotEncoder(sparse=False, drop=drop)
+        m.fit(X)
+        result = m.drop_idx_
+        return result
+
+    check_func(test_drop_idx_1, (X,), is_out_distributed=False)
+    check_func(test_drop_idx_2, (X,), is_out_distributed=False)
+    check_func(test_drop_idx_3, (X,), is_out_distributed=False)
+    check_func(test_drop_idx_4, (X,), is_out_distributed=False)
+
+    def test_n_features_in_(X):
+        m = OneHotEncoder(sparse=False)
+        m.fit(X)
+        result = m.n_features_in_
+        return result
+
+    check_func(test_n_features_in_, (X,))
+
+
+def test_one_hot_encoder_unsupported():
+    """
+    Test OneHotEncoder's unsupported arguments.
+    """
+
+    def impl1():
+        m = OneHotEncoder()
+        return m
+
+    def impl2():
+        m = OneHotEncoder(sparse=True)
+        return m
+
+    def impl3():
+        m = OneHotEncoder(dtype=np.float32)
+        return m
+
+    def impl4():
+        m = OneHotEncoder(sparse=False, dtype=np.int64)
+        return m
+
+    err_msg_1 = "sparse parameter only supports default value False"
+    err_msg_2 = "sparse parameter only supports default value False"
+    err_msg_3 = "sparse parameter only supports default value False"
+    err_msg_4 = "dtype parameter only supports default value float64"
+
+    with pytest.raises(BodoError, match=err_msg_1):
+        bodo.jit()(impl1)()
+
+    with pytest.raises(BodoError, match=err_msg_2):
+        bodo.jit()(impl2)()
+
+    with pytest.raises(BodoError, match=err_msg_3):
+        bodo.jit()(impl3)()
+
+    with pytest.raises(BodoError, match=err_msg_4):
+        bodo.jit()(impl4)()
 
 
 # ---------------------StandardScaler Tests--------------------
