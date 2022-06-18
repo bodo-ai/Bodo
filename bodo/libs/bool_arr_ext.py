@@ -591,6 +591,11 @@ def overload_bool_arr_len(A):
         return lambda A: len(A._data)  # pragma: no cover
 
 
+@overload_attribute(BooleanArrayType, "size")
+def overload_bool_arr_size(A):
+    return lambda A: len(A._data)  # pragma: no cover
+
+
 @overload_attribute(BooleanArrayType, "shape")
 def overload_bool_arr_shape(A):
     return lambda A: (len(A._data),)  # pragma: no cover
@@ -691,6 +696,21 @@ def overload_bool_arr_astype(A, dtype, copy=True):
     return lambda A, dtype, copy=True: bodo.libs.bool_arr_ext.get_bool_arr_data(
         A
     ).astype(nb_dtype)
+
+
+@overload_method(BooleanArrayType, "fillna", no_unliteral=True)
+def overload_bool_fillna(A, value=None, method=None, limit=None):
+    def impl(A, value=None, method=None, limit=None):  # pragma: no cover
+        data = bodo.libs.bool_arr_ext.get_bool_arr_data(A)
+        n = len(data)
+        B = np.empty(n, dtype=np.bool_)
+        for i in numba.parfors.parfor.internal_prange(n):
+            B[i] = data[i]
+            if bodo.libs.array_kernels.isna(A, i):
+                B[i] = value
+        return B
+
+    return impl
 
 
 @overload(str, no_unliteral=True)

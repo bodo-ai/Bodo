@@ -1149,3 +1149,42 @@ def test_iat_control_flow(memory_leak_check):
     S2 = pd.Series(np.arange(100, 200))
 
     check_func(impl, (S1, S2, False))
+
+
+@pytest.mark.parametrize(
+    "S",
+    [
+        pd.Series([2, 1, 2, 4, 8, 4]),
+        pd.Series(["b", "a", "b", "c", "d", "c"]),
+        pd.Series([np.nan, 2, 1, 2, 4.2, 8, 4.2, np.nan]),
+        pd.Series([None, True, False, False, True, True, None]),
+    ],
+)
+@pytest.mark.parametrize(
+    "method",
+    ["average", "min", "max", "first", "dense"],
+)
+@pytest.mark.parametrize(
+    "na_option",
+    ["keep", "top", "bottom"],
+)
+@pytest.mark.parametrize("ascending", [False, True])
+@pytest.mark.parametrize("pct", [True, False])
+def test_series_rank(S, method, na_option, ascending, pct, memory_leak_check):
+    """
+    Tests for Series.rank
+    """
+
+    def impl(S):
+        return S.rank(method=method, na_option=na_option, ascending=ascending, pct=pct)
+
+    if method == "first" and not ascending:
+        with pytest.raises(
+            BodoError,
+            match=re.escape(
+                "Series.rank(): method='first' with ascending=False is currently unsupported."
+            ),
+        ):
+            bodo.jit(impl)(S)
+    else:
+        check_func(impl, (S,), dist_test=False)

@@ -2271,6 +2271,7 @@ class TypingTransforms:
                 (0, "dtype"),
             ],
             "fillna": [(1, "method")],
+            "rank": [(1, "method"), (3, "na_option"), (5, "pct")],
         }
 
         if func_name in series_call_const_args:

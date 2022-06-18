@@ -1356,7 +1356,6 @@ series_unsupported_methods = (
     "clip",
     "factorize",
     "mode",
-    "rank",
     # Reindexing / selection / label manipulation
     "align",
     "drop",
