@@ -541,6 +541,7 @@ class DistributedPass:
                     bodo.libs.sklearn_ext.BodoLassoType,
                     bodo.libs.sklearn_ext.BodoRidgeType,
                     bodo.libs.sklearn_ext.BodoLinearSVCType,
+                    bodo.libs.sklearn_ext.BodoPreprocessingOneHotEncoderType,
                     bodo.libs.sklearn_ext.BodoPreprocessingStandardScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
                     bodo.libs.sklearn_ext.BodoPreprocessingMinMaxScalerType,
@@ -559,7 +560,7 @@ class DistributedPass:
             and isinstance(func_mod, numba.core.ir.Var)
             and isinstance(
                 self.typemap[func_mod.name],
-                (bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,),
+                bodo.libs.sklearn_ext.BodoPreprocessingMaxAbsScalerType,
             )
             and self._is_1D_or_1D_Var_arr(rhs.args[0].name)
         ):
