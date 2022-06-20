@@ -115,6 +115,17 @@ void open_file_appendstream(
     std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs,
     std::shared_ptr<::arrow::io::OutputStream> *out_stream);
 
+/**
+ * @brief Create a directory in a posix filesystem
+ *
+ * This function is assumed to be happening in parallel, i.e.
+ * it should be called by all ranks
+ * @param myrank current MPI rank
+ * @param dirname directory name to create
+ * @param path_name path to dir to create (exclude prefix, include path)
+ */
+void create_dir_posix(int myrank, std::string &dirname, std::string &path_name);
+
 /*
  * Open arrow::io::OutputStream for csv/json/parquet write
  * writing csv/json to posix:
@@ -128,13 +139,12 @@ void open_file_appendstream(
  * @param dirname: directory name to store the files
  * @param fname: name of file to open (exclude prefix, excludes path)
  * @param orig_path: name of file to open (include prefix & path)
- * @param path_name: name of file to open (exclude prefix, include path)
  * @param out_stream: the OutputStream to open
+ * @param bucket_region: Region of the S3 bucket in case writing to S3
  */
 void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
                     const std::string &file_type, std::string &dirname,
                     std::string &fname, std::string &orig_path,
-                    std::string &path_name,
                     std::shared_ptr<::arrow::io::OutputStream> *out_stream,
                     const std::string &bucket_region);
 

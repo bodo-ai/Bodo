@@ -529,8 +529,17 @@ void pq_write(const char *_path_name, const table_info *table,
     extract_fs_dir_path(_path_name, is_parallel, ".parquet", myrank, num_ranks,
                         &fs_option, &dirname, &fname, &orig_path, &path_name);
 
+    // We need to create a directory when writing a distributed
+    // table to a posix filesystem.
+    if (fs_option == Bodo_Fs::posix && is_parallel) {
+        create_dir_posix(myrank, dirname, path_name);
+    }
+    // Do not write a file if there are no rows to write.
+    if (table->nrows() == 0) {
+        return;
+    }
     open_outstream(fs_option, is_parallel, myrank, "parquet", dirname, fname,
-                   orig_path, path_name, &out_stream, bucket_region);
+                   orig_path, &out_stream, bucket_region);
 
     // copy column names to a std::vector<string>
     std::vector<std::string> col_names;
