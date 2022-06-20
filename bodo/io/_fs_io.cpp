@@ -202,10 +202,31 @@ void open_file_appendstream(
     *out_stream = hdfs_fs->OpenAppendStream(fname).ValueOrDie();
 }
 
+void create_dir_posix(int myrank, std::string &dirname,
+                      std::string &path_name) {
+    // create output directory
+    int error = 0;
+    if (std::filesystem::exists(dirname)) {
+        if (!std::filesystem::is_directory(dirname)) error = 1;
+    } else {
+        // for the parallel case, 'dirname' is the directory where the
+        // different parts of the distributed table are stored (each as
+        // a file)
+        std::filesystem::create_directory(dirname);
+    }
+    MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
+    if (error) {
+        if (myrank == 0)
+            std::cerr << "Bodo parquet write ERROR: a process reports "
+                         "that path "
+                      << path_name << " exists and is not a directory"
+                      << std::endl;
+    }
+}
+
 void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
                     const std::string &file_type, std::string &dirname,
                     std::string &fname, std::string &orig_path,
-                    std::string &path_name,
                     std::shared_ptr<::arrow::io::OutputStream> *out_stream,
                     const std::string &bucket_region) {
     PyObject *f_mod = nullptr;
@@ -217,26 +238,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
             return;
         }
         if (is_parallel) {
-            // create output directory
-            int error = 0;
-            if (std::filesystem::exists(dirname)) {
-                if (!std::filesystem::is_directory(dirname)) error = 1;
-            } else {
-                // for the parallel case, 'dirname' is the directory where the
-                // different parts of the distributed table are stored (each as
-                // a file)
-                std::filesystem::create_directory(dirname);
-            }
-            MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR,
-                          MPI_COMM_WORLD);
-            if (error) {
-                if (myrank == 0)
-                    std::cerr << "Bodo parquet write ERROR: a process reports "
-                                 "that path "
-                              << path_name << " exists and is not a directory"
-                              << std::endl;
-                return;
-            }
+            // assumes that the directory has already been created
             std::filesystem::path out_path(dirname);
             out_path /= fname;  // append file name to output path
             posix_open_file_outstream(file_type, out_path.string(), out_stream);

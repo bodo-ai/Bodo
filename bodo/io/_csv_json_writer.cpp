@@ -79,11 +79,16 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
             }
             return;
         }
+
+        // We need to create a directory when writing a distributed
+        // table to a posix filesystem.
+        if (fs_option == Bodo_Fs::posix && is_parallel) {
+            create_dir_posix(myrank, dirname, path_name);
+        }
         // handling s3 and hdfs with arrow
         // & handling posix json directory outputs with std::filesystem
         open_outstream(fs_option, is_parallel, myrank, suffix.substr(1),
-                       dirname, fname, orig_path, path_name, &out_stream,
-                       bucket_region);
+                       dirname, fname, orig_path, &out_stream, bucket_region);
         status = out_stream->Write(buff, count);
         CHECK_ARROW(status, "arrow::io::OutputStream::Write");
         // writing an extra '\n' to the end of json files inside of directory

@@ -43,7 +43,7 @@ from bodo.tests.utils import (
     get_start_end,
     reduce_sum,
 )
-from bodo.utils.testing import ensure_clean
+from bodo.utils.testing import ensure_clean, ensure_clean_dir
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
 
@@ -2504,6 +2504,28 @@ def test_write_parquet_row_group_size(memory_leak_check):
         finally:
             os.remove(output_filename)
     bodo.barrier()
+
+
+def test_write_parquet_no_empty_files(memory_leak_check):
+    """Test that when a rank has no data, it doesn't write a file"""
+    # The test is most useful when run with multiple ranks
+    # but should pass on a single rank too.
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, out_name):
+        df.to_parquet(out_name)
+
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame({"A": [1], "B": [1]})
+    else:
+        df = pd.DataFrame({"A": [], "B": []})
+
+    output_filename = "1row.pq"
+    with ensure_clean_dir(output_filename):
+        impl(df, output_filename)
+        bodo.barrier()
+        # Only rank 0 should've written a file
+        assert len(os.listdir(output_filename)) == 1
 
 
 def test_csv_bool1(datapath, memory_leak_check):
