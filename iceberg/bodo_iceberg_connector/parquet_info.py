@@ -2,6 +2,7 @@
 API used to translate Java BodoParquetInfo objects into
 Python Objects usable inside Bodo.
 """
+import sys
 from collections import namedtuple
 from urllib.parse import urlparse
 
@@ -13,6 +14,18 @@ from bodo_iceberg_connector.jpype_support import get_iceberg_java_table_reader
 
 # Named Tuple for Parquet info
 BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start length")
+
+
+def _remove_prefix(input: str, prefix: str) -> str:
+    """
+    Remove Prefix from String if Available
+    This is part of Python's Standard Library starting from 3.9
+    TODO: Remove once Python 3.8 is deprecated
+    """
+    if sys.version_info.minor < 9:
+        return input[len(prefix) :] if input.startswith(prefix) else input
+    else:
+        return input.removeprefix(prefix)
 
 
 def bodo_connector_get_parquet_file_list(warehouse, schema, table, filters):
@@ -27,9 +40,9 @@ def bodo_connector_get_parquet_file_list(warehouse, schema, table, filters):
     # a full path
     # Replace Hadoop S3A URI scheme with regular S3 Scheme
     return [
-        x.filepath.replace("s3a://", "s3://").removeprefix("file:")
+        _remove_prefix(x.filepath.replace("s3a://", "s3://"), "file:")
         if _has_uri_scheme(x.filepath)
-        else f"{warehouse.removeprefix('file:')}/{x.filepath}"
+        else f"{_remove_prefix(warehouse, 'file:')}/{x.filepath}"
         for x in pq_infos
     ]
 

@@ -5,6 +5,7 @@ according to Bodo requirements (using partial typing).
 import copy
 import itertools
 import operator
+import sys
 import types as pytypes
 import warnings
 from collections import defaultdict
@@ -2339,7 +2340,16 @@ class TypingTransforms:
                 "'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://'"
             )
 
-        con = con.removeprefix("iceberg+").removeprefix("iceberg://")
+        # Remove Iceberg Prefix when using Internally
+        # For support before Python 3.9
+        # TODO: Remove after deprecating Python 3.8
+        if sys.version_info.minor < 9:
+            if con.startswith("iceberg+"):
+                con = con[len("iceberg+") :]
+            if con.startswith("iceberg://"):
+                con = con[len("iceberg://") :]
+        else:
+            con = con.removeprefix("iceberg+").removeprefix("iceberg://")
 
         # Generate Output DataFrame Type
         arg_defaults = {
