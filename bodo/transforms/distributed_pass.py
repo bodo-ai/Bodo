@@ -3776,13 +3776,19 @@ class DistributedPass:
         ):
             return self._is_dist_slice(var_def.args[0], equiv_set)
 
-        require(
-            isinstance(var_def, ir.Expr) and var_def.op in ("getitem", "static_getitem")
-        )
-        require(self._is_1D_or_1D_Var_arr(var_def.value.name))
+        if fdef == ("table_filter", "bodo.hiframes.table"):
+            require(self._is_1D_or_1D_Var_arr(var_def.args[0].name))
+            index_var = var_def.args[1]
+        else:
+            # array case
+            require(
+                isinstance(var_def, ir.Expr)
+                and var_def.op in ("getitem", "static_getitem")
+            )
+            require(self._is_1D_or_1D_Var_arr(var_def.value.name))
+            index_var = get_getsetitem_index_var(var_def, self.typemap, [])
 
-        # make sure getitem index is a limited slice
-        index_var = get_getsetitem_index_var(var_def, self.typemap, [])
+        # make sure index is a limited slice
         require(self.typemap[index_var.name] in (types.slice2_type, types.slice3_type))
         require(
             not guard(
