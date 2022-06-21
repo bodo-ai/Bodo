@@ -809,6 +809,20 @@ table_info* RetrieveTable(table_info* const& in_table,
     return new table_info(out_arrs);
 }
 
+table_info* RetrieveTable(table_info* const& in_table,
+                          std::vector<int64_t> const& rowInds,
+                          std::vector<size_t> const& colInds) {
+    std::vector<array_info*> out_arrs;
+    for (size_t i_col : colInds) {
+        array_info* in_arr = in_table->columns[i_col];
+        out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, rowInds));
+        // decref input since not used anymore (see shuffle_table_kernel for
+        // discussion)
+        decref_array(in_arr);
+    }
+    return new table_info(out_arrs);
+}
+
 template <typename T>
 std::pair<int, bool> process_arrow_bitmap(bool const& na_position_bis,
                                           T const& arrow1, int64_t pos1,

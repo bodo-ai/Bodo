@@ -757,15 +757,11 @@ class DataFramePass:
         else:
             key_names = get_overload_const_list(by_type)
         valid_keys_set = set(df_typ.columns)
-        index_is_key = False
-        index_name = "unset"
+        index_name = "$_bodo_unset_"
         if not is_overload_none(df_typ.index.name_typ):
             index_name = df_typ.index.name_typ.literal_value
             valid_keys_set.add(index_name)
-            if index_name in key_names:
-                index_is_key = True
         if INDEX_SENTINEL in key_names:
-            index_is_key = True
             index_name = INDEX_SENTINEL
             valid_keys_set.add(index_name)
         # "A" is equivalent to ("A", "")
@@ -781,57 +777,43 @@ class DataFramePass:
         ), f"invalid sort keys {key_names}"
 
         nodes = []
-        in_vars = {
-            c: self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns
-        }
+        in_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
         in_index_var = self._gen_array_from_index(df_var, nodes)
-        in_vars[INDEX_SENTINEL] = in_index_var
+        in_vars.append(in_index_var)
 
-        # remove key from dfs (only data is kept)
-        def get_value(c):
-            if c == index_name:
-                return in_index_var
-            return in_vars.pop(c)
-
-        in_key_arrs = [get_value(c) for c in key_names]
+        key_inds = tuple(
+            len(in_vars) - 1 if c == index_name else df_typ.column_index[c]
+            for c in key_names
+        )
         if inplace:
             if any(
-                self.typemap[v.name] == bodo.dict_str_arr_type
-                for v in in_key_arrs + list(in_vars.values())
+                self.typemap[in_vars[i].name] == bodo.dict_str_arr_type
+                for i in key_inds
             ):
                 raise BodoError(
                     "inplace sort not supported for dictionary-encoded string arrays yet",
                     loc=rhs.loc,
                 )
-            out_key_vars = in_key_arrs.copy()
             out_vars = in_vars.copy()
             out_index_var = in_index_var
         else:
-            out_vars = {}
+            out_vars = []
             for ind, k in enumerate(df_typ.columns):
                 out_var = ir.Var(lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc)
                 self.typemap[out_var.name] = df_typ.data[ind]
-                out_vars[k] = out_var
+                out_vars.append(out_var)
             # index var
             out_index_var = ir.Var(lhs.scope, mk_unique_var("_index_"), lhs.loc)
             self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
-            out_key_vars = []
-            if not index_is_key:
-                out_vars[INDEX_SENTINEL] = out_index_var
-            for k in key_names:
-                if index_is_key and k == index_name:
-                    out_key_vars.append(out_index_var)
-                else:
-                    out_key_vars.append(out_vars.pop(k))
+            out_vars.append(out_index_var)
 
         nodes.append(
             bodo.ir.sort.Sort(
                 df_var.name,
                 lhs.name,
-                in_key_arrs,
-                out_key_vars,
                 in_vars,
                 out_vars,
+                key_inds,
                 inplace,
                 lhs.loc,
                 ascending_list,
@@ -846,19 +828,11 @@ class DataFramePass:
 
         _init_df = _gen_init_df_dataframe_pass(df_typ.columns, "index")
 
-        # XXX the order of output variables passed should match out_typ.columns
-        out_arrs = []
-        for c in df_typ.columns:
-            if c in key_names:
-                ind = key_names.index(c)
-                out_arrs.append(out_key_vars[ind])
-            else:
-                out_arrs.append(out_vars[c])
-        out_arrs.append(out_index)
-
         # return new df even for inplace case, since typing pass replaces input variable
         # using output of the call
-        return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
+        return nodes + compile_func_single_block(
+            _init_df, out_vars[:-1] + [out_index], lhs, self
+        )
 
     def _convert_op_call_to_expr(self, assign, rhs, op):
         """converts calls to operators (e.g. operator.add) to equivalent Expr nodes such
