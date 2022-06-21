@@ -110,7 +110,6 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_constant_tuple,
     is_str_arr_type,
-    to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -2000,14 +1999,11 @@ class SeriesPass:
 
             # dummy output data arrays for results
             out_data = ir.Var(lhs.scope, mk_unique_var(data.name + "_data"), lhs.loc)
-            self.typemap[out_data.name] = to_str_arr_if_dict_array(
-                self.typemap[data.name]
-            )
+            self.typemap[out_data.name] = self.typemap[data.name]
 
-            in_df = {"inds": index_var}
-            out_df = {"inds": lhs}
-            in_keys = [data]
-            out_keys = [out_data]
+            in_vars = [data, index_var]
+            out_vars = [out_data, lhs]
+            key_inds = (0,)
             inplace = False
             ascending = True
             na_position = "last"
@@ -2017,10 +2013,9 @@ class SeriesPass:
                 bodo.ir.sort.Sort(
                     data.name,
                     lhs.name,
-                    in_keys,
-                    out_keys,
-                    in_df,
-                    out_df,
+                    in_vars,
+                    out_vars,
+                    key_inds,
                     inplace,
                     lhs.loc,
                     ascending,

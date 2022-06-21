@@ -191,6 +191,19 @@ table_info* RetrieveTable(table_info* const& in_table,
                           std::vector<int64_t> const& ListIdx,
                           int const& n_col);
 
+/**
+ * @brief select rows and columns in input table specified by list of indices
+ * and return a new table.
+ *
+ * @param in_table input table to select from
+ * @param rowInds list of row indices to select
+ * @param colInds list of column indices to select
+ * @return table_info* output table with selected rows/columns
+ */
+table_info* RetrieveTable(table_info* const& in_table,
+                          std::vector<int64_t> const& rowInds,
+                          std::vector<size_t> const& colInds);
+
 /** This code test if two keys are equal (Before that the hash should have been
  * used) It is used that way because we assume that the left key have the same
  * type as the right keys. The computation is for just one column and it is used
@@ -321,7 +334,7 @@ isnan_categorical(T const& val) {
     return false;
 }
 
-template<typename T, int dtype>
+template <typename T, int dtype>
 inline typename std::enable_if<std::is_integral<T>::value, void>::type
 set_na_if_num_categories(T& val, int64_t num_categories) {
     if (val == num_categories) {
@@ -329,7 +342,7 @@ set_na_if_num_categories(T& val, int64_t num_categories) {
     }
 }
 
-template<typename T, int dtype>
+template <typename T, int dtype>
 inline typename std::enable_if<!std::is_integral<T>::value, void>::type
 set_na_if_num_categories(T& val, int64_t num_categories) {
     return;

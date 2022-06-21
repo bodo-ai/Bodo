@@ -2078,12 +2078,18 @@ def hash_join_table(
 
 @intrinsic
 def sort_values_table(
-    typingctx, table_t, n_keys_t, vect_ascending_t, na_position_b_t, parallel_t
+    typingctx,
+    table_t,
+    n_keys_t,
+    vect_ascending_t,
+    na_position_b_t,
+    dead_keys_t,
+    parallel_t,
 ):
     """
     Interface to the sorting of tables.
     """
-    assert table_t == table_type
+    assert table_t == table_type, "C++ table type expected"
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
@@ -2091,6 +2097,7 @@ def sort_values_table(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
@@ -2106,7 +2113,14 @@ def sort_values_table(
         return ret
 
     return (
-        table_type(table_t, types.int64, types.voidptr, types.voidptr, types.boolean),
+        table_type(
+            table_t,
+            types.int64,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.boolean,
+        ),
         codegen,
     )
 

@@ -163,7 +163,8 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
  */
 table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
                                     int64_t* vect_ascending,
-                                    int64_t* na_position, bool is_parallel) {
+                                    int64_t* na_position, int64_t* dead_keys,
+                                    bool is_parallel) {
     tracing::Event ev("sort_values_table_local", is_parallel);
     size_t n_rows = (size_t)in_table->nrows();
     size_t n_key = size_t(n_key_t);
@@ -211,13 +212,32 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
         };
         gfx::timsort(ListIdx.begin(), ListIdx.end(), f);
     }
-    table_info* ret_table = RetrieveTable(in_table, ListIdx, -1);
+
+    table_info* ret_table;
+    if (dead_keys == nullptr) {
+        ret_table = RetrieveTable(in_table, ListIdx, -1);
+    } else {
+        size_t n_cols = (size_t)in_table->ncols();
+        std::vector<size_t> colInds;
+        for (size_t i = 0; i < n_cols; i++) {
+            if (i < n_key_t && dead_keys[i]) {
+                array_info* in_arr = in_table->columns[i];
+                // decref dead keys since not used anymore
+                // RetrieveTable decrefs other arrays
+                decref_array(in_arr);
+                continue;
+            }
+            colInds.push_back(i);
+        }
+        ret_table = RetrieveTable(in_table, ListIdx, colInds);
+    }
+
     return ret_table;
 }
 
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, int64_t* na_position,
-                              bool parallel) {
+                              int64_t* dead_keys, bool parallel) {
     try {
         tracing::Event ev("sort_values_table", parallel);
 
@@ -234,7 +254,8 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         }
 
         table_info* local_sort = sort_values_table_local(
-            in_table, n_key_t, vect_ascending, na_position, parallel);
+            in_table, n_key_t, vect_ascending, na_position,
+            parallel ? nullptr : dead_keys, parallel);
         if (!parallel) return local_sort;
 
         // preliminary definitions.
@@ -300,8 +321,9 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         // Computing the bounds (splitters) on root
         table_info* pre_bounds = nullptr;
         if (myrank == mpi_root) {
-            table_info* all_samples_sort = sort_values_table_local(
-                all_samples, n_key_t, vect_ascending, na_position, parallel);
+            table_info* all_samples_sort =
+                sort_values_table_local(all_samples, n_key_t, vect_ascending,
+                                        na_position, nullptr, parallel);
             int64_t n_samples = all_samples_sort->nrows();
             int64_t step = ceil(double(n_samples) / double(n_pes));
             std::vector<int64_t> ListIdxBounds(n_pes - 1);
@@ -357,8 +379,9 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         delete_table(local_sort);
 
         // Final local sorting
-        table_info* ret_table = sort_values_table_local(
-            collected_table, n_key_t, vect_ascending, na_position, parallel);
+        table_info* ret_table =
+            sort_values_table_local(collected_table, n_key_t, vect_ascending,
+                                    na_position, dead_keys, parallel);
         delete_table(collected_table);
         return ret_table;
     } catch (const std::exception& e) {
@@ -371,8 +394,9 @@ array_info* sort_values_array_local(array_info* in_arr, bool is_parallel,
                                     int64_t ascending, int64_t na_position) {
     std::vector<array_info*> cols = {in_arr};
     table_info* dummy_table = new table_info(cols);
+    int64_t zero = 0;
     table_info* sorted_table = sort_values_table_local(
-        dummy_table, 1, &ascending, &na_position, is_parallel);
+        dummy_table, 1, &ascending, &na_position, &zero, is_parallel);
     delete_table(dummy_table);
     array_info* sorted_arr = sorted_table->columns[0];
     delete sorted_table;

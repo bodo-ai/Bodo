@@ -14,12 +14,14 @@ import random
 import re
 import string
 
+import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import (
+    DeadcodeTestPipeline,
     check_func,
     check_parallel_coherency,
     gen_random_arrow_array_struct_int,
@@ -862,7 +864,7 @@ def test_sort_values_bool_list(memory_leak_check):
     """Test of NaN values for the sorting with vector of ascending"""
 
     def test_impl1(df1):
-        df2 = df1.sort_values(by=["A", "B"], kind="mergesort", axis=0)
+        df2 = df1.sort_values(by=["B", "A"], kind="mergesort", axis=0)
         return df2
 
     def test_impl2(df1):
@@ -964,6 +966,64 @@ def test_sort_values_list_inference(memory_leak_check):
         }
     )
     check_func(impl, (df,))
+
+
+def test_sort_values_key_rm_dead(memory_leak_check):
+    """
+    Make sure dead column elimination works for sort key outputs
+    """
+
+    def impl(df):
+        return df.sort_values(by=["A", "C", "E"])[["A", "D"]]
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 3, 2, 0, -1, 4],
+            "B": [1.2, 3.4, 0.1, 2.2, 3.1, -1.2],
+            "C": np.arange(6),
+            "D": [
+                "¿abc¡Y tú, quién te crees?",
+                "ÕÕÕú¡úú,úũ¿ééé",
+                "россия очень, холодная страна",
+                np.nan,
+                "مرحبا, العالم ، هذا هو بودو",
+                "Γειά σου ,Κόσμε",
+            ],
+            "E": np.arange(6),
+        }
+    )
+    check_func(impl, (df,))
+
+    # make sure dead keys are detected properly
+    sort_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)
+    sort_func(df)
+    fir = sort_func.overloads[sort_func.signatures[0]].metadata["preserved_ir"]
+
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            if isinstance(stmt, bodo.ir.sort.Sort):
+                assert stmt.dead_var_inds == {1}
+                assert stmt.dead_key_var_inds == {2, 4}
+
+
+def test_sort_values_rm_dead(memory_leak_check):
+    """
+    Make sure dead Sort IR nodes are removed
+    """
+
+    def impl(df):
+        df.sort_values(by=["A"])
+
+    df = pd.DataFrame({"A": [1, 3, 2, 0, -1, 4], "B": [1.2, 3.4, 0.1, 2.2, 3.1, -1.2]})
+
+    # make sure there is no Sort node
+    sort_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)
+    sort_func(df)
+    fir = sort_func.overloads[sort_func.signatures[0]].metadata["preserved_ir"]
+
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            assert not isinstance(stmt, bodo.ir.sort.Sort)
 
 
 @pytest.mark.slow

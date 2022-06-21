@@ -2674,8 +2674,10 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                 }
                 return;
-            } else if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::last) { 
-                // NOTE: Bodo_FTypes::max is handled for categorical type since NA is -1.
+            } else if (ftype == Bodo_FTypes::min ||
+                       ftype == Bodo_FTypes::last) {
+                // NOTE: Bodo_FTypes::max is handled for categorical type since
+                // NA is -1.
                 for (int64_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     if (i_grp != -1) {
@@ -2686,13 +2688,14 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                         }
                     }
                 }
-                // aggfunc_output_initialize_kernel, min defaults 
+                // aggfunc_output_initialize_kernel, min defaults
                 // to num_categories if all entries are NA
-                // this needs to be replaced with -1 
+                // this needs to be replaced with -1
                 if (ftype == Bodo_FTypes::min) {
                     for (int64_t i = 0; i < out_col->length; i++) {
                         T& val = getv<ARR_O, T>(out_col, i);
-                        set_na_if_num_categories<T, dtype>(val, out_col->num_categories);
+                        set_na_if_num_categories<T, dtype>(
+                            val, out_col->num_categories);
                     }
                 }
                 return;
@@ -3974,19 +3977,23 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
             switch (out_col->dtype) {
                 case Bodo_CTypes::INT8:
                     std::fill((int8_t*)out_col->data1,
-                              (int8_t*)out_col->data1 + out_col->length, init_val);
+                              (int8_t*)out_col->data1 + out_col->length,
+                              init_val);
                     return;
                 case Bodo_CTypes::INT16:
                     std::fill((int16_t*)out_col->data1,
-                              (int16_t*)out_col->data1 + out_col->length, init_val);
+                              (int16_t*)out_col->data1 + out_col->length,
+                              init_val);
                     return;
                 case Bodo_CTypes::INT32:
                     std::fill((int32_t*)out_col->data1,
-                              (int32_t*)out_col->data1 + out_col->length, init_val);
+                              (int32_t*)out_col->data1 + out_col->length,
+                              init_val);
                     return;
                 case Bodo_CTypes::INT64:
                     std::fill((int64_t*)out_col->data1,
-                              (int64_t*)out_col->data1 + out_col->length, init_val);
+                              (int64_t*)out_col->data1 + out_col->length,
+                              init_val);
                     return;
             }
         }
@@ -5827,8 +5834,9 @@ class GroupbyPipeline {
         // whether to put NaN first or last.
         // Does not matter in this case (no NaN, values are range(nrows))
         int64_t asc_pos = 1;
-        cur_table =
-            sort_values_table(cur_table, 1, &asc_pos, &asc_pos, is_parallel);
+        int64_t zero = 0;
+        cur_table = sort_values_table(cur_table, 1, &asc_pos, &asc_pos, &zero,
+                                      is_parallel);
         // Remove key-sort column
         free_array_groupby(cur_table->columns[0]);
         cur_table->columns.erase(cur_table->columns.begin());
@@ -6123,7 +6131,8 @@ class GroupbyPipeline {
             // TODO: do a hash combine that writes to an empty hash
             // array to avoid memcpy?
             hash_array_combine(key_value_hashes, tmp->columns[num_keys], n_rows,
-                               SEED_HASH_PARTITION, /*global_dict_needed=*/true);
+                               SEED_HASH_PARTITION,
+                               /*global_dict_needed=*/true);
 
             // Compute the local fraction of unique hashes
             size_t nunique_keyval_hashes =
