@@ -15,14 +15,12 @@ import bodo
 # either uses a column (e.g. get_table_data) or
 # create a new table from the existing table
 # (e.g. generate_table_nbytes) and can be exposed
-# to the main IR must be included here. Operations
-# that are aliases/reuse the same internal table
-# (or its lists) without making copies should not
-# be included here as they must be handled separately
-# for correctness (e.g. set_table_data).
+# to the main IR must be included here.
 table_usecol_funcs = {
     ("get_table_data", "bodo.hiframes.table"),
     ("table_filter", "bodo.hiframes.table"),
+    ("set_table_data", "bodo.hiframes.table"),
+    ("set_table_data_null", "bodo.hiframes.table"),
     ("generate_mappable_table_func", "bodo.utils.table_utils"),
     ("table_astype", "bodo.utils.table_utils"),
     ("generate_table_nbytes", "bodo.utils.table_utils"),
@@ -68,6 +66,8 @@ def get_table_used_columns(
         ("table_filter", "bodo.hiframes.table"),
         ("table_astype", "bodo.utils.table_utils"),
         ("generate_mappable_table_func", "bodo.utils.table_utils"),
+        ("set_table_data", "bodo.hiframes.table"),
+        ("set_table_data_null", "bodo.hiframes.table"),
     }:
         kws = dict(call_expr.kws)
         if "used_cols" in kws:
