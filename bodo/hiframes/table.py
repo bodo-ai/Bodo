@@ -44,7 +44,6 @@ from bodo.utils.typing import (
     is_overload_true,
     to_str_arr_if_dict_array,
 )
-from bodo.utils.utils import is_array_typ
 
 
 class Table:
@@ -753,88 +752,171 @@ def _rm_old_array(col_ind, out_table_type, out_table, in_table_type, context, bu
         context.nrt.decref(builder, old_type, old_arr)
 
 
-@intrinsic
-def set_table_data(typingctx, table_type, ind_type, arr_type):
-    """Set array to input table and return a new table.
-    NOTE: this assumes the input table is not used anymore so we can reuse its internal
-    lists.
+def generate_set_table_data_code(table, ind, arr_type, used_cols, is_null=False):
+    """Generates the code used for both set_table_data and
+    set_table_data_null, which are distinguished by the null
+    parameter. Note: Since we copy the parent, we do not need to
+    ensure any columns are unboxed as no data is actually manipulated.
+
+    Args:
+        table (TableType): Input table type that will have a column set
+        ind (int): Index at which the new array will be placed.
+        arr_type (ArrayType): Type of the new array being set. Used to
+            generate code/determine the output table type.
+        used_cols ([Set[int] | None]: If not None, the columns that should
+            be copied to the output table. This is filled by the table column
+            deletion steps. Since set_table_data, is a simple assignment, we only
+            use this set to skip entire loops and do not do a runtime check if
+            a loop is used. Note: used_cols never contains ind.
+        is_null (bool, optional): If this set_table_data_null? If so
+            the arr in the codegen is actually just a type, not an
+            actual array and we don't set the value within the output
+            table.
+
+    Returns:
+        func: Python func with the generated code for either set_table_data
+        or set_table_data_null
     """
-    assert isinstance(table_type, TableType), "invalid input to set_table_data"
-    assert is_overload_constant_int(ind_type), "set_table_data expects const index"
-    col_ind = get_overload_const_int(ind_type)
-    is_new_col = col_ind == len(table_type.arr_types)
-    out_arr_types = list(table_type.arr_types)
-    if is_new_col:
-        out_arr_types.append(arr_type)
+    out_arr_typs = list(table.arr_types)
+    if ind == len(out_arr_typs):
+        old_arr_type = None
+        out_arr_typs.append(arr_type)
     else:
-        out_arr_types[col_ind] = arr_type
-    out_table_type = TableType(tuple(out_arr_types))
+        old_arr_type = table.arr_types[ind]
+        out_arr_typs[ind] = arr_type
+    out_table_typ = TableType(tuple(out_arr_typs))
+    glbls = {
+        "init_table": init_table,
+        "get_table_block": get_table_block,
+        "set_table_block": set_table_block,
+        "set_table_len": set_table_len,
+        "set_table_parent": set_table_parent,
+        "alloc_list_like": alloc_list_like,
+        "out_table_typ": out_table_typ,
+    }
+    func_text = "def set_table_data(table, ind, arr, used_cols=None):\n"
+    func_text += f"  T2 = init_table(out_table_typ, False)\n"
+    # Length of the table cannot change.
+    func_text += f"  T2 = set_table_len(T2, len(table))\n"
+    # Copy the parent for lazy unboxing.
+    func_text += f"  T2 = set_table_parent(T2, table)\n"
+    for typ, blk in out_table_typ.type_to_blk.items():
+        if typ in table.type_to_blk:
+            orig_table_blk = table.type_to_blk[typ]
+            func_text += (
+                f"  arr_list_{blk} = get_table_block(table, {orig_table_blk})\n"
+            )
+            func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, {len(out_table_typ.block_to_arr_ind[blk])}, False)\n"
+            # If this typ isn't included skip the whole loop.
+            if used_cols is None or (
+                set(table.block_to_arr_ind[orig_table_blk]) & used_cols
+            ):
+                func_text += f"  for i in range(len(arr_list_{blk})):\n"
+                if typ not in (old_arr_type, arr_type):
+                    func_text += f"    out_arr_list_{blk}[i] = arr_list_{blk}[i]\n"
+                else:
+                    # If the contents of the list has changed then we need to actually lower
+                    # the location for each column.
+                    ind_list = table.block_to_arr_ind[orig_table_blk]
+                    blk_idx_lst = np.empty(len(ind_list), np.int64)
+                    removes_arr = False
+                    # Arrays are always added to the list in logical column order.
+                    for blk_idx, arr_ind in enumerate(ind_list):
+                        if arr_ind != ind:
+                            new_blk_idx = out_table_typ.block_offsets[arr_ind]
+                        else:
+                            new_blk_idx = -1
+                            removes_arr = True
+                        blk_idx_lst[blk_idx] = new_blk_idx
 
-    def codegen(context, builder, sig, args):
-        table_arg, _, new_arr = args
-        out_table = set_table_data_codegen(
-            context,
-            builder,
-            table_type,
-            table_arg,
-            out_table_type,
-            arr_type,
-            new_arr,
-            col_ind,
-            is_new_col,
-        )
-        return out_table
+                    glbls[f"out_idxs_{blk}"] = np.array(blk_idx_lst, np.int64)
+                    func_text += f"    out_idx = out_idxs_{blk}[i]\n"
+                    if removes_arr:
+                        # If we remove any array we need to check for -1
+                        func_text += f"    if out_idx == -1:\n"
+                        func_text += f"      continue\n"
+                    func_text += (
+                        f"    out_arr_list_{blk}[out_idx] = arr_list_{blk}[i]\n"
+                    )
+            if typ == arr_type and not is_null:
+                # Add the new array.
+                func_text += (
+                    f"  out_arr_list_{blk}[{out_table_typ.block_offsets[ind]}] = arr\n"
+                )
+        else:
+            # We are assigning a new type.
+            glbls[f"arr_list_typ_{blk}"] = types.List(arr_type)
+            func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_typ_{blk}, 1, False)\n"
+            if not is_null:
+                # Assign the array if it exists
+                func_text += f"  out_arr_list_{blk}[0] = arr\n"
+        func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+    func_text += f"  return T2\n"
 
-    return out_table_type(table_type, ind_type, arr_type), codegen
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["set_table_data"]
 
 
-@intrinsic
-def set_table_data_null(typingctx, table_type, ind_type, arr_type):
-    """Set input table colum to NULL and return a new table.
-    NOTE: this assumes the input table is not used anymore so we can reuse its internal
-    lists.
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def set_table_data(table, ind, arr, used_cols=None):
+    """Returns a new table with the contents as table
+    except arr is inserted at ind. There are two main cases,
+    if ind = len(table.arr_types) then we are adding a new array.
+    Otherwise ind must be in range(0, len(table.arr_types)) and
+    we replace the existing array.
+
+    Args:
+        table (TableType): Input table.
+        ind (LiteralInteger): Location at which to place the new array.
+        arr (ArrayType): The new array to place
+        used_cols (types.TypeRef(bodo.MetaType)
+            | types.none): If not None, the columns that should
+            be copied to the output table. This is filled by the table
+            column deletion steps.
+
+    Returns:
+        TableType: Output table with the new array.
     """
-    assert isinstance(table_type, TableType), "invalid input to set_table_data"
-    assert is_overload_constant_int(ind_type), "set_table_data_null expects const index"
-    assert isinstance(
-        arr_type, types.TypeRef
-    ), "invalid input to set_table_data_null, array type is not a typeref"
-    # Unwrap TypeRef
-    arr_type_unboxed = arr_type.instance_type
-    assert is_array_typ(
-        arr_type_unboxed
-    ), "invalid input to set_table_data_null, array type is not an array"
-
-    col_ind = get_overload_const_int(ind_type)
-    is_new_col = col_ind == len(table_type.arr_types)
-
-    out_arr_types = list(table_type.arr_types)
-    if is_new_col:
-        out_arr_types.append(arr_type_unboxed)
+    if is_overload_none(used_cols):
+        used_columns = None
     else:
-        out_arr_types[col_ind] = arr_type_unboxed
-    out_table_type = TableType(tuple(out_arr_types))
+        used_columns = set(used_cols.instance_type.meta)
+    ind_lit = get_overload_const_int(ind)
+    return generate_set_table_data_code(table, ind_lit, arr, used_columns)
 
-    def codegen(context, builder, sig, args):
-        (
-            table_arg,
-            _,
-            _,
-        ) = args
-        out_table = set_table_data_codegen(
-            context,
-            builder,
-            table_type,
-            table_arg,
-            out_table_type,
-            arr_type_unboxed,
-            context.get_constant_null(arr_type_unboxed),
-            col_ind,
-            is_new_col,
-        )
-        return out_table
 
-    return out_table_type(table_type, ind_type, arr_type), codegen
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def set_table_data_null(table, ind, arr, used_cols=None):
+    """Returns a new table with the contents as table
+    except a new null array is inserted at ind. There are two main cases,
+    if ind = len(table.arr_types) then we are just modifying the table
+    types with modifying the data. Otherwise ind must be in
+    range(0, len(table.arr_types)) and we replace the existing array
+    with null.
+
+    Args:
+        table (TableType): Input table.
+        ind (LiteralInteger): Location at which to place the new array.
+        arr (TypeRef(ArrayType)): The type of the new null array to place.
+            This is used for generating an accurate table type.
+        used_cols (types.TypeRef(bodo.MetaType)
+            | types.none): If not None, the columns that should
+            be copied to the output table. This is filled by the table
+            column deletion steps.
+
+    Returns:
+        TableType: Output table with the new null array.
+    """
+    ind_lit = get_overload_const_int(ind)
+    arr_type = arr.instance_type
+    if is_overload_none(used_cols):
+        used_columns = None
+    else:
+        used_columns = set(used_cols.instance_type.meta)
+    return generate_set_table_data_code(
+        table, ind_lit, arr_type, used_columns, is_null=True
+    )
 
 
 def alias_ext_dummy_func(lhs_name, args, alias_map, arg_aliases):
@@ -998,7 +1080,6 @@ def ensure_table_unboxed(typingctx, table_type, used_cols_typ):
             )
 
         table = cgutils.create_struct_proxy(sig.args[0])(context, builder, table_arg)
-        has_parent = cgutils.is_not_null(builder, table.parent)
         for t, blk in table_type.type_to_blk.items():
             n_arrs = context.get_constant(
                 types.int64, len(table_type.block_to_arr_ind[blk])
@@ -1137,6 +1218,30 @@ def set_table_len(typingctx, table_type, l_type):
         return impl_ret_borrowed(context, builder, table_type, in_table._getvalue())
 
     sig = table_type(table_type, l_type)
+    return sig, codegen
+
+
+@intrinsic
+def set_table_parent(typingctx, out_table_type, in_table_type):
+    """set out_table parent to the in_table's parent and return a new table object"""
+    assert isinstance(in_table_type, TableType), "table type expected"
+    assert isinstance(out_table_type, TableType), "table type expected"
+
+    def codegen(context, builder, sig, args):
+        out_table_arg, in_table_arg = args
+        in_table = cgutils.create_struct_proxy(in_table_type)(
+            context, builder, in_table_arg
+        )
+        out_table = cgutils.create_struct_proxy(out_table_type)(
+            context, builder, out_table_arg
+        )
+        out_table.parent = in_table.parent
+        context.nrt.incref(builder, types.pyobject, out_table.parent)
+        return impl_ret_borrowed(
+            context, builder, out_table_type, out_table._getvalue()
+        )
+
+    sig = out_table_type(out_table_type, in_table_type)
     return sig, codegen
 
 
