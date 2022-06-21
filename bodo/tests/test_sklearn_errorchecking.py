@@ -53,12 +53,12 @@ def generate_X_y_classification(n_samples, n_features, n_classes):
 
 
 def generate_sample_weight(n_samples):
-    """ Generate sample_weight data"""
+    """Generate sample_weight data"""
     return np.random.random_sample(size=n_samples)
 
 
 @pytest.mark.slow
-def test_sgdr_sample_weight():
+def test_sgdr_sample_weight(memory_leak_check):
     """Test BodoError is raised for SGDRegressor.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -79,7 +79,7 @@ def test_sgdr_sample_weight():
 
 
 @pytest.mark.slow
-def test_sgdr_coef_init():
+def test_sgdr_coef_init(memory_leak_check):
     """Test BodoError is raised for SGDRegressor.fit():
     'coef_init' unsupported argument for distributed case."""
 
@@ -100,7 +100,7 @@ def test_sgdr_coef_init():
 
 
 @pytest.mark.slow
-def test_sgdr_intercept_init():
+def test_sgdr_intercept_init(memory_leak_check):
     """Test BodoError is raised for SGDRegressor.fit():
     'intercept_init' unsupported argument for distributed case."""
 
@@ -121,7 +121,7 @@ def test_sgdr_intercept_init():
 
 
 @pytest.mark.slow
-def test_sgdc_sample_weight():
+def test_sgdc_sample_weight(memory_leak_check):
     """Test BodoError is raised for SGDClassifier.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -142,7 +142,7 @@ def test_sgdc_sample_weight():
 
 
 @pytest.mark.slow
-def test_lr_sample_weight():
+def test_lr_sample_weight(memory_leak_check):
     """Test BodoError is raised for LogisticRegression.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -163,7 +163,7 @@ def test_lr_sample_weight():
 
 
 @pytest.mark.slow
-def test_linearReg_sample_weight():
+def test_linearReg_sample_weight(memory_leak_check):
     """Test BodoError is raised for LinearRegression.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -184,7 +184,7 @@ def test_linearReg_sample_weight():
 
 
 @pytest.mark.slow
-def test_lasso_sample_weight():
+def test_lasso_sample_weight(memory_leak_check):
     """Test BodoError is raised for Lasso.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -205,7 +205,7 @@ def test_lasso_sample_weight():
 
 
 @pytest.mark.slow
-def test_ridge_sample_weight():
+def test_ridge_sample_weight(memory_leak_check):
     """Test BodoError is raised for Ridge.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -226,7 +226,7 @@ def test_ridge_sample_weight():
 
 
 @pytest.mark.slow
-def test_lsvc_sample_weight():
+def test_lsvc_sample_weight(memory_leak_check):
     """Test BodoError is raised for LinearSVC.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -247,7 +247,7 @@ def test_lsvc_sample_weight():
 
 
 @pytest.mark.slow
-def test_standardscaler_sample_weight():
+def test_standardscaler_sample_weight(memory_leak_check):
     """Test BodoError is raised for StandardScaler.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -268,7 +268,7 @@ def test_standardscaler_sample_weight():
 
 
 @pytest.mark.slow
-def test_randomforestclassifier_sample_weight():
+def test_randomforestclassifier_sample_weight(memory_leak_check):
     """Test BodoError is raised for RandomForestClassifier.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -289,7 +289,7 @@ def test_randomforestclassifier_sample_weight():
 
 
 @pytest.mark.slow
-def test_randomforestregressor_sample_weight():
+def test_randomforestregressor_sample_weight(memory_leak_check):
     """Test BodoError is raised for RandomForestRegressor.fit():
     'sample_weight' unsupported argument for distributed case."""
 
@@ -311,7 +311,7 @@ def test_randomforestregressor_sample_weight():
 
 @pytest.mark.parametrize("value", [10, "wrong"])
 @pytest.mark.slow
-def test_count_vectorizer_min_max_df(value):
+def test_count_vectorizer_min_max_df(value, memory_leak_check):
     """Test BodoError is raised for CountVectorizer():
     'min_df', 'max_df' unsupported arguments."""
 

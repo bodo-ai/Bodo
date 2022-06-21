@@ -12,7 +12,7 @@ from bodo.tests.utils import _get_dist_arg, check_func
 # ---------------------- CountVectorizer tests ----------------------
 
 
-def test_count_vectorizer():
+def test_count_vectorizer(memory_leak_check):
     """Test CountVectorizer's vocabulary and fit_transform"""
 
     cat_in_the_hat_docs = [
@@ -72,7 +72,7 @@ def test_count_vectorizer():
     check_func(impl3, (JUNK_FOOD_DOCS, vocab), only_seq=True)
 
 
-def test_hashing_vectorizer():
+def test_hashing_vectorizer(memory_leak_check):
     """Test HashingVectorizer's fit_transform method.
     Taken from here (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/feature_extraction/tests/test_text.py#L573)
     """
@@ -108,7 +108,7 @@ def test_hashing_vectorizer():
     )(_get_dist_arg(np.array(ALL_FOOD_DOCS), False))
     result = bodo.allgatherv(result)
     token_nnz = result.nnz
-    assert result.shape == (len(ALL_FOOD_DOCS), (2 ** 20))
+    assert result.shape == (len(ALL_FOOD_DOCS), (2**20))
     # By default the hashed values receive a random sign and l2 normalization
     # makes the feature values bounded
     assert np.min(result.data) > -1
@@ -131,7 +131,7 @@ def test_hashing_vectorizer():
         _get_dist_arg(np.array(ALL_FOOD_DOCS))
     )
     X = bodo.allgatherv(X)
-    assert X.shape == (len(ALL_FOOD_DOCS), (2 ** 20))
+    assert X.shape == (len(ALL_FOOD_DOCS), (2**20))
 
     # ngrams generate more non zeros
     ngrams_nnz = X.nnz

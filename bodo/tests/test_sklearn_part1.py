@@ -143,7 +143,7 @@ def gen_random_strings_with_sample_weight(
 )
 @pytest.mark.parametrize("average", ["micro", "macro", "weighted", None])
 # TODO: Add memory_leak when bug is solved (curently fails on data0 and data1)
-def test_score(data, average):
+def test_score(data, average, memory_leak_check):
     def test_precision(y_true, y_pred, average):
         return precision_score(y_true, y_pred, average=average)
 
@@ -195,12 +195,14 @@ def test_score(data, average):
             # there are only two classes in y_true but three classes in y_pred
             np.array([1, 2, 2] * 3),
             np.array([[0.2, 0.7, 0.1], [0.6, 0.2, 0.2], [0.6, 0.1, 0.3]] * 3),
-            [1, 2, 3], # Passing a list here so that the `labels` arg is replicated
+            [1, 2, 3],  # Passing a list here so that the `labels` arg is replicated
             None,
         ),
         (
             pd.Series(np.array(["ham", "spam", "spam", "ham"] * 2)),
-            pd.DataFrame(np.array([[0.2, 0.7], [0.6, 0.5], [0.4, 0.1], [0.7, 0.2]] * 2)),
+            pd.DataFrame(
+                np.array([[0.2, 0.7], [0.6, 0.5], [0.4, 0.1], [0.7, 0.2]] * 2)
+            ),
             None,
             None,
         ),
@@ -216,8 +218,13 @@ def test_log_loss(data, normalize, memory_leak_check):
         return log_loss(y_true, y_pred, labels=labels, sample_weight=sample_weight)
 
     def test_log_loss_1(y_true, y_pred, labels, sample_weight):
-        return log_loss(y_true, y_pred, normalize=normalize,
-                        labels=labels, sample_weight=sample_weight)
+        return log_loss(
+            y_true,
+            y_pred,
+            normalize=normalize,
+            labels=labels,
+            sample_weight=sample_weight,
+        )
 
     check_func(test_log_loss_0, data, is_out_distributed=False)
     check_func(test_log_loss_1, data, is_out_distributed=False)
@@ -261,7 +268,7 @@ def test_log_loss_error(memory_leak_check):
 )
 @pytest.mark.parametrize("normalize", [True, False])
 # TODO: Add memory_leak when bug is solved (curently fails on data0 and data1)
-def test_accuracy_score(data, normalize):
+def test_accuracy_score(data, normalize, memory_leak_check):
     """
     Tests for the sklearn.metrics.accuracy_score implementation in Bodo.
     """
@@ -332,7 +339,7 @@ def test_accuracy_score(data, normalize):
         None,
     ],
 )
-def test_confusion_matrix(data, labels, normalize):
+def test_confusion_matrix(data, labels, normalize, memory_leak_check):
     """
     Tests for the sklearn.metrics.confusion_matrix implementation in Bodo
     with integer labels.
@@ -406,7 +413,7 @@ def test_confusion_matrix(data, labels, normalize):
         None,
     ],
 )
-def test_confusion_matrix_string_labels(data, normalize):
+def test_confusion_matrix_string_labels(data, normalize, memory_leak_check):
     """
     Tests for the sklearn.metrics.confusion_matrix implementation in Bodo
     with string labels

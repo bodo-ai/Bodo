@@ -373,7 +373,7 @@ def test_multioutput_string(memory_leak_check):
 
 
 @pytest.mark.skip(reason="Run manually on multinode cluster.")
-def test_multinode_bigdata():
+def test_multinode_bigdata(memory_leak_check):
     """Check classification against sklearn with big data on multinode cluster"""
 
     # name is used for distinguishing function printing time.
@@ -471,7 +471,7 @@ def generate_dataset(n_train, n_test, n_features, noise=0.1, verbose=False):
     return X_train, y_train, X_test, y_test
 
 
-def test_rf_regressor():
+def test_rf_regressor(memory_leak_check):
     """
     Test RandomForestRegressor model, fit, predict, and score
     """

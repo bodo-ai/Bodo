@@ -21,7 +21,7 @@ from bodo.tests.utils import check_func
 
 
 # ---------------------- SGDClassifer tests ----------------------
-def test_sgdc_svm():
+def test_sgdc_svm(memory_leak_check):
     """Check SGDClassifier SVM against sklearn with big data on multinode cluster"""
 
     # name is used for distinguishing function printing time.
@@ -97,7 +97,7 @@ def test_sgdc_svm():
         assert np.allclose(serial_bodo_accuracy, sk_accuracy, atol=0.1)
 
 
-def test_sgdc_lr():
+def test_sgdc_lr(memory_leak_check):
     """Check SGDClassifier Logistic Regression against sklearn with big data on multinode cluster"""
 
     # name is used for distinguishing function printing time.
@@ -161,7 +161,7 @@ def test_sgdc_lr():
         assert np.allclose(sklearn_predict_result, bodo_predict_result, atol=0.1)
 
 
-def test_sgdc_predict_proba_log_proba():
+def test_sgdc_predict_proba_log_proba(memory_leak_check):
 
     splitN = 500
     n_samples = 1000
@@ -210,7 +210,7 @@ def test_sgdc_predict_proba_log_proba():
 
 # ---------------------- SGDRegressor tests ----------------------
 @pytest.mark.parametrize("penalty", ["l1", "l2", None])
-def test_sgdr(penalty):
+def test_sgdr(penalty, memory_leak_check):
     """Check SGDRegressor against sklearn
     penalty identifies type of regression
     None:Linear, l2: Ridge, l1: Lasso"""
@@ -296,7 +296,7 @@ def test_sgdr(penalty):
 # --------------------Linear Regression Tests-----------------#
 
 
-def test_linear_regression():
+def test_linear_regression(memory_leak_check):
     """Test Linear Regression wrappers"""
 
     def impl(X_train, y_train, X_test, y_test):
@@ -397,7 +397,7 @@ def test_lr_multivariate(memory_leak_check):
 
 
 # --------------------Lasso Regression Tests-----------------#
-def test_lasso():
+def test_lasso(memory_leak_check):
     """Test Lasso wrappers"""
 
     def impl(X_train, y_train, X_test, y_test):
@@ -462,7 +462,7 @@ def test_lasso():
 
 
 # --------------------Ridge Regression Tests-----------------#
-def test_ridge_regression():
+def test_ridge_regression(memory_leak_check):
     """Test Ridge Regression wrapper"""
 
     def impl(X_train, y_train, X_test, y_test):
@@ -670,7 +670,7 @@ def test_logistic_regression(memory_leak_check):
         assert np.allclose(bodo_accuracy, sk_accuracy, atol=0.1)
 
 
-def test_logistic_regression_predict_proba_log_proba():
+def test_logistic_regression_predict_proba_log_proba(memory_leak_check):
 
     splitN = 500
     n_samples = 1000

@@ -36,7 +36,7 @@ from bodo.utils.typing import BodoError
 
 
 # --------------------Multinomial Naive Bayes Tests-----------------#
-def test_multinomial_nb():
+def test_multinomial_nb(memory_leak_check):
     """Test Multinomial Naive Bayes
     Taken from https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/tests/test_naive_bayes.py#L442
     """
@@ -101,7 +101,7 @@ def test_multinomial_nb():
     check_func(impl_predict, (train, train_labels))
 
 
-def test_multinomial_nb_score():
+def test_multinomial_nb_score(memory_leak_check):
     rng = np.random.RandomState(0)
     X = rng.randint(5, size=(6, 100))
     y = np.array([1, 1, 2, 2, 3, 3])
@@ -735,7 +735,7 @@ def test_leave_p_out(X, y, groups, p, memory_leak_check):
     check_func(test_n_splits, (X,))
 
 
-def test_leave_p_out_error():
+def test_leave_p_out_error(memory_leak_check):
     """Test error handling of KFold.split()"""
 
     def test_split(X, p):
@@ -777,7 +777,7 @@ def test_leave_p_out_error():
         ),
     ],
 )
-def test_label_encoder(values, classes):
+def test_label_encoder(values, classes, memory_leak_check):
     """Test LabelEncoder's transform, fit_transform and inverse_transform methods.
     Taken from here (https://github.com/scikit-learn/scikit-learn/blob/8ea176ae0ca535cdbfad7413322bbc3e54979e4d/sklearn/preprocessing/tests/test_label.py#L193)
     """
@@ -806,7 +806,7 @@ def test_label_encoder(values, classes):
     check_func(test_fit_transform, (values,))
 
 
-def test_naive_mnnb_csr():
+def test_naive_mnnb_csr(memory_leak_check):
     """Test csr matrix with MultinomialNB
     Taken from here (https://github.com/scikit-learn/scikit-learn/blob/main/sklearn/tests/test_naive_bayes.py#L461)
     """
@@ -1482,8 +1482,7 @@ def test_robust_scaler_bool_attrs(bool_val, memory_leak_check):
     check_func(impl_copy, ())
 
 
-## TODO Fix memory leak [BE-2825]
-def test_robust_scaler_array_and_quantile_range_attrs():
+def test_robust_scaler_array_and_quantile_range_attrs(memory_leak_check):
 
     data = gen_sklearn_scalers_random_data(20, 3)
 

@@ -17,19 +17,10 @@ from numba.core.typing.templates import (
     infer_global,
     signature,
 )
-from numba.extending import (
-    NativeValue,
-    box,
-    infer_getattr,
-    models,
-    overload,
-    overload_method,
-    register_model,
-    typeof_impl,
-    unbox,
-)
+from numba.extending import infer_getattr, overload, overload_method
 
 import bodo
+from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,
     gen_objmode_func_overload,
@@ -44,6 +35,8 @@ from bodo.utils.utils import unliteral_all
 
 # Matplotlib functions that must be replaced. These are used in
 # series pass.
+
+this_module = sys.modules[__name__]
 
 # matplotlib.pyplot
 mpl_plt_kwargs_funcs = [
@@ -126,70 +119,6 @@ mpl_gather_plots = [
 ]
 
 
-def install_mpl_class(types_name, python_type):
-    """
-    Helper for generating MPL types with opaque
-    models. This dynamically generates the class,
-    creates a single instance of the type, and
-    registers the type inside Numba with proper argument
-    registering, boxing, and unboxing.
-
-    The class can be accessed within the module in a camel case
-    version of the name. For example
-    mpl_figure_type can be accessed by overload as a class within
-    this module via MplFigureType and as a singleton type with
-    numba.core.types.mpl_figure_type.
-
-    @params:
-    types_name: Name of the type to register inside numba.core.types
-    python_type: The actual python type for registering types
-    of arguments to functions.
-    @returns: None
-    """
-    # Convert the class name to camel_case
-    class_name = "".join(map(str.title, types_name.split("_")))
-
-    class_text = f"class {class_name}(types.Opaque):\n"
-    class_text += "    def __init__(self):\n"
-    class_text += f"       types.Opaque.__init__(self, name='{class_name}')\n"
-    # Implement the reduce method for pickling
-    # https://stackoverflow.com/questions/11658511/pickling-dynamically-generated-classes
-    class_text += "    def __reduce__(self):\n"
-    class_text += f"        return (types.Opaque, ('{class_name}',), self.__dict__)\n"
-
-    locs = {}
-    exec(class_text, {"types": types, "bodo": bodo}, locs)
-    class_value = locs[class_name]
-    # Register the class in this module for outside use
-    this_module = sys.modules[__name__]
-    setattr(this_module, class_name, class_value)
-    class_instance = class_value()
-    # Register the type in numba.core.types
-    setattr(types, types_name, class_instance)
-    register_model(class_value)(models.OpaqueModel)
-    typeof_impl.register(python_type)(lambda val, c: class_instance)
-    unbox(class_value)(unbox_mpl_obj)
-    box(class_value)(box_mpl_obj)
-
-
-def unbox_mpl_obj(typ, val, c):
-    """
-    Function for unboxing MPL types with opaque models.
-    """
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return NativeValue(val)
-
-
-def box_mpl_obj(typ, val, c):
-    """
-    Function for boxing MPL types with opaque models.
-    """
-    # just return the Python object pointer
-    c.pyapi.incref(val)
-    return val
-
-
 def _install_mpl_types():
     """
     Function to install MPL classes.
@@ -214,7 +143,9 @@ def _install_mpl_types():
         ("mpl_line_collection_type", matplotlib.collections.LineCollection),
     ]
     for type_name, class_val in mpl_types:
-        install_mpl_class(type_name, class_val)
+        install_py_obj_class(
+            types_name=type_name, python_type=class_val, module=this_module
+        )
 
 
 _install_mpl_types()

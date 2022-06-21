@@ -1,54 +1,23 @@
+import sys
+
 import numba
-from numba.core import types
-from numba.extending import (
-    NativeValue,
-    box,
-    models,
-    overload,
-    overload_method,
-    register_model,
-    typeof_impl,
-    unbox,
-)
+from numba.extending import overload, overload_method
 
 import bodo
+from bodo.utils.py_objs import install_py_obj_class
 
+this_module = sys.modules[__name__]
 # We do the overloads in a Python file (instead of tracing.pyx) because they
 # don't work when done from Cython-compiled code (exact cause is yet unknown)
 
 
-class BodoTracingEventType(types.Opaque):
-    def __init__(self):
-        super(BodoTracingEventType, self).__init__(name="BodoTracingEventType")
-
-
-bodo_tracing_event_type = BodoTracingEventType()
-types.bodo_tracing_event_type = bodo_tracing_event_type
-
-register_model(BodoTracingEventType)(models.OpaqueModel)
-
-
-@typeof_impl.register(bodo.utils.tracing.Event)
-def typeof_event(val, c):
-    return bodo_tracing_event_type
-
-
-@box(BodoTracingEventType)
-def box_bodo_tracing_event(typ, val, c):
-    # NOTE: we can't just let Python steal a reference since boxing can happen
-    # at any point and even in a loop, which can make refcount invalid.
-    # see implementation of str.contains and test_contains_regex
-    # TODO: investigate refcount semantics of boxing in Numba when variable is returned
-    # from function versus not returned
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoTracingEventType)
-def unbox_bodo_tracing_event(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+BodoTracingEventType = install_py_obj_class(
+    types_name="bodo_tracing_event_type",
+    python_type=bodo.utils.tracing.Event,
+    module=this_module,
+    class_name="BodoTracingEventType",
+    model_name="BodoTracingEventModel",
+)
 
 
 @overload(bodo.utils.tracing.Event, no_unliteral=True)

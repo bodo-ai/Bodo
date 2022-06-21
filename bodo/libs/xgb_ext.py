@@ -1,22 +1,16 @@
 """Support XGBoost (Scikit-Learn Wrapper interface for XGBoost) using object mode of Numba """
 # Tests are in https://github.com/Bodo-inc/engine-e2e-tests/tree/xgb-tests/xgboost
 
+import sys
+
 import numba
 import numpy as np
 import xgboost
-from numba.core import types
-from numba.extending import (
-    NativeValue,
-    box,
-    models,
-    overload,
-    overload_attribute,
-    overload_method,
-    register_model,
-    typeof_impl,
-    unbox,
-)
+from numba.extending import overload, overload_attribute, overload_method
 
+from bodo.utils.py_objs import install_py_obj_class
+
+this_module = sys.modules[__name__]
 # ------------------------XGBClassifier-----------------
 # Support xgboost.XGBClassifier object mode of Numba
 # -----------------------------------------------------------------------------
@@ -24,34 +18,13 @@ from numba.extending import (
 # directly via sklearn's API
 
 
-class BodoXGBClassifierType(types.Opaque):  # pragma: no cover
-    def __init__(self):
-        super(BodoXGBClassifierType, self).__init__(name="BodoXGBClassifierType")
-
-
-xgbclassifier_type = BodoXGBClassifierType()
-types.xgbclassifier_type = xgbclassifier_type
-
-register_model(BodoXGBClassifierType)(models.OpaqueModel)
-
-
-@typeof_impl.register(xgboost.XGBClassifier)
-def typeof_xgbclassifier(val, c):  # pragma: no cover
-    return xgbclassifier_type
-
-
-@box(BodoXGBClassifierType)
-def box_xgbclassifier(typ, val, c):  # pragma: no cover
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoXGBClassifierType)
-def unbox_xgbclassifier(typ, obj, c):  # pragma: no cover
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+BodoXGBClassifierType = install_py_obj_class(
+    types_name="xgbclassifier_type",
+    python_type=xgboost.XGBClassifier,
+    module=this_module,
+    class_name="BodoXGBClassifierType",
+    model_name="BodoXGBClassifierModel",
+)
 
 
 @overload(xgboost.XGBClassifier, no_unliteral=True)
@@ -170,7 +143,7 @@ def overload_xgbclassifier_fit(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):  # pragma: no cover
 
-    """ XGBClassifier fit overload """
+    """XGBClassifier fit overload"""
 
     def _xgbclassifier_fit_impl(
         m,
@@ -276,34 +249,14 @@ def overload_xgbclassifier_predict_proba(
 
 
 # Tests are in engine-e2e-tests, so added #pragma: no cover
-class BodoXGBRegressorType(types.Opaque):  # pragma: no cover
-    def __init__(self):
-        super(BodoXGBRegressorType, self).__init__(name="BodoXGBRegressorType")
 
-
-xgbregressor_type = BodoXGBRegressorType()
-types.xgbregressor_type = xgbregressor_type
-
-register_model(BodoXGBRegressorType)(models.OpaqueModel)
-
-
-@typeof_impl.register(xgboost.XGBRegressor)
-def typeof_xgbregressor(val, c):  # pragma: no cover
-    return xgbregressor_type
-
-
-@box(BodoXGBRegressorType)
-def box_xgbregressor(typ, val, c):  # pragma: no cover
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoXGBRegressorType)
-def unbox_xgbregressor(typ, obj, c):  # pragma: no cover
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+BodoXGBRegressorType = install_py_obj_class(
+    types_name="xgbregressor_type",
+    python_type=xgboost.XGBRegressor,
+    module=this_module,
+    class_name="BodoXGBRegressorType",
+    model_name="BodoXGBRegressorModel",
+)  # pragma: no cover
 
 
 @overload(xgboost.XGBRegressor, no_unliteral=True)
@@ -419,7 +372,7 @@ def overload_xgbregressor_fit(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):  # pragma: no cover
 
-    """ XGBRegressor fit overload """
+    """XGBRegressor fit overload"""
 
     def _xgbregressor_fit_impl(
         m,
@@ -492,7 +445,7 @@ def overload_xgbregressor_predict(
 @overload_attribute(BodoXGBClassifierType, "feature_importances_")
 @overload_attribute(BodoXGBRegressorType, "feature_importances_")
 def get_xgb_feature_importances(m):
-    """ Overload feature_importances_ attribute to be accessible inside bodo.jit """
+    """Overload feature_importances_ attribute to be accessible inside bodo.jit"""
 
     def impl(m):  # pragma: no cover
         with numba.objmode(result="float32[:]"):

@@ -1,6 +1,7 @@
 """Support scikit-learn using object mode of Numba """
 import itertools
 import numbers
+import sys
 import types as pytypes
 import warnings
 from itertools import combinations
@@ -18,18 +19,12 @@ import sklearn.naive_bayes
 import sklearn.svm
 import sklearn.utils
 from mpi4py import MPI
-from numba.core import cgutils, types
+from numba.core import types
 from numba.extending import (
-    NativeValue,
-    box,
-    models,
     overload,
     overload_attribute,
     overload_method,
     register_jitable,
-    register_model,
-    typeof_impl,
-    unbox,
 )
 from scipy import stats  # noqa
 from scipy.special import comb
@@ -57,6 +52,7 @@ from bodo.libs.distributed_api import (
     get_nodes_first_ranks,
     get_num_nodes,
 )
+from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -70,6 +66,8 @@ from bodo.utils.typing import (
     is_overload_none,
     is_overload_true,
 )
+
+this_module = sys.modules[__name__]
 
 _is_sklearn_supported_version = False
 _min_sklearn_version = (1, 0, 0)
@@ -200,41 +198,15 @@ def random_forest_model_fit(m, X, y):
 # Typing and overloads to use RandomForestClassifier inside Bodo functions
 # directly via sklearn's API
 
-
-class BodoRandomForestClassifierType(types.Opaque):
-    def __init__(self):
-        super(BodoRandomForestClassifierType, self).__init__(
-            name="BodoRandomForestClassifierType"
-        )
-
-
-random_forest_classifier_type = BodoRandomForestClassifierType()
-types.random_forest_classifier_type = random_forest_classifier_type
-
-register_model(BodoRandomForestClassifierType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.ensemble.RandomForestClassifier)
-def typeof_random_forest_classifier(val, c):
-    return random_forest_classifier_type
-
-
-@box(BodoRandomForestClassifierType)
-def box_random_forest_classifier(typ, val, c):
-    # NOTE: we can't just let Python steal a reference since boxing can happen
-    # at any point and even in a loop, which can make refcount invalid.
-    # see implementation of str.contains and test_contains_regex
-    # TODO: investigate refcount semantics of boxing in Numba when variable is returned
-    # from function versus not returned
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoRandomForestClassifierType)
-def unbox_random_forest_classifier(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoRandomForestClassifierType = install_py_obj_class(
+    types_name="random_forest_classifier_type",
+    python_type=sklearn.ensemble.RandomForestClassifier,
+    module=this_module,
+    class_name="BodoRandomForestClassifierType",
+    model_name="BodoRandomForestClassifierModel",
+)
 
 
 @overload(sklearn.ensemble.RandomForestClassifier, no_unliteral=True)
@@ -1976,35 +1948,15 @@ def overload_confusion_matrix(
 # Typing and overloads to use SGDRegressor inside Bodo functions
 # directly via sklearn's API
 
-
-class BodoSGDRegressorType(types.Opaque):
-    def __init__(self):
-        super(BodoSGDRegressorType, self).__init__(name="BodoSGDRegressorType")
-
-
-sgd_regressor_type = BodoSGDRegressorType()
-types.sgd_regressor_type = sgd_regressor_type
-
-register_model(BodoSGDRegressorType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.linear_model.SGDRegressor)
-def typeof_sgd_regressor(val, c):
-    return sgd_regressor_type
-
-
-@box(BodoSGDRegressorType)
-def box_sgd_regressor(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoSGDRegressorType)
-def unbox_sgd_regressor(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoSGDRegressorType = install_py_obj_class(
+    types_name="sgd_regressor_type",
+    python_type=sklearn.linear_model.SGDRegressor,
+    module=this_module,
+    class_name="BodoSGDRegressorType",
+    model_name="BodoSGDRegressorModel",
+)
 
 
 @overload(sklearn.linear_model.SGDRegressor, no_unliteral=True)
@@ -2169,38 +2121,16 @@ def overload_sgdr_model_score(
 
 # Typing and overloads to use SGDClassifier inside Bodo functions
 # directly via sklearn's API
-class BodoSGDClassifierType(types.Opaque):
-    def __init__(self):
-        super(BodoSGDClassifierType, self).__init__(name="BodoSGDClassifierType")
 
-
-sgd_classifier_type = BodoSGDClassifierType()
-types.sgd_classifier_type = sgd_classifier_type
-
-register_model(BodoSGDClassifierType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.linear_model.SGDClassifier)
-def typeof_sgd_classifier(val, c):
-    return sgd_classifier_type
-
-
-@box(BodoSGDClassifierType)
-def box_sgd_classifier(typ, val, c):
-    # NOTE: we can't just let Python steal a reference since boxing can happen
-    # at any point and even in a loop, which can make refcount invalid.
-    # see implementation of str.contains and test_contains_regex
-    # TODO: investigate refcount semantics of boxing in Numba when variable is returned
-    # from function versus not returned
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoSGDClassifierType)
-def unbox_sgd_classifier(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoSGDClassifierType = install_py_obj_class(
+    types_name="sgd_classifier_type",
+    python_type=sklearn.linear_model.SGDClassifier,
+    module=this_module,
+    class_name="BodoSGDClassifierType",
+    model_name="BodoSGDClassifierModel",
+)
 
 
 @overload(sklearn.linear_model.SGDClassifier, no_unliteral=True)
@@ -2455,35 +2385,15 @@ def get_sgdc_coef(m):
 # implementation of KMeans.
 # --------------------------------------------------------------------------------------------------#
 
-
-class BodoKMeansClusteringType(types.Opaque):
-    def __init__(self):
-        super(BodoKMeansClusteringType, self).__init__(name="BodoKMeansClusteringType")
-
-
-kmeans_clustering_type = BodoKMeansClusteringType()
-types.kmeans_clustering_type = kmeans_clustering_type
-
-register_model(BodoKMeansClusteringType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.cluster.KMeans)
-def typeof_kmeans_clustering(val, c):
-    return kmeans_clustering_type
-
-
-@box(BodoKMeansClusteringType)
-def box_kmeans_clustering(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoKMeansClusteringType)
-def unbox_kmeans_clustering(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoKMeansClusteringType = install_py_obj_class(
+    types_name="kmeans_clustering_type",
+    python_type=sklearn.cluster.KMeans,
+    module=this_module,
+    class_name="BodoKMeansClusteringType",
+    model_name="BodoKMeansClusteringModel",
+)
 
 
 @overload(sklearn.cluster.KMeans, no_unliteral=True)
@@ -2741,35 +2651,15 @@ def overload_kmeans_clustering_transform(m, X):
 # Typing and overloads to use MultinomialNB inside Bodo functions
 # directly via sklearn's API
 
-
-class BodoMultinomialNBType(types.Opaque):
-    def __init__(self):
-        super(BodoMultinomialNBType, self).__init__(name="BodoMultinomialNBType")
-
-
-multinomial_nb_type = BodoMultinomialNBType()
-types.multinomial_nb_type = multinomial_nb_type
-
-register_model(BodoMultinomialNBType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.naive_bayes.MultinomialNB)
-def typeof_multinomial_nb(val, c):
-    return multinomial_nb_type
-
-
-@box(BodoMultinomialNBType)
-def box_multinomial_nb(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoMultinomialNBType)
-def unbox_multinomial_nb(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoMultinomialNBType = install_py_obj_class(
+    types_name="multinomial_nb_type",
+    python_type=sklearn.naive_bayes.MultinomialNB,
+    module=this_module,
+    class_name="BodoMultinomialNBType",
+    model_name="BodoMultinomialNBModel",
+)
 
 
 @overload(sklearn.naive_bayes.MultinomialNB, no_unliteral=True)
@@ -2968,37 +2858,15 @@ def overload_multinomial_nb_model_score(
 # Typing and overloads to use LogisticRegression inside Bodo functions
 # directly via sklearn's API
 
-
-class BodoLogisticRegressionType(types.Opaque):
-    def __init__(self):
-        super(BodoLogisticRegressionType, self).__init__(
-            name="BodoLogisticRegressionType"
-        )
-
-
-logistic_regression_type = BodoLogisticRegressionType()
-types.logistic_regression_type = logistic_regression_type
-
-register_model(BodoLogisticRegressionType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.linear_model.LogisticRegression)
-def typeof_logistic_regression(val, c):
-    return logistic_regression_type
-
-
-@box(BodoLogisticRegressionType)
-def box_logistic_regression(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoLogisticRegressionType)
-def unbox_logistic_regression(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoLogisticRegressionType = install_py_obj_class(
+    types_name="logistic_regression_type",
+    python_type=sklearn.linear_model.LogisticRegression,
+    module=this_module,
+    class_name="BodoLogisticRegressionType",
+    model_name="BodoLogisticRegressionModel",
+)
 
 
 @overload(sklearn.linear_model.LogisticRegression, no_unliteral=True)
@@ -3180,36 +3048,15 @@ def get_logisticR_coef(m):
 # Typing and overloads to use LinearRegression inside Bodo functions
 # directly via sklearn's API
 
-
-class BodoLinearRegressionType(types.Opaque):
-    def __init__(self):
-        super(BodoLinearRegressionType, self).__init__(name="BodoLinearRegressionType")
-
-
-linear_regression_type = BodoLinearRegressionType()
-types.linear_regression_type = linear_regression_type
-
-register_model(BodoLinearRegressionType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.linear_model.LinearRegression)
-def typeof_linear_regression(val, c):
-    return linear_regression_type
-
-
-@box(BodoLinearRegressionType)
-def box_linear_regression(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoLinearRegressionType)
-def unbox_linear_regression(typ, obj, c):
-
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoLinearRegressionType = install_py_obj_class(
+    types_name="linear_regression_type",
+    python_type=sklearn.linear_model.LinearRegression,
+    module=this_module,
+    class_name="BodoLinearRegressionType",
+    model_name="BodoLinearRegressionModel",
+)
 
 
 # normalize was deprecated in version 1.0 and will be removed in 1.2.
@@ -3322,35 +3169,15 @@ def get_lr_coef(m):
 # Typing and overloads to use Lasso inside Bodo functions
 # directly via sklearn's API
 
-
-class BodoLassoType(types.Opaque):
-    def __init__(self):
-        super(BodoLassoType, self).__init__(name="BodoLassoType")
-
-
-lasso_type = BodoLassoType()
-types.lasso_type = lasso_type
-
-register_model(BodoLassoType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.linear_model.Lasso)
-def typeof_lasso(val, c):
-    return lasso_type
-
-
-@box(BodoLassoType)
-def box_lasso(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoLassoType)
-def unbox_lasso(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoLassoType = install_py_obj_class(
+    types_name="lasso_type",
+    python_type=sklearn.linear_model.Lasso,
+    module=this_module,
+    class_name="BodoLassoType",
+    model_name="BodoLassoModel",
+)
 
 
 @overload(sklearn.linear_model.Lasso, no_unliteral=True)
@@ -3479,35 +3306,15 @@ def overload_lasso_score(
 # Typing and overloads to use Ridge inside Bodo functions
 # directly via sklearn's API
 
-
-class BodoRidgeType(types.Opaque):
-    def __init__(self):
-        super(BodoRidgeType, self).__init__(name="BodoRidgeType")
-
-
-ridge_type = BodoRidgeType()
-types.ridge_type = ridge_type
-
-register_model(BodoRidgeType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.linear_model.Ridge)
-def typeof_ridge(val, c):
-    return ridge_type
-
-
-@box(BodoRidgeType)
-def box_ridge(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoRidgeType)
-def unbox_ridge(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoRidgeType = install_py_obj_class(
+    types_name="ridge_type",
+    python_type=sklearn.linear_model.Ridge,
+    module=this_module,
+    class_name="BodoRidgeType",
+    model_name="BodoRidgeModel",
+)
 
 
 @overload(sklearn.linear_model.Ridge, no_unliteral=True)
@@ -3640,35 +3447,15 @@ def get_ridge_coef(m):
 # Typing and overloads to use LinearSVC inside Bodo functions
 # directly via sklearn's API
 
-
-class BodoLinearSVCType(types.Opaque):
-    def __init__(self):
-        super(BodoLinearSVCType, self).__init__(name="BodoLinearSVCType")
-
-
-linear_svc_type = BodoLinearSVCType()
-types.linear_svc_type = linear_svc_type
-
-register_model(BodoLinearSVCType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.svm.LinearSVC)
-def typeof_linear_svc(val, c):
-    return linear_svc_type
-
-
-@box(BodoLinearSVCType)
-def box_linear_svc(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoLinearSVCType)
-def unbox_linear_svc(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoLinearSVCType = install_py_obj_class(
+    types_name="linear_svc_type",
+    python_type=sklearn.svm.LinearSVC,
+    module=this_module,
+    class_name="BodoLinearSVCType",
+    model_name="BodoLinearSVCModel",
+)
 
 
 @overload(sklearn.svm.LinearSVC, no_unliteral=True)
@@ -3808,116 +3595,35 @@ def overload_svm_linear_svc_score(
 # ----------------------------------------------------------------------------------------
 
 
-class BodoPreprocessingOneHotEncoderType(types.Opaque):
-    def __init__(self):
-        super(BodoPreprocessingOneHotEncoderType, self).__init__(
-            name="BodoPreprocessingOneHotEncoderType"
-        )
-
-
-preprocessing_one_hot_encoder_type = BodoPreprocessingOneHotEncoderType()
-types.preprocessing_one_hot_encoder_type = preprocessing_one_hot_encoder_type
-
-
-register_model(BodoPreprocessingOneHotEncoderType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.preprocessing.OneHotEncoder)
-def typeof_preprocessing_one_hot_encoder(val, c):
-    return preprocessing_one_hot_encoder_type
-
-
-@box(BodoPreprocessingOneHotEncoderType)
-def box_preprocessing_one_hot_encoder(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoPreprocessingOneHotEncoderType)
-def unbox_preprocessing_one_hot_encoder(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
-
-
-class BodoPreprocessingOneHotEncoderCategoriesType(types.Opaque):
-    """
-    A type for the m.categories_ attribute. Since this attribute's type
-    depends on the most recent call to OneHotEncoder.fit(), it cannot be known
-    at compile time, so we simply make it appear as an opaque type to numba.
-    """
-
-    def __init__(self):
-        super(BodoPreprocessingOneHotEncoderCategoriesType, self).__init__(
-            name="BodoPreprocessingOneHotEncoderCategoriesType"
-        )
-
-
-preprocessing_one_hot_encoder_categories_type = (
-    BodoPreprocessingOneHotEncoderCategoriesType()
-)
-types.preprocessing_one_hot_encoder_categories_type = (
-    preprocessing_one_hot_encoder_categories_type
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoPreprocessingOneHotEncoderType = install_py_obj_class(
+    types_name="preprocessing_one_hot_encoder_type",
+    python_type=sklearn.preprocessing.OneHotEncoder,
+    module=this_module,
+    class_name="BodoPreprocessingOneHotEncoderType",
+    model_name="BodoPreprocessingOneHotEncoderModel",
 )
 
 
-register_model(BodoPreprocessingOneHotEncoderCategoriesType)(models.OpaqueModel)
-
-
-@box(BodoPreprocessingOneHotEncoderCategoriesType)
-def box_preprocessing_one_hot_encoder_categories(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoPreprocessingOneHotEncoderCategoriesType)
-def unbox_preprocessing_one_hot_encoder_categories(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
-
-
-class BodoPreprocessingOneHotEncoderDropIdxType(types.Opaque):
-    """
-    A type for the m.drop_idx_ attribute. Since this attribute is either
-    None or a 1D array containing both integers and None, its type could be
-    represented as `optional(array(optional(int64))`. Because numba does not
-    support masked arrays, or arrays with element type `optional(int64)`
-    (https://github.com/numba/numba/issues/1834), we make this attribute
-    appear as an opaque type to numba.
-    """
-
-    def __init__(self):
-        super(BodoPreprocessingOneHotEncoderDropIdxType, self).__init__(
-            name="BodoPreprocessingOneHotEncoderDropIdxType"
-        )
-
-
-preprocessing_one_hot_encoder_drop_idx_type = (
-    BodoPreprocessingOneHotEncoderDropIdxType()
-)
-types.preprocessing_one_hot_encoder_drop_idx_type = (
-    preprocessing_one_hot_encoder_drop_idx_type
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoPreprocessingOneHotEncoderCategoriesType = install_py_obj_class(
+    types_name="preprocessing_one_hot_encoder_categories_type",
+    module=this_module,
+    class_name="BodoPreprocessingOneHotEncoderCategoriesType",
+    model_name="BodoPreprocessingOneHotEncoderCategoriesModel",
 )
 
 
-register_model(BodoPreprocessingOneHotEncoderDropIdxType)(models.OpaqueModel)
-
-
-@box(BodoPreprocessingOneHotEncoderDropIdxType)
-def box_preprocessing_one_hot_encoder_drop_idx(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoPreprocessingOneHotEncoderDropIdxType)
-def unbox_preprocessing_one_hot_encoder_drop_idx(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoPreprocessingOneHotEncoderDropIdxType = install_py_obj_class(
+    types_name="preprocessing_one_hot_encoder_drop_idx_type",
+    module=this_module,
+    class_name="BodoPreprocessingOneHotEncoderDropIdxType",
+    model_name="BodoPreprocessingOneHotEncoderDropIdxModel",
+)
 
 
 @overload_attribute(BodoPreprocessingOneHotEncoderType, "categories_")
@@ -4298,37 +4004,15 @@ def overload_preprocessing_one_hot_encoder_get_feature_names_out(
 # MPI operations, and then calculate the variance using a native implementation.
 # ----------------------------------------------------------------------------------------
 
-
-class BodoPreprocessingStandardScalerType(types.Opaque):
-    def __init__(self):
-        super(BodoPreprocessingStandardScalerType, self).__init__(
-            name="BodoPreprocessingStandardScalerType"
-        )
-
-
-preprocessing_standard_scaler_type = BodoPreprocessingStandardScalerType()
-types.preprocessing_standard_scaler_type = preprocessing_standard_scaler_type
-
-register_model(BodoPreprocessingStandardScalerType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.preprocessing.StandardScaler)
-def typeof_preprocessing_standard_scaler(val, c):
-    return preprocessing_standard_scaler_type
-
-
-@box(BodoPreprocessingStandardScalerType)
-def box_preprocessing_standard_scaler(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoPreprocessingStandardScalerType)
-def unbox_preprocessing_standard_scaler(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoPreprocessingStandardScalerType = install_py_obj_class(
+    types_name="preprocessing_standard_scaler_type",
+    python_type=sklearn.preprocessing.StandardScaler,
+    module=this_module,
+    class_name="BodoPreprocessingStandardScalerType",
+    model_name="BodoPreprocessingStandardScalerModel",
+)
 
 
 @overload(sklearn.preprocessing.StandardScaler, no_unliteral=True)
@@ -4541,36 +4225,15 @@ def overload_preprocessing_standard_scaler_inverse_transform(
 # ----------------------------------------------------------------------------------------
 
 
-class BodoPreprocessingMaxAbsScalerType(types.Opaque):
-    def __init__(self):
-        super(BodoPreprocessingMaxAbsScalerType, self).__init__(
-            name="BodoPreprocessingMaxAbsScalerType"
-        )
-
-
-preprocessing_max_abs_scaler_type = BodoPreprocessingMaxAbsScalerType()
-types.preprocessing_max_abs_scaler_type = preprocessing_max_abs_scaler_type
-
-register_model(BodoPreprocessingMaxAbsScalerType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.preprocessing.MaxAbsScaler)
-def typeof_preprocessing_max_abs_scaler(val, c):
-    return preprocessing_max_abs_scaler_type
-
-
-@box(BodoPreprocessingMaxAbsScalerType)
-def box_preprocessing_max_abs_scaler(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoPreprocessingMaxAbsScalerType)
-def unbox_preprocessing_max_abs_scaler(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoPreprocessingMaxAbsScalerType = install_py_obj_class(
+    types_name="preprocessing_max_abs_scaler_type",
+    python_type=sklearn.preprocessing.MaxAbsScaler,
+    module=this_module,
+    class_name="BodoPreprocessingMaxAbsScalerType",
+    model_name="BodoPreprocessingMaxAbsScalerModel",
+)
 
 
 @overload_attribute(BodoPreprocessingMaxAbsScalerType, "scale_")
@@ -4786,68 +4449,25 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
 # ----------------------------------------LeavePOut---------------------------------------
 # Support for sklearn.model_selection.LeavePOut.
 
-
-class BodoModelSelectionLeavePOutType(types.Opaque):
-    def __init__(self):
-        super(BodoModelSelectionLeavePOutType, self).__init__(
-            name="BodoModelSelectionLeavePOutType"
-        )
-
-
-model_selection_leave_p_out_type = BodoModelSelectionLeavePOutType()
-types.model_selection_leave_p_out_type = model_selection_leave_p_out_type
-
-register_model(BodoModelSelectionLeavePOutType)(models.OpaqueModel)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoModelSelectionLeavePOutType = install_py_obj_class(
+    types_name="model_selection_leave_p_out_type",
+    python_type=sklearn.model_selection.LeavePOut,
+    module=this_module,
+    class_name="BodoModelSelectionLeavePOutType",
+    model_name="BodoModelSelectionLeavePOutModel",
+)
 
 
-@typeof_impl.register(sklearn.model_selection.LeavePOut)
-def typeof_model_selection_leave_p_out(val, c):
-    return model_selection_leave_p_out_type
-
-
-@box(BodoModelSelectionLeavePOutType)
-def box_model_selection_leave_p_out(typ, val, c):
-    # See note in box_random_forest_classiier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoModelSelectionLeavePOutType)
-def unbox_model_selection_leave_p_out(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
-
-
-class BodoModelSelectionLeavePOutSplitType(types.Opaque):
-    """
-    Type for the generator that's returned by LeavePOut split().
-    """
-
-    def __init__(self):
-        super(BodoModelSelectionLeavePOutSplitType, self).__init__(
-            name="BodoModelSelectionLeavePOutSplitType"
-        )
-
-
-model_selection_leave_p_out_split_type = BodoModelSelectionLeavePOutSplitType()
-types.model_selection_leave_p_out_split_type = model_selection_leave_p_out_split_type
-
-register_model(BodoModelSelectionLeavePOutSplitType)(models.OpaqueModel)
-
-
-@box(BodoModelSelectionLeavePOutSplitType)
-def box_model_selection_leave_p_out_split(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoModelSelectionLeavePOutSplitType)
-def unbox_model_selection_leave_p_out_split(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoModelSelectionLeavePOutSplitType = install_py_obj_class(
+    types_name="model_selection_leave_p_out_split_type",
+    module=this_module,
+    class_name="BodoModelSelectionLeavePOutSplitType",
+    model_name="BodoModelSelectionLeavePOutSplitModel",
+)
 
 
 @overload(sklearn.model_selection.LeavePOut, no_unliteral=True)
@@ -5009,67 +4629,25 @@ def overload_model_selection_leave_p_out_get_n_splits(
 # ----------------------------------------------------------------------------------------
 
 
-class BodoModelSelectionKFoldType(types.Opaque):
-    def __init__(self):
-        super(BodoModelSelectionKFoldType, self).__init__(
-            name="BodoModelSelectionKFoldType"
-        )
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoModelSelectionKFoldType = install_py_obj_class(
+    types_name="model_selection_kfold_type",
+    python_type=sklearn.model_selection.KFold,
+    module=this_module,
+    class_name="BodoModelSelectionKFoldType",
+    model_name="BodoModelSelectionKFoldModel",
+)
 
 
-model_selection_kfold_type = BodoModelSelectionKFoldType()
-types.model_selection_kfold_type = model_selection_kfold_type
-
-register_model(BodoModelSelectionKFoldType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.model_selection.KFold)
-def typeof_model_selection_kfold(val, c):
-    return model_selection_kfold_type
-
-
-@box(BodoModelSelectionKFoldType)
-def box_model_selection_kfold(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoModelSelectionKFoldType)
-def unbox_model_selection_kfold(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
-
-
-class BodoModelSelectionKFoldSplitType(types.Opaque):
-    """
-    Type for the generator that's returned by KFold split().
-    """
-
-    def __init__(self):
-        super(BodoModelSelectionKFoldSplitType, self).__init__(
-            name="BodoModelSelectionKFoldSplitType"
-        )
-
-
-model_selection_kfold_split_type = BodoModelSelectionKFoldSplitType()
-types.model_selection_kfold_split_type = model_selection_kfold_split_type
-
-register_model(BodoModelSelectionKFoldSplitType)(models.OpaqueModel)
-
-
-@box(BodoModelSelectionKFoldSplitType)
-def box_model_selection_kfold_split(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoModelSelectionKFoldSplitType)
-def unbox_model_selection_kfold_split(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoModelSelectionKFoldSplitType = install_py_obj_class(
+    types_name="model_selection_kfold_split_type",
+    module=this_module,
+    class_name="BodoModelSelectionKFoldSplitType",
+    model_name="BodoModelSelectionKFoldSplitModel",
+)
 
 
 @overload(sklearn.model_selection.KFold, no_unliteral=True)
@@ -5602,36 +5180,15 @@ def sklearn_utils_shuffle_overload(
 # ----------------------------------------------------------------------------------------
 
 
-class BodoPreprocessingMinMaxScalerType(types.Opaque):
-    def __init__(self):
-        super(BodoPreprocessingMinMaxScalerType, self).__init__(
-            name="BodoPreprocessingMinMaxScalerType"
-        )
-
-
-preprocessing_minmax_scaler_type = BodoPreprocessingMinMaxScalerType()
-types.preprocessing_minmax_scaler_type = preprocessing_minmax_scaler_type
-
-register_model(BodoPreprocessingMinMaxScalerType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.preprocessing.MinMaxScaler)
-def typeof_preprocessing_minmax_scaler(val, c):
-    return preprocessing_minmax_scaler_type
-
-
-@box(BodoPreprocessingMinMaxScalerType)
-def box_preprocessing_minmax_scaler(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoPreprocessingMinMaxScalerType)
-def unbox_preprocessing_minmax_scaler(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoPreprocessingMinMaxScalerType = install_py_obj_class(
+    types_name="preprocessing_minmax_scaler_type",
+    python_type=sklearn.preprocessing.MinMaxScaler,
+    module=this_module,
+    class_name="BodoPreprocessingMinMaxScalerType",
+    model_name="BodoPreprocessingMinMaxScalerModel",
+)
 
 
 @overload(sklearn.preprocessing.MinMaxScaler, no_unliteral=True)
@@ -5795,57 +5352,15 @@ def overload_preprocessing_minmax_scaler_inverse_transform(
 # ----------------------------------------------------------------------------------------
 
 
-class BodoPreprocessingRobustScalerType(types.Opaque):
-    def __init__(self):
-        super(BodoPreprocessingRobustScalerType, self).__init__(
-            name="BodoPreprocessingRobustScalerType"
-        )
-
-
-preprocessing_robust_scaler_type = BodoPreprocessingRobustScalerType()
-types.preprocessing_robust_scaler_type = preprocessing_robust_scaler_type
-
-
-# creating a wrapper meminfo around the Python object that holds and manages a reference
-# to avoid memory leaks (see [BE-2825]).
-# See boxing and unboxing for Numpy arrays in Numba as an example:
-# https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L332
-# https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L310
-# https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L248
-# https://github.com/numba/numba/blob/496bc20d91485affa842a63173522a6afef453b6/numba/core/runtime/_nrt_python.c#L34
-@register_model(BodoPreprocessingRobustScalerType)
-class BodoPreprocessingRobustScalerModel(models.StructModel):
-    def __init__(self, dmm, fe_type):
-        members = [
-            ("meminfo", types.MemInfoPointer(preprocessing_robust_scaler_type)),
-            ("pyobj", types.pyobject),
-        ]
-        super().__init__(dmm, fe_type, members)
-
-
-@typeof_impl.register(sklearn.preprocessing.RobustScaler)
-def typeof_preprocessing_robust_scaler(val, c):
-    return preprocessing_robust_scaler_type
-
-
-@box(BodoPreprocessingRobustScalerType)
-def box_preprocessing_robust_scaler(typ, val, c):
-    rob_scalar = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
-    obj = rob_scalar.pyobj
-    c.pyapi.incref(obj)
-    c.context.nrt.decref(c.builder, typ, val)
-    return obj
-
-
-@unbox(BodoPreprocessingRobustScalerType)
-def unbox_preprocessing_robust_scaler(typ, obj, c):
-    rob_scalar = cgutils.create_struct_proxy(typ)(c.context, c.builder)
-    # borrows and manages a reference for obj (see data model comments above)
-    rob_scalar.meminfo = c.pyapi.nrt_meminfo_new_from_pyobject(
-        c.context.get_constant_null(types.voidptr), obj
-    )
-    rob_scalar.pyobj = obj
-    return NativeValue(rob_scalar._getvalue())
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoPreprocessingRobustScalerType = install_py_obj_class(
+    types_name="preprocessing_robust_scaler_type",
+    python_type=sklearn.preprocessing.RobustScaler,
+    module=this_module,
+    class_name="BodoPreprocessingRobustScalerType",
+    model_name="BodoPreprocessingRobustScalerModel",
+)
 
 
 @overload_attribute(BodoPreprocessingRobustScalerType, "with_centering")
@@ -6142,36 +5657,15 @@ def overload_preprocessing_robust_scaler_inverse_transform(
 # ----------------------------------------------------------------------------------------
 
 
-class BodoPreprocessingLabelEncoderType(types.Opaque):
-    def __init__(self):
-        super(BodoPreprocessingLabelEncoderType, self).__init__(
-            name="BodoPreprocessingLabelEncoderType"
-        )
-
-
-preprocessing_label_encoder_type = BodoPreprocessingLabelEncoderType()
-types.preprocessing_label_encoder_type = preprocessing_label_encoder_type
-
-register_model(BodoPreprocessingLabelEncoderType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.preprocessing.LabelEncoder)
-def typeof_preprocessing_label_encoder(val, c):
-    return preprocessing_label_encoder_type
-
-
-@box(BodoPreprocessingLabelEncoderType)
-def box_preprocessing_label_encoder(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoPreprocessingLabelEncoderType)
-def unbox_preprocessing_label_encoder(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoPreprocessingLabelEncoderType = install_py_obj_class(
+    types_name="preprocessing_label_encoder_type",
+    python_type=sklearn.preprocessing.LabelEncoder,
+    module=this_module,
+    class_name="BodoPreprocessingLabelEncoderType",
+    model_name="BodoPreprocessingLabelEncoderModel",
+)
 
 
 @overload(sklearn.preprocessing.LabelEncoder, no_unliteral=True)
@@ -6302,36 +5796,15 @@ def overload_preprocessing_label_encoder_fit_transform(
 # ----------------------------------------------------------------------------------------
 
 
-class BodoFExtractHashingVectorizerType(types.Opaque):
-    def __init__(self):
-        super(BodoFExtractHashingVectorizerType, self).__init__(
-            name="BodoFExtractHashingVectorizerType"
-        )
-
-
-f_extract_hashing_vectorizer_type = BodoFExtractHashingVectorizerType()
-types.f_extract_hashing_vectorizer_type = f_extract_hashing_vectorizer_type
-
-register_model(BodoFExtractHashingVectorizerType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.feature_extraction.text.HashingVectorizer)
-def typeof_f_extract_hashing_vectorizer(val, c):
-    return f_extract_hashing_vectorizer_type
-
-
-@box(BodoFExtractHashingVectorizerType)
-def box_f_extract_hashing_vectorizer(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoFExtractHashingVectorizerType)
-def unbox_f_extract_hashing_vectorizer(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoFExtractHashingVectorizerType = install_py_obj_class(
+    types_name="f_extract_hashing_vectorizer_type",
+    python_type=sklearn.feature_extraction.text.HashingVectorizer,
+    module=this_module,
+    class_name="BodoFExtractHashingVectorizerType",
+    model_name="BodoFExtractHashingVectorizerModel",
+)
 
 
 @overload(sklearn.feature_extraction.text.HashingVectorizer, no_unliteral=True)
@@ -6436,36 +5909,15 @@ def overload_hashing_vectorizer_fit_transform(
 # directly via sklearn's API
 
 
-class BodoRandomForestRegressorType(types.Opaque):
-    def __init__(self):
-        super(BodoRandomForestRegressorType, self).__init__(
-            name="BodoRandomForestRegressorType"
-        )
-
-
-random_forest_regressor_type = BodoRandomForestRegressorType()
-types.random_forest_regressor_type = random_forest_regressor_type
-
-register_model(BodoRandomForestRegressorType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.ensemble.RandomForestRegressor)
-def typeof_random_forest_regressor(val, c):
-    return random_forest_regressor_type
-
-
-@box(BodoRandomForestRegressorType)
-def box_random_forest_regressor(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoRandomForestRegressorType)
-def unbox_random_forest_regressor(typ, obj, c):
-    # borrow a reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoRandomForestRegressorType = install_py_obj_class(
+    types_name="random_forest_regressor_type",
+    python_type=sklearn.ensemble.RandomForestRegressor,
+    module=this_module,
+    class_name="BodoRandomForestRegressorType",
+    model_name="BodoRandomForestRegressorModel",
+)
 
 
 @overload(sklearn.ensemble.RandomForestRegressor, no_unliteral=True)
@@ -6616,36 +6068,15 @@ def overload_rf_classifier_model_fit(
 # ----------------------------------------------------------------------------------------
 
 
-class BodoFExtractCountVectorizerType(types.Opaque):
-    def __init__(self):
-        super(BodoFExtractCountVectorizerType, self).__init__(
-            name="BodoFExtractCountVectorizerType"
-        )
-
-
-f_extract_count_vectorizer_type = BodoFExtractCountVectorizerType()
-types.f_extract_count_vectorizer_type = f_extract_count_vectorizer_type
-
-register_model(BodoFExtractCountVectorizerType)(models.OpaqueModel)
-
-
-@typeof_impl.register(sklearn.feature_extraction.text.CountVectorizer)
-def typeof_f_extract_count_vectorizer(val, c):
-    return f_extract_count_vectorizer_type
-
-
-@box(BodoFExtractCountVectorizerType)
-def box_f_extract_count_vectorizer(typ, val, c):
-    # See note in box_random_forest_classifier
-    c.pyapi.incref(val)
-    return val
-
-
-@unbox(BodoFExtractCountVectorizerType)
-def unbox_f_extract_count_vectorizer(typ, obj, c):
-    # borrow reference from Python
-    c.pyapi.incref(obj)
-    return NativeValue(obj)
+# We don't technically need to get class from the method,
+# but it's useful to avoid IDE not found errors.
+BodoFExtractCountVectorizerType = install_py_obj_class(
+    types_name="f_extract_count_vectorizer_type",
+    python_type=sklearn.feature_extraction.text.CountVectorizer,
+    module=this_module,
+    class_name="BodoFExtractCountVectorizerType",
+    model_name="BodoFExtractCountVectorizerModel",
+)
 
 
 @overload(sklearn.feature_extraction.text.CountVectorizer, no_unliteral=True)
