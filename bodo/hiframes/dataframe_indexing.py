@@ -191,7 +191,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                         return ret(*args)
 
                     elif unliteral_lst_typ.dtype == bodo.string_type:
-                        (new_cols, new_data) = self.get_kept_cols_and_data(
+                        (new_cols, new_data) = get_df_getitem_kept_cols_and_data(
                             df, df_col_inds_literal
                         )
                         ret = DataFrameType(new_data, new_index_type, new_cols)
@@ -266,9 +266,15 @@ class DataFrameGetItemTemplate(AbstractTemplate):
         elif is_overload_constant_list(ind):
             # Check that all columns named are in the dataframe
             ind_columns = get_overload_const_list(ind)
-            (columns, data_type) = self.get_kept_cols_and_data(df, ind_columns)
+            (columns, data_type) = get_df_getitem_kept_cols_and_data(df, ind_columns)
             index_type = df.index
-            ret = DataFrameType(data_type, index_type, columns)
+            use_table_format = (
+                df.is_table_format
+                and len(ind_columns) >= bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
+            )
+            ret = DataFrameType(
+                data_type, index_type, columns, is_table_format=use_table_format
+            )
             return ret(*args)
 
         # In this case, we need to raise a more general error, as a non constant list
@@ -278,21 +284,6 @@ class DataFrameGetItemTemplate(AbstractTemplate):
         raise_bodo_error(
             f"df[] getitem using {ind} not supported. If you are trying to select a subset of the columns, you must provide the column names you are selecting as a constant. See https://docs.bodo.ai/latest/bodo_parallelism/typing_considerations/#require_constants."
         )  # pragma: no cover
-
-    def get_kept_cols_and_data(self, df, cols_to_keep_list):
-        """helper function for getitem typing. Takes a dataframe, and a list of columns to keep,
-        and returns the data_type, and the columns for a dataframe containing only those columns.
-        Throws an error if cols_to_keep_list contains a column that is not present in the input
-        dataframe."""
-        # Check that all columns named are in the dataframe
-        for c in cols_to_keep_list:
-            if c not in df.columns:
-                raise_bodo_error(
-                    "Column {} not found in dataframe columns {}".format(c, df.columns)
-                )
-        columns = tuple(cols_to_keep_list)
-        data_type = tuple(df.data[df.column_index[name]] for name in columns)
-        return (columns, data_type)
 
     def replace_range_with_numeric_idx_if_needed(self, df, ind):
         """
@@ -311,6 +302,23 @@ class DataFrameGetItemTemplate(AbstractTemplate):
 
 
 DataFrameGetItemTemplate._no_unliteral = True
+
+
+def get_df_getitem_kept_cols_and_data(df, cols_to_keep_list):
+    """helper function for getitem typing. Takes a dataframe, and a list of columns to keep,
+    and returns the data_type, and the columns for a dataframe containing only those columns.
+    Throws an error if cols_to_keep_list contains a column that is not present in the input
+    dataframe."""
+    # Check that all columns named are in the dataframe
+    for c in cols_to_keep_list:
+        if c not in df.columns:
+            raise_bodo_error(
+                "Column {} not found in dataframe columns {}".format(c, df.columns)
+            )
+    columns = tuple(cols_to_keep_list)
+    data_type = tuple(df.data[df.column_index[name]] for name in columns)
+    return (columns, data_type)
+
 
 # lowering is necessary since df filtering is used in the train_test_split()
 # implementation which is not inlined and uses the regular Numba pipeline
@@ -375,14 +383,28 @@ def df_getitem_overload(df, ind):
                 raise_bodo_error(
                     "Column {} not found in dataframe columns {}".format(c, df.columns)
                 )
-        new_data = ", ".join(
-            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]}).copy()"
-            for c in ind_columns
-        )
+        extra_globals = None
+        if (
+            df.is_table_format
+            and len(ind_columns) >= bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
+        ):
+            # This assumes ind_columns are always names.
+            col_nums = [df.column_index[c] for c in ind_columns]
+            # Pass the column numbers as a MetaType to avoid putting
+            # a constant in the IR.
+            extra_globals = {
+                "col_nums_meta": bodo.utils.typing.MetaType(tuple(col_nums))
+            }
+            new_data = f"bodo.hiframes.table.table_subset(bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df), col_nums_meta)"
+        else:
+            new_data = ", ".join(
+                f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]}).copy()"
+                for c in ind_columns
+            )
         func_text = "def impl(df, ind):\n"
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
         return bodo.hiframes.dataframe_impl._gen_init_df(
-            func_text, ind_columns, new_data, index
+            func_text, ind_columns, new_data, index, extra_globals=extra_globals
         )
 
     # df1 = df[df.A > .5] or df[:n]
