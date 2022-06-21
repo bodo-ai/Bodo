@@ -695,6 +695,62 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         block_use_map[rhs_table] = (used_cols, use_all, cannot_del_cols)
                         continue
 
+                    # handle selecting a subset of columns like T2 = T1[col_nums].
+                    # This is the table equivalent of df2 = df[["A", "B", "C", ...]]
+                    elif fdef == ("table_subset", "bodo.hiframes.table"):
+                        # Taking the a table subset changes the meaning of the array
+                        # numbers. As a result, we will need to remap columns used
+                        # in the input to the output. For example if we code that
+                        # looks like
+                        #
+                        # T1 = (arr0, arr1, arr2, arr3)
+                        # T2 = table_subset(T1, [2, 2, 0])
+                        # get_dataframe_data(T2, 0)
+                        # get_dataframe_data(T2, 1)
+                        #
+                        # Then T2 would see that is uses columns (0, 1).
+                        # To determine T1's uses remap back to the original
+                        # index, computing [2, 2] or just column 2.
+
+                        rhs_table = rhs.args[0].name
+                        # If the RHS uses all columns already we can skip.
+                        orig_used_cols, use_all, cannot_del_cols = block_use_map[
+                            rhs_table
+                        ]
+                        # If the RHS uses all columns or cannot delete the table we
+                        # can skip.
+                        if use_all or cannot_del_cols:
+                            continue
+                        # Create the mapping between the input the types and the output
+                        # types.
+                        (
+                            used_cols,
+                            use_all,
+                            cannot_del_cols,
+                        ) = _compute_table_column_uses(
+                            lhs_name, table_col_use_map, equiv_vars
+                        )
+                        # The used columns are stored in arg1, which is
+                        # a typeref MetaType
+                        idx_list = typemap[rhs.args[1].name].instance_type.meta
+                        if use_all or cannot_del_cols:
+                            # If we useall or cannot delete columns for the output
+                            # we add every input column. We can still delete columns
+                            # from the input potentially because this creates new
+                            # lists.
+                            final_used_cols = set(idx_list)
+                        else:
+                            final_used_cols = set()
+                            for i, idx in enumerate(idx_list):
+                                if i in used_cols:
+                                    final_used_cols.add(idx)
+                        block_use_map[rhs_table] = (
+                            orig_used_cols | final_used_cols,
+                            False,
+                            False,
+                        )
+                        continue
+
                     # Table_concat is used by melt
                     elif fdef == ("table_concat", "bodo.utils.table_utils"):
                         rhs_table = rhs.args[0].name
@@ -947,6 +1003,44 @@ def remove_dead_columns(
                         )
                     new_body += new_nodes
                     continue
+                elif fdef == ("table_subset", "bodo.hiframes.table"):
+                    used_columns = _find_used_columns(
+                        lhs_name, len(typemap[lhs_name].arr_types), lives, equiv_vars
+                    )
+                    if used_columns is None:
+                        # if used_columns is None it means all columns are used.
+                        # As such, we can't do any column pruning
+                        new_body.append(stmt)
+                        continue
+
+                    nodes = compile_func_single_block(
+                        eval(
+                            "lambda table, idx: bodo.hiframes.table.table_subset(table, idx, used_cols=used_columns)"
+                        ),
+                        rhs.args,
+                        stmt.target,
+                        typing_info=typing_info,
+                        extra_globals={
+                            "used_columns": bodo.utils.typing.MetaType(
+                                tuple(sorted(used_columns))
+                            )
+                        },
+                    )
+
+                    # Replace the variable in the return value to keep
+                    # distributed analysis consistent.
+                    nodes[-1].target = stmt.target
+                    # Update distributed analysis for the replaced function
+                    new_nodes = list(reversed(nodes))
+                    if dist_analysis:
+                        bodo.transforms.distributed_analysis.propagate_assign(
+                            dist_analysis.array_dists, new_nodes
+                        )
+                    new_body += new_nodes
+                    # We do not set removed = True here, as this branch does not make
+                    # any changes that could allow removal in dead code elimination.
+                    continue
+
                 elif fdef == (
                     "table_astype",
                     "bodo.utils.table_utils",

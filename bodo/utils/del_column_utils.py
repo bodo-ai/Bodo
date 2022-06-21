@@ -7,8 +7,6 @@ from typing import Dict, Tuple
 
 from numba.core import ir, types
 
-import bodo
-
 # This must contain all table functions that can
 # "use" a column. This is used by helper functions
 # for pruning columns. Every table operation that
@@ -19,6 +17,7 @@ import bodo
 table_usecol_funcs = {
     ("get_table_data", "bodo.hiframes.table"),
     ("table_filter", "bodo.hiframes.table"),
+    ("table_subset", "bodo.hiframes.table"),
     ("set_table_data", "bodo.hiframes.table"),
     ("set_table_data_null", "bodo.hiframes.table"),
     ("generate_mappable_table_func", "bodo.utils.table_utils"),
@@ -74,8 +73,7 @@ def get_table_used_columns(
             used_cols_var = kws["used_cols"]
             used_cols_typ = typemap[used_cols_var.name]
             used_cols_typ = used_cols_typ.instance_type
-            if isinstance(used_cols_typ, bodo.utils.typing.MetaType):
-                return set(used_cols_typ.meta)
+            return set(used_cols_typ.meta)
     elif fdef == ("table_concat", "bodo.utils.table_utils"):
         # Table concat passes the column numbers meta type
         # as argument 1.
@@ -84,8 +82,35 @@ def get_table_used_columns(
         used_cols_var = call_expr.args[1]
         used_cols_typ = typemap[used_cols_var.name]
         used_cols_typ = used_cols_typ.instance_type
-        if isinstance(used_cols_typ, bodo.utils.typing.MetaType):
-            return set(used_cols_typ.meta)
+        return set(used_cols_typ.meta)
+    elif fdef == ("table_subset", "bodo.hiframes.table"):
+        # Table subset needs to map back to the original columns
+        # via the idx subset in argument 1 and the "used_cols" kws.
+        idx_var = call_expr.args[1]
+        idx_typ = typemap[idx_var.name]
+        idx_typ = idx_typ.instance_type
+        idx_cols = idx_typ.meta
+        # Determine if there are pruned columns,
+        # which produces a different pass
+        kws = dict(call_expr.kws)
+        if "used_cols" in kws:
+            # If there are used columns we need to remove
+            # any idx values that are removed.
+            used_cols_var = kws["used_cols"]
+            used_cols_typ = typemap[used_cols_var.name]
+            used_cols_typ = used_cols_typ.instance_type
+            # These used cols are for the output table.
+            # We need to return this to the input table.
+            used_cols_set = set(used_cols_typ.meta)
+            # Kept track of the orignal columns
+            orig_used_cols = set()
+            for i, orig_num in enumerate(idx_cols):
+                if i in used_cols_set:
+                    orig_used_cols.add(orig_num)
+            return orig_used_cols
+        else:
+            # Remove any duplicate columns
+            return set(idx_cols)
 
     # If we don't have information about which columns this operation
     # kills, we return to None to indicate we must decref any remaining

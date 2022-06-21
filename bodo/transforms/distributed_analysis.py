@@ -917,6 +917,10 @@ class DistributedAnalysis:
             )
             return
 
+        if fdef == ("table_subset", "bodo.hiframes.table"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("table_concat", "bodo.utils.table_utils"):
             table = args[0].name
             out_dist = Distribution.OneD_Var

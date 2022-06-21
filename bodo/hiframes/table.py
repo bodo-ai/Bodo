@@ -1396,6 +1396,143 @@ def table_filter(T, idx, used_cols=None):
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def table_subset(T, idx, used_cols=None):
+    """Selects a subset of arrays/columns
+    from a table using a list of integer column numbers.
+    To minimize the size of the IR the integers are passed
+    via a MetaType TypeRef.
+
+    Args:
+        T (TableType): Original table for taking a subset of arrays
+        idx (TypeRef(MetaType)): Container for the constant list of columns
+            that should be selected
+        used_cols (TypeRef(MetaType) | None): Columns determined to be needed
+            after table_column_del pass. This is used to further filter idx
+            into only the columns that are actually needed.
+    """
+    # Extract the actual columns to select.
+    cols_subset = list(idx.instance_type.meta)
+    out_arr_typs = tuple(np.array(T.arr_types, dtype=object)[cols_subset])
+    out_table_typ = TableType(out_arr_typs)
+    glbls = {
+        "init_table": init_table,
+        "get_table_block": get_table_block,
+        "ensure_column_unboxed": ensure_column_unboxed,
+        "set_table_block": set_table_block,
+        "set_table_len": set_table_len,
+        "alloc_list_like": alloc_list_like,
+        "out_table_typ": out_table_typ,
+    }
+    # Determine which columns to prune if used_cols is included.
+    # Note these are the column numbers of the output table, not
+    # the input table.
+    if not is_overload_none(used_cols):
+        kept_cols = used_cols.instance_type.meta
+        kept_cols_set = set(kept_cols)
+        glbls["kept_cols"] = np.array(kept_cols, np.int64)
+        skip_cols = True
+    else:
+        skip_cols = False
+    # Compute a mapping of columns before removing
+    # dropped columns.
+    moved_cols_map = {i: c for i, c in enumerate(cols_subset)}
+
+    func_text = "def table_subset(T, idx, used_cols=None):\n"
+    func_text += f"  T2 = init_table(out_table_typ, False)\n"
+    # Length of the table cannot change.
+    func_text += f"  T2 = set_table_len(T2, len(T))\n"
+
+    # set table length using index value and return if no table column is used
+    if skip_cols and len(kept_cols_set) == 0:
+        # If all columns are dead just return the table.
+        func_text += f"  return T2\n"
+        loc_vars = {}
+        exec(func_text, glbls, loc_vars)
+        return loc_vars["table_subset"]
+
+    if skip_cols:
+        # Create a set for filtering
+        func_text += f"  kept_cols_set = set(kept_cols)\n"
+
+    # Use the output table to only generate code per output
+    # type. Here we iterate over the output type and list of
+    # arrays and copy the arrays from the original table. Here
+    # is some pseudocode (omitting many details like unboxing).
+
+    #   for typ in out_types:
+    #       out_arrs = alloc_list(typ)
+    #       in_arrs = get_block(table, typ)
+    #       for idx in range(len(out_arrs)):
+    #           # Map the physical offset to df colnum
+    #           logical_idx = get_logical_idx(idx)
+    #           # We skip any columns that are dead
+    #           if logical_idx not dead:
+    #               # Map the new actual index back to the old
+    #               orig_idx = get_orig_idx(idx)
+    #               out_arrs[idx] = in_arrs[orig_idx]
+    #       set_block(out_table, out_arrs, typ)
+    #   return out_table
+    #
+    # Note: We must iterate over the output because the input
+    # could specify duplicate columns.
+    #
+    # If an entire output type is pruned we generate the list and omit
+    # the for loop.
+
+    for typ, blk in out_table_typ.type_to_blk.items():
+        # Since we have a subset of columns this must exist.
+        orig_table_blk = T.type_to_blk[typ]
+        func_text += f"  arr_list_{blk} = get_table_block(T, {orig_table_blk})\n"
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, {len(out_table_typ.block_to_arr_ind[blk])}, False)\n"
+        has_match = True
+        if skip_cols:
+            # If we are deleting columns we may be able to skip the loop.
+            block_colnums_set = set(out_table_typ.block_to_arr_ind[blk])
+            matched_cols = block_colnums_set & kept_cols_set
+            # Determine if any column matches. If not we don't need
+            # the loop.
+            has_match = len(matched_cols) > 0
+        if has_match:
+            glbls[f"out_arr_inds_{blk}"] = np.array(
+                out_table_typ.block_to_arr_ind[blk], dtype=np.int64
+            )
+            # We iterate over the output array because there are always <=
+            # the number of elements in the input array list.
+            func_text += f"  for i in range(len(out_arr_list_{blk})):\n"
+            func_text += f"    out_arr_ind_{blk} = out_arr_inds_{blk}[i]\n"
+            if skip_cols:
+                func_text += (
+                    f"    if out_arr_ind_{blk} not in kept_cols_set: continue\n"
+                )
+
+            # Determine a mapping back to the old index from the new index in case
+            # columns are reordered. Since we may need to unbox the column, we need
+            # both a logical index (DataFrame column number) and a physical index
+            # (offset in the list of arrays).
+            in_logical_idx = []
+            in_physical_idx = []
+            for num in out_table_typ.block_to_arr_ind[blk]:
+                in_logical = moved_cols_map[num]
+                in_logical_idx.append(in_logical)
+                in_physical = T.block_offsets[in_logical]
+                in_physical_idx.append(in_physical)
+            glbls[f"in_logical_idx_{blk}"] = np.array(in_logical_idx, dtype=np.int64)
+            glbls[f"in_physical_idx_{blk}"] = np.array(in_physical_idx, dtype=np.int64)
+            func_text += f"    logical_idx_{blk} = in_logical_idx_{blk}[i]\n"
+            func_text += f"    physical_idx_{blk} = in_physical_idx_{blk}[i]\n"
+            # We must check if we need to unbox the original column because DataFrames
+            # do lazy unboxing.
+            func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, physical_idx_{blk}, logical_idx_{blk})\n"
+            func_text += f"    out_arr_list_{blk}[i] = arr_list_{blk}[physical_idx_{blk}].copy()\n"
+        func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+    func_text += f"  return T2\n"
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["table_subset"]
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def decode_if_dict_table(T):
     """
     Takes a Table that may contain a dict_str_array_type
@@ -1441,7 +1578,6 @@ def decode_if_dict_table(T):
 def overload_table_getitem(T, idx):
     if not isinstance(T, TableType):
         return
-
     return lambda T, idx: table_filter(T, idx)  # pragma: no cover
 
 
