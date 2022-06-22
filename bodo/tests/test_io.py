@@ -153,6 +153,9 @@ def test_pq_select_column(
             os.remove("test.pq")
 
 
+# TODO: Implement Delta Lake in a way similar to Iceberg:
+# https://bodo.atlassian.net/browse/BE-3048
+@pytest.mark.skip
 def test_read_parquet_from_deltalake(memory_leak_check):
     def impl():
         return pd.read_parquet("bodo/tests/data/example_deltalake")
@@ -1392,11 +1395,23 @@ def test_read_parquet_list_of_globs(datapath, memory_leak_check):
 
     import glob
 
-    # get expected output with pandas
+    # construct expected pandas output manually (pandas doesn't support list of files)
     files = []
     for globstring in globstrings:
         files += sorted(glob.glob(globstring))
-    pyout = pd.concat(pd.read_parquet(f) for f in files).reset_index(drop=True)
+    # Arrow ParquetDatasetV2 adds the partition column to the dataset
+    # when passing it a list of files that are in partitioned directories.
+    # So we need to add the partition column to pandas output
+    chunks = []
+    import re
+
+    regexp = re.compile("\/A=(\d+)\/")
+    for f in files:
+        df = pd.read_parquet(f)
+        df["A"] = int(regexp.search(f).group(1))
+        chunks.append(df)
+    pyout = pd.concat(chunks).reset_index(drop=True)
+    pyout["A"] = pyout["A"].astype("category")
 
     check_func(test_impl, (globstrings,), py_output=pyout, check_dtype=False)
 
@@ -1473,17 +1488,19 @@ def test_read_partitions(memory_leak_check):
         #     return n
 
         bodo.parquet_validate_schema = False
-        check_func(impl, ("pq_data",))
+        # check_dtype=False because Arrow 8 doesn't write pandas metadata
+        # and therefore Bodo reads int64 as Int64, not maching pandas
+        check_func(impl, ("pq_data",), check_dtype=False)
         bodo.parquet_validate_schema = True
-        check_func(impl2, ("pq_data", "a"))
+        check_func(impl2, ("pq_data", "a"), check_dtype=False)
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl2)
         bodo_func("pq_data", "a")
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
-        check_func(impl3, ("pq_data", "a"))
-        check_func(impl4, ("pq_data", "a"))
-        check_func(impl5, ("pq_data", "a"))
-        check_func(impl6, ("pq_data",))
+        check_func(impl3, ("pq_data", "a"), check_dtype=False)
+        check_func(impl4, ("pq_data", "a"), check_dtype=False)
+        check_func(impl5, ("pq_data", "a"), check_dtype=False)
+        check_func(impl6, ("pq_data",), check_dtype=False)
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl5)
         bodo_func("pq_data", "a")
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
@@ -1515,7 +1532,7 @@ def test_read_partitions2(memory_leak_check):
 
         def impl1(path, val):
             df = pd.read_parquet(path)
-            return df[(df["c"].astype(int) > val) | (df["c"] == 2)]
+            return df[(df["c"].astype(np.int32) > val) | (df["c"] == 2)]
 
         # TODO(ehsan): match Index
         check_func(impl1, ("pq_data", 3), reset_index=True)
@@ -1598,9 +1615,9 @@ def test_read_partitions_cat_ordering(memory_leak_check):
             df = pd.read_parquet(path)
             return df[(df["c"] != 3) | (df["part"] == "a")]
 
-        check_func(impl1, ("pq_data",))
+        check_func(impl1, ("pq_data",), check_dtype=False)
         # TODO(ehsan): match Index
-        check_func(impl2, ("pq_data",), reset_index=True)
+        check_func(impl2, ("pq_data",), reset_index=True, check_dtype=False)
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl2)
         bodo_func(
@@ -1634,10 +1651,10 @@ def test_read_partitions_two_level(memory_leak_check):
 
         def impl1(path, val):
             df = pd.read_parquet(path)
-            return df[(df["c"].astype(int) > val) | (df["part"] == "a")]
+            return df[(df["c"].astype(np.int32) > val) | (df["part"] == "a")]
 
         # TODO(ehsan): match Index
-        check_func(impl1, ("pq_data", 3), reset_index=True)
+        check_func(impl1, ("pq_data", 3), reset_index=True, check_dtype=False)
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", 3)
@@ -1721,12 +1738,12 @@ def test_read_partitions_implicit_and_simple(memory_leak_check):
             return sum1 + sum2
 
         # TODO: match Index
-        check_func(impl1, ("pq_data", 3), reset_index=True)
+        check_func(impl1, ("pq_data", 3), reset_index=True, check_dtype=False)
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", 3)
         _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
-        check_func(impl1, ("pq_data", 2), reset_index=True)
+        check_func(impl1, ("pq_data", 2), reset_index=True, check_dtype=False)
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree("pq_data", ignore_errors=True)
@@ -1759,7 +1776,7 @@ def test_read_partitions_implicit_and_detailed(memory_leak_check):
             return df
 
         # TODO: match Index
-        check_func(impl1, ("pq_data", 3), reset_index=True)
+        check_func(impl1, ("pq_data", 3), reset_index=True, check_dtype=False)
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", 3)
@@ -1803,7 +1820,13 @@ def test_read_partitions_datetime(memory_leak_check):
                 & (pd.to_datetime(df["part"]) <= pd.to_datetime(e_d))
             ]
 
-        check_func(impl1, ("pq_data", "2018-01-02", "2019-10-02"), reset_index=True)
+        # With arrow8 we output a nullable integer
+        check_func(
+            impl1,
+            ("pq_data", "2018-01-02", "2019-10-02"),
+            reset_index=True,
+            check_dtype=False,
+        )
         # make sure the ParquetReader node has filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", "2018-01-02", "2019-10-02")
@@ -1848,7 +1871,12 @@ def test_read_partitions_to_datetime_format(memory_leak_check):
                 & (pd.to_datetime(df["part"], format="%Y-%d-%m") <= pd.to_datetime(e_d))
             ]
 
-        check_func(impl1, ("pq_data", "2018-01-31", "2018-02-28"), reset_index=True)
+        check_func(
+            impl1,
+            ("pq_data", "2018-01-31", "2018-02-28"),
+            reset_index=True,
+            check_dtype=False,
+        )
         # make sure the ParquetReader node doesn't have filters parameter set
         bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
         bodo_func("pq_data", "2018-01-02", "2019-10-02")
@@ -2085,7 +2113,7 @@ def test_read_partitions_isin(memory_leak_check):
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             # TODO: Fix index
-            check_func(impl1, ("pq_data",), reset_index=True)
+            check_func(impl1, ("pq_data",), reset_index=True, check_dtype=False)
             # Check filter pushdown succeeded
             check_logger_msg(stream, "Filter pushdown successfully performed")
             # Check the columns were pruned
@@ -2094,7 +2122,7 @@ def test_read_partitions_isin(memory_leak_check):
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             # TODO: Fix index
-            check_func(impl2, ("pq_data",), reset_index=True)
+            check_func(impl2, ("pq_data",), reset_index=True, check_dtype=False)
             # Check filter pushdown succeeded
             check_logger_msg(stream, "Filter pushdown successfully performed")
             # Check the columns were pruned
@@ -2103,7 +2131,7 @@ def test_read_partitions_isin(memory_leak_check):
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             # TODO: Fix index
-            check_func(impl3, ("pq_data",), reset_index=True)
+            check_func(impl3, ("pq_data",), reset_index=True, check_dtype=False)
             # Check filter pushdown succeeded
             check_logger_msg(stream, "Filter pushdown successfully performed")
             # Check the columns were pruned
@@ -2159,7 +2187,10 @@ def test_read_partitions_large(memory_leak_check):
 
     try:
         if bodo.get_rank() == 0:
-            I = pd.date_range("2018-01-03", "2020-12-05")
+            # The number of dates can't exceed 1024 because that is the default
+            # max_partitions of Arrow when writing parquet. XXX how to pass
+            # max_partitions option to Arrow from df.to_parquet?
+            I = pd.date_range("2018-01-03", "2020-10-05")
             df = pd.DataFrame(
                 {"A": np.repeat(I.values, 100), "B": np.arange(100 * len(I))}
             )
@@ -2235,7 +2266,10 @@ def test_read_pq_head_only(datapath, memory_leak_check):
     # partitioned data
     try:
         if bodo.get_rank() == 0:
-            I = pd.date_range("2018-01-03", "2020-12-05")
+            # The number of dates can't exceed 1024 because that is the default
+            # max_partitions of Arrow when writing parquet. XXX how to pass
+            # max_partitions option to Arrow from df.to_parquet?
+            I = pd.date_range("2018-01-03", "2020-10-05")
             df = pd.DataFrame(
                 {"A": np.repeat(I.values, 100), "B": np.arange(100 * len(I))}
             )

@@ -421,6 +421,7 @@ def generate_arrow_filters(
     original_out_types,
     typemap,
     source: Literal["parquet", "iceberg"],
+    output_dnf=True,
 ) -> Tuple[str, str]:
     """
     Generate Arrow DNF filters and expression filters with the
@@ -436,6 +437,8 @@ def generate_arrow_filters(
     original_out_types -- original column types in the IR node, including dead columns.
     typemap -- Maps variables name -> types.
     source -- What is generating this filter. Either "parquet" or "iceberg".
+    output_dnf -- Should we output the first expression in DNF format or regular
+                  arrow compute expression format.
     """
     dnf_filter_str = "None"
     expr_filter_str = "None"
@@ -504,15 +507,11 @@ def generate_arrow_filters(
                     if v[1] == "in":
                         # Expected output for this format should like
                         # (ds.field('A').isin(py_var))
-                        expr_and_conds.append(
-                            f"(ds.field('{v[0]}').isin({filter_map[v[2].name]}))"
-                        )
+                        expr_val = f"(ds.field('{v[0]}').isin({filter_map[v[2].name]}))"
                     else:
                         # Expected output for this format should like
                         # (ds.field('A') > ds.scalar(py_var))
-                        expr_and_conds.append(
-                            f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})"
-                        )
+                        expr_val = f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})"
                 else:
                     # Currently the only constant expressions we support are IS [NOT] NULL
                     assert v[2] == "NULL", "unsupport constant used in filter pushdown"
@@ -522,14 +521,18 @@ def generate_arrow_filters(
                         prefix = ""
                     # Expected output for this format should like
                     # (~ds.field('A').is_null())
-                    expr_and_conds.append(f"({prefix}ds.field('{v[0]}').is_null())")
+                    expr_val = f"({prefix}ds.field('{v[0]}').is_null())"
+                expr_and_conds.append(expr_val)
                 # Now handle the dnf section. We can only append a value if its not a constant
                 # expression and is a partition column. If we already know skip_partitions = False,
                 # then we skip partitions as they will be unused.
 
                 if not skip_partitions:
                     if v[0] in partition_names and isinstance(v[2], ir.Var):
-                        dnf_str = f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})"
+                        if output_dnf:
+                            dnf_str = f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})"
+                        else:
+                            dnf_str = expr_val
                         dnf_and_conds.append(dnf_str)
                     # handle isna/notna (e.g. [[('C', 'is', 'NULL')]]) cases only for
                     # Iceberg, since supporting nulls in Parquet/Arrow/Hive partitioning is
@@ -539,7 +542,10 @@ def generate_arrow_filters(
                         and not isinstance(v[2], ir.Var)
                         and source == "iceberg"
                     ):
-                        dnf_str = f"('{v[0]}', '{v[1]}', '{v[2]}')"
+                        if output_dnf:
+                            dnf_str = f"('{v[0]}', '{v[1]}', '{v[2]}')"
+                        else:
+                            dnf_str = expr_val
                         dnf_and_conds.append(dnf_str)
                     # If we don't append to the list, we are effectively
                     # replacing this expression with TRUE as
@@ -547,7 +553,10 @@ def generate_arrow_filters(
 
             dnf_and_str = ""
             if dnf_and_conds:
-                dnf_and_str = ", ".join(dnf_and_conds)
+                if output_dnf:
+                    dnf_and_str = ", ".join(dnf_and_conds)
+                else:
+                    dnf_and_str = " & ".join(dnf_and_conds)
             else:
                 # If dnf_and_conds is empty, this expression = TRUE
                 # Since (expr OR TRUE => TRUE), we should omit all partitions.
@@ -555,15 +564,24 @@ def generate_arrow_filters(
             expr_and_str = " & ".join(expr_and_conds)
             # If all the filters are truncated we may have an empty string.
             if dnf_and_str:
-                dnf_or_conds.append(f"[{dnf_and_str}]")
+                if output_dnf:
+                    dnf_or_conds.append(f"[{dnf_and_str}]")
+                else:
+                    dnf_or_conds.append(f"({dnf_and_str})")
             expr_or_conds.append(f"({expr_and_str})")
 
-        dnf_or_str = ", ".join(dnf_or_conds)
+        if output_dnf:
+            dnf_or_str = ", ".join(dnf_or_conds)
+        else:
+            dnf_or_str = " | ".join(dnf_or_conds)
         expr_or_str = " | ".join(expr_or_conds)
         if dnf_or_str and not skip_partitions:
             # If the expression exists use and we don't need
             # to skip partitions we need  update dnf_filter_str
-            dnf_filter_str = f"[{dnf_or_str}]"
+            if output_dnf:
+                dnf_filter_str = f"[{dnf_or_str}]"
+            else:
+                dnf_filter_str = f"({dnf_or_str})"
         expr_filter_str = f"({expr_or_str})"
     return dnf_filter_str, expr_filter_str
 

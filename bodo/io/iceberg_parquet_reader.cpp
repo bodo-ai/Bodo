@@ -44,8 +44,7 @@ class IcebergParquetReader : public ParquetReader {
                          PyObject* _dnf_filters, PyObject* _expr_filters,
                          int32_t* _selected_fields, int32_t num_selected_fields,
                          int32_t* is_nullable, PyObject* _pyarrow_table_schema)
-        : ParquetReader(/*path*/ nullptr, _parallel,
-                        /*_bucket_region*/ (char*)"", _dnf_filters,
+        : ParquetReader(/*path*/ nullptr, _parallel, _dnf_filters,
                         _expr_filters,
                         /*storage_options*/ PyDict_New(),
                         /*tot_rows_to_read*/ -1, _selected_fields,
@@ -95,27 +94,9 @@ class IcebergParquetReader : public ParquetReader {
         Py_DECREF(this->dnf_filters);
         Py_DECREF(iceberg_mod);
 
-        return ds;
-    }
+        this->filesystem = PyObject_GetAttrString(ds, "filesystem");
 
-    virtual std::shared_ptr<arrow::Schema> get_schema(PyObject* dataset) {
-        PyObject* schema_py = PyObject_GetAttrString(dataset, "schema");
-        // see
-        // https://arrow.apache.org/docs/7.0/python/integration/extending.html?highlight=unwrap_schema
-        auto schema_ = arrow::py::unwrap_schema(schema_py).ValueOrDie();
-        // calculate selected columns (not fields)
-        int col = 0;
-        for (int i = 0; i < schema_->num_fields(); i++) {
-            auto f = schema_->field(i);
-            int field_num_columns = get_num_columns(f);
-            if (selected_fields.find(i) != selected_fields.end()) {
-                for (int j = 0; j < field_num_columns; j++)
-                    selected_columns.push_back(col + j);
-            }
-            col += field_num_columns;
-        }
-        Py_DECREF(schema_py);
-        return schema_;
+        return ds;
     }
 
     // We don't need a special implementation yet and can re-use

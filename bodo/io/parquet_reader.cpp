@@ -152,9 +152,9 @@ PyObject* ParquetReader::get_dataset() {
     if (ds == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
-    PyObject* partitions = PyObject_GetAttrString(ds, "partitions");
-    this->ds_has_partitions = (partitions != Py_None);
-    Py_DECREF(partitions);
+    PyObject* partition_names = PyObject_GetAttrString(ds, "partition_names");
+    this->ds_has_partitions = (PyList_Size(partition_names) > 0);
+    Py_DECREF(partition_names);
     Py_DECREF(path);
     Py_DECREF(dnf_filters);
     Py_DECREF(pq_mod);
@@ -165,17 +165,13 @@ PyObject* ParquetReader::get_dataset() {
     this->prefix.assign(PyUnicode_AsUTF8(prefix_py));
     Py_DECREF(prefix_py);
 
+    this->filesystem = PyObject_GetAttrString(ds, "filesystem");
+
     return ds;
 }
 
 std::shared_ptr<arrow::Schema> ParquetReader::get_schema(PyObject* dataset) {
-    PyObject* pq_mod = PyImport_ImportModule("bodo.io.pa_parquet");
-    PyObject* schema_py =
-        PyObject_CallMethod(pq_mod, "get_dataset_schema", "O", dataset);
-    if (schema_py == NULL && PyErr_Occurred()) {
-        throw std::runtime_error("python");
-    }
-    Py_DECREF(pq_mod);
+    PyObject* schema_py = PyObject_GetAttrString(dataset, "schema");
     // see
     // https://arrow.apache.org/docs/7.0/python/integration/extending.html?highlight=unwrap_schema
     auto schema_ = arrow::py::unwrap_schema(schema_py).ValueOrDie();
@@ -228,11 +224,10 @@ void ParquetReader::read_all(TableBuilder& builder) {
     tracing::Event ev_get_scanner_batches("get_scanner_batches");
     PyObject* py_schema = arrow::py::wrap_schema(this->schema);
     PyObject* dataset_batches_tup = PyObject_CallMethod(
-        pq_mod, "get_scanner_batches", "OOOdiOssOlliO", fnames_list_py,
+        pq_mod, "get_scanner_batches", "OOOdiOOlliO", fnames_list_py,
         expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
-        storage_options, bucket_region.c_str(), prefix.c_str(),
-        str_as_dict_cols_py, this->start_row_first_piece, this->count,
-        int(ds_has_partitions), py_schema);
+        this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
+        this->count, int(ds_has_partitions), py_schema);
     if (dataset_batches_tup == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
@@ -247,6 +242,7 @@ void ParquetReader::read_all(TableBuilder& builder) {
     Py_DECREF(expr_filters);
     Py_DECREF(selected_fields_py);
     Py_DECREF(storage_options);
+    Py_DECREF(this->filesystem);
     Py_DECREF(fnames_list_py);
     Py_DECREF(str_as_dict_cols_py);
     Py_DECREF(py_schema);
@@ -362,7 +358,6 @@ void ParquetReader::get_partition_info(PyObject* piece) {
  * or a Python list of strings -multiple files constituting a single dataset-).
  * The PyObject is passed throught to parquet_pio.py::get_parquet_dataset
  * @param parallel: true if reading in parallel
- * @param bucket_region : S3 bucket region (when reading from S3)
  * @param filters : PyObject passed to pyarrow.parquet.ParquetDataset filters
  * argument to remove rows from scanned data
  * @param storage_options : PyDict with extra read_parquet options. See
@@ -389,18 +384,18 @@ void ParquetReader::get_partition_info(PyObject* piece) {
  * followed by selected partition columns, in same order as specified to this
  * function).
  */
-table_info* pq_read(PyObject* path, bool parallel, char* bucket_region,
-                    PyObject* dnf_filters, PyObject* expr_filters,
-                    PyObject* storage_options, int64_t tot_rows_to_read,
-                    int32_t* selected_fields, int32_t num_selected_fields,
-                    int32_t* is_nullable, int32_t* selected_part_cols,
-                    int32_t* part_cols_cat_dtype, int32_t num_partition_cols,
-                    int32_t* str_as_dict_cols, int32_t num_str_as_dict_cols,
-                    int64_t* total_rows_out, bool input_file_name_col) {
+table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
+                    PyObject* expr_filters, PyObject* storage_options,
+                    int64_t tot_rows_to_read, int32_t* selected_fields,
+                    int32_t num_selected_fields, int32_t* is_nullable,
+                    int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
+                    int32_t num_partition_cols, int32_t* str_as_dict_cols,
+                    int32_t num_str_as_dict_cols, int64_t* total_rows_out,
+                    bool input_file_name_col) {
     try {
-        ParquetReader reader(path, parallel, bucket_region, dnf_filters,
-                             expr_filters, storage_options, tot_rows_to_read,
-                             selected_fields, num_selected_fields, is_nullable,
+        ParquetReader reader(path, parallel, dnf_filters, expr_filters,
+                             storage_options, tot_rows_to_read, selected_fields,
+                             num_selected_fields, is_nullable,
                              input_file_name_col);
         // initialize reader
         reader.init(str_as_dict_cols, num_str_as_dict_cols, part_cols_cat_dtype,

@@ -7,14 +7,14 @@
 #include "../libs/_bodo_common.h"
 
 // --------- functions defined in parquet_reader.cpp ---------
-table_info* pq_read(PyObject* path, bool parallel, char* bucket_region,
-                    PyObject* dnf_filters, PyObject* expr_filters,
-                    PyObject* storage_options, int64_t tot_rows_to_read,
-                    int32_t* selected_cols, int32_t num_selected_cols,
-                    int32_t* is_nullable, int32_t* selected_part_cols,
-                    int32_t* part_cols_cat_dtype, int32_t num_partition_cols,
-                    int32_t* str_as_dict_cols, int32_t num_str_as_dict_cols,
-                    int64_t* total_rows_out, bool input_file_name_col);
+table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
+                    PyObject* expr_filters, PyObject* storage_options,
+                    int64_t tot_rows_to_read, int32_t* selected_cols,
+                    int32_t num_selected_cols, int32_t* is_nullable,
+                    int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
+                    int32_t num_partition_cols, int32_t* str_as_dict_cols,
+                    int32_t num_str_as_dict_cols, int64_t* total_rows_out,
+                    bool input_file_name_col);
 
 // --------- functions defined in iceberg_parquet_reader.cpp --------
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,

@@ -1299,7 +1299,7 @@ def info_to_array_codegen(context, builder, sig, args):
             ).categories.values
             new_cats_tup = MetaType(tuple(new_cats_arr))
             int_type = arr_type.dtype.int_type
-            cats_arr_type = bodo.typeof(new_cats_arr)
+            cats_arr_type = arr_type.dtype.data.data
             cats_arr = context.get_constant_generic(
                 builder, cats_arr_type, new_cats_arr
             )

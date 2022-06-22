@@ -13,19 +13,18 @@ class ParquetReader : public ArrowDataframeReader {
      * Initialize ParquetReader.
      * See pq_read function below for description of arguments.
      */
-    ParquetReader(PyObject* _path, bool _parallel, char* _bucket_region,
-                  PyObject* _dnf_filters, PyObject* _expr_filters,
-                  PyObject* _storage_options, int64_t _tot_rows_to_read,
-                  int32_t* _selected_fields, int32_t num_selected_fields,
-                  int32_t* is_nullable, bool _input_file_name_col)
+    ParquetReader(PyObject* _path, bool _parallel, PyObject* _dnf_filters,
+                  PyObject* _expr_filters, PyObject* _storage_options,
+                  int64_t _tot_rows_to_read, int32_t* _selected_fields,
+                  int32_t num_selected_fields, int32_t* is_nullable,
+                  bool _input_file_name_col)
         : ArrowDataframeReader(_parallel, _tot_rows_to_read, _selected_fields,
                                num_selected_fields, is_nullable),
           dnf_filters(_dnf_filters),
           expr_filters(_expr_filters),
           path(_path),
           storage_options(_storage_options),
-          input_file_name_col(_input_file_name_col),
-          bucket_region(_bucket_region) {
+          input_file_name_col(_input_file_name_col) {
         if (storage_options == Py_None)
             throw std::runtime_error("ParquetReader: storage_options is None");
 
@@ -35,22 +34,6 @@ class ParquetReader : public ArrowDataframeReader {
         size_t i = 0;
         for (auto field_num : selected_fields) {
             PyList_SetItem(selected_fields_py, i++, PyLong_FromLong(field_num));
-        }
-
-        // Extract values from the storage_options dict
-        // Check that it's a dictionary, else throw an error
-        if (PyDict_Check(storage_options)) {
-            // Get value of "anon". Returns NULL if it doesn't exist in the
-            // dict. No need to decref s3fs_anon_py, PyDict_GetItemString
-            // returns borrowed ref
-            PyObject* s3fs_anon_py =
-                PyDict_GetItemString(storage_options, "anon");
-            if (s3fs_anon_py != NULL && s3fs_anon_py == Py_True) {
-                this->s3fs_anon = true;
-            }
-        } else {
-            throw std::runtime_error(
-                "ParquetReader: storage_options is not a Python dictionary.");
         }
     }
 
@@ -86,9 +69,6 @@ class ParquetReader : public ArrowDataframeReader {
             selected_part_cols.push_back(_selected_part_cols[i]);
         }
         part_cols_offset.resize(num_partition_cols, 0);
-
-        // TODO In case of S3, get the region here instead of having it
-        // be passed into the constructor.
     }
 
     virtual ~ParquetReader() {}
@@ -118,8 +98,9 @@ class ParquetReader : public ArrowDataframeReader {
     // field "struct<A: int64, B: int64>" has two int64 columns in the
     // parquet file
     std::vector<int> selected_columns;
-    // Prefix to add to each of the file paths before they are opened
+    // Prefix to add to each of the file paths (only used for input_file_name)
     std::string prefix;
+    PyObject* filesystem = nullptr;
 
    private:
     PyObject* path;  // path passed to pd.read_parquet() call
@@ -135,8 +116,6 @@ class ParquetReader : public ArrowDataframeReader {
 
     // Parquet files that this process has to read
     std::vector<std::string> file_paths;
-    std::string bucket_region;  // s3 bucket region
-    bool s3fs_anon = false;     // s3 anonymous mode
 
     // selected partition columns
     std::vector<int> selected_part_cols;

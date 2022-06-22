@@ -29,6 +29,8 @@ from numba.extending import (
     unbox,
 )
 from pyarrow import null
+from pyarrow._fs import PyFileSystem
+from pyarrow.fs import FSSpecHandler
 
 import bodo
 import bodo.ir.parquet_ext
@@ -44,9 +46,7 @@ from bodo.hiframes.pd_categorical_ext import (
 from bodo.hiframes.table import TableType
 from bodo.io.fs_io import (
     get_hdfs_fs,
-    get_s3_bucket_region_njit,
     get_s3_fs_from_path,
-    get_s3_subtree_fs,
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
@@ -87,8 +87,6 @@ use_nullable_int_arr = True
 
 
 from urllib.parse import urlparse
-
-import bodo.io.pa_parquet
 
 REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 # the ratio of total_uncompressed_size of a Parquet string column vs number of values,
@@ -357,6 +355,7 @@ def pq_distributed_run(
         pq_node.original_out_types,
         typemap,
         "parquet",
+        output_dnf=False,
     )
     arg_names = ", ".join(f"out{i}" for i in range(n_cols))
     func_text = f"def pq_impl(fname, {extra_args}):\n"
@@ -549,7 +548,6 @@ def _gen_pq_reader_py(
     # if it's an s3 url, get the region and pass it into the c++ code
     func_text += f"    ev = bodo.utils.tracing.Event('read_parquet', {is_parallel})\n"
     func_text += f"    ev.add_attribute('g_fname', fname)\n"
-    func_text += f"    bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(fname, parallel={is_parallel})\n"
     func_text += f'    dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({extra_args}{comma}))\n'
     # convert the filename, which could be a string or a list of strings, to a
     # PyObject to pass to C++. C++ just passes it through to parquet_pio.py::get_parquet_dataset()
@@ -677,7 +675,6 @@ def _gen_pq_reader_py(
     func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
     func_text += f"    out_table = pq_read(\n"
     func_text += f"        fname_py, {is_parallel},\n"
-    func_text += f"        unicode_to_utf8(bucket_region),\n"
     func_text += f"        dnf_filters, expr_filters,\n"
     func_text += f"        storage_options_py, {tot_rows_to_read}, selected_cols_arr_{call_id}.ctypes,\n"
     func_text += f"        {len(selected_cols)},\n"
@@ -950,6 +947,126 @@ def _get_numba_typ_from_pa_typ(
     return arr_typ, supported
 
 
+class ParquetDataset(object):
+    """Stores information about parquet dataset that is needed at compile time
+    and runtime (to read the dataset). Stores the list of fragments
+    (pieces) that form the dataset and filesystem object to read them.
+    All of this is obtained at rank 0 using Arrow's pq.ParquetDataset() API
+    (ParquetDatasetV2) and this object is broadcasted to all ranks.
+    """
+
+    def __init__(self, pa_pq_dataset, prefix=""):
+        self.schema = pa_pq_dataset.schema  # Arrow schema
+        # We don't store the filesystem initially, and instead set it after
+        # ParquetDataset is broadcasted. This is because some filesystems
+        # might have pickling issues, and also because of the extra cost of
+        # creating the filesystem during unpickling. Instead, all ranks
+        # initialize the filesystem in parallel at the same time and only once
+        self.filesystem = None
+        # total number of rows in the dataset (after applying filters). This
+        # is computed at runtime in `get_parquet_dataset`
+        self._bodo_total_rows = 0
+        # prefix that needs to be added to paths of parquet pieces to get the
+        # full path to the file
+        self._prefix = prefix
+        # XXX pa_pq_dataset.partitioning is not pickled so we don't store it.
+        # For some datasets, pa_pq_dataset.partitioning.schema contains the
+        # full schema of the dataset when there aren't any partition columns
+        # (bug in Arrow?) so to know if there are partition columns we also
+        # need to check that the partitioning schema is not equal to the
+        # full dataset schema.
+        # XXX is there a better way to get partition column names?
+        self.partition_names = (
+            []
+            if pa_pq_dataset.partitioning is None
+            or pa_pq_dataset.partitioning.schema == pa_pq_dataset.schema
+            else list(pa_pq_dataset.partitioning.schema.names)
+        )
+        # partitioning_dictionaries is an Arrow array containing the
+        # partition values
+        if self.partition_names:
+            self.partitioning_dictionaries = pa_pq_dataset.partitioning.dictionaries
+        else:
+            self.partitioning_dictionaries = {}
+        # Arrow's ParquetDatasetV2 includes partition columns in the dataset
+        # schema, but our code treats partition columns separately, so we remove
+        # them from the schema. Also, when we do schema validation of the files
+        # in the dataset, the fragment's schema won't contain partition columns,
+        # so we need to remove them from the dataset schema for comparison
+        for n in self.partition_names:
+            self.schema = self.schema.remove(self.schema.get_field_index(n))
+        # IMPORTANT: only include partition columns in filters passed to
+        # pq.ParquetDataset(), otherwise `get_fragments` could look inside the
+        # parquet files
+        self.pieces = [
+            ParquetPiece(frag, pa_pq_dataset.partitioning, self.partition_names)
+            for frag in pa_pq_dataset._dataset.get_fragments(
+                filter=pa_pq_dataset._filter_expression
+            )
+        ]
+
+    def set_fs(self, fs):
+        """Set filesystem (to read fragments)"""
+        self.filesystem = fs
+        for p in self.pieces:
+            p.filesystem = fs
+
+
+class ParquetPiece(object):
+    """Parquet dataset piece (file) information and Arrow objects to query
+    metadata"""
+
+    def __init__(self, frag, partitioning, partition_names):
+        # We don't store the frag initially because we broadcast the dataset from rank 0,
+        # and PyArrow has issues (un)pickling the frag, because it opens the file to access
+        # metadata when pickling and/or unpickling. This can cause a massive slowdown
+        # because a single process will try opening all the files in the dataset. Arrow 8
+        # solved the issue when pickling, but I still see it when unpickling, reason
+        # unknown (needs investigation). To check, simply pickle and unpickle the
+        # bodo.io.parquet_io.ParquetDataset object on rank 0
+        self._frag = None
+        # needed to open the fragment (see frag property below)
+        self.format = frag.format
+        self.path = frag.path
+        # number of rows in this piece after applying filters. This
+        # is computed at runtime in `get_parquet_dataset`
+        self._bodo_num_rows = 0
+        self.partition_keys = []
+        if partitioning is not None:
+            # XXX these are not ordered by partitions or in inverse order for some reason
+            self.partition_keys = ds._get_partition_keys(frag.partition_expression)
+            self.partition_keys = [
+                (
+                    part_name,
+                    partitioning.dictionaries[i]
+                    .index(self.partition_keys[part_name])
+                    .as_py(),
+                )
+                for i, part_name in enumerate(partition_names)
+            ]
+
+    @property
+    def frag(self):
+        """returns the Arrow ParquetFileFragment associated with this piece"""
+        if self._frag is None:
+            self._frag = self.format.make_fragment(
+                self.path,
+                self.filesystem,
+            )
+            del self.format
+        return self._frag
+
+    @property
+    def metadata(self):
+        """returns the Arrow metadata of this piece"""
+        return self.frag.metadata
+
+    @property
+    def num_row_groups(self):
+        """returns the number of row groups in this piece"""
+        return self.frag.num_row_groups
+
+
 def get_parquet_dataset(
     fpath,
     get_row_counts=True,
@@ -960,6 +1077,7 @@ def get_parquet_dataset(
     is_parallel=False,  # only used with get_row_counts=True
     tot_rows_to_read=None,
     typing_pa_schema=None,
+    partitioning="hive",
 ):
     """get ParquetDataset object for 'fpath' and set the number of total rows as an
     attribute. Also, sets the number of rows per file as an attribute of
@@ -1061,9 +1179,9 @@ def get_parquet_dataset(
         elif protocol in {"gcs", "gs"}:
             # TODO pass storage_options to GCSFileSystem
             google_fs = gcsfs.GCSFileSystem(token=None)
-            fs.append(google_fs)
+            fs.append(PyFileSystem(FSSpecHandler(google_fs)))
         elif protocol == "http":
-            fs.append(fsspec.filesystem("http"))
+            fs.append(PyFileSystem(FSSpecHandler(fsspec.filesystem("http"))))
         elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
             fs.append(
                 get_hdfs_fs(fpath)
@@ -1071,18 +1189,8 @@ def get_parquet_dataset(
                 else get_hdfs_fs(fpath[0])
             )
         else:
-            fs.append(None)
+            fs.append(pyarrow.fs.LocalFileSystem())
         return fs[0]
-
-    def get_legacy_fs():
-        """return filesystem with legacy interface that ParquetDataset with use_legacy_dataset=True can understand"""
-        if protocol in {"s3", "hdfs", "abfs", "abfss"}:
-            from fsspec.implementations.arrow import ArrowFSWrapper
-
-            # fsspec wrapper makes it legacy API compatible
-            return ArrowFSWrapper(getfs())
-        else:
-            return getfs()
 
     def glob(protocol, fs, path):
         """Return a possibly-empty list of path names that match glob pattern
@@ -1096,20 +1204,7 @@ def get_parquet_dataset(
 
             fs = ArrowFSWrapper(fs)
         try:
-            if protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
-                # HDFS filesystem is initialized with host:port info. Once
-                # initialized, the filesystem needs the <protocol>://<host><port>
-                # prefix removed to query and access files
-                prefix = f"{protocol}://{parsed_url.netloc}"
-                path = path[len(prefix) :]
             files = fs.glob(path)
-            if protocol == "s3":
-                # we need the s3:// prefix for later code to work correctly
-                files = ["s3://" + f for f in files if not f.startswith("s3://")]
-            elif protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
-                # We add the prefix again because later code still expects it
-                # TODO: we can maybe rewrite the code to avoid this
-                files = [prefix + f for f in files]
         except:  # pragma: no cover
             raise BodoError(f"glob pattern expansion not supported for {protocol}")
         if len(files) == 0:
@@ -1121,12 +1216,11 @@ def get_parquet_dataset(
         # Getting row counts and schema validation is going to be
         # distributed across ranks, so every rank will need a filesystem
         # object to query the metadata of their assigned pieces.
-        # There are issues with broadcasting the s3 filesystem object
-        # as part of the ParquetDataset, so instead we initialize
-        # the filesystem before the broadcast. The issues seem related
-        # to pickling the filesystem. For example, for some reason
-        # unpickling seems like it can cause incorrect credential handling
-        # state in Arrow or AWS client.
+        # We have seen issues in the past with broadcasting some filesystem
+        # objects (e.g. s3) and even if they don't exist in Arrow >= 8
+        # broadcasting the filesystem adds extra time, so instead we initialize
+        # the filesystem before the broadcast. That way all ranks do it in parallel
+        # at the same time.
         _ = getfs(parallel=True)
         validate_schema = bodo.parquet_validate_schema
 
@@ -1145,52 +1239,55 @@ def get_parquet_dataset(
             pa_default_io_thread_count = pa.io_thread_count()
             pa.set_io_thread_count(nthreads)
 
-            if isinstance(fpath, list):
+            prefix = ""
+            if protocol == "s3":
+                prefix = "s3://"
+            elif protocol in {"hdfs", "abfs", "abfss"}:
+                # HDFS filesystem is initialized with host:port info. Once
+                # initialized, the filesystem needs the <protocol>://<host><port>
+                # prefix removed to query and access files
+                prefix = f"{protocol}://{parsed_url.netloc}"
+            if prefix:
+                if isinstance(fpath, list):
+                    fpath_noprefix = [f[len(prefix) :] for f in fpath]
+                else:
+                    fpath_noprefix = fpath[len(prefix) :]
+            else:
+                fpath_noprefix = fpath
+
+            if isinstance(fpath_noprefix, list):
                 # Expand any glob strings in the list in order to generate a
                 # single list of fully realized paths to parquet files.
                 # For example: ["A/a.pq", "B/*.pq"] might expand to
                 # ["A/a.pq", "B/part-0.pq", "B/part-1.pq"]
                 new_fpath = []
-                for p in fpath:
+                for p in fpath_noprefix:
                     if has_magic(p):
                         new_fpath += glob(protocol, getfs(), p)
                     else:
                         new_fpath.append(p)
-                fpath = new_fpath
-            elif has_magic(fpath):
-                fpath = glob(protocol, getfs(), fpath)
-            if protocol == "s3":
-                # If there are issues accessing the s3 path (like wrong credentials)
-                # fsspec will suppress the error and ParquetDataset() will ultimately
-                # raise an exception claiming invalid path, which is not accurate.
-                # To get the actual error, we directly query path info before calling
-                # ParquetDataset().
-                # NOTE: the result of fs.info(path) is cached the first time,
-                # so subsequent calls (done inside ParquetDataset()) will not
-                # have additional overhead
-                if isinstance(fpath, list):
-                    get_legacy_fs().info(fpath[0])
-                else:
-                    get_legacy_fs().info(fpath)
-            if protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
-                # HDFS filesystem is initialized with host:port info. Once
-                # initialized, the filesystem needs the <protocol>://<host><port>
-                # prefix removed to query and access files
-                prefix = f"{protocol}://{parsed_url.netloc}"
-                if isinstance(fpath, list):
-                    fpath_arg = [f[len(prefix) :] for f in fpath]
-                else:
-                    fpath_arg = fpath[len(prefix) :]
-            else:
-                fpath_arg = fpath
+                fpath_noprefix = new_fpath
+            elif has_magic(fpath_noprefix):
+                fpath_noprefix = glob(protocol, getfs(), fpath_noprefix)
+
             dataset = pq.ParquetDataset(
-                fpath_arg,
-                filesystem=get_legacy_fs(),  # need fs that works with use_legacy_dataset=True
-                filters=None,
-                use_legacy_dataset=True,  # To ensure that ParquetDataset and not ParquetDatasetV2 is used
-                validate_schema=False,  # we do validation below if needed
-                metadata_nthreads=nthreads,
+                fpath_noprefix,
+                filesystem=getfs(),
+                filters=None,  # we pass filters manually below because of Arrow bug
+                use_legacy_dataset=False,  # Use ParquetDatasetV2
+                partitioning=partitioning,
             )
+            if dnf_filters is not None:
+                # XXX This is actually done inside _ParquetDatasetV2 constructor,
+                # but a bug in Arrow prevents passing compute expression filters.
+                # We can remove this and pass the filters to ParquetDataset
+                # constructor once the bug is fixed.
+                dataset._filters = dnf_filters
+                dataset._filter_expression = pq._filters_to_expression(dnf_filters)
+
+            num_files_before_filter = len(dataset.files)
+            # If there are dnf_filters files are filtered in ParquetDataset constructor
+            dataset = ParquetDataset(dataset, prefix)
             # restore pyarrow default IO thread count
             pa.set_io_thread_count(pa_default_io_thread_count)
 
@@ -1206,39 +1303,30 @@ def get_parquet_dataset(
             # Therefore, it's better to start with the expected schema,
             # and then raise the errors correctly after validation.
             if typing_pa_schema:
-                dataset_schema = typing_pa_schema
-            else:
-                dataset_schema = bodo.io.pa_parquet.get_dataset_schema(dataset)
-            if dnf_filters:
-                # Apply filters after getting the schema, because they might
-                # remove all the pieces from the dataset which would make
-                # get_dataset_schema() fail.
-                # Use DNF, ParquetDataset does not support Expression filters
-                if get_row_counts:
+                dataset.schema = typing_pa_schema
+
+            if get_row_counts:
+                if dnf_filters is not None:
                     ev_pq_ds.add_attribute(
-                        "num_pieces_before_filter", len(dataset.pieces)
+                        "num_pieces_before_filter", num_files_before_filter
                     )
-                t0 = time.time()
-                dataset._filter(dnf_filters)
-                if get_row_counts:
-                    ev_pq_ds.add_attribute("dnf_filter_time", time.time() - t0)
                     ev_pq_ds.add_attribute(
                         "num_pieces_after_filter", len(dataset.pieces)
                     )
-            if get_row_counts:
                 ev_pq_ds.finalize()
-
-            # We don't want to send the filesystem because of the issues
-            # mentioned above, so we set it to None. Note that this doesn't
-            # seem to be enough to prevent sending it
-            dataset._metadata.fs = None
         except Exception as e:
             # See note in s3_list_dir_fnames
             # In some cases, OSError/FileNotFoundError can propagate back to numba and comes back as InternalError.
             # where numba errors are hidden from the user.
             # See [BE-1188] for an example
             # Raising a BodoError lets message comes back and seen by the user.
-            if isinstance(fpath, list) and isinstance(e, (OSError, FileNotFoundError)):
+            if isinstance(e, IsADirectoryError):
+                # We supress Arrow's error message since it doesn't apply to Bodo
+                # (the bit about doing a union of datasets)
+                e = BodoError(list_of_files_error_msg)
+            elif isinstance(fpath, list) and isinstance(
+                e, (OSError, FileNotFoundError)
+            ):
                 e = BodoError(str(e) + list_of_files_error_msg)
             else:
                 e = BodoError(f"error from pyarrow: {type(e).__name__}: {str(e)}\n")
@@ -1248,7 +1336,6 @@ def get_parquet_dataset(
         if get_row_counts:
             ev_bcast = tracing.Event("bcast dataset")
         comm.bcast(dataset)
-        comm.bcast(dataset_schema)
     else:
         if get_row_counts:
             ev_bcast = tracing.Event("bcast dataset")
@@ -1256,29 +1343,17 @@ def get_parquet_dataset(
         if isinstance(dataset, Exception):  # pragma: no cover
             error = dataset
             raise error
-        dataset_schema = comm.bcast(None)
 
-    dataset_schema_names = set(dataset_schema.names)
-
-    # Reinitialize the file system. The filesystem is needed at compile time
-    # to get metadata from a sample of pieces in determine_str_as_dict_columns
-    # and at runtime is needed to get metadata for rowcounts and row counts
-    # for filter pushdown.
-    if get_row_counts:
-        filesystem = getfs()
-    else:
-        # Compile time needs the legacy filesystem.
-        filesystem = get_legacy_fs()
-    dataset._metadata.fs = filesystem
+    # As mentioned above, we don't want to broadcast the filesystem because it
+    # adds time (so initially we didn't include it in the dataset). We add
+    # it to the dataset now that it's been broadcasted
+    dataset.set_fs(getfs())
 
     if get_row_counts:
         ev_bcast.finalize()
 
-    dataset._bodo_total_rows = 0
     if get_row_counts and tot_rows_to_read == 0:
         get_row_counts = validate_schema = False
-        for p in dataset.pieces:
-            p._bodo_num_rows = 0
     if get_row_counts or validate_schema:
         # getting row counts and validating schema requires reading
         # the file metadata from the parquet files and is very expensive
@@ -1302,25 +1377,8 @@ def get_parquet_dataset(
             pieces = random.sample(dataset.pieces, k=len(dataset.pieces))
         else:
             pieces = dataset.pieces
-        for p in pieces:
-            p._bodo_num_rows = 0
 
         fpaths = [p.path for p in pieces[start:end]]
-        if protocol == "s3":
-            # We can call the Arrow dataset API passing a list of s3 file paths in two ways:
-            # - Passing a s3 URL, removing the base path s3://my-bucket from the file paths, and calling ds.dataset
-            #   like this: ds.dataset(fpaths, filesystem="s3://my-bucket/", ...)
-            # - Passing a SubTreeFileSystem, with s3://my-bucket prefix removed from file paths.
-            #   We use this option to be able to pass proxy_options and anonymous options to Arrow.
-            #   The endpoint_override option could be passed via the s3 URL as a query option if we wanted
-            bucket_name = parsed_url.netloc
-            prefix = "s3://" + bucket_name + "/"
-            fpaths = [f[len(prefix) :] for f in fpaths]  # remove prefix from file paths
-            filesystem = get_s3_subtree_fs(
-                bucket_name, region=getfs().region, storage_options=storage_options
-            )
-        else:
-            filesystem = getfs()
         # Presumably the work is partitioned more or less equally among ranks,
         # and we are mostly (or just) reading metadata, so we assign four IO
         # threads to every rank
@@ -1336,9 +1394,9 @@ def get_parquet_dataset(
         try:
             dataset_ = ds.dataset(
                 fpaths,
-                filesystem=filesystem,
+                filesystem=dataset.filesystem,
                 partitioning=ds.partitioning(flavor="hive")
-                if dataset.partitions
+                if dataset.partition_names
                 else None,
             )
             for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
@@ -1354,6 +1412,7 @@ def get_parquet_dataset(
                     # Check the names are the same because pa.unify_schemas
                     # will unify a schema where a column is in 1 file but not
                     # another.
+                    dataset_schema_names = set(dataset.schema.names)
                     if dataset_schema_names != fileset_schema_names:
                         added_columns = fileset_schema_names - dataset_schema_names
                         missing_columns = dataset_schema_names - fileset_schema_names
@@ -1364,7 +1423,7 @@ def get_parquet_dataset(
                             msg += f"File missing column(s) {missing_columns} found in other files in the dataset.\n"
                         raise BodoError(msg)
                     try:
-                        dataset_schema = pa.unify_schemas([dataset_schema, file_schema])
+                        dataset.schema = pa.unify_schemas([dataset.schema, file_schema])
                     except Exception as e:
                         msg = f"Schema in {piece} was different.\n" + str(e)
                         raise BodoError(msg)
@@ -1461,32 +1520,6 @@ https://docs.bodo.ai/latest/file_io/#parquet-section.
                 ev_row_counts.add_attribute("g_row_counts_sum", data.sum())
                 ev_row_counts.finalize()
 
-    # When we pass in a path instead of a filename or list of files to
-    # pq.ParquetDataset, the path of the pieces of the resulting dataset
-    # object may not contain the prefix such as hdfs://localhost:9000,
-    # so we need to store the information in some way since the
-    # code that uses this dataset object needs to know this information.
-    # Therefore, in case this prefix is not present, we add it
-    # to the dataset object as a new attribute (_prefix).
-
-    # Only hdfs seems to be affected based on:
-    # https://github.com/apache/arrow/blob/ab307365198d5724a0b3331a05704d0fe4bcd710/python/pyarrow/parquet.py#L50
-    # which is called in pq.ParquetDataset.__init__
-    # https://github.com/apache/arrow/blob/ab307365198d5724a0b3331a05704d0fe4bcd710/python/pyarrow/parquet.py#L1235
-    dataset._prefix = ""
-    if protocol in {"hdfs", "abfs", "abfss"}:  # pragma: no cover
-        # Compute the prefix that is expected to be there in the
-        # path of the pieces
-        prefix = f"{protocol}://{parsed_url.netloc}"
-        # As a heuristic, we only check if the first piece is missing
-        # this prefix
-        if len(dataset.pieces) > 0:
-            piece = dataset.pieces[0]
-            # If it is missing, then assign it to _prefix attribute of
-            # the dataset object, else set _prefix to an empty string
-            if not piece.path.startswith(prefix):
-                dataset._prefix = prefix
-
     if read_categories:
         _add_categories_to_pq_dataset(dataset)
 
@@ -1499,8 +1532,8 @@ https://docs.bodo.ai/latest/file_io/#parquet-section.
         error = None
 
         try:
-            dataset_schema = comm.allreduce(
-                dataset_schema, bodo.io.helpers.pa_schema_unify_mpi_op
+            dataset.schema = comm.allreduce(
+                dataset.schema, bodo.io.helpers.pa_schema_unify_mpi_op
             )
         except Exception as e:
             error = e
@@ -1515,7 +1548,6 @@ https://docs.bodo.ai/latest/file_io/#parquet-section.
                     msg = f"Schema in some files were different.\n" + str(error)
                     raise BodoError(msg)
 
-    dataset._bodo_arrow_schema = dataset_schema
     return dataset
 
 
@@ -1525,9 +1557,7 @@ def get_scanner_batches(
     selected_fields,
     avg_num_pieces,
     is_parallel,
-    storage_options,
-    region,
-    prefix,  # examples: "hdfs://localhost:9000", "abfs://demo@bododemo.dfs.core.windows.net"
+    filesystem,
     str_as_dict_cols,
     start_offset,  # starting row offset in the pieces this process is going to read
     rows_to_read,  # total number of rows this process is going to read
@@ -1556,30 +1586,6 @@ def get_scanner_batches(
     else:
         pa.set_io_thread_count(default_threads)
         pa.set_cpu_count(default_threads)
-    if fpaths[0].startswith("s3://"):
-        # see comment in get_parquet_dataset about calling ds.dataset with s3
-        bucket_name = urlparse(fpaths[0]).netloc
-        prefix = "s3://" + bucket_name + "/"
-        fpaths = [f[len(prefix) :] for f in fpaths]  # remove prefix from file paths
-        if region == "":
-            # In case of iceberg, the region won't be passed, so we need to
-            # get it here instead.
-            # `parallel=False` since some ranks may get here, e.g. when
-            # they don't need to read any rows.
-            region = get_s3_bucket_region_njit(fpaths[0], parallel=False)
-        filesystem = get_s3_subtree_fs(
-            bucket_name, region=region, storage_options=storage_options
-        )
-    elif prefix and prefix.startswith(("hdfs", "abfs", "abfss")):  # pragma: no cover
-        # unlike s3, hdfs file paths already have their prefix removed
-        filesystem = get_hdfs_fs(prefix + fpaths[0])
-    elif fpaths[0].startswith(("gcs", "gs")):
-        # TODO pass storage_options to GCSFileSystem
-        import gcsfs
-
-        filesystem = gcsfs.GCSFileSystem(token=None)
-    else:
-        filesystem = None
     # We only support hive partitioning right now and will need to change this
     # if we also support directory partitioning
     pq_format = ds.ParquetFileFormat(dictionary_columns=str_as_dict_cols)
@@ -1667,13 +1673,13 @@ def get_scanner_batches(
         # file, not the first row group, so we need to communicate this back to C++
         start_offset = start_row_first_rg
 
-    # TODO: use threads only for s3?
     reader = dataset.scanner(
         columns=selected_names, filter=expr_filters, use_threads=True
     ).to_reader()
     return dataset, reader, start_offset
 
 
+# XXX Move this to ParquetDataset class?
 def _add_categories_to_pq_dataset(pq_dataset):
     """adds categorical values for each categorical column to the Parquet dataset
     as '_category_info' attribute
@@ -1687,11 +1693,12 @@ def _add_categories_to_pq_dataset(pq_dataset):
             "No pieces found in Parquet dataset. Cannot get read categorical values"
         )
 
-    pa_schema = pq_dataset.schema.to_arrow_schema()
+    pa_schema = pq_dataset.schema
     cat_col_names = [
         c
         for c in pa_schema.names
         if isinstance(pa_schema.field(c).type, pa.DictionaryType)
+        and c not in pq_dataset.partition_names
     ]
 
     # avoid more work if no categorical columns
@@ -1703,14 +1710,13 @@ def _add_categories_to_pq_dataset(pq_dataset):
     if bodo.get_rank() == 0:
         try:
             # read categorical values from first row group of first file
-            pf = pq_dataset.pieces[0].open()
-            rg = pf.read_row_group(0, cat_col_names)
+            table_sample = pq_dataset.pieces[0].frag.head(100, columns=cat_col_names)
             # NOTE: assuming DictionaryArray has only one chunk
             category_info = {
-                c: tuple(rg.column(c).chunk(0).dictionary.to_pylist())
+                c: tuple(table_sample.column(c).chunk(0).dictionary.to_pylist())
                 for c in cat_col_names
             }
-            del pf, rg  # release I/O resources ASAP
+            del table_sample  # release I/O resources ASAP
         except Exception as e:
             comm.bcast(e)
             raise e
@@ -1797,8 +1803,8 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns):
     if bodo.get_rank() < len(pieces):
         piece = pieces[bodo.get_rank()]
         try:
-            metadata = piece.get_metadata()
-            for i in range(metadata.num_row_groups):
+            metadata = piece.metadata
+            for i in range(piece.num_row_groups):
                 for j, col_name in enumerate(str_columns):
                     idx = pa_schema.get_field_index(col_name)
                     total_uncompressed_sizes[j] += (
@@ -1846,20 +1852,9 @@ def parquet_file_schema(
         storage_options=storage_options,
         read_categories=True,
     )
-    if hasattr(pq_dataset, "_bodo_arrow_schema"):
-        pa_schema = pq_dataset._bodo_arrow_schema
-    else:
-        pa_schema = pq_dataset.schema.to_arrow_schema()
 
-    # not using 'partition_names' since the order may not match 'levels'
-    partition_names = (
-        []
-        if pq_dataset.partitions is None
-        else [
-            pq_dataset.partitions.levels[i].name
-            for i in range(len(pq_dataset.partitions.partition_names))
-        ]
-    )
+    partition_names = pq_dataset.partition_names
+    pa_schema = pq_dataset.schema
     num_pieces = len(pq_dataset.pieces)
 
     # Get list of string columns
@@ -1902,6 +1897,8 @@ def parquet_file_schema(
     is_supported_list = []
     arrow_types = []
     for i, c in enumerate(col_names):
+        if c in partition_names:
+            continue
         field = pa_schema.field(c)
         dtype, supported = _get_numba_typ_from_pa_typ(
             field,
@@ -1920,7 +1917,7 @@ def parquet_file_schema(
     if partition_names:
         col_names += partition_names
         col_types_total += [
-            _get_partition_cat_dtype(pq_dataset.partitions.levels[i])
+            _get_partition_cat_dtype(pq_dataset.partitioning_dictionaries[i])
             for i in range(len(partition_names))
         ]
         # All partition column types are supported by default.
@@ -1985,13 +1982,17 @@ def parquet_file_schema(
     )
 
 
-def _get_partition_cat_dtype(part_set):
+def _get_partition_cat_dtype(dictionary):
     """get categorical dtype for Parquet partition set"""
     # using 'dictionary' instead of 'keys' attribute since 'keys' may not have the
     # right data type (e.g. string instead of int64)
-    S = part_set.dictionary.to_pandas()
+    assert dictionary is not None
+    S = dictionary.to_pandas()
     elem_type = bodo.typeof(S).dtype
-    cat_dtype = PDCategoricalDtype(tuple(S), elem_type, False)
+    if isinstance(elem_type, (types.Integer)):
+        cat_dtype = PDCategoricalDtype(tuple(S), elem_type, False, int_type=elem_type)
+    else:
+        cat_dtype = PDCategoricalDtype(tuple(S), elem_type, False)
     return CategoricalArrayType(cat_dtype)
 
 
@@ -2000,7 +2001,6 @@ _pq_read = types.ExternalFunction(
     table_type(
         read_parquet_fpath_type,
         types.boolean,
-        types.voidptr,
         parquet_predicate_type,  # dnf filters
         parquet_predicate_type,  # expr filters
         storage_options_dict_type,
