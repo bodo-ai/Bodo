@@ -3153,20 +3153,12 @@ def overload_check_for_cpp_errors():
 
 
 @numba.njit
-def finalize_mpi():  # pragma: no cover
+def call_finalize():  # pragma: no cover
     finalize()
-    _check_for_cpp_errors()
-
-
-@numba.njit
-def finalize_fs():  # pragma: no cover
-    """
-    Disconnects and removes filesystem connections
-    """
-    disconnect_hdfs()
     finalize_s3()
     finalize_fsspec()
     _check_for_cpp_errors()
+    disconnect_hdfs()
 
 
 def flush_stdout():
@@ -3176,10 +3168,9 @@ def flush_stdout():
         sys.stdout.flush()
 
 
-atexit.register(finalize_mpi)
+atexit.register(call_finalize)
 # flush output before finalize
 atexit.register(flush_stdout)
-atexit.register(finalize_fs)
 
 
 def bcast_comm(data, comm_ranks, nranks, root=MPI_ROOT):  # pragma: no cover
