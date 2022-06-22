@@ -3900,6 +3900,8 @@ def overload_dataframe_merge_asof(
     allow_exact_matches=True,
     direction="backward",
 ):
+    # [BE-3083] Disabling because asof doesn't support table format yet.
+    raise BodoError("pandas.merge_asof() not support yet")
 
     validate_merge_asof_spec(
         left,

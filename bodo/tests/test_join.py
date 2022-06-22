@@ -3178,6 +3178,7 @@ def test_merge_nested_arrays_non_keys(nested_arrays_value):
 # ------------------------------ merge_asof() ------------------------------ #
 
 
+@pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_seq(memory_leak_check):
     """
     Test merge_asof(): merge_asof sequencially on key column of type DatetimeIndex
@@ -3204,7 +3205,7 @@ def test_merge_asof_seq(memory_leak_check):
     pd.testing.assert_frame_equal(bodo_func(df1, df2), test_impl(df1, df2))
 
 
-@pytest.mark.smoke
+@pytest.mark.skip("[BE-3083] asof needs to be supported with table format")
 def test_merge_asof_parallel(datapath, memory_leak_check):
     """
     Test merge_asof(): merge_asof in parallel on key column of type DatetimeIndex
