@@ -122,6 +122,7 @@ class IcebergParquetDataset(object):
         self.pieces = []
         self._bodo_total_rows = 0
         self._prefix = ""
+        self.filesystem = None
 
         # If pq_dataset is provided, get these properties
         # from it
@@ -129,6 +130,8 @@ class IcebergParquetDataset(object):
             self.pieces = pq_dataset.pieces
             self._bodo_total_rows = pq_dataset._bodo_total_rows
             self._prefix = pq_dataset._prefix
+            # this is the filesystem that will be used to read data
+            self.filesystem = pq_dataset.filesystem
 
 
 def get_iceberg_pq_dataset(
@@ -218,6 +221,10 @@ def get_iceberg_pq_dataset(
                 is_parallel=is_parallel,
                 # Provide baseline schema to detect schema evolution
                 typing_pa_schema=typing_pa_table_schema,
+                # Iceberg has its own partitioning info and stores
+                # partition columns in the parquet files, so we
+                # tell Arrow not to detect partitioning
+                partitioning=None,
             )
         except BodoError as e:
 

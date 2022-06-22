@@ -143,7 +143,7 @@ def test_read_parquet_invalid_path():
         df = pd.read_parquet("I_dont_exist.pq")
         return df
 
-    with pytest.raises(BodoError, match="Passed non-file path"):
+    with pytest.raises(BodoError, match="error from pyarrow: FileNotFoundError"):
         bodo.jit(locals={"df": {"A": bodo.int64[:]}})(test_impl)()
 
 
@@ -163,14 +163,14 @@ def test_read_parquet_invalid_list_of_files(datapath):
 
     with pytest.raises(
         BodoError,
-        match="only files or glob strings \(no directories\) are supported when passing a list",
+        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
     ):
         fnames = [datapath("decimal1.pq"), datapath("dask_data.parquet")]
         bodo.jit(test_impl)(fnames)
 
     with pytest.raises(
         BodoError,
-        match="only files or glob strings \(no directories\) are supported when passing a list",
+        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
     ):
         fnames = []
         fnames.append(
@@ -236,7 +236,7 @@ def test_io_error_nested_calls(memory_leak_check):
         return test_pq(filename)
 
     filename = "I_dont_exist.pq"
-    with pytest.raises(BodoError, match="Passed non-file path"):
+    with pytest.raises(BodoError, match="error from pyarrow: FileNotFoundError"):
         bodo.jit(test_impl_pq)(filename)
 
     # Reset developer mode
@@ -283,7 +283,7 @@ def test_read_parquet_invalid_path_const(memory_leak_check):
     def test_impl():
         return pd.read_parquet("I_dont_exist.pq")
 
-    with pytest.raises(BodoError, match="Passed non-file path"):
+    with pytest.raises(BodoError, match="error from pyarrow: FileNotFoundError"):
         bodo.jit(test_impl)()
 
 
