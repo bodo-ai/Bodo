@@ -550,14 +550,22 @@ def test_kfold(X, y, groups, n_splits, shuffle, memory_leak_check):
 
         def test_split(X, y, groups, n_splits, random_state):
             m = KFold(n_splits=n_splits, shuffle=True, random_state=random_state)
-            out = m.split(X, y, groups)
+
+            # Make sure we can iterate through the output of split() within JIT
+            out = []
+            for train_idx, test_idx in m.split(X, y, groups):
+                out.append((train_idx, test_idx))
             return out
 
     else:
 
         def test_split(X, y, groups, n_splits, random_state):
             m = KFold(n_splits=n_splits, shuffle=False)
-            out = m.split(X, y, groups)
+
+            # Make sure we can iterate through the output of split() within JIT
+            out = []
+            for train_idx, test_idx in m.split(X, y, groups):
+                out.append((train_idx, test_idx))
             return out
 
     dist_impl = bodo.jit(distributed=["X", "y", "groups"])(test_split)

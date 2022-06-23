@@ -4462,11 +4462,11 @@ BodoModelSelectionLeavePOutType = install_py_obj_class(
 
 # We don't technically need to get class from the method,
 # but it's useful to avoid IDE not found errors.
-BodoModelSelectionLeavePOutSplitType = install_py_obj_class(
-    types_name="model_selection_leave_p_out_split_type",
+BodoModelSelectionLeavePOutGeneratorType = install_py_obj_class(
+    types_name="model_selection_leave_p_out_generator_type",
     module=this_module,
-    class_name="BodoModelSelectionLeavePOutSplitType",
-    model_name="BodoModelSelectionLeavePOutSplitModel",
+    class_name="BodoModelSelectionLeavePOutGeneratorType",
+    model_name="BodoModelSelectionLeavePOutGeneratorModel",
 )
 
 
@@ -4494,7 +4494,7 @@ def sklearn_model_selection_leave_p_out_overload(
     return _sklearn_model_selection_leave_p_out_impl
 
 
-def sklearn_model_selection_leave_p_out_split_dist_helper(m, X):
+def sklearn_model_selection_leave_p_out_generator_dist_helper(m, X):
     """
     Distributed calculation of train/test split indices for LeavePOut.
     We use sklearn on all the indices, then filter out the indices assigned
@@ -4539,7 +4539,7 @@ def sklearn_model_selection_leave_p_out_split_dist_helper(m, X):
 
 
 @overload_method(BodoModelSelectionLeavePOutType, "split", no_unliteral=True)
-def overload_model_selection_leave_p_out_split(
+def overload_model_selection_leave_p_out_generator(
     m,
     X,
     y=None,
@@ -4554,25 +4554,25 @@ def overload_model_selection_leave_p_out_split(
 
     if is_overload_true(_is_data_distributed):
         # If distributed, then use native implementation
-        def _model_selection_leave_p_out_split_impl(
+        def _model_selection_leave_p_out_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
 
-            with numba.objmode(gen="model_selection_leave_p_out_split_type"):
-                gen = sklearn_model_selection_leave_p_out_split_dist_helper(m, X)
+            with numba.objmode(gen="model_selection_leave_p_out_generator_type"):
+                gen = sklearn_model_selection_leave_p_out_generator_dist_helper(m, X)
             return gen
 
     else:
         # If replicated, then just call sklearn
-        def _model_selection_leave_p_out_split_impl(
+        def _model_selection_leave_p_out_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
 
-            with numba.objmode(gen="model_selection_leave_p_out_split_type"):
+            with numba.objmode(gen="model_selection_leave_p_out_generator_type"):
                 gen = m.split(X, y=y, groups=groups)
             return gen
 
-    return _model_selection_leave_p_out_split_impl
+    return _model_selection_leave_p_out_generator_impl
 
 
 @overload_method(BodoModelSelectionLeavePOutType, "get_n_splits", no_unliteral=True)
@@ -4640,16 +4640,6 @@ BodoModelSelectionKFoldType = install_py_obj_class(
 )
 
 
-# We don't technically need to get class from the method,
-# but it's useful to avoid IDE not found errors.
-BodoModelSelectionKFoldSplitType = install_py_obj_class(
-    types_name="model_selection_kfold_split_type",
-    module=this_module,
-    class_name="BodoModelSelectionKFoldSplitType",
-    model_name="BodoModelSelectionKFoldSplitModel",
-)
-
-
 @overload(sklearn.model_selection.KFold, no_unliteral=True)
 def sklearn_model_selection_kfold_overload(
     n_splits=5,
@@ -4680,7 +4670,7 @@ def sklearn_model_selection_kfold_overload(
     return _sklearn_model_selection_kfold_impl
 
 
-def sklearn_model_selection_kfold_split_dist_helper(m, X, y=None, groups=None):
+def sklearn_model_selection_kfold_generator_dist_helper(m, X, y=None, groups=None):
     """
     Distributed calculation of train/test split indices for KFold.
     We use sklearn on the indices assigned to each individual rank,
@@ -4749,22 +4739,19 @@ def sklearn_model_selection_kfold_split_dist_helper(m, X, y=None, groups=None):
     local_extra_locs = global_extra_locs[my_rank::nranks]
     local_fold_sizes[local_extra_locs] += 1
 
-    def _kfold_split_dist_generator(X, y=None, groups=None):
-        start = 0
-        for fold_size in local_fold_sizes:
-            stop = start + fold_size
-            test_index = local_indices[start:stop]
-            train_index = np.concatenate(
-                (local_indices[:start], local_indices[stop:]), axis=0
-            )
-            yield train_index, test_index
-            start = stop
-
-    return _kfold_split_dist_generator(X, y=y, groups=groups)
+    start = 0
+    for fold_size in local_fold_sizes:
+        stop = start + fold_size
+        test_index = local_indices[start:stop]
+        train_index = np.concatenate(
+            (local_indices[:start], local_indices[stop:]), axis=0
+        )
+        yield train_index, test_index
+        start = stop
 
 
 @overload_method(BodoModelSelectionKFoldType, "split", no_unliteral=True)
-def overload_model_selection_kfold_split(
+def overload_model_selection_kfold_generator(
     m,
     X,
     y=None,
@@ -4772,21 +4759,34 @@ def overload_model_selection_kfold_split(
     _is_data_distributed=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """
-    Provide implementations for the split function, which is a generator.
+    Provide implementations for the split function.
     In case input is replicated, we simply call sklearn,
     else we use our native implementation.
+
+    Although the split function is a generator in sklearn, returning it as an
+    opaque type to the user (as we do in LeavePOut) means we cannot iterate
+    through folds in jitted code. As a quick hack to fix this, we return the
+    result as a list of (train_idx, test_idx) tuples across all folds.
+    This has O(nk) memory cost instead of O(n) for the generator case.
+
+    Properly supporting split by returning an actual generator would require
+    lowering the generator to numba and implementing `getiter` and `iternext`.
     """
 
     if is_overload_true(_is_data_distributed):
         # If distributed, then use native implementation
 
-        def _model_selection_kfold_split_impl(
+        def _model_selection_kfold_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
 
-            with numba.objmode(gen="model_selection_kfold_split_type"):
-                gen = sklearn_model_selection_kfold_split_dist_helper(
-                    m, X, y=None, groups=None
+            # Since we do not support iterating through generators directly,
+            # as an unperformant hack, we convert the output to a list
+            with numba.objmode(gen="List(UniTuple(int64[:], 2))"):
+                gen = list(
+                    sklearn_model_selection_kfold_generator_dist_helper(
+                        m, X, y=None, groups=None
+                    )
                 )
 
             return gen
@@ -4794,16 +4794,18 @@ def overload_model_selection_kfold_split(
     else:
         # If replicated, then just call sklearn
 
-        def _model_selection_kfold_split_impl(
+        def _model_selection_kfold_generator_impl(
             m, X, y=None, groups=None, _is_data_distributed=False
         ):  # pragma: no cover
 
-            with numba.objmode(gen="model_selection_kfold_split_type"):
-                gen = m.split(X, y=y, groups=groups)
+            # Since we do not support iterating through generators directly,
+            # as an unperformant hack, we convert the output to a list
+            with numba.objmode(gen="List(UniTuple(int64[:], 2))"):
+                gen = list(m.split(X, y=y, groups=groups))
 
             return gen
 
-    return _model_selection_kfold_split_impl
+    return _model_selection_kfold_generator_impl
 
 
 @overload_method(BodoModelSelectionKFoldType, "get_n_splits", no_unliteral=True)
