@@ -2176,6 +2176,176 @@ def test_two_column_dels(datapath, memory_leak_check):
         _check_column_dels(bodo_func, [columns_to_delete], num_deletes=1)
 
 
+def test_table_loc_column_subset_level1(datapath, memory_leak_check):
+    """
+    Tests selecting a subset of the columns (i.e. [["A", "B", "C"]])
+    using table format via df.loc. This is useful to maintain projections,
+    especially for BodoSQL.
+
+    BodoSQL generated code may select a large subset of columns, even
+    if uncommon in user generated code.
+    """
+    filename = datapath("many_columns.parquet")
+    # Load enough columns to ensure we get table format. We divide
+    # by 2 to check for duplicate support.
+    n_cols = max(1, math.ceil(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD / 2))
+    columns_loaded = [f"Column{i}" for i in range(n_cols)]
+
+    # Note we reverse the columns to check reordering
+    func_text = f"""def impl():
+        df = pd.read_parquet({filename!r})
+        return df.loc[:, {columns_loaded[::-1] * 2}]"""
+
+    local_vars = {}
+    exec(func_text, globals(), local_vars)
+    impl = local_vars["impl"]
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # Check the columns were pruned
+        check_logger_msg(stream, str(columns_loaded))
+        # We should delete all columns at once.
+        _check_column_dels(
+            bodo_func, [list(range(n_cols)) + list(range(n_cols * 2))], num_deletes=2
+        )
+
+
+def test_table_loc_column_subset_level2(datapath, memory_leak_check):
+    """
+    Tests selecting a subset of the columns (i.e. [["A", "B", "C"]])
+    using table format and multiple level of table_format subset via
+    df.loc.
+
+    This is used to ensure used_cols is properly updated at each step
+    """
+    filename = datapath("many_columns.parquet")
+    # Load enough columns to ensure we get table format. We divide
+    # by 2 to check for duplicate support.
+    n_cols_level_1 = max(1, bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD + 4)
+    columns_loaded_level_1 = [f"Column{i}" for i in range(n_cols_level_1)]
+    n_cols_level_2 = max(1, math.ceil(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD / 2))
+    columns_loaded_level_2 = [f"Column{i}" for i in range(n_cols_level_2)]
+
+    # Note we reverse the columns to check reordering
+    func_text = f"""def impl():
+        df = pd.read_parquet({filename!r})
+        df1 = df.loc[:, {columns_loaded_level_1[::-1]}]
+        return df1.loc[:, {columns_loaded_level_2 * 2}]"""
+
+    local_vars = {}
+    exec(func_text, globals(), local_vars)
+    impl = local_vars["impl"]
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # Check the columns were pruned
+        check_logger_msg(stream, str(columns_loaded_level_2))
+        # df deletes columns in the original location, but df1
+        # deletes them at the new remapped location.
+        df_col_nums = list(range(n_cols_level_2))
+        df1_col_nums = list(range(n_cols_level_1 - n_cols_level_2, n_cols_level_1))
+        df2_col_nums = list(range(n_cols_level_2 * 2))
+        # There is 1 del_columns for the original df, 2 for df1 (the subset
+        # and the filter) and 1 for df2 (the subset)
+        del_cols = df_col_nums + df1_col_nums + df1_col_nums + df2_col_nums
+        _check_column_dels(bodo_func, [del_cols], num_deletes=4)
+
+
+def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
+    """
+    Tests selecting a subset of the columns (i.e. [["A", "B", "C"]])
+    using table format via df.iloc. This is useful to maintain projections,
+    especially for BodoSQL.
+
+    BodoSQL generated code may select a large subset of columns, even
+    if uncommon in user generated code.
+    """
+    filename = datapath("many_columns.parquet")
+    # Load enough columns to ensure we get table format. We divide
+    # by 2 to check for duplicate support.
+    n_cols = max(1, math.ceil(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD / 2))
+    columns_loaded = list(range(n_cols))
+    cols_names_loaded = [f"Column{i}" for i in columns_loaded]
+
+    # Note we reverse the columns to check reordering
+    func_text = f"""def impl():
+        df = pd.read_parquet({filename!r})
+        return df.iloc[:, {columns_loaded[::-1] * 2}]"""
+
+    local_vars = {}
+    exec(func_text, globals(), local_vars)
+    impl = local_vars["impl"]
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # Check the columns were pruned
+        check_logger_msg(stream, str(cols_names_loaded))
+        # We should delete all columns at once.
+        _check_column_dels(
+            bodo_func, [list(range(n_cols)) + list(range(n_cols * 2))], num_deletes=2
+        )
+
+
+def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
+    """
+    Tests selecting a subset of the columns (i.e. [["A", "B", "C"]])
+    using table format and multiple level of table_format subset via
+    df.iloc.
+
+    This is used to ensure used_cols is properly updated at each step
+    """
+    filename = datapath("many_columns.parquet")
+    # Load enough columns to ensure we get table format. We divide
+    # by 2 to check for duplicate support.
+    n_cols_level_1 = max(1, bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD + 4)
+    columns_loaded_level_1 = list(range(n_cols_level_1))
+    n_cols_level_2 = max(1, math.ceil(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD / 2))
+    columns_loaded_level_2 = list(
+        range(n_cols_level_1 - n_cols_level_2, n_cols_level_1)
+    )
+    cols_name_loaded_level_2 = [f"Column{i}" for i in range(n_cols_level_2)]
+
+    # Note we reverse the columns to check reordering
+    func_text = f"""def impl():
+        df = pd.read_parquet({filename!r})
+        df1 = df.iloc[:, {columns_loaded_level_1[::-1]}]
+        return df1.iloc[:, {columns_loaded_level_2 * 2}]"""
+
+    local_vars = {}
+    exec(func_text, globals(), local_vars)
+    impl = local_vars["impl"]
+
+    check_func(impl, ())
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # Check the columns were pruned
+        check_logger_msg(stream, str(cols_name_loaded_level_2))
+        # df deletes columns in the original location, but df1
+        # deletes them at the new remapped location.
+        df_col_nums = list(range(n_cols_level_2))
+        df1_col_nums = list(range(n_cols_level_1 - n_cols_level_2, n_cols_level_1))
+        df2_col_nums = list(range(n_cols_level_2 * 2))
+        # There is 1 del_columns for the original df, 2 for df1 (the subset
+        # and the filter) and 1 for df2 (the subset)
+        del_cols = df_col_nums + df1_col_nums + df1_col_nums + df2_col_nums
+        _check_column_dels(bodo_func, [del_cols], num_deletes=4)
+
+
 def test_table_column_subset_level1(datapath, memory_leak_check):
     """
     Tests selecting a subset of the columns (i.e. [["A", "B", "C"]])
