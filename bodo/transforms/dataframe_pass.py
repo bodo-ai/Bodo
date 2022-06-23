@@ -7,6 +7,7 @@ Creates specialized IR nodes for complex operations like Join.
 import operator
 import warnings
 from collections import defaultdict
+from typing import List
 
 import numba
 import numpy as np
@@ -1135,15 +1136,7 @@ class DataFramePass:
         if df_typ.is_table_format:
             # in this case, output dominates the input so we can reuse its internal data
             # see _run_df_set_column()
-            nodes += compile_func_single_block(
-                eval(
-                    "lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)"
-                ),
-                [df_var],
-                None,
-                self,
-            )
-            in_table_var = nodes[-1].target
+            in_table_var = self._get_dataframe_table(df_var, nodes)
             in_arrs = [in_table_var]
             data_args = "T1"
             new_arr_arg = "new_val"
@@ -1254,15 +1247,7 @@ class DataFramePass:
         if in_df_typ.is_table_format:
             # in this case, output dominates the input so we can reuse its internal data
             # see _run_df_set_column()
-            nodes += compile_func_single_block(
-                eval(
-                    "lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)"
-                ),
-                [df_var],
-                None,
-                self,
-            )
-            in_table_var = nodes[-1].target
+            in_table_var = self._get_dataframe_table(df_var, nodes)
             in_arrs = [in_table_var]
             data_args = ["T0"]
             # Note: col_inds is only defined/used in tableformat path
@@ -2360,6 +2345,41 @@ class DataFramePass:
         # to enable alias analysis
         nodes += compile_func_single_block(
             eval("lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"),
+            (df_var,),
+            None,
+            self,
+        )
+        return nodes[-1].target
+
+    def _get_dataframe_table(self, df_var: ir.Var, nodes: List[ir.Stmt]):
+        """Returns the table used by a DataFrame with
+        table format. If the DataFrame's init_dataframe call is in the
+        IR, it extracts an existing ir.Var for the table. Otherwise
+        it generates a get_dataframe_table call.
+
+        Args:
+            df_var (ir.Var): IR Variable for the DataFrame
+            nodes (List[ir.Stmt]): List of IR statements preceding this call.
+                If code must be generated it should be added to this list.
+
+        Returns:
+            ir.Var: Returns an IR Variable for the table.
+        """
+        df_typ = self.typemap[df_var.name]
+        assert df_typ.is_table_format, "_get_dataframe_table requires table format"
+        var_def = guard(get_definition, self.func_ir, df_var)
+        call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
+        if not self._is_updated_df(df_var.name) and call_def == (
+            "init_dataframe",
+            "bodo.hiframes.pd_dataframe_ext",
+        ):
+            seq_info = guard(find_build_sequence, self.func_ir, var_def.args[0])
+            if seq_info is not None:
+                # The table is always the first/only element of the tuple.
+                return seq_info[0]
+
+        nodes += compile_func_single_block(
+            eval("lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)"),
             (df_var,),
             None,
             self,
