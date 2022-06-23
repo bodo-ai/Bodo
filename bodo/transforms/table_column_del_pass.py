@@ -1015,7 +1015,7 @@ def remove_dead_columns(
 
                     nodes = compile_func_single_block(
                         eval(
-                            "lambda table, idx: bodo.hiframes.table.table_subset(table, idx, used_cols=used_columns)"
+                            "lambda table, idx, copy_arrs: bodo.hiframes.table.table_subset(table, idx, copy_arrs, used_cols=used_columns)"
                         ),
                         rhs.args,
                         stmt.target,

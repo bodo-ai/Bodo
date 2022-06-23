@@ -42,6 +42,7 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     is_overload_none,
     is_overload_true,
+    raise_bodo_error,
     to_str_arr_if_dict_array,
 )
 
@@ -1396,7 +1397,7 @@ def table_filter(T, idx, used_cols=None):
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def table_subset(T, idx, used_cols=None):
+def table_subset(T, idx, copy_arrs, used_cols=None):
     """Selects a subset of arrays/columns
     from a table using a list of integer column numbers.
     To minimize the size of the IR the integers are passed
@@ -1414,6 +1415,9 @@ def table_subset(T, idx, used_cols=None):
     cols_subset = list(idx.instance_type.meta)
     out_arr_typs = tuple(np.array(T.arr_types, dtype=object)[cols_subset])
     out_table_typ = TableType(out_arr_typs)
+    if not is_overload_constant_bool(copy_arrs):
+        raise_bodo_error("table_subset(): copy_arrs must be a constant")
+    make_copy = is_overload_true(copy_arrs)
     glbls = {
         "init_table": init_table,
         "get_table_block": get_table_block,
@@ -1437,7 +1441,7 @@ def table_subset(T, idx, used_cols=None):
     # dropped columns.
     moved_cols_map = {i: c for i, c in enumerate(cols_subset)}
 
-    func_text = "def table_subset(T, idx, used_cols=None):\n"
+    func_text = "def table_subset(T, idx, copy_arrs, used_cols=None):\n"
     func_text += f"  T2 = init_table(out_table_typ, False)\n"
     # Length of the table cannot change.
     func_text += f"  T2 = set_table_len(T2, len(T))\n"
@@ -1523,7 +1527,8 @@ def table_subset(T, idx, used_cols=None):
             # We must check if we need to unbox the original column because DataFrames
             # do lazy unboxing.
             func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, physical_idx_{blk}, logical_idx_{blk})\n"
-            func_text += f"    out_arr_list_{blk}[i] = arr_list_{blk}[physical_idx_{blk}].copy()\n"
+            suffix = ".copy()" if make_copy else ""
+            func_text += f"    out_arr_list_{blk}[i] = arr_list_{blk}[physical_idx_{blk}]{suffix}\n"
         func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
     func_text += f"  return T2\n"
 

@@ -95,7 +95,12 @@ class DataFrameGetItemTemplate(AbstractTemplate):
             new_index_type = self.replace_range_with_numeric_idx_if_needed(
                 df, df_idx_inds
             )
-            ret = DataFrameType(new_data_type, new_index_type, new_columns)
+            ret = DataFrameType(
+                new_data_type,
+                new_index_type,
+                new_columns,
+                is_table_format=df.is_table_format,
+            )
             return ret(*args)
 
         # df.loc[idx, col_ind]
@@ -186,7 +191,10 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                         new_cols = tuple()
 
                         ret = DataFrameType(
-                            tuple(new_data), new_index_type, tuple(new_names)
+                            tuple(new_data),
+                            new_index_type,
+                            tuple(new_names),
+                            is_table_format=df.is_table_format,
                         )
                         return ret(*args)
 
@@ -194,7 +202,12 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                         (new_cols, new_data) = get_df_getitem_kept_cols_and_data(
                             df, df_col_inds_literal
                         )
-                        ret = DataFrameType(new_data, new_index_type, new_cols)
+                        ret = DataFrameType(
+                            new_data,
+                            new_index_type,
+                            new_cols,
+                            is_table_format=df.is_table_format,
+                        )
                         return ret(*args)
 
         # this needs to have a constant warning, as the non constant list could either be indexing with column names or bool indexing
@@ -395,7 +408,7 @@ def df_getitem_overload(df, ind):
             extra_globals = {
                 "col_nums_meta": bodo.utils.typing.MetaType(tuple(col_nums))
             }
-            new_data = f"bodo.hiframes.table.table_subset(bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df), col_nums_meta)"
+            new_data = f"bodo.hiframes.table.table_subset(bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df), col_nums_meta, True)"
         else:
             new_data = ", ".join(
                 f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]}).copy()"
@@ -610,7 +623,6 @@ def overload_iloc_getitem(I, idx):
 
 def _gen_iloc_getitem_bool_slice_impl(df, col_names, idx_typ, idx, is_out_series):
     """generate df.iloc getitem implementation for cases with bool or slice index"""
-    # TODO: refactor with df filter
     func_text = "def impl(I, idx):\n"
     func_text += "  df = I._obj\n"
     if isinstance(idx_typ, types.SliceType):
@@ -618,11 +630,18 @@ def _gen_iloc_getitem_bool_slice_impl(df, col_names, idx_typ, idx, is_out_series
     else:
         func_text += f"  idx_t = bodo.utils.conversion.coerce_to_ndarray({idx})\n"
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
-    new_data = ", ".join(
-        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[idx_t]"
-        for c in col_names
-    )
-
+    extra_globals = None
+    if df.is_table_format and not is_out_series:
+        col_nums = [df.column_index[c] for c in col_names]
+        # Pass the column numbers as a MetaType to avoid putting
+        # a constant in the IR.
+        extra_globals = {"col_nums_meta": bodo.utils.typing.MetaType(tuple(col_nums))}
+        new_data = f"bodo.hiframes.table.table_subset(bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df), col_nums_meta, False)[idx_t]"
+    else:
+        new_data = ", ".join(
+            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[idx_t]"
+            for c in col_names
+        )
     if is_out_series:
         c_name = (
             f"'{col_names[0]}'" if isinstance(col_names[0], str) else f"{col_names[0]}"
@@ -633,7 +652,7 @@ def _gen_iloc_getitem_bool_slice_impl(df, col_names, idx_typ, idx, is_out_series
         return loc_vars["impl"]
 
     return bodo.hiframes.dataframe_impl._gen_init_df(
-        func_text, col_names, new_data, index
+        func_text, col_names, new_data, index, extra_globals=extra_globals
     )
 
 
@@ -744,15 +763,17 @@ def overload_loc_getitem(I, idx):
 
     # df.loc[idx] with array of bools
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
-        # TODO: refactor with df filter
         func_text = "def impl(I, idx):\n"
         func_text += "  df = I._obj\n"
         func_text += "  idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)\n"
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
-        new_data = ", ".join(
-            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[idx_t]"
-            for c in df.columns
-        )
+        if df.is_table_format:
+            new_data = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)[idx_t]"
+        else:
+            new_data = ", ".join(
+                f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[idx_t]"
+                for c in df.columns
+            )
         return bodo.hiframes.dataframe_impl._gen_init_df(
             func_text, df.columns, new_data, index
         )
@@ -805,20 +826,36 @@ def gen_df_loc_col_select_impl(df, col_idx_list):
     """generate implementation for cases like df.loc[:, ["A", "B"]] and
     df.loc[:, [True, False, True]]
     """
+    col_names = []
+    col_inds = []
     # get column names if bool list
     if len(col_idx_list) > 0 and isinstance(col_idx_list[0], (bool, np.bool_)):
-        col_idx_list = list(pd.Series(df.columns, dtype=object)[col_idx_list])
-
-    # create a new dataframe, create new data/index using idx
-    new_data = ", ".join(
-        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {df.column_index[c]})[idx[0]]"
-        for c in col_idx_list
-    )
+        for i, kept in enumerate(col_idx_list):
+            if kept:
+                col_inds.append(i)
+                col_names.append(df.columns[i])
+    else:
+        col_names = col_idx_list
+        col_inds = [df.column_index[c] for c in col_idx_list]
+    extra_globals = None
+    if (
+        df.is_table_format
+        and len(col_idx_list) > 0
+        and len(col_idx_list) >= bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
+    ):
+        extra_globals = {"col_nums_meta": bodo.utils.typing.MetaType(tuple(col_inds))}
+        new_data = f"bodo.hiframes.table.table_subset(bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df), col_nums_meta, False)[idx[0]]"
+    else:
+        # create a new dataframe, create new data/index using idx
+        new_data = ", ".join(
+            f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {ind})[idx[0]]"
+            for ind in col_inds
+        )
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx[0]]"
     func_text = "def impl(I, idx):\n"
     func_text += "  df = I._obj\n"
     return bodo.hiframes.dataframe_impl._gen_init_df(
-        func_text, col_idx_list, new_data, index
+        func_text, col_names, new_data, index, extra_globals=extra_globals
     )
 
 
