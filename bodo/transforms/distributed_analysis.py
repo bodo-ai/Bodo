@@ -3678,6 +3678,24 @@ class DistributedAnalysis:
         array_dists[arr2] = new_dist
         return new_dist
 
+    def _meet_several_array_dists(self, iterable_of_arrs, array_dists, top_dist=None):
+        """meet distributions of arrays for consistent distribution"""
+
+        if top_dist is None:
+            top_dist = Distribution.OneD
+
+        new_dist = top_dist
+        for arr in iterable_of_arrs:
+            if arr not in array_dists:
+                self._set_var_dist(arr, array_dists, top_dist, False)
+
+            new_dist = self._min_dist(new_dist, array_dists[arr])
+
+        for arr in iterable_of_arrs:
+            array_dists[arr] = new_dist
+
+        return new_dist
+
     def _set_REP(self, var_list, array_dists, info=None, loc=None):
         """set distribution of all variables in 'var_list' to REP if distributable."""
         if isinstance(var_list, (str, ir.Var)):
