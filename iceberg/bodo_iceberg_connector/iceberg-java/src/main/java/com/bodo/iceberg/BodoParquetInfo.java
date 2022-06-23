@@ -5,11 +5,11 @@ import java.util.List;
 
 public class BodoParquetInfo {
   /** Class that holds the minimal Parquet info needed by Bodo */
-  private String filepath;
+  private final String filepath;
 
-  private long start;
-  private long length;
-  private List<String> deleteFiles;
+  private final long start;
+  private final long length;
+  private final List<String> deleteFiles;
 
   BodoParquetInfo(String filepath, long start, long length, List<String> deleteFiles) {
     this.filepath = filepath;
