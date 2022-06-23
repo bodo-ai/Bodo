@@ -12,7 +12,8 @@ public class IcebergReadEntryPoint {
   }
 
   public static void main(String[] args) throws URISyntaxException {
-    BodoIcebergReader reader = getBodoIcebergReader("glue", "db1", "table1");
+    BodoIcebergReader reader =
+        getBodoIcebergReader("/Users/slade/bodo/iceberg-read-demo/", "iceberg_db", "simple_table");
     //    BodoIcebergReader reader =
     //        getBodoIcebergReader(
     //
@@ -26,6 +27,6 @@ public class IcebergReadEntryPoint {
     //         "iceberg_db",
     //             "simple_numeric_table");
     System.out.println(reader.getIcebergSchema().toString());
-    System.out.println(reader.getParquetInfo(null).toString());
+    //    System.out.println(reader.getParquetInfo(null).toString());
   }
 }

@@ -1,5 +1,6 @@
 package com.bodo.iceberg;
 
+import com.bodo.iceberg.catalog.CatalogHandler;
 import java.net.URISyntaxException;
 import java.util.*;
 import org.apache.iceberg.DeleteFile;
@@ -19,12 +20,12 @@ public class BodoIcebergReader {
    */
 
   // Table instance for the underlying Iceberg table
-  private Table table;
+  private final Table table;
 
   public BodoIcebergReader(String connStr, String dbName, String tableName)
       throws URISyntaxException {
-    CatalogHandler catalog_handler = new CatalogHandler(connStr, dbName, tableName);
-    this.table = catalog_handler.loadTable();
+    CatalogHandler catalogHandler = new CatalogHandler(connStr, dbName, tableName);
+    this.table = catalogHandler.loadTable();
   }
 
   public Schema getIcebergSchema() {
@@ -33,6 +34,10 @@ public class BodoIcebergReader {
 
   public org.apache.arrow.vector.types.pojo.Schema getArrowSchema() {
     return ArrowSchemaUtil.convert(this.table.schema());
+  }
+
+  public TableInfo getTableInfo() {
+    return new TableInfo(this.table);
   }
 
   /** Returns a list of parquet files that construct the given Iceberg Table. */

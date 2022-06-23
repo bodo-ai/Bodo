@@ -55,7 +55,9 @@ def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
     return (col_names, bodo_types, pyarrow_schema)
 
 
-def get_iceberg_file_list(table_name: str, conn: str, database_schema: str, filters):
+def get_iceberg_file_list(
+    table_name: str, conn: str, database_schema: str, filters
+) -> list[str]:
     """
     Gets the list of parquet data files that need to be read
     from an Iceberg table by calling objmode. We also pass
@@ -163,7 +165,7 @@ def get_iceberg_pq_dataset(
 
     comm = MPI.COMM_WORLD
 
-    pq_file_list_or_e = None
+    pq_file_list_or_e = []
     # Get the list on just one rank to reduce JVM overheads
     # and general traffic to table for when there are
     # catalogs in the future.
@@ -197,7 +199,7 @@ def get_iceberg_pq_dataset(
             f"Error reading Iceberg Table: {type(error).__name__}: {str(error)}\n"
         )
 
-    pq_file_list = pq_file_list_or_e
+    pq_file_list: list[str] = pq_file_list_or_e
 
     if len(pq_file_list) == 0:
         # In case all files were filered out by Iceberg, we need to
