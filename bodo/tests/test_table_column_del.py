@@ -19,7 +19,7 @@ from bodo.tests.utils import ColumnDelTestPipeline, check_func, reduce_sum
 from bodo.utils.utils import is_expr
 
 
-def _check_column_dels(bodo_func, col_del_lists, num_deletes=None):
+def _check_column_dels(bodo_func, col_del_lists):
     """
     Helper functions to check for the col_del calls inserted
     into the IR in BodoTableColumnDelPass. Since we don't know
@@ -27,14 +27,10 @@ def _check_column_dels(bodo_func, col_del_lists, num_deletes=None):
     or expected structure.
 
     Instead we pass 'col_del_lists', which is a list of lists for just
-    the blocks that will delete columns for example. If we know that one
-    block should delete 1 then 3 and another should just delete, we pass
-    [[1, 3], [2]]. There may be many other blocks that don't remove any
-    columns, but we just verify that all elements of this list are
+    the that delete columns for each del_column. For example, If we know
+    that one call should delete 1 then 3 and another should just delete 2,
+    we pass [[1, 3], [2]]. We then verify that all elements of this list are
     encountered (and nothing outside this list).
-
-    In addition we can optionally pass num_deletes if we want to check
-    exactly how many "del_column" calls are generated.
 
     Note: We do not check the order in which the deletions are inserted
     within a block to simplify testing as some changes that could occur
@@ -44,9 +40,7 @@ def _check_column_dels(bodo_func, col_del_lists, num_deletes=None):
     typemap = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_typemap"]
     # Ensure every input list is sorted
     col_del_lists = [list(sorted(x)) for x in col_del_lists]
-    found_deletes = 0
     for block in fir.blocks.values():
-        block_del_cols = []
         for stmt in block.body:
             if isinstance(stmt, ir.Assign) and is_expr(stmt.value, "call"):
                 typ = typemap[stmt.value.func.name]
@@ -55,25 +49,18 @@ def _check_column_dels(bodo_func, col_del_lists, num_deletes=None):
                     and typ.name == "Function(<intrinsic del_column>)"
                 ):
                     col_nums = typemap[stmt.value.args[1].name].instance_type.meta
-                    block_del_cols.extend(list(col_nums))
-                    found_deletes += 1
-        if block_del_cols:
-            block_del_cols = list(sorted(block_del_cols))
-            removed = False
-            for i, col_list in enumerate(col_del_lists):
-                if col_list == block_del_cols:
-                    to_pop = i
-                    removed = True
-                    break
-            assert removed, f"Unexpected Del Column list {block_del_cols}"
-            col_del_lists.pop(to_pop)
+                    col_nums = list(sorted(col_nums))
+                    removed = False
+                    for i, col_list in enumerate(col_del_lists):
+                        if col_list == col_nums:
+                            to_pop = i
+                            removed = True
+                            break
+                    assert removed, f"Unexpected Del Column list {col_nums}"
+                    col_del_lists.pop(to_pop)
     assert (
         not col_del_lists
     ), f"Some expected del columns were not encountered: {col_del_lists}"
-    if num_deletes is not None:
-        assert (
-            num_deletes == found_deletes
-        ), "Number of del_column calls doesn't match the expected number"
 
 
 @pytest.fixture(params=["csv", "parquet"])
@@ -204,7 +191,7 @@ def test_table_del_single_block(file_type, datapath, memory_leak_check):
 
     func_text = f"""def impl():
         df = pd.read_{file_type}({filename!r})
-        return df[["Column3", "Column37", "Column59"]]"""
+        return (df["Column3"], df["Column37"], df["Column59"])"""
 
     local_vars = {}
     exec(func_text, globals(), local_vars)
@@ -216,7 +203,7 @@ def test_table_del_single_block(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
-        _check_column_dels(bodo_func, [[3, 37, 59]])
+        _check_column_dels(bodo_func, [[3], [37], [59]])
         check_logger_msg(stream, "Columns loaded ['Column3', 'Column37', 'Column59']")
 
 
@@ -250,9 +237,9 @@ def test_table_del_back(file_type, datapath, memory_leak_check):
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
             # threshold for if the df[[]] creates another table,
             # which adds deletions
-            delete_list = [[0], [3, 37, 59] + [0, 1, 2]]
+            delete_list = [[0], [3, 37, 59], [0, 1, 2]]
         else:
-            delete_list = [[0], [3, 37, 59]]
+            delete_list = [[0], [3], [37], [59]]
         _check_column_dels(bodo_func, delete_list)
         check_logger_msg(
             stream, "Columns loaded ['Column0', 'Column3', 'Column37', 'Column59']"
@@ -289,9 +276,9 @@ def test_table_del_front(file_type, datapath, memory_leak_check):
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
             # threshold for if the df[[]] creates another table,
             # which adds deletions
-            delete_list = [[0], [0], [3, 37, 59] + [0, 1, 2]]
+            delete_list = [[0], [0], [3, 37, 59], [0, 1, 2]]
         else:
-            delete_list = [[0], [0], [3, 37, 59]]
+            delete_list = [[0], [0], [3], [37], [59]]
         _check_column_dels(bodo_func, delete_list)
         check_logger_msg(
             stream, "Columns loaded ['Column0', 'Column3', 'Column37', 'Column59']"
@@ -330,9 +317,9 @@ def test_table_del_front_back(file_type, datapath, memory_leak_check):
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
             # threshold for if the df[[]] creates another table,
             # which adds deletions
-            delete_list = [[9, 0], [6], [0, 6], [9], [3, 37, 59] + [0, 1, 2]]
+            delete_list = [[9], [0], [6], [0, 6], [9], [3, 37, 59], [0, 1, 2]]
         else:
-            delete_list = [[9, 0], [6], [0, 6], [9], [3, 37, 59]]
+            delete_list = [[9], [0], [6], [0, 6], [9], [3], [37], [59]]
         _check_column_dels(bodo_func, delete_list)
         check_logger_msg(
             stream,
@@ -450,9 +437,9 @@ def test_table_del_usecols(file_type, datapath, memory_leak_check):
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
             # threshold for if the df[[]] creates another table,
             # which adds deletions
-            delete_list = [[7, 0], [6], [0, 6], [7], [3, 9, 12] + [0, 1, 2]]
+            delete_list = [[7], [0], [6], [0, 6], [7], [3, 9, 12], [0, 1, 2]]
         else:
-            delete_list = [[7, 0], [6], [0, 6], [7], [3, 9, 12]]
+            delete_list = [[7], [0], [6], [0, 6], [7], [3], [9], [12]]
         _check_column_dels(bodo_func, delete_list)
         check_logger_msg(
             stream,
@@ -491,9 +478,9 @@ def test_table_set_table_columns(file_type, datapath, memory_leak_check):
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
             # threshold for if the df[[]] creates another table,
             # which adds deletions
-            delete_list = [[9, 0], [6], [0, 6], [9], [3, 3, 37, 59, 59] + [0, 1, 2]]
+            delete_list = [[9], [0], [6], [0, 6], [9], [3, 37, 59], [3, 59], [0, 1, 2]]
         else:
-            delete_list = [[9, 0], [6], [0, 6], [9], [3, 3, 37, 59, 59]]
+            delete_list = [[9], [0], [6], [0, 6], [9], [37], [3, 59], [3], [59]]
         _check_column_dels(bodo_func, delete_list)
         check_logger_msg(
             stream,
@@ -579,7 +566,7 @@ def test_table_for_loop(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3]])
+        _check_column_dels(bodo_func, [[0], [3]])
         check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
@@ -608,7 +595,7 @@ def test_table_while_loop(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3]])
+        _check_column_dels(bodo_func, [[0], [3]])
         check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
@@ -639,7 +626,7 @@ def test_table_for_loop_branch(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3]])
+        _check_column_dels(bodo_func, [[0], [3]])
         check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
@@ -671,7 +658,7 @@ def test_table_while_loop_branch(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3]])
+        _check_column_dels(bodo_func, [[0], [3]])
         check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
@@ -813,7 +800,11 @@ def test_table_del_single_block_alias(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
-        _check_column_dels(bodo_func, [[3, 37, 59, 3, 37, 59]])
+        if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
+            delete_list = [[3, 37, 59], [3, 37, 59]]
+        else:
+            delete_list = [[3, 37, 59], [3], [37], [59]]
+        _check_column_dels(bodo_func, delete_list)
         check_logger_msg(stream, "Columns loaded ['Column3', 'Column37', 'Column59']")
 
 
@@ -848,9 +839,9 @@ def test_table_del_back_alias(file_type, datapath, memory_leak_check):
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
             # threshold for if the df[[]] creates another table,
             # which adds deletions
-            delete_list = [[0, 3, 37, 59, 0], [3, 37, 59] + [0, 1, 2]]
+            delete_list = [[0, 3, 37, 59], [0], [3, 37, 59], [0, 1, 2]]
         else:
-            delete_list = [[0, 3, 37, 59, 0], [3, 37, 59]]
+            delete_list = [[0, 3, 37, 59], [0], [3], [37], [59]]
         _check_column_dels(bodo_func, delete_list)
         check_logger_msg(
             stream, "Columns loaded ['Column0', 'Column3', 'Column37', 'Column59']"
@@ -888,9 +879,9 @@ def test_table_del_front_alias(file_type, datapath, memory_leak_check):
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
             # threshold for if the df[[]] creates another table,
             # which adds deletions
-            delete_list = [[0, 3, 37, 59], [0], [0], [3, 37, 59] + [0, 1, 2]]
+            delete_list = [[0, 3, 37, 59], [0], [0], [3, 37, 59], [0, 1, 2]]
         else:
-            delete_list = [[0, 3, 37, 59], [0], [0], [3, 37, 59]]
+            delete_list = [[0, 3, 37, 59], [0], [0], [3], [37], [59]]
         _check_column_dels(bodo_func, delete_list)
         check_logger_msg(
             stream, "Columns loaded ['Column0', 'Column3', 'Column37', 'Column59']"
@@ -933,14 +924,26 @@ def test_table_del_front_back_alias(file_type, datapath, memory_leak_check):
             # which adds deletions
             delete_list = [
                 [0, 3, 6, 9, 37, 59],
-                [9, 0],
+                [9],
+                [0],
                 [6],
                 [0, 6],
                 [9],
-                [3, 37, 59] + [0, 1, 2],
+                [3, 37, 59],
+                [0, 1, 2],
             ]
         else:
-            delete_list = [[0, 3, 6, 9, 37, 59], [9, 0], [6], [0, 6], [9], [3, 37, 59]]
+            delete_list = [
+                [0, 3, 6, 9, 37, 59],
+                [9],
+                [0],
+                [6],
+                [0, 6],
+                [9],
+                [3],
+                [37],
+                [59],
+            ]
         _check_column_dels(bodo_func, delete_list)
         check_logger_msg(
             stream,
@@ -1065,14 +1068,26 @@ def test_table_del_usecols_alias(file_type, datapath, memory_leak_check):
             # which adds deletions
             delete_list = [
                 [0, 3, 6, 7, 9, 12],
-                [7, 0],
+                [7],
+                [0],
                 [6],
                 [0, 6],
                 [7],
-                [3, 9, 12] + [0, 1, 2],
+                [3, 9, 12],
+                [0, 1, 2],
             ]
         else:
-            delete_list = [[0, 3, 6, 7, 9, 12], [7, 0], [6], [0, 6], [7], [3, 9, 12]]
+            delete_list = [
+                [0, 3, 6, 7, 9, 12],
+                [7],
+                [0],
+                [6],
+                [0, 6],
+                [7],
+                [3],
+                [9],
+                [12],
+            ]
         _check_column_dels(bodo_func, delete_list)
         check_logger_msg(
             stream,
@@ -1135,7 +1150,7 @@ def test_table_for_loop_alias(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3], [0, 3]])
+        _check_column_dels(bodo_func, [[0, 3], [0], [3]])
         check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
@@ -1165,7 +1180,7 @@ def test_table_while_loop_alias(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3], [0, 3]])
+        _check_column_dels(bodo_func, [[0, 3], [0], [3]])
         check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
@@ -1198,7 +1213,7 @@ def test_table_for_loop_branch_alias(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3], [0, 3]])
+        _check_column_dels(bodo_func, [[0, 3], [0], [3]])
         check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
@@ -1232,7 +1247,7 @@ def test_table_while_loop_branch_alias(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3], [0, 3]])
+        _check_column_dels(bodo_func, [[0, 3], [0], [3]])
         check_logger_msg(stream, "Columns loaded ['Column0', 'Column3']")
 
 
@@ -1262,8 +1277,7 @@ def test_table_loop_unroll_alias(file_type, datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
-        # Note: all values are separate because sum adds extra basic blocks
-        _check_column_dels(bodo_func, [[0, 3, 6, 0], [3], [6]])
+        _check_column_dels(bodo_func, [[0, 3, 6], [0], [3], [6]])
         check_logger_msg(stream, "Columns loaded ['Column0', 'Column3', 'Column6']")
 
 
@@ -1286,7 +1300,11 @@ def test_table_del_single_block_pq_index(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
-        _check_column_dels(bodo_func, [[3, 37, 59]])
+        if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
+            delete_list = [[3, 37, 59]]
+        else:
+            delete_list = [[3], [37], [59]]
+        _check_column_dels(bodo_func, delete_list)
         check_logger_msg(stream, f"Columns loaded ['Column3', 'Column37', 'Column59']")
 
 
@@ -1309,7 +1327,11 @@ def test_table_del_single_block_pq_index_alias(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func()
-        _check_column_dels(bodo_func, [[3, 37, 59, 3, 37, 59]])
+        if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 3:
+            delete_list = [[3, 37, 59], [3, 37, 59]]
+        else:
+            delete_list = [[3, 37, 59], [3], [37], [59]]
+        _check_column_dels(bodo_func, delete_list)
         check_logger_msg(stream, f"Columns loaded ['Column3', 'Column37', 'Column59']")
 
 
@@ -1333,7 +1355,7 @@ def test_table_dead_pq_index(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3]])
+        _check_column_dels(bodo_func, [[0], [3]])
         check_logger_msg(stream, f"Columns loaded ['Column0', 'Column3']")
 
 
@@ -1358,7 +1380,7 @@ def test_table_dead_pq_index_alias(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3], [0, 3]])
+        _check_column_dels(bodo_func, [[0, 3], [0], [3]])
         check_logger_msg(stream, f"Columns loaded ['Column0', 'Column3']")
 
 
@@ -1385,7 +1407,7 @@ def test_table_while_loop_alias_with_idx_col(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
         bodo_func(25)
-        _check_column_dels(bodo_func, [[0, 3], [0, 3]])
+        _check_column_dels(bodo_func, [[0, 3], [0], [3]])
         check_logger_msg(stream, f"Columns loaded ['Column0', 'Column3']")
 
 
@@ -1582,7 +1604,7 @@ def test_table_column_pruing_past_atype_setitem(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func()
         check_logger_msg(stream, "Columns loaded ['Column3']")
-        _check_column_dels(bodo_func, [[3, 3, 3, 3]], num_deletes=4)
+        _check_column_dels(bodo_func, [[3], [3], [3], [3]])
 
 
 def test_table_del_astype(datapath, memory_leak_check):
@@ -1638,7 +1660,7 @@ def test_table_nbytes_del_cols(datapath, memory_leak_check):
         init_block_columns = list(sorted(set(range(99)) - {3, 6}))
         # The other blocks should then each decref the opposite column
         # at the start and then the used column
-        _check_column_dels(bodo_func, [init_block_columns, [3, 6], [3, 6]])
+        _check_column_dels(bodo_func, [init_block_columns, [3], [6], [3], [6]])
 
 
 def test_table_nbytes_ret_df(datapath, memory_leak_check):
@@ -1710,7 +1732,7 @@ def test_table_concat_del_cols(datapath, memory_leak_check):
         # Melt uses but can then delete 0, 2 and 5.
         # The other blocks delete the columns used in both branch
         # options.
-        _check_column_dels(bodo_func, [[0, 2, 5], [3, 6], [3, 6]])
+        _check_column_dels(bodo_func, [[0], [2], [5], [3], [6], [3], [6]])
 
 
 def test_table_concat_ret_df(datapath, memory_leak_check):
@@ -1824,7 +1846,7 @@ def test_table_astype_del_cols(datapath, memory_leak_check):
         # Column 0 is no longer needed by df1 after the operation. Similarly
         # df2 can remove column 0 after the getitem, so both delete the column
         # in the first block.
-        _check_column_dels(bodo_func, [[0, 0], [3, 6], [3, 6], [6, 6]])
+        _check_column_dels(bodo_func, [[0], [0], [3], [6], [3], [6], [6], [6]])
 
 
 def test_table_astype_ret_df_input(datapath, memory_leak_check):
@@ -1901,7 +1923,7 @@ def test_table_astype_ret_df_output(datapath, memory_leak_check):
         # We prune columns from df1 after the astype.
         init_block_columns = list(sorted(set(range(99)) - {3, 6}))
         _check_column_dels(
-            bodo_func, [init_block_columns, [3, 6], [3, 6], list(range(99))]
+            bodo_func, [init_block_columns, [3], [6], [3], [6], list(range(99))]
         )
 
 
@@ -1946,7 +1968,7 @@ def test_filter_del_cols(datapath, memory_leak_check):
         # Column 0 is no longer needed by df1 after the operation. Similarly
         # df2 can remove column 0 after the getitem, so both delete the column
         # in the first block.
-        _check_column_dels(bodo_func, [[0, 0], [3, 6], [3, 6], [6], [6]])
+        _check_column_dels(bodo_func, [[0], [0], [3], [6], [3], [6], [6], [6]])
 
 
 def test_filter_ret_df_input(datapath, memory_leak_check):
@@ -2023,7 +2045,7 @@ def test_table_filter_ret_df_output(datapath, memory_leak_check):
         # We prune columns from df1 after the filter.
         init_block_columns = list(sorted(set(range(99)) - {3, 6}))
         _check_column_dels(
-            bodo_func, [init_block_columns, [3, 6], [3, 6], list(range(99))]
+            bodo_func, [init_block_columns, [3], [6], [3], [6], list(range(99))]
         )
 
 
@@ -2068,7 +2090,7 @@ def test_table_mappable_del_cols(datapath, memory_leak_check):
         # Column 0 is no longer needed by df1 after the operation. Similarly
         # df2 can remove column 0 after the getitem, so both delete the column
         # in the first block.
-        _check_column_dels(bodo_func, [[0, 0], [3, 6], [3, 6], [6], [6]])
+        _check_column_dels(bodo_func, [[0], [0], [3], [6], [3], [6], [6], [6]])
 
 
 def test_table_mappable_ret_df_input(datapath, memory_leak_check):
@@ -2145,7 +2167,7 @@ def test_table_mappable_ret_df_output(datapath, memory_leak_check):
         # We prune columns from df1 after the copy.
         init_block_columns = list(sorted(set(range(99)) - {3, 6}))
         _check_column_dels(
-            bodo_func, [init_block_columns, [3, 6], [3, 6], list(range(99))]
+            bodo_func, [init_block_columns, [3], [6], [3], [6], list(range(99))]
         )
 
 
@@ -2173,7 +2195,7 @@ def test_two_column_dels(datapath, memory_leak_check):
         # We prune columns from the table after memory usage in
         # 1 function call.
         columns_to_delete = list(range(99))
-        _check_column_dels(bodo_func, [columns_to_delete], num_deletes=1)
+        _check_column_dels(bodo_func, [columns_to_delete])
 
 
 def test_table_loc_column_subset_level1(datapath, memory_leak_check):
@@ -2208,10 +2230,7 @@ def test_table_loc_column_subset_level1(datapath, memory_leak_check):
         bodo_func()
         # Check the columns were pruned
         check_logger_msg(stream, str(columns_loaded))
-        # We should delete all columns at once.
-        _check_column_dels(
-            bodo_func, [list(range(n_cols)) + list(range(n_cols * 2))], num_deletes=2
-        )
+        _check_column_dels(bodo_func, [list(range(n_cols)), list(range(n_cols * 2))])
 
 
 def test_table_loc_column_subset_level2(datapath, memory_leak_check):
@@ -2255,8 +2274,9 @@ def test_table_loc_column_subset_level2(datapath, memory_leak_check):
         df2_col_nums = list(range(n_cols_level_2 * 2))
         # There is 1 del_columns for the original df, 2 for df1 (the subset
         # and the filter) and 1 for df2 (the subset)
-        del_cols = df_col_nums + df1_col_nums + df1_col_nums + df2_col_nums
-        _check_column_dels(bodo_func, [del_cols], num_deletes=4)
+        _check_column_dels(
+            bodo_func, [df_col_nums, df1_col_nums, df1_col_nums, df2_col_nums]
+        )
 
 
 def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
@@ -2292,10 +2312,7 @@ def test_table_iloc_column_subset_level1(datapath, memory_leak_check):
         bodo_func()
         # Check the columns were pruned
         check_logger_msg(stream, str(cols_names_loaded))
-        # We should delete all columns at once.
-        _check_column_dels(
-            bodo_func, [list(range(n_cols)) + list(range(n_cols * 2))], num_deletes=2
-        )
+        _check_column_dels(bodo_func, [list(range(n_cols)), list(range(n_cols * 2))])
 
 
 def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
@@ -2342,8 +2359,9 @@ def test_table_iloc_column_subset_level2(datapath, memory_leak_check):
         df2_col_nums = list(range(n_cols_level_2 * 2))
         # There is 1 del_columns for the original df, 2 for df1 (the subset
         # and the filter) and 1 for df2 (the subset)
-        del_cols = df_col_nums + df1_col_nums + df1_col_nums + df2_col_nums
-        _check_column_dels(bodo_func, [del_cols], num_deletes=4)
+        _check_column_dels(
+            bodo_func, [df_col_nums, df1_col_nums, df1_col_nums, df2_col_nums]
+        )
 
 
 def test_table_column_subset_level1(datapath, memory_leak_check):
@@ -2378,8 +2396,7 @@ def test_table_column_subset_level1(datapath, memory_leak_check):
         bodo_func()
         # Check the columns were pruned
         check_logger_msg(stream, str(columns_loaded))
-        # We should delete all columns at once.
-        _check_column_dels(bodo_func, [list(range(n_cols))], num_deletes=1)
+        _check_column_dels(bodo_func, [list(range(n_cols))])
 
 
 def test_table_column_subset_level2(datapath, memory_leak_check):
@@ -2419,7 +2436,4 @@ def test_table_column_subset_level2(datapath, memory_leak_check):
         # deletes them at the new remapped location.
         df_col_nums = list(range(n_cols_level_2))
         df1_col_nums = list(range(n_cols_level_1 - n_cols_level_2, n_cols_level_1))
-        # We delete from the same block
-        del_cols = df_col_nums + df1_col_nums
-
-        _check_column_dels(bodo_func, [del_cols], num_deletes=2)
+        _check_column_dels(bodo_func, [df_col_nums, df1_col_nums])
