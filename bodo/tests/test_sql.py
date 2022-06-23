@@ -24,6 +24,7 @@ from bodo.tests.utils import (
     check_func,
     get_snowflake_connection_string,
     get_start_end,
+    oracle_user_pass_and_hostname,
     reduce_sum,
     sql_user_pass_and_hostname,
 )
@@ -907,8 +908,6 @@ def test_snowflake_dead_node(memory_leak_check):
 # Queries used from
 # https://www.oracle.com/news/connect/run-sql-data-queries-with-pandas.html
 
-oracle_user_pass_and_hostname = "user:pass@localhost"
-
 
 @pytest.mark.slow
 def test_oracle_read_sql_basic(memory_leak_check):
@@ -1450,7 +1449,7 @@ def test_to_sql_postgres(is_distributed, memory_leak_check):
 # @pytest.mark.slow
 @pytest.mark.parametrize("is_distributed", [True, False])
 def test_to_sql_oracle(is_distributed, memory_leak_check):
-    """Test to_sql with PostgreSQL database
+    """Test to_sql with Oracle database
     Data is compared vs. original DF
     """
 

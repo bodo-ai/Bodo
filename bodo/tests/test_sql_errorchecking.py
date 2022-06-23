@@ -4,13 +4,18 @@
 # TODO: Move error checking tests from test_sql to here.
 
 import os
+import random
+import re
+import string
 
+import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.tests.utils import (
     get_snowflake_connection_string,
+    oracle_user_pass_and_hostname,
     sql_user_pass_and_hostname,
 )
 from bodo.utils.typing import BodoError, BodoWarning
@@ -102,3 +107,29 @@ def test_unsupported_query(memory_leak_check):
 
     with pytest.raises(BodoError, match="query is not supported"):
         bodo.jit(impl)(conn)
+
+
+def test_to_sql_oracle(memory_leak_check):
+    """This test that runtime error message for Oracle with string > 4000
+    is displayed"""
+
+    def test_impl_write_sql(df, table_name, conn):
+        df.to_sql(table_name, conn, index=False, if_exists="replace")
+
+    np.random.seed(5)
+    random.seed(5)
+    len_list = 1
+    letters = string.ascii_letters
+    list_string = [
+        "".join(random.choice(letters) for i in range(4002)) for _ in range(len_list)
+    ]
+    df_in = pd.DataFrame(
+        {
+            "AB": list_string,
+        }
+    )
+    table_name = "to_sql_table"
+    df_input = df_in
+    conn = "oracle+cx_oracle://" + oracle_user_pass_and_hostname + "/ORACLE"
+    with pytest.raises(ValueError, match=re.escape("error in to_sql() operation")):
+        bodo.jit(test_impl_write_sql)(df_in, table_name, conn)

@@ -4027,7 +4027,12 @@ def to_sql_exception_guard(
         # If a column's dtype is identified as `object` by Pandas,
         # use Bodo DataFrame type to get its original dtype.
         if db_type == "oracle":
+            import os
+
             import sqlalchemy as sa
+            from sqlalchemy.dialects.oracle import VARCHAR2
+
+            disable_varchar2 = os.environ.get("BODO_DISABLE_ORACLE_VARCHAR2", None)
 
             bodo_df_type = bodo.typeof(df)
             dtyp = {}
@@ -4035,8 +4040,10 @@ def to_sql_exception_guard(
                 if df[c].dtype == "object":
                     if col_dtype == datetime_date_array_type:
                         dtyp[c] = sa.types.Date
-                    elif col_dtype == bodo.string_array_type:
-                        dtyp[c] = sa.types.VARCHAR(df[c].str.len().max())
+                    elif col_dtype == bodo.string_array_type and (
+                        not disable_varchar2 or disable_varchar2 == "0"
+                    ):
+                        dtyp[c] = VARCHAR2(4000)
             dtype = dtyp
         try:
             df.to_sql(
@@ -4052,6 +4059,13 @@ def to_sql_exception_guard(
             )
         except Exception as e:
             err_msg = e.args[0]
+            if db_type == "oracle" and "ORA-12899" in err_msg:
+                err_msg += """
+                String is larger than VARCHAR2 maximum length.
+                Please set environment variable `BODO_DISABLE_ORACLE_VARCHAR2` to
+                disable Bodo's optimziation use of VARCHA2.
+                NOTE: Oracle `to_sql` with CLOB datatypes is known to be really slow.
+                """
         return err_msg
     finally:
         df.columns = df_columns_original
