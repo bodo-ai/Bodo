@@ -69,11 +69,16 @@ setup(
     url="https://bodo.ai",
     author="Bodo.ai",
     packages=find_packages(),
-    package_data={"bodo_iceberg_connector": ["iceberg-java/target/*.jar"]},
+    # This is needed so that the jars are included if/when the package is installed via pip.
+    package_data={
+        "bodo_iceberg_connector": ["bodo_iceberg_connector/iceberg-java/target/*.jar",
+            "bodo_iceberg_connector/iceberg-java/target/libs/*.jar",
+        ]
+    },
     # When doing `python setup.py develop`, setuptools will try to install whatever is
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install bodo in development mode, and it will also break CI
-    install_requires=[] if development_mode else ["jpype1==1.4.0"],
+    install_requires=[] if development_mode else ["py4j==0.10.9.3"],
     python_requires=">=3.8,<3.11",
     cmdclass={"develop": CustomDevelopCommand},
 )

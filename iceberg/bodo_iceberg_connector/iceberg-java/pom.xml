@@ -19,12 +19,12 @@
 
   <dependencies>
 
+    <!-- py4j import: https://mavenlibs.com/maven/dependency/net.sf.py4j/py4j -->
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
       <version>0.10.9.5</version>
     </dependency>
-
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-api -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
@@ -256,33 +256,43 @@
           <target>1.8</target>
         </configuration>
       </plugin>
-      <!-- Build an executable JAR -->
-      <!-- <plugin>
+
+      <!-- build The executable file for py4j to run -->
+      <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <version>3.1.0</version>
         <configuration>
+          <finalName>bodo-iceberg-reader</finalName>
           <archive>
             <manifest>
+              <!--Set the default classpath of the executable jar file to be /libs.
+              We copy all the dependencies to that directory in the next step-->
               <addClasspath>true</addClasspath>
-              <mainClass>com.bodo.iceberg.IcebergReadEntryPoint</mainClass>
+              <classpathPrefix>libs/</classpathPrefix>
+              <mainClass>
+                com.bodo.iceberg.IcebergReadEntryPoint
+              </mainClass>
             </manifest>
           </archive>
         </configuration>
-      </plugin> -->
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
         <executions>
           <execution>
             <id>copy-dependencies</id>
-            <phase>package</phase>
+            <phase>prepare-package</phase>
             <goals>
               <goal>copy-dependencies</goal>
             </goals>
             <configuration>
-              <outputDirectory>${project.build.directory}</outputDirectory>
-              <overWriteReleases>true</overWriteReleases>
+              <!--Copy all the needed dependencies to target/libs, which is where the executable expects them to be-->
+              <outputDirectory>
+                ${project.build.directory}/libs
+              </outputDirectory>
+              <overWriteSnapshots>true</overWriteSnapshots>
               <overWriteSnapshots>true</overWriteSnapshots>
             </configuration>
           </execution>
