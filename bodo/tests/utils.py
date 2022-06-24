@@ -773,10 +773,24 @@ def _test_equal(
         )
     elif isinstance(py_out, scipy.sparse.csr_matrix):
         # https://stackoverflow.com/questions/30685024/check-if-two-scipy-sparse-csr-matrix-are-equal
+        #
+        # Similar to np.assert_array_equal we compare nan's like numbers,
+        # so two nan's are considered equal. To detect nan's in sparse matrices,
+        # we use the fact that nan's return False in all comparisons
+        # according to IEEE-754, so nan is the only value that satisfies
+        # `nan != nan` in a sparse matrix.
+        # https://stackoverflow.com/questions/1565164/what-is-the-rationale-for-all-comparisons-returning-false-for-ieee754-nan-values
+        #
+        # Here, `(py_out != py_out).multiply(bodo_out != bodo_out)` counts the
+        # number of instances where both values are nan, so the assertion
+        # passes if in all the instances such that py_out != bodo_out, we also
+        # know that both values are nan. Here, `.multiply()` performs logical-and
+        # between nan instances of `py_out` and nan instances of `bodo_out`.
         assert (
             isinstance(bodo_out, scipy.sparse.csr_matrix)
             and py_out.shape == bodo_out.shape
-            and (py_out != bodo_out).nnz == 0
+            and (py_out != bodo_out).nnz
+            == ((py_out != py_out).multiply(bodo_out != bodo_out)).nnz
         )
     # pyarrow array types
     elif isinstance(py_out, pa.Array):
