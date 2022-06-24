@@ -52,6 +52,16 @@ def test_getitem_slice(csr_matrix_value, memory_leak_check):
     check_func(test_impl, (csr_matrix_value,), dist_test=False)
 
 
+def test_getitem_1darray(csr_matrix_value, memory_leak_check):
+    """test basic 1darray getitem for csr matrix"""
+
+    def test_impl(A):
+        idxs = np.array([0, 2], dtype=np.int32)
+        return A[idxs]
+
+    check_func(test_impl, (csr_matrix_value,), dist_test=False)
+
+
 @pytest.mark.slow
 def test_len(csr_matrix_value, memory_leak_check):
     """test len(A) for CSR matrix"""
