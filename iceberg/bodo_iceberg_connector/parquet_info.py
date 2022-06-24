@@ -6,11 +6,11 @@ import sys
 from collections import namedtuple
 from urllib.parse import urlparse
 
-import jpype
 from bodo_iceberg_connector.config import DEFAULT_PORT
 from bodo_iceberg_connector.errors import IcebergJavaError
 from bodo_iceberg_connector.filter_to_java import convert_expr_to_java_parsable
-from bodo_iceberg_connector.jpype_support import get_iceberg_java_table_reader
+from bodo_iceberg_connector.py4j_support import get_iceberg_java_table_reader
+from py4j.protocol import Py4JJavaError
 
 # Named Tuple for Parquet info
 BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start length")
@@ -62,6 +62,7 @@ def get_bodo_parquet_info(port, warehouse, schema, table, filters):
 
     Port is unused and kept in case we opt to switch back to py4j
     """
+
     try:
         bodo_iceberg_table_reader = get_iceberg_java_table_reader(
             warehouse,
@@ -74,7 +75,7 @@ def get_bodo_parquet_info(port, warehouse, schema, table, filters):
             bodo_iceberg_table_reader, filter_expr
         )
 
-    except jpype.JException as e:
+    except Py4JJavaError as e:
         raise IcebergJavaError.from_java_error(e)
 
     return java_to_python(java_parquet_infos)

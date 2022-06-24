@@ -8,6 +8,8 @@ import os
 import re
 from typing import List
 
+from mpi4py import MPI
+
 import bodo
 from bodo.utils import tracing
 from bodo.utils.typing import BodoError
@@ -29,25 +31,41 @@ def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
 
     from bodo.io.parquet_pio import _get_numba_typ_from_pa_typ
 
-    try:
-        (
-            col_names,
-            col_types,
-            pyarrow_schema,
-        ) = bodo_iceberg_connector.get_iceberg_typing_schema(
-            con, database_schema, table_name
-        )
+    # In the case that we encounter an error, we store the exception in col_names_or_err
+    col_names_or_err = None
+    col_types = None
+    pyarrow_schema = None
 
-    except bodo_iceberg_connector.IcebergError as e:
-        # Only include Java error info in dev mode because it contains at lot of
-        # unnecessary info about internal packages and dependencies.
-        if (
-            isinstance(e, bodo_iceberg_connector.IcebergJavaError)
-            and numba.core.config.DEVELOPER_MODE
-        ):  # pragma: no cover
-            raise BodoError(f"{e.message}:\n {e.java_error.stacktrace()}")
-        else:
-            raise BodoError(e.message)
+    # Sonar cube only runs on rank 0, so we add no cover to avoid the warning
+    if bodo.get_rank() == 0:  # pragma: no cover
+        try:
+            (
+                col_names_or_err,
+                col_types,
+                pyarrow_schema,
+            ) = bodo_iceberg_connector.get_iceberg_typing_schema(
+                con, database_schema, table_name
+            )
+
+        except bodo_iceberg_connector.IcebergError as e:
+            # Only include Java error info in dev mode because it contains at lot of
+            # unnecessary info about internal packages and dependencies.
+            if (
+                isinstance(e, bodo_iceberg_connector.IcebergJavaError)
+                and numba.core.config.DEVELOPER_MODE
+            ):  # pragma: no cover
+                col_names_or_err = BodoError(f"{e.message}:\n {str(e.java_error)}")
+            else:
+                col_names_or_err = BodoError(e.message)
+
+    comm = MPI.COMM_WORLD
+    col_names_or_err = comm.bcast(col_names_or_err)
+    if isinstance(col_names_or_err, Exception):
+        raise col_names_or_err
+
+    col_names = col_names_or_err
+    col_types = comm.bcast(col_types)
+    pyarrow_schema = comm.bcast(pyarrow_schema)
 
     bodo_types = [
         _get_numba_typ_from_pa_typ(typ, False, True, None)[0] for typ in col_types
@@ -70,6 +88,10 @@ def get_iceberg_file_list(
     import bodo_iceberg_connector
     import numba.core
 
+    assert (
+        bodo.get_rank() == 0
+    ), "get_iceberg_file_list should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
+
     try:
         lst = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
             conn, database_schema, table_name, filters
@@ -81,7 +103,7 @@ def get_iceberg_file_list(
             isinstance(e, bodo_iceberg_connector.IcebergJavaError)
             and numba.core.config.DEVELOPER_MODE
         ):  # pragma: no cover
-            raise BodoError(f"{e.message}:\n {e.java_error.stacktrace()}")
+            raise BodoError(f"{e.message}:\n {str(e.java_error)}")
         else:
             raise BodoError(e.message)
 
@@ -162,7 +184,6 @@ def get_iceberg_pq_dataset(
     """
 
     ev = tracing.Event("get_iceberg_pq_dataset")
-    from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
 
@@ -170,7 +191,11 @@ def get_iceberg_pq_dataset(
     # Get the list on just one rank to reduce JVM overheads
     # and general traffic to table for when there are
     # catalogs in the future.
-    if bodo.get_rank() == 0 or not is_parallel:
+
+    # Always get the list on rank 0 to avoid the need
+    # to initialize a full JVM + gateway server on every rank.
+    # Sonar cube only runs on rank 0, so we add no cover to avoid the warning
+    if bodo.get_rank() == 0:  # pragma: no cover
         ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
         try:
             pq_file_list_or_e = get_iceberg_file_list(
@@ -190,8 +215,7 @@ def get_iceberg_pq_dataset(
         ev_iceberg_fl.finalize()
 
     # Send list to all ranks
-    if is_parallel:
-        pq_file_list_or_e = comm.bcast(pq_file_list_or_e)
+    pq_file_list_or_e = comm.bcast(pq_file_list_or_e)
 
     # raise error on all processors if found (not just rank 0 which would cause hangs)
     if isinstance(pq_file_list_or_e, Exception):

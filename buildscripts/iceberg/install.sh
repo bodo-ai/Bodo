@@ -14,4 +14,4 @@ eval "$(./bin/micromamba shell hook -s posix)"  # Limited time Use
 # Unlike miniforge / mambaforge, micromamba does not come with anything (including Python)
 # preinstalled, so the base environment is completely empty.
 micromamba activate  # this activates the base environment
-micromamba install -q -y python=$PYTHON_VERSION maven jpype1 credstash -c conda-forge
+micromamba install -q -y python=$PYTHON_VERSION maven py4j credstash -c conda-forge

@@ -1,6 +1,7 @@
 package com.bodo.iceberg;
 
 import java.net.URISyntaxException;
+import py4j.GatewayServer;
 
 public class IcebergReadEntryPoint {
 
@@ -11,22 +12,8 @@ public class IcebergReadEntryPoint {
     return new BodoIcebergReader(warehouse_loc, db_name, tableName);
   }
 
-  public static void main(String[] args) throws URISyntaxException {
-    BodoIcebergReader reader =
-        getBodoIcebergReader("/Users/slade/bodo/iceberg-read-demo/", "iceberg_db", "simple_table");
-    //    BodoIcebergReader reader =
-    //        getBodoIcebergReader(
-    //
-    // "https://nessie.dremio.cloud/v1/projects/50824e14-fd95-434c-a0cb-cc988e57969f?type=nessie&authentication.type=BEARER&authentication.token=...",
-    //            "",
-    //            "arc_test3");
-    //    BodoIcebergReader reader = getBodoIcebergReader("thrift://localhost:9083", "db",
-    // "table2");
-    //    BodoIcebergReader reader =
-    //     getBodoIcebergReader("file:///Users/ehsan/dev/bodo/iceberg/test-dataset-creation/",
-    //         "iceberg_db",
-    //             "simple_numeric_table");
-    System.out.println(reader.getIcebergSchema().toString());
-    //    System.out.println(reader.getParquetInfo(null).toString());
+  public static void main(String[] args) {
+    GatewayServer gatewayServer = new GatewayServer(new IcebergReadEntryPoint());
+    gatewayServer.start();
   }
 }

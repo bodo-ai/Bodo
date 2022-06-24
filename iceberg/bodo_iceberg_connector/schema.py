@@ -4,11 +4,11 @@ representations (Arrow and Bodo)
 """
 from collections import namedtuple
 
-import jpype
 import pyarrow.jvm
 from bodo_iceberg_connector.config import DEFAULT_PORT
 from bodo_iceberg_connector.errors import IcebergError, IcebergJavaError
-from bodo_iceberg_connector.jpype_support import get_iceberg_java_table_reader
+from bodo_iceberg_connector.py4j_support import get_iceberg_java_table_reader
+from py4j.protocol import Py4JJavaError
 
 # Types I didn't figure out how to test with Spark:
 #   FixedType
@@ -96,7 +96,7 @@ def get_iceberg_schemas(port: int, warehouse: str, schema: str, table: str):
         )
         bodo_types = [pyarrow_schema.field(name) for name in pyarrow_schema.names]
 
-    except jpype.JException as e:
+    except Py4JJavaError as e:
         raise IcebergJavaError.from_java_error(e)
 
     return (

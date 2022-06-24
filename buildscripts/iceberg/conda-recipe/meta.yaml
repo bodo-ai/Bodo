@@ -22,7 +22,7 @@ requirements:
   run:
     - python >=3.8,<3.11
     - openjdk >=9.0
-    - jpype1 =1.4.0
+    - py4j ==0.10.9.3
 
 about:
 home: https://bodo.ai/

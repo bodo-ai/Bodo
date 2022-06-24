@@ -167,7 +167,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge openjdk jpype1 maven pyspark=3.2
+      conda install -y -c conda-forge openjdk py4j maven pyspark=3.2
       cd iceberg
       python setup.py develop
     displayName: "Setup Iceberg Testing"

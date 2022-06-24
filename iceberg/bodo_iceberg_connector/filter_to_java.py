@@ -11,18 +11,11 @@ import datetime
 
 import numpy as np
 import pandas as pd
-from bodo_iceberg_connector.jpype_support import (
-    get_boolean_class,
-    get_date_type_class,
-    get_double_class,
-    get_float_class,
-    get_integer_class,
+from bodo_iceberg_connector.py4j_support import (
     get_java_list,
     get_linkedlist_class,
-    get_literal_class,
-    get_long_class,
+    get_literal_converter_class,
     get_op_enum_class,
-    get_timestamp_type_class,
 )
 
 
@@ -169,18 +162,10 @@ def convert_nanoseconds(num_nanoseconds):
     Convert an integer in nanoseconds into an Iceberg Java
     Timestamp Literal.
     """
-    # Get the Java classes
-    long_class = get_long_class()
-    literal_class = get_literal_class()
-    timestamp_type_class = get_timestamp_type_class()
+    converter = get_literal_converter_class()
     # Convert the dt64 to integer and round down to microseconds
     num_microseconds = num_nanoseconds // 1000
-    # Convert num_microseconds to java
-    java_num_microseconds = long_class(num_microseconds)
-    # Return the literal
-    return literal_class.of(java_num_microseconds).to(
-        timestamp_type_class.withoutZone()
-    )
+    return converter.microsecondsToTimestampLiteral(int(num_microseconds))
 
 
 def convert_date(val):
@@ -188,16 +173,13 @@ def convert_date(val):
     Convert a Python datetime.date into an Iceberg Java
     date Literal.
     """
-    # Get the Java classes
-    long_class = get_long_class()
-    literal_class = get_literal_class()
-    date_type_class = get_date_type_class()
+
+    converter = get_literal_converter_class()
     # Convert the date_val to days
     num_days = np.datetime64(val, "D").view("int64")
-    # Convert num_days to java
-    java_num_days = long_class(num_days)
+
     # Return the literal
-    return literal_class.of(java_num_days).to(date_type_class.get())
+    return converter.numDaysToDateLiteral(int(num_days))
 
 
 def convert_long(val):
@@ -205,11 +187,9 @@ def convert_long(val):
     Convert a Python or Numpy integer value that may
     require a Long.
     """
-    # Get the Java classes
-    long_class = get_long_class()
-    literal_class = get_literal_class()
     # Return the literal
-    return literal_class.of(long_class(val))
+    converter = get_literal_converter_class()
+    return converter.asLongLiteral(int(val))
 
 
 def convert_integer(val):
@@ -217,11 +197,9 @@ def convert_integer(val):
     Convert a Numpy integer value that only
     require an Integer.
     """
-    # Get the Java classes
-    integer_class = get_integer_class()
-    literal_class = get_literal_class()
     # Return the literal
-    return literal_class.of(integer_class(val))
+    converter = get_literal_converter_class()
+    return converter.asIntLiteral(int(val))
 
 
 def convert_string(val):
@@ -230,9 +208,8 @@ def convert_string(val):
     Literal with a Java string.
     """
     # Get the Java classes
-    literal_class = get_literal_class()
-    # Return the literal
-    return literal_class.of(val)
+    converter = get_literal_converter_class()
+    return converter.asStringLiteral(val)
 
 
 def convert_float32(val):
@@ -241,10 +218,8 @@ def convert_float32(val):
     Literal with a Java float.
     """
     # Get the Java classes
-    literal_class = get_literal_class()
-    float_class = get_float_class()
-    # Return the literal
-    return literal_class.of(float_class(val))
+    converter = get_literal_converter_class()
+    return converter.asFloatLiteral(float(val))
 
 
 def convert_float64(val):
@@ -253,10 +228,8 @@ def convert_float64(val):
     Literal with a Java double.
     """
     # Get the Java classes
-    literal_class = get_literal_class()
-    double_class = get_double_class()
-    # Return the literal
-    return literal_class.of(double_class(val))
+    converter = get_literal_converter_class()
+    return converter.asDoubleLiteral(float(val))
 
 
 def convert_bool(val):
@@ -265,7 +238,5 @@ def convert_bool(val):
     a literal with a Java bool.
     """
     # Get the Java classes
-    literal_class = get_literal_class()
-    boolean_class = get_boolean_class()
-    # Return the literal
-    return literal_class.of(boolean_class(val))
+    converter = get_literal_converter_class()
+    return converter.asBoolLiteral(bool(val))
