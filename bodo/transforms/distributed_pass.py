@@ -1205,6 +1205,24 @@ class DistributedPass:
                     extra_globals={"sklearn": sklearn},
                 )
 
+        if func_mod == "sklearn.metrics.pairwise" and func_name == "cosine_similarity":
+            # Set last argument to True if X is distributed
+            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
+                self._set_last_arg_to_true(assign.value)
+
+            # Set second-to-last argument to True if Y exists and is distributed
+            # Y could be passed in as the second positional arg, or a kwarg if not None.
+            # We use `fold_argument_types` to handle both cases
+            pysig = self.calltypes[rhs].pysig
+            folded_args = bodo.utils.transform.fold_argument_types(
+                pysig, rhs.args, rhs.kws
+            )
+            y_arg = folded_args[1]
+            if isinstance(y_arg, ir.Var) and self._is_1D_or_1D_Var_arr(y_arg.name):
+                self._set_second_last_arg_to_true(assign.value)
+
+            return [assign]
+
         if (
             func_name == "split"
             and "bodo.libs.sklearn_ext" in sys.modules
@@ -4285,6 +4303,20 @@ class DistributedPass:
         assert call_type.args[-1] == types.Omitted(False)
         self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
             self.typingctx, call_type.args[:-1] + (types.Omitted(True),), {}
+        )
+
+    def _set_second_last_arg_to_true(self, rhs):
+        """set second-to-last argument of call expr 'rhs' to True, assuming that it is an
+        Omitted arg with value of False.
+        This is usually used for Bodo overloads that have an extra flag as second-to-last
+        argument to enable parallelism.
+        """
+        call_type = self.calltypes.pop(rhs)
+        assert call_type.args[-2] == types.Omitted(False)
+        self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+            self.typingctx,
+            call_type.args[:-2] + (types.Omitted(True), call_type.args[-1]),
+            {},
         )
 
     def _update_avail_vars(self, avail_vars, nodes):
