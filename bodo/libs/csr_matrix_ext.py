@@ -277,6 +277,56 @@ def csr_matrix_getitem(A, idx):
 
         return impl
 
+    elif isinstance(idx, types.Array) and idx.ndim == 1 and idx.dtype == _idx_dtype:
+        # Indexing into a CSR matrix by a 1D array of rows.
+        # Used in conjunction with KFold / train_test_split
+
+        def impl(A, idx):  # pragma: no cover
+            nrows, ncols = A.shape
+
+            # based on
+            # https://github.com/scipy/scipy/blob/e198e0a819a0ae89e9d161076ad5bdc8466a40bc/scipy/sparse/sparsetools/csr.h#L1249
+            Ap = A.indptr
+            Aj = A.indices
+            Ax = A.data
+            new_n_row = len(idx)
+            new_nnz = 0
+            kk = 0
+
+            # Count nonzeros total/per row.
+            for i in range(new_n_row):
+                row = idx[i]
+                row_start = Ap[row]
+                row_end = Ap[row + 1]
+                new_nnz += row_end - row_start
+
+            # Allocate.
+            Bp = np.empty(new_n_row + 1, _idx_dtype)
+            Bj = np.empty(new_nnz, _idx_dtype)
+            Bx = np.empty(new_nnz, _data_dtype)
+
+            # Assign.
+            Bp[0] = 0
+
+            for i in range(new_n_row):
+                row = idx[i]
+                row_start = Ap[row]
+                row_end = Ap[row + 1]
+
+                # This code implements `Bj = std::copy(Aj + row_start, Aj + row_end, Bj)`.
+                # kk denotes the current offset into Bj. We copy `row_end - row_start`
+                # bits between `Aj + row_start` and `Aj + row_end` into Bj starting at kk.
+                # We also update Bp with kk which denotes where each row ends.
+                Bj[kk : kk + row_end - row_start] = Aj[row_start:row_end]
+                Bx[kk : kk + row_end - row_start] = Ax[row_start:row_end]
+                kk += row_end - row_start
+                Bp[i + 1] = kk
+
+            out = init_csr_matrix(Bx, Bj, Bp, (new_n_row, ncols))
+            return out
+
+        return impl
+
     raise BodoError(
         f"getitem for CSR matrix with index type {idx} not supported yet."
     )  # pragma: no cover
