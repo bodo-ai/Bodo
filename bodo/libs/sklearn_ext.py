@@ -1356,6 +1356,157 @@ def overload_log_loss(
     return _log_loss_impl
 
 
+# ----------------------------- cosine_similarity ------------------------------
+
+
+@overload(sklearn.metrics.pairwise.cosine_similarity, no_unliteral=True)
+def overload_metrics_cosine_similarity(
+    X,
+    Y=None,
+    dense_output=True,
+    _is_Y_distributed=False,  # Second-to-last argument specifies if Y is distributed
+    _is_X_distributed=False,  # Last argument specifies if X is distributed
+):
+    """
+    Provide implementations for cosine_similarity computation.
+    If X is replicated, we simply call sklearn on each rank (after calling
+    allgather on Y if it's distributed).
+    If X is distributed, we provide a native implementation.
+    Our native implementation only supports dense output.
+    The current implementation of our algorithm requires Y to be replicated
+    internally, as the output distribution matches X's distribution.
+    If Y is passed in as distributed, we call allgatherv to replicate it.
+
+    Args
+        X (ndarray of shape (n_samples_X, n_features)): Input data
+        Y (ndarray of shape (n_samples_Y, n_features) or None): Input data.
+          If None, the output will be pairwise similarities between all
+          samples in X.
+        dense_output (bool): Whether to return dense output even
+          when the input is sparse. Only True is supported.
+
+    Returns:
+        kernel_matrix (ndarray of shape (n_samples_X, n_samples_Y):
+          Pairwise cosine similarities between elements in X and Y.
+    """
+
+    check_sklearn_version()
+
+    # We only support dense_output=True
+    args_dict = {
+        "dense_output": dense_output,
+    }
+    args_default_dict = {
+        "dense_output": True,
+    }
+    check_unsupported_args("cosine_similarity", args_dict, args_default_dict, "ml")
+
+    if is_overload_false(_is_X_distributed):
+        # If X is replicated, directly call sklearn
+        # See note in sklearn_utils_shuffle for how we define an entry in
+        # numba.core.types for the underlying numba type of X
+        X_type_name = (
+            f"metrics_cosine_similarity_type_{numba.core.ir_utils.next_label()}"
+        )
+        setattr(types, X_type_name, X)
+
+        func_text = "def _metrics_cosine_similarity_impl(\n"
+        func_text += "    X, Y=None, dense_output=True, _is_Y_distributed=False, _is_X_distributed=False\n"
+        func_text += "):\n"
+        if (not is_overload_none(Y)) and is_overload_true(_is_Y_distributed):
+            # If Y exists and is distributed, use allgatherv to replicate it before
+            # passing to sklearn. No need to do anything in the replicated case.
+            func_text += "    Y = bodo.allgatherv(Y)\n"
+
+        # Indexing by [:,::1] instead of [:,:] forces C-style memory layout.
+        # This is needed to prevent ambiguous typing of output array
+        func_text += "    with numba.objmode(out='float64[:,::1]'):\n"
+        func_text += "        out = sklearn.metrics.pairwise.cosine_similarity(\n"
+        func_text += "            X, Y, dense_output=dense_output\n"
+        func_text += "        )\n"
+        func_text += "    return out\n"
+
+        loc_vars = {}
+        exec(func_text, globals(), loc_vars)
+        _metrics_cosine_similarity_impl = loc_vars["_metrics_cosine_similarity_impl"]
+
+    else:
+        # If X is distributed, use native implementation.
+        if is_overload_none(Y):
+            # If Y is None, use specialized implementation for cosine_similarity(X, Y)
+            def _metrics_cosine_similarity_impl(
+                X,
+                Y=None,
+                dense_output=True,
+                _is_Y_distributed=False,
+                _is_X_distributed=False,
+            ):  # pragma: no cover
+                # No need to use object mode since our native implementation is
+                # fully compilable by numba
+
+                # Normalize each feature within X. No communication is needed as X is
+                # distributed across samples (axis=0), not features (axis=1).
+                # See the following links for a derivation: `cosine_similarity`
+                # calls `normalize`, which calls `extmath.row_norms`.
+                # https://github.com/scikit-learn/scikit-learn/blob/1.0.X/sklearn/metrics/pairwise.py#L1253
+                # https://github.com/scikit-learn/scikit-learn/blob/1.0.X/sklearn/preprocessing/_data.py#L1823
+                # https://github.com/scikit-learn/scikit-learn/blob/1.0.X/sklearn/utils/extmath.py#L51
+                X_norms = np.sqrt((X * X).sum(axis=1)).reshape(-1, 1)
+                X_normalized = X / X_norms
+
+                # Compute X.T by communicating across all ranks
+                X_normalized_T = bodo.allgatherv(X_normalized).T
+
+                # Compute dot product between local chunk of X and X.T
+                kernel_matrix = np.dot(X_normalized, X_normalized_T)
+                return kernel_matrix
+
+        else:
+            # If Y is not None, use implementation of cosine_similarity(X, Y)
+            func_text = "def _metrics_cosine_similarity_impl(\n"
+            func_text += "    X, Y=None, dense_output=True, _is_Y_distributed=False, _is_X_distributed=False\n"
+            func_text += "):\n"
+            # No need to use object mode since our native implementation is
+            # fully compilable by numba
+
+            # Normalize each feature within X, Y. No communication is needed as X and Y
+            # are distributed across samples (axis=0), not features (axis=1).
+            # See the following links for a derivation: `cosine_similarity`
+            # calls `normalize`, which calls `extmath.row_norms`.
+            # https://github.com/scikit-learn/scikit-learn/blob/1.0.X/sklearn/metrics/pairwise.py#L1253
+            # https://github.com/scikit-learn/scikit-learn/blob/1.0.X/sklearn/preprocessing/_data.py#L1823
+            # https://github.com/scikit-learn/scikit-learn/blob/1.0.X/sklearn/utils/extmath.py#L51
+            func_text += "    X_norms = np.sqrt((X * X).sum(axis=1)).reshape(-1, 1)\n"
+            func_text += "    X_normalized = X / X_norms\n"
+            func_text += "    Y_norms = np.sqrt((Y * Y).sum(axis=1)).reshape(-1, 1)\n"
+            func_text += "    Y_normalized = Y / Y_norms\n"
+
+            if is_overload_true(_is_Y_distributed):
+                # If Y exists and is distributed, use allgatherv to replicate it before
+                # passing to sklearn. No need to do anything in the replicated case.
+                # No need to do an explicit None check because we are already in the `else`
+                # branch of `is_overload_none(Y)`.
+                func_text += "    Y_normalized = bodo.allgatherv(Y_normalized)\n"
+
+            # Compute Y.T, where Y_normalized is already replicated across all ranks
+            func_text += "    Y_normalized_T = Y_normalized.T\n"
+
+            # Compute dot product between local chunk of X and Y.T
+            func_text += "    kernel_matrix = np.dot(X_normalized, Y_normalized_T)\n"
+            func_text += "    return kernel_matrix\n"
+
+            loc_vars = {}
+            exec(func_text, globals(), loc_vars)
+            _metrics_cosine_similarity_impl = loc_vars[
+                "_metrics_cosine_similarity_impl"
+            ]
+
+    return _metrics_cosine_similarity_impl
+
+
+# ------------------------------ accuracy_score --------------------------------
+
+
 def accuracy_score_dist_helper(y_true, y_pred, normalize, sample_weight):
     """
     Helper for distributed accuracy_score computation.

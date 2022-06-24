@@ -1133,6 +1133,12 @@ class DistributedAnalysis:
 
             return
 
+        if func_mod == "sklearn.metrics.pairwise" and func_name == "cosine_similarity":
+            # Match distribution of X to the output.
+            # The output distribution is intended to match X and should ignore Y.
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if (
             func_name in {"split"}
             and "bodo.libs.sklearn_ext" in sys.modules

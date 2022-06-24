@@ -17,6 +17,7 @@ from sklearn.metrics import (
     r2_score,
     recall_score,
 )
+from sklearn.metrics.pairwise import cosine_similarity
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
@@ -165,6 +166,9 @@ def test_score(data, average, memory_leak_check):
     check_func(test_metrics_f1, tuple(data + [average]), is_out_distributed=False)
 
 
+# ---------------------------------- log_loss ----------------------------------
+
+
 @pytest.mark.parametrize(
     "data",
     # Examples taken from https://github.com/scikit-learn/scikit-learn/blob/632384f4314d84d55de1ba8f4234f7cdc8f37824/sklearn/metrics/tests/test_classification.py#L2466
@@ -255,6 +259,109 @@ def test_log_loss_error(memory_leak_check):
     error_str = "Found input variables with inconsistent numbers of samples"
     with pytest.raises(ValueError, match=error_str):
         dist_impl(y_true, y_pred)
+
+
+# ---------------------------- cosine_similarity -------------------------------
+
+
+def gen_random_2d(n, k, seed=None):
+    """
+    Generate a random 2d ndarray with shape (n, k).
+
+    Args
+        n (int): Number of rows
+        k (int): Number of columns
+        seed (None or int): Random seed, if specified
+    """
+    np.random.seed(seed)
+    out = np.random.rand(n, k)
+    return out
+
+
+@pytest.mark.parametrize(
+    "X, Y, pass_Y_as_kwarg",
+    [
+        (
+            gen_random_2d(15, 6, seed=0),
+            gen_random_2d(8, 6, seed=1),
+            True,
+        ),
+        (
+            gen_random_2d(7, 4, seed=2),
+            gen_random_2d(14, 4, seed=3),
+            False,
+        ),
+        (
+            gen_random_2d(16, 5, seed=4),
+            None,
+            True,
+        ),
+        (
+            np.eye(6, dtype=np.float64),
+            None,
+            True,
+        ),
+        (
+            np.eye(5, dtype=np.int32),
+            None,
+            False,
+        ),
+    ],
+)
+def test_cosine_similarity(X, Y, pass_Y_as_kwarg, memory_leak_check):
+    """
+    Tests for sklearn.metrics.pairwise.cosine_similarity.
+    This is manually tested since the distributions of X and Y are independent.
+    """
+    # For 100% coverage, check that Y can be passed as a positional arg and kwarg
+    if pass_Y_as_kwarg:
+
+        def impl(X, Y):
+            out = cosine_similarity(X, Y=Y)
+            return out
+
+    else:
+
+        def impl(X, Y):
+            out = cosine_similarity(X, Y)
+            return out
+
+    # Can't use check_func here since X and Y possibly have different distributions
+    # So, we manually test that all four combinations of X and Y distributions
+    # are properly handled
+    dist_dist_impl = bodo.jit(distributed=["X", "Y"])(impl)
+    dist_rep_impl = bodo.jit(distributed=["X"])(impl)
+    rep_dist_impl = bodo.jit(distributed=["Y"])(impl)
+    rep_rep_impl = bodo.jit(replicated=True)(impl)
+
+    py_output = impl(X, Y)
+    bodo_output1 = bodo.allgatherv(dist_dist_impl(_get_dist_arg(X), _get_dist_arg(Y)))
+    bodo_output2 = bodo.allgatherv(dist_rep_impl(_get_dist_arg(X), Y))
+    bodo_output3 = rep_dist_impl(X, _get_dist_arg(Y))
+    bodo_output4 = rep_rep_impl(X, Y)
+
+    assert np.allclose(py_output, bodo_output1, atol=1e-4)
+    assert np.allclose(py_output, bodo_output2, atol=1e-4)
+    assert np.allclose(py_output, bodo_output3, atol=1e-4)
+    assert np.allclose(py_output, bodo_output4, atol=1e-4)
+
+
+def test_cosine_similarity_unsupported(memory_leak_check):
+    """
+    Tests for unsupported features in sklearn.metrics.pairwise.cosine_similarity.
+    """
+
+    def impl(X):
+        out = cosine_similarity(X, dense_output=False)
+        return out
+
+    err_msg = "dense_output parameter only supports default value True"
+    with pytest.raises(BodoError, match=err_msg):
+        X = np.eye(15)
+        bodo.jit(distributed=["X"])(impl)(_get_dist_arg(X))
+
+
+# ----------------------------- accuracy_score ---------------------------------
 
 
 @pytest.mark.parametrize(
