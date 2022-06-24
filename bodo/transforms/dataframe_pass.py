@@ -2376,7 +2376,7 @@ class DataFramePass:
             seq_info = guard(find_build_sequence, self.func_ir, var_def.args[0])
             if seq_info is not None:
                 # The table is always the first/only element of the tuple.
-                return seq_info[0]
+                return seq_info[0][0]
 
         nodes += compile_func_single_block(
             eval("lambda df: bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)"),

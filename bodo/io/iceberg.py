@@ -6,6 +6,7 @@ main IR transformation.
 """
 import os
 import re
+from typing import List
 
 import bodo
 from bodo.utils import tracing
@@ -57,7 +58,7 @@ def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
 
 def get_iceberg_file_list(
     table_name: str, conn: str, database_schema: str, filters
-) -> list[str]:
+) -> List[str]:
     """
     Gets the list of parquet data files that need to be read
     from an Iceberg table by calling objmode. We also pass
@@ -199,7 +200,7 @@ def get_iceberg_pq_dataset(
             f"Error reading Iceberg Table: {type(error).__name__}: {str(error)}\n"
         )
 
-    pq_file_list: list[str] = pq_file_list_or_e
+    pq_file_list: List[str] = pq_file_list_or_e
 
     if len(pq_file_list) == 0:
         # In case all files were filered out by Iceberg, we need to
