@@ -1263,12 +1263,17 @@ class DataFramePass:
                 self._get_dataframe_data(df_var, c, nodes) for c in in_df_typ.columns
             ]
             data_args = ["data{}".format(i) for i in range(n_cols)]
+            init_table_args = data_args.copy()
             for i in range(len(col_names_to_replace)):
                 new_arr = new_arrs[i]
                 col_name = col_names_to_replace[i]
                 # we should always updating existing column
                 col_ind = in_df_typ.column_index[col_name]
-                data_args[col_ind] = f"bodo.utils.conversion.coerce_to_array({col_ind})"
+                data_args[col_ind] = f"new_arr_{col_ind}"
+                in_arrs[col_ind] = new_arrs[i]
+                init_table_args[
+                    col_ind
+                ] = f"bodo.utils.conversion.coerce_to_array(new_arr_{col_ind})"
                 in_arrs[col_ind] = new_arr
 
         data_args_full_string = ", ".join(data_args)
@@ -1289,7 +1294,8 @@ class DataFramePass:
             func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T{len(col_names_to_replace)},), df_index, out_df_type)\n"
             func_text += f"  return df\n"
         else:
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args_full_string},), df_index, out_df_type)\n"
+            init_table_args_full_string = ", ".join(init_table_args)
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({init_table_args_full_string},), df_index, out_df_type)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
