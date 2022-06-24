@@ -2325,7 +2325,6 @@ def _get_df_args(data, index, columns, dtype, copy):
                     df_len
                 )
             )
-
     data_args = "({},)".format(
         ", ".join(
             "bodo.utils.conversion.coerce_to_array({}, True, scalar_to_arr_len={}){}".format(
@@ -2353,8 +2352,15 @@ def _get_df_len_from_info(
             break
 
     # If we haven't found a length, rely on the index
-    if df_len == "0" and not index_is_none:
-        df_len = f"len({index_arg})"
+    if df_len == "0":
+        if not index_is_none:
+            df_len = f"len({index_arg})"
+        elif data_dict: #pragma: no cover
+            # In the case that the dataframe is not empty, throw an error.
+            # This shouldn't regularly occur
+            raise BodoError(
+                "Internal Error: Unable to determine length of DataFrame Index. If this is unexpected, please try passing an index value."
+            )
 
     return df_len
 

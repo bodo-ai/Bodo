@@ -27,6 +27,12 @@ from bodo.tests.utils import (
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
 
+@pytest.mark.slow
+def test_init_empty_df():
+    def test_impl():
+        return pd.DataFrame()
+    check_func(test_impl, (),)
+
 
 @pytest.mark.slow
 def test_df_to_string():
@@ -968,6 +974,14 @@ def test_df_index(df_value, memory_leak_check):
         return df.index
 
     check_func(impl, (df_value,))
+
+
+@pytest.mark.slow
+def test_df_index_init_with_range(memory_leak_check):
+    def impl():
+        return pd.DataFrame({"A": range(100)}).index
+
+    check_func(impl, ())
 
 
 @pytest.mark.slow
