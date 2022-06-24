@@ -88,6 +88,15 @@ def pytest_collection_modifyitems(items):
     n = len(items)
     for item in items[0 : n // 3]:
         item.add_marker(pytest.mark.firsthalf)
+        item.add_marker(pytest.mark.firstthird)
+    for item in items[n // 3 : n // 2]:
+        item.add_marker(pytest.mark.firsthalf)
+        item.add_marker(pytest.mark.secondthird)
+    for item in items[n // 2: 2 * n // 3]:
+        item.add_marker(pytest.mark.secondthird)
+    for item in items[2 * n // 3: ]:
+        item.add_marker(pytest.mark.lastthird)
+
     # Check if we should try and mark groups for AWS Codebuild
     if "NUMBER_GROUPS_SPLIT" in os.environ:
         num_groups = int(os.environ["NUMBER_GROUPS_SPLIT"])

@@ -4,7 +4,7 @@ trigger:
 pr: none
 
 schedules:
-- cron: "0 5 * * *"
+- cron: "0 5 * * MON-FRI"
   displayName: 'Daily midnight build'
   branches:
     include:
@@ -78,61 +78,50 @@ stages:
       useNumbaDev: false
       caching_test: false
       matrix:
-        TEST_1P_SLOW:
+        TEST_1P_SLOW_FIRST_HALF:
           NP: 1
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow
-        TEST_2P_SLOW:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow
-        TEST_3P_SLOW:
-          NP: 3
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow
-        TEST_1P_NOT_SLOW:
-          NP: 1
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow
-        TEST_2P_NOT SLOW:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow
-        TEST_3P_NOT_SLOW:
-          NP: 3
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow
-  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
-    parameters:
-      name: Linux
-      vmImage: ubuntu-latest
-      useNumbaDev: false
-      caching_test: false
-      matrix:
-        TEST_1P_SLOW:
-          NP: 1
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow
-        TEST_2P_SLOW:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow
-        TEST_3P_SLOW_FIRST_HALF:
-          NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and firsthalf
-        TEST_3P_SLOW_SECOND_HALF:
-          NP: 3
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and not firsthalf
-        TEST_1P_NOT_SLOW:
+        TEST_1P_SLOW_SECOND_HALF:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow
-        TEST_2P_NOT SLOW:
+          PYTEST_MARKER: slow and not firsthalf
+        TEST_2P_SLOW_FIRST_HALF:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow
+          PYTEST_MARKER: slow and firsthalf
+        TEST_2P_SLOW_SECOND_HALF:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and not firsthalf
+        TEST_3P_SLOW_FIRST_THIRD:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and firstthird
+        TEST_3P_SLOW_SECOND_THIRD:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and secondthird
+        TEST_3P_SLOW_LAST_THIRD:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and lastthird
+        TEST_1P_NOT_SLOW_FIRST_HALF:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and firsthalf
+        TEST_1P_NOT_SLOW_SECOND_HALF:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and not firsthalf
+        TEST_2P_NOT_SLOW_FIRST_HALF:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and firsthalf
+        TEST_2P_NOT_SLOW_SECOND_HALF:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and not firsthalf
         TEST_3P_NOT_SLOW_FIRST_HALF:
           NP: 3
           CONDA_ENV: 'bodo'
@@ -141,6 +130,69 @@ stages:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and not firsthalf
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      name: Linux
+      vmImage: ubuntu-latest
+      useNumbaDev: false
+      caching_test: false
+      matrix:
+        TEST_1P_SLOW_FIRST_HALF:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and firsthalf
+        TEST_1P_SLOW_SECOND_HALF:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and not firsthalf
+        TEST_2P_SLOW_FIRST_HALF:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and firsthalf
+        TEST_2P_SLOW_SECOND_HALF:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and not firsthalf
+        TEST_3P_SLOW_FIRST_THIRD:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and firstthird
+        TEST_3P_SLOW_SECOND_THIRD:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and secondthird
+        TEST_3P_SLOW_LAST_THIRD:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: slow and lastthird
+        TEST_1P_NOT_SLOW_FIRST_HALF:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and firsthalf
+        TEST_1P_NOT_SLOW_SECOND_HALF:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and not firsthalf
+        TEST_2P_NOT_SLOW_FIRST_HALF:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and firsthalf
+        TEST_2P_NOT_SLOW_SECOND_HALF:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and not firsthalf
+        TEST_3P_NOT_SLOW_FIRST_THIRD:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and firstthird
+        TEST_3P_NOT_SLOW_SECOND_THIRD:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and secondthird
+        TEST_3P_NOT_SLOW_LAST_THIRD:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: not slow and lastthird
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
