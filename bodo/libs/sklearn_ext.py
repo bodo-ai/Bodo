@@ -3762,7 +3762,6 @@ def sklearn_preprocessing_one_hot_encoder_overload(
         dtype=np.float64,
         handle_unknown="error",
     ):  # pragma: no cover
-
         with numba.objmode(m="preprocessing_one_hot_encoder_type"):
             m = sklearn.preprocessing.OneHotEncoder(
                 categories=categories,
@@ -3882,40 +3881,32 @@ def overload_preprocessing_one_hot_encoder_fit(
         m: Fitted encoder
     """
 
+    func_text = "def _preprocessing_one_hot_encoder_fit_impl(\n"
+    func_text += "    m, X, y=None, _is_data_distributed=False\n"
+    func_text += "):\n"
+    func_text += "    with numba.objmode(m='preprocessing_one_hot_encoder_type'):\n"
+    # sklearn.fit() expects a 2D array as input, but Bodo does not support
+    # 2D string arrays - these are instead typed as 1D arrays of object
+    # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
+    func_text += "        if X.ndim == 1 and isinstance(X[0], np.ndarray):\n"
+    func_text += "            X = np.vstack(X)\n"
+
     if is_overload_true(_is_data_distributed):
         # If distributed, then use native implementation
-
-        def _preprocessing_one_hot_encoder_fit_impl(
-            m, X, y=None, _is_data_distributed=False
-        ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_one_hot_encoder_type"):
-                # sklearn.fit() expects a 2D array as input, but Bodo does not support
-                # 2D string arrays - these are instead typed as 1D arrays of object
-                # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
-                if X.ndim == 1 and isinstance(X[0], np.ndarray):
-                    X = np.vstack(X)
-
-                m = sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X)
-
-            return m
-
+        func_text += (
+            "        m = sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X)\n"
+        )
     else:
         # If replicated, then just call sklearn
+        func_text += "        m = m.fit(X, y)\n"
 
-        def _preprocessing_one_hot_encoder_fit_impl(
-            m, X, y=None, _is_data_distributed=False
-        ):  # pragma: no cover
-            with numba.objmode(m="preprocessing_one_hot_encoder_type"):
-                # sklearn.fit() expects a 2D array as input, but Bodo does not support
-                # 2D string arrays - these are instead typed as 1D arrays of object
-                # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
-                if X.ndim == 1 and isinstance(X[0], np.ndarray):
-                    X = np.vstack(X)
+    func_text += "    return m\n"
 
-                m = m.fit(X, y)
-
-            return m
-
+    loc_vars = {}
+    exec(func_text, globals(), loc_vars)
+    _preprocessing_one_hot_encoder_fit_impl = loc_vars[
+        "_preprocessing_one_hot_encoder_fit_impl"
+    ]
     return _preprocessing_one_hot_encoder_fit_impl
 
 
@@ -3924,7 +3915,8 @@ def overload_preprocessing_one_hot_encoder_transform(
     m,
     X,
 ):
-    """Provide implementation for OneHotEncoder's transform function.
+    """
+    Provide implementation for OneHotEncoder's transform function.
     We simply call sklearn's transform on each rank.
 
     Args:
@@ -3940,7 +3932,6 @@ def overload_preprocessing_one_hot_encoder_transform(
         m,
         X,
     ):  # pragma: no cover
-
         with numba.objmode(transformed_X="float64[:,:]"):
             # sklearn.fit() expects a 2D array as input, but Bodo does not support
             # 2D string arrays - these are instead typed as 1D arrays of object
@@ -4144,24 +4135,31 @@ def overload_preprocessing_standard_scaler_fit(
     In case input is replicated, we simply call sklearn,
     else we use our native implementation.
     """
-    if is_overload_true(_is_data_distributed) and not is_overload_none(sample_weight):
-        raise BodoError(
-            "sklearn.preprocessing.StandardScaler.fit() : 'sample_weight' is not supported for distributed data."
-        )
+    if is_overload_true(_is_data_distributed):
+        # If distributed, then use native implementation
+        if not is_overload_none(sample_weight):
+            raise BodoError(
+                "sklearn.preprocessing.StandardScaler.fit(): "
+                "'sample_weight' is not supported for distributed data."
+            )
 
-    def _preprocessing_standard_scaler_fit_impl(
-        m, X, y=None, sample_weight=None, _is_data_distributed=False
-    ):  # pragma: no cover
-
-        with numba.objmode(m="preprocessing_standard_scaler_type"):
-            if _is_data_distributed:
-                # If distributed, then use native implementation
+        def _preprocessing_standard_scaler_fit_impl(
+            m, X, y=None, sample_weight=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="preprocessing_standard_scaler_type"):
                 m = sklearn_preprocessing_standard_scaler_fit_dist_helper(m, X)
-            else:
-                # If replicated, then just call sklearn
+
+            return m
+
+    else:
+        # If replicated, then just call sklearn
+        def _preprocessing_standard_scaler_fit_impl(
+            m, X, y=None, sample_weight=None, _is_data_distributed=False
+        ):  # pragma: no cover
+            with numba.objmode(m="preprocessing_standard_scaler_type"):
                 m = m.fit(X, y, sample_weight)
 
-        return m
+            return m
 
     return _preprocessing_standard_scaler_fit_impl
 
@@ -4176,15 +4174,30 @@ def overload_preprocessing_standard_scaler_transform(
     Provide implementation for the transform function.
     We simply call sklearn's transform on each rank.
     """
+    if isinstance(X, CSRMatrixType):
+        types.csr_matrix_float64_int64 = CSRMatrixType(types.float64, types.int64)
 
-    def _preprocessing_standard_scaler_transform_impl(
-        m,
-        X,
-        copy=None,
-    ):  # pragma: no cover
-        with numba.objmode(transformed_X="float64[:,:]"):
-            transformed_X = m.transform(X, copy=copy)
-        return transformed_X
+        def _preprocessing_standard_scaler_transform_impl(
+            m,
+            X,
+            copy=None,
+        ):  # pragma: no cover
+            with numba.objmode(transformed_X="csr_matrix_float64_int64"):
+                transformed_X = m.transform(X, copy=copy)
+                transformed_X.indices = transformed_X.indices.astype(np.int64)
+                transformed_X.indptr = transformed_X.indptr.astype(np.int64)
+            return transformed_X
+
+    else:
+
+        def _preprocessing_standard_scaler_transform_impl(
+            m,
+            X,
+            copy=None,
+        ):  # pragma: no cover
+            with numba.objmode(transformed_X="float64[:,:]"):
+                transformed_X = m.transform(X, copy=copy)
+            return transformed_X
 
     return _preprocessing_standard_scaler_transform_impl
 
@@ -4201,15 +4214,34 @@ def overload_preprocessing_standard_scaler_inverse_transform(
     Provide implementation for the inverse_transform function.
     We simply call sklearn's inverse_transform on each rank.
     """
+    if isinstance(X, CSRMatrixType):
+        types.csr_matrix_float64_int64 = CSRMatrixType(types.float64, types.int64)
 
-    def _preprocessing_standard_scaler_inverse_transform_impl(
-        m,
-        X,
-        copy=None,
-    ):  # pragma: no cover
-        with numba.objmode(inverse_transformed_X="float64[:,:]"):
-            inverse_transformed_X = m.inverse_transform(X, copy=copy)
-        return inverse_transformed_X
+        def _preprocessing_standard_scaler_inverse_transform_impl(
+            m,
+            X,
+            copy=None,
+        ):  # pragma: no cover
+            with numba.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
+                inverse_transformed_X = m.inverse_transform(X, copy=copy)
+                inverse_transformed_X.indices = inverse_transformed_X.indices.astype(
+                    np.int64
+                )
+                inverse_transformed_X.indptr = inverse_transformed_X.indptr.astype(
+                    np.int64
+                )
+            return inverse_transformed_X
+
+    else:
+
+        def _preprocessing_standard_scaler_inverse_transform_impl(
+            m,
+            X,
+            copy=None,
+        ):  # pragma: no cover
+            with numba.objmode(inverse_transformed_X="float64[:,:]"):
+                inverse_transformed_X = m.inverse_transform(X, copy=copy)
+            return inverse_transformed_X
 
     return _preprocessing_standard_scaler_inverse_transform_impl
 
@@ -4410,14 +4442,28 @@ def overload_preprocessing_max_abs_scaler_transform(
     Provide implementation for the transform function.
     We simply call sklearn's transform on each rank.
     """
+    if isinstance(X, CSRMatrixType):
+        types.csr_matrix_float64_int64 = CSRMatrixType(types.float64, types.int64)
 
-    def _preprocessing_max_abs_scaler_transform_impl(
-        m,
-        X,
-    ):  # pragma: no cover
-        with numba.objmode(transformed_X="float64[:,:]"):
-            transformed_X = m.transform(X)
-        return transformed_X
+        def _preprocessing_max_abs_scaler_transform_impl(
+            m,
+            X,
+        ):  # pragma: no cover
+            with numba.objmode(transformed_X="csr_matrix_float64_int64"):
+                transformed_X = m.transform(X)
+                transformed_X.indices = transformed_X.indices.astype(np.int64)
+                transformed_X.indptr = transformed_X.indptr.astype(np.int64)
+            return transformed_X
+
+    else:
+
+        def _preprocessing_max_abs_scaler_transform_impl(
+            m,
+            X,
+        ):  # pragma: no cover
+            with numba.objmode(transformed_X="float64[:,:]"):
+                transformed_X = m.transform(X)
+            return transformed_X
 
     return _preprocessing_max_abs_scaler_transform_impl
 
@@ -4433,14 +4479,32 @@ def overload_preprocessing_max_abs_scaler_inverse_transform(
     Provide implementation for the inverse_transform function.
     We simply call sklearn's inverse_transform on each rank.
     """
+    if isinstance(X, CSRMatrixType):
+        types.csr_matrix_float64_int64 = CSRMatrixType(types.float64, types.int64)
 
-    def _preprocessing_max_abs_scaler_inverse_transform_impl(
-        m,
-        X,
-    ):  # pragma: no cover
-        with numba.objmode(inverse_transformed_X="float64[:,:]"):
-            inverse_transformed_X = m.inverse_transform(X)
-        return inverse_transformed_X
+        def _preprocessing_max_abs_scaler_inverse_transform_impl(
+            m,
+            X,
+        ):  # pragma: no cover
+            with numba.objmode(inverse_transformed_X="csr_matrix_float64_int64"):
+                inverse_transformed_X = m.inverse_transform(X)
+                inverse_transformed_X.indices = inverse_transformed_X.indices.astype(
+                    np.int64
+                )
+                inverse_transformed_X.indptr = inverse_transformed_X.indptr.astype(
+                    np.int64
+                )
+            return inverse_transformed_X
+
+    else:
+
+        def _preprocessing_max_abs_scaler_inverse_transform_impl(
+            m,
+            X,
+        ):  # pragma: no cover
+            with numba.objmode(inverse_transformed_X="float64[:,:]"):
+                inverse_transformed_X = m.inverse_transform(X)
+            return inverse_transformed_X
 
     return _preprocessing_max_abs_scaler_inverse_transform_impl
 
@@ -5651,7 +5715,7 @@ def overload_preprocessing_robust_scaler_inverse_transform(
 
 
 # ----------------------------------------------------------------------------------------
-# ----------------------------------- LabelEncoder------------------------------------
+# ------------------------------------- LabelEncoder--------------------------------------
 # Support for sklearn.preprocessing.LabelEncoder.
 # Currently only fit, fit_transform, transform and inverse_transform functions are supported.
 # We use sklearn's transform and inverse_transform directly in their Bodo implementation.

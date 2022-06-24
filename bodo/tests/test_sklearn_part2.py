@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 import scipy
 from pandas.testing import assert_frame_equal
+from scipy.sparse import csr_matrix, issparse
 from scipy.special import comb
 from sklearn import datasets
 from sklearn.metrics import precision_score
@@ -1081,6 +1082,18 @@ def gen_sklearn_scalers_edge_case(
             gen_sklearn_scalers_edge_case(20, 5, 0, 4, 2),
             gen_sklearn_scalers_random_data(40, 5, 0.1, 3),
         ),
+        (
+            gen_sklearn_scalers_random_data(20, 3),
+            gen_sklearn_scalers_random_data(100, 3),
+        ),
+        (
+            csr_matrix(gen_sklearn_scalers_random_data(20, 3)),
+            csr_matrix(gen_sklearn_scalers_random_data(100, 3)),
+        ),
+        (
+            csr_matrix(gen_sklearn_scalers_random_data(15, 5, 0.2, 4)),
+            csr_matrix(gen_sklearn_scalers_random_data(60, 5, 0.5, 2)),
+        ),
     ],
 )
 @pytest.mark.parametrize("copy", [True, False])
@@ -1090,6 +1103,11 @@ def test_standard_scaler(data, copy, with_mean, with_std, memory_leak_check):
     """
     Tests for sklearn.preprocessing.StandardScaler implementation in Bodo.
     """
+    if issparse(data[0]) and (with_mean or with_std):
+        # Skip sparse test cases that would result in an error, since
+        # memory_leak_check behaves inconsistently with numba errors. These are
+        # tested in test_standard_scaler_sparse_error without memory_leak_check.
+        return
 
     def test_fit(X):
         m = StandardScaler(with_mean=with_mean, with_std=with_std, copy=copy)
@@ -1117,7 +1135,11 @@ def test_standard_scaler(data, copy, with_mean, with_std, memory_leak_check):
         return X1_transformed
 
     check_func(
-        test_transform, data, is_out_distributed=True, atol=1e-4, copy_input=True
+        test_transform,
+        data,
+        is_out_distributed=True,
+        atol=1e-4,
+        copy_input=True,
     )
 
     def test_inverse_transform(X, X1):
@@ -1135,13 +1157,52 @@ def test_standard_scaler(data, copy, with_mean, with_std, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "data",
+    [
+        (
+            csr_matrix(gen_sklearn_scalers_random_data(20, 3)),
+            csr_matrix(gen_sklearn_scalers_random_data(100, 3)),
+        ),
+        (
+            csr_matrix(gen_sklearn_scalers_random_data(15, 5, 0.2, 4)),
+            csr_matrix(gen_sklearn_scalers_random_data(60, 5, 0.5, 2)),
+        ),
+    ],
+)
+@pytest.mark.parametrize("copy", [True, False])
+@pytest.mark.parametrize("with_mean", [True, False])
+@pytest.mark.parametrize("with_std", [True, False])
+def test_standard_scaler_sparse_error(data, copy, with_mean, with_std):
+    def test_fit(X):
+        m = StandardScaler(with_mean=with_mean, with_std=with_std, copy=copy)
+        m = m.fit(X)
+        return m
+
+    if with_mean:
+        # Test that sparse matrices cannot be centered
+        error_str = "Cannot center sparse matrices: pass `with_mean=False` instead."
+        with pytest.raises(ValueError, match=error_str):
+            py_output = test_fit(data[0])
+        with pytest.raises(ValueError, match=error_str):
+            bodo_output = bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
+
+    if with_std:
+        # In bodo's implementation, `with_std=True` causes an underlying call to fit
+        # on each rank where `with_mean=True`, which also triggers the ValueError
+        # above when X is a sparse matrix
+        error_str = "Cannot center sparse matrices: pass `with_mean=False` instead."
+        with pytest.raises(ValueError, match=error_str):
+            bodo_output = bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
+
+
 # ---------------------MaxAbsScaler Tests--------------------
 
 
 @pytest.mark.parametrize(
     "data",
     [
-        # Test one with numpy array and one with df
+        # Test one with numpy array, one with df, and one with sparse matrix
         (
             gen_sklearn_scalers_random_data(15, 5, 0.2, 4),
             gen_sklearn_scalers_random_data(60, 5, 0.5, 2),
@@ -1149,6 +1210,10 @@ def test_standard_scaler(data, copy, with_mean, with_std, memory_leak_check):
         (
             pd.DataFrame(gen_sklearn_scalers_random_data(20, 3)),
             gen_sklearn_scalers_random_data(100, 3),
+        ),
+        (
+            csr_matrix(gen_sklearn_scalers_random_data(20, 3)),
+            csr_matrix(gen_sklearn_scalers_random_data(100, 3)),
         ),
         # The other combinations are marked slow
         pytest.param(
@@ -1169,6 +1234,13 @@ def test_standard_scaler(data, copy, with_mean, with_std, memory_leak_check):
             (
                 pd.DataFrame(gen_sklearn_scalers_random_data(20, 3)),
                 pd.DataFrame(gen_sklearn_scalers_random_data(100, 3)),
+            ),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                csr_matrix(gen_sklearn_scalers_random_data(15, 5, 0.2, 4)),
+                csr_matrix(gen_sklearn_scalers_random_data(60, 5, 0.5, 2)),
             ),
             marks=pytest.mark.slow,
         ),
@@ -1216,7 +1288,11 @@ def test_max_abs_scaler(data, copy, memory_leak_check):
         return X1_transformed
 
     check_func(
-        test_transform, data, is_out_distributed=True, atol=1e-4, copy_input=True
+        test_transform,
+        data,
+        is_out_distributed=True,
+        atol=1e-4,
+        copy_input=True,
     )
 
     def test_inverse_transform(X, X1):
@@ -1315,7 +1391,11 @@ def test_minmax_scaler(data, feature_range, copy, clip, memory_leak_check):
         return X1_transformed
 
     check_func(
-        test_transform, data, is_out_distributed=True, atol=1e-8, copy_input=True
+        test_transform,
+        data,
+        is_out_distributed=True,
+        atol=1e-8,
+        copy_input=True,
     )
 
     def test_inverse_transform(X, X1):
