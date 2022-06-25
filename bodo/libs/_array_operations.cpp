@@ -237,9 +237,12 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, int64_t* na_position,
-                              int64_t* dead_keys, bool parallel) {
+                              int64_t* dead_keys, int64_t* out_n_rows, bool parallel) {
     try {
         tracing::Event ev("sort_values_table", parallel);
+        // number of output rows is the same as input in sort
+        if (out_n_rows != nullptr)
+            *out_n_rows = (int64_t)in_table->nrows();
 
         if (parallel) {
             // Convert all local dictionaries to global for dict columns.

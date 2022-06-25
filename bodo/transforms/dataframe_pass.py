@@ -740,6 +740,7 @@ class DataFramePass:
         """
         df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
         df_typ = self.typemap[df_var.name]
+        is_table_format = self.typemap[lhs.name].is_table_format
         inplace = guard(find_const, self.func_ir, inplace_var)
         # error_msg should be unused
         error_msg = "df.sort_values(): 'na_position' must be a literal constant of type str or a constant list of str with 1 entry per key column"
@@ -778,19 +779,23 @@ class DataFramePass:
         ), f"invalid sort keys {key_names}"
 
         nodes = []
-        in_vars = [self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns]
+        if is_table_format:
+            in_table_var = self._get_dataframe_table(df_var, nodes)
+            in_vars = [in_table_var]
+        else:
+            in_vars = [
+                self._get_dataframe_data(df_var, c, nodes) for c in df_typ.columns
+            ]
         in_index_var = self._gen_array_from_index(df_var, nodes)
         in_vars.append(in_index_var)
 
         key_inds = tuple(
-            len(in_vars) - 1 if c == index_name else df_typ.column_index[c]
+            len(df_typ.columns) if c == index_name else df_typ.column_index[c]
             for c in key_names
         )
         if inplace:
-            if any(
-                self.typemap[in_vars[i].name] == bodo.dict_str_arr_type
-                for i in key_inds
-            ):
+            arr_types = df_typ.data + (self.typemap[in_index_var.name],)
+            if any(arr_types[i] == bodo.dict_str_arr_type for i in key_inds):
                 raise BodoError(
                     "inplace sort not supported for dictionary-encoded string arrays yet",
                     loc=rhs.loc,
@@ -799,10 +804,19 @@ class DataFramePass:
             out_index_var = in_index_var
         else:
             out_vars = []
-            for ind, k in enumerate(df_typ.columns):
-                out_var = ir.Var(lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc)
-                self.typemap[out_var.name] = df_typ.data[ind]
+            if is_table_format:
+                out_var = ir.Var(
+                    lhs.scope, mk_unique_var(sanitize_varname("out_table")), lhs.loc
+                )
+                self.typemap[out_var.name] = df_typ.table_type
                 out_vars.append(out_var)
+            else:
+                for ind, k in enumerate(df_typ.columns):
+                    out_var = ir.Var(
+                        lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc
+                    )
+                    self.typemap[out_var.name] = df_typ.data[ind]
+                    out_vars.append(out_var)
             # index var
             out_index_var = ir.Var(lhs.scope, mk_unique_var("_index_"), lhs.loc)
             self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
@@ -819,6 +833,8 @@ class DataFramePass:
                 lhs.loc,
                 ascending_list,
                 na_position,
+                is_table_format=is_table_format,
+                num_table_arrays=len(df_typ.columns) if is_table_format else 0,
             )
         )
 
@@ -827,7 +843,9 @@ class DataFramePass:
         in_df_index_name = self._get_index_name(in_df_index, nodes)
         out_index = self._gen_index_from_array(out_index_var, in_df_index_name, nodes)
 
-        _init_df = _gen_init_df_dataframe_pass(df_typ.columns, "index")
+        _init_df = _gen_init_df_dataframe_pass(
+            df_typ.columns, "index", is_table_format=is_table_format
+        )
 
         # return new df even for inplace case, since typing pass replaces input variable
         # using output of the call
@@ -2516,9 +2534,13 @@ exec(func_text)
 numba.extending.register_jitable(globals()["_check_query_series_bool"])
 
 
-def _gen_init_df_dataframe_pass(columns, index=None):
+def _gen_init_df_dataframe_pass(columns, index=None, is_table_format=False):
     n_cols = len(columns)
-    data_args = ", ".join("data{}".format(i) for i in range(n_cols))
+    if is_table_format:
+        # Table always uses only a single variable
+        data_args = "data0"
+    else:
+        data_args = ", ".join("data{}".format(i) for i in range(n_cols))
     args = data_args
 
     if index is None:

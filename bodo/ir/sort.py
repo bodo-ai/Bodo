@@ -8,26 +8,32 @@ import numpy as np
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
-    mk_unique_var,
     replace_arg_nodes,
     replace_vars_inner,
     visit_vars_inner,
 )
 
 import bodo
-import bodo.libs.timsort
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
+    cpp_table_to_py_data,
     delete_table,
     delete_table_decref_arrays,
     info_from_table,
     info_to_array,
+    py_data_to_cpp_table,
     sort_values_table,
 )
-from bodo.libs.str_arr_ext import cp_str_list_to_array, to_list_if_immutable_arr
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
+from bodo.transforms.table_column_del_pass import (
+    _compute_table_column_uses,
+    _find_used_columns,
+    ir_extension_table_column_use,
+    remove_dead_column_extensions,
+)
+from bodo.utils.typing import MetaType, type_has_unknown_cats
 from bodo.utils.utils import gen_getitem
 
 
@@ -43,6 +49,8 @@ class Sort(ir.Stmt):
         loc: ir.Loc,
         ascending_list: Union[List[bool], bool] = True,
         na_position: Union[List[str], str] = "last",
+        is_table_format: bool = False,
+        num_table_arrays: int = 0,
     ):
         """IR node for sort operations. Produced by several sort operations like
         df/Series.sort_values and df/Series.sort_index.
@@ -53,15 +61,22 @@ class Sort(ir.Stmt):
         Args:
             df_in (str): name of input dataframe (for printing Sort node only)
             df_out (str): name of output dataframe (for printing Sort node only)
-            in_vars (list[ir.Var]): list of input variables to sort (including keys)
-            out_vars (list[ir.Var]): list of output variables of sort (including keys)
-            key_inds (tuple[int]): indices of key arrays in in_vars for sorting
+            in_vars (list[ir.Var]): list of input variables to sort (including keys).
+                The first variable is the table for the table format case.
+            out_vars (list[ir.Var]): list of output variables of sort (including keys).
+                The first variable is the table for the table format case.
+            key_inds (tuple[int]): indices of key arrays in in_vars for sorting.
+                Indices are logical indices of columns that could be in the table
+                (in case of table format) or not.
             inplace (bool): sort values inplace (avoid creating new arrays)
             loc (ir.Loc): location object of this IR node
             ascending_list (bool|list[bool], optional): Ascending or descending sort
                 order (can be set per key). Defaults to True.
             na_position (str|list[str], optional): Place null values first or last in
                 output array. Can be set per key. Defaults to "last".
+            is_table_format (bool): flag for table format case (first variable is a
+                table in in_vars/out_vars)
+            num_table_arrays: number of columns in the table in case of table format
         """
 
         self.df_in = df_in
@@ -70,9 +85,14 @@ class Sort(ir.Stmt):
         self.out_vars = out_vars
         self.key_inds = key_inds
         self.inplace = inplace
-        # indices of dead variables in in_vars/out_vars (excluding keys), updated in DCE
+        self.is_table_format = is_table_format
+        self.num_table_arrays = num_table_arrays
+        # Logical indices of dead columns in input/output (excluding keys), updated in
+        # DCE. The column may be in the table (in case of table format) or not.
+        # Example: 3 columns table, 1 non-table, dead_var_inds={1, 3} means column 1 in
+        # the table is dead and also the non-table column is dead.
         self.dead_var_inds: Set[int] = set()
-        # indices of dead key variables in out_vars, updated in DCE
+        # Logical indices of dead key columns in output, updated in DCE.
         self.dead_key_var_inds: Set[int] = set()
 
         # normalize na_position to list of bools (per key)
@@ -96,16 +116,27 @@ class Sort(ir.Stmt):
         self.ascending_list = ascending_list
         self.loc = loc
 
+    def get_live_in_vars(self):
+        """return input variables that are live (handles both table and non-table
+        format cases)
+
+        Returns:
+            list(ir.Var): list of live variables
+        """
+        return [v for v in self.in_vars if v is not None]
+
+    def get_live_out_vars(self):
+        """return output variables that are live (handles both table and non-table format)
+
+        Returns:
+            list(ir.Var): list of live output variables
+        """
+        return [v for v in self.out_vars if v is not None]
+
     def __repr__(self):  # pragma: no cover
-        in_cols = ", ".join(
-            v.name for i, v in enumerate(self.in_vars) if i not in self.dead_var_inds
-        )
+        in_cols = ", ".join(v.name for v in self.get_live_in_vars())
         df_in_str = f"{self.df_in}{{{in_cols}}}"
-        out_cols = ", ".join(
-            v.name
-            for i, v in enumerate(self.out_vars)
-            if (i not in self.dead_var_inds and i not in self.dead_key_var_inds)
-        )
+        out_cols = ", ".join(v.name for v in self.get_live_out_vars())
         df_out_str = f"{self.df_out}{{{out_cols}}}"
         return f"Sort (keys: {self.key_inds}): {df_in_str} {df_out_str}"
 
@@ -130,9 +161,7 @@ def sort_array_analysis(sort_node, equiv_set, typemap, array_analysis):
 
     # arrays of input df have same size in first dimension
     all_shapes = []
-    for i, col_var in enumerate(sort_node.in_vars):
-        if i in sort_node.dead_var_inds:
-            continue
+    for col_var in sort_node.get_live_in_vars():
         col_shape = equiv_set.get_shape(col_var)
         if col_shape is not None:
             all_shapes.append(col_shape[0])
@@ -146,9 +175,7 @@ def sort_array_analysis(sort_node, equiv_set, typemap, array_analysis):
     post = []
     all_shapes = []
 
-    for i, col_var in enumerate(sort_node.out_vars):
-        if i in sort_node.dead_var_inds or i in sort_node.dead_key_var_inds:
-            continue
+    for col_var in sort_node.get_live_out_vars():
         typ = typemap[col_var.name]
         shape = array_analysis._gen_shape_call(equiv_set, col_var, typ.ndim, None, post)
         equiv_set.insert_equiv(col_var, shape)
@@ -174,14 +201,8 @@ def sort_distributed_analysis(sort_node, array_dists):
             (variable name -> Distribution)
     """
 
-    in_arrs = [
-        v for i, v in enumerate(sort_node.in_vars) if i not in sort_node.dead_var_inds
-    ]
-    out_arrs = [
-        v
-        for i, v in enumerate(sort_node.out_vars)
-        if (i not in sort_node.dead_var_inds and i not in sort_node.dead_key_var_inds)
-    ]
+    in_arrs = sort_node.get_live_in_vars()
+    out_arrs = sort_node.get_live_out_vars()
     # input columns have same distribution
     in_dist = Distribution.OneD
     for col_var in in_arrs:
@@ -219,22 +240,16 @@ def sort_typeinfer(sort_node, typeinferer):
         sort_node (Sort): Sort IR node
         typeinferer (TypeInferer): type inference pass object
     """
-    in_vars = [
-        v
-        for i, v in enumerate(sort_node.in_vars)
-        if (i not in sort_node.dead_var_inds and i not in sort_node.dead_key_var_inds)
-    ]
-    out_vars = [
-        v
-        for i, v in enumerate(sort_node.out_vars)
-        if (i not in sort_node.dead_var_inds and i not in sort_node.dead_key_var_inds)
-    ]
 
     # input and output arrays have the same type
-    for in_var, out_var in zip(in_vars, out_vars):
-        typeinferer.constraints.append(
-            typeinfer.Propagate(dst=out_var.name, src=in_var.name, loc=sort_node.loc)
-        )
+    for i, out_var in enumerate(sort_node.out_vars):
+        in_var = sort_node.in_vars[i]
+        if in_var is not None and out_var is not None:
+            typeinferer.constraints.append(
+                typeinfer.Propagate(
+                    dst=out_var.name, src=in_var.name, loc=sort_node.loc
+                )
+            )
 
 
 typeinfer.typeinfer_extensions[Sort] = sort_typeinfer
@@ -257,9 +272,7 @@ def build_sort_definitions(sort_node, definitions=None):
 
     # output arrays are defined
     if not sort_node.inplace:
-        for i, col_var in enumerate(sort_node.out_vars):
-            if i in sort_node.dead_var_inds or i in sort_node.dead_key_var_inds:
-                continue
+        for col_var in sort_node.get_live_out_vars():
             definitions[col_var.name].append(sort_node)
 
     return definitions
@@ -278,14 +291,14 @@ def visit_vars_sort(sort_node, callback, cbdata):
     """
 
     for i in range(len(sort_node.in_vars)):
-        if i in sort_node.dead_var_inds:
-            continue
-        sort_node.in_vars[i] = visit_vars_inner(sort_node.in_vars[i], callback, cbdata)
-        if i in sort_node.dead_key_var_inds:
-            continue
-        sort_node.out_vars[i] = visit_vars_inner(
-            sort_node.out_vars[i], callback, cbdata
-        )
+        if sort_node.in_vars[i] is not None:
+            sort_node.in_vars[i] = visit_vars_inner(
+                sort_node.in_vars[i], callback, cbdata
+            )
+        if sort_node.out_vars[i] is not None:
+            sort_node.out_vars[i] = visit_vars_inner(
+                sort_node.out_vars[i], callback, cbdata
+            )
 
 
 ir_utils.visit_vars_extensions[Sort] = visit_vars_sort
@@ -311,17 +324,41 @@ def remove_dead_sort(
 
     # TODO: arg aliases for inplace case?
 
-    for i, v in enumerate(sort_node.out_vars):
-        if v.name not in lives:
-            if i in sort_node.key_inds:
-                sort_node.dead_key_var_inds.add(i)
-            else:
-                sort_node.dead_var_inds.add(i)
+    # table case: get logical indices of dead columns
+    if sort_node.is_table_format:
+        table_var = sort_node.out_vars[0]
+        if table_var is not None and table_var.name not in lives:
+            sort_node.out_vars[0] = None
+            dead_cols = set(range(sort_node.num_table_arrays))
+            key_set = set(sort_node.key_inds)
+            sort_node.dead_key_var_inds.update(dead_cols & key_set)
+            sort_node.dead_var_inds.update(dead_cols - key_set)
+            # input table is dead if no key is from input table
+            if len(key_set & dead_cols) == 0:
+                sort_node.in_vars[0] = None
+        for i in range(1, len(sort_node.out_vars)):
+            v = sort_node.out_vars[i]
+            if v is not None and v.name not in lives:
+                sort_node.out_vars[i] = None
+                col_no = sort_node.num_table_arrays + i - 1
+                if col_no in sort_node.key_inds:
+                    sort_node.dead_key_var_inds.add(col_no)
+                else:
+                    sort_node.dead_var_inds.add(col_no)
+                    sort_node.in_vars[i] = None
+    else:
+        for i in range(len(sort_node.out_vars)):
+            v = sort_node.out_vars[i]
+            if v is not None and v.name not in lives:
+                sort_node.out_vars[i] = None
+                if i in sort_node.key_inds:
+                    sort_node.dead_key_var_inds.add(i)
+                else:
+                    sort_node.dead_var_inds.add(i)
+                    sort_node.in_vars[i] = None
 
     # remove empty sort node
-    if (len(sort_node.dead_var_inds) + len(sort_node.dead_key_var_inds)) == len(
-        sort_node.out_vars
-    ):
+    if all(v is None for v in sort_node.out_vars):
         return None
 
     return sort_node
@@ -348,26 +385,11 @@ def sort_usedefs(sort_node, use_set=None, def_set=None):
         def_set = set()
 
     # input arrays are used
-    use_set.update(
-        {
-            v.name
-            for i, v in enumerate(sort_node.in_vars)
-            if i not in sort_node.dead_var_inds
-        }
-    )
+    use_set.update({v.name for v in sort_node.get_live_in_vars()})
 
     # output arrays are defined
     if not sort_node.inplace:
-        def_set.update(
-            {
-                v.name
-                for i, v in enumerate(sort_node.out_vars)
-                if (
-                    i not in sort_node.dead_var_inds
-                    and i not in sort_node.dead_key_var_inds
-                )
-            }
-        )
+        def_set.update({v.name for v in sort_node.get_live_out_vars()})
 
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
@@ -388,16 +410,7 @@ def get_copies_sort(sort_node, typemap):
     # sort doesn't generate copies, it just kills the output columns
     kill_set = set()
     if not sort_node.inplace:
-        kill_set.update(
-            {
-                v.name
-                for i, v in enumerate(sort_node.out_vars)
-                if (
-                    i not in sort_node.dead_var_inds
-                    and i not in sort_node.dead_key_var_inds
-                )
-            }
-        )
+        kill_set.update({v.name for v in sort_node.get_live_out_vars()})
     return set(), kill_set
 
 
@@ -418,12 +431,10 @@ def apply_copies_sort(
         save_copies (list(tuple(str, ir.Var))): copies that were applied
     """
     for i in range(len(sort_node.in_vars)):
-        if i in sort_node.dead_var_inds:
-            continue
-        sort_node.in_vars[i] = replace_vars_inner(sort_node.in_vars[i], var_dict)
-        if i in sort_node.dead_key_var_inds:
-            continue
-        sort_node.out_vars[i] = replace_vars_inner(sort_node.out_vars[i], var_dict)
+        if sort_node.in_vars[i] is not None:
+            sort_node.in_vars[i] = replace_vars_inner(sort_node.in_vars[i], var_dict)
+        if sort_node.out_vars[i] is not None:
+            sort_node.out_vars[i] = replace_vars_inner(sort_node.out_vars[i], var_dict)
 
 
 ir_utils.apply_copy_propagate_extensions[Sort] = apply_copies_sort
@@ -447,14 +458,8 @@ def sort_distributed_run(
     """
 
     parallel = False
-    in_vars = [
-        v for i, v in enumerate(sort_node.in_vars) if i not in sort_node.dead_var_inds
-    ]
-    out_vars = [
-        v
-        for i, v in enumerate(sort_node.out_vars)
-        if (i not in sort_node.dead_var_inds and i not in sort_node.dead_key_var_inds)
-    ]
+    in_vars = sort_node.get_live_in_vars()
+    out_vars = sort_node.get_live_out_vars()
     if array_dists is not None:
         parallel = True
         for v in in_vars + out_vars:
@@ -464,63 +469,37 @@ def sort_distributed_run(
             ):
                 parallel = False
 
-    loc = sort_node.loc
-    scope = sort_node.in_vars[0].scope
-
-    # get input key and data variables separately to pass to C++
-    # NOTE: keys have to be in `key_inds` order when passed to C++
-    key_vars = [sort_node.in_vars[i] for i in sort_node.key_inds]
-    data_vars = [
-        v
-        for i, v in enumerate(sort_node.in_vars)
-        if i not in sort_node.key_inds and i not in sort_node.dead_var_inds
-    ]
-
     # copy arrays when not inplace
     nodes = []
     if not sort_node.inplace:
-        new_key_vars = []
-        for v in key_vars:
-            v_cp = _copy_array_nodes(v, nodes, typingctx, targetctx, typemap, calltypes)
-            new_key_vars.append(v_cp)
-        key_vars = new_key_vars
+        new_in_vars = []
+        for v in in_vars:
+            v_cp = _copy_array_nodes(
+                v,
+                nodes,
+                typingctx,
+                targetctx,
+                typemap,
+                calltypes,
+                sort_node.dead_var_inds,
+            )
+            new_in_vars.append(v_cp)
+        in_vars = new_in_vars
 
-        new_data_vars = []
-        for v in data_vars:
-            v_cp = _copy_array_nodes(v, nodes, typingctx, targetctx, typemap, calltypes)
-            new_data_vars.append(v_cp)
-        data_vars = new_data_vars
+    out_types = [
+        typemap[v.name] if v is not None else types.none for v in sort_node.out_vars
+    ]
 
-    key_name_args = [f"key{i}" for i in range(len(key_vars))]
-    key_name_args_join = ", ".join(key_name_args)
-    col_name_args = [f"c{i}" for i in range(len(data_vars))]
-    col_name_args_join = ", ".join(col_name_args)
-
-    func_text = f"def f({key_name_args_join}, {col_name_args_join}):\n"
-    # map variable number to key number (e.g. for key_inds=[1, 3], 1 -> 0, 3 ->1 )
-    key_map = {k: i for i, k in enumerate(sort_node.key_inds)}
-    dead_keys = {key_map[i] for i in sort_node.dead_key_var_inds}
-    func_text += get_sort_cpp_section(
-        key_name_args,
-        col_name_args,
-        sort_node.ascending_list,
-        sort_node.na_position_b,
-        dead_keys,
-        parallel,
-    )
-    func_text += "  return key_arrs, data\n"
+    func_text, glbls = get_sort_cpp_section(sort_node, out_types, parallel)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     sort_impl = loc_vars["f"]
 
-    f_block = compile_to_numba_ir(
-        sort_impl,
+    glbls.update(
         {
             "bodo": bodo,
             "np": np,
-            "to_list_if_immutable_arr": to_list_if_immutable_arr,
-            "cp_str_list_to_array": cp_str_list_to_array,
             "delete_table": delete_table,
             "delete_table_decref_arrays": delete_table_decref_arrays,
             "info_to_array": info_to_array,
@@ -528,44 +507,28 @@ def sort_distributed_run(
             "sort_values_table": sort_values_table,
             "arr_info_list_to_table": arr_info_list_to_table,
             "array_to_info": array_to_info,
-        },
+            "py_data_to_cpp_table": py_data_to_cpp_table,
+            "cpp_table_to_py_data": cpp_table_to_py_data,
+        }
+    )
+    glbls.update({f"out_type{i}": out_types[i] for i in range(len(out_types))})
+
+    f_block = compile_to_numba_ir(
+        sort_impl,
+        glbls,
         typingctx=typingctx,
         targetctx=targetctx,
-        arg_typs=tuple(typemap[v.name] for v in key_vars + data_vars),
+        arg_typs=tuple(typemap[v.name] for v in in_vars),
         typemap=typemap,
         calltypes=calltypes,
     ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, key_vars + data_vars)
+    replace_arg_nodes(f_block, in_vars)
+    # get return value from cast node, the last node before cast isn't output assignment
+    ret_var = f_block.body[-2].value.value
     nodes += f_block.body[:-2]
-    ret_var = nodes[-1].target
-    # get key tup
-    key_arrs_tup_var = ir.Var(scope, mk_unique_var("key_data"), loc)
-    typemap[key_arrs_tup_var.name] = types.Tuple(
-        [typemap[v.name] for i, v in enumerate(key_vars) if i not in dead_keys]
-    )
-    gen_getitem(key_arrs_tup_var, ret_var, 0, calltypes, nodes)
-    # get data tup
-    data_tup_var = ir.Var(scope, mk_unique_var("sort_data"), loc)
-    typemap[data_tup_var.name] = types.Tuple([typemap[v.name] for v in data_vars])
-    gen_getitem(data_tup_var, ret_var, 1, calltypes, nodes)
 
-    # assign output key variables
-    # NOTE: C++ returns keys in `key_inds` order
-    i_keys = 0
-    for i in sort_node.key_inds:
-        if i in sort_node.dead_key_var_inds:
-            continue
-        var = sort_node.out_vars[i]
-        gen_getitem(var, key_arrs_tup_var, i_keys, calltypes, nodes)
-        i_keys += 1
-
-    # assign output data variables
-    i_data = 0
-    for i, var in enumerate(sort_node.out_vars):
-        if i in sort_node.dead_var_inds or i in sort_node.key_inds:
-            continue
-        gen_getitem(var, data_tup_var, i_data, calltypes, nodes)
-        i_data += 1
+    for i, v in enumerate(out_vars):
+        gen_getitem(v, ret_var, i, calltypes, nodes)
 
     # TODO: handle 1D balance for inplace case
     return nodes
@@ -574,7 +537,7 @@ def sort_distributed_run(
 distributed_pass.distributed_run_extensions[Sort] = sort_distributed_run
 
 
-def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes):
+def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes, dead_cols):
     """generate IR nodes for copying an array
 
     Args:
@@ -585,13 +548,22 @@ def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes):
         typemap (dict(str, ir.Var)): typemap of variables
         calltypes (dict[ir.Inst, Signature]): signature of callable nodes
     """
+    from bodo.hiframes.table import TableType
 
-    def _impl(arr):  # pragma: no cover
-        return arr.copy()
+    impl = lambda arr: arr.copy()  # pragma: no cover
+
+    used_columns = None
+    if isinstance(typemap[var.name], TableType):
+        n_table_cols = len(typemap[var.name].arr_types)
+        used_columns = set(range(n_table_cols)) - dead_cols
+        used_columns = MetaType(tuple(sorted(used_columns)))
+        impl = lambda T: bodo.utils.table_utils.generate_mappable_table_func(
+            T, "copy", types.none, True, used_cols=_used_columns
+        )  # pragma: no cover
 
     f_block = compile_to_numba_ir(
-        _impl,
-        {},
+        impl,
+        {"bodo": bodo, "types": types, "_used_columns": used_columns},
         typingctx=typingctx,
         targetctx=targetctx,
         arg_typs=(typemap[var.name],),
@@ -603,59 +575,275 @@ def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes):
     return nodes[-1].target
 
 
-def get_sort_cpp_section(
-    key_name_args, col_name_args, ascending_list, na_position_b, dead_keys, parallel
-):
-    """generate function text for pass arrays to C++ and calling sort.
+def get_sort_cpp_section(sort_node, out_types, parallel):
+    """generate function text for passing arrays to C++, calling sort, and returning
+    outputs in correct order.
 
     Args:
-        key_name_args (list(str)): list of argument names for key inputs
-        col_name_args (list(str)): list of argument names for data inputs
-        ascending_list (list(bool)): list of ascending/descending order for each key
-        na_position_b (list(bool)): list of first/list null position for each key
+        sort_node (Sort): sort IR node
         parallel (bool): flag for parallel sort
 
     Returns:
         str: function text for calling C++ sort.
     """
-    func_text = ""
-    key_count = len(key_name_args)
-    total_list = [f"array_to_info({name})" for name in key_name_args] + [
-        f"array_to_info({name})" for name in col_name_args
-    ]
-    func_text += "  info_list_total = [{}]\n".format(",".join(total_list))
-    func_text += "  table_total = arr_info_list_to_table(info_list_total)\n"
+
+    key_count = len(sort_node.key_inds)
+    n_in_vars = len(sort_node.in_vars)
+    n_out_vars = len(sort_node.out_vars)
+    n_cols = (
+        sort_node.num_table_arrays + n_in_vars - 1
+        if sort_node.is_table_format
+        else n_in_vars
+    )
+
+    # get Python/C++ input/output mapping indices
+    in_cpp_col_inds, out_cpp_col_inds, dead_keys = _get_cpp_col_ind_mappings(
+        sort_node.key_inds,
+        sort_node.dead_var_inds,
+        sort_node.dead_key_var_inds,
+        n_cols,
+    )
+
+    # make sure array arg names have logical column number for easier codegen below
+    in_args = []
+    if sort_node.is_table_format:
+        in_args.append("arg0")
+        for i in range(1, n_in_vars):
+            col_no = sort_node.num_table_arrays + i - 1
+            if col_no not in sort_node.dead_var_inds:
+                in_args.append(f"arg{col_no}")
+    else:
+        for i in range(n_cols):
+            if i not in sort_node.dead_var_inds:
+                in_args.append(f"arg{i}")
+
+    func_text = f"def f({', '.join(in_args)}):\n"
+
+    if sort_node.is_table_format:
+        comma = "," if n_in_vars - 1 == 1 else ""
+        other_vars = []
+        for i in range(sort_node.num_table_arrays, n_cols):
+            if i in sort_node.dead_var_inds:
+                other_vars.append("None")
+            else:
+                other_vars.append(f"arg{i}")
+        func_text += f"  in_cpp_table = py_data_to_cpp_table(arg0, ({', '.join(other_vars)}{comma}), in_col_inds)\n"
+    else:
+        py_to_cpp_inds = {k: i for i, k in enumerate(in_cpp_col_inds)}
+        arr_vars = [None] * len(in_cpp_col_inds)
+        for i in range(n_cols):
+            out_ind = py_to_cpp_inds.get(i, -1)
+            if out_ind != -1:
+                arr_vars[out_ind] = f"array_to_info(arg{i})"
+        func_text += "  info_list_total = [{}]\n".format(",".join(arr_vars))
+        func_text += "  in_cpp_table = arr_info_list_to_table(info_list_total)\n"
+
     func_text += "  vect_ascending = np.array([{}], np.int64)\n".format(
-        ",".join("1" if x else "0" for x in ascending_list)
+        ",".join("1" if x else "0" for x in sort_node.ascending_list)
     )
     func_text += "  na_position = np.array([{}], np.int64)\n".format(
-        ",".join("1" if x else "0" for x in na_position_b)
+        ",".join("1" if x else "0" for x in sort_node.na_position_b)
     )
     func_text += "  dead_keys = np.array([{}], np.int64)\n".format(
         ",".join("1" if i in dead_keys else "0" for i in range(key_count))
     )
-    func_text += f"  out_table = sort_values_table(table_total, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, {parallel})\n"
-    idx = 0
-    list_key_str = []
-    for i, name in enumerate(key_name_args):
-        if i in dead_keys:
+    # single-element numpy array to return number of rows from C++
+    func_text += f"  total_rows_np = np.array([0], dtype=np.int64)\n"
+    func_text += f"  out_cpp_table = sort_values_table(in_cpp_table, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, total_rows_np.ctypes, {parallel})\n"
+
+    if sort_node.is_table_format:
+        comma = "," if n_out_vars == 1 else ""
+        out_types = f"({', '.join(f'out_type{i}' if not type_has_unknown_cats(out_types[i]) else f'arg{i}' for i in range(n_out_vars))}{comma})"
+        # pass number of table arrays since it's necessary for logical column index
+        # calculation but input table may be optimized out
+        func_text += f"  out_data = cpp_table_to_py_data(out_cpp_table, out_col_inds, {out_types}, total_rows_np[0], {sort_node.num_table_arrays})\n"
+    else:
+        py_to_cpp_inds = {k: i for i, k in enumerate(out_cpp_col_inds)}
+
+        arr_vars = []
+        for i in range(n_cols):
+            out_ind = py_to_cpp_inds.get(i, -1)
+            if out_ind != -1:
+                # unknown categorical arrays need actual value to convert array from C++
+                out_type = (
+                    f"out_type{i}"
+                    if not type_has_unknown_cats(out_types[i])
+                    else f"arg{i}"
+                )
+                func_text += f"  out{i} = info_to_array(info_from_table(out_cpp_table, {out_ind}), {out_type})\n"
+                arr_vars.append(f"out{i}")
+
+        comma = "," if len(arr_vars) == 1 else ""
+        out_rets_tup = f"({', '.join(arr_vars)}{comma})"
+        func_text += f"  out_data = {out_rets_tup}\n"
+
+    func_text += "  delete_table(out_cpp_table)\n"
+    func_text += "  delete_table(in_cpp_table)\n"
+    func_text += f"  return out_data\n"
+
+    return func_text, {
+        "in_col_inds": MetaType(tuple(in_cpp_col_inds)),
+        "out_col_inds": MetaType(tuple(out_cpp_col_inds)),
+    }
+
+
+def _get_cpp_col_ind_mappings(key_inds, dead_var_inds, dead_key_var_inds, n_cols):
+    """get mapping of indices in logical input columns to C++ (keys in order, then live
+    input data columns), and mapping of indices from C++ to logical output columns (live
+    keys are returned in order, then live output data).
+    NOTE: dead logical column indices are not removed from logical indices
+
+    Example input with 6 logical columns:
+    key_inds = [3, 1, 4]
+    dead_key_var_inds = [1]
+    dead_var_inds = [2]
+    in_cpp_col_inds = [3, 1, 4, 0, 5]
+    out_cpp_col_inds: [3, 4, 0, 5]
+    dead_keys = [1]
+
+    Args:
+        key_inds (list(int)): list of key indices from input in order (logical indices,
+            including dead columns)
+        dead_var_inds (set(int)): indices of dead input columns (logical)
+        dead_key_var_inds (set(int)): indices of dead input keys (logical indices,
+            including other dead columns)
+        n_cols (int): number of logical input columns in sort node
+
+    Returns:
+        tuple(list(int), array(int), list(int)):
+            logical indices of input columns to pass to C++,
+            mapping of C++ output to logical output columns,
+            list of dead C++ keys
+    """
+
+    # indices of logical columns that are passed to C++
+    # keys go first in order as expected in sort_values_table
+    in_cpp_col_inds = []
+    out_cpp_col_inds = []
+    dead_keys = []
+    for k, i in enumerate(key_inds):
+        in_cpp_col_inds.append(i)
+        if i in dead_key_var_inds:
+            dead_keys.append(k)
+        else:
+            out_cpp_col_inds.append(i)
+
+    # live data columns
+    for i in range(n_cols):
+        if i in dead_var_inds or i in key_inds:
             continue
-        list_key_str.append(f"info_to_array(info_from_table(out_table, {idx}), {name})")
-        idx += 1
-    func_text += "  key_arrs = ({}{})\n".format(
-        ",".join(list_key_str), "," if len(list_key_str) == 1 else ""
+
+        in_cpp_col_inds.append(i)
+        out_cpp_col_inds.append(i)
+
+    return in_cpp_col_inds, out_cpp_col_inds, dead_keys
+
+
+def sort_table_column_use(
+    sort_node, block_use_map, equiv_vars, typemap, table_col_use_map
+):
+    """Compute column uses in input table of sort based on output table's uses. The
+    input uses are the same as output, except that key columns are always used.
+
+    Args:
+        sort_node (Sort): Sort node to process
+        block_use_map (Dict[str, Tuple[Set[int], bool, bool]]): column uses for current
+            block.
+        equiv_vars (Dict[str, Set[str]]): Dictionary
+            mapping table variable names to a set of
+            other table name aliases.
+        typemap (dict[str, types.Type]): typemap of variables
+        table_col_use_map (Dict[int, Dict[str, Tuple[Set[int], bool, bool]]]):
+            Dictionary mapping block numbers to a dictionary of table names
+            and "column uses". A column use is represented by the triple
+                - used_cols: Set of used column numbers
+                - use_all: Flag for if all columns are used. If True used_cols
+                    is garbage
+                - cannot_del_columns: Flag indicate this table is used in
+                    an unsupported operation (e.g. passed to a DataFrame)
+                    and therefore no columns can be deleted.
+    """
+    if (
+        not sort_node.is_table_format
+        or sort_node.in_vars[0] is None
+        or sort_node.out_vars[0] is None
+    ):
+        return
+
+    rhs_table = sort_node.in_vars[0].name
+    lhs_table = sort_node.out_vars[0].name
+
+    (
+        orig_used_cols,
+        orig_use_all,
+        orig_cannot_del_cols,
+    ) = block_use_map[rhs_table]
+
+    # skip if input already uses all columns or cannot delete the table
+    if orig_use_all or orig_cannot_del_cols:
+        return
+
+    # get output's uses
+    (
+        used_cols,
+        use_all,
+        cannot_del_cols,
+    ) = _compute_table_column_uses(lhs_table, table_col_use_map, equiv_vars)
+
+    # key columns are always used in sorting
+    table_key_set = set(i for i in sort_node.key_inds if i < sort_node.num_table_arrays)
+
+    block_use_map[rhs_table] = (
+        orig_used_cols | used_cols | table_key_set,
+        use_all or cannot_del_cols,
+        False,
     )
 
-    list_data_str = []
-    for name in col_name_args:
-        list_data_str.append(
-            f"info_to_array(info_from_table(out_table, {idx}), {name})"
-        )
-        idx += 1
-    if len(list_data_str) > 0:
-        func_text += "  data = ({},)\n".format(",".join(list_data_str))
-    else:
-        func_text += "  data = ()\n"
-    func_text += "  delete_table(out_table)\n"
-    func_text += "  delete_table(table_total)\n"
-    return func_text
+
+ir_extension_table_column_use[Sort] = sort_table_column_use
+
+
+def sort_remove_dead_column(sort_node, column_live_map, equiv_vars, typemap):
+    """Remove dead table columns from Sort node (if in table format). Updates
+    dead_key_var_inds and dead_var_inds sets based on used column info from dead table
+    column pass.
+
+    Args:
+        sort_node (Sort): Sort node to update
+        column_live_map (Dict[str, Tuple[Set[int], bool, bool]]): column uses of each
+            table variable for current block.
+        equiv_vars (Dict[str, Set[str]]): Dictionary
+            mapping table variable names to a set of
+            other table name aliases.
+        typemap (dict[str, types.Type]): typemap of variables
+    """
+    if not sort_node.is_table_format or sort_node.out_vars[0] is None:
+        return False
+
+    n_table_cols = sort_node.num_table_arrays
+    lhs_table = sort_node.out_vars[0].name
+
+    used_columns = _find_used_columns(
+        lhs_table, n_table_cols, column_live_map, equiv_vars
+    )
+
+    # None means all columns are used so we can't prune any columns
+    if used_columns is None:
+        return False
+
+    dead_columns = set(range(n_table_cols)) - used_columns
+
+    table_key_set = set(i for i in sort_node.key_inds if i < n_table_cols)
+    new_dead_keys = sort_node.dead_key_var_inds | (dead_columns & table_key_set)
+    new_dead_vars = sort_node.dead_var_inds | (dead_columns - table_key_set)
+    removed = (new_dead_keys != sort_node.dead_key_var_inds) | (
+        new_dead_vars != sort_node.dead_var_inds
+    )
+
+    sort_node.dead_key_var_inds = new_dead_keys
+    sort_node.dead_var_inds = new_dead_vars
+
+    return removed
+
+
+remove_dead_column_extensions[Sort] = sort_remove_dead_column

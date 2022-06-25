@@ -543,7 +543,7 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                 f = ir_extension_table_column_use[type(stmt)]
                 # We assume that f checks types if necessary
                 # and performs any required actions.
-                f(stmt, block_use_map, equiv_vars, typemap)
+                f(stmt, block_use_map, equiv_vars, typemap, table_col_use_map)
                 continue
 
             # If we have an assign we don't want to mark that variable as used.
@@ -772,6 +772,24 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         rhs_table = rhs.args[0].name
                         used_cols, use_all, cannot_del_cols = block_use_map[rhs_table]
                         block_use_map[rhs_table] = set(), True, cannot_del_cols
+                        continue
+                    elif fdef == ("py_data_to_cpp_table", "bodo.libs.array"):
+                        # after lowering the Sort IR node into py_data_to_cpp_table and
+                        # other calls, the uses of columns cannot change anymore.
+                        # But the unused columns can be deleted.
+                        rhs_table = rhs.args[0].name
+                        used_cols, use_all, cannot_del_cols = block_use_map[rhs_table]
+                        if not (use_all or cannot_del_cols):
+                            in_cols = typemap[rhs.args[2].name].instance_type.meta
+                            # trim logical column uses that are not in the table (are
+                            # in extra arrays argument)
+                            n_table_cols = len(typemap[rhs_table].arr_types)
+                            in_cols_set = set(i for i in in_cols if i < n_table_cols)
+                            block_use_map[rhs_table] = (
+                                used_cols | in_cols_set,
+                                use_all,
+                                cannot_del_cols,
+                            )
                         continue
 
                 elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "getattr":

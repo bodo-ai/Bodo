@@ -31,11 +31,13 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
  column
  * @param dead_keys, array with 0/1 for each key indicating dead keys (1 is
  dead)
+ * @param out_n_rows, single-element array to store the number of output rows,
+ can be nullptr if not needed.
    @param parallel, true in case of parallel computation, false otherwise.
  */
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, int64_t* na_position,
-                              int64_t* dead_keys, bool parallel);
+                              int64_t* dead_keys, int64_t* out_n_rows, bool parallel);
 
 /**
  * Helper function to sort contents of array_info.
