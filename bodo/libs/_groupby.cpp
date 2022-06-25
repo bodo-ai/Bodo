@@ -5836,7 +5836,7 @@ class GroupbyPipeline {
         int64_t asc_pos = 1;
         int64_t zero = 0;
         cur_table = sort_values_table(cur_table, 1, &asc_pos, &asc_pos, &zero,
-                                      is_parallel);
+                                      nullptr, is_parallel);
         // Remove key-sort column
         free_array_groupby(cur_table->columns[0]);
         cur_table->columns.erase(cur_table->columns.begin());

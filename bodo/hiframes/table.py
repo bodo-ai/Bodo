@@ -1277,7 +1277,7 @@ def alloc_list_like(typingctx, list_type, len_type, to_str_if_dict_t):
 
 
 @intrinsic
-def alloc_empty_list_type(typingctx, size_typ, data_typ=None):
+def alloc_empty_list_type(typingctx, size_typ, data_typ):
     """
     allocate a list with a given size and data type filled
     with null values.

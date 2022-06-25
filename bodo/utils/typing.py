@@ -72,6 +72,36 @@ def is_str_arr_type(t):
     return t == bodo.string_array_type or t == bodo.dict_str_arr_type
 
 
+def type_has_unknown_cats(typ):
+    """Return True if typ is a (or in case of tables has a) CategoricalArrayType with
+    unknown categories (i.e. categories are created during runtime)
+
+    Args:
+        arr_type (types.Type): input array or table type
+
+    Returns:
+        bool: True if is/has categorical with unknown categories
+    """
+    return (
+        isinstance(typ, bodo.CategoricalArrayType) and typ.dtype.categories is None
+    ) or (
+        isinstance(typ, bodo.TableType)
+        and any(type_has_unknown_cats(t) for t in typ.type_to_blk.keys())
+    )
+
+
+def unwrap_typeref(typ):
+    """return instance type if 'typ' is a TypeRef
+
+    Args:
+        typ (types.Type | types.TypeRef): input type
+
+    Returns:
+        types.Type: type without TypeRef
+    """
+    return typ.instance_type if isinstance(typ, types.TypeRef) else typ
+
+
 def decode_if_dict_array(A):  # pragma: no cover
     return A
 

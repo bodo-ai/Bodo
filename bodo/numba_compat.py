@@ -2313,13 +2313,7 @@ def get_stmt_writes(stmt, func_ir):
         writes = {v.name for v in stmt.out_data_vars.values()}
     if isinstance(stmt, bodo.ir.sort.Sort):
         if not stmt.inplace:
-            writes.update(
-                {
-                    v.name
-                    for i, v in enumerate(stmt.out_vars)
-                    if (i not in stmt.dead_var_inds and i not in stmt.dead_key_var_inds)
-                }
-            )
+            writes.update({v.name for v in stmt.get_live_out_vars()})
     if is_call_assign(stmt):
         fdef = guard(find_callname, func_ir, stmt.value)
         if fdef in (

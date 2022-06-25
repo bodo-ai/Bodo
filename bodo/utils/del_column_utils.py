@@ -24,6 +24,7 @@ table_usecol_funcs = {
     ("table_astype", "bodo.utils.table_utils"),
     ("generate_table_nbytes", "bodo.utils.table_utils"),
     ("table_concat", "bodo.utils.table_utils"),
+    ("py_data_to_cpp_table", "bodo.libs.array"),
 }
 
 
@@ -111,6 +112,13 @@ def get_table_used_columns(
         else:
             # Remove any duplicate columns
             return set(idx_cols)
+
+    elif fdef == ("py_data_to_cpp_table", "bodo.libs.array"):
+        # py_data_to_cpp_table takes logical column indices of input table (arg 0) and
+        # extra arrays (arg 1). Non-table indices need to be removed.
+        used_cols = typemap[call_expr.args[2].name].instance_type.meta
+        n_table_cols = len(typemap[call_expr.args[0].name].arr_types)
+        return set(i for i in used_cols if i < n_table_cols)
 
     # If we don't have information about which columns this operation
     # kills, we return to None to indicate we must decref any remaining

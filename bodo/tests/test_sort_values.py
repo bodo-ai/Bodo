@@ -976,6 +976,9 @@ def test_sort_values_key_rm_dead(memory_leak_check):
     def impl(df):
         return df.sort_values(by=["A", "C", "E"])[["A", "D"]]
 
+    def impl2(df):
+        return df.sort_values(by=["C", "A", "E"])[["A", "D"]]
+
     df = pd.DataFrame(
         {
             "A": [1, 3, 2, 0, -1, 4],
@@ -989,10 +992,11 @@ def test_sort_values_key_rm_dead(memory_leak_check):
                 "مرحبا, العالم ، هذا هو بودو",
                 "Γειά σου ,Κόσμε",
             ],
-            "E": np.arange(6),
+            "E": np.arange(6, dtype=np.int32) * np.int32(10),
         }
     )
     check_func(impl, (df,))
+    check_func(impl2, (df,))
 
     # make sure dead keys are detected properly
     sort_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)
@@ -1002,6 +1006,7 @@ def test_sort_values_key_rm_dead(memory_leak_check):
     for block in fir.blocks.values():
         for stmt in block.body:
             if isinstance(stmt, bodo.ir.sort.Sort):
+                # dead column is inside the live table in case of table format
                 assert stmt.dead_var_inds == {1}
                 assert stmt.dead_key_var_inds == {2, 4}
 
@@ -1024,6 +1029,56 @@ def test_sort_values_rm_dead(memory_leak_check):
     for block in fir.blocks.values():
         for stmt in block.body:
             assert not isinstance(stmt, bodo.ir.sort.Sort)
+
+
+def test_sort_values_len_only(memory_leak_check):
+    """
+    Make sure len() works when all columns are dead
+    """
+
+    def impl(df):
+        df2 = df.sort_values(by=["A"])
+        return len(df2)
+
+    df = pd.DataFrame({"A": [1, 3, 2, 0, -1, 4], "B": [1.2, 3.4, 0.1, 2.2, 3.1, -1.2]})
+    check_func(impl, (df,))
+
+
+def test_sort_values_index_only(memory_leak_check):
+    """
+    Make sure sort works if returning only the Index (table is dead in table format
+    case)
+    """
+
+    def impl(df):
+        df2 = df.sort_values(by=["A"])
+        return df2.index
+
+    df = pd.DataFrame({"A": [1, 3, 2, 0, -1, 4], "B": [1.2, 3.4, 0.1, 2.2, 3.1, -1.2]})
+    check_func(impl, (df,))
+
+
+def test_sort_values_unknown_cats(memory_leak_check):
+    """
+    Make sure categorical arrays with unknown categories work
+    """
+
+    def impl(df):
+        df["A"] = df.A.astype("category")
+        df["B"] = df.B.astype("category")
+        df.index = pd.Categorical(df.index)
+        df2 = df.sort_values(by=["A"])
+        return df2
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 3, 2, 0, -1, 4],
+            "B": ["a1", "a3", "b1", "b4", "a1", "b1"],
+            "C": [1.1, 2.2, 3.3, 4.1, -1.1, -0.1],
+        },
+        index=["a1", "a2", "a3", "a4", "a5", "a6"],
+    )
+    check_func(impl, (df,))
 
 
 @pytest.mark.slow

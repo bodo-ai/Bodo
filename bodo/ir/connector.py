@@ -308,7 +308,9 @@ def cast_float_to_nullable(df, df_type):
         df[cols] = df[cols].astype(typ)
 
 
-def connector_table_column_use(node, block_use_map, equiv_vars, typemap):
+def connector_table_column_use(
+    node, block_use_map, equiv_vars, typemap, table_col_use_map
+):
     """
     Function to handle any necessary processing for column uses
     with a particular table. This is used for connectors that define

@@ -55,8 +55,11 @@ from bodo.utils.typing import (
     BodoError,
     MetaType,
     decode_if_dict_array,
+    get_overload_const_int,
     is_str_arr_type,
     raise_bodo_error,
+    type_has_unknown_cats,
+    unwrap_typeref,
 )
 from bodo.utils.utils import (
     CTypeEnum,
@@ -1721,6 +1724,116 @@ def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type
     return py_table_type(cpp_table_t, table_idx_arr_t, py_table_type_t), codegen
 
 
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def cpp_table_to_py_data(
+    cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t
+):
+    """convert C++ table to Python data with types described in out_types_t. The first
+    output is a TableType and there rest are arrays.
+
+    Args:
+        cpp_table (C++ table_type): C++ table type to convert
+        out_col_inds_t (MetaType(list[int])): list of logical column numbers for each
+            C++ table column.
+        out_types_t (Tuple(TypeRef[TableType], TypeRef[array], ...)): data types of
+            output Python data that form logical columns. The first type is a table type
+            that has logical columns 0..n_py_table_arrs-1. The rest are regular
+            arrays that have the rest of data (n_py_table_arrs, n_py_table_arrs+1, ...)
+
+    Returns:
+        Tuple(Table, array, ...): python data corresponding to input C++ table
+    """
+    out_col_inds = out_col_inds_t.instance_type.meta
+    py_table_type = unwrap_typeref(out_types_t.types[0])
+    # arrays to return after filling the Python table, includes dead output for easier
+    # logical index handling
+    extra_arr_types = [
+        unwrap_typeref(out_types_t.types[i]) for i in range(1, len(out_types_t.types))
+    ]
+
+    glbls = {}
+    n_py_table_arrs = get_overload_const_int(n_table_cols_t)
+    py_to_cpp_inds = {k: i for i, k in enumerate(out_col_inds)}
+
+    # basic structure:
+    # for each block in table:
+    #   for each array_ind in block:
+    #     if array_ind in output_inds:
+    #       block[array_ind] = info_to_array(cpp_table[out_ind])
+
+    func_text = (
+        "def impl(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t):\n"
+    )
+
+    if py_table_type == types.none:
+        func_text += f"  py_table = None\n"
+    else:
+        func_text += f"  py_table = init_table(py_table_type, False)\n"
+        func_text += f"  py_table = set_table_len(py_table, n_rows_t)\n"
+
+        for typ, blk in py_table_type.type_to_blk.items():
+            out_inds = [
+                py_to_cpp_inds.get(i, -1) for i in py_table_type.block_to_arr_ind[blk]
+            ]
+            glbls[f"out_inds_{blk}"] = np.array(out_inds, np.int64)
+            glbls[f"out_type_{blk}"] = typ
+            glbls[f"typ_list_{blk}"] = types.List(typ)
+            out_type = f"out_type_{blk}"
+            if type_has_unknown_cats(typ):
+                func_text += (
+                    f"  in_arr_list_{blk} = get_table_block(out_types_t[0], {blk})\n"
+                )
+                out_type = f"in_arr_list_{blk}[i]"
+            n_arrs = len(py_table_type.block_to_arr_ind[blk])
+            func_text += (
+                f"  arr_list_{blk} = alloc_list_like(typ_list_{blk}, {n_arrs}, False)\n"
+            )
+            func_text += f"  for i in range(len(arr_list_{blk})):\n"
+            func_text += f"    cpp_ind_{blk} = out_inds_{blk}[i]\n"
+            func_text += f"    if cpp_ind_{blk} == -1:\n"
+            func_text += f"      continue\n"
+            func_text += f"    arr_{blk} = info_to_array(info_from_table(cpp_table, cpp_ind_{blk}), {out_type})\n"
+            func_text += f"    arr_list_{blk}[i] = arr_{blk}\n"
+            func_text += (
+                f"  py_table = set_table_block(py_table, arr_list_{blk}, {blk})\n"
+            )
+
+    out_vars = []
+    for i, t in enumerate(extra_arr_types):
+        out_ind = py_to_cpp_inds.get(n_py_table_arrs + i, -1)
+        if out_ind != -1:
+            glbls[f"extra_arr_type_{i}"] = t
+            out_type = f"extra_arr_type_{i}"
+            if type_has_unknown_cats(t):
+                out_type = f"out_types_t[{i+1}]"
+            func_text += f"  out_{i} = info_to_array(info_from_table(cpp_table, {out_ind}), {out_type})\n"
+            out_vars.append(f"out_{i}")
+
+    if py_table_type != types.none:
+        func_text += f"  return (py_table, {', '.join(out_vars)})\n"
+    else:
+        comma = "," if len(out_vars) == 1 else ""
+        func_text += f"  return ({', '.join(out_vars)}{comma})\n"
+
+    glbls.update(
+        {
+            "init_table": bodo.hiframes.table.init_table,
+            "alloc_list_like": bodo.hiframes.table.alloc_list_like,
+            "set_table_block": bodo.hiframes.table.set_table_block,
+            "set_table_len": bodo.hiframes.table.set_table_len,
+            "get_table_block": bodo.hiframes.table.get_table_block,
+            "info_to_array": info_to_array,
+            "info_from_table": info_from_table,
+            "out_col_inds": list(out_col_inds),
+            "py_table_type": py_table_type,
+        }
+    )
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
+
+
 @intrinsic
 def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
     """Extract columns of a Python table and creates a C++ table."""
@@ -1856,6 +1969,81 @@ def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
         return cpp_table
 
     return table_type(py_table_type, py_table_type_t), codegen
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t):
+    """Convert Python data (table and arrays) to a C++ table.
+
+    Args:
+        py_table (TableType): Python table to convert
+        extra_arrs_tup (tuple(array)): extra arrays to convert, includes dead columns
+            for easier logical index handling.
+        in_col_inds_t (MetaType(list[int])): logical indices in input for each C++
+            output table column. Actual input data is a table that has logical
+            columns 0..n_py_table_arrs-1, and regular arrays that have the rest of data
+            (n_py_table_arrs, n_py_table_arrs+1, ...).
+
+    Returns:
+        C++ table: converted C++ table
+    """
+    in_col_inds = in_col_inds_t.instance_type.meta
+
+    glbls = {}
+    n_py_table_arrs = len(py_table.arr_types)
+    py_to_cpp_inds = {k: i for i, k in enumerate(in_col_inds)}
+
+    # basic structure:
+    # for each block in py_table:
+    #   for each array_ind in block:
+    #     if array_ind in output_inds:
+    #       output_list[out_ind] = array_to_info(block[array_ind])
+
+    func_text = "def impl(py_table, extra_arrs_tup, in_col_inds_t):\n"
+    func_text += (
+        f"  cpp_arr_list = alloc_empty_list_type({len(in_col_inds)}, array_info_type)\n"
+    )
+
+    for blk in py_table.type_to_blk.values():
+        out_inds = [py_to_cpp_inds.get(i, -1) for i in py_table.block_to_arr_ind[blk]]
+        glbls[f"out_inds_{blk}"] = np.array(out_inds, np.int64)
+        glbls[f"arr_inds_{blk}"] = np.array(py_table.block_to_arr_ind[blk], np.int64)
+        func_text += f"  arr_list_{blk} = get_table_block(py_table, {blk})\n"
+        func_text += f"  for i in range(len(arr_list_{blk})):\n"
+        func_text += f"    out_arr_ind_{blk} = out_inds_{blk}[i]\n"
+        func_text += f"    if out_arr_ind_{blk} == -1:\n"
+        func_text += f"      continue\n"
+        func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
+        func_text += (
+            f"    ensure_column_unboxed(py_table, arr_list_{blk}, i, arr_ind_{blk})\n"
+        )
+        func_text += (
+            f"    cpp_arr_list[out_arr_ind_{blk}] = array_to_info(arr_list_{blk}[i])\n"
+        )
+
+    for i in range(len(extra_arrs_tup)):
+        out_ind = py_to_cpp_inds.get(n_py_table_arrs + i, -1)
+        if out_ind != -1:
+            func_text += (
+                f"  cpp_arr_list[{out_ind}] = array_to_info(extra_arrs_tup[{i}])\n"
+            )
+
+    func_text += f"  return arr_info_list_to_table(cpp_arr_list)\n"
+
+    glbls.update(
+        {
+            "array_info_type": array_info_type,
+            "alloc_empty_list_type": bodo.hiframes.table.alloc_empty_list_type,
+            "get_table_block": bodo.hiframes.table.get_table_block,
+            "ensure_column_unboxed": bodo.hiframes.table.ensure_column_unboxed,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+        }
+    )
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
 
 
 delete_info_decref_array = types.ExternalFunction(
@@ -2084,6 +2272,7 @@ def sort_values_table(
     vect_ascending_t,
     na_position_b_t,
     dead_keys_t,
+    n_rows_t,
     parallel_t,
 ):
     """
@@ -2097,6 +2286,7 @@ def sort_values_table(
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -2116,6 +2306,7 @@ def sort_values_table(
         table_type(
             table_t,
             types.int64,
+            types.voidptr,
             types.voidptr,
             types.voidptr,
             types.voidptr,
