@@ -740,7 +740,7 @@ def join_remove_dead_column(join_node, column_live_map, equiv_vars, typemap):
 remove_dead_column_extensions[Join] = join_remove_dead_column
 
 
-def join_table_column_use(node, block_use_map, equiv_vars, typemap):
+def join_table_column_use(node, block_use_map, equiv_vars, typemap, table_col_use_map):
     # TODO: Update when the input can be tables
     return
 
