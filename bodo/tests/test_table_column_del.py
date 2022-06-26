@@ -2462,3 +2462,32 @@ def test_table_column_subset_level2(datapath, memory_leak_check):
         df_col_nums = list(range(n_cols_level_2))
         df1_col_nums = list(range(n_cols_level_1 - n_cols_level_2, n_cols_level_1))
         _check_column_dels(bodo_func, [df_col_nums, df1_col_nums])
+
+
+def test_merge_del_columns(datapath, memory_leak_check):
+    # Verify that column pruning from the source and dead
+    # column insertion works with Join.
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.merge(df1, on="Column0", how="inner", suffixes=("_x", "_y"))
+        return df2[["Column1_x", "Column21_y"]]
+
+    check_func(impl, (), sort_output=True, reset_index=True)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column1', 'Column21']")
+        check_logger_msg(stream, f"Output columns: ['Column1_x', 'Column21_y']")
+        # We prune columns 0, 1, 21 from the read parquet and 1 and 119
+        # from the join.
+        if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 2:
+            # threshold for if the df[[]] creates another table,
+            # which adds deletions
+            delete_list = [[0], [1], [21], [1, 119]]
+        else:
+            delete_list = [[0], [1], [21], [1], [119]]
+        _check_column_dels(bodo_func, delete_list)

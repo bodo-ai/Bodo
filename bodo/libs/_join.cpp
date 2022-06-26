@@ -26,10 +26,10 @@ table_info* hash_join_table(
     bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* vect_need_typechange, bool is_left, bool is_right, bool is_join,
-    bool optional_col, bool indicator, bool is_na_equal,
+    bool extra_data_col, bool indicator, bool is_na_equal,
     cond_expr_fn_t cond_func, int64_t* cond_func_left_columns,
     int64_t cond_func_left_column_len, int64_t* cond_func_right_columns,
-    int64_t cond_func_right_column_len) {
+    int64_t cond_func_right_column_len, int64_t* num_rows_ptr) {
     // XXX Not sure if this is needed. has_global_dictionary
     // should be set by the compiler automatically for
     // replicated data
@@ -71,9 +71,10 @@ table_info* hash_join_table(
         }
         // in the case of merging on index and one column, it can only be one
         // column
-        if (n_key_t > 1 && optional_col) {
+        if (n_key_t > 1 && extra_data_col) {
             throw std::runtime_error(
-                "Error in join.cpp::hash_join_table: if optional_col=true then "
+                "Error in join.cpp::hash_join_table: if extra_data_col=true "
+                "then "
                 "we must have n_key_t=1.");
         }
 
@@ -87,7 +88,7 @@ table_info* hash_join_table(
             ev.add_attribute("g_n_data_cols_right", n_data_right_t);
             ev.add_attribute("g_is_left", is_left);
             ev.add_attribute("g_is_right", is_right);
-            ev.add_attribute("g_optional_col", optional_col);
+            ev.add_attribute("g_extra_data_col", extra_data_col);
         }
 
         // Now deciding how we handle the parallelization of the tables
@@ -1069,7 +1070,7 @@ table_info* hash_join_table(
         //        and the operation is not a join in Pandas.
         std::vector<uint8_t> last_col_use_left(n_tot_left, 0);
         std::vector<uint8_t> last_col_use_right(n_tot_right, 0);
-        if (optional_col) {
+        if (extra_data_col) {
             size_t i = 0;
             last_col_use_left[i] = 1;
             last_col_use_right[i] = 1;
@@ -1109,14 +1110,20 @@ table_info* hash_join_table(
                 decref_array(right_arr);
             }
         }
+        // Determine the number of rows in your local chunk of the output.
+        // This is passed to Python in case all columns are dead.
+        int64_t num_rows = ListPairWrite.size();
+        *num_rows_ptr = num_rows;
+
         // Construct the output tables. This merges the results in the left and
         // right tables. We resume using work_left_table and work_right_table to
         // ensure we match the expected column order (as opposed to short/long).
 
         // Inserting the optional column in the case of merging on column and
         // index.
-        if (optional_col) {
-            tracing::Event ev_fill_optional("fill_optional", parallel_trace);
+        if (extra_data_col) {
+            tracing::Event ev_fill_optional("fill_extra_data_col",
+                                            parallel_trace);
             size_t i = 0;
             bool map_integer_type = false;
             array_info* left_arr = work_left_table->columns[i];
@@ -1245,7 +1252,6 @@ table_info* hash_join_table(
         right_cond_func_cols_set.clear();
         ev_fill_right.finalize();
         // Create indicator column if indicator=True
-        size_t num_rows = ListPairWrite.size();
         if (indicator) {
             tracing::Event ev_indicator("create_indicator", parallel_trace);
             array_info* indicator_col =
@@ -1281,7 +1287,13 @@ table_info* hash_join_table(
         if (free_work_right) {
             delete_table(work_right_table);
         }
-        return new table_info(out_arrs);
+        // Only return a table if there is at least 1
+        // output column.
+        if (out_arrs.size() > 0) {
+            return new table_info(out_arrs);
+        } else {
+            return nullptr;
+        }
     } catch (const std::exception& e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return NULL;

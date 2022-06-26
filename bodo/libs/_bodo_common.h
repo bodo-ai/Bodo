@@ -597,7 +597,6 @@ struct table_info {
     table_info() {}
     explicit table_info(std::vector<array_info*>& _columns)
         : columns(_columns) {}
-
     int64_t nrows() const { return columns[0]->length; }
     int64_t ncols() const { return columns.size(); }
     array_info* operator[](size_t idx) { return columns[idx]; }
