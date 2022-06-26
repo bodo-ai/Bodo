@@ -86,6 +86,9 @@ typedef bool (*cond_expr_fn_t)(array_info** left_table,
  *     used by cond_func and not found in keys. This is used for assigning
  groups.
  * @param cond_func_right_column_len: Length of cond_func_right_columns.
+ * @param num_rows_ptr: Pointer used to store the number of rows in the
+        output to return to Python. This enables marking all columns as
+        dead.
 
  * @return the returned table used in the code.
  */
@@ -94,8 +97,8 @@ table_info* hash_join_table(
     bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* vect_need_typechange, bool is_left, bool is_right, bool is_join,
-    bool optional_col, bool indicator, bool is_na_equal,
+    bool extra_data_col, bool indicator, bool is_na_equal,
     cond_expr_fn_t cond_func, int64_t* cond_func_left_columns,
     int64_t cond_func_left_column_len, int64_t* cond_func_right_columns,
-    int64_t cond_func_right_column_len);
+    int64_t cond_func_right_column_len, int64_t* num_rows_ptr);
 #endif  // _JOIN_H_INCLUDED

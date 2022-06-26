@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Test join operations like df.merge(), df.join(), pd.merge_asof() ...
 """
+import io
 import os
 import random
 import string
@@ -13,6 +14,11 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
     check_func,
@@ -424,28 +430,31 @@ def test_merge_empty_suffix_keys(memory_leak_check):
     merge_func3 = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f3)
 
     # calling the functions to get function IR
-    merge_func1(df1, df2)
-    merge_func2(df1, df2)
-    merge_func3(df1, df2)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func1(df1, df2)
+        check_logger_msg(stream, "Output columns: ['A', 'C', 'A_t', 'B', 'C_t']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func2(df1, df2)
+        check_logger_msg(stream, "Output columns: ['A', 'C']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func3(df1, df2)
+        check_logger_msg(stream, "Output columns: ['A_t', 'B']")
+    # Verify the index is dead.
     func_sigs = [merge_func1, merge_func2, merge_func3]
-    expected_columns = [
-        ["A", "C", "A_t", "B", "C_t"],
-        ["A", "C"],
-        ["A_t", "B"],
-    ]
-    for i, func_sig in enumerate(func_sigs):
+    for func_sig in func_sigs:
+        confirmed_dead_index = False
         fir = func_sig.overloads[func_sig.signatures[0]].metadata["preserved_ir"]
-
-        expected_cols = expected_columns[i]
-
         for block in fir.blocks.values():
-            for statement in block.body:
-                if isinstance(statement, bodo.ir.join.Join):
-                    output_vars = statement.out_data_vars
-                    # Ensure that the output df has only one column: value_x
-                    assert len(output_vars) == len(expected_cols) and all(
-                        c in output_vars for c in expected_cols
-                    ), "Output columns don't match expectations after dead code elimination"
+            for stmt in block.body:
+                if isinstance(stmt, bodo.ir.join.Join):
+                    confirmed_dead_index = not stmt.has_live_index_var
+        assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
 def test_merge_left_right_index(memory_leak_check):
@@ -512,29 +521,31 @@ def test_merge_left_index_dce(memory_leak_check):
     merge_func2 = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f2)
     merge_func3 = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f3)
 
-    # calling the functions to get function IR
-    merge_func1(df1, df2)
-    merge_func2(df1, df2)
-    merge_func3(df1, df2)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func1(df1, df2)
+        check_logger_msg(stream, "Output columns: ['A', 'B']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func2(df1, df2)
+        check_logger_msg(stream, "Output columns: ['A_x', 'B']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func3(df1, df2)
+        check_logger_msg(stream, "Output columns: ['A_y', 'B']")
+    # Verify the index is alive.
     func_sigs = [merge_func1, merge_func2, merge_func3]
-    expected_columns = [
-        ["B", "$_bodo_index_", "A"],
-        ["B", "$_bodo_index_", "A_x"],
-        ["B", "$_bodo_index_", "A_y"],
-    ]
-    for i, func_sig in enumerate(func_sigs):
+    for func_sig in func_sigs:
+        confirmed_live_index = False
         fir = func_sig.overloads[func_sig.signatures[0]].metadata["preserved_ir"]
-
-        expected_cols = expected_columns[i]
-
         for block in fir.blocks.values():
-            for statement in block.body:
-                if isinstance(statement, bodo.ir.join.Join):
-                    output_vars = statement.out_data_vars
-                    # Ensure that the output df has only one column: value_x
-                    assert len(output_vars) == len(expected_cols) and all(
-                        c in output_vars for c in expected_cols
-                    ), "Output columns don't match expectations after dead code elimination"
+            for stmt in block.body:
+                if isinstance(stmt, bodo.ir.join.Join):
+                    confirmed_live_index = stmt.has_live_index_var
+        assert confirmed_live_index, "Index not confirmed alive in join node"
 
 
 def test_merge_right_index_dce(memory_leak_check):
@@ -576,29 +587,31 @@ def test_merge_right_index_dce(memory_leak_check):
     merge_func2 = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f2)
     merge_func3 = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f3)
 
-    # calling the functions to get function IR
-    merge_func1(df1, df2)
-    merge_func2(df1, df2)
-    merge_func3(df1, df2)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func1(df1, df2)
+        check_logger_msg(stream, "Output columns: ['A', 'B']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func2(df1, df2)
+        check_logger_msg(stream, "Output columns: ['A_x', 'B']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func3(df1, df2)
+        check_logger_msg(stream, "Output columns: ['A_y', 'B']")
+    # Verify the index is alive.
     func_sigs = [merge_func1, merge_func2, merge_func3]
-    expected_columns = [
-        ["B", "$_bodo_index_", "A"],
-        ["B", "$_bodo_index_", "A_x"],
-        ["B", "$_bodo_index_", "A_y"],
-    ]
-    for i, func_sig in enumerate(func_sigs):
+    for func_sig in func_sigs:
+        confirmed_live_index = False
         fir = func_sig.overloads[func_sig.signatures[0]].metadata["preserved_ir"]
-
-        expected_cols = expected_columns[i]
-
         for block in fir.blocks.values():
-            for statement in block.body:
-                if isinstance(statement, bodo.ir.join.Join):
-                    output_vars = statement.out_data_vars
-                    # Ensure that the output df has only one column: value_x
-                    assert len(output_vars) == len(expected_cols) and all(
-                        c in output_vars for c in expected_cols
-                    ), "Output columns don't match expectations after dead code elimination"
+            for stmt in block.body:
+                if isinstance(stmt, bodo.ir.join.Join):
+                    confirmed_live_index = stmt.has_live_index_var
+        assert confirmed_live_index, "Index not confirmed alive in join node"
 
 
 def test_merge_left_right_index_dce(memory_leak_check):
@@ -628,17 +641,66 @@ def test_merge_left_right_index_dce(memory_leak_check):
 
     merge_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f)
 
-    merge_func(df1, df2)  # calling the function to get function IR
-    fir = merge_func.overloads[merge_func.signatures[0]].metadata["preserved_ir"]
-
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func(df1, df2)
+        check_logger_msg(stream, "Output columns: ['B']")
+    # Verify the index is dead.
+    func_sig = merge_func
+    confirmed_dead_index = False
+    fir = func_sig.overloads[func_sig.signatures[0]].metadata["preserved_ir"]
     for block in fir.blocks.values():
-        for statement in block.body:
-            if isinstance(statement, bodo.ir.join.Join):
-                output_vars = statement.out_data_vars
-                # Ensure that the output df has only one column: value_x
-                assert (
-                    len(output_vars) == 1 and "B" in output_vars
-                ), "Output columns don't match expectations after dead code elimination"
+        for stmt in block.body:
+            if isinstance(stmt, bodo.ir.join.Join):
+                confirmed_dead_index = not stmt.has_live_index_var
+    assert confirmed_dead_index, "Index not confirmed dead in join node"
+
+
+def test_merge_left_right_only_index(memory_leak_check):
+    """
+    Test merge(): merging on index and only returning
+    the output index.
+    """
+
+    def f(df1, df2):
+        df3 = df1.merge(df2, left_index=True, right_index=True)
+        return df3.index
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5, 11, 3, 8] * 2,
+            "C": ["a", "b", "A", "C", "CC", "A", "LL", "D"] * 2,
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [1, 2, 4, 3, 5, 11, 8, 3] * 2,
+            "B": ["c", "d", "VV", "DD", "", "D", "SS", "A"] * 2,
+        }
+    )
+
+    check_func(f, (df1, df2), sort_output=True)
+
+    merge_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(f)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func(df1, df2)
+        check_logger_msg(stream, "Output columns: []")
+    # Verify the index is alive and the table is dead.
+    func_sig = merge_func
+    confirmed_live_index = False
+    confirmed_dead_table = False
+    fir = func_sig.overloads[func_sig.signatures[0]].metadata["preserved_ir"]
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            if isinstance(stmt, bodo.ir.join.Join):
+                confirmed_live_index = stmt.has_live_index_var
+                confirmed_dead_table = not stmt.has_live_table_var
+    assert confirmed_live_index, "Index not confirmed alive in join node"
+    assert confirmed_dead_table, "Table not confirmed dead in join node"
 
 
 def test_list_string_array_type_specific(memory_leak_check):
@@ -1700,17 +1762,20 @@ def test_indicator_true_deadcol(memory_leak_check):
         test_impl
     )
 
-    merge_func(df1, df2)  # calling the function to get function IR
-    fir = merge_func.overloads[merge_func.signatures[0]].metadata["preserved_ir"]
-
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        merge_func(df1, df2)
+        check_logger_msg(stream, "Output columns: ['value_x']")
+    # Verify the index is dead.
+    func_sig = merge_func
+    confirmed_dead_index = False
+    fir = func_sig.overloads[func_sig.signatures[0]].metadata["preserved_ir"]
     for block in fir.blocks.values():
-        for statement in block.body:
-            if isinstance(statement, bodo.ir.join.Join):
-                output_vars = statement.out_data_vars
-                # Ensure that the output df has only one column: value_x
-                assert (
-                    len(output_vars) == 1 and "value_x" in output_vars
-                ), "Output columns don't match expectations after dead code elimination"
+        for stmt in block.body:
+            if isinstance(stmt, bodo.ir.join.Join):
+                confirmed_dead_index = not stmt.has_live_index_var
+    assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
 def test_merge_all_nan_cols(memory_leak_check):
@@ -3019,7 +3084,6 @@ def test_merge_index_column_string_index(memory_leak_check):
     check_func(f1, (df1, df2), sort_output=True, check_typing_issues=False)
 
 
-@pytest.mark.skip("need support for binary index, see BE-1246")
 def test_merge_index_column_binary_index(memory_leak_check):
     """
     Test merge(): Same as first but with a binary index

@@ -40,6 +40,7 @@ from bodo.hiframes.pd_groupby_ext import (
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
+from bodo.hiframes.table import TableType
 from bodo.ir.aggregate import get_agg_func
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.utils.transform import (
@@ -1391,22 +1392,25 @@ class DataFramePass:
 
         nodes = []
 
-        # Obtain the output and input IR variables
-        out_data_vars = {
-            c: ir.Var(lhs.scope, mk_unique_var(sanitize_varname(c)), lhs.loc)
-            for c in out_typ.columns
-        }
-        for v, t in zip(out_data_vars.values(), out_typ.data):
-            self.typemap[v.name] = t
+        # Obtain the output and input IR variables. Output is just a
+        # table.
+        out_data_vars = [
+            ir.Var(
+                lhs.scope, mk_unique_var(sanitize_varname("join_out_table")), lhs.loc
+            ),
+        ]
+        out_table_typ = TableType(out_typ.data)
+        # Add the type for the table.
+        self.typemap[out_data_vars[0].name] = out_table_typ
 
-        left_vars = {
-            c: self._get_dataframe_data(left_df, c, nodes)
-            for c in self.typemap[left_df.name].columns
-        }
-        right_vars = {
-            c: self._get_dataframe_data(right_df, c, nodes)
-            for c in self.typemap[right_df.name].columns
-        }
+        left_df_type = self.typemap[left_df.name]
+        left_vars = [
+            self._get_dataframe_data(left_df, c, nodes) for c in left_df_type.columns
+        ]
+        right_df_type = self.typemap[right_df.name]
+        right_vars = [
+            self._get_dataframe_data(right_df, c, nodes) for c in right_df_type.columns
+        ]
         # In the case of pd.merge we have following behavior for the index:
         # ---if the key is a normal column then the joined table has a trivial index.
         # ---if one of the key is an index then it becomes an index.
@@ -1414,7 +1418,7 @@ class DataFramePass:
         # ---the index of df1 is used for the merging. and the index of df2 or some other column.
         # ---The index of the joined table is assigned from the non-joined column.
 
-        out_index_var = None
+        has_index_var = False
         in_df_index_name = None
         right_index = INDEX_SENTINEL in right_keys
         left_index = INDEX_SENTINEL in left_keys
@@ -1436,29 +1440,38 @@ class DataFramePass:
         right_index_as_output = left_index and not right_index
 
         if right_index_as_output:
-            out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
-            self.typemap[out_index_var.name] = self.typemap[right_index_var.name]
-            out_data_vars[INDEX_SENTINEL] = out_index_var
-            left_vars[INDEX_SENTINEL] = left_index_var
-            right_vars[INDEX_SENTINEL] = right_index_var
+            has_index_var = True
+            out_index_typ = self.typemap[right_index_var.name]
             in_df_index_name = right_df_index_name
         elif left_index_as_output:
-            out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
-            self.typemap[out_index_var.name] = self.typemap[left_index_var.name]
-            out_data_vars[INDEX_SENTINEL] = out_index_var
-            left_vars[INDEX_SENTINEL] = left_index_var
-            right_vars[INDEX_SENTINEL] = right_index_var
+            has_index_var = True
+            out_index_typ = self.typemap[left_index_var.name]
             in_df_index_name = left_df_index_name
+        # Update the type info
+        if has_index_var:
+            index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
+            out_data_vars.append(index_var)
+            self.typemap[index_var.name] = out_index_typ
+            left_vars.append(left_index_var)
+            right_vars.append(right_index_var)
+        else:
+            out_data_vars.append(None)
+        if is_indicator:
+            # This indicator column number is always last.
+            indicator_col_num = len(out_typ.data) - 1
+        else:
+            indicator_col_num = -1
+
         nodes.append(
             bodo.ir.join.Join(
-                lhs.name,
-                left_df.name,
-                right_df.name,
                 left_keys,
                 right_keys,
                 out_data_vars,
+                out_typ,
                 left_vars,
+                left_df_type,
                 right_vars,
+                right_df_type,
                 how,
                 suffix_x,
                 suffix_y,
@@ -1468,25 +1481,29 @@ class DataFramePass:
                 is_join,
                 left_index,
                 right_index,
-                is_indicator,
+                indicator_col_num,
                 is_na_equal,
                 gen_cond_expr,
             )
         )
 
-        out_arrs = list(out_data_vars.values())
-        if out_index_var is not None:
+        # Output variables returned by Join (Table/Index)
+        out_vars = [out_data_vars[0]]
+        if has_index_var:
             # Index does not come from the input so we generate a new index.
             out_index = self._gen_index_from_array(
-                out_index_var, in_df_index_name, nodes
+                out_data_vars[1], in_df_index_name, nodes
             )
-            out_arrs = [v for c, v in out_data_vars.items() if c != INDEX_SENTINEL]
-            out_arrs.append(out_index)
-            _init_df = _gen_init_df_dataframe_pass(out_typ.columns, "index")
+            out_vars.append(out_index)
+            _init_df = _gen_init_df_dataframe_pass(
+                out_typ.columns, "index", is_table_format=True
+            )
         else:
-            _init_df = _gen_init_df_dataframe_pass(out_typ.columns)
+            _init_df = _gen_init_df_dataframe_pass(
+                out_typ.columns, is_table_format=True
+            )
 
-        return nodes + compile_func_single_block(_init_df, out_arrs, lhs, self)
+        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
         """Transform groupby calls into an Aggregate IR node"""

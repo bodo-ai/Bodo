@@ -2687,7 +2687,9 @@ class JoinTyper(AbstractTemplate):
             # as the entries will be shuffled
             index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
 
-        out_df = DataFrameType(tuple(data), index_typ, tuple(columns))
+        out_df = DataFrameType(
+            tuple(data), index_typ, tuple(columns), is_table_format=True
+        )
         return signature(out_df, *args)
 
 
