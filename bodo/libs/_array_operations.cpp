@@ -237,11 +237,15 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
 
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, int64_t* na_position,
-                              int64_t* dead_keys, int64_t* out_n_rows, bool parallel) {
+                              int64_t* dead_keys, int64_t* out_n_rows,
+                              bool parallel) {
     try {
         tracing::Event ev("sort_values_table", parallel);
-        // number of output rows is the same as input in sort
+
         if (out_n_rows != nullptr)
+            // Initialize to the input because local sort won't
+            // change the number of elements. If we do a
+            // distributed source the rows per rank may change.
             *out_n_rows = (int64_t)in_table->nrows();
 
         if (parallel) {
@@ -385,6 +389,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         table_info* ret_table =
             sort_values_table_local(collected_table, n_key_t, vect_ascending,
                                     na_position, dead_keys, parallel);
+        if (out_n_rows != nullptr) *out_n_rows = (int64_t)ret_table->nrows();
         delete_table(collected_table);
         return ret_table;
     } catch (const std::exception& e) {
