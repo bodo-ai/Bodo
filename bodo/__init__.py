@@ -109,6 +109,7 @@ from bodo.libs.csr_matrix_ext import CSRMatrixType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
+import bodo.libs.bodosql_array_kernels
 from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,
     NumericIndexType,
