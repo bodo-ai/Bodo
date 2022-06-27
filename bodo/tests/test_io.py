@@ -2215,6 +2215,86 @@ def test_read_partitions_large(memory_leak_check):
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+@pytest.mark.skip(
+    reason="""This test is waiting on support for pushing filters past column filters.
+See https://bodo.atlassian.net/browse/BE-1522"""
+)
+def test_filter_pushdown_past_column_filters():
+    """Tests that filters can be pushed past loc's that exclusivly filter the dataframe's columns."""
+
+    dict = {}
+    arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    for i in ["A", "B", "C", "D"]:
+        dict[i] = arr
+
+    df = pd.DataFrame(dict)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    # TODO: We currnetly clear the logger stream before each call to check_func
+    # via calling stream.seek/truncate. We should investigate if this actually
+    # fully clears the logger, or if additional work is needed.
+    with set_logging_stream(logger, 1):
+        try:
+            if bodo.get_rank() == 0:
+                df.to_parquet("pq_data", partition_cols="A")
+
+            def impl1():
+                df = pd.read_parquet("pq_data")
+                df = df[["A", "C"]]
+                df = df[df["C"] > 5]
+                return df
+
+            def impl2():
+                df = pd.read_parquet("pq_data")
+                df = df.loc[:, ["B", "A", "D"]]
+                df = df[df["D"] < 4]
+                return df
+
+            def impl3():
+                df = pd.read_parquet("pq_data")
+                df = df.loc[:, ["C", "B", "A", "D"]]
+                df = df.loc[:, ["B", "A", "D"]]
+                df = df.loc[:, ["B", "D"]]
+                df = df.loc[:, ["D"]]
+                df = df[df["D"] < 4]
+                return df
+
+
+            check_func
+            check_func(impl1, ())
+            check_logger_msg(stream, f"TODO")
+            stream.truncate(0)
+            stream.seek(0)
+            check_func(impl2, ())
+            check_logger_msg(stream, f"TODO")
+            stream.truncate(0)
+            stream.seek(0)
+            check_func(impl3, ())
+            check_logger_msg(stream, f"TODO")
+            stream.truncate(0)
+            stream.seek(0)
+            bodo.barrier()
+        finally:
+            if bodo.get_rank() == 0:
+                shutil.rmtree("pq_data", ignore_errors=True)
+
+    def impl1():
+        df = pd.DataFrame(
+            {"A": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "B": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+        )
+        df = df[["A", "C"]]
+        return df
+
+    def impl2():
+        df = pd.DataFrame(
+            {"A": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "B": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+        )
+        df = df.loc[df["A"] > 1, :]
+        return df
+
+
 @pytest.mark.slow
 def test_read_pq_head_only(datapath, memory_leak_check):
     """
