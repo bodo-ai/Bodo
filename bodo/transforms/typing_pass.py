@@ -588,6 +588,7 @@ class TypingTransforms:
             index_call_name = guard(
                 find_callname, self.func_ir, index_def, self.typemap
             )
+
         if (
             (
                 is_expr(index_def, "binop")
@@ -601,13 +602,8 @@ class TypingTransforms:
             working_body = guard(
                 self._try_filter_pushdown,
                 assign,
-                value_def,
-                index_def,
                 self._working_body,
                 self.func_ir,
-                {
-                    rhs.value.name: value_def
-                },  # Basic filter pushdown case only has 1 dataframe to track.
                 False,
             )
             # If this function returns a list we have updated the working body.
@@ -619,14 +615,129 @@ class TypingTransforms:
         nodes.append(assign)
         return nodes
 
+    def _iterate_over_column_filters(self, assign, func_ir, from_bodosql):
+        """
+        Iterate over calls that only filter the columns of a dataframe, raising a guard if it encounters an
+        non column filter, maintaining a list of used dataframes.
+        """
+        rhs = assign.value
+        index_def = get_definition(func_ir, rhs.index)
+        value_def = get_definition(func_ir, rhs.value)
+        # Intermediate DataFrames that need to be checked.
+        # Maps dataframe names to their definitions
+        used_dfs = {rhs.value.name: value_def}
+
+        # If we have any df.loc calls that load all rows, they will appear
+        # before the init_dataframe. We can find all rows with a
+        # static getitem with a slice of all none for the rows.
+        #
+        # i.e.
+        # df1 = df.loc[:, ["b", "c"]]
+
+        empty_slice = slice(None, None, None)
+
+        # TODO: Currently, this code will only do work for BodoSQL, as the df.loc's will have already
+        # been replaced by typing pass if the code originates from Bodo.
+        # It is an open issue to refactor this df.loc support into a general support so that we can see
+        # The benefits for Bodo:
+        # https://bodo.atlassian.net/browse/BE-1522
+        while (
+            is_expr(value_def, "static_getitem")
+            and isinstance(value_def.index, tuple)
+            and len(value_def.index) > 0
+            and value_def.index[0] == empty_slice
+        ):  # pragma: no cover
+            # pragma: no cover is due to the fact that bodo will never enter this branch as is
+            used_name = value_def.value.name
+            # Now we confirm we found a df.loc and traverse back to the original dataframe.
+            value_def = get_definition(func_ir, value_def.value)
+            # Add this to the intermediate DataFrames
+            used_dfs[used_name] = value_def
+            # If we didn't find a df.loc exit because the code structure is unexpected.
+            require(is_expr(value_def, "getattr") and value_def.attr == "loc")
+            used_name = value_def.value.name
+            # Move the value to the df in df.loc
+            value_def = get_definition(func_ir, value_def.value)
+            # Add this to the intermediate DataFrames
+            used_dfs[used_name] = value_def
+
+        # TODO: this is the old BodoSQL path. We should remove this, after the next major release
+        # If we load from parquet with paritions, BodoSQL will generate a pd.DataFrame call that performs
+        # an astype with the categorical columns
+        # For example:
+        #
+        # df = pd.read_parquet("filename")
+        # df = pd.DataFrame(
+        #     {
+        #         "a": df["a"],
+        #         "b": df["b"].astype("category")
+        #         "c": df["c"],
+        #     }
+        # )
+        # In this situation, the DataFrame is ALWAYS immediately clobbered.
+        # This means we ignore uses of this variable (to avoid tracking each
+        # column) and we rely on the source being a ParquetReader
+        # to ensure it is safe to perform filter pushdown.
+        if (
+            from_bodosql
+            and is_call(value_def)
+            and guard(find_callname, func_ir, value_def)
+            == (
+                "DataFrame",
+                "pandas",
+            )
+        ):  # pragma: no cover
+            require(len(value_def.args) > 0)
+            # Obtain the dictionary argument to pd.DataFrame
+            df_dict = value_def.args[0]
+            dict_def = get_definition(func_ir, df_dict)
+            require(is_expr(dict_def, "build_tuple"))
+
+            # Find the source DataFrame that should be created from the parquet node.
+            # All dataframes are at the end of this build_tuple, so we look for their
+            # source. These can either be a static getitem from the df or an astype.
+            #
+            # Again we don't check the use of these variables because of the assumed
+            # code structure.
+            source_col = get_definition(func_ir, dict_def.items[-1])
+            if is_call(source_col):
+                # We have an astype.
+                source_col = get_definition(func_ir, source_col.func)
+                require(is_expr(source_col, "getattr") and source_col.attr == "astype")
+                source_col = get_definition(func_ir, source_col.value)
+            # The source column is a static getitem to the relevant df
+            require(is_expr(source_col, "static_getitem"))
+            source_df = get_definition(func_ir, source_col.value)
+
+            value_def = source_df
+
+        elif is_call(value_def) and guard(find_callname, func_ir, value_def) == (
+            "init_dataframe",
+            "bodo.hiframes.pd_dataframe_ext",
+        ):
+            # In this case, we have what we want, we can try and perform filter pushdown.
+            pass
+        elif is_call(value_def) and guard(find_callname, func_ir, value_def) == (
+            "__bodosql_replace_columns_dummy",
+            "bodo.hiframes.dataframe_impl",
+        ):  # pragma: no cover
+            # This is the new BodoSQL path.
+            # args of __bodosql_replace_columns_dummy are (df, col_names_to_replace, cols_to_replace_with)
+            # the dataframe argument is always intialized by a call to init_dataframe
+            # This is init dataframe call is what we want to back to _try_filter_pushdown
+
+            init_df_call = get_definition(func_ir, value_def.args[0])
+            value_def = init_df_call
+        else:
+            raise GuardException("Couldn't find a valid dataframe to filter")
+
+        return value_def, used_dfs
+
     def _try_filter_pushdown(
         self,
         assign,
-        value_def,
-        index_def,
         working_body,
         func_ir,
-        used_dfs,
         from_bodosql,
     ):
         """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
@@ -640,6 +751,16 @@ class TypingTransforms:
 
         Throws GuardException if not possible.
         """
+        rhs = assign.value
+
+        index_def = get_definition(func_ir, rhs.index)
+
+        # Iterate over calls that only filter the columns of the dataframe, until we arive at the first
+        # definition, keeping track of the intermediate dataframes that are used.
+        value_def, used_dfs = self._iterate_over_column_filters(
+            assign, func_ir, from_bodosql
+        )
+
         # avoid empty dataframe
         require(len(value_def.args) > 0)
         data_def = get_definition(func_ir, value_def.args[0])
@@ -746,6 +867,7 @@ class TypingTransforms:
             if flag:
                 df = ....
         """
+
         for block in func_ir.blocks.values():
             for stmt in reversed(block.body):
                 # ignore code before the filtering node in the same basic block
@@ -788,7 +910,6 @@ class TypingTransforms:
         # n = len(df)
         # df = df[df["A"] == 2]
         related_vars = set()
-
         # Get the set of intermediate df names
         df_names = set(used_dfs.keys())
         for node in filter_nodes:
@@ -818,7 +939,7 @@ class TypingTransforms:
             # make sure df is not used before filtering
             if not stmt_vars & related_vars:
                 # df_names is a non-empty set, so if the intersection
-                # is empty then a df_name is in stmt_vars
+                # is non empty then a df_name is in stmt_vars
                 require(not (df_names & stmt_vars))
             else:
                 related_vars |= stmt_vars - df_names
@@ -827,7 +948,6 @@ class TypingTransforms:
                 filter_vars |= stmt_vars
             else:
                 non_filter_vars |= stmt_vars
-
         require(not (filter_vars & non_filter_vars))
 
         # move IR nodes for filter expressions before the reader node
@@ -2849,7 +2969,7 @@ class TypingTransforms:
 
         return block_body
 
-    def _apply_bodosql_filter_pushdown(self, block_body):
+    def _apply_bodosql_filter_pushdown(self, block_body):  # pragma: no cover
         """
         Function that tries to apply filter pushdown to a single "block" produced
         by BodoSQL. The block_body is a list of ir.Stmt.
@@ -2879,153 +2999,12 @@ class TypingTransforms:
                 and inst.value.op in ("getitem", "static_getitem")
             ):
                 updated_working_body = guard(
-                    self._try_bodosql_filter_pushdown, inst, func_ir, working_body
+                    self._try_filter_pushdown, inst, working_body, func_ir, True
                 )
                 # If we have an updated working body swap the working body list
                 if updated_working_body:
                     working_body = updated_working_body
             working_body.append(inst)
-        return working_body
-
-    def _try_bodosql_filter_pushdown(
-        self, inst, func_ir, working_body
-    ):  # pragma: no cover
-        """
-        Tries to convert the given static_getitem expression into
-        a filter pushdown. If this is not possible throws a guard exception.
-
-        Pandas code generated from BodoSQL will contain an astype to perform
-        filter pushdown and 1 or more df.loc
-
-        For example
-
-        # This is the old BodoSQL path. We should remove this, after the next major release:
-        # df = pd.read_parquet("filename")
-        # df = pd.DataFrame(
-        #     {
-        #         "a": df["a"],
-        #         "b": df["b"].astype("category")
-        #         "c": df["c"],
-        #     }
-        # )
-        # df1 = df.loc[:, ["b", "c"]]
-        # df2 = df1[df["b"] == 'a']
-
-        # This is the new BodoSQL path:
-        df = pd.read_parquet("filename")
-        df = __bodosql_replace_columns_dummy(df, 1, df["b"].astype("str"))
-        df1 = df.loc[:, ["b", "c"]]
-        df2 = df1[df["b"] == 'a']
-
-        Return a new working body if the pushdown was successful.
-        """
-
-        # looking for a getitem, where the getitem operation is a binop (IE a filter)
-        rhs = inst.value
-        index_def = get_definition(func_ir, rhs.index)
-        # TODO: Support just isna/notna filter pushdown (requires
-        # typemap info).
-        if is_expr(index_def, "binop"):
-            value_def = get_definition(func_ir, rhs.value)
-
-            # Intermediate DataFrames that need to be checked.
-            # Maps dataframe names to their definitions
-            used_dfs = {rhs.value.name: value_def}
-
-            # If we have any df.loc calls that load all rows, they will appear
-            # before the init_dataframe. We can find all rows with a
-            # static getitem with a slice of all none for the rows.
-            #
-            # i.e.
-            # df1 = df.loc[:, ["b", "c"]]
-            #
-            empty_slice = slice(None, None, None)
-            # TODO: Refactor df.loc support into a general function and apply to Pandas as well.
-            while (
-                is_expr(value_def, "static_getitem")
-                and isinstance(value_def.index, tuple)
-                and len(value_def.index) > 0
-                and value_def.index[0] == empty_slice
-            ):
-                used_name = value_def.value.name
-                # Now we confirm we found a df.loc and traverse back to the original dataframe.
-                value_def = get_definition(func_ir, value_def.value)
-                # Add this to the intermediate DataFrames
-                used_dfs[used_name] = value_def
-                # If we didn't find a df.loc exit because the code structure is unexpected.
-                require(is_expr(value_def, "getattr") and value_def.attr == "loc")
-                used_name = value_def.value.name
-                # Move the value to the df in df.loc
-                value_def = get_definition(func_ir, value_def.value)
-                # Add this to the intermediate DataFrames
-                used_dfs[used_name] = value_def
-
-            # TODO: this is the old BodoSQL path. We should remove this, after the next major release
-            # If we load from parquet with paritions, BodoSQL will generate a pd.DataFrame call that performs
-            # an astype with the categorical columns
-            # For example:
-            #
-            # df = pd.read_parquet("filename")
-            # df = pd.DataFrame(
-            #     {
-            #         "a": df["a"],
-            #         "b": df["b"].astype("category")
-            #         "c": df["c"],
-            #     }
-            # )
-            # In this situation, the DataFrame is ALWAYS immediately clobbered.
-            # This means we ignore uses of this variable (to avoid tracking each
-            # column) and we rely on the source being a ParquetReader
-            # to ensure it is safe to perform filter pushdown.
-            if is_call(value_def) and guard(find_callname, func_ir, value_def) == (
-                "DataFrame",
-                "pandas",
-            ):
-                require(len(value_def.args) > 0)
-                # Obtain the dictionary argument to pd.DataFrame
-                df_dict = value_def.args[0]
-                dict_def = get_definition(func_ir, df_dict)
-                require(is_expr(dict_def, "build_tuple"))
-
-                # Find the source DataFrame that should be created from the parquet node.
-                # All dataframes are at the end of this build_tuple, so we look for their
-                # source. These can either be a static getitem from the df or an astype.
-                #
-                # Again we don't check the use of these variables because of the assumed
-                # code structure.
-                source_col = get_definition(func_ir, dict_def.items[-1])
-                if is_call(source_col):
-                    # We have an astype.
-                    source_col = get_definition(func_ir, source_col.func)
-                    require(
-                        is_expr(source_col, "getattr") and source_col.attr == "astype"
-                    )
-                    source_col = get_definition(func_ir, source_col.value)
-                # The source column is a static getitem to the relevant df
-                require(is_expr(source_col, "static_getitem"))
-                source_df = get_definition(func_ir, source_col.value)
-
-                # If the filter pushdown was successful we can update the working body
-                working_body = self._try_filter_pushdown(
-                    inst, source_df, index_def, working_body, func_ir, used_dfs, True
-                )
-
-            # TODO: this is the new BodoSQL path. After the next major release, we should merge this with
-            # normal filter pushdown path.
-            elif is_call(value_def) and guard(find_callname, func_ir, value_def) == (
-                "__bodosql_replace_columns_dummy",
-                "bodo.hiframes.dataframe_impl",
-            ):
-                # args are (df, col_names_to_replace, cols_to_replace_with)
-                # the dataframe argument is always intialized by a call to init_dataframe
-                # This is init dataframe call is what we want to pass into _try_filter_pushdown
-
-                init_df_call = get_definition(func_ir, value_def.args[0])
-
-                working_body = self._try_filter_pushdown(
-                    inst, init_df_call, index_def, working_body, func_ir, used_dfs, True
-                )
-
         return working_body
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
