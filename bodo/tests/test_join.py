@@ -1437,18 +1437,21 @@ def test_merge_out_str_na(memory_leak_check):
     Size of the test has been extended so that empty bins do not occur for test on 2 or 3 processors.
     """
 
-    def test_impl(df1, df2):
-        # df3 = (
-        #     df1.merge(df2, left_on="key1", right_on="key2", how="inner")
-        #     .sort_values(by="B")
-        #     .reset_index(drop=True)
-        # )
+    def test_impl1(df1, df2):
         df4 = (
             df1.merge(df2, left_on="key1", right_on="key2", how="inner")
             .sort_values(by="B")
             .reset_index(drop=True)
         )
         return df4.B
+
+    def test_impl2(df1, df2):
+        df4 = (
+            df1.merge(df2, left_on="key1", right_on="key2", how="inner")
+            .sort_values(by="B")
+            .reset_index(drop=True)
+        )
+        return df4
 
     df1 = pd.DataFrame({"key1": ["foo", "bar", "baz", "fab", "faz", "fay"]})
     df2 = pd.DataFrame(
@@ -1458,7 +1461,8 @@ def test_merge_out_str_na(memory_leak_check):
         }
     )
 
-    check_func(test_impl, (df1, df2), check_typing_issues=False)
+    check_func(test_impl1, (df1, df2), check_typing_issues=False)
+    check_func(test_impl2, (df1, df2), check_typing_issues=False)
 
 
 def test_merge_out_binary_na(memory_leak_check):
