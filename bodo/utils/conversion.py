@@ -18,7 +18,6 @@ from bodo.libs.nullable_tuple_ext import NullableTupleType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
 from bodo.utils.typing import (
     BodoError,
-    decode_if_dict_array,
     dtype_to_array_type,
     get_overload_const_list,
     get_overload_const_str,
@@ -1356,13 +1355,9 @@ def overload_index_from_array(data, name=None):
     """
     convert data array to Index object.
     """
-    if data in [bodo.string_array_type, bodo.binary_array_type]:
+    if data in [bodo.string_array_type, bodo.binary_array_type, bodo.dict_str_arr_type]:
         return lambda data, name=None: bodo.hiframes.pd_index_ext.init_binary_str_index(
             data, name
-        )  # pragma: no cover
-    if data == bodo.dict_str_arr_type:
-        return lambda data, name=None: bodo.hiframes.pd_index_ext.init_binary_str_index(
-            decode_if_dict_array(data), name
         )  # pragma: no cover
 
     if (

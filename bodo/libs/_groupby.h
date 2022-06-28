@@ -90,7 +90,7 @@ table_info* pivot_groupby_and_aggregate(
     void* combine_cb, void* eval_cb, table_info* udf_dummy_table);
 
 /**
- * @brief Get groupby labels for input key arrays
+ * @brief Get total number of groups for input key arrays
  *
  * @param table a table of all key arrays
  * @param out_labels output array to fill

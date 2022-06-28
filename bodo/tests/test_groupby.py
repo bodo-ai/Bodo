@@ -761,7 +761,6 @@ def test_cumsum_index_preservation(df_index, memory_leak_check):
     check_func(test_impl_all, (df_index,), sort_output=True, check_dtype=False)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_random_index(memory_leak_check):
     def test_impl(df1):
@@ -816,7 +815,6 @@ def test_cumsum_random_index(memory_leak_check):
     check_func(test_impl, (df3,), sort_output=True, check_dtype=False)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_reverse_shuffle_list_string(memory_leak_check):
     """We want to use here the classical scheme of the groupby for cumsum.
@@ -990,7 +988,6 @@ def test_cumsum_exscan_categorical_random(memory_leak_check):
     check_func(f2, (df2,), check_dtype=False)
 
 
-# TODO: add memory leak check when cumsum leak issue resolved
 @pytest.mark.slow
 def test_cumsum_exscan_multikey_random(memory_leak_check):
     """For cumulative sum of integers, a special code that create a categorical key column
@@ -1761,7 +1758,7 @@ def test_groupby_agg_const_dict(memory_leak_check):
     check_func(impl18, (df,), sort_output=True, check_dtype=False)
 
 
-def test_groupby_agg_func_list():
+def test_groupby_agg_func_list(memory_leak_check):
     # TODO: Restore memory leak check
     """
     Test groupy.agg with list of functions in const dict input
@@ -1793,8 +1790,7 @@ def test_groupby_agg_func_list():
     assert not dist_IR_contains(f_ir, "global(cpp_cb_general:")
 
 
-def test_groupby_agg_nullable_or():
-    # TODO: Restore memory leak check
+def test_groupby_agg_nullable_or(memory_leak_check):
     """
     Test groupy.agg with & and | can take the optimized path
     """
@@ -2483,6 +2479,7 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
     )
     check_func(impl1, (df,), sort_output=True)
     # TODO [BE-2246]: Match output dtype by checking null info.
+
     check_func(impl7, (df,), sort_output=True, reset_index=True, check_dtype=False)
     check_func(impl11, (df,), sort_output=True, reset_index=True)
     if not is_slow_run:
@@ -2495,7 +2492,7 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
     check_func(impl5, (df,), sort_output=True)
     # NOTE: Pandas bug: drops the key arrays from output Index if it's Series sometimes
     # (as of 1.1.5)
-    check_func(impl6, (df,), sort_output=True, reset_index=True)
+    check_func(impl6, (df,), reset_index=True)
     check_func(impl8, (df,), sort_output=True, reset_index=True)
     # TODO [BE-2246]: Match output dtype by checking null info.
     check_func(impl9, (df,), sort_output=True, reset_index=True, check_dtype=False)
@@ -4478,8 +4475,7 @@ def test_const_list_inference(memory_leak_check):
 g_keys = ["A", "B"]
 
 
-# TODO: add memory leak check when issues addressed
-def test_global_list():
+def test_global_list(memory_leak_check):
     """
     Test passing a global list to groupby()
     """
@@ -4792,7 +4788,7 @@ def test_groupby_shift_int():
 
 
 @pytest.mark.slow
-def test_groupby_shift_timedelta():
+def test_groupby_shift_timedelta(memory_leak_check):
     def impl2(df):
         df2 = df.groupby("A").shift(-2)
         return df2
@@ -4819,7 +4815,7 @@ def test_groupby_shift_timedelta():
 
 
 @pytest.mark.slow
-def test_groupby_shift_binary():
+def test_groupby_shift_binary(memory_leak_check):
     """tests groupby shift for dataframes containing binary data"""
 
     def impl2(df):
@@ -4835,7 +4831,7 @@ def test_groupby_shift_binary():
     check_func(impl2, (df,))
 
 
-def test_groupby_shift_simple():
+def test_groupby_shift_simple(memory_leak_check):
     def impl(df):
         df2 = df.groupby("A").shift()
         return df2
@@ -4902,6 +4898,7 @@ def test_groupby_shift_main(periods):
     check_func(impl3, (df1_str,))
 
     n = 10
+    random.seed(5)
     df_ls = pd.DataFrame(
         {
             "A": gen_random_list_string_array(2, n),
@@ -4912,9 +4909,8 @@ def test_groupby_shift_main(periods):
     check_func(impl3, (df_ls,))
 
 
-# TODO: memory_leak_check (fails with ["A", "B"])
 @pytest.mark.parametrize("by", ["A", "B", ["A", "B"]])
-def test_groupby_size(by):
+def test_groupby_size(by, memory_leak_check):
     def impl(df):
         result = df.groupby(by=by).size()
         return result
@@ -5248,6 +5244,7 @@ def test_count_supported_cases(memory_leak_check):
     check_func(impl1, (df_mix,), sort_output=True, check_dtype=False)
 
 
+# TODO: memory_leak_check
 def test_value_counts():
     """Test groupby.value_counts"""
 
@@ -5724,9 +5721,8 @@ def test_head(memory_leak_check):
     check_func(impl1, (df_empty,))
 
 
-# TODO: memory_leak
 @pytest.mark.slow
-def test_head_cat():
+def test_head_cat(memory_leak_check):
     """
     Test Groupby.head with categorical column.
     This is in its own test since it does not pass memory_leak_check.

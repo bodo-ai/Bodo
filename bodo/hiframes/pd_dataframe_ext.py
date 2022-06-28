@@ -2348,7 +2348,7 @@ def _get_df_len_from_info(
     if df_len == "0":
         if not index_is_none:
             df_len = f"len({index_arg})"
-        elif data_dict: #pragma: no cover
+        elif data_dict:  # pragma: no cover
             # In the case that the dataframe is not empty, throw an error.
             # This shouldn't regularly occur
             raise BodoError(
@@ -4041,9 +4041,10 @@ def to_sql_exception_guard(
                 if df[c].dtype == "object":
                     if col_dtype == datetime_date_array_type:
                         dtyp[c] = sa.types.Date
-                    elif col_dtype == bodo.string_array_type and (
-                        not disable_varchar2 or disable_varchar2 == "0"
-                    ):
+                    elif col_dtype in (
+                        bodo.string_array_type,
+                        bodo.dict_str_arr_type,
+                    ) and (not disable_varchar2 or disable_varchar2 == "0"):
                         dtyp[c] = VARCHAR2(4000)
             dtype = dtyp
         try:

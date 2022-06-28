@@ -95,6 +95,23 @@ struct multi_col_key {
                     if (test != 0) return false;
                 }
                     continue;
+                case bodo_array_type::DICT: {
+                    if (c1->has_global_dictionary &&
+                        c2->has_global_dictionary) {
+                        if (c1->info1 != c2->info1) {
+                            throw std::runtime_error(
+                                "multi-key-hashing dictionary the columns are "
+                                "not unified.");
+                        }
+                        return c1->info2->at<dict_indices_t>(row) ==
+                               c2->info2->at<dict_indices_t>(other.row);
+                    } else {
+                        throw std::runtime_error(
+                            "multi-key-hashing dictionary array requires "
+                            "global dictionary");
+                    }
+                }
+                    continue;
                 case bodo_array_type::NULLABLE_INT_BOOL:
                     if (c1->get_null_bit(row) != c2->get_null_bit(other.row))
                         return false;
@@ -234,6 +251,7 @@ struct KeyEqualDict {
         // TODO inline?
         return TestEqualColumn(dict_A, jRowA, dict_B, jRowB, true);
     }
+    // global_dict_len, global_dictionary, local_dictionary
     size_t global_array_rows;
     array_info* global_dictionary;
     array_info* local_dictionary;

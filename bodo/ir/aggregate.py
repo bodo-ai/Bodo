@@ -1720,7 +1720,7 @@ def gen_top_level_agg_func(
         in_args,
         ", index_arg" if agg_node.input_has_index else "",
     )
-    for a in key_arg_names + tuple(in_arg_names.values()):
+    for a in tuple(in_arg_names.values()):
         func_text += f"    {a} = decode_if_dict_array({a})\n"
 
     # convert arrays to table
