@@ -3653,7 +3653,7 @@ def test_index_simple_attributes(index):
 
     # Bodo diverges from the Pandas API by always returning the numpy dtype in
     # ambiguous cases.
-    if isinstance(index.dtype, np.dtype) or isinstance(index, pd.CategoricalIndex):
+    if isinstance(index.dtype, np.dtype):
         check_func(impl3, (index,), dist_test=dist_test)
 
 

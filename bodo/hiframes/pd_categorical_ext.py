@@ -460,6 +460,7 @@ def get_code_for_value(cat_dtype, val):
 
     return -2  # return dummy value that doesn't match any categorical code
 
+
 @overload_method(CategoricalArrayType, "astype", inline="always", no_unliteral=True)
 def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
     # If dtype is a string, force it to be a literal
@@ -770,7 +771,9 @@ def cat_replace_overload(arr, to_replace, value):
         # constant. This avoids constant lowered Index inside the dtype, which can be
         # slow since it cannot have a dictionary.
         # see https://github.com/Bodo-inc/Bodo/pull/3563
-        new_categories = pd.CategoricalDtype(cats_list, _ordered).categories.values
+        new_categories = bodo.utils.utils.create_categorical_type(
+            cats_list, arr.dtype.data.data, _ordered
+        )
         new_categories_tup = MetaType(tuple(new_categories))
 
         # Implementation avoids changing the actual categories and knows the
@@ -975,8 +978,8 @@ def pd_categorical_overload(
             # be slow since it cannot have a dictionary.
             # see https://github.com/Bodo-inc/Bodo/pull/3563
             new_cats_arr = pd.CategoricalDtype(
-                const_categories, is_ordered
-            ).categories.values
+                pd.array(const_categories), is_ordered
+            ).categories.array
             new_cats_tup = MetaType(tuple(new_cats_arr))
 
             # If the categories are constant, create the type at compile time.

@@ -5059,7 +5059,9 @@ def overload_inferred_type(I):
         return lambda I: dtype  # pragma: no cover
 
     if isinstance(I, CategoricalIndexType):
-        dtype = pd.CategoricalDtype(I.dtype.categories, I.dtype.ordered)
+        dtype = bodo.utils.utils.create_categorical_type(
+            I.dtype.categories, I.data, I.dtype.ordered
+        )
         return lambda I: dtype  # pragma: no cover
 
     dtype_map = {
