@@ -19,7 +19,7 @@ requirements:
   host:
     - python
     - setuptools
-    - numba 0.55.1
+    - numba =0.55.2
     # Compatable with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.18,<1.22
@@ -60,7 +60,8 @@ requirements:
   # support up to 3.5.1
   run_constrained:
     - matplotlib <= 3.5.1
-
+  run_constrained:
+    - numpy >=1.18,<1.22
 
 test:
   imports:
