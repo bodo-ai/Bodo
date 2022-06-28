@@ -8,6 +8,8 @@ ENV MKL_DISABLE_FAST_MM 1
 
 WORKDIR /src
 
+# Builds python with the proper flags, and then copies the suppression file generated during
+# the build process to /src.
 RUN set -e \
     && apt-get update && apt-get install -y  valgrind --no-install-recommends  \
     && curl "https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz" > python.tgz  \
@@ -40,9 +42,9 @@ RUN conda create -n BODODEV numpy scipy pandas=${BODO_PD_VERSION:-'1.4.*'} boost
 RUN conda install -n BODODEV python hdf5='1.10.*=*mpich*' -c conda-forge
 RUN conda install -n BODODEV python pyarrow=7.0.0 fsspec>=2021.09 -c conda-forge
 RUN conda install -n BODODEV python numba=0.55.1 -c conda-forge
-RUN conda install -v BODODEV python nomkl numpy -c conda-forge
-RUN conda install -v BODODEV scikit-learn='1.0.*' -c conda-forge
-RUN conda install -v BODODEV python pytest sqlalchemy mypysql xlrd openpyxl mpi4py cython -c conda-forge
+RUN conda install -v -n BODODEV python nomkl numpy -c conda-forge
+RUN conda install -v -n BODODEV scikit-learn='1.0.*' -c conda-forge
+RUN conda install -v -n BODODEV python pytest sqlalchemy pymysql xlrd openpyxl mpi4py cython -c conda-forge
 #
 # Creation of the .bashrc file
 #
