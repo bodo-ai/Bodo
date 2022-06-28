@@ -1297,9 +1297,9 @@ def info_to_array_codegen(context, builder, sig, args):
             # be slow since it cannot have a dictionary.
             # see https://github.com/Bodo-inc/Bodo/pull/3563
             is_ordered = arr_type.dtype.ordered
-            new_cats_arr = pd.CategoricalDtype(
-                arr_type.dtype.categories, is_ordered
-            ).categories.values
+            new_cats_arr = bodo.utils.utils.create_categorical_type(
+                arr_type.dtype.categories, arr_type.dtype.data.data, is_ordered
+            )
             new_cats_tup = MetaType(tuple(new_cats_arr))
             int_type = arr_type.dtype.int_type
             cats_arr_type = arr_type.dtype.data.data

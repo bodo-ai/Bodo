@@ -2219,9 +2219,9 @@ class SeriesPass:
                     # see https://github.com/Bodo-inc/Bodo/pull/3563
                     is_ordered = typ.dtype.ordered
                     int_type = typ.dtype.int_type
-                    new_cats_arr = pd.CategoricalDtype(
-                        typ.dtype.categories, is_ordered
-                    ).categories.values
+                    new_cats_arr = bodo.utils.utils.create_categorical_type(
+                        typ.dtype.categories, typ.dtype.data.data, is_ordered
+                    )
                     new_cats_tup = MetaType(tuple(new_cats_arr))
                     dtype = "bodo.hiframes.pd_categorical_ext.init_cat_dtype(bodo.utils.conversion.index_from_array(new_cats_arr), is_ordered, int_type, new_cats_tup)"
                     impl = eval(

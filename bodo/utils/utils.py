@@ -657,6 +657,28 @@ def tuple_to_scalar(n):
     return lambda n: n  # pragma: no cover
 
 
+def create_categorical_type(categories, data, is_ordered):
+    """Create categorical array with either pd.array or np.array
+        based on data array type to ensure correct lowering happens when using
+        dictionary-encoded arrays or numpy arrays.
+
+    Args:
+        categories (Any): unique values for categorical data
+        data (Any): data type of cateogrical data
+        is_ordered (bool): wether or not this categorical is ordered
+
+    Returns:
+        new_cats_arr (pd.CategoricalDtype) : return type of pd.CategoricalDtype
+    """
+    if data == bodo.string_array_type or bodo.utils.typing.is_dtype_nullable(data):
+        new_cats_arr = pd.CategoricalDtype(
+            pd.array(categories), is_ordered
+        ).categories.array
+    else:
+        new_cats_arr = pd.CategoricalDtype(categories, is_ordered).categories.values
+    return new_cats_arr
+
+
 def alloc_type(n, t, s=None):  # pragma: no cover
     return np.empty(n, t.dtype)
 
@@ -722,9 +744,9 @@ def overload_alloc_type(n, t, s=None):
             # see https://github.com/Bodo-inc/Bodo/pull/3563
             is_ordered = typ.dtype.ordered
             int_type = typ.dtype.int_type
-            new_cats_arr = pd.CategoricalDtype(
-                typ.dtype.categories, is_ordered
-            ).categories.values
+            new_cats_arr = create_categorical_type(
+                typ.dtype.categories, typ.dtype.data.data, is_ordered
+            )
             new_cats_tup = MetaType(tuple(new_cats_arr))
             return lambda n, t, s=None: bodo.hiframes.pd_categorical_ext.alloc_categorical_array(
                 n,
