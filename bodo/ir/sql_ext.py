@@ -127,7 +127,35 @@ def parse_dbtype(con_str):
     if db_type == "mysql+pymysql":
         # Standardize mysql to always use "mysql"
         return "mysql", con_paswd
+
+    # NOTE: if you're upding supported schemes here, don't forget
+    # to update the associated error message in _run_call_read_sql_table
+    if con_str == "iceberg+glue" or parseresult.scheme in (
+        "iceberg",
+        "iceberg+file",
+        "iceberg+thrift",
+        "iceberg+http",
+        "iceberg+https",
+    ):
+        # Standardize iceberg to always use "iceberg"
+        return "iceberg", con_paswd
     return db_type, con_paswd
+
+
+def remove_iceberg_prefix(con):
+    import sys
+
+    # Remove Iceberg Prefix when using Internally
+    # For support before Python 3.9
+    # TODO: Remove after deprecating Python 3.8
+    if sys.version_info.minor < 9:  # pragma: no cover
+        if con.startswith("iceberg+"):
+            con = con[len("iceberg+") :]
+        if con.startswith("iceberg://"):
+            con = con[len("iceberg://") :]
+    else:
+        con = con.removeprefix("iceberg+").removeprefix("iceberg://")
+    return con
 
 
 def remove_dead_sql(

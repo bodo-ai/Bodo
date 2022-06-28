@@ -5,11 +5,9 @@ according to Bodo requirements (using partial typing).
 import copy
 import itertools
 import operator
-import sys
 import types as pytypes
 import warnings
 from collections import defaultdict
-from urllib.parse import urlparse
 
 import numba
 import numpy as np
@@ -43,6 +41,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
+from bodo.ir.sql_ext import parse_dbtype, remove_iceberg_prefix
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (
@@ -1796,6 +1795,7 @@ class TypingTransforms:
             (1, "file_type"),
             (2, "conn_str"),
             (3, "reorder_io"),
+            (4, "db_schema"),
         ]
         nodes += self._replace_arg_with_literal(
             "bodosql.TablePath", rhs, func_args, label
@@ -2446,30 +2446,14 @@ class TypingTransforms:
         table_name, con, database_schema = arg_values
 
         # Parse `con` String and Ensure its an Iceberg Connection
-        parse_res = urlparse(con)
-        if con != "iceberg+glue" and parse_res.scheme not in (
-            "iceberg",
-            "iceberg+file",
-            "iceberg+thrift",
-            "iceberg+http",
-            "iceberg+https",
-        ):
+        parse_res, _ = parse_dbtype(con)
+        if parse_res != "iceberg":  # pragma: no cover
             raise BodoError(
-                "pandas.read_sql_table(): Only Iceberg is currently supported. "
                 "'con' must be 'iceberg+glue' or start with one of the following: 'iceberg://', 'iceberg+file://', "
                 "'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://'"
             )
 
-        # Remove Iceberg Prefix when using Internally
-        # For support before Python 3.9
-        # TODO: Remove after deprecating Python 3.8
-        if sys.version_info.minor < 9:
-            if con.startswith("iceberg+"):
-                con = con[len("iceberg+") :]
-            if con.startswith("iceberg://"):
-                con = con[len("iceberg://") :]
-        else:
-            con = con.removeprefix("iceberg+").removeprefix("iceberg://")
+        con = remove_iceberg_prefix(con)
 
         # Generate Output DataFrame Type
         arg_defaults = {
@@ -2927,7 +2911,6 @@ class TypingTransforms:
 
         keys = tuple(keys)
         value_typs = tuple([self.typemap[value.name] for value in values])
-
         if func_name == "sql":
             (
                 impl,
@@ -3236,6 +3219,7 @@ class TypingTransforms:
         kws = dict(rhs.kws)
         nodes = []
         for (arg_no, arg_name) in func_args:
+
             var = get_call_expr_arg(func_name, rhs.args, kws, arg_no, arg_name, "")
             # skip if argument not specified or literal already
             if var == "":
