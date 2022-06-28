@@ -1041,9 +1041,9 @@ def join_distributed_run(
                     right_used_key_nums.add(in_col_num)
                     cpp_table_logical_idx[out_col_num] = physical_idx
                     physical_idx += 1
+            right_key_in_output.append(is_live)
         right_logical_physical_map[in_col_num] = right_physical_index
         right_physical_index += 1
-        right_key_in_output.append(is_live)
     right_key_vars = tuple(right_key_vars)
 
     # Extract the right column variables for the non-keys and determine

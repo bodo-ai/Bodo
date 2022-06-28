@@ -998,6 +998,8 @@ def remove_dead_columns(
                         )
                         removed = True
                     else:
+                        # Remove set_col_num if present because it isn't needed.
+                        used_columns.discard(set_col_num)
                         # Pass the used_cols to the function to skip loops, but
                         # keep the same function.
                         nodes = compile_func_single_block(
