@@ -161,12 +161,14 @@ def test_lpad_rpad(args):
         (arr, length, pad_string),
         py_output=lpad_answer,
         check_dtype=False,
+        reset_index=True,
     )
     check_func(
         impl2,
         (arr, length, pad_string),
         py_output=rpad_answer,
         check_dtype=False,
+        reset_index=True,
     )
 
 
