@@ -79,7 +79,7 @@ from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.conversion import fix_arr_dtype, index_to_array
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
-from bodo.utils.transform import get_const_func_output_type, get_const_tup_vals
+from bodo.utils.transform import get_const_func_output_type
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
@@ -1134,17 +1134,10 @@ def init_dataframe(typingctx, data_tup_typ, index_typ, col_names_typ):
         else col_names_typ
     )
 
-    # currently, col_names_typ should always be a metadata type,
-    # from which we can infer the column names.
-    # TODO: the two second branches should be removes durring the PR freese prior to the
-    # following the next major release (2022.6)
-    if isinstance(untyperefed_col_names_typ, ColNamesMetaType):
-        assert isinstance(untyperefed_col_names_typ.meta, tuple)
-        column_names = untyperefed_col_names_typ.meta
-    elif isinstance(untyperefed_col_names_typ, DataFrameType):
-        column_names = untyperefed_col_names_typ.columns
-    else:
-        column_names = get_const_tup_vals(untyperefed_col_names_typ)
+    assert isinstance(untyperefed_col_names_typ, ColNamesMetaType) and isinstance(
+        untyperefed_col_names_typ.meta, tuple
+    ), "Third argument to init_dataframe must be of type ColNamesMetaType, and must contain a tuple of column names"
+    column_names = untyperefed_col_names_typ.meta
 
     # handle the new table format
     if n_cols == 1 and isinstance(data_tup_typ.types[0], TableType):

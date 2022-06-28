@@ -5609,6 +5609,7 @@ def overload_index_sort_values(
 
     constructor = get_index_constructor(I)
 
+    meta_data = ColNamesMetaType(("$_bodo_col_",))
     # reusing dataframe sort_values() in implementation.
     def impl(
         I, return_indexer=False, ascending=True, na_position="last", key=None
@@ -5616,9 +5617,7 @@ def overload_index_sort_values(
         arr = bodo.hiframes.pd_index_ext.get_index_data(I)
         name = get_index_name(I)
         index = init_range_index(0, len(arr), 1, None)
-        df = bodo.hiframes.pd_dataframe_ext.init_dataframe(
-            (arr,), index, ("$_bodo_col_",)
-        )
+        df = bodo.hiframes.pd_dataframe_ext.init_dataframe((arr,), index, meta_data)
         sorted_df = df.sort_values(
             ["$_bodo_col_"],
             ascending=ascending,

@@ -2929,15 +2929,24 @@ class TypingTransforms:
         value_typs = tuple([self.typemap[value.name] for value in values])
 
         if func_name == "sql":
-            impl = bodosql.context_ext._gen_pd_func_for_query(
+            (
+                impl,
+                additional_globals_to_lower,
+            ) = bodosql.context_ext._gen_pd_func_and_glbls_for_query(
                 sql_context_type, sql_str, keys, value_typs
             )
         elif func_name == "_test_sql_unoptimized":
-            impl = bodosql.context_ext._gen_pd_func_for_unoptimized_query(
+            (
+                impl,
+                additional_globals_to_lower,
+            ) = bodosql.context_ext._gen_pd_func_and_globals_for_unoptimized_query(
                 sql_context_type, sql_str, keys, value_typs
             )
         elif func_name == "convert_to_pandas":
-            impl = bodosql.context_ext._gen_pd_func_str_for_query(
+            (
+                impl,
+                additional_globals_to_lower,
+            ) = bodosql.context_ext._gen_pd_func_and_glbls_for_query(
                 sql_context_type, sql_str, keys, value_typs
             )
 
@@ -2954,6 +2963,7 @@ class TypingTransforms:
             run_untyped_pass=True,
             flags=self.flags,
             replace_globals=False,
+            extra_globals=additional_globals_to_lower,
         )
         # Attempt to apply filter pushdown if there is parquet load
         if any(
