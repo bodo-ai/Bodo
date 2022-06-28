@@ -3225,8 +3225,7 @@ def bcast_comm_impl(data, comm_ranks, nranks, root=MPI_ROOT):  # pragma: no cove
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         n_cols = len(data.columns)
         data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
-        col_var = bodo.utils.transform.gen_const_tup(data.columns)
-        ColNamesMetaType(("$_bodo_col2_",))
+        col_name_meta_value_bcast_comm = ColNamesMetaType(data.columns)
 
         func_text = f"def impl_df(data, comm_ranks, nranks, root={MPI_ROOT}):\n"
         for i in range(n_cols):
@@ -3240,11 +3239,19 @@ def bcast_comm_impl(data, comm_ranks, nranks, root=MPI_ROOT):  # pragma: no cove
             "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
         )
         func_text += "  g_index = bodo.libs.distributed_api.bcast_comm_impl(index, comm_ranks, nranks, root)\n"
-        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, {})\n".format(
-            data_args, col_var
+        func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({},), g_index, __col_name_meta_value_bcast_comm)\n".format(
+            data_args
         )
+
         loc_vars = {}
-        exec(func_text, {"bodo": bodo}, loc_vars)
+        exec(
+            func_text,
+            {
+                "bodo": bodo,
+                "__col_name_meta_value_bcast_comm": col_name_meta_value_bcast_comm,
+            },
+            loc_vars,
+        )
         impl_df = loc_vars["impl_df"]
         return impl_df
 
