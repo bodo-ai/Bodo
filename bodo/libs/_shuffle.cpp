@@ -1592,7 +1592,19 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 PyExc_RuntimeError,
                 "Reverse shuffle for arrow data not yet supported");
             return nullptr;
-        } else {
+
+        } else if (arr_type == bodo_array_type::DICT) {
+            if (!in_arr->has_global_dictionary) {
+                throw std::runtime_error(
+                    "reverse_shuffle_table: input dictionary array doesn't "
+                    "have a "
+                    "global dictionary");
+            }
+            // in_arr <- indices array, to simplify code below
+            in_arr = in_arr->info2;
+            arr_type = in_arr->arr_type;
+        }
+        {
             if (arr_type == bodo_array_type::NUMPY ||
                 arr_type == bodo_array_type::CATEGORICAL ||
                 arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -1612,6 +1624,18 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                 reverse_shuffle_null_bitmap_array(in_arr, out_arr, hashes,
                                                   comm_info);
             }
+        }
+        if (in_table->columns[i]->arr_type == bodo_array_type::DICT) {
+            in_arr = in_table->columns[i];
+            array_info* out_dict_arr = new array_info(
+                bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1, -1,
+                NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL, NULL, NULL,
+                0, 0, 0, true, in_arr->has_sorted_dictionary, in_arr->info1,
+                out_arr);
+            // info1 is dictionary. incref so it doesn't get deleted since
+            // it is given to the output array
+            incref_array(in_arr->info1);
+            out_arr = out_dict_arr;
         }
         // Reference stealing see shuffle_table_kernel for discussion
         decref_array(in_arr);
@@ -1713,6 +1737,15 @@ void delete_shuffle_info(shuffle_info* sh_info) {
  * @return table_info* reverse shuffled output table
  */
 table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
+    // TODO: move outside shuffle function.
+    // Ideally the convert should happen at the function that
+    // calls the reverse.
+    for (array_info* a : in_table->columns) {
+        if ((a->arr_type == bodo_array_type::DICT) &&
+            !a->has_global_dictionary) {
+            convert_local_dictionary_to_global(a);
+        }
+    }
     table_info* revshuf_table = reverse_shuffle_table_kernel(
         in_table, sh_info->hashes, *sh_info->comm_info);
 

@@ -432,7 +432,7 @@ def get_keys_not_as_index(
         else:
             e_col = k
         ind = grp.df_type.columns.index(k)
-        data = to_str_arr_if_dict_array(grp.df_type.data[ind])
+        data = grp.df_type.data[ind]
         out_columns.append(e_col)
         out_data.append(data)
         out_column_type.append(ColumnType.KeyColumn.value)
@@ -476,13 +476,12 @@ def get_agg_typ(
                 grp.df_type.column_index[grp.keys[i]] for i in range(len(grp.keys))
             )
             arr_types = tuple(grp.df_type.data[ind] for ind in key_col_inds)
-            arr_types = tuple(to_str_arr_if_dict_array(t) for t in arr_types)
             index = MultiIndexType(
                 arr_types, tuple(types.StringLiteral(k) for k in grp.keys)
             )
         else:
             ind = grp.df_type.column_index[grp.keys[0]]
-            ind_arr_t = to_str_arr_if_dict_array(grp.df_type.data[ind])
+            ind_arr_t = grp.df_type.data[ind]
             index = bodo.hiframes.pd_index_ext.array_type_to_index(
                 ind_arr_t, types.StringLiteral(grp.keys[0])
             )
@@ -1406,14 +1405,12 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
                         for i in range(len(grp.keys))
                     )
                     arr_types = tuple(grp.df_type.data[ind] for ind in key_col_inds)
-                    arr_types = tuple(to_str_arr_if_dict_array(t) for t in arr_types)
                     out_index_type = MultiIndexType(
                         arr_types, tuple(types.literal(k) for k in grp.keys)
                     )
                 else:
                     ind = grp.df_type.columns.index(grp.keys[0])
                     ind_arr_t = grp.df_type.data[ind]
-                    ind_arr_t = to_str_arr_if_dict_array(ind_arr_t)
                     out_index_type = bodo.hiframes.pd_index_ext.array_type_to_index(
                         ind_arr_t, types.literal(grp.keys[0])
                     )
@@ -1423,7 +1420,6 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             key_arr_types = tuple(
                 grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
             )
-            key_arr_types = tuple(to_str_arr_if_dict_array(t) for t in key_arr_types)
             index_names = tuple(
                 types.literal(v) for v in grp.keys
             ) + get_index_name_types(f_return_type.index)
@@ -1611,7 +1607,8 @@ class CrossTabTyper(AbstractTemplate):
         pivot_vals = _pivot_values.meta
         n_vals = len(pivot_vals)
         index_typ = bodo.hiframes.pd_index_ext.array_type_to_index(
-            to_str_arr_if_dict_array(index.data), types.StringLiteral("index")
+            index.data,
+            types.StringLiteral("index"),
         )
         out_df = DataFrameType((out_arr_typ,) * n_vals, index_typ, tuple(pivot_vals))
 

@@ -1431,7 +1431,7 @@ int64_t get_groupby_labels_impl(Map& key_to_group, tracing::Event& ev,
 }  // namespace
 
 /**
- * @brief Get groupby labels for input key arrays
+ * @brief Get total number of groups for input key arrays
  *
  * @param table a table of all key arrays
  * @param[out] out_labels output array to fill
@@ -1451,6 +1451,12 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     table->num_keys = table->columns.size();
     std::vector<array_info*> key_cols = table->columns;
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
+    for (auto a : key_cols) {
+        if ((a->arr_type == bodo_array_type::DICT) &&
+            !a->has_global_dictionary) {
+            convert_local_dictionary_to_global(a);
+        }
+    }
     uint32_t* hashes = hash_keys(key_cols, seed, is_parallel);
 
     size_t nunique_hashes =
@@ -1635,7 +1641,8 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
                               int32_t const& ftype, bool const& skipna) {
     size_t num_group = grp_info.group_to_first_row.size();
     if (arr->arr_type == bodo_array_type::STRING ||
-        arr->arr_type == bodo_array_type::LIST_STRING) {
+        arr->arr_type == bodo_array_type::LIST_STRING ||
+        arr->arr_type == bodo_array_type::DICT) {
         Bodo_PyErr_SetString(PyExc_RuntimeError,
                              "There is no cumulative operation for the string "
                              "or list string case");
@@ -4459,10 +4466,10 @@ class BasicColSet {
     /**
      * Construct column set corresponding to function of type ftype applied to
      * the input column in_col
-     * @param input column of groupby associated with this column set
-     * @param ftype associated with this column set
-     * @param tells the column set whether GroupbyPipeline is going to perform
-     *        a combine operation or not. If false, this means that either
+     * @param in_col input column of groupby associated with this column set
+     * @param ftype function associated with this column set
+     * @param combine_step tells the column set whether GroupbyPipeline is going
+     * to perform a combine operation or not. If false, this means that either
      *        shuffling is not necessary or that it will be done at the
      *        beginning of the pipeline.
      */
@@ -5593,6 +5600,13 @@ class GroupbyPipeline {
         // Add key-sorting-column for gb.head() to sort output at the end
         // this is relevant only if data is distributed.
         if (head_i) add_head_key_sort_column();
+        for (int icol = 0; icol < num_keys; icol++) {
+            array_info* a = in_table->columns[icol];
+            if ((a->arr_type == bodo_array_type::DICT) &&
+                !a->has_global_dictionary) {
+                convert_local_dictionary_to_global(a);
+            }
+        }
 
         // get hashes of keys
         hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION,
@@ -6015,6 +6029,7 @@ class GroupbyPipeline {
         if (return_key)
             out_table->columns.assign(cur_table->columns.begin(),
                                       cur_table->columns.begin() + num_keys);
+
         // gb.head() with distirbuted data sorted the table so col_sets no
         // longer reflects final
         // output columns.
@@ -6214,6 +6229,15 @@ class GroupbyPipeline {
         }
     }
 
+    /**
+     * @brief Get key_col given a group number
+     *
+     * @param group[in]: group number
+     * @param from_tables[in] list of tables
+     * @param key_col_idx[in]
+     * @param key_col[in] key column
+     * @param key_row[out] row
+     */
     void find_key_for_group(int64_t group,
                             const std::vector<table_info*>& from_tables,
                             int64_t key_col_idx, array_info*& key_col,
@@ -6257,6 +6281,28 @@ class GroupbyPipeline {
                         new_key_col->set_null_bit(j, bit);
                     }
                 }
+            }
+            if (key_col->arr_type == bodo_array_type::DICT) {
+                array_info* key_indices = key_col->info2;
+                array_info* new_key_indices =
+                    alloc_array(num_groups, -1, -1, key_indices->arr_type,
+                                key_indices->dtype, 0, 0);
+                for (size_t j = 0; j < num_groups; j++) {
+                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    new_key_indices->at<dict_indices_t>(j) =
+                        key_indices->at<dict_indices_t>(key_row);
+                    bool bit = key_indices->get_null_bit(key_row);
+                    new_key_indices->set_null_bit(j, bit);
+                }
+                new_key_col = new array_info(
+                    bodo_array_type::DICT, key_col->dtype,
+                    new_key_indices->length, -1, -1, NULL, NULL, NULL,
+                    new_key_indices->null_bitmask, NULL, NULL, NULL, NULL, 0, 0,
+                    0, key_col->has_global_dictionary,
+                    key_col->has_sorted_dictionary, key_col->info1,
+                    new_key_indices);
+                // incref because they share the same dictionary array
+                incref_array(key_col->info1);
             }
             if (key_col->arr_type == bodo_array_type::STRING) {
                 // new key col will have num_groups rows containing the
@@ -6876,8 +6922,12 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
 #endif
     // A rare case of incref since we are going to need the in_table after the
     // computation of red_table.
-    for (int64_t i_key = 0; i_key < num_keys; i_key++)
-        incref_array(in_table->columns[i_key]);
+    for (int64_t i_key = 0; i_key < num_keys; i_key++) {
+        array_info* a = in_table->columns[i_key];
+        if ((a->arr_type == bodo_array_type::DICT) && !a->has_global_dictionary)
+            convert_local_dictionary_to_global(a);
+        incref_array(a);
+    }
     table_info* red_table =
         drop_duplicates_keys(in_table, num_keys, is_parallel, key_dropna);
     size_t n_rows_full, n_rows = red_table->nrows();

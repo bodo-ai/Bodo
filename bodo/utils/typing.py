@@ -122,6 +122,19 @@ def decode_if_dict_array_overload(A):
         impl = loc_vars["f"]
         return impl
 
+    if isinstance(A, types.List):
+
+        def impl(A):  # pragma: no cover
+
+            n = 0
+            for a in A:
+                n += 1
+            ans = []
+            for i in range(n):
+                ans.append(decode_if_dict_array(A[i]))
+            return ans
+
+        return impl
     if A == bodo.dict_str_arr_type:
         return lambda A: A._decode()  # pragma: no cover
 

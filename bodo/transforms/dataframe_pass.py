@@ -65,7 +65,6 @@ from bodo.utils.typing import (
     is_overload_constant_tuple,
     is_overload_none,
     list_cumulative,
-    to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -1599,9 +1598,7 @@ class DataFramePass:
                     lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc
                 )
                 ind = df_type.columns.index(k)
-                self.typemap[out_key_var.name] = to_str_arr_if_dict_array(
-                    df_type.data[ind]
-                )
+                self.typemap[out_key_var.name] = df_type.data[ind]
                 out_key_vars.append(out_key_var)
 
         if input_has_index:
@@ -1834,7 +1831,7 @@ class DataFramePass:
         func_text = (
             f"def f({key_name_args}, {col_name_args}, df_index, {extra_arg_names}):\n"
         )
-        for a in key_names + col_names:
+        for a in col_names:
             func_text += f"  {a} = decode_if_dict_array({a})\n"
 
         func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, __col_name_meta_value_inner)\n"
@@ -1871,11 +1868,10 @@ class DataFramePass:
             "bodo": bodo,
             "get_group_indices": bodo.hiframes.pd_groupby_ext.get_group_indices,
             "generate_slices": bodo.hiframes.pd_groupby_ext.generate_slices,
-            "shuffle_dataframe": bodo.hiframes.pd_groupby_ext.shuffle_dataframe,
-            "reverse_shuffle": bodo.hiframes.pd_groupby_ext.reverse_shuffle,
             "delete_shuffle_info": bodo.libs.array.delete_shuffle_info,
             "dist_reduce": bodo.libs.distributed_api.dist_reduce,
             "map_func": map_func,
+            "reverse_shuffle": bodo.hiframes.pd_groupby_ext.reverse_shuffle,
         }
         if isinstance(out_typ, DataFrameType):
             glbs.update(
@@ -1981,9 +1977,17 @@ class DataFramePass:
         func_text = ""
         func_text += "  ev = bodo.utils.tracing.Event('_gen_groupby_apply_row_loop', _is_parallel)\n"
 
+        df = grp_typ.df_type
         # output always has input keys (either Index or regular columns)
         for i in range(n_keys):
-            func_text += f"  in_key_arrs{i} = bodo.utils.utils.alloc_type(ngroups, s_key{i}, (-1,))\n"
+            # Get key array type to compare if it's dictionary string encoded.
+            # For dict-encoded string, allocate array for indices only.
+            # Then, create in_key_arrs as dictionary-encoded string at the end.
+            key_typ = df.data[df.column_index[grp_typ.keys[i]]]
+            if key_typ == bodo.dict_str_arr_type:
+                func_text += f"  dict_key_indices_arrs{i} = bodo.libs.int_arr_ext.alloc_int_array(ngroups, np.int32)\n"
+            else:
+                func_text += f"  in_key_arrs{i} = bodo.utils.utils.alloc_type(ngroups, s_key{i}, (-1,))\n"
         for i in range(n_out_cols - n_out_keys):
             func_text += f"  arrs{i} = bodo.utils.utils.alloc_type(ngroups, _arr_typ{i+n_out_keys}, (-1,))\n"
         # as_index=False includes group number as Index
@@ -2012,7 +2016,13 @@ class DataFramePass:
                 f"    arrs0[i] = bodo.utils.conversion.unbox_if_timestamp(out)\n"
             )
         for i in range(n_keys):
-            func_text += f"    in_key_arrs{i}[i] = s_key{i}[starts[i]]\n"
+            key_typ = df.data[df.column_index[grp_typ.keys[i]]]
+            if key_typ == bodo.dict_str_arr_type:
+                func_text += (
+                    f"    dict_key_indices_arrs{i}[i] = s_key{i}._indices[starts[i]]\n"
+                )
+            else:
+                func_text += f"    in_key_arrs{i}[i] = s_key{i}[starts[i]]\n"
         if not grp_typ.as_index:
             func_text += f"    out_index_arr[i] = n_prev_groups + i\n"
 
@@ -2023,6 +2033,11 @@ class DataFramePass:
             )
         else:
             index_names = "None"
+        for i in range(n_keys):
+            key_typ = df.data[df.column_index[grp_typ.keys[i]]]
+            if key_typ == bodo.dict_str_arr_type:
+                func_text += f"  in_key_arrs{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, dict_key_indices_arrs{i})\n"
+
         if isinstance(out_typ.index, MultiIndexType):
             out_key_arr_names = ", ".join(f"in_key_arrs{i}" for i in range(n_keys))
             func_text += f"  out_index = bodo.hiframes.pd_multi_index_ext.init_multi_index(({out_key_arr_names},), ({index_names},), None)\n"
@@ -2035,7 +2050,6 @@ class DataFramePass:
             out_data = (
                 ", ".join(f"in_key_arrs{i}" for i in range(n_keys)) + ", " + out_data
             )
-
         # parallel shuffle clean up
         func_text += f"  if _is_parallel:\n"
         func_text += f"    delete_shuffle_info(shuffle_info)\n"
@@ -2099,11 +2113,16 @@ class DataFramePass:
             "    arrs_index.append(bodo.utils.conversion.index_to_array(out_idx))\n"
         )
         # all rows of returned df will get the same key value in output index
+        df = grp_typ.df_type
         if grp_typ.as_index:
             for i in range(n_keys):
                 # all rows of output get the input keys as Index. Hence, create an array
                 # of key values with same length as output
-                func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
+                key_typ = df.data[df.column_index[grp_typ.keys[i]]]
+                if key_typ == bodo.dict_str_arr_type:
+                    func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}._indices[starts[i]], s_key{i}._indices))\n"
+                else:
+                    func_text += f"    in_key_arrs{i}.append(bodo.utils.utils.full_type(len(out_df), s_key{i}[starts[i]], s_key{i}))\n"
         else:
             func_text += (
                 f"    in_key_arr.append(np.full(len(out_df), n_prev_groups + i))\n"
@@ -2117,11 +2136,23 @@ class DataFramePass:
             func_text += f"  out_arr{i} = bodo.libs.array_kernels.concat(arrs{i})\n"
         if grp_typ.as_index:
             for i in range(n_keys):
-                func_text += f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
+                key_typ = df.data[df.column_index[grp_typ.keys[i]]]
+                if key_typ == bodo.dict_str_arr_type:
+                    func_text += f"  out_key_arr_dict_index{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
+                    func_text += f"  out_key_arr{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, out_key_arr_dict_index{i})\n"
+                else:
+                    func_text += f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
 
             out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(n_keys))
         else:
-            func_text += f"  out_key_arr = bodo.libs.array_kernels.concat(in_key_arr)\n"
+            key_typ = df.data[df.column_index[grp_typ.keys[0]]]
+            if key_typ == bodo.dict_str_arr_type:
+                func_text += f"  out_key_arr_dict_index = bodo.libs.array_kernels.concat(in_key_arr)\n"
+                func_text += f"  out_key_arr = bodo.libs.dict_arr_ext.init_dict_arr(s_key._data, out_key_arr_dict_index)\n"
+            else:
+                func_text += (
+                    f"  out_key_arr = bodo.libs.array_kernels.concat(in_key_arr)\n"
+                )
             out_key_arr_names = "out_key_arr"
 
         # create output dataframe
@@ -2226,9 +2257,7 @@ class DataFramePass:
         # TODO: Add the name of the index to the construction. Pandas does it.
         out_key_vars = []
         out_index_var = ir.Var(lhs.scope, mk_unique_var("index"), lhs.loc)
-        self.typemap[out_index_var.name] = to_str_arr_if_dict_array(
-            self.typemap[index.name]
-        )
+        self.typemap[out_index_var.name] = self.typemap[index.name]
         out_key_vars.append(out_index_var)
 
         df_in_vars = {}
