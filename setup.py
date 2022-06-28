@@ -607,7 +607,7 @@ setup(
     install_requires=[]
     if development_mode
     else [
-        "numba==0.55.1",
+        "numba==0.55.2",
         "pyarrow==7.0.0",
         "pandas>=1.3.*,<1.5",
         "numpy>=1.18,<1.22",

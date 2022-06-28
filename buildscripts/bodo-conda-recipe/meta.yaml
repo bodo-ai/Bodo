@@ -20,7 +20,7 @@ requirements:
   host:
     - python
     - setuptools
-    - numba 0.55.1
+    - numba 0.55.2
     # Compatable with Numba requirements.
     # Resolves build issues on nightly
     - numpy >=1.18,<1.22
@@ -48,7 +48,7 @@ requirements:
     - fsspec >=2021.09
     - pyarrow =7.0.0
     - libcurl
-    - numba 0.55.1
+    - numba 0.55.2
     - mpich >=3.3,<4.0.0a0=h* # [not win]
     - msmpi # [win]
     - mpi4py
@@ -61,6 +61,8 @@ requirements:
   # support up to 3.5.1
   run_constrained:
     - matplotlib <= 3.5.1
+  run_constrained:
+    - numpy >=1.18,<1.22
 
 
 test:
