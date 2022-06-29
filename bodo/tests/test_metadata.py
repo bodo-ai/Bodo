@@ -291,6 +291,9 @@ def test_series_index_metadata(metadata_supported_index_types, memory_leak_check
 
 def test_dataframe_typing_metadata(df_value, memory_leak_check):
     """tests that the typing metadata is properly set when returning a DataFrame from Bodo"""
+    if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 1:
+        # [BE-1538] Typing metadata not supported with table format yet
+        return
 
     @bodo.jit
     def impl(df):

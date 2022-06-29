@@ -7,6 +7,7 @@ from typing import Dict, Set
 import numba
 import numpy as np
 from numba.core import types
+from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.table import TableType
@@ -158,6 +159,19 @@ def generate_mappable_table_func(
     local_vars = {}
     exec(func_text, glbls, local_vars)
     return local_vars["impl"]
+
+
+def generate_mappable_table_func_equiv(self, scope, equiv_set, loc, args, kws):
+    """shape of generate_mappable_table_func is the same as the input"""
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_utils_table_utils_generate_mappable_table_func = (
+    generate_mappable_table_func_equiv
+)
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
@@ -442,3 +456,14 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     local_vars = {}
     exec(func_text, glbls, local_vars)
     return local_vars["impl"]
+
+
+def table_astype_equiv(self, scope, equiv_set, loc, args, kws):
+    """shape of table_astype is the same as the input"""
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_utils_table_utils_table_astype = table_astype_equiv

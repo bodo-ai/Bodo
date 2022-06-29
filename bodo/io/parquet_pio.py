@@ -465,7 +465,7 @@ def pq_distributed_run(
     # set total size variable if necessary (for limit pushdown)
     # value comes from 'total_rows' output of '_pq_reader_py' above
     if meta_head_only_info:
-        nodes[-1 - n_cols].target = meta_head_only_info[1]
+        nodes[-3].target = meta_head_only_info[1]
 
     # assign output table
     nodes[-2].target = pq_node.out_vars[0]
