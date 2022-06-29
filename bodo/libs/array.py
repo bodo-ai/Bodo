@@ -1972,9 +1972,8 @@ def py_table_to_cpp_table(typingctx, py_table_t, py_table_type_t):
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t):
+def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):
     """Convert Python data (table and arrays) to a C++ table.
-
     Args:
         py_table (TableType): Python table to convert
         extra_arrs_tup (tuple(array)): extra arrays to convert, includes dead columns
@@ -1990,7 +1989,7 @@ def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t):
     in_col_inds = in_col_inds_t.instance_type.meta
 
     glbls = {}
-    n_py_table_arrs = len(py_table.arr_types)
+    n_py_table_arrs = get_overload_const_int(n_table_cols_t)
     py_to_cpp_inds = {k: i for i, k in enumerate(in_col_inds)}
 
     # basic structure:
@@ -1999,27 +1998,28 @@ def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t):
     #     if array_ind in output_inds:
     #       output_list[out_ind] = array_to_info(block[array_ind])
 
-    func_text = "def impl(py_table, extra_arrs_tup, in_col_inds_t):\n"
+    func_text = "def impl(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t):\n"
     func_text += (
         f"  cpp_arr_list = alloc_empty_list_type({len(in_col_inds)}, array_info_type)\n"
     )
 
-    for blk in py_table.type_to_blk.values():
-        out_inds = [py_to_cpp_inds.get(i, -1) for i in py_table.block_to_arr_ind[blk]]
-        glbls[f"out_inds_{blk}"] = np.array(out_inds, np.int64)
-        glbls[f"arr_inds_{blk}"] = np.array(py_table.block_to_arr_ind[blk], np.int64)
-        func_text += f"  arr_list_{blk} = get_table_block(py_table, {blk})\n"
-        func_text += f"  for i in range(len(arr_list_{blk})):\n"
-        func_text += f"    out_arr_ind_{blk} = out_inds_{blk}[i]\n"
-        func_text += f"    if out_arr_ind_{blk} == -1:\n"
-        func_text += f"      continue\n"
-        func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
-        func_text += (
-            f"    ensure_column_unboxed(py_table, arr_list_{blk}, i, arr_ind_{blk})\n"
-        )
-        func_text += (
-            f"    cpp_arr_list[out_arr_ind_{blk}] = array_to_info(arr_list_{blk}[i])\n"
-        )
+    if py_table != types.none:
+        for blk in py_table.type_to_blk.values():
+            out_inds = [
+                py_to_cpp_inds.get(i, -1) for i in py_table.block_to_arr_ind[blk]
+            ]
+            glbls[f"out_inds_{blk}"] = np.array(out_inds, np.int64)
+            glbls[f"arr_inds_{blk}"] = np.array(
+                py_table.block_to_arr_ind[blk], np.int64
+            )
+            func_text += f"  arr_list_{blk} = get_table_block(py_table, {blk})\n"
+            func_text += f"  for i in range(len(arr_list_{blk})):\n"
+            func_text += f"    out_arr_ind_{blk} = out_inds_{blk}[i]\n"
+            func_text += f"    if out_arr_ind_{blk} == -1:\n"
+            func_text += f"      continue\n"
+            func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
+            func_text += f"    ensure_column_unboxed(py_table, arr_list_{blk}, i, arr_ind_{blk})\n"
+            func_text += f"    cpp_arr_list[out_arr_ind_{blk}] = array_to_info(arr_list_{blk}[i])\n"
 
     for i in range(len(extra_arrs_tup)):
         out_ind = py_to_cpp_inds.get(n_py_table_arrs + i, -1)

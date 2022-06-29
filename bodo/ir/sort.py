@@ -627,7 +627,7 @@ def get_sort_cpp_section(sort_node, out_types, parallel):
                 other_vars.append("None")
             else:
                 other_vars.append(f"arg{i}")
-        func_text += f"  in_cpp_table = py_data_to_cpp_table(arg0, ({', '.join(other_vars)}{comma}), in_col_inds)\n"
+        func_text += f"  in_cpp_table = py_data_to_cpp_table(arg0, ({', '.join(other_vars)}{comma}), in_col_inds, {sort_node.num_table_arrays})\n"
     else:
         py_to_cpp_inds = {k: i for i, k in enumerate(in_cpp_col_inds)}
         arr_vars = [None] * len(in_cpp_col_inds)

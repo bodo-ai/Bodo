@@ -1403,13 +1403,21 @@ class DataFramePass:
         self.typemap[out_data_vars[0].name] = out_table_typ
 
         left_df_type = self.typemap[left_df.name]
-        left_vars = [
-            self._get_dataframe_data(left_df, c, nodes) for c in left_df_type.columns
-        ]
+        if left_df_type.is_table_format:
+            left_vars = [self._get_dataframe_table(left_df, nodes)]
+        else:
+            left_vars = [
+                self._get_dataframe_data(left_df, c, nodes)
+                for c in left_df_type.columns
+            ]
         right_df_type = self.typemap[right_df.name]
-        right_vars = [
-            self._get_dataframe_data(right_df, c, nodes) for c in right_df_type.columns
-        ]
+        if right_df_type.is_table_format:
+            right_vars = [self._get_dataframe_table(right_df, nodes)]
+        else:
+            right_vars = [
+                self._get_dataframe_data(right_df, c, nodes)
+                for c in right_df_type.columns
+            ]
         # In the case of pd.merge we have following behavior for the index:
         # ---if the key is a normal column then the joined table has a trivial index.
         # ---if one of the key is an index then it becomes an index.
@@ -1455,6 +1463,8 @@ class DataFramePass:
             right_vars.append(right_index_var)
         else:
             out_data_vars.append(None)
+            left_vars.append(None)
+            right_vars.append(None)
         if is_indicator:
             # This indicator column number is always last.
             indicator_col_num = len(out_typ.data) - 1
@@ -2404,7 +2414,6 @@ class DataFramePass:
         return nodes[-1].target
 
     def _get_dataframe_index(self, df_var, nodes):
-        df_typ = self.typemap[df_var.name]
         var_def = guard(get_definition, self.func_ir, df_var)
         call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
         # TODO(ehsan): make sure dataframe index is not updated elsewhere

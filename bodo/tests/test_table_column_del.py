@@ -2487,7 +2487,111 @@ def test_merge_del_columns(datapath, memory_leak_check):
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 2:
             # threshold for if the df[[]] creates another table,
             # which adds deletions
-            delete_list = [[0], [1], [21], [1, 119]]
+            delete_list = [[1], [0, 21], [1, 119]]
         else:
-            delete_list = [[0], [1], [21], [1], [119]]
+            # [1] and [0, 21] are handled separately because each
+            # is used separately with py_data_to_cpp_table
+            delete_list = [[1], [0, 21], [1], [119]]
         _check_column_dels(bodo_func, delete_list)
+
+
+def test_merge_del_columns_tuple(datapath, memory_leak_check):
+    """
+    Tests executing pd.merge with DataFrames that don't have table
+    format still enable optimizations, such as removing columns.
+    """
+    if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD <= 10:
+        # Only test this with tuple format.
+        return
+
+    # Verify that column pruning from the source and dead
+    # column insertion works with Join.
+    filename = datapath(f"many_columns.parquet")
+
+    def impl1():
+        df1 = pd.read_parquet(filename)
+        df2 = df1[
+            [
+                "Column0",
+                "Column1",
+                "Column2",
+                "Column3",
+                "Column4",
+                "Column5",
+                "Column6",
+                "Column7",
+                "Column8",
+                "Column9",
+            ]
+        ]
+        df3 = df1.merge(df2, on="Column0", how="inner", suffixes=("_x", "_y"))
+        return df3[["Column1_y", "Column21"]]
+
+    def impl2():
+        df1 = pd.read_parquet(filename)
+        df2 = df1[
+            [
+                "Column0",
+                "Column1",
+                "Column2",
+                "Column3",
+                "Column4",
+                "Column5",
+                "Column6",
+                "Column7",
+                "Column8",
+                "Column9",
+            ]
+        ]
+        df3 = df2.merge(df1, on="Column0", how="inner", suffixes=("_x", "_y"))
+        return df3[["Column1_x", "Column21"]]
+
+    def impl3():
+        df1 = pd.read_parquet(filename)
+        df2 = df1[
+            [
+                "Column0",
+                "Column1",
+                "Column2",
+                "Column3",
+                "Column4",
+                "Column5",
+                "Column6",
+                "Column7",
+                "Column8",
+                "Column9",
+            ]
+        ]
+        df3 = df2.merge(df2, on="Column0", how="inner", suffixes=("_x", "_y"))
+        return df3[["Column1_x", "Column2_y"]]
+
+    check_func(impl1, (), sort_output=True, reset_index=True)
+    check_func(impl2, (), sort_output=True, reset_index=True)
+    check_func(impl3, (), sort_output=True, reset_index=True)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl1)
+        bodo_func()
+        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column1', 'Column21']")
+        check_logger_msg(stream, f"Output columns: ['Column21', 'Column1_y']")
+        _check_column_dels(bodo_func, [[1], [0, 21], [21], [99]])
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl2)
+        bodo_func()
+        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column1', 'Column21']")
+        check_logger_msg(stream, f"Output columns: ['Column1_x', 'Column21']")
+        _check_column_dels(bodo_func, [[1], [0, 21], [1], [30]])
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl3)
+        bodo_func()
+        check_logger_msg(stream, f"Columns loaded ['Column0', 'Column1', 'Column2']")
+        check_logger_msg(stream, f"Output columns: ['Column1_x', 'Column2_y']")
+        _check_column_dels(bodo_func, [[0], [1], [2], [1], [11]])
