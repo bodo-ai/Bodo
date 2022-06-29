@@ -1,7 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """IR node for the join and merge"""
 from collections import defaultdict
-from typing import Dict, List, Literal, Set, Tuple, Union
+from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
 import numba
 import numpy as np
@@ -18,23 +18,21 @@ from numba.core.ir_utils import (
 from numba.extending import intrinsic
 
 import bodo
-from bodo.hiframes.table import init_table, set_table_len
+from bodo.hiframes.table import TableType
 from bodo.ir.connector import trim_extra_used_columns
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
-    cpp_table_to_py_table,
+    cpp_table_to_py_data,
     delete_table,
-    delete_table_decref_arrays,
     hash_join_table,
-    info_from_table,
-    info_to_array,
+    py_data_to_cpp_table,
 )
-from bodo.libs.str_arr_ext import cp_str_list_to_array, to_list_if_immutable_arr
 from bodo.libs.timsort import getitem_arr_tup, setitem_arr_tup
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import (
+    _compute_table_column_uses,
     get_live_column_nums_block,
     ir_extension_table_column_use,
     remove_dead_column_extensions,
@@ -42,6 +40,7 @@ from bodo.transforms.table_column_del_pass import (
 from bodo.utils.typing import (
     INDEX_SENTINEL,
     BodoError,
+    MetaType,
     dtype_to_array_type,
     find_common_np_dtype,
     is_dtype_nullable,
@@ -202,9 +201,6 @@ class Join(ir.Stmt):
         """
         self.left_keys = left_keys
         self.right_keys = right_keys
-        # Create a set for future lookups
-        self.left_key_set = set(left_keys)
-        self.right_key_set = set(right_keys)
         self.out_data_vars = out_data_vars
         # Store the column names for logging pruned columns.
         self.out_col_names = out_df_type.columns
@@ -223,29 +219,49 @@ class Join(ir.Stmt):
         # Columns within the output table type that are actually used.
         # These will be updated during optimzations. For more
         # information see 'join_remove_dead_column'.
-        self.n_table_cols = len(self.out_col_names)
-        self.out_used_cols = set(range(self.n_table_cols))
+        self.n_out_table_cols = len(self.out_col_names)
+        self.out_used_cols = set(range(self.n_out_table_cols))
         if self.out_data_vars[1] is not None:
-            self.out_used_cols.add(self.n_table_cols)
-
-        # Track the indices of dead vars for the left and right
-        # inputs.
-        self.left_dead_var_inds = set()
-        self.right_dead_var_inds = set()
+            self.out_used_cols.add(self.n_out_table_cols)
 
         left_col_names = left_df_type.columns
         right_col_names = right_df_type.columns
         self.left_col_names = left_col_names
         self.right_col_names = right_col_names
+        self.is_left_table = left_df_type.is_table_format
+        self.is_right_table = right_df_type.is_table_format
+
+        self.n_left_table_cols = len(left_col_names) if self.is_left_table else 0
+        self.n_right_table_cols = len(right_col_names) if self.is_right_table else 0
+
+        left_index_loc = (
+            self.n_left_table_cols if self.is_left_table else len(left_vars) - 1
+        )
+        right_index_loc = (
+            self.n_right_table_cols if self.is_right_table else len(right_vars) - 1
+        )
+
+        # Track the indices of dead vars for the left and right
+        # inputs. These hold the logical indices for the variables.
+        self.left_dead_var_inds = set()
+        self.right_dead_var_inds = set()
+        if self.left_vars[-1] is None:
+            self.left_dead_var_inds.add(left_index_loc)
+        if self.right_vars[-1] is None:
+            self.right_dead_var_inds.add(right_index_loc)
 
         # Create a map for selecting variables
         self.left_var_map = {c: i for i, c in enumerate(left_col_names)}
         self.right_var_map = {c: i for i, c in enumerate(right_col_names)}
         # If INDEX_SENTINEL exists its always the last var
-        if INDEX_SENTINEL in self.left_key_set:
-            self.left_var_map[INDEX_SENTINEL] = len(left_vars) - 1
-        if INDEX_SENTINEL in self.right_key_set:
-            self.right_var_map[INDEX_SENTINEL] = len(right_vars) - 1
+        if self.left_vars[-1] is not None:
+            self.left_var_map[INDEX_SENTINEL] = left_index_loc
+        if self.right_vars[-1] is not None:
+            self.right_var_map[INDEX_SENTINEL] = right_index_loc
+
+        # Create a set of keys future lookups
+        self.left_key_set = set(self.left_var_map[c] for c in left_keys)
+        self.right_key_set = set(self.right_var_map[c] for c in right_keys)
 
         if gen_cond_expr:
             # find columns used in general join condition to avoid removing them in rm dead
@@ -254,10 +270,14 @@ class Join(ir.Stmt):
             # based on this check, even though only A) is. Fixing this requires a more detailed
             # refactoring of the parsing.
             self.left_cond_cols = set(
-                c for c in left_col_names if f"(left.{c})" in gen_cond_expr
+                self.left_var_map[c]
+                for c in left_col_names
+                if f"(left.{c})" in gen_cond_expr
             )
             self.right_cond_cols = set(
-                c for c in right_col_names if f"(right.{c})" in gen_cond_expr
+                self.right_var_map[c]
+                for c in right_col_names
+                if f"(right.{c})" in gen_cond_expr
             )
         else:
             self.left_cond_cols = set()
@@ -268,15 +288,11 @@ class Join(ir.Stmt):
         # In this situation, since the column is used twice we must generate
         # an extra data column via the input. For an example, please refer to
         # test_merge_index_column.
-        extra_data_col_tuple: Tuple[int, Literal["left", "right"], int] = (
-            -1,
-            "left",
-            -1,
-        )
+        extra_data_col_num: int = -1
 
         # Compute maps for each input to the output and the
         # output to the inputs.
-        comm_keys = self.left_key_set & self.right_key_set
+        comm_keys = set(left_keys) & set(right_keys)
         comm_data = set(left_col_names) & set(right_col_names)
         add_suffix = comm_data - comm_keys
         # Map the output column numbers to the input
@@ -292,9 +308,9 @@ class Join(ir.Stmt):
                 out_col_num = out_df_type.column_index[suffixed_left_name]
                 # If a column is both a data column and a key
                 # from left we have an extra column.
-                if right_index and not left_index and c in self.left_key_set:
-                    extra_out_col_num = out_df_type.column_index[c]
-                    extra_data_col_tuple = (extra_out_col_num, "left", i)
+                if right_index and not left_index and i in self.left_key_set:
+                    extra_data_col_num = out_df_type.column_index[c]
+                    out_to_input_col_map[extra_data_col_num] = ("left", i)
             else:
                 out_col_num = out_df_type.column_index[c]
             out_to_input_col_map[out_col_num] = ("left", i)
@@ -307,29 +323,33 @@ class Join(ir.Stmt):
                     out_col_num = out_df_type.column_index[suffixed_right_name]
                     # If a column is both a data column and a key
                     # from left we have an extra column.
-                    if left_index and not right_index and c in self.right_key_set:
-                        extra_out_col_num = out_df_type.column_index[c]
-                        extra_data_col_tuple = (extra_out_col_num, "right", i)
+                    if left_index and not right_index and i in self.right_key_set:
+                        extra_data_col_num = out_df_type.column_index[c]
+                        out_to_input_col_map[extra_data_col_num] = ("right", i)
                 else:
                     out_col_num = out_df_type.column_index[c]
                 out_to_input_col_map[out_col_num] = ("right", i)
                 right_to_output_map[i] = out_col_num
 
+        if self.left_vars[-1] is not None:
+            left_to_output_map[left_index_loc] = self.n_out_table_cols
+        if self.right_vars[-1] is not None:
+            right_to_output_map[right_index_loc] = self.n_out_table_cols
+
         self.out_to_input_col_map = out_to_input_col_map
         self.left_to_output_map = left_to_output_map
         self.right_to_output_map = right_to_output_map
-        self.extra_data_col_tuple = extra_data_col_tuple
+        self.extra_data_col_num = extra_data_col_num
 
         if len(out_data_vars) > 1:
             # Compute the source for the index. Note we only
             # need to track the source for a possible output
             # index.
             index_source = "left" if right_index else "right"
-            # The index is always stored in the last slot.
             if index_source == "left":
-                index_col_num = len(left_vars) - 1
+                index_col_num = left_index_loc
             elif index_source == "right":
-                index_col_num = len(right_vars) - 1
+                index_col_num = right_index_loc
         else:
             index_source = None
             index_col_num = -1
@@ -351,7 +371,27 @@ class Join(ir.Stmt):
         self.vect_same_key = vect_same_key
 
     @property
-    def has_live_table_var(self):
+    def has_live_left_table_var(self):
+        """Does this Join node contain a left input table
+        that is live.
+
+        Returns:
+            bool: Left Table var exists and is live.
+        """
+        return self.is_left_table and self.left_vars[0] is not None
+
+    @property
+    def has_live_right_table_var(self):
+        """Does this Join node contain a right input table
+        that is live.
+
+        Returns:
+            bool: Right Table var exists and is live.
+        """
+        return self.is_right_table and self.right_vars[0] is not None
+
+    @property
+    def has_live_out_table_var(self):
         """Does this Join node contain a live output variable
         for the table.
 
@@ -361,7 +401,7 @@ class Join(ir.Stmt):
         return self.out_data_vars[0] is not None
 
     @property
-    def has_live_index_var(self):
+    def has_live_out_index_var(self):
         """Does this Join node contain a live output variable
         for the index.
 
@@ -370,16 +410,16 @@ class Join(ir.Stmt):
         """
         return self.out_data_vars[1] is not None
 
-    def get_table_var(self):
-        """Returns the table var for this Join Node.
+    def get_out_table_var(self):
+        """Returns the table var for this Join Node's output.
 
         Returns:
             ir.Var: The table var.
         """
         return self.out_data_vars[0]
 
-    def get_index_var(self):
-        """Returns the index var for this Join Node.
+    def get_out_index_var(self):
+        """Returns the index var for this Join Node's output.
 
         Returns:
             ir.Var: The index var.
@@ -394,9 +434,9 @@ class Join(ir.Stmt):
             List[ir.Var]: Currently live variables.
         """
         vars = []
-        for i, v in enumerate(self.left_vars):
-            if i not in self.left_dead_var_inds:
-                vars.append(v)
+        for var in self.left_vars:
+            if var is not None:
+                vars.append(var)
         return vars
 
     def get_live_right_vars(self):
@@ -407,9 +447,9 @@ class Join(ir.Stmt):
             List[ir.Var]: Currently live variables.
         """
         vars = []
-        for i, v in enumerate(self.right_vars):
-            if i not in self.right_dead_var_inds:
-                vars.append(v)
+        for var in self.right_vars:
+            if var is not None:
+                vars.append(var)
         return vars
 
     def get_live_out_vars(self):
@@ -433,8 +473,20 @@ class Join(ir.Stmt):
         """
         left_vars = []
         idx = 0
-        for i in range(len(self.left_vars)):
-            if i in self.left_dead_var_inds:
+        start = 0
+        # Handle the table var
+        if self.is_left_table:
+            if self.has_live_left_table_var:
+                left_vars.append(live_data_vars[idx])
+                idx += 1
+            else:
+                left_vars.append(None)
+            # Update the start for other vars
+            start = 1
+        # Handle array vars
+        offset = max(self.n_left_table_cols - 1, 0)
+        for i in range(start, len(self.left_vars)):
+            if (i + offset) in self.left_dead_var_inds:
                 left_vars.append(None)
             else:
                 left_vars.append(live_data_vars[idx])
@@ -449,8 +501,20 @@ class Join(ir.Stmt):
         """
         right_vars = []
         idx = 0
-        for i in range(len(self.right_vars)):
-            if i in self.right_dead_var_inds:
+        start = 0
+        # Handle the table var
+        if self.is_right_table:
+            if self.has_live_right_table_var:
+                right_vars.append(live_data_vars[idx])
+                idx += 1
+            else:
+                right_vars.append(None)
+            # Update the start for other vars
+            start = 1
+        # Handle array vars
+        offset = max(self.n_right_table_cols - 1, 0)
+        for i in range(start, len(self.right_vars)):
+            if (i + offset) in self.right_dead_var_inds:
                 right_vars.append(None)
             else:
                 right_vars.append(live_data_vars[idx])
@@ -464,7 +528,7 @@ class Join(ir.Stmt):
         properly.
         """
         out_data_vars = []
-        is_live = [self.has_live_table_var, self.has_live_index_var]
+        is_live = [self.has_live_out_table_var, self.has_live_out_index_var]
         idx = 0
         for i in range(len(self.out_data_vars)):
             if not is_live[i]:
@@ -480,7 +544,7 @@ class Join(ir.Stmt):
         Returns:
             Set[int]: Set of column numbers found in the table.
         """
-        return {i for i in self.out_used_cols if i < self.n_table_cols}
+        return {i for i in self.out_used_cols if i < self.n_out_table_cols}
 
     def __repr__(self):  # pragma: no cover
         in_col_names = ", ".join([f"{c}" for c in self.left_col_names])
@@ -637,10 +701,10 @@ def remove_dead_join(
     are dead data columns in the output and eliminates them from the
     inputs.
     """
-    if join_node.has_live_table_var:
+    if join_node.has_live_out_table_var:
         # Columns to delete from out_to_input_col_map
         del_col_nums = []
-        table_var = join_node.get_table_var()
+        table_var = join_node.get_out_table_var()
         if table_var.name not in lives:
             # Remove the IR var
             join_node.out_data_vars[0] = None
@@ -663,54 +727,73 @@ def remove_dead_join(
                 join_node.indicator_col_num = -1
                 continue
             # avoid extra data column (that is not in the input)
-            if col_num == join_node.extra_data_col_tuple[0]:
+            if col_num == join_node.extra_data_col_num:
                 # If the extra column is removed, avoid generating
-                join_node.extra_data_col_tuple = (-1, "left", -1)
+                join_node.extra_data_col_num = -1
                 continue
             orig, col_num = join_node.out_to_input_col_map[col_num]
             if orig == "left":
-                col_name = join_node.left_col_names[col_num]
                 if (
-                    col_name not in join_node.left_key_set
-                    and col_name not in join_node.left_cond_cols
+                    col_num not in join_node.left_key_set
+                    and col_num not in join_node.left_cond_cols
                 ):
                     join_node.left_dead_var_inds.add(col_num)
+                    if not join_node.is_left_table:
+                        join_node.left_vars[col_num] = None
             elif orig == "right":
-                col_name = join_node.right_col_names[col_num]
                 if (
-                    col_name not in join_node.right_key_set
-                    and col_name not in join_node.right_cond_cols
+                    col_num not in join_node.right_key_set
+                    and col_num not in join_node.right_cond_cols
                 ):
                     join_node.right_dead_var_inds.add(col_num)
+                    if not join_node.is_right_table:
+                        join_node.right_vars[col_num] = None
 
         # Remove dead columns from the dictionary.
         for i in del_col_nums:
             del join_node.out_to_input_col_map[i]
 
-    if join_node.has_live_index_var:
-        index_var = join_node.get_index_var()
+        # Check if the left or right table is completely dead
+        if join_node.is_left_table:
+            all_dead_set = set(range(join_node.n_left_table_cols))
+            remove_table = not bool(all_dead_set - join_node.left_dead_var_inds)
+            if remove_table:
+                join_node.left_vars[0] = None
+
+        if join_node.is_right_table:
+            all_dead_set = set(range(join_node.n_right_table_cols))
+            remove_table = not bool(all_dead_set - join_node.right_dead_var_inds)
+            if remove_table:
+                join_node.right_vars[0] = None
+
+    if join_node.has_live_out_index_var:
+        index_var = join_node.get_out_index_var()
         if index_var.name not in lives:
             # Remove the IR var
             join_node.out_data_vars[1] = None
             # Update the input
-            join_node.out_used_cols.remove(join_node.n_table_cols)
+            join_node.out_used_cols.remove(join_node.n_out_table_cols)
             if join_node.index_source == "left":
                 if (
-                    INDEX_SENTINEL not in join_node.left_key_set
-                    and INDEX_SENTINEL not in join_node.left_cond_cols
+                    join_node.index_col_num not in join_node.left_key_set
+                    and join_node.index_col_num not in join_node.left_cond_cols
                 ):
                     join_node.left_dead_var_inds.add(join_node.index_col_num)
+                    # The index is always the last var.
+                    join_node.left_vars[-1] = None
             else:
                 if (
-                    INDEX_SENTINEL not in join_node.right_key_set
-                    and INDEX_SENTINEL not in join_node.right_cond_cols
+                    join_node.index_col_num not in join_node.right_key_set
+                    and join_node.index_col_num not in join_node.right_cond_cols
                 ):
                     join_node.right_dead_var_inds.add(join_node.index_col_num)
-            join_node.index_col_num = -1
+                    # The index is always the last var.
+                    join_node.right_vars[-1] = None
 
-    if not (join_node.has_live_table_var or join_node.has_live_index_var):
+    if not (join_node.has_live_out_table_var or join_node.has_live_out_index_var):
         # remove empty join node
         return None
+
     return join_node
 
 
@@ -720,29 +803,157 @@ ir_utils.remove_dead_extensions[Join] = remove_dead_join
 def join_remove_dead_column(join_node, column_live_map, equiv_vars, typemap):
     # Compute the columns that are live for the table
     changed = False
-    if join_node.has_live_table_var:
-        table_var_name = join_node.get_table_var().name
+    if join_node.has_live_out_table_var:
+        table_var_name = join_node.get_out_table_var().name
         used_columns, use_all, cannot_del_cols = get_live_column_nums_block(
             column_live_map, equiv_vars, table_var_name
         )
         if not (use_all or cannot_del_cols):
-            used_columns = trim_extra_used_columns(used_columns, join_node.n_table_cols)
+            used_columns = trim_extra_used_columns(
+                used_columns, join_node.n_out_table_cols
+            )
             table_used_cols = join_node.get_out_table_used_cols()
             if len(used_columns) != len(table_used_cols):
-                # Mark the columns as changed as we may be able to
-                # remove dead columns as a result.
-                changed = True
+                # If the inputs are not tables, dead column elimination could
+                # lead to dead code elimination. If both inputs are tables this
+                # node can't directly lead to dead code.
+                changed = not (join_node.is_left_table and join_node.is_right_table)
                 removed_cols = table_used_cols - used_columns
-                join_node.out_used_cols.difference_update(removed_cols)
+                join_node.out_used_cols = join_node.out_used_cols - removed_cols
     return changed
 
 
 remove_dead_column_extensions[Join] = join_remove_dead_column
 
 
-def join_table_column_use(node, block_use_map, equiv_vars, typemap, table_col_use_map):
-    # TODO: Update when the input can be tables
-    return
+def join_table_column_use(
+    join_node: Join,
+    block_use_map: Dict[str, Tuple[Set[int], bool, bool]],
+    equiv_vars: Dict[str, Set[str]],
+    typemap: Dict[str, types.Type],
+    table_col_use_map: Dict[int, Dict[str, Tuple[Set[int], bool, bool]]],
+):
+    """Compute column uses in input tables of Join based on output table's
+    uses. The input uses are the same as output, except that key columns
+    are always used.
+
+    Args:
+        join_node (Join): Join node to process
+        block_use_map (Dict[str, Tuple[Set[int], bool, bool]]): column uses for current
+             block.
+         equiv_vars (Dict[str, Set[str]]): Dictionary
+             mapping table variable names to a set of
+             other table name aliases.
+         typemap (Dict[str, types.Type]): typemap of variables
+         table_col_use_map (Dict[int, Dict[str, Tuple[Set[int], bool, bool]]]):
+             Dictionary mapping block numbers to a dictionary of table names
+             and "column uses". A column use is represented by the triple
+                 - used_cols: Set of used column numbers
+                 - use_all: Flag for if all columns are used. If True used_cols
+                     is garbage
+                 - cannot_del_columns: Flag indicate this table is used in
+                     an unsupported operation (e.g. passed to a DataFrame)
+                     and therefore no columns can be deleted.
+    """
+
+    # Only compute uses if there is a table input.
+    if not (join_node.is_left_table or join_node.is_right_table):
+        return
+
+    # get output's uses
+    if join_node.has_live_out_table_var:
+        out_table_var = join_node.get_out_table_var()
+        (used_cols, use_all, cannot_del_cols,) = _compute_table_column_uses(
+            out_table_var.name, table_col_use_map, equiv_vars
+        )
+    else:
+        (used_cols, use_all, cannot_del_cols) = (
+            set(),
+            False,
+            False,
+        )
+
+    if join_node.has_live_left_table_var:
+
+        left_table = join_node.left_vars[0].name
+
+        (
+            orig_used_cols,
+            orig_use_all,
+            orig_cannot_del_cols,
+        ) = block_use_map[left_table]
+
+        # skip if input already uses all columns or cannot delete the table
+        if not (orig_use_all or orig_cannot_del_cols):
+
+            # Map the used columns from output to left
+            left_used_cols = set(
+                [
+                    join_node.out_to_input_col_map[i][1]
+                    for i in used_cols
+                    if join_node.out_to_input_col_map[i][0] == "left"
+                ]
+            )
+
+            # key columns are always used in join
+            left_key_cols = set(
+                i
+                for i in (join_node.left_key_set | join_node.left_cond_cols)
+                if i < join_node.n_left_table_cols
+            )
+
+            # Update the dead columns for the left
+            if not (use_all or cannot_del_cols):
+                join_node.left_dead_var_inds |= set(
+                    range(join_node.n_left_table_cols)
+                ) - (left_used_cols | left_key_cols)
+
+            block_use_map[left_table] = (
+                orig_used_cols | left_used_cols | left_key_cols,
+                use_all or cannot_del_cols,
+                False,
+            )
+
+    if join_node.has_live_right_table_var:
+
+        right_table = join_node.right_vars[0].name
+
+        (
+            orig_used_cols,
+            orig_use_all,
+            orig_cannot_del_cols,
+        ) = block_use_map[right_table]
+
+        # skip if input already uses all columns or cannot delete the table
+        if not (orig_use_all or orig_cannot_del_cols):
+
+            # Map the used columns from output to right
+            right_used_cols = set(
+                [
+                    join_node.out_to_input_col_map[i][1]
+                    for i in used_cols
+                    if join_node.out_to_input_col_map[i][0] == "right"
+                ]
+            )
+
+            # key columns are always used in join
+            right_key_cols = set(
+                i
+                for i in (join_node.right_key_set | join_node.right_cond_cols)
+                if i < join_node.n_right_table_cols
+            )
+
+            # Update the dead columns for the right
+            if not (use_all or cannot_del_cols):
+                join_node.right_dead_var_inds |= set(
+                    range(join_node.n_right_table_cols)
+                ) - (right_used_cols | right_key_cols)
+
+            block_use_map[right_table] = (
+                orig_used_cols | right_used_cols | right_key_cols,
+                use_all or cannot_del_cols,
+                False,
+            )
 
 
 ir_extension_table_column_use[Join] = join_table_column_use
@@ -833,19 +1044,49 @@ def join_distributed_run(
     Replace the join IR node with the distributed implementations. This
     is called in distributed_pass and removes the Join from the IR.
     """
-    # Add debug info about column pruning and dictionary encoded arrays.
+    # Add debug info about column pruning for left, right, and output.
     if bodo.user_logging.get_verbose_level() >= 2:
         join_source = join_node.loc.strformat()
-        join_cols = [
-            join_node.out_col_names[i]
-            for i in sorted(join_node.get_out_table_used_cols())
+
+        left_join_cols = [
+            join_node.left_col_names[i]
+            for i in sorted(
+                set(range(len(join_node.left_col_names))) - join_node.left_dead_var_inds
+            )
         ]
-        pruning_msg = "Finish column pruning on join node:\n%s\nOutput columns: %s\n"
+        pruning_msg = "Finished column elimination on join's left input:\n%s\nLeft input columns: %s\n"
         bodo.user_logging.log_message(
             "Column Pruning",
             pruning_msg,
             join_source,
-            join_cols,
+            left_join_cols,
+        )
+
+        right_join_cols = [
+            join_node.right_col_names[i]
+            for i in sorted(
+                set(range(len(join_node.right_col_names)))
+                - join_node.right_dead_var_inds
+            )
+        ]
+        pruning_msg = "Finished column elimination on join's right input:\n%s\nRight input columns: %s\n"
+        bodo.user_logging.log_message(
+            "Column Pruning",
+            pruning_msg,
+            join_source,
+            right_join_cols,
+        )
+
+        out_join_cols = [
+            join_node.out_col_names[i]
+            for i in sorted(join_node.get_out_table_used_cols())
+        ]
+        pruning_msg = "Finished column pruning on join node:\n%s\nOutput columns: %s\n"
+        bodo.user_logging.log_message(
+            "Column Pruning",
+            pruning_msg,
+            join_source,
+            out_join_cols,
         )
 
     left_parallel, right_parallel = False, False
@@ -857,37 +1098,24 @@ def join_distributed_run(
     # TODO: rebalance if output distributions are 1D instead of 1D_Var
     n_keys = len(join_node.left_keys)
 
+    # Logical location for every cpp_table into the output
+    # Python table. Any values that are left as -1 refer to
+    # dead columns.
+    out_physical_to_logical_list = []
     # Get the output table type.
-    if join_node.has_live_table_var:
-        out_table_type = typemap[join_node.get_table_var().name]
-        # Logical location for every cpp_table into the output
-        # Python table. Any values that are left as -1 refer to
-        # dead columns.
-        cpp_table_logical_idx = np.full(len(out_table_type.arr_types), -1, np.int64)
+    if join_node.has_live_out_table_var:
+        out_table_type = typemap[join_node.get_out_table_var().name]
     else:
         out_table_type = types.none
-        cpp_table_logical_idx = None
-    if join_node.has_live_index_var:
-        index_col_type = typemap[join_node.get_index_var().name]
+    if join_node.has_live_out_index_var:
+        index_col_type = typemap[join_node.get_out_index_var().name]
     else:
         index_col_type = types.none
 
-    physical_idx = 0
-    # physical index used for the index var if live
-    index_physical_index = -1
-
-    # Optional column refer: When doing a merge on column and index, the key
+    # Extra column refer: When doing a merge on column and index, the key
     # is put also in output, so we need one additional column in that case.
-    extra_data_col_var = ()
-    extra_data_col = join_node.extra_data_col_tuple[0] != -1
-    if extra_data_col:
-        out_col_num, source, in_col_num = join_node.extra_data_col_tuple
-        cpp_table_logical_idx[out_col_num] = physical_idx
-        physical_idx += 1
-        if source == "left":
-            extra_data_col_var = (join_node.left_vars[in_col_num],)
-        else:
-            extra_data_col_var = (join_node.right_vars[in_col_num],)
+    if join_node.extra_data_col_num != -1:
+        out_physical_to_logical_list.append(join_node.extra_data_col_num)
 
     # It is a fairly complex construction
     # ---keys can have same name on left and right.
@@ -933,6 +1161,8 @@ def join_distributed_run(
     #
     left_logical_physical_map = {}
     right_logical_physical_map = {}
+    left_physical_to_logical_list = []
+    right_physical_to_logical_list = []
     left_physical_index = 0
     right_physical_index = 0
     # Extract the left column variables for the keys and determine
@@ -940,8 +1170,11 @@ def join_distributed_run(
     left_key_vars = []
     for c in join_node.left_keys:
         in_col_num = join_node.left_var_map[c]
-        left_key_vars.append(join_node.left_vars[in_col_num])
+        # If the inputs are array we need to collect the used vars
+        if not join_node.is_left_table:
+            left_key_vars.append(join_node.left_vars[in_col_num])
         is_live = 1
+        out_col_num = join_node.left_to_output_map[in_col_num]
         if c == INDEX_SENTINEL:
             # If we are joining on the index, we may need to return
             # the index to the output. If so, the output can be either
@@ -950,23 +1183,21 @@ def join_distributed_run(
             # exists but is not used in the output it is a dead key
             # by definition.
             if (
-                join_node.has_live_index_var
+                join_node.has_live_out_index_var
                 and join_node.index_source == "left"
                 and join_node.index_col_num == in_col_num
             ):
-                index_physical_index = physical_idx
-                physical_idx += 1
+                out_physical_to_logical_list.append(out_col_num)
                 left_used_key_nums.add(in_col_num)
             else:
                 is_live = 0
         else:
-            out_col_num = join_node.left_to_output_map[in_col_num]
             if out_col_num not in join_node.out_used_cols:
                 is_live = 0
             else:
                 left_used_key_nums.add(in_col_num)
-                cpp_table_logical_idx[out_col_num] = physical_idx
-                physical_idx += 1
+                out_physical_to_logical_list.append(out_col_num)
+        left_physical_to_logical_list.append(in_col_num)
         left_logical_physical_map[in_col_num] = left_physical_index
         left_physical_index += 1
         left_key_in_output.append(is_live)
@@ -975,47 +1206,66 @@ def join_distributed_run(
     # Extract the left column variables for the non-keys and determine
     # the physical index for each live column.
     left_other_col_vars = []
-    for i, n in enumerate(join_node.left_col_names):
-        v = join_node.left_vars[i]
-        if i not in join_node.left_dead_var_inds and n not in join_node.left_key_set:
-            left_other_col_vars.append(v)
-            is_live = 1
+    for i in range(len(join_node.left_col_names)):
+        if i not in join_node.left_dead_var_inds and i not in join_node.left_key_set:
+            # If the inputs are array we need to collect the used vars
+            if not join_node.is_left_table:
+                v = join_node.left_vars[i]
+                left_other_col_vars.append(v)
+            is_live_output = 1
+            is_live_input = 1
             out_col_num = join_node.left_to_output_map[i]
-            if n in join_node.left_cond_cols:
+            if i in join_node.left_cond_cols:
                 # Join conditions need to be tracked like keys
                 if out_col_num not in join_node.out_used_cols:
-                    is_live = 0
-                left_key_in_output.append(is_live)
-            if is_live:
-                cpp_table_logical_idx[out_col_num] = physical_idx
-                physical_idx += 1
-            left_logical_physical_map[i] = left_physical_index
-            left_physical_index += 1
+                    is_live_output = 0
+                left_key_in_output.append(is_live_output)
+            elif i in join_node.left_dead_var_inds:
+                is_live_output = 0
+                is_live_input = 0
+            if is_live_output:
+                out_physical_to_logical_list.append(out_col_num)
+            if is_live_input:
+                left_physical_to_logical_list.append(i)
+                left_logical_physical_map[i] = left_physical_index
+                left_physical_index += 1
 
     # Append the index data column if it exists
     if (
-        join_node.has_live_index_var
+        join_node.has_live_out_index_var
         and join_node.index_source == "left"
-        and index_physical_index == -1
+        and join_node.index_col_num not in join_node.left_key_set
     ):
         # If we are joining on the index, we may need to return
         # the index to the output. If so, the output can be either
         # from the keys or the data columns. Here we determine that
         # the index is a data column because its not a key.
-        left_other_col_vars.append(join_node.left_vars[join_node.index_col_num])
-        index_physical_index = physical_idx
-        physical_idx += 1
+        if not join_node.is_left_table:
+            left_other_col_vars.append(join_node.left_vars[join_node.index_col_num])
+        out_col_num = join_node.left_to_output_map[join_node.index_col_num]
+        out_physical_to_logical_list.append(out_col_num)
+        left_physical_to_logical_list.append(join_node.index_col_num)
 
     left_other_col_vars = tuple(left_other_col_vars)
+
+    if join_node.is_left_table:
+        # If we have table format input and the
+        # table is live, we append a single variable for
+        # the table. In the none table format case
+        # we added each array that was live in the loop.
+        left_other_col_vars = tuple(join_node.get_live_left_vars())
 
     # Extract the right column variables for the keys and determine
     # the physical index for each live column.
     right_key_vars = []
     for i, c in enumerate(join_node.right_keys):
         in_col_num = join_node.right_var_map[c]
-        right_key_vars.append(join_node.right_vars[in_col_num])
+        # If the inputs are array we need to collect the used vars
+        if not join_node.is_right_table:
+            right_key_vars.append(join_node.right_vars[in_col_num])
         if not join_node.vect_same_key[i] and not join_node.is_join:
             is_live = 1
+            out_col_num = join_node.right_to_output_map[in_col_num]
             if c == INDEX_SENTINEL:
                 # If we are joining on the index, we may need to return
                 # the index to the output. If so, the output can be either
@@ -1024,24 +1274,22 @@ def join_distributed_run(
                 # exists but is not used in the output it is a dead key
                 # by definition.
                 if (
-                    join_node.has_live_index_var
+                    join_node.has_live_out_index_var
                     and join_node.index_source == "right"
                     and join_node.index_col_num == in_col_num
                 ):
-                    index_physical_index = physical_idx
-                    physical_idx += 1
+                    out_physical_to_logical_list.append(out_col_num)
                     right_used_key_nums.add(in_col_num)
                 else:
                     is_live = 0
             else:
-                out_col_num = join_node.right_to_output_map[in_col_num]
                 if out_col_num not in join_node.out_used_cols:
                     is_live = 0
                 else:
+                    out_physical_to_logical_list.append(out_col_num)
                     right_used_key_nums.add(in_col_num)
-                    cpp_table_logical_idx[out_col_num] = physical_idx
-                    physical_idx += 1
             right_key_in_output.append(is_live)
+        right_physical_to_logical_list.append(in_col_num)
         right_logical_physical_map[in_col_num] = right_physical_index
         right_physical_index += 1
     right_key_vars = tuple(right_key_vars)
@@ -1049,105 +1297,267 @@ def join_distributed_run(
     # Extract the right column variables for the non-keys and determine
     # the physical index for each live column.
     right_other_col_vars = []
-    for i, n in enumerate(join_node.right_col_names):
-        v = join_node.right_vars[i]
-        if i not in join_node.right_dead_var_inds and n not in join_node.right_key_set:
-            right_other_col_vars.append(v)
-            is_live = 1
+    for i in range(len(join_node.right_col_names)):
+        if i not in join_node.right_dead_var_inds and i not in join_node.right_key_set:
+            # If the inputs are array we need to collect the used vars
+            if not join_node.is_right_table:
+                right_other_col_vars.append(join_node.right_vars[i])
+            is_live_output = 1
+            is_live_input = 1
             out_col_num = join_node.right_to_output_map[i]
-            if n in join_node.right_cond_cols:
+            if i in join_node.right_cond_cols:
                 # Join conditions need to be tracked like keys
                 if out_col_num not in join_node.out_used_cols:
-                    is_live = 0
-                right_key_in_output.append(is_live)
-            if is_live:
-                cpp_table_logical_idx[out_col_num] = physical_idx
-                physical_idx += 1
-            right_logical_physical_map[i] = right_physical_index
-            right_physical_index += 1
+                    is_live_output = 0
+                right_key_in_output.append(is_live_output)
+            elif i in join_node.right_dead_var_inds:
+                is_live_output = 0
+                is_live_input = 0
+            if is_live_output:
+                out_physical_to_logical_list.append(out_col_num)
+            if is_live_input:
+                right_physical_to_logical_list.append(i)
+                right_logical_physical_map[i] = right_physical_index
+                right_physical_index += 1
 
     # Append the index data column if it exists
     if (
-        join_node.has_live_index_var
+        join_node.has_live_out_index_var
         and join_node.index_source == "right"
-        and index_physical_index == -1
+        and join_node.index_col_num not in join_node.right_key_set
     ):
         # If we are joining on the index, we may need to return
         # the index to the output. If so, the output can be either
         # from the keys or the data columns. Here we determine that
         # the index is a data column because its not a key.
-        right_other_col_vars.append(join_node.right_vars[join_node.index_col_num])
-        index_physical_index = physical_idx
-        physical_idx += 1
+        if not join_node.is_right_table:
+            right_other_col_vars.append(join_node.right_vars[join_node.index_col_num])
+        out_col_num = join_node.right_to_output_map[join_node.index_col_num]
+        out_physical_to_logical_list.append(out_col_num)
+        right_physical_to_logical_list.append(join_node.index_col_num)
 
     right_other_col_vars = tuple(right_other_col_vars)
 
+    if join_node.is_right_table:
+        # If we have table format input and the
+        # table is live, we append a single variable for
+        # the table. In the none table format case
+        # we added each array that was live in the loop.
+        right_other_col_vars = tuple(join_node.get_live_right_vars())
+
     if join_node.indicator_col_num != -1:
         # There is an indicator column in the output.
-        cpp_table_logical_idx[join_node.indicator_col_num] = physical_idx
-        physical_idx += 1
+        out_physical_to_logical_list.append(join_node.indicator_col_num)
 
     # get column types
     arg_vars = (
-        extra_data_col_var
-        + left_key_vars
-        + right_key_vars
-        + left_other_col_vars
-        + right_other_col_vars
+        left_key_vars + right_key_vars + left_other_col_vars + right_other_col_vars
     )
     arg_typs = tuple(typemap[v.name] for v in arg_vars)
 
     # arg names of non-key columns
-    extra_names = tuple("opti_c" + str(i) for i in range(len(extra_data_col_var)))
-
     left_other_names = tuple("t1_c" + str(i) for i in range(len(left_other_col_vars)))
     right_other_names = tuple("t2_c" + str(i) for i in range(len(right_other_col_vars)))
-    left_other_types = tuple([typemap[c.name] for c in left_other_col_vars])
-    right_other_types = tuple([typemap[c.name] for c in right_other_col_vars])
-    left_key_names = tuple("t1_key" + str(i) for i in range(n_keys))
-    right_key_names = tuple("t2_key" + str(i) for i in range(n_keys))
+    if join_node.is_left_table:
+        left_key_names = ()
+    else:
+        left_key_names = tuple("t1_key" + str(i) for i in range(n_keys))
+    if join_node.is_right_table:
+        right_key_names = ()
+    else:
+        right_key_names = tuple("t2_key" + str(i) for i in range(n_keys))
     glbs = {}
     loc = join_node.loc
 
-    func_text = "def f({}{}, {},{}{}{}):\n".format(
-        ("{},".format(extra_names[0]) if len(extra_names) == 1 else ""),
-        ",".join(left_key_names),
-        ",".join(right_key_names),
-        ",".join(left_other_names),
-        ("," if len(left_other_names) != 0 else ""),
-        ",".join(right_other_names),
+    func_text = "def f({}):\n".format(
+        ",".join(
+            left_key_names + right_key_names + left_other_names + right_other_names
+        ),
     )
 
-    left_key_types = tuple(typemap[v.name] for v in left_key_vars)
-    right_key_types = tuple(typemap[v.name] for v in right_key_vars)
+    # If the inputs are tables we either need to find the keys from
+    # the table or from the index var.
+    if join_node.is_left_table:
+        left_key_types = []
+        left_other_types = []
+        if join_node.has_live_left_table_var:
+            table_type = typemap[join_node.left_vars[0].name]
+        else:
+            table_type = types.none
+        for ind in left_physical_to_logical_list:
+            if ind < join_node.n_left_table_cols:
+                # This should never be reached if the table is dead
+                assert (
+                    join_node.has_live_left_table_var
+                ), "No logical columns should refer to a dead table"
+                typ = table_type.arr_types[ind]
+            else:
+                # The source is an index array.
+                typ = typemap[join_node.left_vars[-1].name]
+            if ind in join_node.left_key_set:
+                left_key_types.append(typ)
+            else:
+                left_other_types.append(typ)
+        left_key_types = tuple(left_key_types)
+        left_other_types = tuple(left_other_types)
+    else:
+        left_key_types = tuple(typemap[v.name] for v in left_key_vars)
+        left_other_types = tuple([typemap[c.name] for c in left_other_col_vars])
+    if join_node.is_right_table:
+        right_key_types = []
+        right_other_types = []
+        if join_node.has_live_right_table_var:
+            table_type = typemap[join_node.right_vars[0].name]
+        else:
+            table_type = types.none
+        for ind in right_physical_to_logical_list:
+            if ind < join_node.n_right_table_cols:
+                # This should never be reached if the table is dead
+                assert (
+                    join_node.has_live_right_table_var
+                ), "No logical columns should refer to a dead table"
+                typ = table_type.arr_types[ind]
+            else:
+                # The source is an index array.
+                typ = typemap[join_node.right_vars[-1].name]
+            if ind in join_node.right_key_set:
+                right_key_types.append(typ)
+            else:
+                right_other_types.append(typ)
+        right_key_types = tuple(right_key_types)
+        right_other_types = tuple(right_other_types)
+    else:
+        right_key_types = tuple(typemap[v.name] for v in right_key_vars)
+        right_other_types = tuple([typemap[c.name] for c in right_other_col_vars])
 
     # add common key type to globals to use below for type conversion
+    matched_key_types = []
     for i in range(n_keys):
-        glbs[f"key_type_{i}"] = _match_join_key_types(
+        matched_key_type = _match_join_key_types(
             left_key_types[i], right_key_types[i], loc
         )
+        glbs[f"key_type_{i}"] = matched_key_type
+        matched_key_types.append(matched_key_type)
 
-    # Cast the keys to a common dtype for comparison
-    func_text += "    t1_keys = ({},)\n".format(
-        ", ".join(
-            f"bodo.utils.utils.astype({left_key_names[i]}, key_type_{i})"
-            for i in range(n_keys)
+    # Extract the left data
+    if join_node.is_left_table:
+        cast_map = determine_table_cast_map(
+            matched_key_types,
+            left_key_types,
+            None,
+            None,
+            True,
+            loc,
         )
-    )
-    func_text += "    t2_keys = ({},)\n".format(
-        ", ".join(
-            f"bodo.utils.utils.astype({right_key_names[i]}, key_type_{i})"
-            for i in range(n_keys)
+        # We need to generate a cast of the table or index.
+        if cast_map:
+            table_changed = False
+            index_changed = False
+            index_typ = None
+            if join_node.has_live_left_table_var:
+                table_arrs = list(typemap[join_node.left_vars[0].name].arr_types)
+            else:
+                table_arrs = None
+            for col_num, typ in cast_map.items():
+                if col_num < join_node.n_left_table_cols:
+                    assert (
+                        join_node.has_live_left_table_var
+                    ), "Casting columns for a dead table should not occur"
+                    table_arrs[col_num] = typ
+                    table_changed = True
+                else:
+                    index_typ = typ
+                    index_changed = True
+            if table_changed:
+                # Generate a table astype call
+                func_text += f"    {left_other_names[0]} = bodo.utils.table_utils.table_astype({left_other_names[0]}, left_cast_table_type, False, _bodo_nan_to_str=False, used_cols=left_used_cols)\n"
+                glbs["left_cast_table_type"] = TableType(tuple(table_arrs))
+                glbs["left_used_cols"] = MetaType(
+                    tuple(
+                        sorted(
+                            set(range(join_node.n_left_table_cols))
+                            - join_node.left_dead_var_inds
+                        )
+                    )
+                )
+            if index_changed:
+                # Generate a cast for the index
+                func_text += f"    {left_other_names[1]} = bodo.utils.utils.astype({left_other_names[1]}, left_cast_index_type)\n"
+                glbs["left_cast_index_type"] = index_typ
+    else:
+        # Cast the keys to a common dtype for comparison
+        # if the types differ.
+        func_text += "    t1_keys = ({},)\n".format(
+            ", ".join(
+                f"bodo.utils.utils.astype({left_key_names[i]}, key_type_{i})"
+                if left_key_types[i] != matched_key_types[i]
+                else f"{left_key_names[i]}"
+                for i in range(n_keys)
+            )
         )
-    )
+        func_text += "    data_left = ({}{})\n".format(
+            ",".join(left_other_names), "," if len(left_other_names) != 0 else ""
+        )
 
-    # Extract the values as a tuple.
-    func_text += "    data_left = ({}{})\n".format(
-        ",".join(left_other_names), "," if len(left_other_names) != 0 else ""
-    )
-    func_text += "    data_right = ({}{})\n".format(
-        ",".join(right_other_names), "," if len(right_other_names) != 0 else ""
-    )
+    # Extract the right data
+    if join_node.is_right_table:
+        cast_map = determine_table_cast_map(
+            matched_key_types,
+            right_key_types,
+            None,
+            None,
+            True,
+            loc,
+        )
+        # We need to generate a cast of the table or index.
+        if cast_map:
+            table_changed = False
+            index_changed = False
+            index_typ = None
+            if join_node.has_live_right_table_var:
+                table_arrs = list(typemap[join_node.right_vars[0].name].arr_types)
+            else:
+                table_arrs = None
+            for col_num, typ in cast_map.items():
+                if col_num < join_node.n_right_table_cols:
+                    assert (
+                        join_node.has_live_right_table_var
+                    ), "Casting columns for a dead table should not occur"
+                    table_arrs[col_num] = typ
+                    table_changed = True
+                else:
+                    index_typ = typ
+                    index_changed = True
+            if table_changed:
+                # Generate a table astype call
+                func_text += f"    {right_other_names[0]} = bodo.utils.table_utils.table_astype({right_other_names[0]}, right_cast_table_type, False, _bodo_nan_to_str=False, used_cols=right_used_cols)\n"
+                glbs["right_cast_table_type"] = TableType(tuple(table_arrs))
+                glbs["right_used_cols"] = MetaType(
+                    tuple(
+                        sorted(
+                            set(range(join_node.n_right_table_cols))
+                            - join_node.right_dead_var_inds
+                        )
+                    )
+                )
+            if index_changed:
+                # Generate a cast for the index
+                func_text += f"    {right_other_names[1]} = bodo.utils.utils.astype({right_other_names[1]}, left_cast_index_type)\n"
+                glbs["right_cast_index_type"] = index_typ
+    else:
+        # Cast the keys to a common dtype for comparison
+        # if the types differ.
+        func_text += "    t2_keys = ({},)\n".format(
+            ", ".join(
+                f"bodo.utils.utils.astype({right_key_names[i]}, key_type_{i})"
+                if right_key_types[i] != matched_key_types[i]
+                else f"{right_key_names[i]}"
+                for i in range(n_keys)
+            )
+        )
+        func_text += "    data_right = ({}{})\n".format(
+            ",".join(right_other_names), "," if len(right_other_names) != 0 else ""
+        )
 
     # Generate a general join condition function if it exists
     # and determine the data columns it needs.
@@ -1172,37 +1582,30 @@ def join_distributed_run(
         )
     else:
         func_text += _gen_local_hash_join(
-            extra_data_col,
+            join_node,
             left_key_types,
             right_key_types,
+            matched_key_types,
             left_other_names,
             right_other_names,
             left_other_types,
             right_other_types,
-            join_node.vect_same_key,
             left_key_in_output,
             right_key_in_output,
-            join_node.is_left,
-            join_node.is_right,
-            join_node.is_join,
             left_parallel,
             right_parallel,
             glbs,
+            out_physical_to_logical_list,
             out_table_type,
-            cpp_table_logical_idx,
             index_col_type,
-            index_physical_index,
             join_node.get_out_table_used_cols(),
             left_used_key_nums,
             right_used_key_nums,
-            join_node.loc,
-            join_node.indicator_col_num != -1,
-            join_node.is_na_equal,
             general_cond_cfunc,
             left_col_nums,
-            join_node.left_to_output_map,
             right_col_nums,
-            join_node.right_to_output_map,
+            left_physical_to_logical_list,
+            right_physical_to_logical_list,
         )
     # TODO: Update asof
     # Set the output variables.
@@ -1225,16 +1628,11 @@ def join_distributed_run(
             "bodo": bodo,
             "np": np,
             "pd": pd,
-            "to_list_if_immutable_arr": to_list_if_immutable_arr,
-            "cp_str_list_to_array": cp_str_list_to_array,
             "parallel_asof_comm": parallel_asof_comm,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
             "hash_join_table": hash_join_table,
-            "info_from_table": info_from_table,
-            "info_to_array": info_to_array,
             "delete_table": delete_table,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
             "add_join_gen_cond_cfunc_sym": add_join_gen_cond_cfunc_sym,
             "get_join_cond_addr": get_join_cond_addr,
             # key_in_output is defined to contain left_table then right_table
@@ -1242,9 +1640,8 @@ def join_distributed_run(
             "key_in_output": np.array(
                 left_key_in_output + right_key_in_output, dtype=np.bool_
             ),
-            "cpp_table_to_py_table": cpp_table_to_py_table,
-            "init_table": init_table,
-            "set_table_len": set_table_len,
+            "py_data_to_cpp_table": py_data_to_cpp_table,
+            "cpp_table_to_py_data": cpp_table_to_py_data,
         }
     )
     if general_cond_cfunc:
@@ -1263,17 +1660,17 @@ def join_distributed_run(
 
     # Replace the return values with assignments to the output IR
     nodes = f_block.body[:-3]
-    if join_node.has_live_index_var:
+    if join_node.has_live_out_index_var:
         nodes[-1].target = join_node.out_data_vars[1]
-    if join_node.has_live_table_var:
+    if join_node.has_live_out_table_var:
         nodes[-2].target = join_node.out_data_vars[0]
     assert (
-        join_node.has_live_index_var or join_node.has_live_table_var
+        join_node.has_live_out_index_var or join_node.has_live_out_table_var
     ), "At most one of table and index should be dead if the Join IR node is live"
-    if not join_node.has_live_index_var:
+    if not join_node.has_live_out_index_var:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
-    elif not join_node.has_live_table_var:
+    elif not join_node.has_live_out_table_var:
         nodes.pop(-2)
     return nodes
 
@@ -1333,6 +1730,7 @@ def _gen_general_cond_cfunc(
         "left",
         len(join_node.left_keys),
         na_check_name,
+        join_node.is_left_table,
     )
     expr, func_text, right_col_nums = _replace_column_accesses(
         expr,
@@ -1345,6 +1743,7 @@ def _gen_general_cond_cfunc(
         "right",
         len(join_node.right_keys),
         na_check_name,
+        join_node.is_right_table,
     )
     func_text += f"  return {expr}"
 
@@ -1380,6 +1779,7 @@ def _replace_column_accesses(
     table_name,
     n_keys,
     na_check_name,
+    is_table_var,
 ):
     """replace column accesses in join condition expression with an intrinsic that loads
     values from table data pointers.
@@ -1395,7 +1795,10 @@ def _replace_column_accesses(
             continue
         getitem_fname = f"getitem_{table_name}_val_{c_ind}"
         val_varname = f"_bodo_{table_name}_val_{c_ind}"
-        array_typ = typemap[col_vars[c_ind].name]
+        if is_table_var:
+            array_typ = typemap[col_vars[0].name].arr_types[c_ind]
+        else:
+            array_typ = typemap[col_vars[c_ind].name]
         if is_str_arr_type(array_typ):
             # If we have unicode we pass the table variable which is an array info
             func_text += f"  {val_varname}, {val_varname}_size = {getitem_fname}({table_name}_table, {table_name}_ind)\n"
@@ -1494,37 +1897,30 @@ def _get_table_parallel_flags(join_node, array_dists):
 
 
 def _gen_local_hash_join(
-    extra_data_col,
+    join_node,
     left_key_types,
     right_key_types,
+    matched_key_types,
     left_other_names,
     right_other_names,
     left_other_types,
     right_other_types,
-    vect_same_key,
     left_key_in_output,
     right_key_in_output,
-    is_left,
-    is_right,
-    is_join,
     left_parallel,
     right_parallel,
     glbs,
+    out_physical_to_logical_list,
     out_table_type,
-    cpp_table_logical_idx,
     index_col_type,
-    index_physical_index,
     out_table_used_cols,
     left_used_key_nums,
     right_used_key_nums,
-    loc,
-    indicator,
-    is_na_equal,
     general_cond_cfunc,
     left_col_nums,
-    left_to_output_map,
     right_col_nums,
-    right_to_output_map,
+    left_physical_to_logical_list,
+    right_physical_to_logical_list,
 ):
     """
     Generate the code need to compute a hash join in C++
@@ -1556,13 +1952,16 @@ def _gen_local_hash_join(
     left_cond_col_nums_set = set(left_col_nums)
     right_cond_col_nums_set = set(right_col_nums)
 
+    vect_same_key = join_node.vect_same_key
+
     # List of columns in the output that need to be cast.
     vect_need_typechange = []
     for i in range(len(left_key_types)):
         if left_key_in_output[i]:
-            key_type = _match_join_key_types(left_key_types[i], right_key_types[i], loc)
             vect_need_typechange.append(
-                needs_typechange(key_type, is_right, vect_same_key[i])
+                needs_typechange(
+                    matched_key_types[i], join_node.is_right, vect_same_key[i]
+                )
             )
 
     # Offset for left and right table inside the key in output
@@ -1571,69 +1970,92 @@ def _gen_local_hash_join(
     left_key_in_output_idx = len(left_key_types)
     right_key_in_output_idx = 0
 
-    # Determine the number of keys in the left table
-    left_key_offset = left_key_in_output_idx
+    left_data_logical_list = left_physical_to_logical_list[len(left_key_types) :]
 
-    for i in range(len(left_other_names)):
+    for i, ind in enumerate(left_data_logical_list):
         load_arr = True
         # Data columns may be used in the non-equality
         # condition function. If so they are treated
         # like a key and can be eliminated from the output
         # but not the input.
-        if i + left_key_offset in left_cond_col_nums_set:
+        if ind in left_cond_col_nums_set:
             load_arr = left_key_in_output[left_key_in_output_idx]
             left_key_in_output_idx += 1
         if load_arr:
             vect_need_typechange.append(
-                needs_typechange(left_other_types[i], is_right, False)
+                needs_typechange(left_other_types[i], join_node.is_right, False)
             )
 
     for i in range(len(right_key_types)):
-        if not vect_same_key[i] and not is_join:
+        if not vect_same_key[i] and not join_node.is_join:
             if right_key_in_output[right_key_in_output_idx]:
-                key_type = _match_join_key_types(
-                    left_key_types[i], right_key_types[i], loc
+                vect_need_typechange.append(
+                    needs_typechange(matched_key_types[i], join_node.is_left, False)
                 )
-                vect_need_typechange.append(needs_typechange(key_type, is_left, False))
             right_key_in_output_idx += 1
 
-    # Determine the number of keys in the right table
-    right_key_offset = right_key_in_output_idx
+    right_data_logical_list = right_physical_to_logical_list[len(right_key_types) :]
 
-    for i in range(len(right_other_names)):
+    for i, ind in enumerate(right_data_logical_list):
         load_arr = True
         # Data columns may be used in the non-equality
         # condition function. If so they are treated
         # like a key and can be eliminated from the output
         # but not the input.
-        if i + right_key_offset in right_cond_col_nums_set:
+        if ind in right_cond_col_nums_set:
             load_arr = right_key_in_output[right_key_in_output_idx]
             right_key_in_output_idx += 1
         if load_arr:
             vect_need_typechange.append(
-                needs_typechange(right_other_types[i], is_left, False)
+                needs_typechange(right_other_types[i], join_node.is_left, False)
             )
 
     n_keys = len(left_key_types)
     func_text = "    # beginning of _gen_local_hash_join\n"
-    eList_l = []
-    for i in range(n_keys):
-        eList_l.append("t1_keys[{}]".format(i))
-    for i in range(len(left_other_names)):
-        eList_l.append("data_left[{}]".format(i))
-    func_text += "    info_list_total_l = [{}]\n".format(
-        ",".join("array_to_info({})".format(a) for a in eList_l)
-    )
-    func_text += "    table_left = arr_info_list_to_table(info_list_total_l)\n"
-    eList_r = []
-    for i in range(n_keys):
-        eList_r.append("t2_keys[{}]".format(i))
-    for i in range(len(right_other_names)):
-        eList_r.append("data_right[{}]".format(i))
-    func_text += "    info_list_total_r = [{}]\n".format(
-        ",".join("array_to_info({})".format(a) for a in eList_r)
-    )
-    func_text += "    table_right = arr_info_list_to_table(info_list_total_r)\n"
+    if join_node.is_left_table:
+        if join_node.has_live_left_table_var:
+            index_left_others = left_other_names[1:]
+            table_var = left_other_names[0]
+        else:
+            index_left_others = left_other_names
+            table_var = None
+        index_str = (
+            "()" if len(index_left_others) == 0 else f"({index_left_others[0]},)"
+        )
+        func_text += f"    table_left = py_data_to_cpp_table({table_var}, {index_str}, left_in_cols, {join_node.n_left_table_cols})\n"
+        glbs["left_in_cols"] = MetaType(tuple(left_physical_to_logical_list))
+    else:
+        eList_l = []
+        for i in range(n_keys):
+            eList_l.append("t1_keys[{}]".format(i))
+        for i in range(len(left_other_names)):
+            eList_l.append("data_left[{}]".format(i))
+        func_text += "    info_list_total_l = [{}]\n".format(
+            ",".join("array_to_info({})".format(a) for a in eList_l)
+        )
+        func_text += "    table_left = arr_info_list_to_table(info_list_total_l)\n"
+    if join_node.is_right_table:
+        if join_node.has_live_right_table_var:
+            index_right_others = right_other_names[1:]
+            table_var = right_other_names[0]
+        else:
+            index_right_others = right_other_names
+            table_var = None
+        index_str = (
+            "()" if len(index_right_others) == 0 else f"({index_right_others[0]},)"
+        )
+        func_text += f"    table_right = py_data_to_cpp_table({table_var}, {index_str}, right_in_cols, {join_node.n_right_table_cols})\n"
+        glbs["right_in_cols"] = MetaType(tuple(right_physical_to_logical_list))
+    else:
+        eList_r = []
+        for i in range(n_keys):
+            eList_r.append("t2_keys[{}]".format(i))
+        for i in range(len(right_other_names)):
+            eList_r.append("data_right[{}]".format(i))
+        func_text += "    info_list_total_r = [{}]\n".format(
+            ",".join("array_to_info({})".format(a) for a in eList_r)
+        )
+        func_text += "    table_right = arr_info_list_to_table(info_list_total_r)\n"
     # Add globals that will be used in the function call.
     glbs["vect_same_key"] = np.array(vect_same_key, dtype=np.int64)
     glbs["vect_need_typechange"] = np.array(vect_need_typechange, dtype=np.int64)
@@ -1657,78 +2079,98 @@ def _gen_local_hash_join(
         left_parallel,
         right_parallel,
         n_keys,
-        len(left_other_names),
-        len(right_other_names),
-        is_left,
-        is_right,
-        is_join,
-        extra_data_col,
-        indicator,
-        is_na_equal,
+        len(left_data_logical_list),
+        len(right_data_logical_list),
+        join_node.is_left,
+        join_node.is_right,
+        join_node.is_join,
+        join_node.extra_data_col_num != -1,
+        join_node.indicator_col_num != -1,
+        join_node.is_na_equal,
         len(left_col_nums),
         len(right_col_nums),
     )
     func_text += "    delete_table(table_left)\n"
     func_text += "    delete_table(table_right)\n"
-
-    if out_table_type == types.none:
-        # The table is dead
-        func_text += f"    T = None\n"
+    out_types = "(py_table_type, index_col_type)"
+    func_text += f"    out_data = cpp_table_to_py_data(out_table, out_col_inds, {out_types}, total_rows_np[0], {join_node.n_out_table_cols})\n"
+    if join_node.has_live_out_table_var:
+        func_text += f"    T = out_data[0]\n"
     else:
-        glbs["py_table_type"] = out_table_type
-        if not out_table_used_cols:
-            # The table isn't dead but there aren't any output columns.
-            # We only need a length.
-            func_text += "    null_table = init_table(py_table_type, False)\n"
-            func_text += "    T = set_table_len(null_table, total_rows_np[0])\n"
-        else:
-            # The table is live
-            func_text += (
-                f"    T = cpp_table_to_py_table(out_table, table_idx, py_table_type)\n"
-            )
-            glbs["table_idx"] = np.array(cpp_table_logical_idx, np.int64)
-            cast_map = determine_out_table_cast_map(
-                left_key_types,
-                right_key_types,
-                left_used_key_nums,
-                right_used_key_nums,
-                left_to_output_map,
-                right_to_output_map,
-                loc,
-            )
-            if cast_map:
-                func_text += f"    T = bodo.utils.table_utils.table_astype(T, cast_table_type, False, _bodo_nan_to_str=False, used_cols=used_cols)\n"
-                # Determine the types that must be loaded.
-                pre_cast_array_types = list(out_table_type.arr_types)
-                for col_num, typ in cast_map.items():
-                    pre_cast_array_types[col_num] = typ
-                pre_cast_table_type = bodo.TableType(tuple(pre_cast_array_types))
-                # Update the table types
-                glbs["py_table_type"] = pre_cast_table_type
-                glbs["cast_table_type"] = out_table_type
-                glbs["used_cols"] = bodo.utils.typing.MetaType(
-                    tuple(out_table_used_cols)
-                )
-    if index_physical_index != -1:
-        func_text += f"    index_var = info_to_array(info_from_table(out_table, {index_physical_index}), index_col_type)\n"
-        glbs["index_col_type"] = index_col_type
+        func_text += f"    T = None\n"
+    if join_node.has_live_out_index_var:
+        idx = 1 if join_node.has_live_out_table_var else 0
+        func_text += f"    index_var = out_data[{idx}]\n"
     else:
         func_text += f"    index_var = None\n"
-    if out_table_used_cols or index_physical_index != -1:
+
+    glbs["py_table_type"] = out_table_type
+    glbs["index_col_type"] = index_col_type
+    glbs["out_col_inds"] = MetaType(tuple(out_physical_to_logical_list))
+
+    if bool(join_node.out_used_cols) or index_col_type != types.none:
         # Only delete the C++ table if it is not a nullptr (0 output columns returns nullptr)
         func_text += "    delete_table(out_table)\n"
+    if out_table_type != types.none:
+        cast_map = determine_table_cast_map(
+            matched_key_types,
+            left_key_types,
+            left_used_key_nums,
+            join_node.left_to_output_map,
+            False,
+            join_node.loc,
+        )
+        cast_map.update(
+            determine_table_cast_map(
+                matched_key_types,
+                right_key_types,
+                right_used_key_nums,
+                join_node.right_to_output_map,
+                False,
+                join_node.loc,
+            )
+        )
+        table_changed = False
+        index_changed = False
+        if join_node.has_live_out_table_var:
+            table_arrs = list(out_table_type.arr_types)
+        else:
+            table_arrs = None
+        for col_num, typ in cast_map.items():
+            if col_num < join_node.n_out_table_cols:
+                assert (
+                    join_node.has_live_out_table_var
+                ), "Casting columns for a dead table should not occur"
+                table_arrs[col_num] = typ
+                table_changed = True
+            else:
+                index_typ = typ
+                index_changed = True
+        if table_changed:
+            func_text += f"    T = bodo.utils.table_utils.table_astype(T, cast_table_type, False, _bodo_nan_to_str=False, used_cols=used_cols)\n"
+            # Determine the types that must be loaded.
+            pre_cast_table_type = bodo.TableType(tuple(table_arrs))
+            # Update the table types
+            glbs["py_table_type"] = pre_cast_table_type
+            glbs["cast_table_type"] = out_table_type
+            glbs["used_cols"] = MetaType(tuple(out_table_used_cols))
+        if index_changed:
+            glbs["index_col_type"] = index_typ
+            glbs["index_cast_type"] = index_col_type
+            func_text += (
+                f"    index_var = bodo.utils.utils.astype(index_var, index_cast_type)\n"
+            )
     func_text += f"    out_table = T\n"
     func_text += f"    out_index = index_var\n"
     return func_text
 
 
-def determine_out_table_cast_map(
-    left_key_types: List[types.Type],
-    right_key_types: List[types.Type],
-    left_used_key_nums: Set[int],
-    right_used_key_nums: Set[int],
-    left_to_output_map: Dict[int, int],
-    right_to_output_map: Dict[int, int],
+def determine_table_cast_map(
+    matched_key_types: List[types.Type],
+    key_types: List[types.Type],
+    used_key_nums: Optional[Set[int]],
+    output_map: Optional[Dict[int, int]],
+    convert_dict_col: bool,
     loc: ir.Loc,
 ):
     """Determine any columns in the output table keys that were
@@ -1765,28 +2207,24 @@ def determine_out_table_cast_map(
     cast_map: Dict[int, types.Type] = {}
 
     # Check the keys for casts.
-    n_keys = len(left_key_types)
-    key_nums_list = [left_key_types, right_key_types]
-    used_key_nums_list = [left_used_key_nums, right_used_key_nums]
-    input_output_map_list = [left_to_output_map, right_to_output_map]
-    for i in range(len(key_nums_list)):
-        key_types = key_nums_list[i]
-        used_key_nums = used_key_nums_list[i]
-        input_output_map = input_output_map_list[i]
-        for j in range(n_keys):
-            # Determine if the column is live in the output.
-            if j in used_key_nums:
-                key_type = _match_join_key_types(
-                    left_key_types[j], right_key_types[j], loc
-                )
-                # Astype is needed when the key had to be cast for the join
-                # (e.g. left=int64 and right=float64 casts the left to float64)
-                # and we need the key back to the original type in the output.
-                if key_type != key_types[j] and key_types[j] != bodo.dict_str_arr_type:
-                    # Need to generate an astype for the table.
-                    # The CPP Table's return type contains key_types[j]
-                    # and we need to convert to key_type.
-                    cast_map[input_output_map[j]] = key_type
+    n_keys = len(matched_key_types)
+    for i in range(n_keys):
+        # Determine if the column is liveå
+        if used_key_nums is None or i in used_key_nums:
+            # Astype is needed when the key had to be cast for the join
+            # (e.g. left=int64 and right=float64 casts the left to float64)
+            # and we need the key back to the original type in the output.
+            if matched_key_types[i] != key_types[i] and (
+                convert_dict_col or key_types[i] != bodo.dict_str_arr_type
+            ):
+                # Need to generate an astype for the table.
+                # The CPP Table's return type contains key_types[j]
+                # and we need to convert to key_type.
+                if output_map:
+                    idx = output_map[i]
+                else:
+                    idx = i
+                cast_map[idx] = matched_key_types[i]
 
     return cast_map
 

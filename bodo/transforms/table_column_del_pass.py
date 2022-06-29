@@ -368,7 +368,7 @@ class TableColumnDelPass:
                         rhs = stmt.value
                         fdef = guard(numba.core.ir_utils.find_callname, func_ir, rhs)
                         # Only eliminate columns once we find the get_table_data call
-                        if is_table_use_column_ops(fdef):
+                        if is_table_use_column_ops(fdef, rhs.args, typemap):
                             table_var_name = rhs.args[0].name
                             col_nums = get_table_used_columns(fdef, rhs, typemap)
                             # Determine the table key.
@@ -778,18 +778,23 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                         # other calls, the uses of columns cannot change anymore.
                         # But the unused columns can be deleted.
                         rhs_table = rhs.args[0].name
-                        used_cols, use_all, cannot_del_cols = block_use_map[rhs_table]
-                        if not (use_all or cannot_del_cols):
-                            in_cols = typemap[rhs.args[2].name].instance_type.meta
-                            # trim logical column uses that are not in the table (are
-                            # in extra arrays argument)
-                            n_table_cols = len(typemap[rhs_table].arr_types)
-                            in_cols_set = set(i for i in in_cols if i < n_table_cols)
-                            block_use_map[rhs_table] = (
-                                used_cols | in_cols_set,
-                                use_all,
-                                cannot_del_cols,
-                            )
+                        if isinstance(typemap[rhs_table], TableType):
+                            used_cols, use_all, cannot_del_cols = block_use_map[
+                                rhs_table
+                            ]
+                            if not (use_all or cannot_del_cols):
+                                in_cols = typemap[rhs.args[2].name].instance_type.meta
+                                # trim logical column uses that are not in the table (are
+                                # in extra arrays argument)
+                                n_table_cols = len(typemap[rhs_table].arr_types)
+                                in_cols_set = set(
+                                    i for i in in_cols if i < n_table_cols
+                                )
+                                block_use_map[rhs_table] = (
+                                    used_cols | in_cols_set,
+                                    use_all,
+                                    cannot_del_cols,
+                                )
                         continue
 
                 elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "getattr":

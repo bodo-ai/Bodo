@@ -7,6 +7,8 @@ from typing import Dict, Tuple
 
 from numba.core import ir, types
 
+from bodo.hiframes.table import TableType
+
 # This must contain all table functions that can
 # "use" a column. This is used by helper functions
 # for pruning columns. Every table operation that
@@ -28,7 +30,7 @@ table_usecol_funcs = {
 }
 
 
-def is_table_use_column_ops(fdef: Tuple[str, str]):
+def is_table_use_column_ops(fdef: Tuple[str, str], args, typemap):
     """Is the given callname a table operation
     that uses columns. Note: This must include
     all valid table operations that do not result
@@ -41,7 +43,13 @@ def is_table_use_column_ops(fdef: Tuple[str, str]):
         Bool: Is the table a known operation that
             can produce a column deletion.
     """
-    return fdef in table_usecol_funcs
+    # Every function in table_usecol_funcs takes a table as
+    # arg0.
+    return (
+        fdef in table_usecol_funcs
+        and len(args) > 0
+        and isinstance(typemap[args[0].name], TableType)
+    )
 
 
 def get_table_used_columns(

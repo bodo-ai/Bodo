@@ -453,7 +453,7 @@ def test_merge_empty_suffix_keys(memory_leak_check):
         for block in fir.blocks.values():
             for stmt in block.body:
                 if isinstance(stmt, bodo.ir.join.Join):
-                    confirmed_dead_index = not stmt.has_live_index_var
+                    confirmed_dead_index = not stmt.has_live_out_index_var
         assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
@@ -544,7 +544,7 @@ def test_merge_left_index_dce(memory_leak_check):
         for block in fir.blocks.values():
             for stmt in block.body:
                 if isinstance(stmt, bodo.ir.join.Join):
-                    confirmed_live_index = stmt.has_live_index_var
+                    confirmed_live_index = stmt.has_live_out_index_var
         assert confirmed_live_index, "Index not confirmed alive in join node"
 
 
@@ -610,7 +610,7 @@ def test_merge_right_index_dce(memory_leak_check):
         for block in fir.blocks.values():
             for stmt in block.body:
                 if isinstance(stmt, bodo.ir.join.Join):
-                    confirmed_live_index = stmt.has_live_index_var
+                    confirmed_live_index = stmt.has_live_out_index_var
         assert confirmed_live_index, "Index not confirmed alive in join node"
 
 
@@ -653,7 +653,7 @@ def test_merge_left_right_index_dce(memory_leak_check):
     for block in fir.blocks.values():
         for stmt in block.body:
             if isinstance(stmt, bodo.ir.join.Join):
-                confirmed_dead_index = not stmt.has_live_index_var
+                confirmed_dead_index = not stmt.has_live_out_index_var
     assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
@@ -692,15 +692,21 @@ def test_merge_left_right_only_index(memory_leak_check):
     # Verify the index is alive and the table is dead.
     func_sig = merge_func
     confirmed_live_index = False
-    confirmed_dead_table = False
+    confirmed_dead_out_table = False
+    confirmed_dead_left_table = False
+    confirmed_dead_right_table = False
     fir = func_sig.overloads[func_sig.signatures[0]].metadata["preserved_ir"]
     for block in fir.blocks.values():
         for stmt in block.body:
             if isinstance(stmt, bodo.ir.join.Join):
-                confirmed_live_index = stmt.has_live_index_var
-                confirmed_dead_table = not stmt.has_live_table_var
+                confirmed_live_index = stmt.has_live_out_index_var
+                confirmed_dead_out_table = not stmt.has_live_out_table_var
+                confirmed_dead_left_table = not stmt.has_live_left_table_var
+                confirmed_dead_right_table = not stmt.has_live_right_table_var
     assert confirmed_live_index, "Index not confirmed alive in join node"
-    assert confirmed_dead_table, "Table not confirmed dead in join node"
+    assert confirmed_dead_out_table, "Output Table not confirmed dead in join node"
+    assert confirmed_dead_left_table, "Left Table not confirmed dead in join node"
+    assert confirmed_dead_right_table, "Right Table not confirmed dead in join node"
 
 
 def test_list_string_array_type_specific(memory_leak_check):
@@ -1778,7 +1784,7 @@ def test_indicator_true_deadcol(memory_leak_check):
     for block in fir.blocks.values():
         for stmt in block.body:
             if isinstance(stmt, bodo.ir.join.Join):
-                confirmed_dead_index = not stmt.has_live_index_var
+                confirmed_dead_index = not stmt.has_live_out_index_var
     assert confirmed_dead_index, "Index not confirmed dead in join node"
 
 
