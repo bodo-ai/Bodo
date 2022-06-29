@@ -1728,7 +1728,7 @@ def _gen_general_cond_cfunc(
         table_getitem_funcs,
         func_text,
         "left",
-        len(join_node.left_keys),
+        join_node.left_key_set,
         na_check_name,
         join_node.is_left_table,
     )
@@ -1741,7 +1741,7 @@ def _gen_general_cond_cfunc(
         table_getitem_funcs,
         func_text,
         "right",
-        len(join_node.right_keys),
+        join_node.right_key_set,
         na_check_name,
         join_node.is_right_table,
     )
@@ -1777,7 +1777,7 @@ def _replace_column_accesses(
     table_getitem_funcs,
     func_text,
     table_name,
-    n_keys,
+    key_set,
     na_check_name,
     is_table_var,
 ):
@@ -1835,7 +1835,7 @@ def _replace_column_accesses(
             expr = expr.replace(na_cname, na_val_varname)
 
         # only append the column if it is not a key
-        if c_ind >= n_keys:
+        if c_ind not in key_set:
             col_nums.append(physical_ind)
     return expr, func_text, col_nums
 
