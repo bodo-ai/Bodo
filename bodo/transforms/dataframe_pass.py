@@ -1309,11 +1309,11 @@ class DataFramePass:
             for i in range(len(col_inds)):
                 col_ind = col_inds[i]
                 func_text += f"  T{i+1} = bodo.hiframes.table.set_table_data(T{i}, {col_ind}, bodo.utils.conversion.coerce_to_array({data_args[i+1]}))\n"
-            func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T{len(col_names_to_replace)},), df_index, out_df_type)\n"
+            func_text += f"  df = bodo.hiframes.pd_dataframe_ext.init_dataframe((T{len(col_names_to_replace)},), df_index, out_col_names)\n"
             func_text += f"  return df\n"
         else:
             init_table_args_full_string = ", ".join(init_table_args)
-            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({init_table_args_full_string},), df_index, out_df_type)\n"
+            func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({init_table_args_full_string},), df_index, out_col_names)\n"
         loc_vars = {}
         exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
@@ -1322,7 +1322,7 @@ class DataFramePass:
             _init_df,
             in_arrs + [df_index_var],
             pre_nodes=nodes,
-            extra_globals={"out_df_type": out_df_typ},
+            extra_globals={"out_col_names": ColNamesMetaType(out_df_typ.columns)},
         )
 
     def _run_call_len(self, lhs, df_var, assign):
