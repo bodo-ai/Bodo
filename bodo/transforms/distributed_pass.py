@@ -4454,6 +4454,15 @@ class DistributedPass:
                     ):
                         shape_nodes.append(stmt)
                         continue
+                    if is_call(rhs) and guard(find_callname, self.func_ir, rhs) == (
+                        "table_subset",
+                        "bodo.hiframes.table",
+                    ):
+                        # If we take a subset of a table treat it as a
+                        # used array/table.
+                        arr_varnames.add(stmt.target.name)
+                        continue
+
                     # arr[:11] match for both array and table format
                     if (
                         is_call(rhs)

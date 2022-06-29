@@ -11,6 +11,7 @@ import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
+from numba.core.ir_utils import guard
 from numba.core.typing.templates import signature
 from numba.cpython.listobj import ListInstance
 from numba.extending import (
@@ -45,6 +46,7 @@ from bodo.utils.typing import (
     raise_bodo_error,
     to_str_arr_if_dict_array,
 )
+from bodo.utils.utils import is_whole_slice
 
 
 class Table:
@@ -1535,6 +1537,35 @@ def table_subset(T, idx, copy_arrs, used_cols=None):
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["table_subset"]
+
+
+def table_filter_equiv(self, scope, equiv_set, loc, args, kws):
+    """output of table_filter has the same number of columns as input table.
+    If there is an empty slice its also the same length."""
+    var = args[0]
+    if equiv_set.has_shape(var):
+        if guard(is_whole_slice, self.typemap, self.func_ir, args[1]):
+            return ArrayAnalysis.AnalyzeResult(shape=var, pre=[])
+        return ArrayAnalysis.AnalyzeResult(
+            shape=(None, equiv_set.get_shape(var)[1]), pre=[]
+        )
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_table_table_filter = table_filter_equiv
+
+
+def table_subset_equiv(self, scope, equiv_set, loc, args, kws):
+    """output of table_subset has the same length as input table"""
+    var = args[0]
+    if equiv_set.has_shape(var):
+        return ArrayAnalysis.AnalyzeResult(
+            shape=(equiv_set.get_shape(var)[0], None), pre=[]
+        )
+    return None
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_table_table_subset = table_subset_equiv
 
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
