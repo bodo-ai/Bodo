@@ -2155,7 +2155,7 @@ def pd_dataframe_overload(data=None, index=None, columns=None, dtype=None, copy=
         "def _init_df(data=None, index=None, columns=None, dtype=None, copy=False):\n"
     )
     func_text += "  return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, {}, __col_name_meta_value_pd_overload)\n".format(
-        data_args, index_arg, col_var
+        data_args, index_arg
     )
     loc_vars = {}
     exec(
