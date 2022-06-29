@@ -2,7 +2,8 @@
 """ Test miscellaneous supported sklearn models and methods
     Currently this file tests:
     Robust Scaler
-    This needs to be done due to the large ammount of test_robust_scalar tests,
+    The Robust Scaler tests need to be done across two files (this and test_sklearn_part5)
+    due to the large ammount of test_robust_scalar tests,
     which can cause OOM issues on nightly due to numba caching artifacts.
 """
 
@@ -15,12 +16,11 @@ import bodo
 from bodo.tests.test_sklearn_part3 import gen_sklearn_scalers_random_data
 from bodo.tests.utils import _get_dist_arg, check_func
 
-# ---------------------RobustScaler Tests--------------------
+# ---------------------RobustScaler Tests, part 1--------------------
 
 
-@pytest.mark.parametrize(
-    "data",
-    [
+@pytest.fixture(
+    params=[
         # Test one with numpy array and one with df
         (
             gen_sklearn_scalers_random_data(15, 5, 0.2, 4),
@@ -52,8 +52,15 @@ from bodo.tests.utils import _get_dist_arg, check_func
             ),
             marks=pytest.mark.slow,
         ),
-    ],
+    ]
 )
+def robust_scalar_data(request):
+    """
+    Returns data for the robust scalar tests
+    """
+    return request.param
+
+
 @pytest.mark.parametrize(
     "with_centering", [True, pytest.param(False, marks=pytest.mark.slow)]
 )
@@ -72,8 +79,8 @@ from bodo.tests.utils import _get_dist_arg, check_func
     "unit_variance", [False, pytest.param(True, marks=pytest.mark.slow)]
 )
 @pytest.mark.parametrize("copy", [True, pytest.param(False, marks=pytest.mark.slow)])
-def test_robust_scaler(
-    data,
+def test_robust_scaler_fit(
+    robust_scalar_data,
     with_centering,
     with_scaling,
     quantile_range,
@@ -82,7 +89,7 @@ def test_robust_scaler(
     memory_leak_check,
 ):
     """
-    Tests for sklearn.preprocessing.RobustScaler implementation in Bodo.
+    Tests for sklearn.preprocessing.RobustScaler.fit implementation in Bodo.
     """
 
     def test_fit(X):
@@ -96,8 +103,10 @@ def test_robust_scaler(
         m = m.fit(X)
         return m
 
-    py_output = test_fit(data[0])
-    bodo_output = bodo.jit(distributed=["X"])(test_fit)(_get_dist_arg(data[0]))
+    py_output = test_fit(robust_scalar_data[0])
+    bodo_output = bodo.jit(distributed=["X"])(test_fit)(
+        _get_dist_arg(robust_scalar_data[0])
+    )
 
     if with_centering:
         assert np.allclose(
@@ -107,6 +116,38 @@ def test_robust_scaler(
         assert np.allclose(
             py_output.scale_, bodo_output.scale_, atol=1e-4, equal_nan=True
         )
+
+
+@pytest.mark.parametrize(
+    "with_centering", [True, pytest.param(False, marks=pytest.mark.slow)]
+)
+@pytest.mark.parametrize(
+    "with_scaling", [True, pytest.param(False, marks=pytest.mark.slow)]
+)
+@pytest.mark.parametrize(
+    "quantile_range",
+    [
+        (25.0, 75.0),
+        pytest.param((10.0, 85.0), marks=pytest.mark.slow),
+        pytest.param((40.0, 60.0), marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "unit_variance", [False, pytest.param(True, marks=pytest.mark.slow)]
+)
+@pytest.mark.parametrize("copy", [True, pytest.param(False, marks=pytest.mark.slow)])
+def test_robust_scaler_transform(
+    robust_scalar_data,
+    with_centering,
+    with_scaling,
+    quantile_range,
+    unit_variance,
+    copy,
+    memory_leak_check,
+):
+    """
+    Tests for sklearn.preprocessing.RobustScaler.transform implementation in Bodo.
+    """
 
     def test_transform(X, X1):
         m = RobustScaler(
@@ -121,75 +162,9 @@ def test_robust_scaler(
         return X1_transformed
 
     check_func(
-        test_transform, data, is_out_distributed=True, atol=1e-4, copy_input=True
-    )
-
-    def test_inverse_transform(X, X1):
-        m = RobustScaler(
-            with_centering=with_centering,
-            with_scaling=with_scaling,
-            quantile_range=quantile_range,
-            unit_variance=unit_variance,
-            copy=copy,
-        )
-        m = m.fit(X)
-        X1_inverse_transformed = m.inverse_transform(X1)
-        return X1_inverse_transformed
-
-    check_func(
-        test_inverse_transform,
-        data,
+        test_transform,
+        robust_scalar_data,
         is_out_distributed=True,
         atol=1e-4,
         copy_input=True,
     )
-
-
-@pytest.mark.parametrize(
-    "bool_val",
-    [True, pytest.param(False, marks=pytest.mark.slow)],
-)
-def test_robust_scaler_bool_attrs(bool_val, memory_leak_check):
-    def impl_with_centering():
-        m = RobustScaler(with_centering=bool_val)
-        return m.with_centering
-
-    def impl_with_scaling():
-        m = RobustScaler(with_scaling=bool_val)
-        return m.with_scaling
-
-    def impl_unit_variance():
-        m = RobustScaler(unit_variance=bool_val)
-        return m.unit_variance
-
-    def impl_copy():
-        m = RobustScaler(copy=bool_val)
-        return m.copy
-
-    check_func(impl_with_centering, ())
-    check_func(impl_with_scaling, ())
-    check_func(impl_unit_variance, ())
-    check_func(impl_copy, ())
-
-
-def test_robust_scaler_array_and_quantile_range_attrs(memory_leak_check):
-
-    data = gen_sklearn_scalers_random_data(20, 3)
-
-    def impl_center_(X):
-        m = RobustScaler()
-        m.fit(X)
-        return m.center_
-
-    def impl_scale_(X):
-        m = RobustScaler()
-        m.fit(X)
-        return m.scale_
-
-    def impl_quantile_range():
-        m = RobustScaler()
-        return m.quantile_range
-
-    check_func(impl_center_, (data,), is_out_distributed=False)
-    check_func(impl_scale_, (data,), is_out_distributed=False)
-    check_func(impl_quantile_range, (), is_out_distributed=False)
