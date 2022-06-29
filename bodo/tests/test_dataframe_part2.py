@@ -29,7 +29,7 @@ from bodo.tests.utils import (
     get_start_end,
     has_udf_call,
 )
-from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.typing import BodoError, BodoWarning, ColNamesMetaType
 
 
 def test_pd_isna_getitem(memory_leak_check):
@@ -2680,9 +2680,10 @@ def test_dataframe_empty_with_index():
     """Make sure dataframe boxing works when dataframe has no columns but has a
     non-empty Index.
     """
+    col_names = ColNamesMetaType(())
 
     def impl(A):
-        return bodo.hiframes.pd_dataframe_ext.init_dataframe((), A, ())
+        return bodo.hiframes.pd_dataframe_ext.init_dataframe((), A, col_names)
 
     A = pd.Index([1, 3, 4, 11, 16, 19], dtype="Int64")
     check_func(impl, (A,), py_output=pd.DataFrame(index=A), only_seq=True)
