@@ -3550,6 +3550,87 @@ def test_merge_dead_keys(memory_leak_check):
     )
 
 
+def test_merge_repeat_key(memory_leak_check):
+    """tests pd.merge when the same key is repeated twice"""
+
+    def impl1(df1, df2):
+        return df1.merge(df2, left_on=["A", "A"], right_on=["A", "B"])
+
+    def impl2(df1, df2):
+        return df2.merge(df1, left_on=["A", "B"], right_on=["A", "A"])
+
+    def impl3(df1, df2):
+        return df1.merge(df2, left_on=["A", "A"], right_on=["A", "B"], how="left")
+
+    def impl4(df1, df2):
+        return df2.merge(df1, left_on=["A", "B"], right_on=["A", "A"], how="left")
+
+    def impl5(df1, df2):
+        return df1.merge(df2, left_on=["A", "A"], right_on=["A", "B"], how="right")
+
+    def impl6(df1, df2):
+        return df2.merge(df1, left_on=["A", "B"], right_on=["A", "A"], how="right")
+
+    def impl7(df1, df2):
+        return df1.merge(df2, left_on=["A", "A"], right_on=["A", "B"], how="outer")
+
+    def impl8(df1, df2):
+        return df2.merge(df1, left_on=["A", "B"], right_on=["A", "A"], how="outer")
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="Int64"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="Int64"),
+            "B": pd.Series([None, 2, 4, 3] * 3, dtype="Int64"),
+        }
+    )
+    check_func(impl1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl2, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl3, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl4, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl5, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl6, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl7, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl8, (df1, df2), sort_output=True, reset_index=True)
+
+
+def test_merge_repeat_key_same_frame(memory_leak_check):
+    """tests pd.merge when the same key is repeated twice and keys
+    aren't shared between DataFrames."""
+
+    def impl1(df1, df2):
+        return df1.merge(df2, left_on=["A", "A"], right_on=["B", "B"])
+
+    def impl2(df1, df2):
+        return df1.merge(df2, left_on=["A", "A"], right_on=["B", "B"])
+
+    def impl3(df1, df2):
+        return df1.merge(df2, left_on=["A", "A"], right_on=["B", "B"])
+
+    def impl4(df1, df2):
+        return df1.merge(df2, left_on=["A", "A"], right_on=["B", "B"])
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="Int64"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="Int64"),
+            "B": pd.Series([None, 2, 4, 3] * 3, dtype="Int64"),
+        }
+    )
+    check_func(impl1, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl2, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl3, (df1, df2), sort_output=True, reset_index=True)
+    check_func(impl4, (df1, df2), sort_output=True, reset_index=True)
+
+
 @pytest.mark.slow
 class TestJoin(unittest.TestCase):
     def test_join_parallel(self):

@@ -1195,8 +1195,13 @@ def join_distributed_run(
             if out_col_num not in join_node.out_used_cols:
                 is_live = 0
             else:
-                left_used_key_nums.add(in_col_num)
-                out_physical_to_logical_list.append(out_col_num)
+                if in_col_num in left_used_key_nums:
+                    # If a key is repeated it is only in the output
+                    # once.
+                    is_live = 0
+                else:
+                    left_used_key_nums.add(in_col_num)
+                    out_physical_to_logical_list.append(out_col_num)
         left_physical_to_logical_list.append(in_col_num)
         left_logical_physical_map[in_col_num] = left_physical_index
         left_physical_index += 1
@@ -1265,29 +1270,39 @@ def join_distributed_run(
             right_key_vars.append(join_node.right_vars[in_col_num])
         if not join_node.vect_same_key[i] and not join_node.is_join:
             is_live = 1
-            out_col_num = join_node.right_to_output_map[in_col_num]
-            if c == INDEX_SENTINEL:
-                # If we are joining on the index, we may need to return
-                # the index to the output. If so, the output can be either
-                # from the keys or the data columns, which we track via
-                # the index_source and index_col_num. If the index column
-                # exists but is not used in the output it is a dead key
-                # by definition.
-                if (
-                    join_node.has_live_out_index_var
-                    and join_node.index_source == "right"
-                    and join_node.index_col_num == in_col_num
-                ):
-                    out_physical_to_logical_list.append(out_col_num)
-                    right_used_key_nums.add(in_col_num)
-                else:
-                    is_live = 0
+            if in_col_num not in join_node.right_to_output_map:
+                # This path is taken if the key is a common key but
+                # not capture by vect_same_key. See test_merge_repeat_key.
+                is_live = 0
             else:
-                if out_col_num not in join_node.out_used_cols:
-                    is_live = 0
+                out_col_num = join_node.right_to_output_map[in_col_num]
+                if c == INDEX_SENTINEL:
+                    # If we are joining on the index, we may need to return
+                    # the index to the output. If so, the output can be either
+                    # from the keys or the data columns, which we track via
+                    # the index_source and index_col_num. If the index column
+                    # exists but is not used in the output it is a dead key
+                    # by definition.
+                    if (
+                        join_node.has_live_out_index_var
+                        and join_node.index_source == "right"
+                        and join_node.index_col_num == in_col_num
+                    ):
+                        out_physical_to_logical_list.append(out_col_num)
+                        right_used_key_nums.add(in_col_num)
+                    else:
+                        is_live = 0
                 else:
-                    out_physical_to_logical_list.append(out_col_num)
-                    right_used_key_nums.add(in_col_num)
+                    if out_col_num not in join_node.out_used_cols:
+                        is_live = 0
+                    else:
+                        if in_col_num in right_used_key_nums:
+                            # If a key is repeated it is only in the output
+                            # once.
+                            is_live = 0
+                        else:
+                            right_used_key_nums.add(in_col_num)
+                            out_physical_to_logical_list.append(out_col_num)
             right_key_in_output.append(is_live)
         right_physical_to_logical_list.append(in_col_num)
         right_logical_physical_map[in_col_num] = right_physical_index

@@ -1,6 +1,8 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Tools for handling bodo arrays, e.g. passing to C/C++ code
 """
+from collections import defaultdict
+
 import llvmlite.binding as ll
 import numba
 import numpy as np
@@ -1990,7 +1992,17 @@ def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t
 
     glbls = {}
     n_py_table_arrs = get_overload_const_int(n_table_cols_t)
-    py_to_cpp_inds = {k: i for i, k in enumerate(in_col_inds)}
+
+    # Technically a single Python array can hold multiple spots
+    # in the C++ table. As a result we look for any duplicates
+    # to process with regular array format.
+    duplicates = defaultdict(list)
+    py_to_cpp_inds = {}
+    for i, k in enumerate(in_col_inds):
+        if k in py_to_cpp_inds:
+            duplicates[k].append(i)
+        else:
+            py_to_cpp_inds[k] = i
 
     # basic structure:
     # for each block in py_table:
@@ -2021,12 +2033,23 @@ def py_data_to_cpp_table(py_table, extra_arrs_tup, in_col_inds_t, n_table_cols_t
             func_text += f"    ensure_column_unboxed(py_table, arr_list_{blk}, i, arr_ind_{blk})\n"
             func_text += f"    cpp_arr_list[out_arr_ind_{blk}] = array_to_info(arr_list_{blk}[i])\n"
 
+        # Handle any table duplicates as individual arrays.
+        for arr_num, ind_list in duplicates.items():
+            if arr_num < n_py_table_arrs:
+                blk = py_table.block_nums[arr_num]
+                in_ind = py_table.block_offsets[arr_num]
+                for out_ind in ind_list:
+                    # Since this is a duplicate the array must already be loaded.
+                    func_text += f"  cpp_arr_list[{out_ind}] = array_to_info(arr_list_{blk}[{in_ind}])\n"
+
     for i in range(len(extra_arrs_tup)):
-        out_ind = py_to_cpp_inds.get(n_py_table_arrs + i, -1)
-        if out_ind != -1:
-            func_text += (
-                f"  cpp_arr_list[{out_ind}] = array_to_info(extra_arrs_tup[{i}])\n"
-            )
+        first_ind = py_to_cpp_inds.get(n_py_table_arrs + i, -1)
+        if first_ind != -1:
+            total_out_inds = [first_ind] + duplicates.get(n_py_table_arrs + i, [])
+            for out_ind in total_out_inds:
+                func_text += (
+                    f"  cpp_arr_list[{out_ind}] = array_to_info(extra_arrs_tup[{i}])\n"
+                )
 
     func_text += f"  return arr_info_list_to_table(cpp_arr_list)\n"
 
