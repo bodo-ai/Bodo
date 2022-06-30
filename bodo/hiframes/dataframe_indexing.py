@@ -190,11 +190,18 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                                 new_data.append(df.data[i])
                         new_cols = tuple()
 
+                        use_table_format = (
+                            df.is_table_format
+                            and len(new_names) > 0
+                            and len(new_names)
+                            >= bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
+                        )
+
                         ret = DataFrameType(
                             tuple(new_data),
                             new_index_type,
                             tuple(new_names),
-                            is_table_format=df.is_table_format,
+                            is_table_format=use_table_format,
                         )
                         return ret(*args)
 
@@ -202,11 +209,17 @@ class DataFrameGetItemTemplate(AbstractTemplate):
                         (new_cols, new_data) = get_df_getitem_kept_cols_and_data(
                             df, df_col_inds_literal
                         )
+                        use_table_format = (
+                            df.is_table_format
+                            and len(df_col_inds_literal) > 0
+                            and len(df_col_inds_literal)
+                            >= bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
+                        )
                         ret = DataFrameType(
                             new_data,
                             new_index_type,
                             new_cols,
-                            is_table_format=df.is_table_format,
+                            is_table_format=use_table_format,
                         )
                         return ret(*args)
 
@@ -283,6 +296,7 @@ class DataFrameGetItemTemplate(AbstractTemplate):
             index_type = df.index
             use_table_format = (
                 df.is_table_format
+                and len(ind_columns) > 0
                 and len(ind_columns) >= bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
             )
             ret = DataFrameType(
@@ -324,7 +338,7 @@ def get_df_getitem_kept_cols_and_data(df, cols_to_keep_list):
     dataframe."""
     # Check that all columns named are in the dataframe
     for c in cols_to_keep_list:
-        if c not in df.columns:
+        if c not in df.column_index:
             raise_bodo_error(
                 "Column {} not found in dataframe columns {}".format(c, df.columns)
             )
@@ -399,6 +413,7 @@ def df_getitem_overload(df, ind):
         extra_globals = None
         if (
             df.is_table_format
+            and len(ind_columns) > 0
             and len(ind_columns) >= bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
         ):
             # This assumes ind_columns are always names.
@@ -809,7 +824,7 @@ def overload_loc_getitem(I, idx):
             if (
                 len(col_idx_list) > 0
                 and not isinstance(col_idx_list[0], (bool, np.bool_))
-                and not all(c in df.columns for c in col_idx_list)
+                and not all(c in df.column_index for c in col_idx_list)
             ):
                 raise_bodo_error(
                     f"DataFrame.loc[]: invalid column list {col_idx_list}; not all in dataframe columns {df.columns}"
