@@ -1,8 +1,10 @@
 import os
+import shutil
 import sys
 from distutils.errors import DistutilsExecError
 
 from setuptools import find_packages, setup
+from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
 # ----- Trick to pass the Bodo Version in CI -----
@@ -29,7 +31,7 @@ def build_libs(obj):
 
     try:
         pom_dir = os.path.join("bodo_iceberg_connector", "iceberg-java", "pom.xml")
-        cmd_list = ["mvn", "install"]
+        cmd_list = ["mvn", "clean", "install"]
         cmd_list += [
             "-Dmaven.test.skip=true",
             "-f",
@@ -37,6 +39,21 @@ def build_libs(obj):
         ]
 
         obj.spawn(cmd_list)
+        curr_path = os.path.dirname(os.path.realpath(__file__))
+        executable_jar_dir = os.path.join(
+            curr_path,
+            "bodo_iceberg_connector/iceberg-java/target",
+        )
+        to_jar_path = os.path.join(curr_path, "bodo_iceberg_connector/jars")
+        os.makedirs(to_jar_path, exist_ok=True)
+        os.rename(
+            os.path.join(executable_jar_dir, "bodo-iceberg-reader.jar"),
+            os.path.join(to_jar_path, "bodo-iceberg-reader.jar"),
+        )
+        # Delete libs if they already exist
+        jar_lib_dst = os.path.join(to_jar_path, "libs/")
+        shutil.rmtree(jar_lib_dst, ignore_errors=True)
+        os.rename(os.path.join(executable_jar_dir, "libs/"), jar_lib_dst)
     except DistutilsExecError as e:
         obj.error("Maven Build Failed with Error:", e)
 
@@ -45,6 +62,13 @@ class CustomDevelopCommand(develop):
     """Custom command to build the jars with python setup.py develop"""
 
     def run(self):
+        build_libs(self)
+        super().run()
+
+
+class CustomBuildCommand(build_py):
+    def run(self):
+        """Creates the generated library/tests, builds maven, and then calls the original run command"""
         build_libs(self)
         super().run()
 
@@ -71,8 +95,9 @@ setup(
     packages=find_packages(),
     # This is needed so that the jars are included if/when the package is installed via pip.
     package_data={
-        "bodo_iceberg_connector": ["bodo_iceberg_connector/iceberg-java/target/*.jar",
-            "bodo_iceberg_connector/iceberg-java/target/libs/*.jar",
+        "bodo_iceberg_connector": [
+            "jars/bodo-iceberg-reader.jar",
+            "jars/libs/*.jar",
         ]
     },
     # When doing `python setup.py develop`, setuptools will try to install whatever is
@@ -80,5 +105,5 @@ setup(
     # install bodo in development mode, and it will also break CI
     install_requires=[] if development_mode else ["py4j==0.10.9.3"],
     python_requires=">=3.8,<3.11",
-    cmdclass={"develop": CustomDevelopCommand},
+    cmdclass={"develop": CustomDevelopCommand, "build_py": CustomBuildCommand},
 )

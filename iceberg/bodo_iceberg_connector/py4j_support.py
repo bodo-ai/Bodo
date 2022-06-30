@@ -1,7 +1,6 @@
 """
 Contains information used to access the Java package via py4j.
 """
-import atexit
 import os
 import sys
 
@@ -17,8 +16,6 @@ LinkedListClass = None
 OpEnumClass = None
 LiteralConverterClass = None
 
-
-from bodo_iceberg_connector.config import DEFAULT_PORT
 
 # Dictionary mapping table info -> Reader obj
 table_dict = {}
@@ -36,9 +33,7 @@ def launch_jvm():
 
     if gateway is None:
         cur_file_path = os.path.dirname(os.path.abspath(__file__))
-        full_path = os.path.join(
-            cur_file_path, "iceberg-java", "target", "bodo-iceberg-reader.jar"
-        )
+        full_path = os.path.join(cur_file_path, "jars", "bodo-iceberg-reader.jar")
 
         # TODO: we do not currently specify a port here. In this case, launch_gateway launches
         # using an arbitrary free ephemeral port. Launching with specified port can lead to
