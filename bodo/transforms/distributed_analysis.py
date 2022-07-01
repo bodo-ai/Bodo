@@ -1506,6 +1506,22 @@ class DistributedAnalysis:
                 self._meet_several_array_dists(arrays, array_dists)
             return
 
+        if fdef == ("coalesce", "bodo.libs.bodosql_array_kernels"):
+            # Note: this will fail if the tuple argument is not constant,
+            # but this should never happen because we control code generation
+            elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
+            assert (
+                elems is not None
+            ), "Internal error, unable to find build tuple for arg0 of coalesce"
+
+            arrays = [lhs]
+            for arg in elems:
+                if is_array_typ(self.typemap[arg.name]):
+                    arrays.append(arg.name)
+            if len(arrays) > 1:
+                self._meet_several_array_dists(arrays, array_dists)
+            return
+
         if fdef == ("first_last_valid_index", "bodo.libs.array_kernels"):
             # doesn't affect distribution of either input or output
             return
