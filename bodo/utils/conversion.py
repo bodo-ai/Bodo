@@ -527,11 +527,10 @@ def overload_coerce_to_array(
                 1, bodo.libs.str_arr_ext.get_utf8_size(data)
             )
             dict_arr[0] = data
-            indice_data = np.full(n, 0, np.int32)
-            indices_nulls = np.full((n + 7) >> 3, 255, np.uint8)
-            indices = bodo.libs.int_arr_ext.init_integer_array(
-                indice_data, indices_nulls
-            )
+            indices = bodo.libs.int_arr_ext.alloc_int_array(n, np.int32)
+            numba.parfors.parfor.init_prange()
+            for i in numba.parfors.parfor.internal_prange(n):
+                indices[i] = 0
             A = bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True)
             return A
 
