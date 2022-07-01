@@ -1804,12 +1804,16 @@ def test_df_1D_Var_col_set_string(memory_leak_check):
 
     def impl(df):
         df["B"] = "A"
-        return len(bodo.libs.array_item_arr_ext.get_data(df.B.values._data))
+        # Scalar strings are dictionary encoded so we check the number of
+        # indices.
+        return len(df.B.values._data), len(df.B.values._indices)
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n)})
     df_chunk = _get_dist_arg(df, var_length=True)
-    assert reduce_sum(bodo.jit(distributed={"df"})(impl)(df_chunk)) == n
+    dict_len, indices_len = bodo.jit(distributed={"df"})(impl)(df_chunk)
+    assert dict_len == 1
+    assert reduce_sum(indices_len) == n
     assert count_array_OneD_Vars() > 0
 
 

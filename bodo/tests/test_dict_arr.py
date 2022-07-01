@@ -271,6 +271,21 @@ def test_gatherv_rm(dict_arr_value, memory_leak_check):
     )
 
 
+def test_scalar_to_arr(memory_leak_check):
+    """tests that appending a scalar to a DataFrame creates
+    a dictionary encoded array."""
+
+    def impl(arr):
+        return pd.DataFrame({"A": arr, "b": "my string to copy"})
+
+    arr = np.arange(100)
+    check_func(impl, (arr,))
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+    bodo_func(arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "init_dict_arr")
+
+
 def test_str_cat_opt(memory_leak_check):
     """test optimizaton of Series.str.cat() for dict array"""
 

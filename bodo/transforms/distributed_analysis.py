@@ -2188,6 +2188,20 @@ class DistributedAnalysis:
             self._set_var_dist(lhs, array_dists, new_dist)
             return
 
+        if fdef == ("init_dict_arr", "bodo.libs.dict_arr_ext"):
+            # The dictionary is available in the main IR must
+            # be replicated. Here we assume other the data risks
+            # having incorrect indices. The indices should match
+            # the distribution of the output.
+            self._meet_array_dists(lhs, rhs.args[1].name, array_dists)
+            self._set_REP(
+                rhs.args[0].name,
+                array_dists,
+                "init_dict_arr dictionary array is REP",
+                rhs.loc,
+            )
+            return
+
         if fdef == ("init_integer_array", "bodo.libs.int_arr_ext"):
             # lhs, data, and bitmap should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

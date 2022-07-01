@@ -509,7 +509,9 @@ def overload_coerce_to_array(
 
         return impl_array_item_arr
 
-    # string scalars to array
+    # string scalars to array. Since we know the scalar is repeated
+    # for every value we opt to make the output array dictionary
+    # encoded.
     if not is_overload_none(scalar_to_arr_len) and isinstance(
         data, (types.UnicodeType, types.StringLiteral)
     ):
@@ -521,11 +523,16 @@ def overload_coerce_to_array(
             scalar_to_arr_len=None,
         ):  # pragma: no cover
             n = scalar_to_arr_len
-            # NOTE: not using n to calculate n_chars since distributed pass will use
-            # the global value of n and cannot replace it with the local version
-            A = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
-            for i in numba.parfors.parfor.internal_prange(n):
-                A[i] = data
+            dict_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(
+                1, bodo.libs.str_arr_ext.get_utf8_size(data)
+            )
+            dict_arr[0] = data
+            indice_data = np.full(n, 0, np.int32)
+            indices_nulls = np.full((n + 7) >> 3, 255, np.uint8)
+            indices = bodo.libs.int_arr_ext.init_integer_array(
+                indice_data, indices_nulls
+            )
+            A = bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True)
             return A
 
         return impl_str
