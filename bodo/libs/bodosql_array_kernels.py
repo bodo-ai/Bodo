@@ -12,7 +12,14 @@ from bodo.utils.typing import raise_bodo_error
 
 
 def gen_vectorized(
-    arg_names, arg_types, propogate_null, scalar_text, constructor_text, arg_string=None
+    arg_names,
+    arg_types,
+    propogate_null,
+    scalar_text,
+    out_dtype,
+    arg_string=None,
+    arg_sources=None,
+    array_override=None,
 ):
     """Creates an impl for a function that has several inputs that could all be
        scalars, nulls, or arrays by broadcasting appropriately.
@@ -27,11 +34,15 @@ def gen_vectorized(
         refer to the scalar values as arg0, arg1, arg2, etc. (where arg0
         corresponds to the current value from arg_names[0]), and store the final
         answer of the calculation in res[i]
-        constructor_text (string): the expression that generates the final
-        result array. Assume that the size of the array is in a variable n.
-        arg_string (optional string): string representing the parameters of the
-        function as the appear in the def line. If not provided, they are
-        inferred from arg_names.
+        out_dtype (dtype): the dtype of the output array
+        arg_string (optional string): the string that goes in the def line to
+        describe the parameters. If not provided, is inferred from arg_names
+        arg_sources (optional dict): key-value pairings describing how to
+        obtain the arg_names from the arguments described in arg_string
+        array_override (optional string): a string representing how to obtain
+        the length of the final array. If not provided, inferred from arg_types.
+        If provided, ensures that the returned answer is always an array,
+        even if all of the arg_types are scalars.
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -45,16 +56,16 @@ def gen_vectorized(
     for when both arguments are arrays.
 
     arg_names = ['left', 'right']
-    arg_types = [Int64Array, Int64Array]
+    arg_types = [series(int64, ...), series(int64, ...)]
     propogate_null = [True, True]
+    out_dtype = np.int64
     scalar_text = "res[i] = arg0 + arg1"
-    constructor_text = "bodo.libs.int_arr_ext.alloc_int_array(n, np.int64))"
 
     This would result in an impl constructed from the following func_text:
 
     def impl(left, right):
         n = len(left)
-        res = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64))
+        res = bodo.utils.utils.alloc_type(n, out_dtype, -1)
         left = bodo.utils.conversion.coerce_to_array(left)
         right = bodo.utils.conversion.coerce_to_array(right)
         for i in range(n):
@@ -67,7 +78,9 @@ def gen_vectorized(
             arg0 = left[i]
             arg1 = right[i]
             res[i] = arg0 + arg1
-        return res
+        return return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)
+
+    (Where out_dtype is mapped to np.int64)
     """
     are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
     all_scalar = not any(are_arrays)
@@ -79,14 +92,21 @@ def gen_vectorized(
     first_line = scalar_text.splitlines()[0]
     base_indentation = len(first_line) - len(first_line.lstrip())
 
-    if arg_string == None:
+    if arg_string is None:
         arg_string = ", ".join(arg_names)
 
     func_text = f"def impl({arg_string}):\n"
 
+    # Extract each argument name from the arg_string. Currently this is used for
+    # a tuple input for variadic functions, but this use case may expand in the
+    # future, at which point this comment will be updated
+    if arg_sources is not None:
+        for argument, source in arg_sources.items():
+            func_text += f"   {argument} = {source}\n"
+
     # If all the inputs are scalar, either output None immediately or
     # compute a single scalar computation without the loop
-    if all_scalar:
+    if all_scalar and array_override == None:
         if out_null:
             func_text += "   return None"
         else:
@@ -95,13 +115,23 @@ def gen_vectorized(
             for line in scalar_text.splitlines():
                 func_text += (
                     " " * 3
-                    + line[base_indentation:].replace("res[i] =", "answer =")
+                    + line[base_indentation:]
+                    # res[i] is now stored as answer, since there is no res array
+                    .replace("res[i] =", "answer =")
+                    # Calls to setna mean that the answer is NULL, so they are
+                    # replaced with "return None".
+                    .replace("bodo.libs.array_kernels.setna(res, i)", "return None")
+                    # NOTE: scalar_text should not contain any isna calls in
+                    # the case where all of the inputs are scalar.
                     + "\n"
                 )
             func_text += "   return answer"
 
     else:
         # Determine the size of the final output array and convert Series to arrays
+        if array_override != None:
+            found_size = True
+            size_text = f"len({array_override})"
         found_size = False
         for i in range(len(arg_names)):
             if are_arrays[i]:
@@ -112,7 +142,7 @@ def gen_vectorized(
                     func_text += f"   {arg_names[i]} = bodo.hiframes.pd_series_ext.get_series_data({arg_names[i]})\n"
 
         func_text += f"   n = {size_text}\n"
-        func_text += f"   res = {constructor_text}\n"
+        func_text += f"   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
         func_text += "   for i in range(n):\n"
 
         # If the argument types imply that every row is null, then just set each
@@ -145,13 +175,10 @@ def gen_vectorized(
         func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)"
 
     loc_vars = {}
+
     exec(
         func_text,
-        {
-            "bodo": bodo,
-            "numba": numba,
-            "np": np,
-        },
+        {"bodo": bodo, "numba": numba, "np": np, "out_dtype": out_dtype},
         loc_vars,
     )
 
@@ -160,7 +187,7 @@ def gen_vectorized(
     return impl
 
 
-def unopt_argument(func_name, arg_names, i):
+def unopt_argument(func_name, arg_names, i, container_length=None):
     """Creates an impl that cases on whether or not a certain argument to a function
        is None in order to un-optionalize that argument
 
@@ -168,20 +195,43 @@ def unopt_argument(func_name, arg_names, i):
         func_name (string): the name of hte function with the optional arguments
         arg_names (string list): the name of each argument to the function
         i (integer): the index of the argument from arg_names being unoptionalized
+        container_length (optional int): if provided, treat the single arg_name as
+        a container of this many arguments. Used so we can pass in arbitrary sized
+        containers or arguments to handle SQL functions with variadic arguments,
+        such as coalesce
 
     Returns:
         function: the impl that re-calls func_name with arg_names[i] no longer optional
     """
-    args1 = [arg_names[j] if j != i else "None" for j in range(len(arg_names))]
-    args2 = [
-        arg_names[j] if j != i else f"bodo.utils.indexing.unoptional({arg_names[j]})"
-        for j in range(len(arg_names))
-    ]
-    func_text = f"def impl({', '.join(arg_names)}):\n"
-    func_text += f"   if {arg_names[i]} is None:\n"
-    func_text += f"      return {func_name}({', '.join(args1)})\n"
-    func_text += f"   else:\n"
-    func_text += f"      return {func_name}({', '.join(args2)})"
+    if container_length != None:
+        args1 = [
+            f"{arg_names[0]}{[j]}" if j != i else "None"
+            for j in range(container_length)
+        ]
+        args2 = [
+            f"{arg_names[0]}{[j]}"
+            if j != i
+            else f"bodo.utils.indexing.unoptional({arg_names[0]}[{j}])"
+            for j in range(container_length)
+        ]
+        func_text = f"def impl({', '.join(arg_names)}):\n"
+        func_text += f"   if {arg_names[0]}[{i}] is None:\n"
+        func_text += f"      return {func_name}(({', '.join(args1)}))\n"
+        func_text += f"   else:\n"
+        func_text += f"      return {func_name}(({', '.join(args2)}))"
+    else:
+        args1 = [arg_names[j] if j != i else "None" for j in range(len(arg_names))]
+        args2 = [
+            arg_names[j]
+            if j != i
+            else f"bodo.utils.indexing.unoptional({arg_names[j]})"
+            for j in range(len(arg_names))
+        ]
+        func_text = f"def impl({', '.join(arg_names)}):\n"
+        func_text += f"   if {arg_names[i]} is None:\n"
+        func_text += f"      return {func_name}({', '.join(args1)})\n"
+        func_text += f"   else:\n"
+        func_text += f"      return {func_name}({', '.join(args2)})"
 
     loc_vars = {}
     exec(
@@ -308,10 +358,10 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
                 quotient = (arg1 - len(arg0)) // len(arg2)
                 remainder = (arg1 - len(arg0)) % len(arg2)
                 res[i] = {pad_line}"""
-        constructor_text = "bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)"
+        out_dtype = bodo.string_array_type
 
         return gen_vectorized(
-            arg_names, arg_types, propogate_null, scalar_text, constructor_text
+            arg_names, arg_types, propogate_null, scalar_text, out_dtype
         )
 
     return overload_lpad_rpad_util
@@ -325,3 +375,162 @@ def _install_lpad_rpad_overload():
 
 
 _install_lpad_rpad_overload()
+
+
+def coalesce(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+def coalesce_util(A):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(coalesce)
+def overload_coalesce(A):
+    """Handles cases where COALESCE recieves optional arguments and forwards
+    to the apropriate version of the real implementation"""
+    if not isinstance(A, (types.Tuple, types.UniTuple)):
+        raise_bodo_error("Coalesce argument must be a tuple")
+    for i in range(len(A)):
+        if isinstance(A[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.coalesce",
+                ["A"],
+                i,
+                container_length=len(A),
+            )
+
+    def impl(A):  # pragma: no cover
+        return coalesce_util(A)
+
+    return impl
+
+
+@overload(coalesce_util, no_unliteral=True)
+def overload_coalesce_util(A):
+    """A dedicated kernel for the SQL function COALESCE which takes in array of
+       1+ columns/scalars and returns the first value from each row that is
+       not NULL.
+
+    Args:
+        A (any array/scalar tuple): the array of values that are coalesced
+        into a single column by choosing the first non-NULL value
+
+    Raises:
+        BodoError: if there are 0 columns, or the types don't match
+
+    Returns:
+        pd.Series: a Series containing the coalesce values of the input array
+    """
+    if len(A) == 0:
+        raise_bodo_error("Cannot coalesce 0 columns")
+
+    # Figure out which columns can be ignored (NULLS or after a scalar)
+    array_override = None
+    dead_cols = []
+    for i in range(len(A)):
+        if A[i] == bodo.none:
+            dead_cols.append(i)
+        elif not bodo.utils.utils.is_array_typ(A[i]):
+            for j in range(i + 1, len(A)):
+                dead_cols.append(j)
+                if bodo.utils.utils.is_array_typ(A[j]):
+                    array_override = f"A[{j}]"
+            break
+
+    arg_names = [f"A{i}" for i in range(len(A)) if i not in dead_cols]
+    arg_types = [A[i] for i in range(len(A)) if i not in dead_cols]
+    propogate_null = [False] * (len(A) - len(dead_cols))
+    scalar_text = ""
+    first = True
+    found_scalar = False
+    dead_offset = 0
+
+    for i in range(len(A)):
+
+        # If A[i] is NULL or comes after a scalar, it can be skipped
+        if i in dead_cols:
+            dead_offset += 1
+            continue
+
+        # If A[i] is an array, its value is the answer if it is not NULL
+        elif bodo.utils.utils.is_array_typ(A[i]):
+            cond = "if" if first else "elif"
+            scalar_text += f"{cond} not bodo.libs.array_kernels.isna(A{i}, i):\n"
+            scalar_text += f"   res[i] = arg{i-dead_offset}\n"
+            first = False
+
+        # If A[i] is a non-NULL scalar, then it is the answer and stop searching
+        else:
+            assert (
+                not found_scalar
+            ), "should not encounter more than one scalar due to dead column pruning"
+            if first:
+                scalar_text += f"res[i] = arg{i-dead_offset}\n"
+            else:
+                scalar_text += "else:\n"
+                scalar_text += f"   res[i] = arg{i-dead_offset}\n"
+            found_scalar = True
+            break
+
+    # If no other conditions were entered, and we did not encounter a scalar,
+    # set to NULL
+    if not found_scalar:
+        if not first:
+            scalar_text += "else:\n"
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)"
+        else:
+            scalar_text += "bodo.libs.array_kernels.setna(res, i)"
+
+    # Create the mapping from each local variable to the corresponding element in the array
+    # of columns/scalars
+    arg_string = "A"
+    arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A)) if i not in dead_cols}
+
+    # Extract the underlying type of each scalar/vector
+    elem_types = []
+    for i in range(len(arg_types)):
+        # Array
+        if bodo.utils.utils.is_array_typ(arg_types[i], False):
+            elem_types.append(arg_types[i])
+        # Series
+        elif bodo.utils.utils.is_array_typ(arg_types[i], True):
+            elem_types.append(arg_types[i].data)
+        # Scalar
+        else:
+            elem_types.append(arg_types[i])
+    if len(elem_types) == 0:
+        out_dtype = bodo.none
+    elif len(elem_types) == 1:
+        if bodo.utils.utils.is_array_typ(elem_types[0]):
+            out_dtype = elem_types[0]
+        else:
+            out_dtype = bodo.utils.typing.dtype_to_array_type(elem_types[0])
+    else:
+        # Verify that the underlying scalar types are common before extracting
+        # the corresponding output_dtype
+        scalar_dtypes = []
+        for i in range(len(arg_types)):
+            if bodo.utils.utils.is_array_typ(arg_types[i]):
+                scalar_dtypes.append(elem_types[i].dtype)
+            else:
+                scalar_dtypes.append(elem_types[i])
+        common_dtype, success = bodo.utils.typing.get_common_scalar_dtype(scalar_dtypes)
+        if not success:
+            raise_bodo_error("Cannot coalesce columns with different dtypes")
+        out_dtype = bodo.utils.typing.to_nullable_type(
+            bodo.utils.typing.dtype_to_array_type(common_dtype)
+        )
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propogate_null,
+        scalar_text,
+        out_dtype,
+        arg_string,
+        arg_sources,
+        array_override,
+    )
