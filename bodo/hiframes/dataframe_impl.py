@@ -5897,7 +5897,10 @@ class SetDfColInfer(AbstractTemplate):
 
             if isinstance(val, types.List):
                 val = dtype_to_array_type(val.dtype)
-            if not is_array_typ(val):
+            if is_overload_constant_str(val) or val == types.unicode_type:
+                # String scalars are coerced to dictionary encoded arrays.
+                val = bodo.dict_str_arr_type
+            elif not is_array_typ(val):
                 val = dtype_to_array_type(val)
             if ind in target.columns:
                 # set existing column, with possibly a new array type
