@@ -447,6 +447,7 @@ def test_option_coalesce():
                 (arr, scale1, scale2, flag1, flag2),
                 py_output=answer,
                 check_dtype=False,
+                reset_index=True,
             )
 
 
@@ -481,3 +482,176 @@ def test_error_coalesce():
 
     with pytest.raises(BodoError, match=err_msg3):
         bodo.jit(impl3)()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]),
+                pd.Series([1, -4, 3, 14, 5, 0]),
+            ),
+            id="all_vector_no_null",
+        ),
+        pytest.param(
+            (
+                pd.Series(pd.array(["AAAAA", "BBBBB", "CCCCC", None] * 3)),
+                pd.Series(pd.array([2, 4, None] * 4)),
+            ),
+            id="all_vector_some_null",
+        ),
+        pytest.param(
+            (
+                pd.Series(["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]),
+                4,
+            ),
+            id="vector_string_scalar_int",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "alphabet",
+                pd.Series(pd.array(list(range(-2, 11)))),
+            ),
+            id="scalar_string_vector_int",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "alphabet",
+                6,
+            ),
+            id="all_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]),
+                None,
+            ),
+            id="vector_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "alphabet",
+                None,
+            ),
+            id="scalar_null",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_left_right(args):
+    def impl1(arr, n_chars):
+        return bodo.libs.bodosql_array_kernels.left(arr, n_chars)
+
+    def impl2(arr, n_chars):
+        return bodo.libs.bodosql_array_kernels.right(arr, n_chars)
+
+    # Simulates LEFT on a single row
+    def left_scalar_fn(elem, n_chars):
+        if pd.isna(elem) or pd.isna(n_chars):
+            return None
+        elif n_chars <= 0:
+            return ""
+        else:
+            return elem[:n_chars]
+
+    # Simulates RIGHT on a single row
+    def right_scalar_fn(elem, n_chars):
+        if pd.isna(elem) or pd.isna(n_chars):
+            return None
+        elif n_chars <= 0:
+            return ""
+        else:
+            return elem[-n_chars:]
+
+    arr, n_chars = args
+    left_answer = vectorized_sol((arr, n_chars), left_scalar_fn, pd.StringDtype())
+    right_answer = vectorized_sol((arr, n_chars), right_scalar_fn, pd.StringDtype())
+    check_func(
+        impl1,
+        (arr, n_chars),
+        py_output=left_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl2,
+        (arr, n_chars),
+        py_output=right_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_option_left_right():
+    def impl1(scale1, scale2, flag1, flag2):
+        arr = scale1 if flag1 else None
+        n_chars = scale2 if flag2 else None
+        return bodo.libs.bodosql_array_kernels.left(arr, n_chars)
+
+    def impl2(scale1, scale2, flag1, flag2):
+        arr = scale1 if flag1 else None
+        n_chars = scale2 if flag2 else None
+        return bodo.libs.bodosql_array_kernels.right(arr, n_chars)
+
+    scale1, scale2 = "alphabet soup", 10
+    for flag1 in [True, False]:
+        for flag2 in [True, False]:
+            if flag1 and flag2:
+                answer1 = "alphabet s"
+                answer2 = "habet soup"
+            else:
+                answer1 = None
+                answer2 = None
+            check_func(
+                impl1,
+                (scale1, scale2, flag1, flag2),
+                py_output=answer1,
+                check_dtype=False,
+            )
+            check_func(
+                impl2,
+                (scale1, scale2, flag1, flag2),
+                py_output=answer2,
+                check_dtype=False,
+            )
+
+
+@pytest.mark.slow
+def test_error_left_right():
+    def impl1(arr, n_chars):
+        return bodo.libs.bodosql_array_kernels.left(arr, n_chars)
+
+    def impl2(arr, n_chars):
+        return bodo.libs.bodosql_array_kernels.right(arr, n_chars)
+
+    err_msg1 = re.escape(
+        "LEFT n_chars argument must be an integer, integer column, or null"
+    )
+    err_msg2 = re.escape("LEFT can only be applied to strings, string columns, or null")
+    err_msg3 = re.escape(
+        "RIGHT n_chars argument must be an integer, integer column, or null"
+    )
+    err_msg4 = re.escape(
+        "RIGHT can only be applied to strings, string columns, or null"
+    )
+
+    A = pd.Series(["A", "B", "C", "D", "E"])
+    B = pd.Series([123, 456, 789, 123, 456])
+
+    with pytest.raises(BodoError, match=err_msg1):
+        bodo.jit(impl1)(A, A)
+
+    with pytest.raises(BodoError, match=err_msg2):
+        bodo.jit(impl1)(B, B)
+
+    with pytest.raises(BodoError, match=err_msg3):
+        bodo.jit(impl2)(A, A)
+
+    with pytest.raises(BodoError, match=err_msg4):
+        bodo.jit(impl2)(B, B)

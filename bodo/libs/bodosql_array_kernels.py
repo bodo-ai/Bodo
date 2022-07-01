@@ -534,3 +534,120 @@ def overload_coalesce_util(A):
         arg_sources,
         array_override,
     )
+
+
+def left(arr, n_chars):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+def right(arr, n_chars):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+def left_util(arr, n_chars):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+def right_util(arr, n_chars):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(left)
+def overload_left(arr, n_chars):
+    """Handles cases where LEFT recieves optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    args = [arr, n_chars]
+    for i in range(2):
+        if isinstance(args[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.left", ["arr", "n_chars"], i
+            )
+
+    def impl(arr, n_chars):  # pragma: no cover
+        return left_util(arr, n_chars)
+
+    return impl
+
+
+@overload(right)
+def overload_right(arr, n_chars):
+    """Handles cases where RIGHT recieves optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    args = [arr, n_chars]
+    for i in range(2):
+        if isinstance(args[i], types.optional):
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.right", ["arr", "n_chars"], i
+            )
+
+    def impl(arr, n_chars):  # pragma: no cover
+        return right_util(arr, n_chars)
+
+    return impl
+
+
+def create_left_right_util_overload(func_name):  # pragma: no cover
+    """Creates an overload function to support the LEFT and RIGHT functions on
+       a string array representing a column of a SQL table
+
+    Args:
+        func_name: whether to create LEFT or RIGHT
+
+    Returns:
+        (function): a utility that takes in 2 arguments (arr, n-chars)
+        and returns LEFT/RIGHT of all of the two arguments, where either of the
+        arguments could be arrays/scalars/nulls.
+    """
+
+    def overload_left_right_util(arr, n_chars):
+        if arr not in (types.none, types.unicode_type) and not (
+            bodo.utils.utils.is_array_typ(arr, True) and arr.dtype == types.unicode_type
+        ):
+            raise_bodo_error(
+                f"{func_name} can only be applied to strings, string columns, or null"
+            )
+
+        if (
+            n_chars != types.none
+            and not isinstance(n_chars, types.Integer)
+            and not (
+                bodo.utils.utils.is_array_typ(n_chars, True)
+                and n_chars.dtype in types.integer_domain
+            )
+        ):
+            raise_bodo_error(
+                f"{func_name} n_chars argument must be an integer, integer column, or null"
+            )
+
+        arg_names = ["arr", "n_chars"]
+        arg_types = [arr, n_chars]
+        propogate_null = [True] * 2
+        scalar_text = "if arg1 <= 0:\n"
+        scalar_text += "   res[i] = ''\n"
+        scalar_text += "else:\n"
+        if func_name == "LEFT":
+            scalar_text += "   res[i] = arg0[:arg1]"
+        elif func_name == "RIGHT":
+            scalar_text += "   res[i] = arg0[-arg1:]"
+
+        out_dtype = bodo.string_array_type
+
+        return gen_vectorized(
+            arg_names, arg_types, propogate_null, scalar_text, out_dtype
+        )
+
+    return overload_left_right_util
+
+
+def _install_left_right_overload():
+    """Creates and installs the overloads for left_util and right_util"""
+    for func, func_name in zip((left_util, right_util), ("LEFT", "RIGHT")):
+        overload_impl = create_left_right_util_overload(func_name)
+        overload(func)(overload_impl)
+
+
+_install_left_right_overload()

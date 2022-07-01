@@ -1497,6 +1497,8 @@ class DistributedAnalysis:
         if fdef in [
             ("lpad", "bodo.libs.bodosql_array_kernels"),
             ("rpad", "bodo.libs.bodosql_array_kernels"),
+            ("left", "bodo.libs.bodosql_array_kernels"),
+            ("right", "bodo.libs.bodosql_array_kernels"),
         ]:
             arrays = [lhs]
             for arg in rhs.args:
