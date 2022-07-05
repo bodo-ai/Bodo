@@ -437,6 +437,34 @@ def test_replace_noregex(test_unicode, memory_leak_check):
     check_func(test_impl2, (test_unicode,))
 
 
+@pytest.mark.parametrize("case", [True, False])
+def test_match(test_unicode, case, memory_leak_check):
+    def test_impl(S):
+        return S.str.match("AB*", case=case)
+
+    def test_impl1(S):
+        return S.str.match("AB", case=case)
+
+    def test_impl2(S):
+        return S.str.match("피츠버*", case=case)
+
+    def test_impl3(S):
+        return S.str.match("피츠버", case=case)
+
+    def test_impl4(S):
+        return S.str.match("ab*", case=case)
+
+    def test_impl5(S):
+        return S.str.match("ab", case=case)
+
+    check_func(test_impl, (test_unicode,))
+    check_func(test_impl1, (test_unicode,))
+    check_func(test_impl2, (test_unicode,))
+    check_func(test_impl3, (test_unicode,))
+    check_func(test_impl4, (test_unicode,))
+    check_func(test_impl5, (test_unicode,))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize("case", [True, False])
 def test_contains_regex(test_unicode, case, memory_leak_check):

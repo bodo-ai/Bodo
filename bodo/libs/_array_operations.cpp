@@ -963,12 +963,14 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
  * boost::xpressive::regex_search(in, pattern)
  * @param[in] in_arr input array of string  elements
  * @param[in] case_sensitive bool whether pattern is case sensitive or not
+ * @param[in] match_beginning bool whether the pattern starts at the beginning
  * @param[in] regex regular expression pattern
  * @param[out] out_arr output array of bools specifying whether the pattern
  *                      matched for corresponding in_arr element
  */
 void get_search_regex(array_info* in_arr, const bool case_sensitive,
-                      char const* const pat, array_info* out_arr) {
+                      const bool match_beginning, char const* const pat,
+                      array_info* out_arr) {
     tracing::Event ev("get_search_regex");
     // See:
     // https://www.boost.org/doc/libs/1_76_0/boost/xpressive/regex_constants.hpp
@@ -977,6 +979,12 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
     if (!case_sensitive) {
         flag = boost::xpressive::icase;
     }
+    // match_continuous specifies that the expression must match a sub-sequence
+    // that begins at first
+    boost::xpressive::regex_constants::match_flag_type match_flag =
+        match_beginning ? boost::xpressive::regex_constants::match_continuous
+                        : boost::xpressive::regex_constants::match_default;
+
     const boost::xpressive::cregex pattern =
         boost::xpressive::cregex::compile(pat, flag);
     // Use of cmatch is needed to achieve better performance.
@@ -993,8 +1001,9 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
             if (bit) {
                 const offset_t start_pos = data2[iRow];
                 const offset_t end_pos = data2[iRow + 1];
-                if (boost::xpressive::regex_search(
-                        data1 + start_pos, data1 + end_pos, m, pattern)) {
+                if (boost::xpressive::regex_search(data1 + start_pos,
+                                                   data1 + end_pos, m, pattern,
+                                                   match_flag)) {
                     out_arr->at<bool>(iRow) = true;
                     num_match++;
                 } else {
@@ -1025,7 +1034,8 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
         // when we call this function recursively
         incref_array(dict_arr);
         incref_array(dict_arr_out);
-        get_search_regex(dict_arr, case_sensitive, pat, dict_arr_out);
+        get_search_regex(dict_arr, case_sensitive, match_beginning, pat,
+                         dict_arr_out);
 
         array_info* indices_arr = in_arr->info2;
 

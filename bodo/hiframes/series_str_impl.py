@@ -451,6 +451,13 @@ def series_contains_regex(S, pat, case, flags, na, regex):  # pragma: no cover
     return out_arr
 
 
+@numba.njit
+def series_match_regex(S, pat, case, flags, na):  # pragma: no cover
+    with numba.objmode(out_arr=bodo.boolean_array):
+        out_arr = S.array._str_match(pat, case, flags, na)
+    return out_arr
+
+
 def is_regex_unsupported(pat):
     """Check if it's constant and any of the below patterns are in the regex-pattern."""
     # Based on https://docs.python.org/3/library/re.html,
@@ -505,7 +512,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
     func_text += "  out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
 
     if is_overload_true(regex):
-        # It not known at compile-time or the pattern isn't supported,
+        # If not known at compile-time or the pattern isn't supported,
         # use Python's re.search in objmode
         if is_regex_unsupported(pat) or flags:
             # optimized version for dictionary encoded arrays
@@ -515,7 +522,7 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
                 func_text += "  out_arr = bodo.hiframes.series_str_impl.series_contains_regex(S, pat, case, flags, na, regex)\n"
         else:
             # get_search_regex handles dictionary encoded arrays as well
-            func_text += "  get_search_regex(arr, case, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr)\n"
+            func_text += "  get_search_regex(arr, case, False, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr)\n"
 
     else:
         # optimized version for dictionary encoded arrays
@@ -538,6 +545,57 @@ def overload_str_method_contains(S_str, pat, case=True, flags=0, na=np.nan, rege
     func_text += (
         "  return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
     )
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "re": re,
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+            "re_ignorecase_value": re_ignorecase_value,
+            "get_search_regex": get_search_regex,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
+
+
+@overload_method(SeriesStrMethodType, "match", inline="always", no_unliteral=True)
+def overload_str_method_match(S_str, pat, case=True, flags=0, na=np.nan):
+    not_supported_arg_check("match", "na", na, np.nan)
+    str_arg_check("match", "pat", pat)
+    int_arg_check("match", "flags", flags)
+
+    # Error checking for case argument
+    if not is_overload_constant_bool(case):
+        raise BodoError(
+            "Series.str.match(): 'case' argument should be a constant boolean"
+        )
+    # Get value of re.IGNORECASE. It cannot be computed inside the impl
+    # since this is a custom enum class (not regular Enum) and numba doesn't
+    # support it. https://numba.readthedocs.io/en/stable/reference/pysupported.html#enum
+    re_ignorecase_value = re.IGNORECASE.value
+
+    func_text = "def impl(S_str, pat, case=True, flags=0, na=np.nan):\n"
+    func_text += "        S = S_str._obj\n"
+    func_text += "        arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
+    func_text += "        l = len(arr)\n"
+    func_text += "        index = bodo.hiframes.pd_series_ext.get_series_index(S)\n"
+    func_text += "        name = bodo.hiframes.pd_series_ext.get_series_name(S)\n"
+    if not is_regex_unsupported(pat) and flags == 0:
+        func_text += "        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(l)\n"
+        func_text += "        get_search_regex(arr, case, True, bodo.libs.str_ext.unicode_to_utf8(pat), out_arr)\n"
+    # optimized version for dictionary encoded array
+    elif S_str.stype.data == bodo.dict_str_arr_type:
+        func_text += "        out_arr = bodo.libs.dict_arr_ext.str_match(arr, pat, case, flags, na)\n"
+    else:
+        func_text += "        out_arr = series_match_regex(S, pat, case, flags, na)\n"
+    func_text += (
+        "        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
+    )
+
     loc_vars = {}
     exec(
         func_text,

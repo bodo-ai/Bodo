@@ -861,6 +861,83 @@ def test_str_contains_noregex(memory_leak_check, test_unicode_dict_str_arr, case
     assert dist_IR_contains(f_ir, "str_contains_non_regex")
 
 
+@pytest.mark.parametrize("case", [True, False])
+def test_str_match(memory_leak_check, test_unicode_dict_str_arr, case):
+    """
+    test optimization of Series.str.contains(regex=False) for dict array
+    """
+
+    def impl1(A):
+        return pd.Series(A).str.match("AB", case=case)
+
+    def impl2(A):
+        return pd.Series(A).str.match("피츠버", case=case)
+
+    def impl3(A):
+        return pd.Series(A).str.match("ab", case=case)
+
+    def impl4(A):
+        return pd.Series(A).str.match("AB*", case=case)
+
+    def impl5(A):
+        return pd.Series(A).str.match("피츠버*", case=case)
+
+    def impl6(A):
+        return pd.Series(A).str.match("ab*", case=case)
+
+    check_func(
+        impl1,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.match("AB", case=case),
+    )
+    check_func(
+        impl2,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.match("피츠버", case=case),
+    )
+    check_func(
+        impl3,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.match("ab", case=case),
+    )
+    check_func(
+        impl4,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.match("AB*", case=case),
+    )
+    check_func(
+        impl5,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.match("피츠버*", case=case),
+    )
+    check_func(
+        impl6,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.match("ab*", case=case),
+    )
+    # Test flags (and hence `str_match` in dict_arr_ext.py)
+    import re
+
+    flag = re.M.value
+
+    def impl7(A):
+        return pd.Series(A).str.match(r"ab*", case=case, flags=flag)
+
+    check_func(
+        impl7,
+        (test_unicode_dict_str_arr,),
+        py_output=pd.Series(test_unicode_dict_str_arr).str.match(
+            r"ab*", case=case, flags=flag
+        ),
+    )
+
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl7)
+    bodo_func(test_unicode_dict_str_arr)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "str_match")
+
+
 def test_sort_values(memory_leak_check):
     """test that sort_values works for dict array"""
 

@@ -2701,17 +2701,20 @@ def array_isin(out_arr, in_arr, in_values, is_parallel):  # pragma: no cover
 _get_search_regex = types.ExternalFunction(
     "get_search_regex",
     # params: in array, case-sensitive flag, pattern, output boolean array
-    types.void(array_info_type, types.bool_, types.voidptr, array_info_type),
+    types.void(
+        array_info_type, types.bool_, types.bool_, types.voidptr, array_info_type
+    ),
 )
 
 
 @numba.njit(no_cpython_wrapper=True)
-def get_search_regex(in_arr, case, pat, out_arr):  # pragma: no cover
+def get_search_regex(in_arr, case, match, pat, out_arr):  # pragma: no cover
     in_arr_info = array_to_info(in_arr)
     out_arr_info = array_to_info(out_arr)
     _get_search_regex(
         in_arr_info,
         case,
+        match,
         pat,
         out_arr_info,
     )

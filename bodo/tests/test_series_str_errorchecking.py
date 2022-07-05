@@ -400,6 +400,43 @@ def test_contains_case(test_sr, memory_leak_check):
         bodo.jit(impl)(test_sr)
 
 
+# ------------------------------ match() ------------------------------ #
+def test_match_args(test_sr, memory_leak_check):
+    """
+    tests error for match arguments that are not supported
+    """
+
+    def impl(test_sr):
+        return test_sr.str.match("New", na=np.nan)
+
+    with pytest.raises(BodoError, match="is not supported"):
+        bodo.jit(impl)(test_sr)
+
+
+def test_match_flags(test_sr, memory_leak_check):
+    """
+    tests error for match argument flags being incorrect type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.match("New", flags="x")
+
+    with pytest.raises(BodoError, match="expected an int object"):
+        bodo.jit(impl)(test_sr)
+
+
+def test_match_case(test_sr, memory_leak_check):
+    """
+    tests error for match argument case being incorrect type
+    """
+
+    def impl(test_sr):
+        return test_sr.str.match("New", case="x")
+
+    with pytest.raises(BodoError, match="'case' argument should be a constant boolean"):
+        bodo.jit(impl)(test_sr)
+
+
 # ------------------------------ count() ------------------------------ #
 def test_count_args(test_sr, memory_leak_check):
     """
