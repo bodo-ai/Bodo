@@ -1342,6 +1342,7 @@ class DistributedAnalysis:
             "str_istitle",
             "str_isnumeric",
             "str_isdecimal",
+            "str_match",
         ):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
@@ -1399,6 +1400,10 @@ class DistributedAnalysis:
             return
 
         if fdef == ("series_contains_regex", "bodo.hiframes.series_str_impl"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == ("series_match_regex", "bodo.hiframes.series_str_impl"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 

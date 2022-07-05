@@ -296,6 +296,7 @@ no_side_effect_call_tuples = {
     ("str_istitle", "dict_arr_ext", "libs", bodo),
     ("str_isnumeric", "dict_arr_ext", "libs", bodo),
     ("str_isdecimal", "dict_arr_ext", "libs", bodo),
+    ("str_match", "dict_arr_ext", "libs", bodo),
     ("prange", bodo),
     (bodo.prange,),
     ("objmode", bodo),

@@ -37,7 +37,8 @@ void array_isin(array_info* out_arr, array_info* in_arr, array_info* in_values,
  */
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, int64_t* na_position,
-                              int64_t* dead_keys, int64_t* out_n_rows, bool parallel);
+                              int64_t* dead_keys, int64_t* out_n_rows,
+                              bool parallel);
 
 /**
  * Helper function to sort contents of array_info.
@@ -112,5 +113,6 @@ table_info* sample_table(table_info* in_table, int64_t n, double frac,
                          bool replace, bool parallel);
 
 void get_search_regex(array_info* in_arr, const bool case_sensitive,
-                      char const* const pat, array_info* out_arr);
+                      const bool match_beginning, char const* const pat,
+                      array_info* out_arr);
 #endif  // _ARRAY_OPERATIONS_H_INCLUDED

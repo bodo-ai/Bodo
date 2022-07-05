@@ -778,6 +778,34 @@ def str_contains_non_regex(arr, pat, case):  # pragma: no cover
     return out_arr
 
 
+@numba.njit
+def str_match(arr, pat, case, flags, na):  # pragma: no cover
+    """Implement optimized string match for dictionary encoded arrays
+
+    Args:
+        arr (_type_): Dictionary encoded array
+        pat (_type_): Regex pattern
+        case (_type_): If True, case sensitive
+        flags (_type_): Regex flags
+        na (_type_): Fill value for missing values
+    """
+    dict_arr = arr._data
+    indices_arr = arr._indices
+    n_indices = len(indices_arr)
+    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n_indices)
+    dict_arr_S = pd.Series(dict_arr)
+    # Compute the operation on the dictionary and save the output
+    with numba.objmode(dict_arr_out=bodo.boolean_array):
+        dict_arr_out = dict_arr_S.array._str_match(pat, case, flags, na)
+
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(arr, i):
+            bodo.libs.array_kernels.setna(out_arr, i)
+        else:
+            out_arr[i] = dict_arr_out[indices_arr[i]]
+    return out_arr
+
+
 def create_simple_str2str_methods(func_name, func_args):
     """
     Returns the dictionary-encoding optimized implementation for
