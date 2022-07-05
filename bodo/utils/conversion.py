@@ -523,10 +523,8 @@ def overload_coerce_to_array(
             scalar_to_arr_len=None,
         ):  # pragma: no cover
             n = scalar_to_arr_len
-            dict_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(
-                1, bodo.libs.str_arr_ext.get_utf8_size(data)
-            )
-            dict_arr[0] = data
+            # Use str_arr_from_sequence to force rep/avoid equiv_set
+            dict_arr = bodo.libs.str_arr_ext.str_arr_from_sequence([data])
             indices = bodo.libs.int_arr_ext.alloc_int_array(n, np.int32)
             numba.parfors.parfor.init_prange()
             for i in numba.parfors.parfor.internal_prange(n):
