@@ -5978,15 +5978,23 @@ numba.core.compiler.CompileResult._rebuild = _rebuild
 
 #### BEGIN MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
 
-
-def _get_cache_path(self):
-    # _UserProvidedCacheLocator uses os.path.join(config.CACHE_DIR, cache_subpath), where cache_subpath
-    # is derived from the python file being cached
-    return numba.config.CACHE_DIR
-
-
 if _check_numba_change:  # pragma: no cover
-    if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
-        numba.core.caching._IPythonCacheLocator.get_cache_path = _get_cache_path
+    lines = inspect.getsource(numba.core.caching._IPythonCacheLocator.get_cache_path)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "eb33b7198697b8ef78edddcf69e58973c44744ff2cb2f54d4015611ad43baed0"
+    ):
+        warnings.warn(
+            "numba.core.caching._IPythonCacheLocator.get_cache_path has changed"
+        )
+
+if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
+
+    def _get_cache_path(self):
+        # _UserProvidedCacheLocator uses os.path.join(config.CACHE_DIR, cache_subpath), where cache_subpath
+        # is derived from the python file being cached
+        return numba.config.CACHE_DIR
+
+    numba.core.caching._IPythonCacheLocator.get_cache_path = _get_cache_path
 
 #### END MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
