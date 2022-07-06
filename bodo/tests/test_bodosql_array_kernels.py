@@ -241,14 +241,14 @@ def test_error_lpad_rpad():
     err_msg2 = re.escape(
         "LPAD lpad_string argument must be a string, string column, or null"
     )
-    err_msg3 = re.escape("LPAD can only be applied to strings, string columns, or null")
+    err_msg3 = re.escape("LPAD arr argument must be a string, string column, or nul")
     err_msg4 = re.escape(
         "RPAD length argument must be an integer, integer column, or null"
     )
     err_msg5 = re.escape(
         "RPAD rpad_string argument must be a string, string column, or null"
     )
-    err_msg6 = re.escape("RPAD can only be applied to strings, string columns, or null")
+    err_msg6 = re.escape("RPAD arr argument must be a string, string column, or nul")
 
     A1 = pd.array(["A", "B", "C", "D", "E"])
     A2 = pd.array([1, 2, 3, 4, 5])
@@ -633,13 +633,11 @@ def test_error_left_right():
     err_msg1 = re.escape(
         "LEFT n_chars argument must be an integer, integer column, or null"
     )
-    err_msg2 = re.escape("LEFT can only be applied to strings, string columns, or null")
+    err_msg2 = re.escape("LEFT arr argument must be a string, string column, or null")
     err_msg3 = re.escape(
         "RIGHT n_chars argument must be an integer, integer column, or null"
     )
-    err_msg4 = re.escape(
-        "RIGHT can only be applied to strings, string columns, or null"
-    )
+    err_msg4 = re.escape("RIGHT arr argument must be a string, string column, or null")
 
     A = pd.Series(["A", "B", "C", "D", "E"])
     B = pd.Series([123, 456, 789, 123, 456])
@@ -655,3 +653,222 @@ def test_error_left_right():
 
     with pytest.raises(BodoError, match=err_msg4):
         bodo.jit(impl2)(B, B)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(pd.array(["A", "BCD", "EFGH🐍", None, "I", "J"])),
+                pd.Series(pd.array([2, 6, -1, 3, None, 3])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (pd.Series(pd.array(["", "A✓", "BC", "DEF", "GHIJ", None])), 10),
+            id="vector_scalar",
+        ),
+        pytest.param(
+            ("Ʃ = alphabet", pd.Series(pd.array([-5, 0, 1, 5, 2]))),
+            id="scalar_vector",
+        ),
+        pytest.param(("racecars!", 4), id="all_scalar_no_null"),
+        pytest.param((None, None), id="all_scalar_with_null", marks=pytest.mark.slow),
+    ],
+)
+def test_repeat(args):
+    def impl(arr, repeats):
+        return bodo.libs.bodosql_array_kernels.repeat(arr, repeats)
+
+    # Simulates REPEAT on a single row
+    def repeat_scalar_fn(elem, repeats):
+        if pd.isna(elem) or pd.isna(repeats):
+            return None
+        else:
+            return elem * repeats
+
+    strings, numbers = args
+    repeat_answer = vectorized_sol(
+        (strings, numbers), repeat_scalar_fn, pd.StringDtype()
+    )
+    check_func(
+        impl,
+        (strings, numbers),
+        py_output=repeat_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "numbers",
+    [
+        pytest.param(
+            pd.Series(pd.array([2, 6, -1, 3, None, 3])),
+            id="vector",
+        ),
+        pytest.param(
+            4,
+            id="scalar",
+        ),
+    ],
+)
+def test_space(numbers):
+    def impl(n_chars):
+        return bodo.libs.bodosql_array_kernels.space(n_chars)
+
+    # Simulates SPACE on a single row
+    def space_scalar_fn(n_chars):
+        if pd.isna(n_chars):
+            return None
+        else:
+            return " " * n_chars
+
+    space_answer = vectorized_sol((numbers,), space_scalar_fn, pd.StringDtype())
+    check_func(
+        impl,
+        (numbers,),
+        py_output=space_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "strings",
+    [
+        pytest.param(
+            pd.Series(pd.array(["A", "BƬCD", "EFGH", None, "I", "J✖"])),
+            id="vector",
+        ),
+        pytest.param("racecarsƟ", id="scalar"),
+    ],
+)
+def test_reverse(strings):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.reverse(arr)
+
+    # Simulates REVERSE on a single row
+    def reverse_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem[::-1]
+
+    reverse_answer = vectorized_sol((strings,), reverse_scalar_fn, pd.StringDtype())
+    check_func(
+        impl,
+        (strings,),
+        py_output=reverse_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(pd.array(["alphabet", "s🟦o🟦u🟦p", "is", "delicious", None])),
+                pd.Series(pd.array(["a", "", "4", "ic", " "])),
+                pd.Series(pd.array(["_", "X", "5", "", "."])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    pd.array(
+                        [
+                            "i'd like to buy",
+                            "the world a coke",
+                            "and",
+                            None,
+                            "keep it company",
+                        ]
+                    )
+                ),
+                pd.Series(pd.array(["i", " ", "", "$", None])),
+                "🟩",
+            ),
+            id="vector_vector_scalar",
+        ),
+        pytest.param(
+            (
+                pd.Series(pd.array(["oohlala", "books", "oooo", "ooo", "ooohooooh"])),
+                "oo",
+                pd.Series(pd.array(["", "OO", "*", "#O#", "!"])),
+            ),
+            id="vector_scalar_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "♪♪♪ I'd like to teach the world to sing ♫♫♫",
+                " ",
+                pd.Series(pd.array(["_", "  ", "", ".", None])),
+            ),
+            id="scalar_scalar_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            ("alphabet soup is so very delicious", "so", "SO"), id="all_scalar_no_null"
+        ),
+        pytest.param(
+            ("Alpha", None, "Beta"), id="all_scalar_with_null", marks=pytest.mark.slow
+        ),
+    ],
+)
+def test_replace(args):
+    def impl(arr, to_replace, replace_with):
+        return bodo.libs.bodosql_array_kernels.replace(arr, to_replace, replace_with)
+
+    # Simulates REPLACE on a single row
+    def replace_scalar_fn(elem, to_replace, replace_with):
+        if pd.isna(elem) or pd.isna(to_replace) or pd.isna(replace_with):
+            return None
+        elif to_replace == "":
+            return elem
+        else:
+            return elem.replace(to_replace, replace_with)
+
+    replace_answer = vectorized_sol(args, replace_scalar_fn, pd.StringDtype())
+    check_func(
+        impl,
+        args,
+        py_output=replace_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_option_reverse_repeat_replace_space():
+    def impl(A, B, C, D, flag0, flag1, flag2, flag3):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C if flag2 else None
+        arg3 = D if flag3 else None
+        return (
+            bodo.libs.bodosql_array_kernels.reverse(arg0),
+            bodo.libs.bodosql_array_kernels.replace(arg0, arg1, arg2),
+            bodo.libs.bodosql_array_kernels.repeat(arg2, arg3),
+            bodo.libs.bodosql_array_kernels.space(arg3),
+        )
+
+    A, B, C, D = "alphabet soup", "a", "_", 4
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                for flag3 in [True, False]:
+                    a0 = "puos tebahpla" if flag0 else None
+                    a1 = "_lph_bet soup" if flag0 and flag1 and flag2 else None
+                    a2 = "____" if flag2 and flag3 else None
+                    a3 = "    " if flag3 else None
+                    check_func(
+                        impl,
+                        (A, B, C, D, flag0, flag1, flag2, flag3),
+                        py_output=(a0, a1, a2, a3),
+                    )
