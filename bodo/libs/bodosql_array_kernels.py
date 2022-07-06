@@ -10,6 +10,17 @@ from numba.extending import overload
 import bodo
 from bodo.utils.typing import raise_bodo_error
 
+broadcasted_string_functions = {
+    "lpad",
+    "rpad",
+    "left",
+    "right",
+    "repeat",
+    "reverse",
+    "replace",
+    "space",
+}
+
 
 def gen_vectorized(
     arg_names,
@@ -248,6 +259,53 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
     return impl
 
 
+def verify_int_arg(arg, f_name, a_name):  # pragma: no coverage
+    """Verifies that one of the arguments to a SQL function is an integer
+       (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+
+    raises: BodoError if the argument is not an integer, integer column, or NULL
+    """
+    if (
+        arg != types.none
+        and not isinstance(arg, types.Integer)
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, types.Integer)
+        )
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be an integer, integer column, or null"
+        )
+
+
+def verify_string_arg(arg, f_name, a_name):  # pragma: no coverage
+    """Verifies that one of the arguments to a SQL function is an string
+       (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+
+    raises: BodoError if the argument is not an string, string column, or NULL
+    """
+    if (
+        arg not in (types.none, types.unicode_type)
+        and not isinstance(arg, types.StringLiteral)
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == types.unicode_type
+        )
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a string, string column, or null"
+        )
+
+
 def lpad(arr, length, padstr):  # pragma: no cover
     # Dummy function used for overload
     return
@@ -316,28 +374,9 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
     """
 
     def overload_lpad_rpad_util(arr, length, pad_string):
-        if arr not in (types.none, types.unicode_type) and not (
-            bodo.utils.utils.is_array_typ(arr, True) and arr.dtype == types.unicode_type
-        ):
-            raise_bodo_error(
-                f"{func_name} can only be applied to strings, string columns, or null"
-            )
-
-        if length not in (types.none, *types.integer_domain) and not (
-            bodo.utils.utils.is_array_typ(length, True)
-            and length.dtype in types.integer_domain
-        ):
-            raise_bodo_error(
-                f"{func_name} length argument must be an integer, integer column, or null"
-            )
-
-        if pad_string not in (types.none, types.unicode_type) and not (
-            bodo.utils.utils.is_array_typ(pad_string, True)
-            and pad_string.dtype == types.unicode_type
-        ):
-            raise_bodo_error(
-                f"{func_name} {func_name.lower()}_string argument must be a string, string column, or null"
-            )
+        verify_string_arg(arr, func_name, "arr")
+        verify_int_arg(length, func_name, "length")
+        verify_string_arg(pad_string, func_name, f"{func_name.lower()}_string")
 
         if func_name == "LPAD":
             pad_line = f"(arg2 * quotient) + arg2[:remainder] + arg0"
@@ -604,24 +643,8 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
     """
 
     def overload_left_right_util(arr, n_chars):
-        if arr not in (types.none, types.unicode_type) and not (
-            bodo.utils.utils.is_array_typ(arr, True) and arr.dtype == types.unicode_type
-        ):
-            raise_bodo_error(
-                f"{func_name} can only be applied to strings, string columns, or null"
-            )
-
-        if (
-            n_chars != types.none
-            and not isinstance(n_chars, types.Integer)
-            and not (
-                bodo.utils.utils.is_array_typ(n_chars, True)
-                and n_chars.dtype in types.integer_domain
-            )
-        ):
-            raise_bodo_error(
-                f"{func_name} n_chars argument must be an integer, integer column, or null"
-            )
+        verify_string_arg(arr, func_name, "arr")
+        verify_int_arg(n_chars, func_name, "n_chars")
 
         arg_names = ["arr", "n_chars"]
         arg_types = [arr, n_chars]
@@ -651,3 +674,186 @@ def _install_left_right_overload():
 
 
 _install_left_right_overload()
+
+
+@numba.generated_jit(nopython=True)
+def repeat(arr, repeats):
+    """Handles cases where REPEEAT receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    args = [arr, repeats]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.repeat", ["arr", "repeats"], i
+            )
+
+    def impl(arr, repeats):  # pragma: no cover
+        return repeat_util(arr, repeats)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def repeat_util(arr, repeats):
+    """A dedicated kernel for the SQL function REPEAT which takes in a string
+       and integer (either of which can be a scalar or vector) and
+       concatenates the string to itself repeatedly according to the integer
+
+
+    Args:
+        arr (string array/series/scalar): the string(s) being repeated
+        repeats (integer array/series/scalar): the number(s) of repeats
+
+    Returns:
+        string series/scalar: the repeated string(s)
+    """
+    verify_string_arg(arr, "REPEAT", "arr")
+    verify_int_arg(repeats, "REPEAT", "repeats")
+
+    arg_names = ["arr", "repeats"]
+    arg_types = [arr, repeats]
+    propogate_null = [True] * 2
+    scalar_text = "if arg1 <= 0:\n"
+    scalar_text += "   res[i] = ''\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = arg0 * arg1"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def space(n_chars):
+    """Handles cases where SPACE receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    if isinstance(n_chars, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.space_util", ["n_chars"], 0
+        )
+
+    def impl(n_chars):  # pragma: no cover
+        return space_util(n_chars)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def space_util(n_chars):
+    """A dedicated kernel for the SQL function SPACE which takes in an integer
+       (or integer column) and returns that many spaces
+
+
+    Args:
+        n_chars (integer array/series/scalar): the number(s) of spaces
+
+    Returns:
+        string series/scalar: the string/column of spaces
+    """
+
+    verify_int_arg(n_chars, "SPACE", "n_chars")
+
+    arg_names = ["n_chars"]
+    arg_types = [n_chars]
+    propogate_null = [True]
+    scalar_text = "if arg0 <= 0:\n"
+    scalar_text += "   res[i] = ''\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = ' ' * arg0"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def reverse(arr):
+    """Handles cases where REVERSE receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.reverse_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return reverse_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def reverse_util(arr):
+    """A dedicated kernel for the SQL function REVERSE which takes in a string
+       (or string column) and reverses it
+
+
+    Args:
+        arr (string array/series/scalar): the strings(s) to be reversed
+
+    Returns:
+        string series/scalar: the string/column that has been reversed
+    """
+
+    verify_string_arg(arr, "REVERSE", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propogate_null = [True]
+    scalar_text = "res[i] = arg0[::-1]"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def replace(arr, to_replace, replace_with):
+    """Handles cases where REPLACE receives optional arguments and forwards
+    to args apropriate version of the real implementaiton"""
+    args = [arr, to_replace, replace_with]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.replace",
+                ["arr", "to_replace", "replace_with"],
+                i,
+            )
+
+    def impl(arr, to_replace, replace_with):  # pragma: no cover
+        return replace_util(arr, to_replace, replace_with)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def replace_util(arr, to_replace, replace_with):
+    """A dedicated kernel for the SQL function REVERSE which takes in a base string
+       (or string column), a second string to locate in the base string, and a
+       third string with which to replace it.
+
+
+    Args:
+        arr (string array/series/scalar): the strings(s) to be modified
+        to_replace (string array/series/scalar): the substring(s) to replace
+        replace_with (string array/series/scalar): the string(s) that replace to_replace
+
+    Returns:
+        string series/scalar: the string/column where each ocurrence of
+        to_replace has been replaced by replace_with
+    """
+
+    verify_string_arg(arr, "REPLACE", "arr")
+    verify_string_arg(to_replace, "REPLACE", "to_replace")
+    verify_string_arg(replace_with, "REPLACE", "replace_with")
+
+    arg_names = ["arr", "to_replace", "replace_with"]
+    arg_types = [arr, to_replace, replace_with]
+    propogate_null = [True] * 3
+    scalar_text = "if arg1 == '':\n"
+    scalar_text += "   res[i] = arg0\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = arg0.replace(arg1, arg2)"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
