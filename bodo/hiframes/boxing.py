@@ -18,6 +18,7 @@ from numba.core.typing import signature
 from numba.cpython.listobj import ListInstance
 from numba.extending import NativeValue, box, intrinsic, typeof_impl, unbox
 from numba.np import numpy_support
+from numba.np.arrayobj import _getitem_array_single_int
 from numba.typed.typeddict import Dict
 
 import bodo
@@ -1322,12 +1323,9 @@ def _set_bodo_meta_dataframe(c, obj, typ):
     context = c.context
     builder = c.builder
 
-    # Only provide typing information when DataFrames have a small number of columns.
-    # TODO[BE-1538]: reduce overhead and enable for table format
+    # Only provide typing information when DataFrames don't use table format.
     # TODO: support for dataframes with variable number of columns
-    append_typing = not typ.has_runtime_cols and (
-        not typ.is_table_format or len(typ.columns) < TABLE_FORMAT_THRESHOLD
-    )
+    append_typing = not typ.has_runtime_cols
 
     dict_len = 2 if append_typing else 1
 
@@ -1357,25 +1355,70 @@ def _set_bodo_meta_dataframe(c, obj, typ):
         else:
             index_type_metadata_obj = pyapi.make_none()
 
-        col_typs = []
-        for dtype in typ.data:
-            typ_list = _dtype_to_type_enum_list(dtype)
-            if typ_list != None:
-                array_type_metadata_obj = type_enum_list_to_py_list_obj(
-                    pyapi, context, builder, c.env_manager, typ_list
+        if typ.is_table_format:
+            t = typ.table_type
+            col_types_metadata_obj = pyapi.list_new(
+                lir.Constant(lir.IntType(64), len(typ.data))
+            )
+            for blk, dtype in t.blk_to_type.items():
+                # Determine the type for this block
+                typ_list = _dtype_to_type_enum_list(dtype)
+                if typ_list != None:
+                    typ_list = type_enum_list_to_py_list_obj(
+                        pyapi, context, builder, c.env_manager, typ_list
+                    )
+                else:
+                    typ_list = pyapi.make_none()
+                # Create a for loop to append to the list at runtime and minimize
+                # the IR size.
+                n_arrs = c.context.get_constant(
+                    types.int64, len(t.block_to_arr_ind[blk])
                 )
-            else:
-                array_type_metadata_obj = pyapi.make_none()
+                arr_inds = c.context.make_constant_array(
+                    c.builder,
+                    types.Array(types.int64, 1, "C"),
+                    # On windows np.array defaults to the np.int32 for integers.
+                    # As a result, we manually specify int64 during the array
+                    # creation to keep the lowered constant consistent with the
+                    # expected type.
+                    np.array(t.block_to_arr_ind[blk], dtype=np.int64),
+                )
+                arr_inds_struct = c.context.make_array(
+                    types.Array(types.int64, 1, "C")
+                )(c.context, c.builder, arr_inds)
+                with cgutils.for_range(c.builder, n_arrs) as loop:
+                    i = loop.index
+                    # get offset into list
+                    arr_ind = _getitem_array_single_int(
+                        c.context,
+                        c.builder,
+                        types.int64,
+                        types.Array(types.int64, 1, "C"),
+                        arr_inds_struct,
+                        i,
+                    )
+                    c.context.nrt.incref(builder, types.pyobject, typ_list)
+                    pyapi.list_setitem(col_types_metadata_obj, arr_ind, typ_list)
+                c.context.nrt.decref(builder, types.pyobject, typ_list)
+        else:
+            col_typs = []
+            for dtype in typ.data:
+                typ_list = _dtype_to_type_enum_list(dtype)
+                if typ_list != None:
+                    array_type_metadata_obj = type_enum_list_to_py_list_obj(
+                        pyapi, context, builder, c.env_manager, typ_list
+                    )
+                else:
+                    array_type_metadata_obj = pyapi.make_none()
 
-            col_typs.append(array_type_metadata_obj)
+                col_typs.append(array_type_metadata_obj)
 
-        col_types_metadata_obj = pyapi.list_pack(col_typs)
+            col_types_metadata_obj = pyapi.list_pack(col_typs)
+            for val in col_typs:
+                pyapi.decref(val)
         df_type_metadata_obj = pyapi.list_pack(
             [index_type_metadata_obj, col_types_metadata_obj]
         )
-
-        for val in col_typs:
-            pyapi.decref(val)
 
         pyapi.dict_setitem_string(meta_dict_obj, "type_metadata", df_type_metadata_obj)
 
