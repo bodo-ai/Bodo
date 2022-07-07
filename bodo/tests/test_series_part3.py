@@ -1188,3 +1188,18 @@ def test_series_rank(S, method, na_option, ascending, pct, memory_leak_check):
             bodo.jit(impl)(S)
     else:
         check_func(impl, (S,), dist_test=False)
+
+
+@pytest.mark.slow()
+def test_np_mod(numeric_series_val):
+    """tests that np.mod is properly supported"""
+
+    # np.mod not supported for datetime types
+    if isinstance(numeric_series_val.iloc[0], pd.Timestamp):
+        pytest.skip("np.mod not supported for datetime types")
+
+    def impl(arg1, arg2):
+        return np.mod(arg1, arg2)
+
+    check_func(impl, (numeric_series_val, numeric_series_val), check_dtype=False)
+    check_func(impl, (10, numeric_series_val), check_dtype=False)
