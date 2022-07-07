@@ -2780,6 +2780,17 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, in_arr, array_dists)
             return
 
+        # pragma is needed as the only test is marked as slow
+        if func_name == "mod":  # pragma: no cover
+            arys_to_meet = [lhs]
+            if is_distributable_typ(self.typemap[args[0].name]):
+                arys_to_meet += [args[0].name]
+            if is_distributable_typ(self.typemap[args[1].name]):
+                arys_to_meet += [args[1].name]
+            if len(arys_to_meet) > 1:
+                self._meet_several_array_dists(arys_to_meet, array_dists)
+            return
+
         # set REP if not found
         self._analyze_call_set_REP(lhs, args, array_dists, "np." + func_name, loc)
 
