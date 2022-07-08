@@ -31,3 +31,8 @@ repos:
     hooks:
       - id: pretty-format-java
         args: ["--autofix", "--google-java-formatter-version", "1.9"]
+  - repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: v14.0.5
+    hooks:
+      - id: clang-format
+        types_or: [c++]
