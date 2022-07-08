@@ -16,10 +16,13 @@ broadcasted_string_functions = {
     "format",
     "left",
     "right",
+    "ord_ascii",
+    "char",
     "repeat",
     "reverse",
     "replace",
     "space",
+    "conv",
     "substring",
     "substring_index",
 }
@@ -993,6 +996,155 @@ def replace_util(arr, to_replace, replace_with):
     scalar_text += "   res[i] = arg0\n"
     scalar_text += "else:\n"
     scalar_text += "   res[i] = arg0.replace(arg1, arg2)"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def conv(arr, old_base, new_base):
+    """Handles cases where CONV receives optional arguments and forwards
+    to args apropriate version of the real implementaiton"""
+    args = [arr, old_base, new_base]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.conv",
+                ["arr", "old_base", "new_base"],
+                i,
+            )
+
+    def impl(arr, old_base, new_base):  # pragma: no cover
+        return conv_util(arr, old_base, new_base)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def conv_util(arr, old_base, new_base):
+    """A dedicated kernel for the CONV function REVERSE which takes in three
+    integers (or integer columns) and converts the first column from the base
+    indicated in the first second column to the base indicated by the third
+    column.
+
+
+    Args:
+        arr (string array/series/scalar): the number(s) to be re-based
+        old_base (int array/series/scalar): the original numerical base(s).
+        Currently only supports numbers between 2 and 36 (inclusive).
+        new_base (int array/series/scalar): the new numerical base(s). Currently
+        only supports 2, 8, 10 and 16.
+
+    Returns:
+        string series/scalar: the converted numbers
+    """
+
+    verify_string_arg(arr, "CONV", "arr")
+    verify_int_arg(old_base, "CONV", "old_base")
+    verify_int_arg(new_base, "CONV", "new_base")
+
+    arg_names = ["arr", "old_base", "new_base"]
+    arg_types = [arr, old_base, new_base]
+    propogate_null = [True] * 3
+    scalar_text = "old_val = int(arg0, arg1)\n"
+    scalar_text += "if arg2 == 2:\n"
+    scalar_text += "   res[i] = format(old_val, 'b')\n"
+    scalar_text += "elif arg2 == 8:\n"
+    scalar_text += "   res[i] = format(old_val, 'o')\n"
+    scalar_text += "elif arg2 == 10:\n"
+    scalar_text += "   res[i] = format(old_val, 'd')\n"
+    scalar_text += "elif arg2 == 16:\n"
+    scalar_text += "   res[i] = format(old_val, 'x')\n"
+    scalar_text += "else:\n"
+    scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def ord_ascii(arr):
+    """Handles cases where ORD/ASCII receives optional arguments and forwards
+    to args appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.ord_ascii_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return ord_ascii_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def ord_ascii_util(arr):
+    """A dedicated kernel for the SQL function ORD/ASCII which takes in a string
+       (or string column) and returns the ord value of the first character
+
+
+    Args:
+        arr (string array/series/scalar): the string(s) whose ord value(s) are
+        being calculated
+
+    Returns:
+        integer series/scalar: the ord value of the first character(s)
+    """
+
+    verify_string_arg(arr, "ORD", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propogate_null = [True]
+    scalar_text = "if len(arg0) == 0:\n"
+    scalar_text += "   res[i] = 0\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = ord(arg0[0])"
+
+    out_dtype = bodo.utils.typing.to_nullable_type(np.int32)
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def char(arr):
+    """Handles cases where CHAR receives optional arguments and forwards
+    to args apropriate version of the real implementaiton"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument("bodo.libs.bodosql_array_kernels.char_util", ["arr"], 0)
+
+    def impl(arr):  # pragma: no cover
+        return char_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def char_util(arr):
+    """A dedicated kernel for the SQL function CHAR which takes in an integer
+       (or integer column) and returns the character corresponding to the
+       number(s)
+
+
+    Args:
+        arr (integer array/series/scalar): the integers(s) whose corresponding
+        string(s) are being calculated
+
+    Returns:
+        string series/scalar: the character(s) corresponding to the integer(s)
+    """
+
+    verify_int_arg(arr, "CHAR", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propogate_null = [True]
+    scalar_text = "if 0 <= arg0 <= 127:\n"
+    scalar_text += "   res[i] = chr(arg0)\n"
+    scalar_text += "else:\n"
+    scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
 
     out_dtype = bodo.string_array_type
 

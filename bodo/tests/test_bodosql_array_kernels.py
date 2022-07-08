@@ -326,6 +326,7 @@ def test_error_lpad_rpad():
                 5,
             ),
             id="scalar_vector_mix",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             ("alphabet soup is 🟥🟧🟨🟩🟦🟪 so very delicious", 10, 8),
@@ -410,6 +411,7 @@ def test_substring(args):
                 pd.Series(pd.array([1, 2, -1, 4, 5, 1, 0])),
             ),
             id="scalar_vector_mix",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             ("alphabet soup is so very delicious", "o", 3),
@@ -452,6 +454,7 @@ def test_substring_index(args):
     )
 
 
+@pytest.mark.slow
 def test_option_substring():
     def impl(A, B, C, D, E, flag0, flag1, flag2, flag3, flag4):
         arg0 = A if flag0 else None
@@ -1067,6 +1070,197 @@ def test_option_reverse_repeat_replace_space():
                         (A, B, C, D, flag0, flag1, flag2, flag3),
                         py_output=(a0, a1, a2, a3),
                     )
+
+
+@pytest.mark.parametrize(
+    "s",
+    [
+        pytest.param(
+            pd.Series(pd.array(["alphabet", "ɲɳ", "Ʃ=sigma", "", " yay "])),
+            id="vector",
+        ),
+        pytest.param(
+            "Apple",
+            id="scalar",
+        ),
+    ],
+)
+def test_ord_ascii(s):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.ord_ascii(arr)
+
+    # Simulates ORD/ASCII on a single row
+    def ord_ascii_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        elif len(elem) == 0:
+            return 0
+        else:
+            return ord(elem[0])
+
+    ord_answer = vectorized_sol((s,), ord_ascii_scalar_fn, pd.Int32Dtype())
+    check_func(
+        impl,
+        (s,),
+        py_output=ord_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "n",
+    [
+        pytest.param(
+            pd.Series(pd.array([65, 100, 110, 0, 33])),
+            id="vector",
+        ),
+        pytest.param(
+            42,
+            id="scalar",
+        ),
+    ],
+)
+def test_char(n):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.char(arr)
+
+    # Simulates CHAR on a single row
+    def char_scalar_fn(elem):
+        if pd.isna(elem) or elem < 0 or elem > 127:
+            return None
+        else:
+            return chr(elem)
+
+    chr_answer = vectorized_sol((n,), char_scalar_fn, pd.StringDtype())
+    check_func(
+        impl,
+        (n,),
+        py_output=chr_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_option_ord_ascii_char():
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.ord_ascii(arg0),
+            bodo.libs.bodosql_array_kernels.char(arg1),
+        )
+
+    A, B = "A", 97
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            a0 = 65 if flag0 else None
+            a1 = "a" if flag1 else None
+            check_func(impl, (A, B, flag0, flag1), py_output=(a0, a1))
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(pd.array(["10", "11", "12", "13", "14", "15"])),
+                pd.Series(pd.array([10, 10, 10, 16, 16, 16])),
+                pd.Series(pd.array([2, 10, 16, 2, 10, 16])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                "11111",
+                pd.Series(
+                    pd.array(
+                        [2, 2, 2, 2, 8, 8, 8, 8, 10, 10, 10, 10, 16, 16, 16, 16, 10, 10]
+                    )
+                ),
+                pd.Series(
+                    pd.array(
+                        [2, 8, 10, 16, 2, 8, 10, 16, 2, 8, 10, 16, 2, 8, 10, 16, 17, -1]
+                    )
+                ),
+            ),
+            id="scalar_vector_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(pd.array(["2", "4", None, "8", "16", "32", "64", None])),
+                pd.Series(pd.array([3, None, None, None, 16, 7, 36, 3])),
+                10,
+            ),
+            id="vector_vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "FGHIJ",
+                pd.Series(pd.array([20, 21, 22, 23, 24, 25])),
+                10,
+            ),
+            id="scalar_vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            ("ff", 16, 2),
+            id="all_scalar",
+        ),
+    ],
+)
+def test_conv(args):
+    def impl(arr, old_base, new_base):
+        return bodo.libs.bodosql_array_kernels.conv(arr, old_base, new_base)
+
+    # Simulates CONV on a single row
+    def conv_scalar_fn(elem, old_base, new_base):
+        if (
+            pd.isna(elem)
+            or pd.isna(old_base)
+            or pd.isna(new_base)
+            or old_base <= 1
+            or new_base not in [2, 8, 10, 16]
+        ):
+            return None
+        else:
+            old = int(elem, base=old_base)
+            if new_base == 2:
+                return "{:b}".format(old)
+            if new_base == 8:
+                return "{:o}".format(old)
+            if new_base == 10:
+                return "{:d}".format(old)
+            if new_base == 16:
+                return "{:x}".format(old)
+            return None
+
+    conv_answer = vectorized_sol(args, conv_scalar_fn, pd.StringDtype())
+    check_func(
+        impl,
+        args,
+        py_output=conv_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_conv_option():
+    def impl(A, B, C, flag0, flag1, flag2):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C if flag2 else None
+        return bodo.libs.bodosql_array_kernels.conv(arg0, arg1, arg2)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                answer = "101010" if flag0 and flag1 and flag2 else None
+                check_func(impl, ("42", 10, 2, flag0, flag1, flag2), py_output=answer)
 
 
 @pytest.mark.parametrize(
