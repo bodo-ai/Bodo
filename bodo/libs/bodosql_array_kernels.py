@@ -13,6 +13,7 @@ from bodo.utils.typing import raise_bodo_error
 broadcasted_string_functions = {
     "lpad",
     "rpad",
+    "format",
     "left",
     "right",
     "repeat",
@@ -276,6 +277,31 @@ def verify_int_arg(arg, f_name, a_name):  # pragma: no coverage
         and not (
             bodo.utils.utils.is_array_typ(arg, True)
             and isinstance(arg.dtype, types.Integer)
+        )
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be an integer, integer column, or null"
+        )
+
+
+def verify_int_float_arg(arg, f_name, a_name):  # pragma: no coverage
+    """Verifies that one of the arguments to a SQL function is an integer or float
+       (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+
+    raises: BodoError if the argument is not an integer/float, integer/float
+    column, or NULL
+    """
+    if (
+        arg != types.none
+        and not isinstance(arg, (types.Integer, types.Float))
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, (types.Integer, types.Float))
         )
     ):
         raise_bodo_error(
@@ -853,6 +879,52 @@ def replace_util(arr, to_replace, replace_with):
     scalar_text += "   res[i] = arg0\n"
     scalar_text += "else:\n"
     scalar_text += "   res[i] = arg0.replace(arg1, arg2)"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def format(arr, places):
+    """Handles cases where FORMAT recieves optional arguments and forwards
+    to args apropriate version of the real implementaiton"""
+    args = [arr, places]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.format", ["arr", "places"], i
+            )
+
+    def impl(arr, places):  # pragma: no cover
+        return format_util(arr, places)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def format_util(arr, places):
+    """A dedicated kernel for the SQL function FORMAT which takes in two
+    integers (or columns) and formats the former with commas at every
+    thousands place, with decimal precision specified by the latter column
+
+
+    Args:
+        arr (integer array/series/scalar): the integer(s) to be modified formatted
+        places (integer array/series/scalar): the precision of the decimal place(s)
+
+    Returns:
+        string series/scalar: the string/column of formatted numbers
+    """
+
+    verify_int_float_arg(arr, "FORMAT", "arr")
+    verify_int_arg(places, "FORMAT", "places")
+
+    arg_names = ["arr", "places"]
+    arg_types = [arr, places]
+    propogate_null = [True] * 2
+    scalar_text = "prec = max(arg1, 0)\n"
+    scalar_text += "res[i] = format(arg0, f',.{prec}f')"
 
     out_dtype = bodo.string_array_type
 
