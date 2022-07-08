@@ -20,6 +20,8 @@ broadcasted_string_functions = {
     "reverse",
     "replace",
     "space",
+    "substring",
+    "substring_index",
 }
 
 
@@ -440,6 +442,118 @@ def _install_lpad_rpad_overload():
 
 
 _install_lpad_rpad_overload()
+
+
+@numba.generated_jit(nopython=True)
+def substring(arr, start, length):
+    """Handles cases where SUBSTRING recieves optional arguments and forwards
+    to args apropriate version of the real implementaiton"""
+    args = [arr, start, length]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.substring",
+                ["arr", "start", "length"],
+                i,
+            )
+
+    def impl(arr, start, length):  # pragma: no cover
+        return substring_util(arr, start, length)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def substring_util(arr, start, length):
+    """A dedicated kernel for the SQL function SUBSTRING which takes in a string,
+       (or string column), and two integers (or integer columns) and returns
+       the string starting from the index of the first integer, with a length
+       corresponding to the second integer.
+
+
+    Args:
+        arr (string array/series/scalar): the strings(s) to be modified
+        start (integer array/series/scalar): the starting location(s) of the substring(s)
+        length (integer array/series/scalar): the length(s) of the substring(s)
+
+    Returns:
+        string series/scalar: the string/column of extracted substrings
+    """
+
+    verify_string_arg(arr, "SUBSTRING", "arr")
+    verify_int_arg(start, "SUBSTRING", "start")
+    verify_int_arg(length, "SUBSTRING", "length")
+
+    arg_names = ["arr", "start", "length"]
+    arg_types = [arr, start, length]
+    propogate_null = [True] * 3
+    scalar_text = "if arg2 <= 0:\n"
+    scalar_text += "   res[i] = ''\n"
+    scalar_text += "elif arg1 < 0 and arg1 + arg2 >= 0:\n"
+    scalar_text += "   res[i] = arg0[arg1:]\n"
+    scalar_text += "else:\n"
+    scalar_text += "   if arg1 > 0: arg1 -= 1\n"
+    scalar_text += "   res[i] = arg0[arg1:arg1+arg2]\n"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def substring_index(arr, delimiter, occurrences):
+    """Handles cases where SUBSTRING_INDEX recieves optional arguments and forwards
+    to args apropriate version of the real implementaiton"""
+    args = [arr, delimiter, occurrences]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.substring_index",
+                ["arr", "delimiter", "occurrences"],
+                i,
+            )
+
+    def impl(arr, delimiter, occurrences):  # pragma: no cover
+        return substring_index_util(arr, delimiter, occurrences)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def substring_index_util(arr, delimiter, occurrences):
+    """A dedicated kernel for the SQL function SUBSTRING_INDEX which takes in a
+       string, (or string column), a delimiter string (or string column) and an
+       occurrences integer (or integer column) and returns the prefix of the
+       first string before that number of occurences of the delimiter
+
+
+    Args:
+        arr (string array/series/scalar): the strings(s) to be modified
+        delimiter (string array/series/scalar): the delimiter(s) to look for
+        occurences (integer array/series/scalar): how many of the delimiter to look for
+
+    Returns:
+        string series/scalar: the string/column of prefixes before ocurrences
+        many of the delimiter string occur
+    """
+
+    verify_string_arg(arr, "SUBSTRING_INDEX", "arr")
+    verify_string_arg(delimiter, "SUBSTRING_INDEX", "delimiter")
+    verify_int_arg(occurrences, "SUBSTRING_INDEX", "occurrences")
+
+    arg_names = ["arr", "delimiter", "occurrences"]
+    arg_types = [arr, delimiter, occurrences]
+    propogate_null = [True] * 3
+    scalar_text = "if arg1 == '' or arg2 == 0:\n"
+    scalar_text += "   res[i] = ''\n"
+    scalar_text += "elif arg2 >= 0:\n"
+    scalar_text += "   res[i] = arg1.join(arg0.split(arg1, arg2+1)[:arg2])\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = arg1.join(arg0.split(arg1)[arg2:])\n"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
 
 
 def coalesce(A):  # pragma: no cover

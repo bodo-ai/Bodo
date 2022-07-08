@@ -291,6 +291,201 @@ def test_error_lpad_rpad():
             (
                 pd.Series(
                     pd.array(
+                        [
+                            "alphabet soup is 🟥🟧🟨🟩🟦🟪",
+                            "so very very delicious",
+                            "aaeaaeieaaeioiea",
+                            "alpha beta gamma delta epsilon",
+                            None,
+                            "foo",
+                            "bar",
+                        ]
+                    )
+                ),
+                pd.Series(pd.array([5, -5, 3, -8, 10, 20, 1])),
+                pd.Series(pd.array([10, 5, 12, 4, 2, 5, -1])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    pd.array(
+                        [
+                            "alphabet soup is",
+                            "so very very delicious",
+                            "aaeaaeieaaeioiea",
+                            "alpha beta gamma delta epsilon",
+                            None,
+                            "foo 🟥🟧🟨🟩🟦🟪",
+                            "bar",
+                        ]
+                    )
+                ),
+                pd.Series(pd.array([0, 1, -2, 4, -8, 16, -32])),
+                5,
+            ),
+            id="scalar_vector_mix",
+        ),
+        pytest.param(
+            ("alphabet soup is 🟥🟧🟨🟩🟦🟪 so very delicious", 10, 8),
+            id="all_scalar_no_null",
+        ),
+        pytest.param(
+            ("alphabet soup is so very delicious", None, 8),
+            id="all_scalar_some_null",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_substring(args):
+    def impl(arr, start, length):
+        return bodo.libs.bodosql_array_kernels.substring(arr, start, length)
+
+    # Simulates SUBSTRING on a single row
+    def substring_scalar_fn(elem, start, length):
+        if pd.isna(elem) or pd.isna(start) or pd.isna(length):
+            return None
+        elif length <= 0:
+            return ""
+        elif start < 0 and start + length >= 0:
+            return elem[start:]
+        else:
+            if start > 0:
+                start -= 1
+            return elem[start : start + length]
+
+    arr, start, length = args
+    substring_answer = vectorized_sol(
+        (arr, start, length), substring_scalar_fn, pd.StringDtype()
+    )
+    check_func(
+        impl,
+        (arr, start, length),
+        py_output=substring_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(
+                    pd.array(
+                        [
+                            "alphabet soup is",
+                            "so very very delicious 🟥🟧🟨🟩🟦🟪",
+                            "aaeaaeieaaeioiea",
+                            "alpha beta gamma delta epsilon",
+                            None,
+                            "foo",
+                            "bar",
+                        ]
+                    )
+                ),
+                pd.Series(pd.array(["a", "b", "e", " ", " ", "o", "r"])),
+                pd.Series(pd.array([1, 4, 3, 0, 1, -1, None])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    pd.array(
+                        [
+                            "alphabet soup is",
+                            "so very very delicious 🟥🟧🟨🟩🟦🟪",
+                            "aaeaaeieaaeioiea",
+                            "alpha beta gamma delta epsilon",
+                            None,
+                            "foo",
+                            "bar",
+                        ]
+                    )
+                ),
+                " ",
+                pd.Series(pd.array([1, 2, -1, 4, 5, 1, 0])),
+            ),
+            id="scalar_vector_mix",
+        ),
+        pytest.param(
+            ("alphabet soup is so very delicious", "o", 3),
+            id="all_scalar_no_null",
+        ),
+        pytest.param(
+            ("alphabet soup is so very delicious", None, 3),
+            id="all_scalar_some_null",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_substring_index(args):
+    def impl(arr, delimiter, occurrences):
+        return bodo.libs.bodosql_array_kernels.substring_index(
+            arr, delimiter, occurrences
+        )
+
+    # Simulates SUBSTRING_INDEX on a single row
+    def substring_index_scalar_fn(elem, delimiter, occurrences):
+        if pd.isna(elem) or pd.isna(delimiter) or pd.isna(occurrences):
+            return None
+        elif delimiter == "" or occurrences == 0:
+            return ""
+        elif occurrences >= 0:
+            return delimiter.join(elem.split(delimiter)[:occurrences])
+        else:
+            return delimiter.join(elem.split(delimiter)[occurrences:])
+
+    arr, delimiter, occurrences = args
+    substring_index_answer = vectorized_sol(
+        (arr, delimiter, occurrences), substring_index_scalar_fn, pd.StringDtype()
+    )
+    check_func(
+        impl,
+        (arr, delimiter, occurrences),
+        py_output=substring_index_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_option_substring():
+    def impl(A, B, C, D, E, flag0, flag1, flag2, flag3, flag4):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C if flag2 else None
+        arg3 = D if flag3 else None
+        arg4 = E if flag4 else None
+        return (
+            bodo.libs.bodosql_array_kernels.substring(arg0, arg1, arg2),
+            bodo.libs.bodosql_array_kernels.substring_index(arg0, arg3, arg4),
+        )
+
+    A, B, C, D, E = "alpha beta gamma", 7, 4, " ", 1
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                for flag3 in [True, False]:
+                    for flag4 in [True, False]:
+                        a0 = "beta" if flag0 and flag1 and flag2 else None
+                        a1 = "alpha" if flag0 and flag3 and flag4 else None
+                        check_func(
+                            impl,
+                            (A, B, C, D, E, flag0, flag1, flag2, flag3, flag4),
+                            py_output=(a0, a1),
+                        )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(
+                    pd.array(
                         [1, None, 3, None, 5, None, 7, None], dtype=pd.Int32Dtype()
                     )
                 ),
