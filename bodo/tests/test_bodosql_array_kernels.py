@@ -32,14 +32,14 @@ def vectorized_sol(args, scalar_fn, dtype):
     """
     length = -1
     for arg in args:
-        if isinstance(arg, (pd.core.arrays.base.ExtensionArray, pd.Series)):
+        if isinstance(arg, (pd.core.arrays.base.ExtensionArray, pd.Series, np.ndarray)):
             length = len(arg)
             break
     if length == -1:
         return scalar_fn(*args)
     arglist = []
     for arg in args:
-        if isinstance(arg, (pd.core.arrays.base.ExtensionArray, pd.Series)):
+        if isinstance(arg, (pd.core.arrays.base.ExtensionArray, pd.Series, np.ndarray)):
             arglist.append(arg)
         else:
             arglist.append([arg] * length)
@@ -872,3 +872,73 @@ def test_option_reverse_repeat_replace_space():
                         (A, B, C, D, flag0, flag1, flag2, flag3),
                         py_output=(a0, a1, a2, a3),
                     )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                np.array(
+                    [
+                        15.112345,
+                        1234567890,
+                        np.NAN,
+                        17,
+                        -13.6413,
+                        1.2345,
+                        12345678910111213.141516171819,
+                    ]
+                ),
+                pd.Series(pd.array([3, 4, 6, None, 0, -1, 5])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                12345678.123456789,
+                pd.Series(pd.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])),
+            ),
+            id="vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param((-426472, 2), id="all_scalar_not_null"),
+        pytest.param((None, 5), id="all_scalar_with_null", marks=pytest.mark.slow),
+    ],
+)
+def test_format(args):
+    def impl(arr, places):
+        return bodo.libs.bodosql_array_kernels.format(arr, places)
+
+    # Simulates FORMAT on a single row
+    def format_scalar_fn(elem, places):
+        if pd.isna(elem) or pd.isna(places):
+            return None
+        elif places <= 0:
+            return "{:,}".format(round(elem))
+        else:
+            return (f"{{:,.{places}f}}").format(elem)
+
+    arr, places = args
+    format_answer = vectorized_sol((arr, places), format_scalar_fn, pd.StringDtype())
+    check_func(
+        impl,
+        (arr, places),
+        py_output=format_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_option_format():
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return bodo.libs.bodosql_array_kernels.format(arg0, arg1)
+
+    A, B = 12345678910.111213, 4
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = "12,345,678,910.1112" if flag0 and flag1 else None
+            check_func(impl, (A, B, flag0, flag1), py_output=answer)
