@@ -5817,7 +5817,7 @@ class GroupbyPipeline {
     /**
      * This is the main control flow of the Groupby pipeline.
      */
-    table_info* run() {
+    table_info* run(int64_t* n_out_rows) {
         update();
         if (shuffle_before_update) {
             if (in_table != orig_in_table)
@@ -5832,7 +5832,7 @@ class GroupbyPipeline {
         // For gb.head() operation, if data is distributed,
         // sort table based on head_sort_col column.
         if (head_op && is_parallel) sort_gb_head_output();
-        return getOutputTable();
+        return getOutputTable(n_out_rows);
     }
     /**
      * @brief
@@ -5957,11 +5957,7 @@ class GroupbyPipeline {
         tracing::Event ev("shuffle", is_parallel);
         table_info* shuf_table =
             shuffle_table(update_table, num_keys, is_parallel);
-#ifdef DEBUG_GROUPBY
-        std::cout << "After shuffle_table_kernel. shuf_table=\n";
-        DEBUG_PrintSetOfColumn(std::cout, shuf_table->columns);
-        DEBUG_PrintRefct(std::cout, shuf_table->columns);
-#endif
+
         // NOTE: shuffle_table_kernel decrefs input arrays
         delete_table(update_table);
         update_table = cur_table = shuf_table;
@@ -6024,7 +6020,8 @@ class GroupbyPipeline {
     /**
      * Returns the final output table which is the result of the groupby.
      */
-    table_info* getOutputTable() {
+    table_info* getOutputTable(int64_t* n_out_rows) {
+        *n_out_rows = cur_table->nrows();
         table_info* out_table = new table_info();
         if (return_key)
             out_table->columns.assign(cur_table->columns.begin(),
@@ -6724,13 +6721,6 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
                                         int* ftypes, int* func_offsets,
                                         bool is_parallel, bool skipdropna,
                                         bool return_key, bool return_index) {
-#ifdef DEBUG_GROUPBY_SYMBOL
-    std::cout << "mpi_exscan_computation_Tkey (in_table)\n";
-    DEBUG_PrintRefct(std::cout, in_table->columns);
-#ifdef DEBUG_GROUPBY_FULL
-    DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
-#endif
-#endif
     std::vector<array_info*> out_arrs;
     // We do not return the keys in output in the case of cumulative operations.
     int64_t n_rows = in_table->nrows();
@@ -6801,11 +6791,7 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
                 func_offsets, is_parallel, skipdropna);
     }
     if (return_index) out_arrs.push_back(copy_array(in_table->columns.back()));
-#ifdef DEBUG_GROUPBY
-    std::cout << "mpi_exscan_computation(out_arrs)\n";
-    DEBUG_PrintSetOfColumn(std::cout, out_arrs);
-    DEBUG_PrintRefct(std::cout, out_arrs);
-#endif
+
     return new table_info(out_arrs);
 }
 
@@ -7057,48 +7043,13 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
     return 1;      // all conditions satisfied. Let's go for EXSCAN code
 }
 
-/*
-  The pivot_table and crosstab functionality
-  --
-  The dispatch_table contains the columns with the information.
-  The dispatch_info contains the dispatching information.
-  The rest works as for groupby.
-  We use the multiple_array_info template type to make it work
-  for pivot_table and groupby.
- */
-table_info* pivot_groupby_and_aggregate(
-    table_info* in_table, int64_t num_keys, table_info* dispatch_table,
-    table_info* dispatch_info, bool input_has_index, int* ftypes,
-    int* func_offsets, int* udf_nredvars, bool is_parallel, bool is_crosstab,
-    bool skipdropna, bool return_key, bool return_index, void* update_cb,
-    void* combine_cb, void* eval_cb, table_info* udf_dummy_table) {
-    try {
-        GroupbyPipeline<multiple_array_info> groupby(
-            in_table, num_keys, dispatch_table, dispatch_info, input_has_index,
-            is_parallel, is_crosstab, ftypes, func_offsets, udf_nredvars,
-            udf_dummy_table, (udf_table_op_fn)update_cb,
-            // TODO: general UDFs
-            (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb, 0, skipdropna, 0,
-            0, -1, return_key,
-            // dropna = True for pivot operation
-            return_index, true);  // transform_func = periods = 0
-                                  // head_n = -1. Not used in
-                                  // pivot operation.
-
-        table_info* ret_table = groupby.run();
-        return ret_table;
-    } catch (const std::exception& e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return NULL;
-    }
-}
-
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
     int64_t periods, int64_t transform_func, int64_t head_n, bool return_key,
     bool return_index, bool key_dropna, void* update_cb, void* combine_cb,
-    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table) {
+    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table,
+    int64_t* n_out_rows) {
     try {
         tracing::Event ev("groupby_and_aggregate", is_parallel);
         int strategy =
@@ -7117,7 +7068,7 @@ table_info* groupby_and_aggregate(
                 (udf_general_fn)general_udfs_cb, skipdropna, periods,
                 transform_func, head_n, return_key, return_index, key_dropna);
 
-            table_info* ret_table = groupby.run();
+            table_info* ret_table = groupby.run(n_out_rows);
 
             return ret_table;
         };
@@ -7126,6 +7077,7 @@ table_info* groupby_and_aggregate(
             table_info* ret_table = mpi_exscan_computation(
                 cat_column, in_table, num_keys, ftypes, func_offsets,
                 is_parallel, skipdropna, return_key, return_index);
+            *n_out_rows = in_table->nrows();
             return ret_table;
         };
         if (strategy == 0) return implement_strategy0();

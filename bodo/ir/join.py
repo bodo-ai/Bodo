@@ -834,8 +834,7 @@ def join_table_column_use(
     table_col_use_map: Dict[int, Dict[str, Tuple[Set[int], bool, bool]]],
 ):
     """Compute column uses in input tables of Join based on output table's
-    uses. The input uses are the same as output, except that key columns
-    are always used.
+    uses.
 
     Args:
         join_node (Join): Join node to process

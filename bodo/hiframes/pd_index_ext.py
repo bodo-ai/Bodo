@@ -1587,7 +1587,7 @@ class RangeIndexType(types.IterableType, types.ArrayCompatible):
         if name_typ is None:
             name_typ = types.none
         self.name_typ = name_typ
-        super(RangeIndexType, self).__init__(name="RangeIndexType({})".format(name_typ))
+        super(RangeIndexType, self).__init__(name=f"RangeIndexType({name_typ})")
 
     ndim = 1
 

@@ -2196,6 +2196,59 @@ def test_sort_table_dels(datapath, memory_leak_check):
         )
 
 
+def test_groupby_table_dels(datapath, memory_leak_check):
+    """
+    Make sure table columns are deleted properly for Aggregate nodes
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.groupby(by=["Column9", "Column6", "Column13", "Column11"])[
+            ["Column14", "Column3", "Column17", "Column8", "Column1"]
+        ].count()
+        return df2["Column8"].values, df2["Column3"].values, df1["Column1"].values
+
+    check_func(impl, (), sort_output=True, reset_index=True)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        columns_list = [f"Column{i}" for i in [1, 3, 6, 8, 9, 11, 13]]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        _check_column_dels(bodo_func, [[3, 6, 8, 9, 11, 13], [3], [1], [1]])
+
+
+def test_groupby_table_dels_as_index_false(datapath, memory_leak_check):
+    """
+    Make sure table columns are deleted properly for Aggregate nodes when as_index=False
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        df2 = df1.groupby(
+            by=["Column9", "Column6", "Column13", "Column11"], as_index=False
+        )[["Column14", "Column3", "Column17", "Column8", "Column1"]].count()
+        return (
+            df2["Column8"].values,
+            df2["Column3"].values,
+            df1["Column1"].values,
+            df2["Column6"].values,
+        )
+
+    check_func(impl, (), sort_output=True, reset_index=True)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        columns_list = [f"Column{i}" for i in [1, 3, 6, 8, 9, 11, 13]]
+        check_logger_msg(stream, f"Columns loaded {columns_list}")
+        _check_column_dels(bodo_func, [[3, 6, 8, 9, 11, 13], [7], [5], [1], [1]])
+
+
 def test_two_column_dels(datapath, memory_leak_check):
     """
     Test that when deleting a large number of columns we

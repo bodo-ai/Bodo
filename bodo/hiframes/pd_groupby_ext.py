@@ -82,6 +82,7 @@ from bodo.utils.typing import (
     list_cumulative,
     raise_bodo_error,
     to_nullable_type,
+    to_numeric_index_if_range_index,
     to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import dt_err, is_expr
@@ -464,6 +465,7 @@ def get_agg_typ(
     if not grp.as_index:
         get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
     elif func_name == "head":
+        # TODO: clarify this case with examples
         # Regardless of number of keys, index is always NumericIndex
         # unless it's explicitly assigned
         if grp.df_type.index == index:
@@ -684,7 +686,9 @@ def get_agg_typ(
                 )
             )
 
-    out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
+    out_res = DataFrameType(
+        tuple(out_data), index, tuple(out_columns), is_table_format=True
+    )
     # XXX output becomes series if single output and explicitly selected
     if (len(grp.selection) == 1 and grp.series_select and grp.as_index) or (
         func_name == "size" and grp.as_index
@@ -871,7 +875,9 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         else:
             index = out_tp.index
 
-        out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
+        out_res = DataFrameType(
+            tuple(out_data), index, tuple(out_columns), is_table_format=True
+        )
         return signature(out_res, *args), gb_info
 
     # multi-function tuple or list case
@@ -919,7 +925,9 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
             index = grp.df_type.index
         else:
             index = out_tp.index
-        out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
+        out_res = DataFrameType(
+            tuple(out_data), index, tuple(out_columns), is_table_format=True
+        )
         return signature(out_res, *args), gb_info
 
     f_name = ""
@@ -947,7 +955,12 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
 def resolve_transformative(grp, args, kws, msg, name_operation):
     """For datetime and timedelta datatypes, we can support cummin / cummax,
     but not cumsum / cumprod. Hence the is_minmax entry"""
-    index = grp.df_type.index
+    index = to_numeric_index_if_range_index(grp.df_type.index)
+    if isinstance(index, MultiIndexType):
+        raise_bodo_error(
+            f"Groupby.{name_operation}: MultiIndex input not supported for groupby operations that use input Index"
+        )
+
     out_columns = []
     out_data = []
     if name_operation in list_cumulative:
@@ -1048,7 +1061,9 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
 
     if len(out_data) == 0:
         raise BodoError("No columns in output.")
-    out_res = DataFrameType(tuple(out_data), index, tuple(out_columns))
+    out_res = DataFrameType(
+        tuple(out_data), index, tuple(out_columns), is_table_format=True
+    )
     # XXX output becomes series if single output and explicitly selected
     if len(grp.selection) == 1 and grp.series_select and grp.as_index:
         out_res = SeriesType(

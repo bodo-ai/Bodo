@@ -1062,6 +1062,24 @@ def get_index_data_arr_types(t):
     raise BodoError(f"Invalid index type {t}")
 
 
+def to_numeric_index_if_range_index(t):
+    """Convert RangeIndexType to NumericIndexType (if input is RangeIndexType)
+
+    Args:
+        t (types.Type): input Index type
+
+    Returns:
+        types.Type: same input if not RangeIndexType, otherwise NumericIndexType
+    """
+    from bodo.hiframes.pd_index_ext import NumericIndexType, RangeIndexType
+
+    return (
+        NumericIndexType(types.int64, t.name_typ)
+        if isinstance(t, RangeIndexType)
+        else t
+    )
+
+
 def get_index_type_from_dtype(t):
     """get Index type that can hold dtype 't' values."""
     from bodo.hiframes.pd_index_ext import (

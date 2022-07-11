@@ -2303,13 +2303,9 @@ def get_stmt_writes(stmt, func_ir):
     if isinstance(stmt, (ir.Assign, ir.SetItem, ir.StaticSetItem)):
         writes.add(stmt.target.name)
     # Bodo change: add Bodo nodes and builtins
-    if isinstance(stmt, bodo.ir.aggregate.Aggregate):
-        writes = {v.name for v in stmt.df_out_vars.values()}
-        if stmt.out_key_vars is not None:
-            writes.update({v.name for v in stmt.out_key_vars})
     if isinstance(stmt, (bodo.ir.csv_ext.CsvReader, bodo.ir.parquet_ext.ParquetReader)):
         writes = {v.name for v in stmt.out_vars}
-    if isinstance(stmt, bodo.ir.join.Join):
+    if isinstance(stmt, (bodo.ir.join.Join, bodo.ir.aggregate.Aggregate)):
         writes = {v.name for v in stmt.get_live_out_vars()}
     if isinstance(stmt, bodo.ir.sort.Sort):
         if not stmt.inplace:

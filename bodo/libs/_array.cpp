@@ -1283,7 +1283,6 @@ void int_array_from_sequence(PyObject* arr_obj, int64_t* data,
 char* array_info_getitem(array_info* arr, int64_t row_num,
                          offset_t* output_size) {
     bodo_array_type::arr_type_enum arr_type = arr->arr_type;
-    Bodo_CTypes::CTypeEnum dtype = arr->dtype;
     if (arr_type == bodo_array_type::STRING) {
         // In the first case of STRING, we have to check the offsets.
         offset_t* offsets = (offset_t*)arr->data2;
@@ -1392,6 +1391,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "delete_table_decref_arrays",
         PyLong_FromVoidPtr((void*)(&delete_table_decref_arrays)));
+    PyObject_SetAttrString(
+        m, "decref_table_array",
+        PyLong_FromVoidPtr((void*)(&decref_table_array)));
     // Not covered by error handler
     PyObject_SetAttrString(m, "delete_table",
                            PyLong_FromVoidPtr((void*)(&delete_table)));
@@ -1420,9 +1422,6 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&drop_duplicates_table)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
-    PyObject_SetAttrString(
-        m, "pivot_groupby_and_aggregate",
-        PyLong_FromVoidPtr((void*)(&pivot_groupby_and_aggregate)));
     PyObject_SetAttrString(m, "get_groupby_labels",
                            PyLong_FromVoidPtr((void*)(&get_groupby_labels)));
     PyObject_SetAttrString(m, "array_isin",

@@ -658,6 +658,16 @@ void delete_table_decref_arrays(table_info* table) {
     delete table;
 }
 
+/**
+ * Free an array of a table
+ */
+void decref_table_array(table_info* table, int arr_no) {
+    array_info* a = table->columns[arr_no];
+    if (a != NULL) {
+        decref_array(a);
+    }
+}
+
 /*
   Decreases refcount and frees array if refcount is zero.
   This is more complicated than one might expect since the structure needs to be

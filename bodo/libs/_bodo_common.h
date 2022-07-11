@@ -633,6 +633,11 @@ void delete_table(table_info* table);
 void delete_table_decref_arrays(table_info* table);
 
 /**
+ * Free an array of a table
+ */
+void decref_table_array(table_info* table, int arr_no);
+
+/**
  * decref Bodo array and free all memory if refcount is zero.
  */
 void decref_array(array_info* arr);

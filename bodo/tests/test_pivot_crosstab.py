@@ -357,7 +357,7 @@ def test_pivot_drop_column(datapath, memory_leak_check):
     check_func(impl, (), additional_compiler_arguments=add_args)
 
 
-@pytest.mark.smoke
+@pytest.mark.skip("[BE-3188] Disabling since needs to use new pivot infrastructure")
 def test_crosstab(memory_leak_check):
     def test_impl(df):
         pt = pd.crosstab(df.A, df.C)
@@ -399,6 +399,7 @@ def test_crosstab(memory_leak_check):
     )
 
 
+@pytest.mark.skip("[BE-3188] Disabling since needs to use new pivot infrastructure")
 def test_crosstab_deadcolumn(datapath, memory_leak_check):
     """The specificity of this test is that we compute pt.small.values.sum().
     Therefore, the "large" column gets removed from the ouput by the compiler passes.
@@ -416,6 +417,7 @@ def test_crosstab_deadcolumn(datapath, memory_leak_check):
     check_func(impl, (), additional_compiler_arguments=add_args)
 
 
+@pytest.mark.skip("[BE-3188] Disabling since needs to use new pivot infrastructure")
 def test_crosstab_invalid_types(memory_leak_check):
     """
     Tests that pd.crosstab produces a reasonable error message
