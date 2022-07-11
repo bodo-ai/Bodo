@@ -29,7 +29,115 @@ class Bodo310ByteCodePass(FunctionPass):
         dprint_func_ir(state.func_ir, "starting Bodo 3.10 Bytecode optimizations pass")
         peep_hole_call_function_ex_to_call_function_kw(state.func_ir)
         peep_hole_fuse_dict_add_updates(state.func_ir)
+        peep_hole_fuse_tuple_adds(state.func_ir)
         return True
+
+
+def peep_hole_fuse_tuple_adds(func_ir):
+    """
+    This rewrite removes t3 = t1 + t2 exprs that
+    are between two tuples, t1 and t2 in the
+    same basic block, resulting from a Python 3.10
+    upgrade. If both expressions are build tuples
+    defined in that block and neither is used between
+    the add call, then we replace t3 with a new definition
+    that combines the two tuples into a single build_tuple.
+
+    At this time we cannot differentiate between user code
+    and bytecode generated code.
+    """
+
+    # This algorithm fuses tuple add expressions into the largest
+    # possible build_tuple before usage. For example, if we have an
+    # IR that looks like this:
+    #
+    #   $t0 = build_tuple([])
+    #   $val1 = const(2)
+    #   $t1 = build_tuple([$val1])
+    #   $append_t1_t0 = $t0 + $t1
+    #   $val2 = const(2)
+    #   $t2 = build_tuple([$val2])
+    #   $append_t2_t1 = $t1 + $append_t1_t0
+    #   $val3 = const(2)
+    #   $t3 = build_tuple([$val3])
+    #   $append_t3_t2 = $t2 + $append_t2_t1
+    #   $val4 = const(2)
+    #   $t4 = build_tuple([$val4])
+    #   $append_t4_t3 = $t3 + $append_t3_t2
+    #   $finalvar = $append_t4_t3
+    #   $retvar = cast($finalvar)
+    #   return $retvar
+    #
+    # It gets converted into
+    #
+    #   $t0 = build_tuple([])
+    #   $val1 = const(2)
+    #   $t1 = build_tuple([$val1])
+    #   $append_t1_t0 = build_tuple([$val1])
+    #   $val2 = const(2)
+    #   $t2 = build_tuple([$val2])
+    #   $append_t2_t1 = build_tuple([$val1, $val2])
+    #   $val3 = const(2)
+    #   $t3 = build_tuple([$val3])
+    #   $append_t3_t2 = build_tuple([$val1, $val2, $val3])
+    #   $val4 = const(2)
+    #   $t4 = build_tuple([$val4])
+    #   $append_t4_t3 = build_tuple([$val1, $val2, $val3, $val4])
+    #   $finalvar = $append_t4_t3
+    #   $retvar = cast($finalvar)
+    #   return $retvar
+    #
+    # We then depend on the dead code elimination in untyped pass to remove
+    # any unused tuple.
+
+    for blk in func_ir.blocks.values():
+        new_body = []
+        # var name -> list of items for build tuple
+        build_tuple_map = {}
+        for i, stmt in enumerate(blk.body):
+            stmt_build_tuple_out = None
+            if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Expr):
+                lhs = stmt.target.name
+                if stmt.value.op == "build_tuple":
+                    # Add any build tuples to the list to track
+                    stmt_build_tuple_out = lhs
+                    build_tuple_map[lhs] = stmt.value.items
+                elif (
+                    stmt.value.op == "binop"
+                    and stmt.value.fn == operator.add
+                    and stmt.value.lhs.name in build_tuple_map
+                    and stmt.value.rhs.name in build_tuple_map
+                ):
+                    stmt_build_tuple_out = lhs
+                    # If we have an add between two build_tuples we are tracking we replace the tuple.
+                    new_items = (
+                        build_tuple_map[stmt.value.lhs.name]
+                        + build_tuple_map[stmt.value.rhs.name]
+                    )
+                    new_build_tuple = ir.Expr.build_tuple(new_items, stmt.value.loc)
+                    # Add the new tuple to track
+                    build_tuple_map[lhs] = new_items
+                    # Each tuple should be used only once.
+                    del build_tuple_map[stmt.value.lhs.name]
+                    del build_tuple_map[stmt.value.rhs.name]
+                    # Delete the old definition
+                    if stmt.value in func_ir._definitions[lhs]:
+                        func_ir._definitions[lhs].remove(stmt.value)
+                    # Add the new defintion
+                    func_ir._definitions[lhs].append(new_build_tuple)
+                    # Replace the stmt
+                    stmt = ir.Assign(new_build_tuple, stmt.target, stmt.loc)
+
+            for var in stmt.list_vars():
+                # We only want to replace tuples that are unused
+                # except for a single add. As result we delete any
+                # tuples from the constant list once they are used.
+                if var.name in build_tuple_map and var.name != stmt_build_tuple_out:
+                    del build_tuple_map[var.name]
+            new_body.append(stmt)
+
+        blk.body = new_body
+    return func_ir
 
 
 # The code below is all copied from https://github.com/numba/numba/pull/7866
