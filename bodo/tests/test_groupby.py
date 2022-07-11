@@ -4847,6 +4847,23 @@ def test_groupby_shift_simple(memory_leak_check):
     check_func(impl, (df3,))
 
 
+def test_groupby_shift_dead_index(memory_leak_check):
+    """Test dead output Index case for groupby shift which returns an Index."""
+
+    def impl(df):
+        return df.groupby("A")["B"].shift().values
+
+    df3 = pd.DataFrame(
+        {
+            "A": [0.3, np.nan, 3.5, 0.2, np.nan, 3.3, 0.2, 0.3, 0.2, 0.2],
+            "B": [-1.1, 1.1, 3.2, 1.1, 5.2, 6.8, 7.3, 3.4, 1.2, 2.4],
+            "C": [-8.1, 2.3, 5.3, 1.1, 0.5, 4.6, 1.7, 4.3, -8.1, 5.3],
+        },
+        index=np.arange(52, 62),
+    )
+    check_func(impl, (df3,))
+
+
 @pytest.mark.parametrize(
     "periods",
     [0, 2, -2],

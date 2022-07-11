@@ -653,10 +653,10 @@ def get_sort_cpp_section(sort_node, out_types, parallel):
 
     if sort_node.is_table_format:
         comma = "," if n_out_vars == 1 else ""
-        out_types = f"({', '.join(f'out_type{i}' if not type_has_unknown_cats(out_types[i]) else f'arg{i}' for i in range(n_out_vars))}{comma})"
+        out_types_str = f"({', '.join(f'out_type{i}' if not type_has_unknown_cats(out_types[i]) else f'arg{i}' for i in range(n_out_vars))}{comma})"
         # pass number of table arrays since it's necessary for logical column index
         # calculation but input table may be optimized out
-        func_text += f"  out_data = cpp_table_to_py_data(out_cpp_table, out_col_inds, {out_types}, total_rows_np[0], {sort_node.num_table_arrays})\n"
+        func_text += f"  out_data = cpp_table_to_py_data(out_cpp_table, out_col_inds, {out_types_str}, total_rows_np[0], {sort_node.num_table_arrays})\n"
     else:
         py_to_cpp_inds = {k: i for i, k in enumerate(out_cpp_col_inds)}
 

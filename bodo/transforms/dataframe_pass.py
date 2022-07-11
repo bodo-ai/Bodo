@@ -1519,16 +1519,20 @@ class DataFramePass:
         if func_name == "apply":
             return self._run_call_groupby_apply(assign, lhs, rhs, grp_var)
 
-        grp_typ = self.typemap[
-            grp_var.name
-        ]  # DataFrameGroupByType instance with initial typing info
-        df_var = self._get_groupby_df_obj(
-            grp_var
-        )  # IR Var associated with groupby input dataframe
-        df_type = self.typemap[df_var.name]  # Input dataframe type
-        out_typ = self.typemap[lhs.name]  # Type of df.groupby() output
+        # DataFrameGroupByType instance with initial typing info
+        grp_typ = self.typemap[grp_var.name]
+        # get dataframe variable of groupby
+        df_var = self._get_groupby_df_obj(grp_var)
+        df_type = self.typemap[df_var.name]
+        # Type of df.groupby() output
+        out_typ = self.typemap[lhs.name]
 
-        nodes = []
+        # check for duplicate output columns
+        out_colnames = (
+            grp_typ.selection if isinstance(out_typ, SeriesType) else out_typ.columns
+        )
+        if len(out_colnames) != len(set(out_colnames)):
+            raise BodoError("aggregate with duplication in output is not allowed")
 
         args = tuple([self.typemap[v.name] for v in rhs.args])
         kws = {k: self.typemap[v.name] for k, v in rhs.kws}
@@ -1555,21 +1559,32 @@ class DataFramePass:
             # TODO Might be possible to simplify get_agg_func by returning a flat list
             agg_funcs = list(flatten(agg_func))
 
+        used_colnames = set(grp_typ.keys)
         i = 0
         for (in_col, fname), out_col in gb_info.items():
+            in_col_ind = df_type.column_index[in_col] if in_col is not None else None
+            out_col_ind = (
+                out_typ.column_index[out_col]
+                if not isinstance(out_typ, SeriesType)
+                else 0
+            )
             f = agg_funcs[i]
             assert fname == f.fname
-            gb_info_in[in_col].append((f, out_col))
-            gb_info_out[out_col] = (in_col, f)
+            gb_info_in[in_col_ind].append((f, out_col_ind))
+            gb_info_out[out_col_ind] = (in_col_ind, f)
+            used_colnames.add(in_col)
             i += 1
 
+        # input_has_index=True means we have to pass Index of input dataframe to groupby
+        # since it's needed in creating output, e.g. in shift() but not sum()
         input_has_index = False
+        # same_index=True if groupby returns the Index for output dataframe since its
+        # values have to match the input (cumulative operations not using RangeIndex)
         same_index = False
+        # return_key=True if groupby returns group keys since needed for output.
+        # e.g. for sum() but not shift()
         return_key = True
-        # return_key is True if we return the keys from the table. In case
-        # of aggregate on cumsum or other cumulative function, there is no such need.
-        # same_index is True if we return the index from the table (which is the case for
-        # cumulative operations not using RangeIndex)
+
         for funcs in gb_info_in.values():
             for func, _ in funcs:
                 if func.ftype in (list_cumulative | {"shift", "transform"}):
@@ -1583,94 +1598,79 @@ class DataFramePass:
                     same_index = True
                     return_key = False
 
-        # unlike cumulative operations gb.head() will always return the index in all cases including RangIndexType.
+        # TODO: comment on when this case is possible and necessary
         if (
             same_index
-            and isinstance(grp_typ.df_type.index, RangeIndexType)
+            and isinstance(out_typ.index, RangeIndexType)
+            # unlike cumulative operations gb.head() will always return the same Index
+            # in all cases including RangeIndexType.
             and func.ftype != "head"
         ):
             same_index = False
             input_has_index = False
 
-        df_in_vars = {
-            c: self._get_dataframe_data(df_var, c, nodes)
-            for c in gb_info_in.keys()
-            if c is not None
-        }
+        in_key_inds = [df_type.column_index[c] for c in grp_typ.keys]
 
-        in_key_arrs = [self._get_dataframe_data(df_var, c, nodes) for c in grp_typ.keys]
+        # get input variables (data columns first then Index if needed)
+        nodes = []
+        if df_type.is_table_format:
+            in_table_var = self._get_dataframe_table(df_var, nodes)
+            in_vars = [in_table_var]
+        else:
+            # pass all data columns to Aggregate node since it uses logical column indexes
+            # minor optimization: avoid generating get_dataframe_data for columns that are
+            # obviously not used
+            in_vars = [
+                self._get_dataframe_data(df_var, c, nodes)
+                if c in used_colnames
+                else None
+                for c in df_type.columns
+            ]
 
-        out_key_vars = None
-        if return_key and (grp_typ.as_index is False or out_typ.index != types.none):
-            out_key_vars = []
+        if input_has_index:
+            in_index_var = self._gen_array_from_index(df_var, nodes)
+            in_vars.append(in_index_var)
+        else:
+            in_vars.append(None)
+
+        # output data is a single array in case of Series, otherwise always a table
+        # if keys are returned, they could be part of the table (as_index=False), or be
+        # separate array(s) that go to output dataframe's Index
+        out_var = ir.Var(lhs.scope, mk_unique_var("groupby_out_data"), lhs.loc)
+        self.typemap[out_var.name] = (
+            out_typ.data if isinstance(out_typ, SeriesType) else out_typ.table_type
+        )
+        out_vars = [out_var]
+
+        # add key column variables
+        # extra variables are necessary if keys are part of Index and not table
+        if return_key and not isinstance(out_typ.index, RangeIndexType):
             for k in grp_typ.keys:
                 out_key_var = ir.Var(
                     lhs.scope, mk_unique_var(sanitize_varname(k)), lhs.loc
                 )
-                ind = df_type.columns.index(k)
+                ind = df_type.column_index[k]
                 self.typemap[out_key_var.name] = df_type.data[ind]
-                out_key_vars.append(out_key_var)
-
-        if input_has_index:
-            in_index_var = self._gen_array_from_index(df_var, nodes)
-            df_in_vars[INDEX_SENTINEL] = in_index_var
+                out_vars.append(out_key_var)
 
         if same_index:
             out_index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
             self.typemap[out_index_var.name] = self.typemap[in_index_var.name]
-            if out_key_vars == None:
-                out_key_vars = []
-            out_key_vars.append(out_index_var)
-
-        df_out_vars = {}
-        out_colnames = (
-            grp_typ.selection if isinstance(out_typ, SeriesType) else out_typ.columns
-        )
-        if func_name == "size":
-            var = ir.Var(lhs.scope, mk_unique_var("size"), lhs.loc)
-            self.typemap[var.name] = types.Array(types.int64, 1, "C")
-            df_out_vars["size"] = var
+            out_vars.append(out_index_var)
         else:
-            for c in out_colnames:
-                # output key columns are stored in out_key_vars and shouldn't be duplicated
-                if isinstance(c, tuple) and len(c) > 1 and c[1] == "":
-                    if c[0] in grp_typ.keys:
-                        continue
-                # gb.head() includes the keys as part of the ouptut columns if
-                # no columns are explicitly selected.
-                elif (
-                    c in grp_typ.keys
-                    and not c in grp_typ.selection
-                    and not func_name == "head"
-                ):
-                    continue
-                # output column name can be a string or tuple of strings. the
-                # latter case occurs when doing this:
-                # df.groupby(...).agg({"A": [f1, f2]})
-                # In this case, output names have 2 levels: (A, f1) and (A, f2)
-                var = ir.Var(
-                    lhs.scope, mk_unique_var(sanitize_varname(str(c))), lhs.loc
-                )
-                self.typemap[var.name] = (
-                    out_typ.data
-                    if isinstance(out_typ, SeriesType)
-                    else out_typ.data[out_typ.column_index[c]]
-                )
-                df_out_vars[c] = var
-
-            if len(out_colnames) != len(set(out_colnames)):
-                raise BodoError("aggregate with duplication in output is not allowed")
+            out_vars.append(None)
 
         agg_node = bodo.ir.aggregate.Aggregate(
             lhs.name,
             df_var.name,  # input dataframe var name
-            grp_typ.keys,  # name of key columns
+            grp_typ.keys,  # name of key columns, for printing only
             gb_info_in,
             gb_info_out,
-            out_key_vars,
-            df_out_vars,
-            df_in_vars,
-            in_key_arrs,
+            out_vars,
+            in_vars,
+            in_key_inds,
+            df_type,
+            out_typ,
             input_has_index,
             same_index,
             return_key,
@@ -1688,13 +1688,10 @@ class DataFramePass:
             )
         elif isinstance(out_typ.index, RangeIndexType):
             # as_index=False case generates trivial RangeIndex
-            # If there are no output columns, we get the length
-            # from the out keys. See test_groupby_asindex_no_values
-            output_column_ir_var = (
-                list(df_out_vars.values())[0]
-                if len(df_out_vars) > 0
-                else out_key_vars[0]
-            )
+            # See test_groupby_asindex_no_values
+            # We get the length from the first output assuming it won't cause trouble
+            # for dead code/column elimination
+            output_column_ir_var = out_vars[0]
             nodes += compile_func_single_block(
                 eval(
                     "lambda A: bodo.hiframes.pd_index_ext.init_range_index(0, len(A), 1, None)"
@@ -1706,21 +1703,20 @@ class DataFramePass:
             index_var = nodes[-1].target
         elif isinstance(out_typ.index, MultiIndexType):
             # gen MultiIndex init function
-            arg_names = ", ".join("in{}".format(i) for i in range(len(grp_typ.keys)))
-            names_tup = ", ".join("'{}'".format(k) for k in grp_typ.keys)
-            func_text = "def _multi_inde_impl({}):\n".format(arg_names)
-            func_text += "    return bodo.hiframes.pd_multi_index_ext.init_multi_index(({}), ({}))\n".format(
-                arg_names, names_tup
-            )
+            arg_names = ", ".join(f"in{i}" for i in range(len(grp_typ.keys)))
+            names_tup = ", ".join(f"'{k}'" for k in grp_typ.keys)
+            func_text = f"def _multi_inde_impl({arg_names}):\n"
+            func_text += f"    return bodo.hiframes.pd_multi_index_ext.init_multi_index(({arg_names}), ({names_tup}))\n"
             loc_vars = {}
             exec(func_text, {}, loc_vars)
             _multi_inde_impl = loc_vars["_multi_inde_impl"]
-            nodes += compile_func_single_block(
-                _multi_inde_impl, out_key_vars, None, self
-            )
+            # the key columns are right before Index which is last
+            index_arrs = out_vars[-len(grp_typ.keys) - 1 : -1]
+            nodes += compile_func_single_block(_multi_inde_impl, index_arrs, None, self)
             index_var = nodes[-1].target
         else:
-            index_arr = out_key_vars[0]
+            # the key column is right before Index which is last
+            index_arr = out_vars[-2]
             index_name = grp_typ.keys[0]
             nodes += compile_func_single_block(
                 eval(
@@ -1733,14 +1729,14 @@ class DataFramePass:
             )
             index_var = nodes[-1].target
 
-        # XXX output becomes series if single output and explicitly selected
+        # NOTE: output becomes series if single output and explicitly selected
         if isinstance(out_typ, SeriesType):
             assert (
                 len(grp_typ.selection) == 1
                 and grp_typ.series_select
                 and grp_typ.as_index
             ) or (grp_typ.as_index and func_name == "size")
-            name_val = None if func_name == "size" else list(df_out_vars.keys())[0]
+            name_val = None if func_name == "size" else grp_typ.selection[0]
             name_var = ir.Var(lhs.scope, mk_unique_var("S_name"), lhs.loc)
             self.typemap[name_var.name] = (
                 types.none if func_name == "size" else types.StringLiteral(name_val)
@@ -1751,32 +1747,16 @@ class DataFramePass:
                 eval(
                     "lambda A, I, name: bodo.hiframes.pd_series_ext.init_series(A, I, name)"
                 ),
-                list(df_out_vars.values()) + [index_var, name_var],
+                [out_vars[0], index_var, name_var],
                 pre_nodes=nodes,
             )
 
-        _init_df = _gen_init_df_dataframe_pass(out_typ.columns, "index")
-
-        # XXX the order of output variables passed should match out_typ.columns
-        out_vars = []
-        for c in out_typ.columns:
-            is_key = False
-            if isinstance(c, tuple) and len(c) > 1 and c[1] == "":
-                if c[0] in grp_typ.keys:
-                    is_key = True
-                    c = c[0]
-            # head operation is performed on keys as well
-            elif c in grp_typ.keys and not func_name == "head":
-                is_key = True
-            if is_key:
-                assert not grp_typ.as_index
-                ind = grp_typ.keys.index(c)
-                out_vars.append(out_key_vars[ind])
-            else:
-                out_vars.append(df_out_vars[c])
-
-        out_vars.append(index_var)
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
+        _init_df = _gen_init_df_dataframe_pass(
+            out_typ.columns, "index", is_table_format=True
+        )
+        return nodes + compile_func_single_block(
+            _init_df, [out_vars[0], index_var], lhs, self
+        )
 
     def _run_call_groupby_apply(self, assign, lhs, rhs, grp_var):
         """generate IR nodes for df.groupby().apply() with UDFs.
@@ -2234,99 +2214,6 @@ class DataFramePass:
             pysig=numba.core.utils.pysignature(func),
             run_full_pipeline=True,
         )
-
-    def _run_call_crosstab(self, assign, lhs, rhs):
-        index, columns, _pivot_values = rhs.args
-        pivot_values = self.typemap[_pivot_values.name].meta
-        out_typ = self.typemap[lhs.name]
-
-        index_typ = out_typ.index
-        index_name_typ = index_typ.name_typ
-        index_name = index_name_typ.literal_value
-
-        nodes = []
-        if isinstance(self.typemap[index.name], SeriesType):
-            nodes += compile_func_single_block(
-                eval("lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)"),
-                (index,),
-                None,
-                self,
-            )
-            index = nodes[-1].target
-
-        if isinstance(self.typemap[columns.name], SeriesType):
-            nodes += compile_func_single_block(
-                eval("lambda S: bodo.hiframes.pd_series_ext.get_series_data(S)"),
-                (columns,),
-                None,
-                self,
-            )
-            columns = nodes[-1].target
-
-        # The index is added.
-        # TODO: Add the name of the index to the construction. Pandas does it.
-        out_key_vars = []
-        out_index_var = ir.Var(lhs.scope, mk_unique_var("index"), lhs.loc)
-        self.typemap[out_index_var.name] = self.typemap[index.name]
-        out_key_vars.append(out_index_var)
-
-        df_in_vars = {}
-
-        df_out_vars = {
-            col: ir.Var(lhs.scope, mk_unique_var(sanitize_varname(col)), lhs.loc)
-            for col in pivot_values
-        }
-        for i, v in enumerate(df_out_vars.values()):
-            self.typemap[v.name] = out_typ.data[i]
-
-        pivot_arr = columns
-        agg_func = get_agg_func(self.func_ir, "count", rhs, typemap=self.typemap)
-        gb_info_in = {None: [(agg_func, list(pivot_values))]}
-        gb_info_out = {col: (None, agg_func) for col in pivot_values}
-
-        # TODO: make out_key_var an index column
-        input_has_index = False
-        same_index = False
-        return_key = True
-        dropna = True
-        agg_node = bodo.ir.aggregate.Aggregate(
-            lhs.name,
-            "crosstab",
-            ["index"],
-            gb_info_in,
-            gb_info_out,
-            out_key_vars,
-            df_out_vars,
-            df_in_vars,
-            [index],
-            input_has_index,
-            same_index,
-            return_key,
-            lhs.loc,
-            "pandas.crosstab",
-            dropna,
-            pivot_arr,
-            pivot_values,
-            True,
-        )
-        nodes.append(agg_node)
-
-        _init_df = _gen_init_df_dataframe_pass(out_typ.columns, "index")
-
-        # XXX the order of output variables passed should match out_typ.columns
-        out_vars = [df_out_vars[c] for c in out_typ.columns]
-
-        nodes += compile_func_single_block(
-            eval("lambda A: bodo.utils.conversion.index_from_array(A, _index_name)"),
-            (out_index_var,),
-            None,
-            self,
-            extra_globals={"_index_name": index_name},
-        )
-        out_index = nodes[-1].target
-
-        out_vars.append(out_index)
-        return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
 
     def _get_groupby_df_obj(self, obj_var):
         """get df object for groupby()

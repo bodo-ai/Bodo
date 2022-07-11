@@ -1880,6 +1880,22 @@ def test_nunique_shift_unsupported_types(df, memory_leak_check):
         bodo.jit(impl_shift)(df)
 
 
+@pytest.mark.slow
+def test_shift_multi_index_error(memory_leak_check):
+    """Make sure proper error is raised for MultiIndex input"""
+
+    def impl(df):
+        return df.groupby("A").shift()
+
+    I = pd.MultiIndex.from_arrays([[5, 3, 1], ["a", "b", "c"]], names=("AI", "BI"))
+    df = pd.DataFrame({"A": [1, 2, 1], "B": [3.1, 4.2, 2.2], "C": [3, 1, 5]}, index=I)
+    with pytest.raises(
+        BodoError,
+        match="MultiIndex input not supported for groupby operations that use input Index",
+    ):
+        bodo.jit(impl)(df)
+
+
 # ------------------------------ df.groupby().agg()------------------------------ #
 @pytest.mark.slow
 def test_agg_unsupported_types(test_cumulatives_df, memory_leak_check):

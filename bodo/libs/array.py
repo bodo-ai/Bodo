@@ -58,6 +58,7 @@ from bodo.utils.typing import (
     MetaType,
     decode_if_dict_array,
     get_overload_const_int,
+    is_overload_none,
     is_str_arr_type,
     raise_bodo_error,
     type_has_unknown_cats,
@@ -92,6 +93,7 @@ ll.add_symbol("arr_info_list_to_table", array_ext.arr_info_list_to_table)
 ll.add_symbol("info_from_table", array_ext.info_from_table)
 ll.add_symbol("delete_info_decref_array", array_ext.delete_info_decref_array)
 ll.add_symbol("delete_table_decref_arrays", array_ext.delete_table_decref_arrays)
+ll.add_symbol("decref_table_array", array_ext.decref_table_array)
 ll.add_symbol("delete_table", array_ext.delete_table)
 ll.add_symbol("shuffle_table", array_ext.shuffle_table)
 ll.add_symbol("get_shuffle_info", array_ext.get_shuffle_info)
@@ -104,7 +106,6 @@ ll.add_symbol("sample_table", array_ext.sample_table)
 ll.add_symbol("shuffle_renormalization", array_ext.shuffle_renormalization)
 ll.add_symbol("shuffle_renormalization_group", array_ext.shuffle_renormalization_group)
 ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
-ll.add_symbol("pivot_groupby_and_aggregate", array_ext.pivot_groupby_and_aggregate)
 ll.add_symbol("get_groupby_labels", array_ext.get_groupby_labels)
 ll.add_symbol("array_isin", array_ext.array_isin)
 ll.add_symbol("get_search_regex", array_ext.get_search_regex)
@@ -1728,19 +1729,40 @@ def cpp_table_to_py_table(typingctx, cpp_table_t, table_idx_arr_t, py_table_type
 
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def cpp_table_to_py_data(
-    cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t
+    cpp_table,
+    out_col_inds_t,
+    out_types_t,
+    n_rows_t,
+    n_table_cols_t,
+    unknown_cat_arrs_t=None,
+    cat_inds_t=None,
 ):
     """convert C++ table to Python data with types described in out_types_t. The first
-    output is a TableType and there rest are arrays.
+    output is a TableType or array or none, and there rest are arrays.
 
     Args:
         cpp_table (C++ table_type): C++ table type to convert
         out_col_inds_t (MetaType(list[int])): list of logical column numbers for each
             C++ table column.
-        out_types_t (Tuple(TypeRef[TableType], TypeRef[array], ...)): data types of
-            output Python data that form logical columns. The first type is a table type
-            that has logical columns 0..n_py_table_arrs-1. The rest are regular
-            arrays that have the rest of data (n_py_table_arrs, n_py_table_arrs+1, ...)
+        out_types_t (Tuple(TypeRef[TableType|array|NoneType], TypeRef[array], ...)):
+            data types of output Python data that form logical columns. If the first
+            type is a table type, it has logical columns 0..n_py_table_arrs-1.
+            The first type can be a regular array or none as well.
+            The rest are regular arrays that have the rest of data (n_py_table_arrs,
+            n_py_table_arrs+1, ...)
+        n_rows_t (int): Number of rows in output table. Necessary since all table
+            columns may be dead, but the length of the table may be used.
+        n_table_cols_t (int): number of logical columns in the table structure (vs.
+            extra arrays). Necessary since the table may be dead and out_types_t[0] may
+            be types.none (table type not always available).
+        unknown_cat_arrs_t (Tuple(array) | none): Reference arrays for output
+            categorical arrays with unknown categories (one for each). Necessary for
+            creating proper output array from cpp array info.
+            If not passed, the corresponding out_types_t should have the reference
+            array (easy to pass reference array in out_types_t in case of Sort since
+            each output corresponds to an input in same position).
+        cat_inds_t (MetaType(Tuple(int))): Logical output indices of reference arrays
+            passed in unknown_cat_arrs_t.
 
     Returns:
         Tuple(Table, array, ...): python data corresponding to input C++ table
@@ -1757,19 +1779,21 @@ def cpp_table_to_py_data(
     n_py_table_arrs = get_overload_const_int(n_table_cols_t)
     py_to_cpp_inds = {k: i for i, k in enumerate(out_col_inds)}
 
+    # map output column number to index in unknown_cat_arrs_t
+    if not is_overload_none(unknown_cat_arrs_t):
+        cat_arr_inds = {c: i for i, c in enumerate(cat_inds_t.instance_type.meta)}
+
     # basic structure:
     # for each block in table:
     #   for each array_ind in block:
     #     if array_ind in output_inds:
     #       block[array_ind] = info_to_array(cpp_table[out_ind])
 
-    func_text = (
-        "def impl(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t):\n"
-    )
+    out_vars = []
 
-    if py_table_type == types.none:
-        func_text += f"  py_table = None\n"
-    else:
+    func_text = "def impl(cpp_table, out_col_inds_t, out_types_t, n_rows_t, n_table_cols_t, unknown_cat_arrs_t=None, cat_inds_t=None):\n"
+
+    if isinstance(py_table_type, bodo.TableType):
         func_text += f"  py_table = init_table(py_table_type, False)\n"
         func_text += f"  py_table = set_table_len(py_table, n_rows_t)\n"
 
@@ -1782,10 +1806,21 @@ def cpp_table_to_py_data(
             glbls[f"typ_list_{blk}"] = types.List(typ)
             out_type = f"out_type_{blk}"
             if type_has_unknown_cats(typ):
-                func_text += (
-                    f"  in_arr_list_{blk} = get_table_block(out_types_t[0], {blk})\n"
-                )
-                out_type = f"in_arr_list_{blk}[i]"
+                # use unknown_cat_arrs_t if provided (Aggregate case)
+                # use input data (assuming corresponds to output) if unknown_cat_arrs_t
+                # is not provided (Sort case)
+                if is_overload_none(unknown_cat_arrs_t):
+                    func_text += f"  in_arr_list_{blk} = get_table_block(out_types_t[0], {blk})\n"
+                    out_type = f"in_arr_list_{blk}[i]"
+                else:
+                    glbls[f"cat_arr_inds_{blk}"] = np.array(
+                        [
+                            cat_arr_inds.get(i, -1)
+                            for i in py_table_type.block_to_arr_ind[blk]
+                        ],
+                        np.int64,
+                    )
+                    out_type = f"unknown_cat_arrs_t[cat_arr_inds_{blk}[i]]"
             n_arrs = len(py_table_type.block_to_arr_ind[blk])
             func_text += (
                 f"  arr_list_{blk} = alloc_list_like(typ_list_{blk}, {n_arrs}, False)\n"
@@ -1799,23 +1834,38 @@ def cpp_table_to_py_data(
             func_text += (
                 f"  py_table = set_table_block(py_table, arr_list_{blk}, {blk})\n"
             )
+        out_vars.append("py_table")
+    elif py_table_type != types.none:
+        # regular array case
+        out_ind = py_to_cpp_inds.get(0, -1)
+        if out_ind != -1:
+            glbls[f"arr_typ_arg0"] = py_table_type
+            out_type = f"arr_typ_arg0"
+            if type_has_unknown_cats(py_table_type):
+                if is_overload_none(unknown_cat_arrs_t):
+                    out_type = f"out_types_t[0]"
+                else:
+                    out_type = f"unknown_cat_arrs_t[{cat_arr_inds[0]}]"
+            func_text += f"  out_arg0 = info_to_array(info_from_table(cpp_table, {out_ind}), {out_type})\n"
+            out_vars.append("out_arg0")
 
-    out_vars = []
     for i, t in enumerate(extra_arr_types):
         out_ind = py_to_cpp_inds.get(n_py_table_arrs + i, -1)
         if out_ind != -1:
             glbls[f"extra_arr_type_{i}"] = t
             out_type = f"extra_arr_type_{i}"
             if type_has_unknown_cats(t):
-                out_type = f"out_types_t[{i+1}]"
+                if is_overload_none(unknown_cat_arrs_t):
+                    out_type = f"out_types_t[{i+1}]"
+                else:
+                    out_type = (
+                        f"unknown_cat_arrs_t[{cat_arr_inds[n_py_table_arrs + i]}]"
+                    )
             func_text += f"  out_{i} = info_to_array(info_from_table(cpp_table, {out_ind}), {out_type})\n"
             out_vars.append(f"out_{i}")
 
-    if py_table_type != types.none:
-        func_text += f"  return (py_table, {', '.join(out_vars)})\n"
-    else:
-        comma = "," if len(out_vars) == 1 else ""
-        func_text += f"  return ({', '.join(out_vars)}{comma})\n"
+    comma = "," if len(out_vars) == 1 else ""
+    func_text += f"  return ({', '.join(out_vars)}{comma})\n"
 
     glbls.update(
         {
@@ -2078,6 +2128,11 @@ delete_info_decref_array = types.ExternalFunction(
 delete_table_decref_arrays = types.ExternalFunction(
     "delete_table_decref_arrays",
     types.void(table_type),
+)
+
+decref_table_array = types.ExternalFunction(
+    "decref_table_array",
+    types.void(table_type, types.int32),
 )
 
 
@@ -2489,92 +2544,6 @@ def drop_duplicates_table(
 
 
 @intrinsic
-def pivot_groupby_and_aggregate(
-    typingctx,
-    table_t,
-    n_keys_t,
-    dispatch_table_t,
-    dispatch_info_t,
-    input_has_index,
-    ftypes,
-    func_offsets,
-    udf_n_redvars,
-    is_parallel,
-    is_crosstab,
-    skipdropna_t,
-    return_keys,
-    return_index,
-    update_cb,
-    combine_cb,
-    eval_cb,
-    udf_table_dummy_t,
-):
-    """
-    Interface to pivot_groupby_and_aggregate function in C++ library for groupby
-    offloading.
-    """
-    assert table_t == table_type
-    assert dispatch_table_t == table_type
-    assert dispatch_info_t == table_type
-    assert udf_table_dummy_t == table_type
-
-    def codegen(context, builder, sig, args):
-        fnty = lir.FunctionType(
-            lir.IntType(8).as_pointer(),
-            [
-                lir.IntType(8).as_pointer(),
-                lir.IntType(64),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(1),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-            ],
-        )
-        fn_tp = cgutils.get_or_insert_function(
-            builder.module, fnty, name="pivot_groupby_and_aggregate"
-        )
-        ret = builder.call(fn_tp, args)
-        context.compile_internal(
-            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
-        )  # pragma: no cover
-        return ret
-
-    return (
-        table_type(
-            table_t,
-            types.int64,
-            table_t,
-            table_t,
-            types.boolean,
-            types.voidptr,
-            types.voidptr,
-            types.voidptr,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.boolean,
-            types.voidptr,
-            types.voidptr,
-            types.voidptr,
-            table_t,
-        ),
-        codegen,
-    )
-
-
-@intrinsic
 def groupby_and_aggregate(
     typingctx,
     table_t,
@@ -2596,6 +2565,7 @@ def groupby_and_aggregate(
     eval_cb,
     general_udfs_cb,
     udf_table_dummy_t,
+    n_out_rows_t,
 ):
     """
     Interface to groupby_and_aggregate function in C++ library for groupby
@@ -2622,6 +2592,7 @@ def groupby_and_aggregate(
                 lir.IntType(1),
                 lir.IntType(1),
                 lir.IntType(1),  # groupby key dropna
+                lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -2659,6 +2630,7 @@ def groupby_and_aggregate(
             types.voidptr,
             types.voidptr,
             table_t,
+            types.voidptr,
         ),
         codegen,
     )

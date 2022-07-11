@@ -4722,6 +4722,9 @@ def crosstab_overload(
     _pivot_values=None,
 ):
 
+    # TODO[BE-3188]: Disabling since needs to use new pivot infrastructure
+    raise BodoError(f"pandas.crosstab() not supported yet")
+
     unsupported_args = dict(
         values=values,
         rownames=rownames,

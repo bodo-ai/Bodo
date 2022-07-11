@@ -74,20 +74,16 @@ void groupby_init();
  * UDFs. Does the UDF for all input columns with ftype=gen_udf
  * @param udf_dummy_table: dummy table containing type info for output and
  * redvars columns for udfs
+ * @param n_out_rows: the total number of rows in output table, necessary if
+ * all the output columns are dead and only number of rows is used.
  */
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
     int* func_offsets, int* udf_nredvars, bool is_parallel, bool skipdropna,
     int64_t periods, int64_t transform_func, int64_t head_n, bool return_key,
     bool return_index, bool key_dropna, void* update_cb, void* combine_cb,
-    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table);
-
-table_info* pivot_groupby_and_aggregate(
-    table_info* in_table, int64_t num_keys, table_info* dispatch_table,
-    table_info* dispatch_info, bool input_has_index, int* ftypes,
-    int* func_offsets, int* udf_nredvars, bool is_parallel, bool is_crosstab,
-    bool skipdropna, bool return_key, bool return_index, void* update_cb,
-    void* combine_cb, void* eval_cb, table_info* udf_dummy_table);
+    void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table,
+    int64_t* n_out_rows);
 
 /**
  * @brief Get total number of groups for input key arrays

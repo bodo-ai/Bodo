@@ -1,5 +1,5 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
-"""IR node for the groupby, pivot and cross_tabulation"""
+"""IR node for the groupby"""
 import ctypes
 import operator
 import types as pytypes
@@ -32,7 +32,7 @@ from numba.core.ir_utils import (
 )
 from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
-from numba.extending import intrinsic, lower_builtin
+from numba.extending import intrinsic
 from numba.parfors.parfor import (
     Parfor,
     unwrap_parfor_blocks,
@@ -45,13 +45,15 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
+    cpp_table_to_py_data,
+    decref_table_array,
     delete_info_decref_array,
     delete_table,
     delete_table_decref_arrays,
     groupby_and_aggregate,
     info_from_table,
     info_to_array,
-    pivot_groupby_and_aggregate,
+    py_data_to_cpp_table,
 )
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayType,
@@ -69,10 +71,19 @@ from bodo.libs.str_arr_ext import (
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
 from bodo.transforms.distributed_analysis import Distribution
+from bodo.transforms.table_column_del_pass import (
+    _compute_table_column_uses,
+    _find_used_columns,
+    ir_extension_table_column_use,
+    remove_dead_column_extensions,
+)
 from bodo.utils.transform import get_call_expr_arg
 from bodo.utils.typing import (
     BodoError,
+    MetaType,
     decode_if_dict_array,
+    dtype_to_array_type,
+    get_index_data_arr_types,
     get_literal_value,
     get_overload_const_func,
     get_overload_const_list,
@@ -83,17 +94,17 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     list_cumulative,
     to_str_arr_if_dict_array,
+    type_has_unknown_cats,
+    unwrap_typeref,
 )
 from bodo.utils.utils import (
-    debug_prints,
+    gen_getitem,
     incref,
     is_assign,
     is_call_assign,
     is_expr,
     is_null_pointer,
     is_var_assign,
-    sanitize_varname,
-    unliteral_all,
 )
 
 # TODO: it's probably a bad idea for these to be global. Maybe try moving them
@@ -417,7 +428,6 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
     assert func_name in ["agg", "aggregate"]
 
     # NOTE: assuming typemap is provided here
-    # TODO: refactor old pivot code that doesn't provide typemap
     assert typemap is not None
     kws = dict(rhs.kws)
     func_var = get_call_expr_arg(func_name, rhs.args, kws, 0, "func", "")
@@ -570,34 +580,6 @@ class TypeDt64(AbstractTemplate):
             return signature(classty, *args)
 
 
-# combine function takes the reduce vars in reverse order of their user
-@numba.njit(no_cpython_wrapper=True)
-def _var_combine(ssqdm_a, mean_a, nobs_a, ssqdm_b, mean_b, nobs_b):  # pragma: no cover
-    nobs = nobs_a + nobs_b
-    mean_x = (nobs_a * mean_a + nobs_b * mean_b) / nobs
-    delta = mean_b - mean_a
-    M2 = ssqdm_a + ssqdm_b + delta * delta * nobs_a * nobs_b / nobs
-    return M2, mean_x, nobs
-
-
-# XXX: njit doesn't work when bodo.jit() is used for agg_func in hiframes
-# @numba.njit
-def __special_combine(*args):  # pragma: no cover
-    return
-
-
-@infer_global(__special_combine)
-class SpecialCombineTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        return signature(types.void, *unliteral_all(args))
-
-
-@lower_builtin(__special_combine, types.VarArg(types.Any))
-def lower_special_combine(context, builder, sig, args):
-    return context.get_dummy_value()
-
-
 class Aggregate(ir.Stmt):
     def __init__(
         self,
@@ -606,128 +588,242 @@ class Aggregate(ir.Stmt):
         key_names,
         gb_info_in,
         gb_info_out,
-        out_key_vars,
-        df_out_vars,  # NOTE: does not include output key vars (stored in out_key_vars)
-        df_in_vars,
-        key_arrs,
+        out_vars,
+        in_vars,
+        in_key_inds,
+        df_in_type,
+        out_type,
         input_has_index,
         same_index,
         return_key,
         loc,
         func_name,
         dropna=True,
-        pivot_arr=None,
-        pivot_values=None,
-        is_crosstab=False,
     ):
-        # name of output dataframe (just for printing purposes)
+        """IR node for groupby operations. It takes a logical table (input data can be
+        in a table and arrays, or just arrays), and returns a logical table (table and
+        arrays or just arrays). The actual computation is done in C++.
+
+        Args:
+            df_out (str): name of output variable, just for IR printing
+            df_in (str): name of input variable, just for IR printing
+            key_names (tuple(str)): names of key columns, just for IR printing
+            gb_info_in (dict[int, list(tuple(func, int))]):
+                in_col -> list of (func, out_col)
+                map input logical column numbers to the list of output functions and
+                logical columns numbers created from them.
+                Examples (["A", "B", "C"] input column names):
+                For `df.groupby("A").agg({"B": "min", "C": "max"})`
+                gb_info_in = {1: [(min_func, 0)], 2: [(max_func, 1)]}
+                For `df.groupby("A").agg(
+                   E=pd.NamedAgg(column="B", aggfunc=lambda A: A.sum()),
+                   F=pd.NamedAgg(column="B", aggfunc="min"),
+                )`
+                gb_info_in = {1: [(lambda_func, 0), (min_func, 1)]}
+            gb_info_out (dict[int, tuple(int, func)]): out_col -> (in_col, func)
+                map each output logical column number to the input logical number and
+                function that creates it.
+                Examples (["A", "B", "C"] input column names):
+                For `df.groupby("A").agg({"B": "min", "C": "max"})`
+                gb_info_out = {0: (1, min_func), 1: (2, max_func)}
+                For `df.groupby("A").agg(
+                   E=pd.NamedAgg(column="B", aggfunc=lambda A: A.sum()),
+                   F=pd.NamedAgg(column="B", aggfunc="min"),
+                )`
+                gb_info_out = {0: (1, lambda_func), 1: (1, min_func)}
+            out_vars (list(ir.Var)): list of output variables to assign
+            in_vars (list(ir.Var)): list of variables with input data
+            in_key_inds (list(int)): logical column number of keys in input (i.e. table
+                column number in table format case or array index in list of variables
+                in non-table case)
+            df_in_type (types.Type): data type of input (always a dataframe)
+            out_type (types.Type): data type of output (dataframe or Series)
+            input_has_index (bool): whether input Index (last logical column) is used in
+                computation.
+                NOTE: MultiIndex isn't supported yet.
+            same_index (bool): whether groupby returns the Index for output dataframe
+                which has to match input Index.
+                NOTE: MultiIndex isn't supported yet.
+            return_key (bool): whether groupby returns key columns in output
+            loc (ir.Loc): code location of the IR node
+            func_name (str): name of the groupby function called (sum, agg, ...)
+            dropna (bool, optional): whether groupby drops NA values in computation.
+                Defaults to True.
+        """
         self.df_out = df_out
-        # name of input dataframe (just for printing purposes)
         self.df_in = df_in
-        # key name (for printing)
         self.key_names = key_names
-        # Store full info on how input columns and aggregation functions map
-        # to output columns
-        # gb_info_in: maps in_col -> list of (func, out) where out is output
-        # column name for non-pivot/crosstab case or list of output columns otherwise
-        # Examples:
-        # For `df.groupby("A").agg({"B": "min", "C": "max"})`
-        # gb_info_in = {"B": [(min_func, "B")]}
-        # For `df.groupby("A").agg(
-        #    E=pd.NamedAgg(column="B", aggfunc=lambda A: A.sum()),
-        #    F=pd.NamedAgg(column="B", aggfunc="min"),
-        # )`
-        # gb_info_in = {"B": [(lambda_func, "E"), (min_func, "F")]}
+        # TODO(ehsan): remove gb_info_in and use gb_info_out in dead code elimination
         self.gb_info_in = gb_info_in
-        # gb_info_out: maps out_col -> (in_col, func)
         self.gb_info_out = gb_info_out
-        self.out_key_vars = out_key_vars
-        self.df_out_vars = df_out_vars
-        self.df_in_vars = df_in_vars
-        self.key_arrs = key_arrs
+        self.out_vars = out_vars
+        self.in_vars = in_vars
+        self.in_key_inds = in_key_inds
+        self.df_in_type = df_in_type
+        self.out_type = out_type
         self.input_has_index = input_has_index
         self.same_index = same_index
         self.return_key = return_key
         self.loc = loc
         self.func_name = func_name
         self.dropna = dropna
-        # pivot_table handling
-        self.pivot_arr = pivot_arr
-        self.pivot_values = pivot_values
-        self.is_crosstab = is_crosstab
+        # logical column number of dead inputs
+        self.dead_in_inds = set()
+        # logical column number of dead outputs
+        self.dead_out_inds = set()
+
+    def get_live_in_vars(self):
+        """return input variables that are live (handles both table and non-table
+        format cases)
+
+        Returns:
+            list(ir.Var): list of live variables
+        """
+        return [v for v in self.in_vars if v is not None]
+
+    def get_live_out_vars(self):
+        """return output variables that are live (table, possibly key arrays, possibly
+        Index array)
+
+        Returns:
+            list(ir.Var): list of live output variables
+        """
+        return [v for v in self.out_vars if v is not None]
+
+    @property
+    def is_in_table_format(self):
+        """True if input dataframe is in table format"""
+        return self.df_in_type.is_table_format
+
+    @property
+    def n_in_table_arrays(self):
+        """number of logical input columns that are part of the input table.
+        Returns 1 if input is not in table format to simplify computations.
+        """
+        return len(self.df_in_type.columns) if self.df_in_type.is_table_format else 1
+
+    @property
+    def n_in_cols(self):
+        """Number of logical input columns"""
+        # table columns plus extra arrays
+        return self.n_in_table_arrays + len(self.in_vars) - 1
+
+    @property
+    def in_col_types(self):
+        """list of data types of all logical input columns"""
+        return list(self.df_in_type.data) + list(
+            get_index_data_arr_types(self.df_in_type.index)
+        )
+
+    @property
+    def is_output_table(self):
+        """True if output is in table format. We always use table format for dataframe
+        output, but a single array for Series output.
+        """
+        return not isinstance(self.out_type, SeriesType)
+
+    @property
+    def n_out_table_arrays(self):
+        """number of logical output columns that are part of the output table.
+        Returns 1 if output is not in table format (Series case) to simplify
+        computations.
+        """
+        return (
+            len(self.out_type.table_type.arr_types)
+            if not isinstance(self.out_type, SeriesType)
+            else 1
+        )
+
+    @property
+    def n_out_cols(self):
+        """Number of logical output columns"""
+        # table columns plus extra arrays
+        return self.n_out_table_arrays + len(self.out_vars) - 1
+
+    @property
+    def out_col_types(self):
+        """list of data types of all logical output columns"""
+        data_col_types = (
+            [self.out_type.data]
+            if isinstance(self.out_type, SeriesType)
+            else list(self.out_type.table_type.arr_types)
+        )
+        index_col_types = list(get_index_data_arr_types(self.out_type.index))
+        return data_col_types + index_col_types
+
+    def update_dead_col_info(self):
+        """updates all internal data structures when there are more output dead columns
+        added in dead_out_inds.
+        gb_info_out, gb_info_in, dead_in_inds need updated and dead input variables need
+        to be set to None.
+        """
+        # remove dead output columns from gb_info_out
+        for col_no in self.dead_out_inds:
+            self.gb_info_out.pop(col_no, None)
+
+        # Index column (which is last) is not passed if input_as_index=False
+        if not self.input_has_index:
+            self.dead_in_inds.add(self.n_in_cols - 1)
+            self.dead_out_inds.add(self.n_out_cols - 1)
+
+        # remove dead outputs from gb_info_in, remove dead inputs (have no live output)
+        for in_col, outs in self.gb_info_in.copy().items():
+            new_outs = []
+            for (f, out_col) in outs:
+                if out_col not in self.dead_out_inds:
+                    new_outs.append((f, out_col))
+            if not new_outs:
+                # in_col can be None for size() function
+                # output columns can be keys too, e.g. df.groupby("A")["A"].sum()
+                if in_col is not None and in_col not in self.in_key_inds:
+                    self.dead_in_inds.add(in_col)
+                self.gb_info_in.pop(in_col)
+            else:
+                self.gb_info_in[in_col] = new_outs
+
+        # update input variables
+        if self.is_in_table_format:
+            if not (set(range(self.n_in_table_arrays)) - self.dead_in_inds):
+                self.in_vars[0] = None
+            for i in range(1, len(self.in_vars)):
+                col_no = self.n_in_table_arrays + i - 1
+                if col_no in self.dead_in_inds:
+                    self.in_vars[i] = None
+        else:
+            for i in range(len(self.in_vars)):
+                if i in self.dead_in_inds:
+                    self.in_vars[i] = None
 
     def __repr__(self):  # pragma: no cover
-        out_cols = ""
-        for (c, v) in self.df_out_vars.items():
-            out_cols += "'{}':{}, ".format(c, v.name)
-        df_out_str = "{}{{{}}}".format(self.df_out, out_cols)
-        in_cols = ""
-        for (c, v) in self.df_in_vars.items():
-            in_cols += "'{}':{}, ".format(c, v.name)
-        df_in_str = "{}{{{}}}".format(self.df_in, in_cols)
-        pivot = (
-            "pivot {}:{}".format(self.pivot_arr.name, self.pivot_values)
-            if self.pivot_arr is not None
-            else ""
-        )
-        key_names = ",".join([str(k) for k in self.key_names])
-        key_arrnames = ",".join([v.name for v in self.key_arrs])
-        return "aggregate: {} = {} [key: {}:{}] {}".format(
-            df_out_str, df_in_str, key_names, key_arrnames, pivot
-        )
-
-    def remove_out_col(self, out_col_name):
-        """Remove output column and associated input column if no longer needed"""
-
-        self.df_out_vars.pop(out_col_name)
-
-        in_col, _ = self.gb_info_out.pop(out_col_name)
-        if in_col is None and not self.is_crosstab:
-            # size operation where output column doesn't have associated input column
-            return
-
-        outs = self.gb_info_in[in_col]
-        if self.pivot_arr is not None:
-            # pivot case, output corresponds to pivot values
-            self.pivot_values.remove(out_col_name)
-            # each (input_col, func) can produce multiple output columns
-            for i, (func, out_cols) in enumerate(outs):
-                try:
-                    out_cols.remove(out_col_name)
-                    if len(out_cols) == 0:
-                        outs.pop(i)
-                        break
-                except ValueError:  # not found
-                    continue
-        else:
-            for i, (func, out_col) in enumerate(outs):
-                if out_col == out_col_name:
-                    outs.pop(i)
-                    break
-        if len(outs) == 0:  # input column is no longer needed
-            self.gb_info_in.pop(in_col)
-            self.df_in_vars.pop(in_col)
+        in_cols = ", ".join(v.name for v in self.get_live_in_vars())
+        df_in_str = f"{self.df_in}{{{in_cols}}}"
+        out_cols = ", ".join(v.name for v in self.get_live_out_vars())
+        df_out_str = f"{self.df_out}{{{out_cols}}}"
+        return f"Groupby (keys: {self.key_names} {self.in_key_inds}): {df_in_str} {df_out_str}"
 
 
 def aggregate_usedefs(aggregate_node, use_set=None, def_set=None):
+    """use/def analysis extension for Aggregate IR node
+
+    Args:
+        aggregate_node (Aggregate): Aggregate IR node
+        use_set (set(str), optional): Existing set of used variables. Defaults to None.
+        def_set (set(str), optional): Existing set of defined variables. Defaults to
+            None.
+
+    Returns:
+        namedtuple('use_defs_result', 'usemap,defmap'): use/def sets
+    """
     if use_set is None:
         use_set = set()
     if def_set is None:
         def_set = set()
 
-    # key array and input columns are used
-    use_set.update({v.name for v in aggregate_node.key_arrs})
-    use_set.update({v.name for v in aggregate_node.df_in_vars.values()})
+    # input table/arrays are used
+    use_set.update({v.name for v in aggregate_node.get_live_in_vars()})
 
-    if aggregate_node.pivot_arr is not None:
-        use_set.add(aggregate_node.pivot_arr.name)
-
-    # output columns are defined
-    def_set.update({v.name for v in aggregate_node.df_out_vars.values()})
-
-    # return key is defined
-    if aggregate_node.out_key_vars is not None:
-        def_set.update({v.name for v in aggregate_node.out_key_vars})
+    # output table/arrays are defined
+    def_set.update({v.name for v in aggregate_node.get_live_out_vars()})
 
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
@@ -736,41 +832,65 @@ numba.core.analysis.ir_extension_usedefs[Aggregate] = aggregate_usedefs
 
 
 def remove_dead_aggregate(
-    aggregate_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
+    agg_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
-    """remove dead input/output columns and agg functions"""
+    """Dead code elimination for Aggregate IR node
 
-    # find dead output columns
-    dead_cols = [
-        col_name
-        for col_name, col_var in aggregate_node.df_out_vars.items()
-        if col_var.name not in lives
-    ]
+    Args:
+        agg_node (Aggregate): Aggregate IR node
+        lives_no_aliases (set(str)): live variable names without their aliases
+        lives (set(str)): live variable names with their aliases
+        arg_aliases (set(str)): variables that are function arguments or alias them
+        alias_map (dict(str, set(str))): mapping of variables names and their aliases
+        func_ir (FunctionIR): full function IR
+        typemap (dict(str, types.Type)): typemap of variables
 
-    # remove dead output columns and their corresponding input columns/functions
-    for cname in dead_cols:
-        aggregate_node.remove_out_col(cname)
+    Returns:
+        (Aggregate, optional): Aggregate IR node if not fully dead, None otherwise
+    """
 
-    out_key_vars = aggregate_node.out_key_vars
-    if out_key_vars is not None and all(v.name not in lives for v in out_key_vars):
-        aggregate_node.out_key_vars = None
+    # remove dead table and non-table variables
+    out_data_var = agg_node.out_vars[0]
+    if out_data_var is not None and out_data_var.name not in lives:
+        agg_node.out_vars[0] = None
+        # output is table in dataframe case but a single array in Series case
+        if agg_node.is_output_table:
+            dead_cols = set(range(agg_node.n_out_table_arrays))
+            agg_node.dead_out_inds.update(dead_cols)
+        else:
+            agg_node.dead_out_inds.add(0)
 
-    # TODO: test agg remove
+    for i in range(1, len(agg_node.out_vars)):
+        v = agg_node.out_vars[i]
+        if v is not None and v.name not in lives:
+            agg_node.out_vars[i] = None
+            col_no = agg_node.n_out_table_arrays + i - 1
+            agg_node.dead_out_inds.add(col_no)
+
     # remove empty aggregate node
-    if len(aggregate_node.df_out_vars) == 0 and aggregate_node.out_key_vars is None:
+    if all(v is None for v in agg_node.out_vars):
         return None
 
-    return aggregate_node
+    agg_node.update_dead_col_info()
+
+    return agg_node
 
 
 ir_utils.remove_dead_extensions[Aggregate] = remove_dead_aggregate
 
 
 def get_copies_aggregate(aggregate_node, typemap):
-    # aggregate doesn't generate copies, it just kills the output columns
-    kill_set = set(v.name for v in aggregate_node.df_out_vars.values())
-    if aggregate_node.out_key_vars is not None:
-        kill_set.update({v.name for v in aggregate_node.out_key_vars})
+    """Aggregate IR node extension for variable copy analysis
+
+    Args:
+        aggregate_node (Aggregate): Aggregate IR node
+        typemap (dict(str, ir.Var)): typemap of variables
+
+    Returns:
+        tuple(set(str), set(str)): set of copies generated or killed
+    """
+    # Aggregate doesn't generate copies, it just kills the output columns
+    kill_set = {v.name for v in aggregate_node.get_live_out_vars()}
     return set(), kill_set
 
 
@@ -780,65 +900,52 @@ ir_utils.copy_propagate_extensions[Aggregate] = get_copies_aggregate
 def apply_copies_aggregate(
     aggregate_node, var_dict, name_var_table, typemap, calltypes, save_copies
 ):
-    """apply copy propagate in aggregate node"""
-    for i in range(len(aggregate_node.key_arrs)):
-        aggregate_node.key_arrs[i] = replace_vars_inner(
-            aggregate_node.key_arrs[i], var_dict
-        )
+    """Aggregate IR node extension for applying variable copies pass
 
-    for col_name in list(aggregate_node.df_in_vars.keys()):
-        aggregate_node.df_in_vars[col_name] = replace_vars_inner(
-            aggregate_node.df_in_vars[col_name], var_dict
-        )
-    for col_name in list(aggregate_node.df_out_vars.keys()):
-        aggregate_node.df_out_vars[col_name] = replace_vars_inner(
-            aggregate_node.df_out_vars[col_name], var_dict
-        )
-
-    if aggregate_node.out_key_vars is not None:
-        for i in range(len(aggregate_node.out_key_vars)):
-            aggregate_node.out_key_vars[i] = replace_vars_inner(
-                aggregate_node.out_key_vars[i], var_dict
+    Args:
+        aggregate_node (Aggregate): Aggregate IR node
+        var_dict (dict(str, ir.Var)): dictionary of variables to replace
+        name_var_table (dict(str, ir.Var)): map variable name to its ir.Var object
+        typemap (dict(str, ir.Var)): typemap of variables
+        calltypes (dict[ir.Inst, Signature]): signature of callable nodes
+        save_copies (list(tuple(str, ir.Var))): copies that were applied
+    """
+    for i in range(len(aggregate_node.in_vars)):
+        if aggregate_node.in_vars[i] is not None:
+            aggregate_node.in_vars[i] = replace_vars_inner(
+                aggregate_node.in_vars[i], var_dict
             )
 
-    if aggregate_node.pivot_arr is not None:
-        aggregate_node.pivot_arr = replace_vars_inner(
-            aggregate_node.pivot_arr, var_dict
-        )
+    for i in range(len(aggregate_node.out_vars)):
+        if aggregate_node.out_vars[i] is not None:
+            aggregate_node.out_vars[i] = replace_vars_inner(
+                aggregate_node.out_vars[i], var_dict
+            )
 
 
 ir_utils.apply_copy_propagate_extensions[Aggregate] = apply_copies_aggregate
 
 
 def visit_vars_aggregate(aggregate_node, callback, cbdata):
-    if debug_prints():  # pragma: no cover
-        print("visiting aggregate vars for:", aggregate_node)
-        print("cbdata: ", sorted(cbdata.items()))
+    """Aggregate IR node extension for visiting variables pass
 
-    for i in range(len(aggregate_node.key_arrs)):
-        aggregate_node.key_arrs[i] = visit_vars_inner(
-            aggregate_node.key_arrs[i], callback, cbdata
-        )
+    Args:
+        aggregate_node (Aggregate): Aggregate IR node
+        callback (function): callback to call on each variable (just passed along here)
+        cbdata (object): data to pass to callback (just passed along here)
+    """
 
-    for col_name in list(aggregate_node.df_in_vars.keys()):
-        aggregate_node.df_in_vars[col_name] = visit_vars_inner(
-            aggregate_node.df_in_vars[col_name], callback, cbdata
-        )
-    for col_name in list(aggregate_node.df_out_vars.keys()):
-        aggregate_node.df_out_vars[col_name] = visit_vars_inner(
-            aggregate_node.df_out_vars[col_name], callback, cbdata
-        )
-
-    if aggregate_node.out_key_vars is not None:
-        for i in range(len(aggregate_node.out_key_vars)):
-            aggregate_node.out_key_vars[i] = visit_vars_inner(
-                aggregate_node.out_key_vars[i], callback, cbdata
+    for i in range(len(aggregate_node.in_vars)):
+        if aggregate_node.in_vars[i] is not None:
+            aggregate_node.in_vars[i] = visit_vars_inner(
+                aggregate_node.in_vars[i], callback, cbdata
             )
 
-    if aggregate_node.pivot_arr is not None:
-        aggregate_node.pivot_arr = visit_vars_inner(
-            aggregate_node.pivot_arr, callback, cbdata
-        )
+    for i in range(len(aggregate_node.out_vars)):
+        if aggregate_node.out_vars[i] is not None:
+            aggregate_node.out_vars[i] = visit_vars_inner(
+                aggregate_node.out_vars[i], callback, cbdata
+            )
 
 
 # add call to visit aggregate variable
@@ -846,28 +953,26 @@ ir_utils.visit_vars_extensions[Aggregate] = visit_vars_aggregate
 
 
 def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis):
-    # empty aggregate nodes should be deleted in remove dead
-    assert (
-        len(aggregate_node.df_out_vars) > 0
-        or aggregate_node.out_key_vars is not None
-        or aggregate_node.is_crosstab
-    ), "empty aggregate in array analysis"
+    """Array analysis for Aggregate IR node. Input arrays have the same size. Output
+    arrays have the same size as well.
+    But outputs are not the same size as inputs necessarily.
 
-    # arrays of input df have same size in first dimension as key array
+    Args:
+        aggregate_node (ir.Aggregate): input Aggregate node
+        equiv_set (SymbolicEquivSet): equivalence set object of Numba array analysis
+        typemap (dict[str, types.Type]): typemap from analysis pass
+        array_analysis (ArrayAnalysis): array analysis object for the pass
+
+    Returns:
+        tuple(list(ir.Stmt), list(ir.Stmt)): lists of IR statements to add to IR before
+        this node and after this node.
+    """
+
+    # arrays of input df have same size in first dimension
     all_shapes = []
-    for key_arr in aggregate_node.key_arrs:
-        col_shape = equiv_set.get_shape(key_arr)
-        if col_shape:
-            all_shapes.append(col_shape[0])
-
-    if aggregate_node.pivot_arr is not None:
-        col_shape = equiv_set.get_shape(aggregate_node.pivot_arr)
-        if col_shape:
-            all_shapes.append(col_shape[0])
-
-    for col_var in aggregate_node.df_in_vars.values():
+    for col_var in aggregate_node.get_live_in_vars():
         col_shape = equiv_set.get_shape(col_var)
-        if col_shape:
+        if col_shape is not None:
             all_shapes.append(col_shape[0])
 
     if len(all_shapes) > 1:
@@ -875,14 +980,11 @@ def aggregate_array_analysis(aggregate_node, equiv_set, typemap, array_analysis)
 
     # create correlations for output arrays
     # arrays of output df have same size in first dimension
-    # gen size variable for an output column
+    # gen size variables for output columns
     post = []
     all_shapes = []
-    out_vars = list(aggregate_node.df_out_vars.values())
-    if aggregate_node.out_key_vars is not None:
-        out_vars.extend(aggregate_node.out_key_vars)
 
-    for col_var in out_vars:
+    for col_var in aggregate_node.get_live_out_vars():
         typ = typemap[col_var.name]
         shape = array_analysis._gen_shape_call(equiv_set, col_var, typ.ndim, None, post)
         equiv_set.insert_equiv(col_var, shape)
@@ -901,61 +1003,40 @@ numba.parfors.array_analysis.array_analysis_extensions[
 
 
 def aggregate_distributed_analysis(aggregate_node, array_dists):
+    """Distributed analysis for Aggregate IR node. Inputs and outputs have the same
+    distribution, except that output of 1D is 1D_Var due to groupby/shuffling.
+
+    Args:
+        aggregate_node (Aggregate): Aggregate IR node
+        array_dists (dict[str, Distribution]): distributions of arrays in the IR
+            (variable name -> Distribution)
+    """
+
+    in_arrs = aggregate_node.get_live_in_vars()
+    out_arrs = aggregate_node.get_live_out_vars()
     # input columns have same distribution
     in_dist = Distribution.OneD
-    for col_var in aggregate_node.df_in_vars.values():
+    for col_var in in_arrs:
         in_dist = Distribution(min(in_dist.value, array_dists[col_var.name].value))
 
-    # key arrays
-    for key_arr in aggregate_node.key_arrs:
-        in_dist = Distribution(min(in_dist.value, array_dists[key_arr.name].value))
-
-    # pivot case
-    if aggregate_node.pivot_arr is not None:
-        in_dist = Distribution(
-            min(in_dist.value, array_dists[aggregate_node.pivot_arr.name].value)
-        )
-        array_dists[aggregate_node.pivot_arr.name] = in_dist
-
-    for col_var in aggregate_node.df_in_vars.values():
-        array_dists[col_var.name] = in_dist
-    for key_arr in aggregate_node.key_arrs:
-        array_dists[key_arr.name] = in_dist
-
-    # output columns have same distribution
-    out_dist = Distribution.OneD_Var
-    for col_var in aggregate_node.df_out_vars.values():
-        # output dist might not be assigned yet
+    # output is 1D_Var due to groupby/shuffle, has to meet input dist
+    out_dist = Distribution(min(in_dist.value, Distribution.OneD_Var.value))
+    for col_var in out_arrs:
         if col_var.name in array_dists:
             out_dist = Distribution(
                 min(out_dist.value, array_dists[col_var.name].value)
             )
 
-    if aggregate_node.out_key_vars is not None:
-        for col_var in aggregate_node.out_key_vars:
-            if col_var.name in array_dists:
-                out_dist = Distribution(
-                    min(out_dist.value, array_dists[col_var.name].value)
-                )
-
-    # out dist should meet input dist (e.g. REP in causes REP out)
-    out_dist = Distribution(min(out_dist.value, in_dist.value))
-    for col_var in aggregate_node.df_out_vars.values():
-        array_dists[col_var.name] = out_dist
-
-    if aggregate_node.out_key_vars is not None:
-        for cvar in aggregate_node.out_key_vars:
-            array_dists[cvar.name] = out_dist
-
     # output can cause input REP
     if out_dist != Distribution.OneD_Var:
-        for key_arr in aggregate_node.key_arrs:
-            array_dists[key_arr.name] = out_dist
-        # pivot case
-        if aggregate_node.pivot_arr is not None:
-            array_dists[aggregate_node.pivot_arr.name] = out_dist
-        for col_var in aggregate_node.df_in_vars.values():
-            array_dists[col_var.name] = out_dist
+        in_dist = out_dist
+
+    # set dists
+    for col_var in in_arrs:
+        array_dists[col_var.name] = in_dist
+
+    for col_var in out_arrs:
+        array_dists[col_var.name] = out_dist
 
 
 distributed_analysis.distributed_analysis_extensions[
@@ -964,15 +1045,23 @@ distributed_analysis.distributed_analysis_extensions[
 
 
 def build_agg_definitions(agg_node, definitions=None):
+    """Aggregate IR node extension for building varibale definitions pass
+
+    Args:
+        agg_node (Aggregate): Aggregate IR node
+        definitions (defaultdict(list), optional): Existing definitions list. Defaults
+            to None.
+
+    Returns:
+        defaultdict(list): updated definitions
+    """
+
     if definitions is None:
         definitions = defaultdict(list)
 
-    for col_var in agg_node.df_out_vars.values():
+    # output arrays are defined
+    for col_var in agg_node.get_live_out_vars():
         definitions[col_var.name].append(agg_node)
-
-    if agg_node.out_key_vars is not None:
-        for cvar in agg_node.out_key_vars:
-            definitions[cvar.name].append(agg_node)
 
     return definitions
 
@@ -1017,36 +1106,34 @@ class EvalDummyTyper(AbstractTemplate):
 def agg_distributed_run(
     agg_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
+    """lowers Aggregate IR node to regular IR nodes. Uses the C++ implementation of
+    groupby operations.
+
+    Args:
+        agg_node (Aggregate): Aggregate IR node to lower
+        array_dists (dict(str, Distribution)): distribution of arrays
+        typemap (dict(str, ir.Var)): typemap of variables
+        calltypes (dict[ir.Inst, Signature]): signature of callable nodes
+        typingctx (typing.Context): typing context for compiler pipeline
+        targetctx (cpu.CPUContext): target context for compiler pipeline
+
+    Returns:
+        list(ir.Stmt): list of IR nodes that implement the input Aggregate IR node
+    """
     parallel = False
+    live_in_vars = agg_node.get_live_in_vars()
+    live_out_vars = agg_node.get_live_out_vars()
     if array_dists is not None:
         parallel = True
-        for v in (
-            list(agg_node.df_in_vars.values())
-            + list(agg_node.df_out_vars.values())
-            + agg_node.key_arrs
-        ):
+        for v in live_in_vars + live_out_vars:
             if (
                 array_dists[v.name] != distributed_pass.Distribution.OneD
                 and array_dists[v.name] != distributed_pass.Distribution.OneD_Var
             ):
                 parallel = False
-            # TODO: check supported types
-            # if (typemap[v.name] != types.Array(types.intp, 1, 'C')
-            #         and typemap[v.name] != types.Array(types.float64, 1, 'C')):
-            #     raise ValueError(
-            #         "Only int64 and float64 columns are currently supported in aggregate")
-            # if (typemap[left_key_var.name] != types.Array(types.intp, 1, 'C')
-            #     or typemap[right_key_var.name] != types.Array(types.intp, 1, 'C')):
-            # raise ValueError("Only int64 keys are currently supported in aggregate")
 
-    # TODO: rebalance if output distributions are 1D instead of 1D_Var
+    out_col_typs = agg_node.out_col_types
 
-    # TODO: handle key column being part of output
-
-    key_typs = tuple(typemap[v.name] for v in agg_node.key_arrs)
-    # get column variables
-    in_col_vars = [v for (n, v) in agg_node.df_in_vars.items()]
-    out_col_vars = [v for (n, v) in agg_node.df_out_vars.items()]
     # get column types
     # Type of input columns in the same order as passed to C++ and can include
     # repetition. C++ receives one input column for each (in_col,func) pair
@@ -1054,27 +1141,14 @@ def agg_distributed_run(
     # positions in that list (see NamedAgg examples)
     in_col_typs = []
     funcs = []
+    func_out_types = []
     # See comment about use of gb_info_in vs gb_info_out in gen_top_level_agg_func
     # when laying out input columns and functions for C++
-    if agg_node.pivot_arr is not None:
-        for in_col, outs in agg_node.gb_info_in.items():
-            for func, _ in outs:
-                if in_col is not None:
-                    in_col_typs.append(typemap[agg_node.df_in_vars[in_col].name])
-                funcs.append(func)
-    else:
-        for in_col, func in agg_node.gb_info_out.values():
-            if in_col is not None:
-                in_col_typs.append(typemap[agg_node.df_in_vars[in_col].name])
-            funcs.append(func)
-    out_col_typs = tuple(typemap[v.name] for v in out_col_vars)
-
-    pivot_typ = (
-        types.none if agg_node.pivot_arr is None else typemap[agg_node.pivot_arr.name]
-    )
-    arg_typs = tuple(
-        key_typs + tuple(typemap[v.name] for v in in_col_vars) + (pivot_typ,)
-    )
+    for out_col, (in_col, func) in agg_node.gb_info_out.items():
+        if in_col is not None:
+            in_col_typs.append(agg_node.in_col_types[in_col])
+        funcs.append(func)
+        func_out_types.append(out_col_typs[out_col])
 
     in_col_typs = [to_str_arr_if_dict_array(t) for t in in_col_typs]
 
@@ -1095,23 +1169,26 @@ def agg_distributed_run(
 
     udf_func_struct = get_udf_func_struct(
         funcs,
-        agg_node.input_has_index,
         in_col_typs,
-        out_col_typs,
         typingctx,
         targetctx,
-        pivot_typ,
-        agg_node.pivot_values,
-        agg_node.is_crosstab,
     )
 
-    top_level_func = gen_top_level_agg_func(
+    out_var_types = [
+        typemap[v.name] if v is not None else types.none for v in agg_node.out_vars
+    ]
+
+    func_text, f_glbs = gen_top_level_agg_func(
         agg_node,
         in_col_typs,
         out_col_typs,
+        func_out_types,
         parallel,
         udf_func_struct,
+        out_var_types,
+        typemap,
     )
+    glbs.update(f_glbs)
     glbs.update(
         {
             "pd": pd,
@@ -1124,7 +1201,6 @@ def agg_distributed_run(
             "arr_info_list_to_table": arr_info_list_to_table,
             "coerce_to_array": bodo.utils.conversion.coerce_to_array,
             "groupby_and_aggregate": groupby_and_aggregate,
-            "pivot_groupby_and_aggregate": pivot_groupby_and_aggregate,
             "info_from_table": info_from_table,
             "info_to_array": info_to_array,
             "delete_info_decref_array": delete_info_decref_array,
@@ -1132,7 +1208,10 @@ def agg_distributed_run(
             "add_agg_cfunc_sym": add_agg_cfunc_sym,
             "get_agg_udf_addr": get_agg_udf_addr,
             "delete_table_decref_arrays": delete_table_decref_arrays,
+            "decref_table_array": decref_table_array,
             "decode_if_dict_array": decode_if_dict_array,
+            "set_table_data": bodo.hiframes.table.set_table_data,
+            "get_table_data": bodo.hiframes.table.get_table_data,
             "out_typs": out_col_typs,
         }
     )
@@ -1152,90 +1231,33 @@ def agg_distributed_run(
         if udf_func_struct.general_udfs:
             glbs.update({"cpp_cb_general": udf_func_struct.general_udf_cfunc})
 
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    top_level_func = loc_vars["agg_top"]
+
     f_block = compile_to_numba_ir(
         top_level_func,
         glbs,
         typingctx=typingctx,
         targetctx=targetctx,
-        arg_typs=arg_typs,
+        arg_typs=tuple(typemap[v.name] for v in live_in_vars),
         typemap=typemap,
         calltypes=calltypes,
     ).blocks.popitem()[1]
 
-    nodes = []
-    if agg_node.pivot_arr is None:
-        scope = agg_node.key_arrs[0].scope
-        loc = agg_node.loc
-        none_var = ir.Var(scope, mk_unique_var("dummy_none"), loc)
-        typemap[none_var.name] = types.none
-        nodes.append(ir.Assign(ir.Const(None, loc), none_var, loc))
-        in_col_vars.append(none_var)
-    else:
-        in_col_vars.append(agg_node.pivot_arr)
+    replace_arg_nodes(f_block, live_in_vars)
 
-    replace_arg_nodes(f_block, agg_node.key_arrs + in_col_vars)
+    # get return value from cast node, the last node before cast isn't output assignment
+    ret_var = f_block.body[-2].value.value
+    nodes = f_block.body[:-2]
 
-    tuple_assign = f_block.body[-3]
-    assert (
-        is_assign(tuple_assign)
-        and isinstance(tuple_assign.value, ir.Expr)
-        and tuple_assign.value.op == "build_tuple"
-    )
-    nodes += f_block.body[:-3]
-
-    out_vars = list(agg_node.df_out_vars.values())
-    if agg_node.out_key_vars is not None:
-        out_vars += agg_node.out_key_vars
-
-    for i, var in enumerate(out_vars):
-        out_var = tuple_assign.value.items[i]
-        nodes.append(ir.Assign(out_var, var, var.loc))
+    for i, v in enumerate(live_out_vars):
+        gen_getitem(v, ret_var, i, calltypes, nodes)
 
     return nodes
 
 
 distributed_pass.distributed_run_extensions[Aggregate] = agg_distributed_run
-
-
-def get_numba_set(dtype):
-    pass
-
-
-@infer_global(get_numba_set)
-class GetNumbaSetTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        arr = args[0]
-        dtype = (
-            types.Tuple([t.dtype for t in arr.types])
-            if isinstance(arr, types.BaseTuple)
-            else arr.dtype
-        )
-        if isinstance(arr, types.BaseTuple) and len(arr.types) == 1:
-            dtype = arr.types[0].dtype
-        return signature(types.Set(dtype), *args)
-
-
-@lower_builtin(get_numba_set, types.Any)
-def lower_get_numba_set(context, builder, sig, args):
-    return numba.cpython.setobj.set_empty_constructor(context, builder, sig, args)
-
-
-@infer_global(bool)
-class BoolNoneTyper(AbstractTemplate):
-    def generic(self, args, kws):
-        assert not kws
-        assert len(args) == 1
-        val_t = args[0]
-        if val_t == types.none:
-            return signature(types.boolean, *args)
-
-
-@lower_builtin(bool, types.none)
-def lower_column_mean_impl(context, builder, sig, args):
-    res = context.compile_internal(builder, lambda a: False, sig, args)
-    return res  # impl_ret_untracked(context, builder, sig.return_type, res)
 
 
 # TODO: Use `bodo.utils.utils.alloc_type` instead if possible
@@ -1287,7 +1309,6 @@ def gen_update_cb(
     allfuncs,
     n_keys,
     data_in_typs_,
-    out_data_typs,
     do_combine,
     func_idx_to_in_col,
     label_suffix,
@@ -1388,9 +1409,7 @@ def gen_update_cb(
     func_text += "    for i in range(len(data_in_0)):\n"
     func_text += "        w_ind = row_to_group[i]\n"
     func_text += "        if w_ind != -1:\n"
-    func_text += (
-        "            __update_redvars(redvars, data_in, w_ind, i, pivot_arr=None)\n"
-    )
+    func_text += "            __update_redvars(redvars, data_in, w_ind, i)\n"
 
     loc_vars = {}
     exec(
@@ -1414,7 +1433,7 @@ def gen_update_cb(
     return loc_vars["bodo_gb_udf_update_local{}".format(label_suffix)]
 
 
-def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs, label_suffix):
+def gen_combine_cb(udf_func_struct, allfuncs, n_keys, label_suffix):
     """
     Generates a Python function (to be compiled into a numba cfunc) which
     does the "combine" step of an agg operation. The code is for a specific
@@ -1492,7 +1511,7 @@ def gen_combine_cb(udf_func_struct, allfuncs, n_keys, out_data_typs, label_suffi
     if n_red_vars:  # if there is a parfor
         func_text += "    for i in range(len(recv_redvar_arr_0)):\n"
         func_text += "        w_ind = row_to_group[i]\n"
-        func_text += "        __combine_redvars(redvars, recv_redvars, w_ind, i, pivot_arr=None)\n"
+        func_text += "        __combine_redvars(redvars, recv_redvars, w_ind, i)\n"
 
     loc_vars = {}
     exec(
@@ -1684,78 +1703,103 @@ def gen_top_level_agg_func(
     agg_node,
     in_col_typs,
     out_col_typs,
+    func_out_types,
     parallel,
     udf_func_struct,
+    out_var_types,
+    typemap,
 ):
     """create the top level aggregation function by generating text"""
-    has_pivot_value = agg_node.pivot_arr is not None
+    n_keys = len(agg_node.in_key_inds)
+    n_out_vars = len(agg_node.out_vars)
+
     # If we output the index then we need to remove it from the list of variables.
     if agg_node.same_index:
-        assert agg_node.input_has_index
-    if agg_node.pivot_values is None:
-        n_pivot = 1
+        assert (
+            agg_node.input_has_index
+        ), "agg codegen: input_has_index=True required for same_index=True"
+
+    # make sure array arg names have logical column number for easier codegen below
+    # NOTE: input columns are not repeated in the arg list
+    if agg_node.is_in_table_format:
+        in_args = []
+        if agg_node.in_vars[0] is not None:
+            in_args.append("arg0")
+        for i in range(agg_node.n_in_table_arrays, agg_node.n_in_cols):
+            if i not in agg_node.dead_in_inds:
+                in_args.append(f"arg{i}")
     else:
-        n_pivot = len(agg_node.pivot_values)
+        in_args = [f"arg{i}" for i, v in enumerate(agg_node.in_vars) if v is not None]
 
-    # These are the names of arguments of agg_top function
-    # NOTE that input columns are not repeated in the arg list
-    key_arg_names = tuple("key_" + sanitize_varname(c) for c in agg_node.key_names)
-    in_arg_names = {
-        c: "in_{}".format(sanitize_varname(c))
-        for c in agg_node.gb_info_in.keys()
-        if c is not None
-    }
-    # out_names are the names of the output columns which are returned by agg_top
-    out_names = {c: "out_" + sanitize_varname(c) for c in agg_node.gb_info_out.keys()}
+    func_text = f"def agg_top({', '.join(in_args)}):\n"
 
-    n_keys = len(agg_node.key_names)
-    key_args = ", ".join(key_arg_names)
-    in_args = ", ".join(in_arg_names.values())
-    if in_args != "":
-        in_args = ", " + in_args
-    # If we put the index as argument, then it is the last argument of the
-    # function.
-    func_text = "def agg_top({}{}{}, pivot_arr):\n".format(
-        key_args,
-        in_args,
-        ", index_arg" if agg_node.input_has_index else "",
-    )
-    for a in tuple(in_arg_names.values()):
-        func_text += f"    {a} = decode_if_dict_array({a})\n"
+    # convert data columns to regular strings (keys can stay dict-encoded)
+    if agg_node.is_in_table_format:
+        table_type = (
+            None if agg_node.in_vars[0] is None else typemap[agg_node.in_vars[0].name]
+        )
+        if table_type is not None:
+            for j, t in enumerate(table_type.arr_types):
+                if j not in agg_node.in_key_inds and t == bodo.dict_str_arr_type:
+                    func_text += f"    arg0 = set_table_data(arg0, {j}, decode_if_dict_array(get_table_data(arg0, {j})))\n"
 
-    # convert arrays to table
+        for i in range(1, len(agg_node.in_vars)):
+            v = agg_node.in_vars[i]
+            if v is None:
+                continue
+            var_typ = typemap[v.name]
+            col_no = agg_node.n_in_table_arrays + i - 1
+            if col_no not in agg_node.in_key_inds and var_typ == bodo.dict_str_arr_type:
+                func_text += f"    arg{col_no} = decode_if_dict_array(arg{col_no})\n"
+    else:
+        for i, v in enumerate(agg_node.in_vars):
+            if v is None:
+                continue
+            var_typ = typemap[v.name]
+            if i not in agg_node.in_key_inds and var_typ == bodo.dict_str_arr_type:
+                func_text += f"    arg{i} = decode_if_dict_array(arg{i})\n"
+
+    # convert arrays to cpp table, format: key columns, data columns, Index column
     # For each unique function applied to a given input column (i.e. each
     # (in_col, func) pair) we add the column to the table_info passed to C++
     # (in other words input columns can be repeated in the table info)
-    if has_pivot_value:
-        # Pivot array must not be a dictionary array
-        func_text += f"    pivot_arr = decode_if_dict_array(pivot_arr)\n"
-        # For pivot case we can't use gb_info_out because multiple output
-        # columns match to the same input column for a given function, but we
-        # only want to add one input per (input_col, func)
-        # Note that this path also works for df.groupby without NamedAggs
-        # It doesn't work for NamedAgg case because inputs might not be consecutive
-        in_names_all = []
-        for in_col, outs in agg_node.gb_info_in.items():
-            # in_col can be None in case of "size" operation
-            if in_col is not None:
-                for func, _ in outs:
-                    in_names_all.append(in_arg_names[in_col])
+    # For NamedAgg case the order in which inputs are provided has to
+    # match the output order, so we use agg_node.gb_info_out instead
+
+    in_cpp_col_inds = []
+    if agg_node.is_in_table_format:
+        in_cpp_col_inds = agg_node.in_key_inds + [
+            in_col for in_col, _ in agg_node.gb_info_out.values() if in_col is not None
+        ]
+        if agg_node.input_has_index:
+            # Index is always last input
+            in_cpp_col_inds.append(agg_node.n_in_cols - 1)
+
+        comma = "," if len(agg_node.in_vars) - 1 == 1 else ""
+        other_vars = []
+        for i in range(agg_node.n_in_table_arrays, agg_node.n_in_cols):
+            if i in agg_node.dead_in_inds:
+                other_vars.append("None")
+            else:
+                other_vars.append(f"arg{i}")
+        first_arg = "arg0" if agg_node.in_vars[0] is not None else "None"
+        func_text += f"    table = py_data_to_cpp_table({first_arg}, ({', '.join(other_vars)}{comma}), in_col_inds, {agg_node.n_in_table_arrays})\n"
     else:
-        # For NamedAgg case the order in which inputs are provided has to
-        # match the output order, so we use agg_node.gb_info_out instead
-        in_names_all = tuple(
-            in_arg_names[in_col]
+        key_in_arrs = [f"arg{i}" for i in agg_node.in_key_inds]
+        data_in_arrs = [
+            f"arg{in_col}"
             for in_col, _ in agg_node.gb_info_out.values()
             if in_col is not None
+        ]
+        all_in_arrs = key_in_arrs + data_in_arrs
+        if agg_node.input_has_index:
+            # Index is always last input
+            all_in_arrs.append(f"arg{len(agg_node.in_vars)-1}")
+
+        func_text += "    info_list = [{}]\n".format(
+            ", ".join(f"array_to_info({a})" for a in all_in_arrs),
         )
-    all_arrs = key_arg_names + tuple(in_names_all)
-    func_text += "    info_list = [{}{}{}]\n".format(
-        ", ".join("array_to_info({})".format(a) for a in all_arrs),
-        ", array_to_info(index_arg)" if agg_node.input_has_index else "",
-        ", array_to_info(pivot_arr)" if agg_node.is_crosstab else "",
-    )
-    func_text += "    table = arr_info_list_to_table(info_list)\n"
+        func_text += "    table = arr_info_list_to_table(info_list)\n"
 
     # do_combine indicates whether GroupbyPipeline in C++ will need to do
     # `void combine()` operation or not
@@ -1775,10 +1819,7 @@ def gen_top_level_agg_func(
     num_cum_funcs = 0
     transform_func = 0
 
-    if not has_pivot_value:
-        funcs = [func for _, func in agg_node.gb_info_out.values()]
-    else:
-        funcs = [func for func, _ in outs for outs in agg_node.gb_info_in.values()]
+    funcs = [func for _, func in agg_node.gb_info_out.values()]
     for f_idx, func in enumerate(funcs):
         func_offsets.append(len(allfuncs))
         if func.ftype in {"median", "nunique"}:
@@ -1806,14 +1847,9 @@ def gen_top_level_agg_func(
             udf_ncols.append(0)
             do_combine = False
     func_offsets.append(len(allfuncs))
-    if agg_node.is_crosstab:
-        assert (
-            len(agg_node.gb_info_out) == n_pivot
-        ), "invalid number of groupby outputs for pivot"
-    else:
-        assert (
-            len(agg_node.gb_info_out) == len(allfuncs) * n_pivot
-        ), "invalid number of groupby outputs"
+    assert len(agg_node.gb_info_out) == len(
+        allfuncs
+    ), "invalid number of groupby outputs"
     if num_cum_funcs > 0:
         if num_cum_funcs != len(allfuncs):
             raise BodoError(
@@ -1822,27 +1858,7 @@ def gen_top_level_agg_func(
             )
         do_combine = False  # same as median and nunique
 
-    for i, c in enumerate(agg_node.gb_info_out.keys()):
-        out_name = out_names[c] + "_dummy"
-        out_col_typ = out_col_typs[i]
-        # Shift, Min, and Max maintain the same output and input type
-        # We handle these separately with Categorical data because if a
-        # CategoricalArrayType doesn't have types known at compile time then
-        # we must associate it with another DType that has it's categories
-        # set at runtime. The existing approach for other types just uses
-        # Typerefs and those can't be resolved.
-        in_col, func = agg_node.gb_info_out[c]
-        if (
-            isinstance(func, pytypes.SimpleNamespace)
-            and func.fname in ["min", "max", "shift"]
-            and isinstance(out_col_typ, bodo.CategoricalArrayType)
-        ):
-            func_text += "    {} = {}\n".format(out_name, in_arg_names[in_col])
-        elif udf_func_struct is not None:
-            func_text += "    {} = {}\n".format(
-                out_name, _gen_dummy_alloc(out_col_typ, i, False)
-            )
-
+    udf_types = []
     if udf_func_struct is not None:
         # there are user-defined functions
         udf_label = next_label()
@@ -1861,19 +1877,18 @@ def gen_top_level_agg_func(
                     allfuncs,
                     n_keys,
                     in_col_typs,
-                    out_col_typs,
                     do_combine,
                     func_idx_to_in_col,
                     udf_label,
                 )
             )
             cpp_cb_combine = numba.cfunc(c_sig, nopython=True)(
-                gen_combine_cb(
-                    udf_func_struct, allfuncs, n_keys, out_col_typs, udf_label
-                )
+                gen_combine_cb(udf_func_struct, allfuncs, n_keys, udf_label)
             )
             cpp_cb_eval = numba.cfunc("void(voidptr)", nopython=True)(
-                gen_eval_cb(udf_func_struct, allfuncs, n_keys, out_col_typs, udf_label)
+                gen_eval_cb(
+                    udf_func_struct, allfuncs, n_keys, func_out_types, udf_label
+                )
             )
 
             udf_func_struct.set_regular_cfuncs(
@@ -1889,7 +1904,7 @@ def gen_top_level_agg_func(
                 allfuncs,
                 n_keys,
                 in_col_typs,
-                out_col_typs,
+                func_out_types,
                 func_idx_to_in_col,
                 udf_label,
             )
@@ -1898,52 +1913,36 @@ def gen_top_level_agg_func(
         # generate a dummy (empty) table with correct type info for
         # output columns and reduction variables corresponding to UDFs,
         # so that the C++ runtime can allocate arrays
-        udf_names_dummy = []
+        red_var_typs = (
+            udf_func_struct.var_typs if udf_func_struct.regular_udfs else None
+        )
+
         redvar_offset = 0
         i = 0
-        for out_name, f in zip(out_names.values(), allfuncs):
+        for out_col_ind, f in zip(agg_node.gb_info_out.keys(), allfuncs):
             if f.ftype in ("udf", "gen_udf"):
-                udf_names_dummy.append(out_name + "_dummy")
+                udf_types.append(out_col_typs[out_col_ind])
                 for j in range(redvar_offset, redvar_offset + udf_ncols[i]):
-                    udf_names_dummy.append("data_redvar_dummy_" + str(j))
+                    udf_types.append(dtype_to_array_type(red_var_typs[j]))
                 redvar_offset += udf_ncols[i]
                 i += 1
 
-        if udf_func_struct.regular_udfs:
-            red_var_typs = udf_func_struct.var_typs
-            for i, t in enumerate(red_var_typs):
-                func_text += "    data_redvar_dummy_{} = np.empty(1, {})\n".format(
-                    i, _get_np_dtype(t)
-                )
-
-        func_text += "    out_info_list_dummy = [{}]\n".format(
-            ", ".join("array_to_info({})".format(a) for a in udf_names_dummy)
-        )
-        func_text += (
-            "    udf_table_dummy = arr_info_list_to_table(out_info_list_dummy)\n"
-        )
+        func_text += f"    dummy_table = create_dummy_table(({', '.join(f'udf_type{i}' for i in range(len(udf_types)))}{',' if len(udf_types) == 1 else ''}))\n"
+        func_text += f"    udf_table_dummy = py_data_to_cpp_table(dummy_table, (), udf_dummy_col_inds, {len(udf_types)})\n"
 
         # include cfuncs in library and insert a dummy call to make sure symbol
         # is not discarded
         if udf_func_struct.regular_udfs:
-            func_text += "    add_agg_cfunc_sym(cpp_cb_update, '{}')\n".format(
-                cpp_cb_update.native_name
+            func_text += (
+                f"    add_agg_cfunc_sym(cpp_cb_update, '{cpp_cb_update.native_name}')\n"
             )
-            func_text += "    add_agg_cfunc_sym(cpp_cb_combine, '{}')\n".format(
-                cpp_cb_combine.native_name
+            func_text += f"    add_agg_cfunc_sym(cpp_cb_combine, '{cpp_cb_combine.native_name}')\n"
+            func_text += (
+                f"    add_agg_cfunc_sym(cpp_cb_eval, '{cpp_cb_eval.native_name}')\n"
             )
-            func_text += "    add_agg_cfunc_sym(cpp_cb_eval, '{}')\n".format(
-                cpp_cb_eval.native_name
-            )
-            func_text += "    cpp_cb_update_addr = get_agg_udf_addr('{}')\n".format(
-                cpp_cb_update.native_name
-            )
-            func_text += "    cpp_cb_combine_addr = get_agg_udf_addr('{}')\n".format(
-                cpp_cb_combine.native_name
-            )
-            func_text += "    cpp_cb_eval_addr = get_agg_udf_addr('{}')\n".format(
-                cpp_cb_eval.native_name
-            )
+            func_text += f"    cpp_cb_update_addr = get_agg_udf_addr('{cpp_cb_update.native_name}')\n"
+            func_text += f"    cpp_cb_combine_addr = get_agg_udf_addr('{cpp_cb_combine.native_name}')\n"
+            func_text += f"    cpp_cb_eval_addr = get_agg_udf_addr('{cpp_cb_eval.native_name}')\n"
         else:
             func_text += "    cpp_cb_update_addr = 0\n"
             func_text += "    cpp_cb_combine_addr = 0\n"
@@ -1952,11 +1951,11 @@ def gen_top_level_agg_func(
             cfunc = udf_func_struct.general_udf_cfunc
             gb_agg_cfunc[cfunc.native_name] = cfunc
             gb_agg_cfunc_addr[cfunc.native_name] = cfunc.address
-            func_text += "    add_agg_cfunc_sym(cpp_cb_general, '{}')\n".format(
-                cfunc.native_name
+            func_text += (
+                f"    add_agg_cfunc_sym(cpp_cb_general, '{cfunc.native_name}')\n"
             )
-            func_text += "    cpp_cb_general_addr = get_agg_udf_addr('{}')\n".format(
-                cfunc.native_name
+            func_text += (
+                f"    cpp_cb_general_addr = get_agg_udf_addr('{cfunc.native_name}')\n"
             )
         else:
             func_text += "    cpp_cb_general_addr = 0\n"
@@ -1974,102 +1973,296 @@ def gen_top_level_agg_func(
     func_text += "    ftypes = np.array([{}, 0], dtype=np.int32)\n".format(
         ", ".join([str(supported_agg_funcs.index(f.ftype)) for f in allfuncs] + ["0"])
     )
-    func_text += "    func_offsets = np.array({}, dtype=np.int32)\n".format(
-        str(func_offsets)
-    )
+    # TODO: pass these constant arrays as globals to make compilation faster
+    func_text += f"    func_offsets = np.array({str(func_offsets)}, dtype=np.int32)\n"
     if len(udf_ncols) > 0:
-        func_text += "    udf_ncols = np.array({}, dtype=np.int32)\n".format(
-            str(udf_ncols)
-        )
+        func_text += f"    udf_ncols = np.array({str(udf_ncols)}, dtype=np.int32)\n"
     else:
         func_text += "    udf_ncols = np.array([0], np.int32)\n"  # dummy
+    # single-element numpy array to return number of rows from C++
+    func_text += "    total_rows_np = np.array([0], dtype=np.int64)\n"
     # call C++ groupby
     # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
 
-    if has_pivot_value:
-        func_text += "    arr_type = coerce_to_array({})\n".format(
-            agg_node.pivot_values
-        )
-        func_text += "    arr_info = array_to_info(arr_type)\n"
-        func_text += "    dispatch_table = arr_info_list_to_table([arr_info])\n"
-        func_text += "    pivot_info = array_to_info(pivot_arr)\n"
-        func_text += "    dispatch_info = arr_info_list_to_table([pivot_info])\n"
-        func_text += (
-            "    out_table = pivot_groupby_and_aggregate(table, {}, dispatch_table, dispatch_info, {},"
-            " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, udf_table_dummy)\n".format(
-                n_keys,
-                agg_node.input_has_index,
-                parallel,
-                agg_node.is_crosstab,
-                skipdropna,
-                agg_node.return_key,
-                agg_node.same_index,
-            )
-        )
-        func_text += "    delete_info_decref_array(pivot_info)\n"
-        func_text += "    delete_info_decref_array(arr_info)\n"
-    else:
-        func_text += (
-            "    out_table = groupby_and_aggregate(table, {}, {},"
-            " ftypes.ctypes, func_offsets.ctypes, udf_ncols.ctypes, {}, {}, {}, {}, {}, {}, {}, {}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr, cpp_cb_general_addr, udf_table_dummy)\n".format(
-                n_keys,
-                agg_node.input_has_index,
-                parallel,
-                skipdropna,
-                shift_periods,
-                transform_func,
-                head_n,
-                agg_node.return_key,
-                agg_node.same_index,
-                agg_node.dropna,
-            )
-        )
+    func_text += (
+        f"    out_table = groupby_and_aggregate(table, {n_keys}, "
+        f"{agg_node.input_has_index}, ftypes.ctypes, func_offsets.ctypes, "
+        f"udf_ncols.ctypes, {parallel}, {skipdropna}, {shift_periods}, "
+        f"{transform_func}, {head_n}, {agg_node.return_key}, {agg_node.same_index}, "
+        f"{agg_node.dropna}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr,"
+        " cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes)\n"
+    )
 
+    out_cpp_col_inds = []
     idx = 0
     if agg_node.return_key:
-        for i, key_name in enumerate(key_arg_names):
-            func_text += (
-                "    {} = info_to_array(info_from_table(out_table, {}), {})\n".format(
-                    key_name, idx, key_name
-                )
+        # output keys are in the beginning if as_index=False but after data if
+        # as_index=True (part of Index)
+        out_key_offset = (
+            0
+            if isinstance(agg_node.out_type.index, bodo.RangeIndexType)
+            # number of data columns is all logical columns minus keys minus Index
+            else agg_node.n_out_cols - len(agg_node.in_key_inds) - 1
+        )
+        for i in range(n_keys):
+            col_no = out_key_offset + i
+            # cpp returns all keys even if dead
+            # TODO[BE-3182]: avoid returning dead key columns in cpp
+            out_cpp_col_inds.append(
+                col_no if col_no not in agg_node.dead_out_inds else -1
             )
             idx += 1
-    for i, out_name in enumerate(out_names.values()):
-        if (
-            isinstance(func, pytypes.SimpleNamespace)
-            and func.fname in ["min", "max", "shift"]
-            and isinstance(out_col_typ, bodo.CategoricalArrayType)
-        ):
-            func_text += f"    {out_name} = info_to_array(info_from_table(out_table, {idx}), {out_name + '_dummy'})\n"
-        else:
-            func_text += f"    {out_name} = info_to_array(info_from_table(out_table, {idx}), out_typs[{i}])\n"
+
+    for out_col_ind in agg_node.gb_info_out.keys():
+        out_cpp_col_inds.append(out_col_ind)
         idx += 1
-    # The index as last argument in output as well.
+
+    # Index is always stored last
+    dead_out_index = False
     if agg_node.same_index:
-        func_text += "    out_index_arg = info_to_array(info_from_table(out_table, {}), index_arg)\n".format(
-            idx
-        )
-        idx += 1
+        if agg_node.out_vars[-1] is not None:
+            out_cpp_col_inds.append(agg_node.n_out_cols - 1)
+        else:
+            dead_out_index = True
+
+    # NOTE: cpp_table_to_py_data() needs a type for all logical arrays (even if None)
+    # out_cpp_col_inds determines what arrays are dead
+    comma = "," if n_out_vars == 1 else ""
+    out_types_str = f"({', '.join(f'out_type{i}' for i in range(n_out_vars))}{comma})"
+
+    # pass input arrays corresponding to output arrays with unknown categorical values
+    # to cpp_table_to_py_data() to reuse categorical values for output arrays
+    unknown_cat_arrs = []
+    unknown_cat_out_inds = []
+    for i, t in enumerate(out_col_typs):
+        if i not in agg_node.dead_out_inds and type_has_unknown_cats(t):
+            if i in agg_node.gb_info_out:
+                in_col = agg_node.gb_info_out[i][0]
+            else:
+                assert (
+                    agg_node.return_key
+                ), "Internal error: groupby key output with unknown categoricals detected, but return_key is False"
+                key_no = i - out_key_offset
+                in_col = agg_node.in_key_inds[key_no]
+            unknown_cat_out_inds.append(i)
+            if agg_node.is_in_table_format and in_col < agg_node.n_in_table_arrays:
+                unknown_cat_arrs.append(f"get_table_data(arg0, {in_col})")
+            else:
+                unknown_cat_arrs.append(f"arg{in_col}")
+
+    comma = "," if len(unknown_cat_arrs) == 1 else ""
+    func_text += f"    out_data = cpp_table_to_py_data(out_table, out_col_inds, {out_types_str}, total_rows_np[0], {agg_node.n_out_table_arrays}, ({', '.join(unknown_cat_arrs)}{comma}), unknown_cat_out_inds)\n"
+
     # clean up
     func_text += (
         f"    ev_clean = bodo.utils.tracing.Event('tables_clean_up', {parallel})\n"
     )
     func_text += "    delete_table_decref_arrays(table)\n"
     func_text += "    delete_table_decref_arrays(udf_table_dummy)\n"
-    func_text += "    delete_table(out_table)\n"
-    func_text += f"    ev_clean.finalize()\n"
 
-    ret_names = tuple(out_names.values())
+    # TODO[BE-3182]: support removing dead keys from cpp output
+    # decref dead output keys since cpp code doesn't remove dead output keys yet
     if agg_node.return_key:
-        ret_names += tuple(key_arg_names)
-    func_text += "    return ({},{})\n".format(
-        ", ".join(ret_names), " out_index_arg," if agg_node.same_index else ""
+        for i in range(n_keys):
+            if out_cpp_col_inds[i] == -1:
+                func_text += f"    decref_table_array(out_table, {i})\n"
+
+    # TODO[BE-3200]: support removing dead output Index from cpp output
+    if dead_out_index:
+        # Index is always last in cpp output table (after keys and data)
+        out_index_ind = len(agg_node.gb_info_out) + (
+            n_keys if agg_node.return_key else 0
+        )
+        func_text += f"    decref_table_array(out_table, {out_index_ind})\n"
+
+    func_text += "    delete_table(out_table)\n"
+    func_text += "    ev_clean.finalize()\n"
+
+    func_text += "    return out_data\n"
+
+    glbls = {f"out_type{i}": out_var_types[i] for i in range(n_out_vars)}
+    glbls["out_col_inds"] = MetaType(tuple(out_cpp_col_inds))
+    glbls["in_col_inds"] = MetaType(tuple(in_cpp_col_inds))
+    glbls["cpp_table_to_py_data"] = cpp_table_to_py_data
+    glbls["py_data_to_cpp_table"] = py_data_to_cpp_table
+    glbls.update({f"udf_type{i}": t for i, t in enumerate(udf_types)})
+    glbls["udf_dummy_col_inds"] = MetaType(tuple(range(len(udf_types))))
+    glbls["create_dummy_table"] = create_dummy_table
+    glbls["unknown_cat_out_inds"] = MetaType(tuple(unknown_cat_out_inds))
+    glbls["get_table_data"] = bodo.hiframes.table.get_table_data
+
+    return func_text, glbls
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def create_dummy_table(data_types):
+    """Creates a dummy TableType value with the specified array types.
+    Currently used to pass UDF data types to C++ using py_data_to_cpp_table().
+
+    Args:
+        data_types (tuple(types.Type)): Array types in the dummy table
+
+    Returns:
+        TableType: dummy table with specified array types
+    """
+    arr_types = tuple(
+        unwrap_typeref(data_types.types[i]) for i in range(len(data_types.types))
+    )
+    table_type = bodo.TableType(arr_types)
+    glbls = {"table_type": table_type}
+
+    func_text = "def impl(data_types):\n"
+    func_text += "  py_table = init_table(table_type, False)\n"
+    func_text += "  py_table = set_table_len(py_table, 1)\n"
+
+    for typ, blk in table_type.type_to_blk.items():
+        glbls[f"typ_list_{blk}"] = types.List(typ)
+        glbls[f"typ_{blk}"] = typ
+        n_arrs = len(table_type.block_to_arr_ind[blk])
+        func_text += (
+            f"  arr_list_{blk} = alloc_list_like(typ_list_{blk}, {n_arrs}, False)\n"
+        )
+        func_text += f"  for i in range(len(arr_list_{blk})):\n"
+        func_text += f"    arr_list_{blk}[i] = alloc_type(1, typ_{blk}, (-1,))\n"
+        func_text += f"  py_table = set_table_block(py_table, arr_list_{blk}, {blk})\n"
+
+    func_text += "  return py_table\n"
+
+    glbls.update(
+        {
+            "init_table": bodo.hiframes.table.init_table,
+            "alloc_list_like": bodo.hiframes.table.alloc_list_like,
+            "set_table_block": bodo.hiframes.table.set_table_block,
+            "set_table_len": bodo.hiframes.table.set_table_len,
+            "alloc_type": bodo.utils.utils.alloc_type,
+        }
     )
 
     loc_vars = {}
-    exec(func_text, {"out_typs": out_col_typs}, loc_vars)
-    agg_top = loc_vars["agg_top"]
-    return agg_top
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
+
+
+def agg_table_column_use(
+    agg_node, block_use_map, equiv_vars, typemap, table_col_use_map
+):
+    """Compute column uses in input table of groupby based on output table's uses.
+    Uses gb_info_out to map output to input column number. Key columns are always used.
+
+    Args:
+        agg_node (Aggregate): Aggregate node to process
+        block_use_map (Dict[str, Tuple[Set[int], bool, bool]]): column uses for current
+            block.
+        equiv_vars (Dict[str, Set[str]]): Dictionary
+            mapping table variable names to a set of
+            other table name aliases.
+        typemap (dict[str, types.Type]): typemap of variables
+        table_col_use_map (Dict[int, Dict[str, Tuple[Set[int], bool, bool]]]):
+            Dictionary mapping block numbers to a dictionary of table names
+            and "column uses". A column use is represented by the triple
+                - used_cols: Set of used column numbers
+                - use_all: Flag for if all columns are used. If True used_cols
+                    is garbage
+                - cannot_del_columns: Flag indicate this table is used in
+                    an unsupported operation (e.g. passed to a DataFrame)
+                    and therefore no columns can be deleted.
+    """
+    if not agg_node.is_in_table_format or agg_node.in_vars[0] is None:
+        return
+
+    rhs_table = agg_node.in_vars[0].name
+
+    (
+        orig_used_cols,
+        orig_use_all,
+        orig_cannot_del_cols,
+    ) = block_use_map[rhs_table]
+
+    # skip if input already uses all columns or cannot delete the table
+    if orig_use_all or orig_cannot_del_cols:
+        return
+
+    # get output's data column uses, which are only in first variable (table or array)
+    if agg_node.is_output_table and agg_node.out_vars[0] is not None:
+        (out_used_cols, out_use_all, out_cannot_del_cols,) = _compute_table_column_uses(
+            agg_node.out_vars[0].name, table_col_use_map, equiv_vars
+        )
+        # we don't simply propagate use_all since all of output columns may not use all
+        # of input columns (groupby has explicit column selection support)
+        if out_use_all or out_cannot_del_cols:
+            out_used_cols = set(range(agg_node.n_out_table_arrays))
+    else:
+        out_used_cols = {}
+        # Series case, output only has column 0
+        if agg_node.out_vars[0] is not None and 0 not in agg_node.dead_out_inds:
+            out_used_cols = {0}
+
+    # key columns are always used
+    table_in_key_set = set(
+        i for i in agg_node.in_key_inds if i < agg_node.n_in_table_arrays
+    )
+
+    # get used input data columns
+    in_used_cols = set(
+        agg_node.gb_info_out[i][0]
+        for i in out_used_cols
+        # output keys (as_index=False) are not part of gb_info_out
+        # size() has None as input (just uses keys)
+        if i in agg_node.gb_info_out and agg_node.gb_info_out[i][0] is not None
+    )
+    in_used_cols |= table_in_key_set | orig_used_cols
+    in_use_all = len(set(range(agg_node.n_in_table_arrays)) - in_used_cols) == 0
+
+    block_use_map[rhs_table] = (
+        in_used_cols,
+        in_use_all,
+        False,
+    )
+
+
+ir_extension_table_column_use[Aggregate] = agg_table_column_use
+
+
+def agg_remove_dead_column(agg_node, column_live_map, equiv_vars, typemap):
+    """Remove dead table columns from Aggregate node (if in table format).
+    Updates all of Aggregate node's internal data structures (dead_out_inds,
+    dead_in_inds, gb_info_out, gb_info_in).
+
+    Args:
+        agg_node (Aggregate): Aggregate node to update
+        column_live_map (Dict[str, Tuple[Set[int], bool, bool]]): column uses of each
+            table variable for current block.
+        equiv_vars (Dict[str, Set[str]]): Dictionary
+            mapping table variable names to a set of
+            other table name aliases.
+        typemap (dict[str, types.Type]): typemap of variables
+    """
+    if not agg_node.is_output_table or agg_node.out_vars[0] is None:
+        return False
+
+    n_table_cols = agg_node.n_out_table_arrays
+    lhs_table = agg_node.out_vars[0].name
+
+    used_columns = _find_used_columns(
+        lhs_table, n_table_cols, column_live_map, equiv_vars
+    )
+
+    # None means all columns are used so we can't prune any columns
+    if used_columns is None:
+        return False
+
+    dead_columns = set(range(n_table_cols)) - used_columns
+    removed = len(dead_columns - agg_node.dead_out_inds) != 0
+
+    # update agg node's internal data structures
+    if removed:
+        agg_node.dead_out_inds.update(dead_columns)
+        agg_node.update_dead_col_info()
+
+    return removed
+
+
+remove_dead_column_extensions[Aggregate] = agg_remove_dead_column
 
 
 def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
@@ -2256,24 +2449,16 @@ def replace_closures(f_ir, closure, code):
         numba.core.inline_closurecall._replace_freevars(f_ir.blocks, items)
 
 
-class RegularUDFGenerator(object):
+class RegularUDFGenerator:
     """Generate code that applies UDFs to all columns that use them"""
 
     def __init__(
         self,
         in_col_types,
-        out_col_types,
-        pivot_typ,
-        pivot_values,
-        is_crosstab,
         typingctx,
         targetctx,
     ):
         self.in_col_types = in_col_types
-        self.out_col_types = out_col_types
-        self.pivot_typ = pivot_typ
-        self.pivot_values = pivot_values
-        self.is_crosstab = is_crosstab
         self.typingctx = typingctx
         self.targetctx = targetctx
         self.all_reduce_vars = []
@@ -2387,18 +2572,6 @@ class RegularUDFGenerator(object):
         if len(self.all_update_funcs) == 0:
             return None
 
-        self.all_vartypes = (
-            self.all_vartypes * len(self.pivot_values)
-            if self.pivot_values is not None
-            else self.all_vartypes
-        )
-
-        self.all_reduce_vars = (
-            self.all_reduce_vars * len(self.pivot_values)
-            if self.pivot_values is not None
-            else self.all_reduce_vars
-        )
-
         init_func = gen_init_func(
             self.all_init_nodes,
             self.all_reduce_vars,
@@ -2408,14 +2581,8 @@ class RegularUDFGenerator(object):
         )
         update_all_func = gen_all_update_func(
             self.all_update_funcs,
-            self.all_vartypes,
             self.in_col_types,
             self.redvar_offsets,
-            self.typingctx,
-            self.targetctx,
-            self.pivot_typ,
-            self.pivot_values,
-            self.is_crosstab,
         )
         combine_all_func = gen_all_combine_func(
             self.all_combine_funcs,
@@ -2423,17 +2590,10 @@ class RegularUDFGenerator(object):
             self.redvar_offsets,
             self.typingctx,
             self.targetctx,
-            self.pivot_typ,
-            self.pivot_values,
         )
         eval_all_func = gen_all_eval_func(
             self.all_eval_funcs,
-            self.all_vartypes,
             self.redvar_offsets,
-            self.out_col_types,
-            self.typingctx,
-            self.targetctx,
-            self.pivot_values,
         )
         return (
             self.all_vartypes,
@@ -2445,7 +2605,6 @@ class RegularUDFGenerator(object):
 
 
 class GeneralUDFGenerator(object):
-    # TODO pivot and crosstab
     def __init__(self):
         self.funcs = []
 
@@ -2464,19 +2623,10 @@ class GeneralUDFGenerator(object):
 
 def get_udf_func_struct(
     agg_func,
-    input_has_index,
     in_col_types,
-    out_col_types,
     typingctx,
     targetctx,
-    pivot_typ,
-    pivot_values,
-    is_crosstab,
 ):
-    if is_crosstab and len(in_col_types) == 0:
-        # use dummy int input type for crosstab since doesn't have input
-        in_col_types = [types.Array(types.intp, 1, "C")]
-
     # Construct list of (input col type, aggregation func)
     # If multiple functions will be applied to the same input column, that
     # input column will appear multiple times in the generated list
@@ -2487,10 +2637,6 @@ def get_udf_func_struct(
     # Create UDF code generators
     regular_udf_gen = RegularUDFGenerator(
         in_col_types,
-        out_col_types,
-        pivot_typ,
-        pivot_values,
-        is_crosstab,
         typingctx,
         targetctx,
     )
@@ -2640,55 +2786,25 @@ def gen_init_func(init_nodes, reduce_vars, var_types, typingctx, targetctx):
 
 def gen_all_update_func(
     update_funcs,
-    reduce_var_types,
     in_col_types,
     redvar_offsets,
-    typingctx,
-    targetctx,
-    pivot_typ,
-    pivot_values,
-    is_crosstab,
 ):
 
     out_num_cols = len(update_funcs)
     in_num_cols = len(in_col_types)
-    if pivot_values is not None:
-        assert in_num_cols == 1
 
-    func_text = "def update_all_f(redvar_arrs, data_in, w_ind, i, pivot_arr):\n"
-    if pivot_values is not None:
-        num_redvars = redvar_offsets[in_num_cols]
-        func_text += "  pv = pivot_arr[i]\n"
-        for j, pv in enumerate(pivot_values):
-            el = "el" if j != 0 else ""
-            func_text += "  {}if pv == '{}':\n".format(el, pv)  # TODO: non-string pivot
-            init_offset = num_redvars * j
-            redvar_access = ", ".join(
-                [
-                    "redvar_arrs[{}][w_ind]".format(i)
-                    for i in range(
-                        init_offset + redvar_offsets[0], init_offset + redvar_offsets[1]
-                    )
-                ]
+    func_text = "def update_all_f(redvar_arrs, data_in, w_ind, i):\n"
+    for j in range(out_num_cols):
+        redvar_access = ", ".join(
+            [
+                "redvar_arrs[{}][w_ind]".format(i)
+                for i in range(redvar_offsets[j], redvar_offsets[j + 1])
+            ]
+        )
+        if redvar_access:  # if there is a parfor
+            func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(
+                redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j
             )
-            data_access = "data_in[0][i]"
-            if is_crosstab:  # TODO: crosstab with values arg
-                data_access = "0"
-            func_text += "    {} = update_vars_0({}, {})\n".format(
-                redvar_access, redvar_access, data_access
-            )
-    else:
-        for j in range(out_num_cols):
-            redvar_access = ", ".join(
-                [
-                    "redvar_arrs[{}][w_ind]".format(i)
-                    for i in range(redvar_offsets[j], redvar_offsets[j + 1])
-                ]
-            )
-            if redvar_access:  # if there is a parfor
-                func_text += "  {} = update_vars_{}({},  data_in[{}][i])\n".format(
-                    redvar_access, j, redvar_access, 0 if in_num_cols == 1 else j
-                )
     func_text += "  return\n"
 
     glbs = {}
@@ -2706,8 +2822,6 @@ def gen_all_combine_func(
     redvar_offsets,
     typingctx,
     targetctx,
-    pivot_typ,
-    pivot_values,
 ):
 
     reduce_arrs_tup_typ = types.Tuple(
@@ -2718,55 +2832,29 @@ def gen_all_combine_func(
         reduce_arrs_tup_typ,
         types.intp,
         types.intp,
-        pivot_typ,
     )
 
     num_cols = len(redvar_offsets) - 1
-    num_redvars = redvar_offsets[num_cols]
 
-    func_text = "def combine_all_f(redvar_arrs, recv_arrs, w_ind, i, pivot_arr):\n"
+    func_text = "def combine_all_f(redvar_arrs, recv_arrs, w_ind, i):\n"
 
-    if pivot_values is not None:
-        assert num_cols == 1
-        for k in range(len(pivot_values)):
-            init_offset = num_redvars * k
-            redvar_access = ", ".join(
-                [
-                    "redvar_arrs[{}][w_ind]".format(i)
-                    for i in range(
-                        init_offset + redvar_offsets[0], init_offset + redvar_offsets[1]
-                    )
-                ]
+    for j in range(num_cols):
+        redvar_access = ", ".join(
+            [
+                "redvar_arrs[{}][w_ind]".format(i)
+                for i in range(redvar_offsets[j], redvar_offsets[j + 1])
+            ]
+        )
+        recv_access = ", ".join(
+            [
+                "recv_arrs[{}][i]".format(i)
+                for i in range(redvar_offsets[j], redvar_offsets[j + 1])
+            ]
+        )
+        if recv_access:  # if there is a parfor
+            func_text += "  {} = combine_vars_{}({}, {})\n".format(
+                redvar_access, j, redvar_access, recv_access
             )
-            recv_access = ", ".join(
-                [
-                    "recv_arrs[{}][i]".format(i)
-                    for i in range(
-                        init_offset + redvar_offsets[0], init_offset + redvar_offsets[1]
-                    )
-                ]
-            )
-            func_text += "  {} = combine_vars_0({}, {})\n".format(
-                redvar_access, redvar_access, recv_access
-            )
-    else:
-        for j in range(num_cols):
-            redvar_access = ", ".join(
-                [
-                    "redvar_arrs[{}][w_ind]".format(i)
-                    for i in range(redvar_offsets[j], redvar_offsets[j + 1])
-                ]
-            )
-            recv_access = ", ".join(
-                [
-                    "recv_arrs[{}][i]".format(i)
-                    for i in range(redvar_offsets[j], redvar_offsets[j + 1])
-                ]
-            )
-            if recv_access:  # if there is a parfor
-                func_text += "  {} = combine_vars_{}({}, {})\n".format(
-                    redvar_access, j, redvar_access, recv_access
-                )
     func_text += "  return\n"
     glbs = {}
     for i, f in enumerate(combine_funcs):
@@ -2791,51 +2879,23 @@ def gen_all_combine_func(
 
 def gen_all_eval_func(
     eval_funcs,
-    reduce_var_types,
     redvar_offsets,
-    out_col_typs,
-    typingctx,
-    targetctx,
-    pivot_values,
 ):
-
-    reduce_arrs_tup_typ = types.Tuple(
-        [types.Array(t, 1, "C") for t in reduce_var_types]
-    )
-    out_col_typs = types.Tuple(out_col_typs)
 
     num_cols = len(redvar_offsets) - 1
 
-    num_redvars = redvar_offsets[num_cols]
-
     func_text = "def eval_all_f(redvar_arrs, out_arrs, j):\n"
 
-    if pivot_values is not None:
-        assert num_cols == 1
-        for j in range(len(pivot_values)):
-            init_offset = num_redvars * j
-            redvar_access = ", ".join(
-                [
-                    "redvar_arrs[{}][j]".format(i)
-                    for i in range(
-                        init_offset + redvar_offsets[0], init_offset + redvar_offsets[1]
-                    )
-                ]
-            )
-            func_text += "  out_arrs[{}][j] = eval_vars_0({})\n".format(
-                j, redvar_access
-            )
-    else:
-        for j in range(num_cols):
-            redvar_access = ", ".join(
-                [
-                    "redvar_arrs[{}][j]".format(i)
-                    for i in range(redvar_offsets[j], redvar_offsets[j + 1])
-                ]
-            )
-            func_text += "  out_arrs[{}][j] = eval_vars_{}({})\n".format(
-                j, j, redvar_access
-            )
+    for j in range(num_cols):
+        redvar_access = ", ".join(
+            [
+                "redvar_arrs[{}][j]".format(i)
+                for i in range(redvar_offsets[j], redvar_offsets[j + 1])
+            ]
+        )
+        func_text += "  out_arrs[{}][j] = eval_vars_{}({})\n".format(
+            j, j, redvar_access
+        )
     func_text += "  return\n"
     glbs = {}
     for i, f in enumerate(eval_funcs):
@@ -2933,30 +2993,6 @@ def gen_combine_func(
     for label in topo_order:
         bl = parfor.loop_body[label]
         for stmt in bl.body:
-            if is_call_assign(stmt) and (
-                guard(find_callname, f_ir, stmt.value)
-                == ("__special_combine", "bodo.ir.aggregate")
-            ):
-                args = stmt.value.args
-                l_argnames = []
-                r_argnames = []
-                for v in args[:-1]:
-                    ind = redvars.index(v.name)
-                    ignore_redvar_inds.append(ind)
-                    l_argnames.append("v{}".format(ind))
-                    r_argnames.append("in{}".format(ind))
-                comb_name = "__special_combine__{}".format(len(special_combines))
-                func_text += "    ({},) = {}({})\n".format(
-                    ", ".join(l_argnames), comb_name, ", ".join(l_argnames + r_argnames)
-                )
-                dummy_call = ir.Expr.call(args[-1], [], (), bl.loc)
-                sp_func = guard(find_callname, f_ir, dummy_call)
-                # XXX: only var supported for now
-                # TODO: support general functions
-                assert sp_func == ("_var_combine", "bodo.ir.aggregate")
-                sp_func = bodo.ir.aggregate._var_combine
-                special_combines[comb_name] = sp_func
-
             # reduction variables
             if is_assign(stmt) and stmt.target.name in redvars:
                 red_var = stmt.target.name
