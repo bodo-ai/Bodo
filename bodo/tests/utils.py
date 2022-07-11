@@ -1540,6 +1540,95 @@ def gen_random_arrow_struct_struct(span, n):
     return e_list
 
 
+def gen_nonascii_list(num_strings):
+    """
+    Generate list of num_strings number of non-ASCII strings
+    Non-ASCII Reference: https://rbutterworth.nfshost.com/Tables/compose/
+    """
+
+    list_non_ascii_strings = [
+        "À È Ì",
+        "Á É Í",
+        "Â Ê Î",
+        "Ã Ẽ Ĩ",
+        "Ä Ë Ï",
+        "Å Ů ẘ ẙ",
+        "Ā Ē Ī",
+        "Ă Ĕ Ĭ",
+        "Ą Ę Į",
+        "Ǎ Ě Ǐ",
+        "Ɨ Ø ƀ",
+        "Ȩ Ç Ḑ",
+        "Ő Ű",
+        "ǖ ǘ ǚ ǜ",
+        "Æ æ",
+        "Œ œ",
+        "Ð ð",
+        "Þ þ",
+        "Ŋ ŋ",
+        "ẞ ß",
+        "ſ ſ",
+        "İ ı",
+        "ĸ",
+        "ə",
+        "ʻ",
+        "♩ ♪ ♫ ♬ ♭ ♮ ♯",
+        "ⁱ ⁿ ª º",
+        "ʰ ʲ ˡ ʳ ˢ ʷ ˣ ʸ",
+        "⁰ ¹ ² ³ ⁴ ⁵ ⁶ ⁷ ⁸ ⁹",
+        "⁽ ⁺ ⁼ ⁾",
+        "₍ ₊ ₌ ₎",
+        "₀ ₁ ₂ ₃ ₄ ₅ ₆ ₇ ₈ ₉",
+        "½⅓¼⅕⅙⅐⅛⅑ ⅔⅖ ¾⅗ ⅘ ⅚⅝ ⅞",
+        "± × ÷ √",
+        "≠ ≤ ≥ ≡",
+        "← → ⇒",
+        "∴ ∵",
+        "¦ ¬ ⋄",
+        "° ∞ ‰",
+        "µ ∅",
+        "« »",
+        "‹ ›",
+        "“ ”",
+        "‘ ’",
+        "‚ „",
+        "〞〝",
+        "¡",
+        "¿",
+        "§",
+        "¶",
+        "…",
+        "·",
+        "¸",
+        "–",
+        "—",
+        "©",
+        "®",
+        "℠",
+        "™",
+        "₥",
+        "¢",
+        "¤",
+        "€",
+        "£",
+        "₡",
+        "¥",
+        "₦",
+        "₨",
+        "₩",
+        "฿",
+        "₫",
+        "₠",
+        "₣",
+        "₤",
+        "₧",
+        "₢",
+        "∞",
+    ]
+
+    return list_non_ascii_strings[0:num_strings]
+
+
 def gen_random_list_string_array(option, n):
     """Generate a random array of list(string)
     option=1 for series with nullable values

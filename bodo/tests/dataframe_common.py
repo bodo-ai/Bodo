@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.utils import gen_nonascii_list
 
 
 # TODO: other possible df types like dt64, td64, ...
@@ -65,7 +66,11 @@ import bodo
         # string and int columns, float index
         pytest.param(
             pd.DataFrame(
-                {"A": ["AA", np.nan, "", "D", "GG", "FF"], "B": [1, 8, 4, -1, 2, 10]},
+                {
+                    "A": ["AA", np.nan, "", "D", "GG", "FF"],
+                    "B": [1, 8, 4, -1, 2, 10],
+                    "C": gen_nonascii_list(6),
+                },
                 [-2.1, 0.1, 1.1, 7.1, 9.0, 7.7],
             ),
             marks=pytest.mark.slow,
