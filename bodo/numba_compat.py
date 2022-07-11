@@ -69,6 +69,7 @@ from bodo.utils.python_310_bytecode_pass import (
     Bodo310ByteCodePass,
     peep_hole_call_function_ex_to_call_function_kw,
     peep_hole_fuse_dict_add_updates,
+    peep_hole_fuse_tuple_adds,
 )
 from bodo.utils.typing import (
     BodoError,
@@ -113,6 +114,7 @@ def run_frontend(func, inline_closures=False, emit_dels=False):
     if PYVERSION == (3, 10):
         func_ir = peep_hole_call_function_ex_to_call_function_kw(func_ir)
         func_ir = peep_hole_fuse_dict_add_updates(func_ir)
+        func_ir = peep_hole_fuse_tuple_adds(func_ir)
 
     if inline_closures:
         from numba.core.inline_closurecall import InlineClosureCallPass
