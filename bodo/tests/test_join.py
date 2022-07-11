@@ -24,6 +24,7 @@ from bodo.tests.utils import (
     check_func,
     count_array_REPs,
     count_parfor_REPs,
+    gen_nonascii_list,
     gen_random_decimal_array,
     gen_random_list_string_array,
     get_start_end,
@@ -268,6 +269,36 @@ def _gen_df_binary(n, seed=None):
 
 
 # ------------------------------ merge() ------------------------------ #
+def test_merge_nonascii_values(memory_leak_check):
+    """
+    Test merge(): make sure merge works with non-ASCII key and data values
+    """
+
+    def test_impl1(df1, df2):
+        o1 = df1.merge(df2, on=["key"])
+        return o1
+
+    def test_impl2(df1, df2):
+        o1 = df1.merge(df2, on=["value"])
+        return o1
+
+    def test_impl3(df1, df2):
+        o1 = df1.merge(df2, on=["key"], how="outer")
+        return o1
+
+    df1 = pd.DataFrame({"key": gen_nonascii_list(5), "value": [1, 2, 3, 4, 5]})
+
+    df2 = pd.DataFrame(
+        {"key": ["a", "bb", "ccc", "DDDD", "e"], "value": [6, 7, 8, 9, 10]}
+    )
+
+    df3 = pd.DataFrame({"key": gen_nonascii_list(5), "value": [6, 7, 8, 9, 10]})
+
+    pairs = ((df1, df2), (df1, df3), (df2, df3))
+    for left, right in pairs:
+        check_func(test_impl1, (left, right), sort_output=True, reset_index=True)
+        check_func(test_impl2, (left, right), sort_output=True, reset_index=True)
+        check_func(test_impl3, (left, right), sort_output=True, reset_index=True)
 
 
 def test_merge_key_change(memory_leak_check):
