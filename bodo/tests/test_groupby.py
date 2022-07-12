@@ -18,6 +18,7 @@ from bodo.tests.utils import (
     check_parallel_coherency,
     convert_non_pandas_columns,
     dist_IR_contains,
+    gen_nonascii_list,
     gen_random_decimal_array,
     gen_random_list_string_array,
     get_start_end,
@@ -367,7 +368,7 @@ def test_sum_string(memory_leak_check):
     df1 = pd.DataFrame(
         {
             "A": [1, 1, 1, 2, 3, 3, 4, 0, 5, 0, 11],
-            "B": ["a", "b", "c", "d", "", "AA", "ABC", "AB", "c", "F", "GG"],
+            "B": ["a", "b", "c", "d", "", "AA"] + gen_nonascii_list(5),
             # String cols are dropped for sum, so we need an extra column to avoid empty output in that case
             "C": [1] * 11,
         }
@@ -531,8 +532,12 @@ def test_random_string_sum_min_max_first_last(memory_leak_check):
         eList_C = []
         for i in range(n):
             len_str = random.randint(1, 10)
+            k2 = random.randint(1, len_str)
+            nonascii_val_B = " ".join(random.sample(gen_nonascii_list(k2), k2))
             val_A = random.randint(1, 10)
-            val_B = "".join(random.choices(string.ascii_uppercase, k=len_str))
+            val_B = nonascii_val_B.join(
+                random.choices(string.ascii_uppercase, k=(len_str - k2))
+            )
             eList_A.append(val_A)
             eList_B.append(val_B)
             eList_C.append(1)
@@ -655,6 +660,24 @@ def test_agg_str_key(memory_leak_check):
         {
             "A": ["AA", "B", "B", "B", "AA", "AA", "B"],
             "B": [-8, 2, 3, 1, 5, 6, 7],
+        }
+    )
+    check_func(impl, (df,), sort_output=True)
+
+
+def test_agg_nonascii_str_key(memory_leak_check):
+    """
+    Test Groupby.agg() with non-ASCII string keys
+    """
+
+    def impl(df):
+        A = df.groupby("A").agg(lambda x: x.sum())
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": ["AA", "B", "B", "B", "AA", "AA", "B"],
+            " ".join(gen_nonascii_list(1)): [-8, 2, 3, 1, 5, 6, 7],
         }
     )
     check_func(impl, (df,), sort_output=True)
@@ -1347,7 +1370,11 @@ def test_agg_select_col_fast(memory_leak_check):
         return A
 
     df_str = pd.DataFrame(
-        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": ["a", "b", "c", "c", "b", "c", "a"],
+            "C": gen_nonascii_list(7),
+        }
     )
 
     check_func(impl_str, (df_str,), sort_output=True)
@@ -1373,7 +1400,11 @@ def test_agg_select_col(memory_leak_check):
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2]}
     )
     df_str = pd.DataFrame(
-        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": ["a", "b", "c", "c", "b", "c", "a"],
+            "C": gen_nonascii_list(7),
+        }
     )
     check_func(impl_num, (df_int,), sort_output=True, check_dtype=False)
     check_func(impl_num, (df_float,), sort_output=True, check_dtype=False)
@@ -1578,7 +1609,11 @@ def test_aggregate_select_col(is_slow_run, memory_leak_check):
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": [1.2, 2.4, np.nan, 2.2, 5.3, 3.3, 7.2]}
     )
     df_str = pd.DataFrame(
-        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": ["a", "b", "c", "c", "b", "c", "a"],
+            "C": gen_nonascii_list(7),
+        }
     )
     check_func(impl_num, (df_int,), sort_output=True, check_dtype=False)
     if not is_slow_run:
@@ -1954,7 +1989,11 @@ def test_agg_global_func(memory_leak_check):
         return A
 
     df_str = pd.DataFrame(
-        {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["a", "b", "c", "c", "b", "c", "a"]}
+        {
+            "A": [2, 1, 1, 1, 2, 2, 1],
+            "B": ["a", "b", "c", "c", "b", "c", "a"],
+            "C": gen_nonascii_list(7),
+        }
     )
 
     check_func(impl_str, (df_str,), sort_output=True)
@@ -1991,9 +2030,10 @@ def test_count(memory_leak_check):
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
             "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
-            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+            "C": gen_nonascii_list(7),
         }
     )
+
     df_bool = pd.DataFrame(
         {
             "A": [2, 1, 1, 1, 2, 2, 1],
@@ -2042,11 +2082,13 @@ def test_count_select_col(memory_leak_check):
             "C": [1.1, 2.4, 3.1, -1.9, 2.3, 3.0, -2.4],
         }
     )
+
     df_str = pd.DataFrame(
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
             "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
             "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+            "D": gen_nonascii_list(7),
         }
     )
     df_bool = pd.DataFrame(
@@ -3306,7 +3348,7 @@ def test_min_max_other_supported_types(memory_leak_check):
         {
             "A": [2, 1, 1, 2, 3],
             "B": [1.1, 2.2, 3.3, 4.4, 1.1],
-            "C": ["ab", "cd", "ef", "gh", "ijk"],
+            "C": ["ab", "cd"] + gen_nonascii_list(3),
         }
     )
     check_func(impl1, (df_mix,), sort_output=True)
@@ -3603,9 +3645,10 @@ def test_first_last(test_df):
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
             "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
-            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+            "C": gen_nonascii_list(7),
         }
     )
+
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
@@ -3728,7 +3771,7 @@ def test_first_last_supported_types(memory_leak_check):
         {
             "A": [2, 1, 1, 2, 3],
             "B": [1.1, 2.2, 3.3, 4.4, 1.1],
-            "C": ["ab", "cd", "ef", "gh", "ijk"],
+            "C": ["ab", "cd"] + gen_nonascii_list(3),
         }
     )
     check_func(impl_mix, (df_mix,), sort_output=True)
@@ -3763,9 +3806,10 @@ def test_first_last_one_col(test_df):
         {
             "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
             "B": ["ccc", np.nan, "bb", "aa", np.nan, "ggg", "rr"],
-            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+            "C": gen_nonascii_list(7),
         }
     )
+
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
