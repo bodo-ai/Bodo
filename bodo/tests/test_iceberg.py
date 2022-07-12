@@ -255,6 +255,7 @@ def test_schema_evolution_detection(iceberg_database, iceberg_table_conn):
         bodo.jit(impl)(table_name, conn, db_schema)
 
 
+@pytest.mark.skip("[BE-3212] Fix Java failures on CI")
 def test_iceberg_invalid_table(iceberg_database, iceberg_table_conn):
     """Tests error raised when a nonexistent Iceberg table is provided."""
 
