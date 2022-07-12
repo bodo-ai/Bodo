@@ -48,6 +48,7 @@ from bodo.utils.transform import (
     gen_const_tup,
     get_call_expr_arg,
     get_const_value,
+    get_const_value_inner,
     replace_func,
 )
 from bodo.utils.typing import (
@@ -2506,46 +2507,81 @@ def _gen_init_df_dataframe_pass(columns, index=None, is_table_format=False):
 
 
 def _get_df_apply_used_cols(func, columns):
-    """find which df columns are actually used in UDF 'func' inside df.apply(func) if
-    possible (has to be conservative and assume all columns are used when it cannot
-    analyze the IR properly)
+    """find which df columns are actually used in UDF 'func' inside df.apply(func) or
+    df.groupby().apply(func) if possible (has to be conservative and assume all columns
+    are used when it cannot analyze the IR properly)
     """
     lambda_ir = numba.core.compiler.run_frontend(func)
+    columns_set = set(columns)
 
-    used_cols = []
+    used_cols = set()
     l_topo_order = find_topo_order(lambda_ir.blocks)
     first_stmt = lambda_ir.blocks[l_topo_order[0]].body[0]
     assert isinstance(first_stmt, ir.Assign) and isinstance(first_stmt.value, ir.Arg)
+    # NOTE: UDF argument can be dataframe or Series
     arg_var = first_stmt.target
     use_all_cols = False
     for bl in lambda_ir.blocks.values():
         for stmt in bl.body:
-            vnames = [v.name for v in stmt.list_vars()]
+
+            # ignore ir.Arg
+            if is_assign(stmt) and isinstance(stmt.value, ir.Arg):
+                continue
+
+            # ignore df.loc getattr
+            if (
+                is_assign(stmt)
+                and is_expr(stmt.value, "getattr")
+                and stmt.value.attr == "loc"
+            ):
+                continue
+
+            # match df.C column access
+            if (
+                is_assign(stmt)
+                and is_expr(stmt.value, "getattr")
+                and stmt.value.value.name == arg_var.name
+                and stmt.value.attr in columns_set
+            ):
+                used_cols.add(stmt.value.attr)
+                continue
+
+            # match df["C"], df[["C", "D"]], df.loc[:, ["C", "D"]]
+            if is_assign(stmt) and is_expr(stmt.value, "getitem"):
+                # df["C"], df[["C", "D"]]
+                if stmt.value.value.name == arg_var.name:
+                    cols = guard(get_const_value_inner, lambda_ir, stmt.value.index)
+                    if not isinstance(cols, list):
+                        cols = [cols]
+                    cols_set = set(cols)
+                    # make sure getitem indices are column names since input argument
+                    # can be a Series which allows integer indexing, e.g. r[[1, 2]]
+                    if not (cols_set - columns_set):
+                        used_cols.update(cols_set)
+                        continue
+
+                # df.loc[:, ["C", "D"]]
+                val_def = guard(get_definition, lambda_ir, stmt.value.value)
+                if (
+                    is_expr(val_def, "getattr")
+                    and val_def.attr == "loc"
+                    and val_def.value.name == arg_var.name
+                ):
+                    idx = guard(find_build_tuple, lambda_ir, stmt.value.index)
+                    if idx is not None and len(idx) == 2:
+                        cols = guard(get_const_value_inner, lambda_ir, idx[1])
+                        cols_set = set(cols)
+                        if not (cols_set - columns_set):
+                            used_cols.update(cols_set)
+                            continue
+
+            vnames = set(v.name for v in stmt.list_vars())
             if arg_var.name in vnames:
-                if is_assign(stmt) and isinstance(stmt.value, ir.Arg):
-                    continue
-                # match x.C column access
-                elif (
-                    is_assign(stmt)
-                    and is_expr(stmt.value, "getattr")
-                    and stmt.value.value.name == arg_var.name
-                    and stmt.value.attr in columns
-                ):
-                    used_cols.append(stmt.value.attr)
-                # match x["C"] column access
-                elif (
-                    is_assign(stmt)
-                    and is_expr(stmt.value, "getitem")
-                    and stmt.value.value.name == arg_var.name
-                    and guard(find_const, lambda_ir, stmt.value.index) in columns
-                ):
-                    used_cols.append(guard(find_const, lambda_ir, stmt.value.index))
-                else:
-                    # argument is used in some other form
-                    # be conservative and use all cols
-                    use_all_cols = True
-                    used_cols = columns
-                    break
+                # argument is used in some other form
+                # be conservative and use all cols
+                use_all_cols = True
+                used_cols = columns_set
+                break
 
         if use_all_cols:
             break
@@ -2555,5 +2591,5 @@ def _get_df_apply_used_cols(func, columns):
     # rows
     # Create a dictionary for scaling to large numbers of columns.
     cols_dict = {name: i for i, name in enumerate(columns)}
-    used_cols = [c for (_, c) in sorted((cols_dict[v], v) for v in set(used_cols))]
+    used_cols = [c for (_, c) in sorted((cols_dict[v], v) for v in used_cols)]
     return used_cols

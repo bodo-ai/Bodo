@@ -2510,6 +2510,34 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
         df2.columns = ["A", "B", "C"]  # set name since Pandas sets NaN for data column
         return df2
 
+    # similar to BodoSQL generated code for window functions
+    def impl13(in_df):
+        def _bodo_f(df):
+            df = df.loc[:, ["B", "C"]]
+            final_index = df.index
+            df["OUTPUT_COL"] = np.arange(1, len(df) + 1)
+            sorted_df = df.sort_values(
+                by=[
+                    "B",
+                ],
+                ascending=[
+                    False,
+                ],
+                na_position="first",
+            )
+            arr = sorted_df["C"]
+            retval = pd.DataFrame(
+                {
+                    "AGG_OUTPUT_0": arr,
+                },
+                index=final_index,
+            )
+            return retval
+
+        return in_df.groupby(["A"], as_index=False, dropna=False).apply(_bodo_f)[
+            "AGG_OUTPUT_0"
+        ]
+
     df = pd.DataFrame(
         {
             "A": [1, 4, 4, 11, 4, 1],
@@ -2524,6 +2552,7 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
 
     check_func(impl7, (df,), sort_output=True, reset_index=True, check_dtype=False)
     check_func(impl11, (df,), sort_output=True, reset_index=True)
+    check_func(impl13, (df,), sort_output=True, reset_index=True, check_dtype=False)
     if not is_slow_run:
         return
     check_func(impl2, (df,), sort_output=True)
