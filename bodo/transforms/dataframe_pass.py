@@ -1821,8 +1821,6 @@ class DataFramePass:
         func_text = (
             f"def f({key_name_args}, {col_name_args}, df_index, {extra_arg_names}):\n"
         )
-        for a in col_names:
-            func_text += f"  {a} = decode_if_dict_array({a})\n"
 
         func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, __col_name_meta_value_inner)\n"
 
@@ -1889,7 +1887,6 @@ class DataFramePass:
             "bodo": bodo,
             "out_type": out_typ,
             "_bodo_groupby_apply_impl": _bodo_groupby_apply_impl,
-            "decode_if_dict_array": bodo.utils.typing.decode_if_dict_array,
         }
 
         return replace_func(
