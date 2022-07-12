@@ -224,7 +224,38 @@ void create_dir_posix(int myrank, std::string &dirname,
     }
 }
 
-void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
+void create_dir_hdfs(int myrank, std::string &dirname, std::string &orig_path,
+                     const std::string &file_type) {
+    PyObject *f_mod = nullptr;
+    // get hdfs_get_fs function
+    PyObject *hdfs_func_obj = nullptr;
+    import_fs_module(Bodo_Fs::hdfs, file_type, f_mod);
+    get_get_fs_pyobject(Bodo_Fs::hdfs, file_type, f_mod, hdfs_func_obj);
+    hdfs_get_fs_t hdfs_get_fs =
+        (hdfs_get_fs_t)PyNumber_AsSsize_t(hdfs_func_obj, NULL);
+    arrow::Status status;
+    std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
+    hdfs_get_fs(orig_path, &hdfs_fs);
+    if (myrank == 0) {
+        status = hdfs_fs->CreateDir(dirname);
+        CHECK_ARROW(status, "Hdfs::MakeDirectory", file_type);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    Py_DECREF(f_mod);
+    Py_DECREF(hdfs_func_obj);
+}
+
+void create_dir_parallel(Bodo_Fs::FsEnum fs_option, int myrank,
+                         std::string &dirname, std::string &path_name,
+                         std::string &orig_path, const std::string &file_type) {
+    if (fs_option == Bodo_Fs::posix) {
+        create_dir_posix(myrank, dirname, path_name);
+    } else if (fs_option == Bodo_Fs::hdfs) {
+        create_dir_hdfs(myrank, dirname, orig_path, file_type);
+    }
+}
+
+void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
                     const std::string &file_type, std::string &dirname,
                     std::string &fname, std::string &orig_path,
                     std::shared_ptr<::arrow::io::OutputStream> *out_stream,
@@ -279,11 +310,7 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
         std::shared_ptr<::arrow::fs::HadoopFileSystem> hdfs_fs;
         hdfs_get_fs(orig_path, &hdfs_fs);
         if (is_parallel) {
-            if (myrank == 0) {
-                status = hdfs_fs->CreateDir(dirname);
-                CHECK_ARROW(status, "Hdfs::MakeDirectory", file_type);
-            }
-            MPI_Barrier(MPI_COMM_WORLD);
+            // assumes that the directory has already been created
             open_file_outstream(fs_option, file_type, dirname + "/" + fname,
                                 NULL, hdfs_fs, out_stream);
         } else {
