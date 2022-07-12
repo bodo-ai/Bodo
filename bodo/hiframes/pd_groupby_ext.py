@@ -1533,7 +1533,6 @@ def _get_groupby_apply_udf_out_type(
         if len(grp.selection) == 1:
             col_name = grp.selection[0]
             data_arr = in_df_type.data[in_df_type.columns.index(col_name)]
-            data_arr = to_str_arr_if_dict_array(data_arr)
             in_data_type = SeriesType(
                 data_arr.dtype, data_arr, in_df_type.index, types.literal(col_name)
             )
@@ -1541,7 +1540,6 @@ def _get_groupby_apply_udf_out_type(
             in_data = tuple(
                 in_df_type.data[in_df_type.columns.index(c)] for c in grp.selection
             )
-            in_data = tuple(to_str_arr_if_dict_array(t) for t in in_data)
             in_data_type = DataFrameType(
                 in_data, in_df_type.index, tuple(grp.selection)
             )
