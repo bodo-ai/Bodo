@@ -116,15 +116,20 @@ void open_file_appendstream(
     std::shared_ptr<::arrow::io::OutputStream> *out_stream);
 
 /**
- * @brief Create a directory in a posix filesystem
+ * @brief Create a directory in a posix / hadoop filesystem.
  *
  * This function is assumed to be happening in parallel, i.e.
  * it should be called by all ranks
+ * @param fs_option: file system to write to
  * @param myrank current MPI rank
  * @param dirname directory name to create
  * @param path_name path to dir to create (exclude prefix, include path)
+ * @param orig_path: name of file to open (include prefix & path)
+ * @param file_type: type of file, 'csv', 'json', or 'parquet'
  */
-void create_dir_posix(int myrank, std::string &dirname, std::string &path_name);
+void create_dir_parallel(Bodo_Fs::FsEnum fs_option, int myrank,
+                         std::string &dirname, std::string &path_name,
+                         std::string &orig_path, const std::string &file_type);
 
 /*
  * Open arrow::io::OutputStream for csv/json/parquet write
@@ -134,15 +139,14 @@ void create_dir_posix(int myrank, std::string &dirname, std::string &path_name);
  *  use std::filesystem to create directory if necessary
  * @param fs_option: file system to write to
  * @param is_parallel: true if the table is part of a distributed table
- * @param myrank: current MPI rank
- * @param file_type: type of file, 'csv', "json', or 'parquet'
+ * @param file_type: type of file, 'csv', 'json', or 'parquet'
  * @param dirname: directory name to store the files
  * @param fname: name of file to open (exclude prefix, excludes path)
  * @param orig_path: name of file to open (include prefix & path)
  * @param out_stream: the OutputStream to open
  * @param bucket_region: Region of the S3 bucket in case writing to S3
  */
-void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel, int myrank,
+void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
                     const std::string &file_type, std::string &dirname,
                     std::string &fname, std::string &orig_path,
                     std::shared_ptr<::arrow::io::OutputStream> *out_stream,

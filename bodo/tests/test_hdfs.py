@@ -1,4 +1,5 @@
 # Copyright (C) 2019 Bodo Inc.
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -23,6 +24,40 @@ def test_partition_cols(hdfs_datapath):
         bd_out = pd.read_parquet(bd_fname)
         pd_out = pd.read_parquet(pd_fname)
     pd.testing.assert_frame_equal(bd_out, pd_out)
+
+
+def test_hdfs_write_parquet_no_empty_files(hdfs_datapath, memory_leak_check):
+    """Test that when a rank has no data, it doesn't write a file"""
+    # The test is most useful when run with multiple ranks
+    # but should pass on a single rank too.
+    from urllib.parse import urlparse
+
+    from pyarrow.fs import FileSelector, FileType
+    from pyarrow.fs import HadoopFileSystem as HdFS
+
+    output_filename = hdfs_datapath("1row.pq")
+    options = urlparse(output_filename)
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, out_name):
+        df.to_parquet(out_name)
+
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame({"A": [1], "B": [1]})
+    else:
+        df = pd.DataFrame({"A": [], "B": []})
+
+    with ensure_clean2(output_filename):
+        impl(df, output_filename)
+        bodo.barrier()
+        # Only rank 0 should've written a file
+        fs = HdFS(host=options.hostname, port=options.port, user=options.username)
+        fi = fs.get_file_info(options.path)
+        is_dir = (not fi.size) and fi.type == FileType.Directory
+        assert is_dir, "Not a directory"
+        file_selector = FileSelector(options.path, recursive=True)
+        file_stats = fs.get_file_info(file_selector)
+        assert len(file_stats) == 1
 
 
 def test_hdfs_pq_groupby3(datapath, hdfs_datapath):
