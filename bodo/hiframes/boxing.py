@@ -801,9 +801,9 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
 
 def _infer_series_dtype(S, array_metadata=None):
 
-    # TODO: use this if all the values in S.values are NULL as well
     if S.dtype == np.dtype("O"):
-        if len(S.values) == 0:
+        # We check the metadata if the data is empty or all null
+        if len(S.values) == 0 or S.isna().sum() == len(S):
             if array_metadata != None:
                 # If the metadata is passed by the dataframe, it is the type of the underlying array.
 
