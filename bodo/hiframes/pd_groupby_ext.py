@@ -432,7 +432,7 @@ def get_keys_not_as_index(
             e_col = (k, "")
         else:
             e_col = k
-        ind = grp.df_type.columns.index(k)
+        ind = grp.df_type.column_index[k]
         data = grp.df_type.data[ind]
         out_columns.append(e_col)
         out_data.append(data)
@@ -1017,7 +1017,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
     for c in grp.selection:
         out_columns.append(c)
         gb_info[(c, name_operation)] = c
-        ind = grp.df_type.columns.index(c)
+        ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
         data = to_str_arr_if_dict_array(data)
         if name_operation == "cumprod":
@@ -1416,7 +1416,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             else:
                 if len(grp.keys) > 1:
                     key_col_inds = tuple(
-                        grp.df_type.columns.index(grp.keys[i])
+                        grp.df_type.column_index[grp.keys[i]]
                         for i in range(len(grp.keys))
                     )
                     arr_types = tuple(grp.df_type.data[ind] for ind in key_col_inds)
@@ -1424,7 +1424,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
                         arr_types, tuple(types.literal(k) for k in grp.keys)
                     )
                 else:
-                    ind = grp.df_type.columns.index(grp.keys[0])
+                    ind = grp.df_type.column_index[grp.keys[0]]
                     ind_arr_t = grp.df_type.data[ind]
                     out_index_type = bodo.hiframes.pd_index_ext.array_type_to_index(
                         ind_arr_t, types.literal(grp.keys[0])
@@ -1433,7 +1433,7 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             out_columns = tuple(out_columns)
         else:
             key_arr_types = tuple(
-                grp.df_type.data[grp.df_type.columns.index(c)] for c in grp.keys
+                grp.df_type.data[grp.df_type.column_index[c]] for c in grp.keys
             )
             index_names = tuple(
                 types.literal(v) for v in grp.keys
@@ -1466,7 +1466,9 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
                     to_nullable_type(dtype_to_array_type(t)) for t in scalar_types
                 )
                 ret_type = DataFrameType(
-                    out_data + arrs, out_index_type, out_columns + index_vals
+                    out_data + arrs,
+                    out_index_type,
+                    out_columns + index_vals,
                 )
             elif isinstance(f_return_type, SeriesType):
                 n_cols, index_vals = f_return_type.const_info
@@ -1479,14 +1481,18 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
                     for _ in range(n_cols)
                 )
                 ret_type = DataFrameType(
-                    out_data + arrs, out_index_type, out_columns + index_vals
+                    out_data + arrs,
+                    out_index_type,
+                    out_columns + index_vals,
                 )
             else:  # scalar case
                 data_arr = get_udf_out_arr_type(f_return_type)
                 if not grp.as_index:
                     # TODO: Pandas sets NaN for data column
                     ret_type = DataFrameType(
-                        out_data + (data_arr,), out_index_type, out_columns + ("",)
+                        out_data + (data_arr,),
+                        out_index_type,
+                        out_columns + ("",),
                     )
                 else:
                     ret_type = SeriesType(
@@ -1501,7 +1507,9 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             )
         else:
             ret_type = DataFrameType(
-                f_return_type.data, out_index_type, f_return_type.columns
+                f_return_type.data,
+                out_index_type,
+                f_return_type.columns,
             )
 
         pysig = gen_apply_pysig(len(f_args), kws.keys())
@@ -1532,13 +1540,13 @@ def _get_groupby_apply_udf_out_type(
         # input to UDF is a Series if only one column is explicitly selected
         if len(grp.selection) == 1:
             col_name = grp.selection[0]
-            data_arr = in_df_type.data[in_df_type.columns.index(col_name)]
+            data_arr = in_df_type.data[in_df_type.column_index[col_name]]
             in_data_type = SeriesType(
                 data_arr.dtype, data_arr, in_df_type.index, types.literal(col_name)
             )
         else:
             in_data = tuple(
-                in_df_type.data[in_df_type.columns.index(c)] for c in grp.selection
+                in_df_type.data[in_df_type.column_index[c]] for c in grp.selection
             )
             in_data_type = DataFrameType(
                 in_data, in_df_type.index, tuple(grp.selection)
