@@ -1639,7 +1639,7 @@ def gen_random_list_string_array(option, n):
         e_ent = []
         for _ in range(n):
             k = random.randint(1, 3)
-            val = "".join(random.choices(["A", "B", "C"], k=k))
+            val = "".join(random.choices(["À", "B", "C"], k=k))
             e_ent.append(val)
         return e_ent
 
@@ -1663,7 +1663,7 @@ def gen_random_list_string_array(option, n):
                     val = None
                 else:
                     k = random.randint(1, 3)
-                    val = "".join(random.choices(["A", "B", "C"], k=k))
+                    val = "".join(random.choices(["À", "B", "C"], k=k))
                 e_list.append(val)
             e_list_list.append(e_list)
         return e_list_list

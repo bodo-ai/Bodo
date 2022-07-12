@@ -24,6 +24,7 @@ from bodo.tests.utils import (
     DeadcodeTestPipeline,
     check_func,
     check_parallel_coherency,
+    gen_nonascii_list,
     gen_random_arrow_array_struct_int,
     gen_random_arrow_array_struct_list_int,
     gen_random_arrow_list_list_decimal,
@@ -399,7 +400,13 @@ def test_sort_values_str(memory_leak_check):
                 continue
 
             k = random.randint(1, 10)
-            val = "".join(random.choices(string.ascii_uppercase + string.digits, k=k))
+            k2 = random.randint(1, 10)
+
+            nonascii_val = " ".join(random.sample(gen_nonascii_list(k2), k2))
+            val = nonascii_val.join(
+                random.choices(string.ascii_uppercase + string.digits, k=k)
+            )
+
             str_vals.append(val)
 
         A = np.random.randint(0, 1000, n)
@@ -653,7 +660,10 @@ def test_sort_values_strings(n, len_str, memory_leak_check):
                 val = np.nan
             else:
                 k = random.randint(1, len_str)
-                val = "".join(random.choices(string.ascii_uppercase, k=k))
+                k2 = len_str - k
+
+                nonascii_val = " ".join(random.sample(gen_nonascii_list(k2), k2))
+                val = nonascii_val.join(random.choices(string.ascii_uppercase, k=k))
             str_vals.append(val)
         df = pd.DataFrame({"A": str_vals})
         return df
