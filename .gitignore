@@ -60,3 +60,5 @@ bodo/utils/tracing.c
 
 # Iceberg Connector
 iceberg/bodo_iceberg_connector/iceberg-java/target
+iceberg/bodo_iceberg_connector/jars
+iceberg_db
