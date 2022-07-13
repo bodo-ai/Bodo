@@ -152,9 +152,7 @@ PyObject* ParquetReader::get_dataset() {
     if (ds == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
-    PyObject* partition_names = PyObject_GetAttrString(ds, "partition_names");
-    this->ds_has_partitions = (PyList_Size(partition_names) > 0);
-    Py_DECREF(partition_names);
+    this->ds_partitioning = PyObject_GetAttrString(ds, "partitioning");
     Py_DECREF(path);
     Py_DECREF(dnf_filters);
     Py_DECREF(pq_mod);
@@ -224,10 +222,10 @@ void ParquetReader::read_all(TableBuilder& builder) {
     tracing::Event ev_get_scanner_batches("get_scanner_batches");
     PyObject* py_schema = arrow::py::wrap_schema(this->schema);
     PyObject* dataset_batches_tup = PyObject_CallMethod(
-        pq_mod, "get_scanner_batches", "OOOdiOOlliO", fnames_list_py,
+        pq_mod, "get_scanner_batches", "OOOdiOOllOO", fnames_list_py,
         expr_filters, selected_fields_py, avg_num_pieces, int(parallel),
         this->filesystem, str_as_dict_cols_py, this->start_row_first_piece,
-        this->count, int(ds_has_partitions), py_schema);
+        this->count, this->ds_partitioning, py_schema);
     if (dataset_batches_tup == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
@@ -246,6 +244,7 @@ void ParquetReader::read_all(TableBuilder& builder) {
     Py_DECREF(fnames_list_py);
     Py_DECREF(str_as_dict_cols_py);
     Py_DECREF(py_schema);
+    Py_DECREF(this->ds_partitioning);
     PyObject* batch_py = NULL;
     // while ((batch_py = PyIter_Next(batches_it))) {  // XXX Fails with
     // batch reader returned by scanner

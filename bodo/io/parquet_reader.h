@@ -101,15 +101,15 @@ class ParquetReader : public ArrowDataframeReader {
     // Prefix to add to each of the file paths (only used for input_file_name)
     std::string prefix;
     PyObject* filesystem = nullptr;
+    // dataset partitioning info (regardless of whether we select partition
+    // columns or not)
+    PyObject* ds_partitioning = nullptr;
 
    private:
     PyObject* path;  // path passed to pd.read_parquet() call
     PyObject* storage_options;
     PyObject* selected_fields_py;
     bool input_file_name_col;
-    // parquet dataset has partitions (regardless of whether we select them or
-    // not)
-    bool ds_has_partitions = false;
 
     std::vector<int64_t> pieces_nrows;
     double avg_num_pieces = 0;

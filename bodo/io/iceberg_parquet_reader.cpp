@@ -57,7 +57,9 @@ class IcebergParquetReader : public ParquetReader {
 
     virtual ~IcebergParquetReader() {}
 
-    virtual void init() { ParquetReader::init(nullptr, 0, nullptr, nullptr, 0); }
+    virtual void init() {
+        ParquetReader::init(nullptr, 0, nullptr, nullptr, 0);
+    }
 
    protected:
     // We don't need a special implementation yet and can re-use
@@ -80,6 +82,7 @@ class IcebergParquetReader : public ParquetReader {
             iceberg_mod, "get_iceberg_pq_dataset", "sssOOOO", this->conn,
             this->database_schema, this->table_name, this->pyarrow_table_schema,
             this->dnf_filters, this->expr_filters, PyBool_FromLong(parallel));
+        this->ds_partitioning = Py_None;
         if (ds == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }

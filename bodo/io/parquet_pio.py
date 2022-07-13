@@ -947,6 +947,31 @@ def _get_numba_typ_from_pa_typ(
     return arr_typ, supported
 
 
+def unify_schemas(schemas):
+    """Same as pyarrow.unify_schemas with the difference
+    that we unify `large_string` and `string` types to `string`
+    (Arrow considers them incompatible).
+    Note that large_strings is not a property of parquet, but
+    rather a decision made by Arrow on how to store string data
+    in memory. For Bodo, we can have Arrow always read as regular
+    strings and convert to Bodo's representation during read."""
+    # first replace large_string with string in every schema
+    new_schemas = []
+    for schema in schemas:
+        for i in range(len(schema)):
+            f = schema.field(i)
+            if f.type == pa.large_string():
+                schema = schema.set(i, f.with_type(pa.string()))
+            elif isinstance(
+                f.type, (pa.ListType, pa.LargeListType)
+            ) and f.type.value_type in (pa.string(), pa.large_string()):
+                schema = schema.set(i, f.with_type(pa.list_(pa.string())))
+            # TODO handle arbitrary nested types
+        new_schemas.append(schema)
+    # now we run Arrow's regular schema unification
+    return pa.unify_schemas(new_schemas)
+
+
 class ParquetDataset(object):
     """Stores information about parquet dataset that is needed at compile time
     and runtime (to read the dataset). Stores the list of fragments
@@ -969,8 +994,11 @@ class ParquetDataset(object):
         # prefix that needs to be added to paths of parquet pieces to get the
         # full path to the file
         self._prefix = prefix
-        # XXX pa_pq_dataset.partitioning is not pickled so we don't store it.
-        # For some datasets, pa_pq_dataset.partitioning.schema contains the
+        # XXX pa_pq_dataset.partitioning can't be pickled, so we reconstruct
+        # manually after broadcasting the dataset (see __setstate__ below)
+        self.partitioning = None
+        partitioning = pa_pq_dataset.partitioning
+        # For some datasets, partitioning.schema contains the
         # full schema of the dataset when there aren't any partition columns
         # (bug in Arrow?) so to know if there are partition columns we also
         # need to check that the partitioning schema is not equal to the
@@ -978,28 +1006,28 @@ class ParquetDataset(object):
         # XXX is there a better way to get partition column names?
         self.partition_names = (
             []
-            if pa_pq_dataset.partitioning is None
-            or pa_pq_dataset.partitioning.schema == pa_pq_dataset.schema
-            else list(pa_pq_dataset.partitioning.schema.names)
+            if partitioning is None or partitioning.schema == pa_pq_dataset.schema
+            else list(partitioning.schema.names)
         )
         # partitioning_dictionaries is an Arrow array containing the
         # partition values
         if self.partition_names:
-            self.partitioning_dictionaries = pa_pq_dataset.partitioning.dictionaries
+            self.partitioning_dictionaries = partitioning.dictionaries
+            self.partitioning_cls = partitioning.__class__
+            self.partitioning_schema = partitioning.schema
         else:
             self.partitioning_dictionaries = {}
-        # Arrow's ParquetDatasetV2 includes partition columns in the dataset
-        # schema, but our code treats partition columns separately, so we remove
-        # them from the schema. Also, when we do schema validation of the files
-        # in the dataset, the fragment's schema won't contain partition columns,
-        # so we need to remove them from the dataset schema for comparison
-        for n in self.partition_names:
-            self.schema = self.schema.remove(self.schema.get_field_index(n))
+        # Convert large_string Arrow types to string
+        # (see comment in bodo.io.parquet_pio.unify_schemas)
+        for i in range(len(self.schema)):
+            f = self.schema.field(i)
+            if f.type == pa.large_string():
+                self.schema = self.schema.set(i, f.with_type(pa.string()))
         # IMPORTANT: only include partition columns in filters passed to
         # pq.ParquetDataset(), otherwise `get_fragments` could look inside the
         # parquet files
         self.pieces = [
-            ParquetPiece(frag, pa_pq_dataset.partitioning, self.partition_names)
+            ParquetPiece(frag, partitioning, self.partition_names)
             for frag in pa_pq_dataset._dataset.get_fragments(
                 filter=pa_pq_dataset._filter_expression
             )
@@ -1010,6 +1038,20 @@ class ParquetDataset(object):
         self.filesystem = fs
         for p in self.pieces:
             p.filesystem = fs
+
+    def __setstate__(self, state):
+        """called when unpickling"""
+        self.__dict__ = state
+        if self.partition_names:
+            # We do this because there is an error (bug?) when pickling
+            # Arrow HivePartitioning objects
+            part_dicts = {
+                p: self.partitioning_dictionaries[i]
+                for i, p in enumerate(self.partition_names)
+            }
+            self.partitioning = self.partitioning_cls(
+                self.partitioning_schema, part_dicts
+            )
 
 
 class ParquetPiece(object):
@@ -1303,6 +1345,7 @@ def get_parquet_dataset(
             # Therefore, it's better to start with the expected schema,
             # and then raise the errors correctly after validation.
             if typing_pa_schema:
+                # NOTE: typing_pa_schema must include partitions
                 dataset.schema = typing_pa_schema
 
             if get_row_counts:
@@ -1335,7 +1378,7 @@ def get_parquet_dataset(
 
         if get_row_counts:
             ev_bcast = tracing.Event("bcast dataset")
-        comm.bcast(dataset)
+        dataset = comm.bcast(dataset)
     else:
         if get_row_counts:
             ev_bcast = tracing.Event("bcast dataset")
@@ -1395,9 +1438,7 @@ def get_parquet_dataset(
             dataset_ = ds.dataset(
                 fpaths,
                 filesystem=dataset.filesystem,
-                partitioning=ds.partitioning(flavor="hive")
-                if dataset.partition_names
-                else None,
+                partitioning=dataset.partitioning,
             )
             for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
 
@@ -1412,7 +1453,9 @@ def get_parquet_dataset(
                     # Check the names are the same because pa.unify_schemas
                     # will unify a schema where a column is in 1 file but not
                     # another.
-                    dataset_schema_names = set(dataset.schema.names)
+                    dataset_schema_names = set(dataset.schema.names) - set(
+                        dataset.partition_names
+                    )
                     if dataset_schema_names != fileset_schema_names:
                         added_columns = fileset_schema_names - dataset_schema_names
                         missing_columns = dataset_schema_names - fileset_schema_names
@@ -1423,7 +1466,7 @@ def get_parquet_dataset(
                             msg += f"File missing column(s) {missing_columns} found in other files in the dataset.\n"
                         raise BodoError(msg)
                     try:
-                        dataset.schema = pa.unify_schemas([dataset.schema, file_schema])
+                        dataset.schema = unify_schemas([dataset.schema, file_schema])
                     except Exception as e:
                         msg = f"Schema in {piece} was different.\n" + str(e)
                         raise BodoError(msg)
@@ -1561,7 +1604,7 @@ def get_scanner_batches(
     str_as_dict_cols,
     start_offset,  # starting row offset in the pieces this process is going to read
     rows_to_read,  # total number of rows this process is going to read
-    has_partitions,  # parquet dataset has partitions
+    partitioning,
     schema,
 ):
     """return RecordBatchReader for dataset of 'fpaths' that contain the rows
@@ -1586,31 +1629,23 @@ def get_scanner_batches(
     else:
         pa.set_io_thread_count(default_threads)
         pa.set_cpu_count(default_threads)
-    # We only support hive partitioning right now and will need to change this
-    # if we also support directory partitioning
     pq_format = ds.ParquetFileFormat(dictionary_columns=str_as_dict_cols)
-    dataset = ds.dataset(
-        fpaths,
-        filesystem=filesystem,
-        partitioning=ds.partitioning(flavor="hive") if has_partitions else None,
-        format=pq_format,
-    )
-    # Update the provided schema to convert arrays to be dictionary
-    # encoded. This is needed for unifying with the dictionary encoded
-    # values in dataset.schema.
+    # set columns to be read as dictionary encoded in schema
     dict_col_set = set(str_as_dict_cols)
-    names = schema.names
-    for i, name in enumerate(names):
+    for i, name in enumerate(schema.names):
         if name in dict_col_set:
             old_field = schema.field(i)
             new_field = pa.field(
                 name, pa.dictionary(pa.int32(), old_field.type), old_field.nullable
             )
             schema = schema.remove(i).insert(i, new_field)
-    # Replace the schema after unifying rather than set the schema
-    # because the provided schema doesn't contain any of the partitions.
-    # TODO: Move to get_parquet_dataset as part of the ParquetDatasetV2 refactoring.
-    dataset = dataset.replace_schema(pa.unify_schemas([dataset.schema, schema]))
+    dataset = ds.dataset(
+        fpaths,
+        filesystem=filesystem,
+        partitioning=partitioning,
+        schema=schema,
+        format=pq_format,
+    )
     col_names = dataset.schema.names
     selected_names = [col_names[field_num] for field_num in selected_fields]
 
@@ -1768,7 +1803,7 @@ def get_str_columns_from_pa_schema(pa_schema):
     str_columns = []
     for col_name in pa_schema.names:
         field = pa_schema.field(col_name)
-        if field.type == pa.string():
+        if field.type in (pa.string(), pa.large_string()):
             str_columns.append(col_name)
     return str_columns
 
@@ -1915,7 +1950,6 @@ def parquet_file_schema(
 
     # add partition column data types if any
     if partition_names:
-        col_names += partition_names
         col_types_total += [
             _get_partition_cat_dtype(pq_dataset.partitioning_dictionaries[i])
             for i in range(len(partition_names))
