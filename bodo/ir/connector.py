@@ -2,17 +2,18 @@
 """
 Common IR extension functions for connectors such as CSV, Parquet and JSON readers.
 """
+import sys
 from collections import defaultdict
 from typing import Literal, Set, Tuple
 
 import numba
 from numba.core import ir, types
 from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
-from numba.extending import box, models, register_model
 
 from bodo.hiframes.table import TableType
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
+from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import debug_prints
 
@@ -253,19 +254,13 @@ def generate_filter_map(filters):
         return {}, []
 
 
-class StreamReaderType(types.Opaque):
-    def __init__(self):
-        super(StreamReaderType, self).__init__(name="StreamReaderType")
-
-
-stream_reader_type = StreamReaderType()
-register_model(StreamReaderType)(models.OpaqueModel)
-
-
-@box(StreamReaderType)
-def box_stream_reader(typ, val, c):
-    c.pyapi.incref(val)
-    return val
+this_module = sys.modules[__name__]
+StreamReaderType = install_py_obj_class(
+    types_name="stream_reader_type",
+    module=this_module,
+    class_name="StreamReaderType",
+    model_name="StreamReaderModel",
+)
 
 
 def trim_extra_used_columns(used_columns: Set, num_columns: int):

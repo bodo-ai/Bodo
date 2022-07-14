@@ -81,7 +81,7 @@ class CSVIteratorType(types.SimpleIteratorType):
 class CSVIteratorModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
-            ("csv_reader", bodo.ir.connector.stream_reader_type),
+            ("csv_reader", types.stream_reader_type),
             # "index" is the number of rows read so far,
             # which is needed to create RangeIndex of output
             # DataFrame if necessary.
@@ -112,7 +112,10 @@ def getiter_csv_iterator(context, builder, sig, args):
     fn_tp = cgutils.get_or_insert_function(
         builder.module, fnty, name="initialize_csv_reader"
     )
-    builder.call(fn_tp, [iterator_struct.csv_reader])
+    csv_reader_struct = cgutils.create_struct_proxy(types.stream_reader_type)(
+        context, builder, value=iterator_struct.csv_reader
+    )
+    builder.call(fn_tp, [csv_reader_struct.pyobj])
     # Initialize the index. TODO: Does this change with nrows?
     builder.store(context.get_constant(types.uint64, 0), iterator_struct.index)
 
@@ -144,7 +147,10 @@ def iternext_csv_iterator(context, builder, sig, args, result):
     fn_tp = cgutils.get_or_insert_function(
         builder.module, fnty, name="update_csv_reader"
     )
-    is_valid = builder.call(fn_tp, [iterator_struct.csv_reader])
+    csv_reader_struct = cgutils.create_struct_proxy(types.stream_reader_type)(
+        context, builder, value=iterator_struct.csv_reader
+    )
+    is_valid = builder.call(fn_tp, [csv_reader_struct.pyobj])
     # Set the valid bit based on if C++ has more to read
     result.set_valid(is_valid)
     with builder.if_then(is_valid):
@@ -152,9 +158,7 @@ def iternext_csv_iterator(context, builder, sig, args, result):
         # Perform the actual csv_read
         tuple_typ = types.Tuple([sig.return_type.first_type, types.int64])
         impl = gen_read_csv_objmode(sig.args[0])
-        read_csv_sig = signature(
-            tuple_typ, bodo.ir.connector.stream_reader_type, types.int64
-        )
+        read_csv_sig = signature(tuple_typ, types.stream_reader_type, types.int64)
         ret_tuple = context.compile_internal(
             builder, impl, read_csv_sig, [iterator_struct.csv_reader, index]
         )
@@ -177,6 +181,7 @@ def init_csv_iterator(typingctx, csv_reader, csv_iterator_typeref):
 
     def codegen(context, builder, signature, args):
         iterator = cgutils.create_struct_proxy(signature.return_type)(context, builder)
+        context.nrt.incref(builder, signature.args[0], args[0])
         iterator.csv_reader = args[0]
         zero = context.get_constant(types.uintp, 0)
         iterator.index = cgutils.alloca_once_value(builder, zero)
@@ -201,7 +206,6 @@ def gen_read_csv_objmode(csv_iterator_type):
     the iterator and that this function will only be called if there
     is more data to return.
     """
-
     func_text = "def read_csv_objmode(f_reader):\n"
     santized_cnames = [sanitize_varname(c) for c in csv_iterator_type._out_colnames]
     call_id = ir_utils.next_label()

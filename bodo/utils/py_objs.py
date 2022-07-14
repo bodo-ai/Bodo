@@ -2,6 +2,7 @@ from numba.core import cgutils, types
 from numba.extending import (
     NativeValue,
     box,
+    make_attribute_wrapper,
     models,
     register_model,
     typeof_impl,
@@ -69,7 +70,7 @@ def install_py_obj_class(
     class_text += f"    def __init__(self, dmm, fe_type):\n"
     class_text += f"        members = [\n"
     class_text += f"            ('meminfo', types.MemInfoPointer({types_name})),\n"
-    class_text += f"            ('pyobj', types.pyobject),\n"
+    class_text += f"            ('pyobj', types.voidptr),\n"
     class_text += f"        ]\n"
     class_text += f"        models.StructModel.__init__(self, dmm, fe_type, members)\n"
 
@@ -81,6 +82,7 @@ def install_py_obj_class(
     model_value = locs[model_name]
     setattr(module, model_name, model_value)
     register_model(class_value)(model_value)
+    make_attribute_wrapper(class_value, "pyobj", "_pyobj")
 
     if python_type is not None:
         typeof_impl.register(python_type)(lambda val, c: class_instance)

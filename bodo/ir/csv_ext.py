@@ -5,9 +5,11 @@ from collections import defaultdict
 import numba
 import numpy as np  # noqa
 import pandas as pd  # noqa
+from llvmlite import ir as lir
 from mpi4py import MPI
-from numba.core import ir, ir_utils, typeinfer, types
+from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
+from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
@@ -34,7 +36,7 @@ from bodo.transforms.table_column_del_pass import (
 )
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import check_java_installation  # noqa
-from bodo.utils.utils import sanitize_varname
+from bodo.utils.utils import check_and_propagate_cpp_exception, sanitize_varname
 
 
 class CsvReader(ir.Stmt):
@@ -168,23 +170,89 @@ from bodo.io import csv_cpp
 
 ll.add_symbol("csv_file_chunk_reader", csv_cpp.csv_file_chunk_reader)
 
-csv_file_chunk_reader = types.ExternalFunction(
-    "csv_file_chunk_reader",
-    bodo.ir.connector.stream_reader_type(
-        types.voidptr,
-        types.bool_,
-        types.voidptr,  # skiprows (array of int64_t)
-        types.int64,
-        types.bool_,
-        types.voidptr,
-        types.voidptr,
-        storage_options_dict_type,  # storage_options dictionary
-        types.int64,  # chunksize
-        types.bool_,  # is_skiprows_list
-        types.int64,  # skiprows_list_len
-        types.bool_,  # pd_low_memory
-    ),
-)
+
+@intrinsic
+def csv_file_chunk_reader(
+    typingctx,
+    fname_t,
+    is_parallel_t,
+    skiprows_t,
+    nrows_t,
+    header_t,
+    compression_t,
+    bucket_region_t,
+    storage_options_t,
+    chunksize_t,
+    is_skiprows_list_t,
+    skiprows_list_len_t,
+    pd_low_memory_t,
+):
+    """
+    Interface to csv_file_chunk_reader function in C++ library for creating
+    the csv file reader.
+    """
+    # TODO: Update storage options to pyobject once the type is updated to do refcounting
+    # properly.
+    assert (
+        storage_options_t == storage_options_dict_type
+    ), "Storage options don't match expected type"
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),  # filename
+                lir.IntType(1),  # is_parallel
+                lir.IntType(8).as_pointer(),  # skiprows (array of int64_t)
+                lir.IntType(64),  # nrows
+                lir.IntType(1),  # header
+                lir.IntType(8).as_pointer(),  # compressoin
+                lir.IntType(8).as_pointer(),  # bucket_region
+                lir.IntType(8).as_pointer(),  # storage_options dictionary
+                lir.IntType(64),  # chunksize
+                lir.IntType(1),  # is_skiprows_list
+                lir.IntType(64),  # skiprows_list_len
+                lir.IntType(1),  # pd_low_memory
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="csv_file_chunk_reader"
+        )
+        obj = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        # csv_file_chunk_reader returns a pyobject. We need to wrap the result in the
+        # proper return type and create a meminfo.
+        ret = cgutils.create_struct_proxy(types.stream_reader_type)(context, builder)
+        pyapi = context.get_python_api(builder)
+        # borrows and manages a reference for obj (see comments in py_objs.py)
+        ret.meminfo = pyapi.nrt_meminfo_new_from_pyobject(
+            context.get_constant_null(types.voidptr), obj
+        )
+        ret.pyobj = obj
+        # `nrt_meminfo_new_from_pyobject` increfs the object (holds a reference)
+        # so need to decref since the object is not live anywhere else.
+        pyapi.decref(obj)
+        return ret._getvalue()
+
+    return (
+        types.stream_reader_type(
+            types.voidptr,
+            types.bool_,
+            types.voidptr,  # skiprows (array of int64_t)
+            types.int64,
+            types.bool_,
+            types.voidptr,
+            types.voidptr,
+            storage_options_dict_type,  # storage_options dictionary
+            types.int64,  # chunksize
+            types.bool_,  # is_skiprows_list
+            types.int64,  # skiprows_list_len
+            types.bool_,  # pd_low_memory
+        ),
+        codegen,
+    )
 
 
 def remove_dead_csv(
@@ -697,13 +765,11 @@ def _gen_csv_file_reader_init(
         is_skiprows_list,
         pd_low_memory,
     )
-    # Check if there was an error in the C++ code. If so, raise it.
-    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
     # TODO: unrelated to skiprows list PR
     # This line is printed even if failure is because of another check
     # Commenting it gives another compiler error.
     # TypeError: csv_reader_py expected 1 argument, got 0
-    func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
+    func_text += "  if bodo.utils.utils.is_null_pointer(f_reader._pyobj):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
     return func_text
 
