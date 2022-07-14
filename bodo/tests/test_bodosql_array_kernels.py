@@ -14,7 +14,7 @@ from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
 
-def vectorized_sol(args, scalar_fn, dtype):
+def vectorized_sol(args, scalar_fn, dtype, manual_coercion=False):
     """Creates a py_output for a vectorized function using its arguments and the
        a function that is applied to the scalar values
 
@@ -24,6 +24,8 @@ def vectorized_sol(args, scalar_fn, dtype):
         scalar_fn (function): the function that is applied to scalar values
         corresponding to each row
         dtype (dtype): the dtype of the final output array
+        manual_coercion (boolean, optional): whether to manually coerce the
+        non-null elements of the output array to the dtype
 
     Returns:
         scalar or Series: the result of applying scalar_fn to each row of the
@@ -36,14 +38,17 @@ def vectorized_sol(args, scalar_fn, dtype):
             length = len(arg)
             break
     if length == -1:
-        return scalar_fn(*args)
+        return dtype(scalar_fn(*args)) if manual_coercion else scalar_fn(*args)
     arglist = []
     for arg in args:
         if isinstance(arg, (pd.core.arrays.base.ExtensionArray, pd.Series, np.ndarray)):
             arglist.append(arg)
         else:
             arglist.append([arg] * length)
-    return pd.Series([scalar_fn(*params) for params in zip(*arglist)], dtype=dtype)
+    if manual_coercion:
+        return pd.Series([dtype(scalar_fn(*params)) for params in zip(*arglist)])
+    else:
+        return pd.Series([scalar_fn(*params) for params in zip(*arglist)], dtype=dtype)
 
 
 @pytest.mark.parametrize(
@@ -664,7 +669,7 @@ def test_error_coalesce():
     # by BodoSQL in cases where we do the code generation and can guarantee
     # that the tuple is constant
 
-    err_msg1 = re.escape("Cannot coalesce columns with different dtypes")
+    err_msg1 = re.escape("Cannot call COALESCE on columns with different dtypes")
     err_msg2 = re.escape("Coalesce argument must be a tuple")
     err_msg3 = re.escape("Cannot coalesce 0 columns")
 
@@ -1161,6 +1166,223 @@ def test_option_ord_ascii_char():
 
 
 @pytest.mark.parametrize(
+    "days",
+    [
+        pytest.param(
+            pd.Series(pd.array([0, 1, -2, 4, 8, None, -32])),
+            id="vector",
+        ),
+        pytest.param(
+            42,
+            id="scalar",
+        ),
+    ],
+)
+def test_int_to_days(days):
+    def impl(days):
+        return bodo.libs.bodosql_array_kernels.int_to_days(days)
+
+    # Simulates int_to_days on a single row
+    def itd_scalar_fn(days):
+        if pd.isna(days):
+            return None
+        else:
+            return np.timedelta64(days, "D")
+
+    itd_answer = vectorized_sol(
+        (days,), itd_scalar_fn, np.timedelta64, manual_coercion=True
+    )
+    check_func(
+        impl,
+        (days,),
+        py_output=itd_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_option_int_to_days():
+    def impl(A, flag):
+        arg = A if flag else None
+        return bodo.libs.bodosql_array_kernels.int_to_days(arg)
+
+    for flag in [True, False]:
+        answer = pd.Timedelta(days=10) if flag else None
+        check_func(impl, (10, flag), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "seconds",
+    [
+        pytest.param(
+            pd.Series(pd.array([0, 1, -2, 4, 8, None, -32, 100000])),
+            id="vector",
+        ),
+        pytest.param(
+            42,
+            id="scalar",
+        ),
+    ],
+)
+def test_second_timestamp(seconds):
+    def impl(seconds):
+        return bodo.libs.bodosql_array_kernels.second_timestamp(seconds)
+
+    # Simulates second_timestamp on a single row
+    def second_scalar_fn(seconds):
+        if pd.isna(seconds):
+            return None
+        else:
+            return pd.Timestamp(seconds, unit="s")
+
+    second_answer = vectorized_sol(
+        (seconds,), second_scalar_fn, np.datetime64, manual_coercion=True
+    )
+    check_func(
+        impl,
+        (seconds,),
+        py_output=second_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "days",
+    [
+        pytest.param(
+            pd.Series(pd.array([0, 1, -2, 4, 8, None, -32, 10000])),
+            id="vector",
+        ),
+        pytest.param(
+            42,
+            id="scalar",
+        ),
+    ],
+)
+def test_day_timestamp(days):
+    def impl(days):
+        return bodo.libs.bodosql_array_kernels.day_timestamp(days)
+
+    # Simulates day_timestamp on a single row
+    def days_scalar_fn(days):
+        if pd.isna(days):
+            return None
+        else:
+            return pd.Timestamp(days, unit="D")
+
+    days_answer = vectorized_sol(
+        (days,), days_scalar_fn, np.datetime64, manual_coercion=True
+    )
+    check_func(
+        impl,
+        (days,),
+        py_output=days_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_option_timestamp():
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.second_timestamp(arg0),
+            bodo.libs.bodosql_array_kernels.day_timestamp(arg1),
+        )
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            A0 = pd.Timestamp(1000000, unit="s") if flag0 else None
+            A1 = pd.Timestamp(10000, unit="D") if flag1 else None
+            check_func(
+                impl,
+                (1000000, 10000, 10, flag0, flag1),
+                py_output=(A0, A1),
+            )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.concat(
+                    [
+                        pd.Series(
+                            pd.date_range("2018-01-01", "2019-01-01", periods=20)
+                        ),
+                        pd.Series([None, None]),
+                    ]
+                ),
+                pd.Series(pd.date_range("2005-01-01", "2020-01-01", periods=22)),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
+                pd.Timestamp("2018-06-05"),
+            ),
+            id="vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.Timestamp("2000-10-29"), pd.Timestamp("1992-03-25")), id="all_scalar"
+        ),
+    ],
+)
+def test_month_diff(args):
+    def impl(arr0, arr1):
+        return bodo.libs.bodosql_array_kernels.month_diff(arr0, arr1)
+
+    # Simulates month diff on a single row
+    def md_scalar_fn(ts1, ts2):
+        if pd.isna(ts1) or pd.isna(ts2):
+            return None
+        else:
+            floored_delta = (ts1.year - ts2.year) * 12 + (ts1.month - ts2.month)
+            remainder = ((ts1 - pd.DateOffset(months=floored_delta)) - ts2).value
+            remainder = 1 if remainder > 0 else (-1 if remainder < 0 else 0)
+            if floored_delta > 0 and remainder < 0:
+                actual_month_delta = floored_delta - 1
+            elif floored_delta < 0 and remainder > 0:
+                actual_month_delta = floored_delta + 1
+            else:
+                actual_month_delta = floored_delta
+            return -actual_month_delta
+
+    days_answer = vectorized_sol(args, md_scalar_fn, pd.Int32Dtype())
+    check_func(
+        impl,
+        args,
+        py_output=days_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_option_month_diff():
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return bodo.libs.bodosql_array_kernels.month_diff(arg0, arg1)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = 42 if flag0 and flag1 else None
+            check_func(
+                impl,
+                (pd.Timestamp("2007-01-01"), pd.Timestamp("2010-07-04"), flag0, flag1),
+                py_output=answer,
+            )
+
+
+@pytest.mark.parametrize(
     "args",
     [
         pytest.param(
@@ -1331,3 +1553,102 @@ def test_option_format():
         for flag1 in [True, False]:
             answer = "12,345,678,910.1112" if flag0 and flag1 else None
             check_func(impl, (A, B, flag0, flag1), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(pd.array(["ABC", "25", "X", None, "A"])),
+                pd.Series(pd.array(["abc", "123", "X", "B", None])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (pd.Series(pd.array(["ABC", "ACB", "ABZ", "AZB", "ACE", "ACX"])), "ACE"),
+            id="vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(("alphabet", "soup"), id="all_scalar"),
+    ],
+)
+def test_strcmp(args):
+    def impl(arr0, arr1):
+        return bodo.libs.bodosql_array_kernels.strcmp(arr0, arr1)
+
+    # Simulates STRCMP on a single row
+    def strcmp_scalar_fn(arr0, arr1):
+        if pd.isna(arr0) or pd.isna(arr1):
+            return None
+        else:
+            return -1 if arr0 < arr1 else (1 if arr0 > arr1 else 0)
+
+    strcmp_answer = vectorized_sol(args, strcmp_scalar_fn, pd.Int32Dtype())
+    check_func(
+        impl,
+        args,
+        py_output=strcmp_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(pd.array(["alpha", "beta", "gamma", None, "epsilon"])),
+                pd.Series(pd.array(["a", "b", "c", "t", "n"])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                "alphabet soup is delicious",
+                pd.Series(pd.array([" ", "ici", "x", "i", None])),
+            ),
+            id="scalar_vector",
+        ),
+        pytest.param(
+            ("The quick brown fox jumps over the lazy dog", "x"),
+            id="all_scalar",
+        ),
+    ],
+)
+def test_instr(args):
+    def impl(arr0, arr1):
+        return bodo.libs.bodosql_array_kernels.instr(arr0, arr1)
+
+    # Simulates INSTR on a single row
+    def instr_scalar_fn(elem, target):
+        if pd.isna(elem) or pd.isna(target):
+            return None
+        else:
+            return elem.find(target) + 1
+
+    instr_answer = vectorized_sol(args, instr_scalar_fn, pd.Int32Dtype())
+    check_func(
+        impl,
+        args,
+        py_output=instr_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_strcmp_instr_option():
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.strcmp(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.instr(arg0, arg1),
+        )
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (1, 0) if flag0 and flag1 else None
+            check_func(impl, ("a", "Z", flag0, flag1), py_output=answer)

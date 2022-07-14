@@ -2,8 +2,10 @@
 """
 Implements array kernels that are specific to BodoSQL
 """
+
 import numba
 import numpy as np
+import pandas as pd
 from numba.core import types
 from numba.extending import overload
 
@@ -22,9 +24,16 @@ broadcasted_string_functions = {
     "reverse",
     "replace",
     "space",
+    "int_to_days",
+    "second_timestamp",
+    "day_timestamp",
+    "year_timestamp",
+    "month_diff",
     "conv",
     "substring",
     "substring_index",
+    "strcmp",
+    "instr",
 }
 
 
@@ -75,7 +84,7 @@ def gen_vectorized(
     arg_names = ['left', 'right']
     arg_types = [series(int64, ...), series(int64, ...)]
     propogate_null = [True, True]
-    out_dtype = np.int64
+    out_dtype = types.int64
     scalar_text = "res[i] = arg0 + arg1"
 
     This would result in an impl constructed from the following func_text:
@@ -97,7 +106,7 @@ def gen_vectorized(
             res[i] = arg0 + arg1
         return return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)
 
-    (Where out_dtype is mapped to np.int64)
+    (Where out_dtype is mapped to types.int64)
     """
     are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
     all_scalar = not any(are_arrays)
@@ -192,10 +201,15 @@ def gen_vectorized(
         func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)"
 
     loc_vars = {}
-
     exec(
         func_text,
-        {"bodo": bodo, "numba": numba, "np": np, "out_dtype": out_dtype},
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+            "out_dtype": out_dtype,
+            "pd": pd,
+        },
         loc_vars,
     )
 
@@ -265,7 +279,7 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
     return impl
 
 
-def verify_int_arg(arg, f_name, a_name):  # pragma: no coverage
+def verify_int_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is an integer
        (scalar or vector)
 
@@ -289,7 +303,7 @@ def verify_int_arg(arg, f_name, a_name):  # pragma: no coverage
         )
 
 
-def verify_int_float_arg(arg, f_name, a_name):  # pragma: no coverage
+def verify_int_float_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is an integer or float
        (scalar or vector)
 
@@ -310,11 +324,11 @@ def verify_int_float_arg(arg, f_name, a_name):  # pragma: no coverage
         )
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be an integer, integer column, or null"
+            f"{f_name} {a_name} argument must be a numeric, numeric column, or null"
         )
 
 
-def verify_string_arg(arg, f_name, a_name):  # pragma: no coverage
+def verify_string_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is an string
        (scalar or vector)
 
@@ -334,6 +348,105 @@ def verify_string_arg(arg, f_name, a_name):  # pragma: no coverage
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a string, string column, or null"
+        )
+
+
+def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a boolean
+       (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+
+    raises: BodoError if the argument is not an boolean, boolean column, or NULL
+    """
+    if arg not in (types.none, types.boolean) and not (
+        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == types.boolean
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a boolean, boolean column, or null"
+        )
+
+
+def verify_datetime_arg(arg, f_name, a_name):  # pragma: no coverage
+    """Verifies that one of the arguments to a SQL function is a datetime
+       (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+
+    raises: BodoError if the argument is not a datetime, datetime column, or NULL
+    """
+    if arg not in (
+        types.none,
+        bodo.datetime64ns,
+        bodo.pd_timestamp_type,
+        bodo.hiframes.datetime_date_ext.DatetimeDateType(),
+    ) and not (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and arg.dtype
+        in (bodo.datetime64ns, bodo.hiframes.datetime_date_ext.DatetimeDateType())
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a datetime, datetime column, or null"
+        )
+
+
+def get_common_broadcasted_type(arg_types, func_name):
+    """Takes in a list of types from arrays/Series/scalars, verifies that they
+    have a common underlying scalar type, and if so returns the corresponding
+    array type (+ ensures that it is nullable).
+
+    Args:
+        arg_types (dtype list/tuple): the types of the arrays/Series/scalars being checked
+        func_name (string): the name of the function being compiled
+
+    Returns:
+        dtype: the common underlying dtype of the inputted types
+
+    raises: BodoError if the underlying types are not compatible
+    """
+    # Extract the underlying type of each scalar/vector
+    elem_types = []
+    for i in range(len(arg_types)):
+        # Array
+        if bodo.utils.utils.is_array_typ(arg_types[i], False):
+            elem_types.append(arg_types[i])
+        # Series
+        elif bodo.utils.utils.is_array_typ(arg_types[i], True):
+            elem_types.append(arg_types[i].data)
+        # Scalar
+        else:
+            elem_types.append(arg_types[i])
+    if len(elem_types) == 0:
+        return bodo.none
+    elif len(elem_types) == 1:
+        if bodo.utils.utils.is_array_typ(elem_types[0]):
+            return bodo.utils.typing.to_nullable_type(elem_types[0])
+        else:
+            return bodo.utils.typing.to_nullable_type(
+                bodo.utils.typing.dtype_to_array_type(elem_types[0])
+            )
+    else:
+        # Verify that the underlying scalar types are common before extracting
+        # the corresponding output_dtype
+        scalar_dtypes = []
+        for i in range(len(arg_types)):
+            if bodo.utils.utils.is_array_typ(arg_types[i]):
+                scalar_dtypes.append(elem_types[i].dtype)
+            else:
+                scalar_dtypes.append(elem_types[i])
+        common_dtype, success = bodo.utils.typing.get_common_scalar_dtype(scalar_dtypes)
+        if not success:
+            raise_bodo_error(
+                f"Cannot call {func_name} on columns with different dtypes"
+            )
+        return bodo.utils.typing.to_nullable_type(
+            bodo.utils.typing.dtype_to_array_type(common_dtype)
         )
 
 
@@ -671,40 +784,7 @@ def overload_coalesce_util(A):
     arg_string = "A"
     arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A)) if i not in dead_cols}
 
-    # Extract the underlying type of each scalar/vector
-    elem_types = []
-    for i in range(len(arg_types)):
-        # Array
-        if bodo.utils.utils.is_array_typ(arg_types[i], False):
-            elem_types.append(arg_types[i])
-        # Series
-        elif bodo.utils.utils.is_array_typ(arg_types[i], True):
-            elem_types.append(arg_types[i].data)
-        # Scalar
-        else:
-            elem_types.append(arg_types[i])
-    if len(elem_types) == 0:
-        out_dtype = bodo.none
-    elif len(elem_types) == 1:
-        if bodo.utils.utils.is_array_typ(elem_types[0]):
-            out_dtype = elem_types[0]
-        else:
-            out_dtype = bodo.utils.typing.dtype_to_array_type(elem_types[0])
-    else:
-        # Verify that the underlying scalar types are common before extracting
-        # the corresponding output_dtype
-        scalar_dtypes = []
-        for i in range(len(arg_types)):
-            if bodo.utils.utils.is_array_typ(arg_types[i]):
-                scalar_dtypes.append(elem_types[i].dtype)
-            else:
-                scalar_dtypes.append(elem_types[i])
-        common_dtype, success = bodo.utils.typing.get_common_scalar_dtype(scalar_dtypes)
-        if not success:
-            raise_bodo_error("Cannot coalesce columns with different dtypes")
-        out_dtype = bodo.utils.typing.to_nullable_type(
-            bodo.utils.typing.dtype_to_array_type(common_dtype)
-        )
+    out_dtype = get_common_broadcasted_type(arg_types, "COALESCE")
 
     return gen_vectorized(
         arg_names,
@@ -1003,6 +1083,183 @@ def replace_util(arr, to_replace, replace_with):
 
 
 @numba.generated_jit(nopython=True)
+def int_to_days(arr):
+    """Handles cases where int_to_days receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.int_to_days_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return int_to_days_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def second_timestamp(arr):
+    """Handles cases where second_timestamp receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.second_timestamp_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return second_timestamp_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def day_timestamp(arr):
+    """Handles cases where day_timestamp receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.day_timestamp_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return day_timestamp_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def month_diff(arr0, arr1):
+    """Handles cases where month_diff receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    args = [arr0, arr1]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.month_diff",
+                ["arr0", "arr1"],
+                i,
+            )
+
+    def impl(arr0, arr1):  # pragma: no cover
+        return month_diff_util(arr0, arr1)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def int_to_days_util(arr):
+    """A dedicated kernel for converting an integer (or integer column) to
+    interval days.
+
+
+    Args:
+        arr (int array/series/scalar): the number(s) to be converted to timedelta(s)
+
+    Returns:
+        timedelta series/scalar: the number/column of days
+    """
+
+    verify_int_arg(arr, "int_to_days", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propogate_null = [True]
+    scalar_text = (
+        "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timedelta(days=arg0))"
+    )
+
+    out_dtype = np.dtype("timedelta64[ns]")
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def second_timestamp_util(arr):
+    """A dedicated kernel for converting an integer (or integer column) to
+    a timestamp in seconds.
+
+
+    Args:
+        arr (int array/series/scalar): the number(s) to be converted to datetime(s)
+
+    Returns:
+        datetime series/scalar: the number/column in seconds
+    """
+
+    verify_int_arg(arr, "second_timestamp", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propogate_null = [True]
+    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0, unit='s'))"
+
+    out_dtype = np.dtype("datetime64[ns]")
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def day_timestamp_util(arr):
+    """A dedicated kernel for converting an integer (or integer column) to
+    a timestamp in days.
+
+
+    Args:
+        arr (int array/series/scalar): the number(s) to be converted to datetime(s)
+
+    Returns:
+        datetime series/scalar: the number/column in days
+    """
+
+    verify_int_arg(arr, "day_timestamp", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propogate_null = [True]
+    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0, unit='D'))"
+
+    out_dtype = np.dtype("datetime64[ns]")
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def month_diff_util(arr0, arr1):
+    """A dedicated kernel for obtaining the floor of the difference in months
+    between two Datetimes (or columns)
+
+
+    Args:
+        arr0 (datetime array/series/scalar): the date(s) being subtraced from
+        arr1 (datetime array/series/scalar): the date(s) being subtraced
+
+    Returns:
+        int series/scalar: the difference in months between the two dates
+    """
+
+    verify_datetime_arg(arr0, "month_diff", "arr0")
+    verify_datetime_arg(arr1, "month_diff", "arr1")
+
+    arg_names = ["arr0", "arr1"]
+    arg_types = [arr0, arr1]
+    propogate_null = [True] * 2
+    scalar_text = "A0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
+    scalar_text += "A1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
+    scalar_text += "delta = 12 * (A0.year - A1.year) + (A0.month - A1.month)\n"
+    scalar_text += "remainder = ((A0 - pd.DateOffset(months=delta)) - A1).value\n"
+    scalar_text += "if delta > 0 and remainder < 0:\n"
+    scalar_text += "   res[i] = -(delta - 1)\n"
+    scalar_text += "elif delta < 0 and remainder > 0:\n"
+    scalar_text += "   res[i] = -(delta + 1)\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = -delta"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
 def conv(arr, old_base, new_base):
     """Handles cases where CONV receives optional arguments and forwards
     to args apropriate version of the real implementaiton"""
@@ -1193,5 +1450,106 @@ def format_util(arr, places):
     scalar_text += "res[i] = format(arg0, f',.{prec}f')"
 
     out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def strcmp(arr0, arr1):
+    """Handles cases where STRCMP receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    args = [arr0, arr1]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.strcmp",
+                ["arr0", "arr1"],
+                i,
+            )
+
+    def impl(arr0, arr1):  # pragma: no cover
+        return strcmp_util(arr0, arr1)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def strcmp_util(arr0, arr1):
+    """A dedicated kernel for the SQL function STRCMP which takes in 2 strings
+    (or string columns) and returns 1 if the first is greater than the second,
+    -1 if it is less, and 0 if they are equal
+
+
+    Args:
+        arr0 (string array/series/scalar): the first string(s) being compared
+        arr1 (string array/series/scalar): the second string(s) being compared
+
+    Returns:
+        int series/scalar: -1, 0 or 1, depending on which string is bigger
+    """
+
+    verify_string_arg(arr0, "strcmp", "arr0")
+    verify_string_arg(arr1, "strcmp", "arr1")
+
+    arg_names = ["arr0", "arr1"]
+    arg_types = [arr0, arr1]
+    propogate_null = [True] * 2
+    scalar_text = "if arg0 < arg1:\n"
+    scalar_text += "   res[i] = -1\n"
+    scalar_text += "elif arg0 > arg1:\n"
+    scalar_text += "   res[i] = 1\n"
+    scalar_text += "else:\n"
+    scalar_text += "   res[i] = 0\n"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def instr(arr, target):
+    """Handles cases where INSTR receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    args = [arr, target]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.instr",
+                ["arr", "target"],
+                i,
+            )
+
+    def impl(arr, target):  # pragma: no cover
+        return instr_util(arr, target)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def instr_util(arr, target):
+    """A dedicated kernel for the SQL function INSTR which takes in 2 strings
+    (or string columns) and returns the location where the second string
+    first occurs inside the first (with 1-indexing), default zero if it is
+    not there.
+
+
+    Args:
+        arr (string array/series/scalar): the first string(s) being searched in
+        target (string array/series/scalar): the second string(s) being searched for
+
+    Returns:
+        int series/scalar: the location of the first occurrence of target in arr,
+        or zero if it does not occur in arr.
+    """
+
+    verify_string_arg(arr, "instr", "arr")
+    verify_string_arg(target, "instr", "target")
+
+    arg_names = ["arr", "target"]
+    arg_types = [arr, target]
+    propogate_null = [True] * 2
+    scalar_text = "res[i] = arg0.find(arg1) + 1"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
