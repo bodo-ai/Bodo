@@ -1929,6 +1929,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("range_index_to_numeric", "bodo.hiframes.pd_index_ext"):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         # dummy hiframes functions
         if func_mod == "bodo.hiframes.pd_series_ext" and func_name in (
             "get_series_data",

@@ -1819,16 +1819,32 @@ class DataFramePass:
         key_name_args = ", ".join(key_names)
         col_name_args = ", ".join(col_names)
 
+        if extra_arg_names:
+            extra_arg_names += ", "
+
         func_text = (
             f"def f({key_name_args}, {col_name_args}, df_index, {extra_arg_names}):\n"
         )
+        # Distributed pass shuffles in_df, which converts RangeIndex to NumericIndex.
+        # We need to avoid RangeIndex to make sure data type of in_df doesn't change.
+        # Otherwise, _bodo_groupby_apply_impl would have to be recompiled in distributed
+        # pass to avoid errors (extra compilation time overhead).
+        if isinstance(df_type.index, RangeIndexType):
+            func_text += f"  df_index = range_index_to_numeric(df_index)\n"
 
         func_text += f"  in_df = bodo.hiframes.pd_dataframe_ext.init_dataframe(({col_name_args},), df_index, __col_name_meta_value_inner)\n"
 
-        func_text += f"  return _bodo_groupby_apply_impl(({key_name_args},), in_df, {extra_arg_names})\n"
+        # pass shuffle info and is_parallel (not literal) to keep data types constant
+        # after distributed pass parallelization (avoid recompilation).
+        func_text += f"  return _bodo_groupby_apply_impl(({key_name_args},), in_df, {extra_arg_names} get_null_shuffle_info(), unliteral_val(False))\n"
 
         loc_vars = {}
-        glbls = {"__col_name_meta_value_inner": ColNamesMetaType(tuple(used_cols))}
+        glbls = {
+            "__col_name_meta_value_inner": ColNamesMetaType(tuple(used_cols)),
+            "get_null_shuffle_info": bodo.libs.array.get_null_shuffle_info,
+            "unliteral_val": bodo.utils.typing.unliteral_val,
+            "range_index_to_numeric": bodo.hiframes.pd_index_ext.range_index_to_numeric,
+        }
         exec(func_text, glbls, loc_vars)
         f = loc_vars["f"]
 
@@ -1837,9 +1853,6 @@ class DataFramePass:
         col_vars = [self._get_dataframe_data(df_var, c, nodes) for c in used_cols]
         df_index_var = self._get_dataframe_index(df_var, nodes)
         map_func = bodo.compiler.udf_jit(func)
-
-        if extra_arg_names:
-            extra_arg_names += ", "
 
         func_text = self._gen_groupby_apply_func(
             grp_typ,
@@ -1890,12 +1903,12 @@ class DataFramePass:
             "_bodo_groupby_apply_impl": _bodo_groupby_apply_impl,
         }
 
-        return replace_func(
-            self,
+        return nodes + compile_func_single_block(
             f,
             key_vars + col_vars + [df_index_var] + extra_args,
+            lhs,
+            self,
             extra_globals=glbs,
-            pre_nodes=nodes,
         )
 
     def _gen_groupby_apply_func(
@@ -1915,7 +1928,7 @@ class DataFramePass:
         # remove NA groups from both out_labels and sort_idx when (dropna=True)
         # when dropna=True, we don't need to keep track of groupby labels and sort_idx for NA values
 
-        func_text = f"def _bodo_groupby_apply_impl(keys, in_df, {extra_arg_names}shuffle_info=None, _is_parallel=False):\n"
+        func_text = f"def _bodo_groupby_apply_impl(keys, in_df, {extra_arg_names}shuffle_info, _is_parallel):\n"
         func_text += "  ev_apply = bodo.utils.tracing.Event('gb.apply', _is_parallel)\n"
 
         # get groupby info

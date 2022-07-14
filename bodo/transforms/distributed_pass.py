@@ -1970,7 +1970,7 @@ class DistributedPass:
                 in_df_type, keys_type, types.literal(True)
             )
             true_var = ir.Var(assign.target.scope, mk_unique_var("true"), rhs.loc)
-            self.typemap[true_var.name] = types.literal(True)
+            self.typemap[true_var.name] = types.bool_
             nodes = [ir.Assign(ir.Const(True, rhs.loc), true_var, rhs.loc)]
             nodes += compile_func_single_block(
                 py_func, [in_df, keys, true_var], None, self, extra_globals=glbls
@@ -1983,14 +1983,9 @@ class DistributedPass:
             # update _bodo_groupby_apply_impl() call to use shuffled data
             rhs.args[0] = out_keys
             rhs.args[1] = out_df
-            # append in case there are other UDF inputs
-            rhs.args.append(shuffle_info)
-            rhs.args.append(true_var)
-            # update calltype since inputs are changed
-            self.calltypes.pop(rhs)
-            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
-                self.typingctx, tuple(self.typemap[v.name] for v in rhs.args), {}
-            )
+            # shuffle info and is_parallel are last arguments
+            rhs.args[-2] = shuffle_info
+            rhs.args[-1] = true_var
             nodes.append(assign)
             return nodes
 
