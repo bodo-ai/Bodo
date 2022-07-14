@@ -1,6 +1,7 @@
 # Copyright (C) 2019 Bodo Inc. All rights reserved.
 """Tests I/O for CSV, Parquet, HDF5, etc.
 """
+import datetime
 import io
 import os
 import random
@@ -1965,6 +1966,42 @@ def test_read_predicates_isnull(memory_leak_check):
             os.remove("pq_data")
 
 
+def test_read_predicates_timestamp_date(memory_leak_check):
+    """Test predicate pushdown where a date column is filtered
+    by a timestamp."""
+    filepath = "pq_data"
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame(
+            {
+                "A": [
+                    datetime.date(2021, 2, 1),
+                    datetime.date(2021, 3, 1),
+                    datetime.date(2021, 4, 1),
+                    datetime.date(2021, 5, 1),
+                    datetime.date(2021, 6, 1),
+                ]
+                * 10,
+                "B": np.arange(50),
+            }
+        )
+        df.to_parquet(filepath)
+    bodo.barrier()
+    with ensure_clean(filepath):
+
+        def impl(path):
+            df = pd.read_parquet(filepath)
+            df = df[df.A > pd.Timestamp(2021, 3, 30)]
+            return df
+
+        # TODO: Fix index
+        check_func(impl, (filepath,), reset_index=True)
+        # make sure the ParquetReader node has filters parameter set
+        bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+        bodo_func(filepath)
+        _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+        bodo.barrier()
+
+
 def test_read_predicates_isnull_alone(memory_leak_check):
     """test that predicate pushdown with isnull as the sole filter."""
 
@@ -2260,7 +2297,6 @@ def test_filter_pushdown_past_column_filters():
                 df = df.loc[:, ["D"]]
                 df = df[df["D"] < 4]
                 return df
-
 
             check_func
             check_func(impl1, ())

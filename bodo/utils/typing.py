@@ -2212,13 +2212,20 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
     are manually supported.
     """
     # TODO: Support more types
-    if lhs_scalar_typ == types.unicode_type:
+    # All tests excpet lhs: date are currently marked as slow
+    if lhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between string and timestamp
         return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
-    elif lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type):
+    elif rhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between timestamp and string
-        return rhs_scalar_typ == types.unicode_type
-    return False
+        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+    elif lhs_scalar_typ == bodo.datetime_date_type:
+        # Cast is supported between date and timestamp
+        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+    elif rhs_scalar_typ == bodo.datetime_date_type:  # pragma: no cover
+        # Cast is supported between date and timestamp
+        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+    return False  # pragma: no cover
 
 
 def register_type(type_name, type_value):
