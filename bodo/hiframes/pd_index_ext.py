@@ -4340,6 +4340,22 @@ def cast_range_index_to_int_index(context, builder, fromty, toty, val):
     return context.compile_internal(builder, f, toty(fromty), [val])
 
 
+@numba.njit(no_cpython_wrapper=True)
+def range_index_to_numeric(I):  # pragma: no cover
+    """Convert RangeIndex to equivalent NumericIndex
+
+    Args:
+        I (RangeIndexType): RangeIndex input
+
+    Returns:
+        NumericIndexType: NumericIndex output
+    """
+    return init_numeric_index(
+        np.arange(I._start, I._stop, I._step),
+        bodo.hiframes.pd_index_ext.get_index_name(I),
+    )
+
+
 class HeterogeneousIndexType(types.Type):
     """
     Type class for Index objects with potentially heterogeneous but limited number of
