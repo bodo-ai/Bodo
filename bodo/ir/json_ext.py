@@ -2,8 +2,10 @@
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import ir, ir_utils, typeinfer, types
+from llvmlite import ir as lir
+from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import compile_to_numba_ir, replace_arg_nodes
+from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
@@ -14,7 +16,11 @@ from bodo.io.fs_io import (
 )
 from bodo.libs.str_ext import string_type
 from bodo.transforms import distributed_analysis, distributed_pass
-from bodo.utils.utils import check_java_installation, sanitize_varname
+from bodo.utils.utils import (
+    check_and_propagate_cpp_exception,
+    check_java_installation,
+    sanitize_varname,
+)
 
 
 class JsonReader(ir.Stmt):
@@ -59,18 +65,74 @@ from bodo.io import json_cpp
 
 ll.add_symbol("json_file_chunk_reader", json_cpp.json_file_chunk_reader)
 
-json_file_chunk_reader = types.ExternalFunction(
-    "json_file_chunk_reader",
-    bodo.ir.connector.stream_reader_type(
-        types.voidptr,  # filename
-        types.bool_,  # lines
-        types.bool_,  # is_parallel
-        types.int64,  # nrows
-        types.voidptr,  # compression
-        types.voidptr,  # bucket_region
-        storage_options_dict_type,  # storage_options dictionary
-    ),
-)
+
+@intrinsic
+def json_file_chunk_reader(
+    typingctx,
+    fname_t,
+    lines_t,
+    is_parallel_t,
+    nrows_t,
+    compression_t,
+    bucket_region_t,
+    storage_options_t,
+):
+    """
+    Interface to json_file_chunk_reader function in C++ library for creating
+    the json file reader.
+    """
+    # TODO: Update storage options to pyobject once the type is updated to do refcounting
+    # properly.
+    assert (
+        storage_options_t == storage_options_dict_type
+    ), "Storage options don't match expected type"
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="json_file_chunk_reader"
+        )
+        obj = builder.call(fn_tp, args)
+        context.compile_internal(
+            builder, lambda: check_and_propagate_cpp_exception(), types.none(), []
+        )  # pragma: no cover
+        # json_file_chunk_reader returns a pyobject. We need to wrap the result in the
+        # proper return type and create a meminfo.
+        ret = cgutils.create_struct_proxy(types.stream_reader_type)(context, builder)
+        pyapi = context.get_python_api(builder)
+        # borrows and manages a reference for obj (see comments in py_objs.py)
+        ret.meminfo = pyapi.nrt_meminfo_new_from_pyobject(
+            context.get_constant_null(types.voidptr), obj
+        )
+        ret.pyobj = obj
+        # `nrt_meminfo_new_from_pyobject` increfs the object (holds a reference)
+        # so need to decref since the object is not live anywhere else.
+        pyapi.decref(obj)
+        return ret._getvalue()
+
+    return (
+        types.stream_reader_type(
+            types.voidptr,  # filename
+            types.bool_,  # lines
+            types.bool_,  # is_parallel
+            types.int64,  # nrows
+            types.voidptr,  # compression
+            types.voidptr,  # bucket_region
+            storage_options_dict_type,  # storage_options dictionary
+        ),
+        codegen,
+    )
 
 
 def remove_dead_json(
@@ -262,9 +324,7 @@ def _gen_json_reader_py(
     func_text += "    {}, {}, -1, bodo.libs.str_ext.unicode_to_utf8('{}'), bodo.libs.str_ext.unicode_to_utf8(bucket_region), storage_options_py )\n".format(
         lines, parallel, compression
     )
-    # Check if there was an error in the C++ code. If so, raise it.
-    func_text += "  bodo.utils.utils.check_and_propagate_cpp_exception()\n"
-    func_text += "  if bodo.utils.utils.is_null_pointer(f_reader):\n"
+    func_text += "  if bodo.utils.utils.is_null_pointer(f_reader._pyobj):\n"
     func_text += "      raise FileNotFoundError('File does not exist')\n"
     func_text += f"  with objmode({typ_strs}):\n"
     func_text += f"    df = pd.read_json(f_reader, orient='{orient}',\n"
