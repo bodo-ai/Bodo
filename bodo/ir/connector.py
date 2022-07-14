@@ -657,15 +657,24 @@ def determine_filter_cast(
     )
     if not bodo.utils.typing.is_common_scalar_dtype([lhs_scalar_typ, rhs_scalar_typ]):
         # If a cast is not implicit it must be in our white list.
-        if not bodo.utils.typing.is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
+        # All paths are only tested via slow except date -> timestamp
+        if not bodo.utils.typing.is_safe_arrow_cast(
+            lhs_scalar_typ, rhs_scalar_typ
+        ):  # pragma: no cover
             raise BodoError(
                 f"Unsupported Arrow cast from {lhs_scalar_typ} to {rhs_scalar_typ} in filter pushdown. Please try a comparison that avoids casting the column."
             )
         # We always cast string -> other types
-        # Only supported types should be string and timestamp
-        if lhs_scalar_typ == types.unicode_type:
+        # Only supported types should be string and timestamp or timestamp + date
+        if lhs_scalar_typ == types.unicode_type and rhs_scalar_typ in (
+            bodo.datetime64ns,
+            bodo.pd_timestamp_type,
+        ):  # pragma: no cover
             return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
-        elif lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type):
+        elif rhs_scalar_typ == types.unicode_type and lhs_scalar_typ in (
+            bodo.datetime64ns,
+            bodo.pd_timestamp_type,
+        ):  # pragma: no cover
             if isinstance(rhs_typ, (types.List, types.Set)):  # pragma: no cover
                 # This path should never be reached because we checked that
                 # list/set doesn't contain Timestamp or datetime64 in typing pass.
@@ -674,5 +683,14 @@ def determine_filter_cast(
                     f"Cannot cast {type_name} values with isin filter pushdown."
                 )
             return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
-
+        elif lhs_scalar_typ == bodo.datetime_date_type and rhs_scalar_typ in (
+            bodo.datetime64ns,
+            bodo.pd_timestamp_type,
+        ):
+            return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
+        elif rhs_scalar_typ == bodo.datetime_date_type and lhs_scalar_typ in (
+            bodo.datetime64ns,
+            bodo.pd_timestamp_type,
+        ):  # pragma: no cover
+            return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
     return col_cast, ""
