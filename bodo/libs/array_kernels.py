@@ -68,6 +68,7 @@ from bodo.utils.typing import (
     is_overload_constant_bool,
     is_overload_constant_str,
     is_overload_none,
+    is_overload_true,
     is_str_arr_type,
     raise_bodo_error,
     to_str_arr_if_dict_array,
@@ -2158,9 +2159,12 @@ def gen_na_array(n, arr):  # pragma: no cover
 
 
 @overload(gen_na_array, no_unliteral=True)
-def overload_gen_na_array(n, arr):
+def overload_gen_na_array(n, arr, use_dict_arr=False):
     """
     generate an array full of NA values with the same type as 'arr'
+
+    If use_dict_arr=True then we allocate a dicitonary encoded array
+    for any strings with a global dictionary.
     """
     # TODO: support all array types
 
@@ -2176,7 +2180,7 @@ def overload_gen_na_array(n, arr):
     ):
         dtype = dtype if isinstance(dtype, types.Float) else types.float64
 
-        def impl_float(n, arr):  # pragma: no cover
+        def impl_float(n, arr, use_dict_arr=False):  # pragma: no cover
             numba.parfors.parfor.init_prange()
             out_arr = np.empty(n, dtype)
             for i in numba.parfors.parfor.internal_prange(n):
@@ -2185,9 +2189,21 @@ def overload_gen_na_array(n, arr):
 
         return impl_float
 
+    if arr == bodo.dict_str_arr_type and is_overload_true(use_dict_arr):
+
+        def impl_dict(n, arr, use_dict_arr=False):  # pragma: no cover
+            dict_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(0, 0)
+            indices = bodo.libs.int_arr_ext.alloc_int_array(n, np.int32)
+            numba.parfors.parfor.init_prange()
+            for i in numba.parfors.parfor.internal_prange(n):
+                setna(indices, i)
+            return bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True)
+
+        return impl_dict
+
     _arr_typ = to_str_arr_if_dict_array(arr)
 
-    def impl(n, arr):  # pragma: no cover
+    def impl(n, arr, use_dict_arr=False):  # pragma: no cover
         numba.parfors.parfor.init_prange()
         out_arr = bodo.utils.utils.alloc_type(n, _arr_typ, (0,))
         for i in numba.parfors.parfor.internal_prange(n):

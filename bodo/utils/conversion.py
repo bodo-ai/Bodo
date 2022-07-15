@@ -29,6 +29,7 @@ from bodo.utils.typing import (
     is_overload_true,
     is_str_arr_type,
     to_nullable_type,
+    unwrap_typeref,
 )
 
 NS_DTYPE = np.dtype("M8[ns]")  # similar pandas/_libs/tslibs/conversion.pyx
@@ -351,6 +352,44 @@ def overload_coerce_to_ndarray(
     return (
         lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: data
     )  # pragma: no cover
+
+
+def coerce_scalar_to_array(scalar, length, arr_type):  # pragma: no cover
+    pass
+
+
+@overload(coerce_scalar_to_array)
+def overload_coerce_scalar_to_array(scalar, length, arr_type):
+    """
+    Converts the given scalar to an array with the given length.
+    If the scalar is None or optional then we generate the result
+    as all NA with the given array type. If the value is optional
+    we also convert the array to a nullable type.
+    """
+    # The array type always needs to be nullable for the gen_na_array case.
+    _arr_typ = to_nullable_type(unwrap_typeref(arr_type))
+    if scalar == types.none:
+        # If the scalar is None we generate an array of all NA
+        def impl(scalar, length, arr_type):  # pragma: no cover
+            return bodo.libs.array_kernels.gen_na_array(length, _arr_typ, True)
+
+    elif isinstance(scalar, types.Optional):
+
+        def impl(scalar, length, arr_type):  # pragma: no cover
+            if scalar is None:
+                return bodo.libs.array_kernels.gen_na_array(length, _arr_typ, True)
+            else:
+                # If the data may be null both paths must produce the nullable array type.
+                return bodo.utils.conversion.coerce_to_array(
+                    bodo.utils.indexing.unoptional(scalar), True, True, length
+                )
+
+    else:
+
+        def impl(scalar, length, arr_type):  # pragma: no cover
+            return bodo.utils.conversion.coerce_to_array(scalar, True, False, length)
+
+    return impl
 
 
 # TODO: use generated_jit with IR inlining
