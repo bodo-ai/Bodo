@@ -1652,3 +1652,170 @@ def test_strcmp_instr_option():
         for flag1 in [True, False]:
             answer = (1, 0) if flag0 and flag1 else None
             check_func(impl, ("a", "Z", flag0, flag1), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series([1.0, 2.0, 3.0, 4.0, 8.0]),
+                pd.Series([6.0, 2.0, 2.0, 10.5, 2.0]),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series([1.1, None, 3.6, 10.0, 16.0, 17.3, 101.0]),
+                2.0,
+            ),
+            id="vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (64.0, 4.0),
+            id="all_scalar_no_null",
+        ),
+        pytest.param((None, 5.6), id="all_scalar_with_null", marks=pytest.mark.slow),
+    ],
+)
+def test_log(args):
+    def impl(arr, base):
+        return bodo.libs.bodosql_array_kernels.log(arr, base)
+
+    # Simulates LOG on a single row
+    def log_scalar_fn(elem, base):
+        if pd.isna(elem) or pd.isna(base):
+            return None
+        else:
+            return np.log(elem) / np.log(base)
+
+    log_answer = vectorized_sol(args, log_scalar_fn, np.float64)
+    check_func(
+        impl,
+        args,
+        py_output=log_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_log_option():
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return bodo.libs.bodosql_array_kernels.log(arg0, arg1)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = 3.0 if flag0 and flag1 else None
+            check_func(impl, (8.0, 2.0, flag0, flag1), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "numbers",
+    [
+        pytest.param(
+            pd.Series([1, 0, 2345678, -910, None]),
+            id="vector_int",
+        ),
+        pytest.param(
+            pd.Series(pd.array([0, 1, 32, 127, 128, 255], dtype=pd.UInt8Dtype())),
+            id="vector_uint8",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                pd.array([0, 1, 100, 1000, 32767, 32768, 65535], dtype=pd.UInt16Dtype())
+            ),
+            id="vector_uint16",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                pd.array(
+                    [0, 100, 32767, 32768, 65535, 4294967295], dtype=pd.UInt32Dtype()
+                )
+            ),
+            id="vector_uint32",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                pd.array(
+                    [
+                        0,
+                        100,
+                        32767,
+                        4294967295,
+                        9223372036854775806,
+                        9223372036854775807,
+                    ],
+                    dtype=pd.UInt64Dtype(),
+                )
+            ),
+            id="vector_uint64",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([-1.0, 0.0, -123.456, 4096.1, None]),
+            id="vector_float",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            42,
+            id="scalar_int",
+        ),
+        pytest.param(-12.345, id="scalar_float", marks=pytest.mark.slow),
+    ],
+)
+def test_negate(numbers):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.negate(arr)
+
+    # Simulates -X on a single row
+    def negate_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return -elem
+
+    # Turns unsigned ints into signed ints and upcasts them, except for uint64
+    # which is handled manually
+    if isinstance(numbers, pd.Series):
+        dtype = {
+            pd.UInt8Dtype(): pd.Int16Dtype(),
+            pd.UInt16Dtype(): pd.Int32Dtype(),
+            pd.UInt32Dtype(): pd.Int64Dtype(),
+        }.get(numbers.dtype, None)
+    else:
+        dtype = None
+
+    if isinstance(numbers, pd.Series) and numbers.dtype == pd.UInt64Dtype():
+        negate_answer = vectorized_sol(
+            (pd.Series([elem for elem in numbers], dtype=pd.Int64Dtype()),),
+            negate_scalar_fn,
+            pd.Int64Dtype(),
+        )
+    else:
+        negate_answer = vectorized_sol((numbers,), negate_scalar_fn, dtype)
+
+    check_func(
+        impl,
+        (numbers,),
+        py_output=negate_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_negate_option():
+    def impl(A, flag0):
+        arg = A if flag0 else None
+        return bodo.libs.bodosql_array_kernels.negate(arg)
+
+    for flag0 in [True, False]:
+        answer = -42 if flag0 else None
+        check_func(impl, (42, flag0), py_output=answer)
