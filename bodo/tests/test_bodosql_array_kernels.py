@@ -1747,13 +1747,22 @@ def test_log_option():
     "numbers",
     [
         pytest.param(
-            pd.Series([1, 0, 2345678, -910, None]),
+            pd.Series([1, 0, 2345678, -910, None], dtype=pd.Int64Dtype()),
             id="vector_int",
         ),
         pytest.param(
-            pd.Series(pd.array([0, 1, 32, 127, 128, 255], dtype=pd.UInt8Dtype())),
-            id="vector_uint8",
+            pd.Series(pd.array([0, 1, 32, 127, -126, 125], dtype=pd.Int8Dtype())),
+            id="vector_int8",
             marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                pd.array(
+                    [0, 1, 32, 127, 128, 129, 251, 252, 253, 254, 255],
+                    dtype=pd.UInt8Dtype(),
+                )
+            ),
+            id="vector_uint8",
         ),
         pytest.param(
             pd.Series(
@@ -1786,10 +1795,9 @@ def test_log_option():
                 )
             ),
             id="vector_uint64",
-            marks=pytest.mark.slow,
         ),
         pytest.param(
-            pd.Series([-1.0, 0.0, -123.456, 4096.1, None]),
+            pd.Series([-1.0, 0.0, -123.456, 4096.1, None], dtype=np.float64),
             id="vector_float",
             marks=pytest.mark.slow,
         ),
@@ -1811,25 +1819,23 @@ def test_negate(numbers):
         else:
             return -elem
 
-    # Turns unsigned ints into signed ints and upcasts them, except for uint64
-    # which is handled manually
-    if isinstance(numbers, pd.Series):
+    if (
+        isinstance(numbers, pd.Series)
+        and not isinstance(numbers.dtype, np.dtype)
+        and numbers.dtype
+        in (pd.UInt8Dtype(), pd.UInt16Dtype(), pd.UInt32Dtype(), pd.UInt64Dtype())
+    ):
         dtype = {
             pd.UInt8Dtype(): pd.Int16Dtype(),
             pd.UInt16Dtype(): pd.Int32Dtype(),
             pd.UInt32Dtype(): pd.Int64Dtype(),
-        }.get(numbers.dtype, None)
-    else:
-        dtype = None
-
-    if isinstance(numbers, pd.Series) and numbers.dtype == pd.UInt64Dtype():
+            pd.UInt64Dtype(): pd.Int64Dtype(),
+        }[numbers.dtype]
         negate_answer = vectorized_sol(
-            (pd.Series([elem for elem in numbers], dtype=pd.Int64Dtype()),),
-            negate_scalar_fn,
-            pd.Int64Dtype(),
+            (pd.Series(pd.array(list(numbers), dtype=dtype)),), negate_scalar_fn, dtype
         )
     else:
-        negate_answer = vectorized_sol((numbers,), negate_scalar_fn, dtype)
+        negate_answer = vectorized_sol((numbers,), negate_scalar_fn, None)
 
     check_func(
         impl,
