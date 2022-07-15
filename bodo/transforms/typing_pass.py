@@ -17,7 +17,6 @@ from numba.core.compiler_machinery import register_pass
 from numba.core.extending import register_jitable
 from numba.core.ir_utils import (
     GuardException,
-    build_definitions,
     compute_cfg_from_blocks,
     dprint_func_ir,
     find_callname,
@@ -586,41 +585,39 @@ class TypingTransforms:
             )
 
         if (
-            (
-                is_expr(index_def, "binop")
-                or self._is_na_filter_pushdown_func(index_def, index_call_name)
-                or self._is_isin_filter_pushdown_func(index_def, index_call_name)
-                or self._starts_ends_with_filter_pushdown_func(
-                    index_def, index_call_name
-                )
-            )
-            and is_call(value_def)
-            and guard(find_callname, self.func_ir, value_def)
-            == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext")
+            is_expr(index_def, "binop")
+            or self._is_na_filter_pushdown_func(index_def, index_call_name)
+            or self._is_isin_filter_pushdown_func(index_def, index_call_name)
+            or self._starts_ends_with_filter_pushdown_func(index_def, index_call_name)
         ):
-            working_body = guard(
-                self._try_filter_pushdown,
-                assign,
-                self._working_body,
-                self.func_ir,
-                False,
+            value_def, used_dfs = self._iterate_over_column_filters(
+                assign, self.func_ir
             )
-            # If this function returns a list we have updated the working body.
-            # This is done to enable updating a single block that is not yet being processed
-            # in the working body.
-            if working_body is not None:
-                self._working_body = working_body
+            call_name = guard(find_callname, self.func_ir, value_def)
+            if call_name == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+                working_body = guard(
+                    self._try_filter_pushdown,
+                    assign,
+                    self._working_body,
+                    self.func_ir,
+                    value_def,
+                    used_dfs,
+                )
+                # If this function returns a list we have updated the working body.
+                # This is done to enable updating a single block that is not yet being processed
+                # in the working body.
+                if working_body is not None:
+                    self._working_body = working_body
 
         nodes.append(assign)
         return nodes
 
-    def _iterate_over_column_filters(self, assign, func_ir, from_bodosql):
+    def _iterate_over_column_filters(self, assign, func_ir):
         """
         Iterate over calls that only filter the columns of a dataframe, raising a guard if it encounters an
         non column filter, maintaining a list of used dataframes.
         """
         rhs = assign.value
-        index_def = get_definition(func_ir, rhs.index)
         value_def = get_definition(func_ir, rhs.value)
         # Intermediate DataFrames that need to be checked.
         # Maps dataframe names to their definitions
@@ -660,63 +657,7 @@ class TypingTransforms:
             # Add this to the intermediate DataFrames
             used_dfs[used_name] = value_def
 
-        # TODO: this is the old BodoSQL path. We should remove this, after the next major release
-        # If we load from parquet with paritions, BodoSQL will generate a pd.DataFrame call that performs
-        # an astype with the categorical columns
-        # For example:
-        #
-        # df = pd.read_parquet("filename")
-        # df = pd.DataFrame(
-        #     {
-        #         "a": df["a"],
-        #         "b": df["b"].astype("category")
-        #         "c": df["c"],
-        #     }
-        # )
-        # In this situation, the DataFrame is ALWAYS immediately clobbered.
-        # This means we ignore uses of this variable (to avoid tracking each
-        # column) and we rely on the source being a ParquetReader
-        # to ensure it is safe to perform filter pushdown.
-        if (
-            from_bodosql
-            and is_call(value_def)
-            and guard(find_callname, func_ir, value_def)
-            == (
-                "DataFrame",
-                "pandas",
-            )
-        ):  # pragma: no cover
-            require(len(value_def.args) > 0)
-            # Obtain the dictionary argument to pd.DataFrame
-            df_dict = value_def.args[0]
-            dict_def = get_definition(func_ir, df_dict)
-            require(is_expr(dict_def, "build_tuple"))
-
-            # Find the source DataFrame that should be created from the parquet node.
-            # All dataframes are at the end of this build_tuple, so we look for their
-            # source. These can either be a static getitem from the df or an astype.
-            #
-            # Again we don't check the use of these variables because of the assumed
-            # code structure.
-            source_col = get_definition(func_ir, dict_def.items[-1])
-            if is_call(source_col):
-                # We have an astype.
-                source_col = get_definition(func_ir, source_col.func)
-                require(is_expr(source_col, "getattr") and source_col.attr == "astype")
-                source_col = get_definition(func_ir, source_col.value)
-            # The source column is a static getitem to the relevant df
-            require(is_expr(source_col, "static_getitem"))
-            source_df = get_definition(func_ir, source_col.value)
-
-            value_def = source_df
-
-        elif is_call(value_def) and guard(find_callname, func_ir, value_def) == (
-            "init_dataframe",
-            "bodo.hiframes.pd_dataframe_ext",
-        ):
-            # In this case, we have what we want, we can try and perform filter pushdown.
-            pass
-        elif is_call(value_def) and guard(find_callname, func_ir, value_def) == (
+        if is_call(value_def) and guard(find_callname, func_ir, value_def) == (
             "__bodosql_replace_columns_dummy",
             "bodo.hiframes.dataframe_impl",
         ):  # pragma: no cover
@@ -727,8 +668,6 @@ class TypingTransforms:
 
             init_df_call = get_definition(func_ir, value_def.args[0])
             value_def = init_df_call
-        else:
-            raise GuardException("Couldn't find a valid dataframe to filter")
 
         return value_def, used_dfs
 
@@ -737,7 +676,8 @@ class TypingTransforms:
         assign,
         working_body,
         func_ir,
-        from_bodosql,
+        value_def,
+        used_dfs,
     ):
         """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
 
@@ -753,12 +693,6 @@ class TypingTransforms:
         rhs = assign.value
 
         index_def = get_definition(func_ir, rhs.index)
-
-        # Iterate over calls that only filter the columns of the dataframe, until we arive at the first
-        # definition, keeping track of the intermediate dataframes that are used.
-        value_def, used_dfs = self._iterate_over_column_filters(
-            assign, func_ir, from_bodosql
-        )
 
         # avoid empty dataframe
         require(len(value_def.args) > 0)
@@ -796,7 +730,6 @@ class TypingTransforms:
             func_ir,
             # SQL generates different operators than pyarrow
             read_node,
-            from_bodosql,
         )
         self._check_non_filter_df_use(set(used_dfs.keys()), assign, func_ir)
         new_working_body = self._reorder_filter_nodes(
@@ -1039,7 +972,7 @@ class TypingTransforms:
         return (colname, op, call_def.args[0])
 
     def _get_partition_filters(
-        self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node, from_bodosql
+        self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node
     ):
         """get filters for predicate pushdown if possible.
         Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
@@ -1059,7 +992,7 @@ class TypingTransforms:
                     l_def = get_definition(func_ir, lhs_def.lhs)
                     r_def = get_definition(func_ir, lhs_def.rhs)
                     left_or = self._get_partition_filters(
-                        lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                        lhs_def, df_var, l_def, r_def, func_ir, read_node
                     )
                 else:
                     left_or = [
@@ -1069,7 +1002,7 @@ class TypingTransforms:
                     l_def = get_definition(func_ir, rhs_def.lhs)
                     r_def = get_definition(func_ir, rhs_def.rhs)
                     right_or = self._get_partition_filters(
-                        rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                        rhs_def, df_var, l_def, r_def, func_ir, read_node
                     )
                 else:
                     right_or = [
@@ -1095,7 +1028,6 @@ class TypingTransforms:
                         new_lhs_rdef,
                         func_ir,
                         read_node,
-                        from_bodosql,
                     )
                     # lhs And rhs.rhs (A And C)
                     new_rhs = ir.Expr.binop(
@@ -1109,7 +1041,6 @@ class TypingTransforms:
                         new_rhs_rdef,
                         func_ir,
                         read_node,
-                        from_bodosql,
                     )
                     return left_or + right_or
 
@@ -1128,7 +1059,6 @@ class TypingTransforms:
                         rhs_def,
                         func_ir,
                         read_node,
-                        from_bodosql,
                     )
                     # lhs.rhs And rhs (C And A)
                     new_rhs = ir.Expr.binop(
@@ -1142,7 +1072,6 @@ class TypingTransforms:
                         rhs_def,
                         func_ir,
                         read_node,
-                        from_bodosql,
                     )
                     return left_or + right_or
 
@@ -1151,7 +1080,7 @@ class TypingTransforms:
                     l_def = get_definition(func_ir, lhs_def.lhs)
                     r_def = get_definition(func_ir, lhs_def.rhs)
                     left_or = self._get_partition_filters(
-                        lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                        lhs_def, df_var, l_def, r_def, func_ir, read_node
                     )
                 else:
                     left_or = [
@@ -1161,7 +1090,7 @@ class TypingTransforms:
                     l_def = get_definition(func_ir, rhs_def.lhs)
                     r_def = get_definition(func_ir, rhs_def.rhs)
                     right_or = self._get_partition_filters(
-                        rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
+                        rhs_def, df_var, l_def, r_def, func_ir, read_node
                     )
                 else:
                     right_or = [
@@ -1228,9 +1157,7 @@ class TypingTransforms:
         # If this is parquet we need to verify this is a filter we can process.
         # We don't do this check if there is a call expression because isnull
         # is always supported.
-        # TODO(Nick): Support for BodoSQL, which we can't yet because we don't
-        # have typemap information (requires refactoring filter pushdown in BodoSQL).
-        if not is_sql and not is_call(index_def) and not from_bodosql:
+        if not is_sql and not is_call(index_def):
             lhs_arr_typ = read_node.original_out_types[
                 read_node.original_df_colnames.index(cond[0])
             ]
@@ -2960,57 +2887,7 @@ class TypingTransforms:
             replace_globals=False,
             extra_globals=additional_globals_to_lower,
         )
-        # Attempt to apply filter pushdown if there is parquet load
-        if any(
-            [
-                isinstance(
-                    stmt,
-                    (bodo.ir.parquet_ext.ParquetReader, bodo.ir.sql_ext.SqlReader),
-                )
-                for stmt in block_body
-            ]
-        ):
-            block_body = self._apply_bodosql_filter_pushdown(block_body)
-
         return block_body
-
-    def _apply_bodosql_filter_pushdown(self, block_body):  # pragma: no cover
-        """
-        Function that tries to apply filter pushdown to a single "block" produced
-        by BodoSQL. The block_body is a list of ir.Stmt.
-
-        Currently we only attempt to apply filter pushdown(s) to files read
-        from parquet within the BodoSQL block.
-
-        Returns a new list of statements, updated with the filter pushdown(s).
-        """
-        # We generate a dummy scope + loc because BodoSQL doesn't contain useful
-        # loc information anyways (since its a func_text).
-        loc = ir.Loc("", 0)
-        scope = ir.Scope(None, loc)
-        # Wrap the body in a dummy Block + FunctionIR for Numba APIs
-        block = ir.Block(scope, loc)
-        block.body = block_body
-        blocks = {0: block}
-        definitions = build_definitions(blocks)
-        func_ir = ir.FunctionIR({0: block}, False, -1, loc, definitions, 0, ())
-        working_body = []
-        for inst in block.body:
-            # Try and determine if we could have a filter pushdown. This only
-            # occurs when we have a getitem with a filter.
-            if (
-                isinstance(inst, ir.Assign)
-                and isinstance(inst.value, ir.Expr)
-                and inst.value.op in ("getitem", "static_getitem")
-            ):
-                updated_working_body = guard(
-                    self._try_filter_pushdown, inst, working_body, func_ir, True
-                )
-                # If we have an updated working body swap the working body list
-                if updated_working_body:
-                    working_body = updated_working_body
-            working_body.append(inst)
-        return working_body
 
     def _call_arg_list_to_tuple(self, rhs, func_name, arg_no, arg_name, nodes):
         """Convert call argument to tuple if it is a constant list"""
