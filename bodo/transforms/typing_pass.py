@@ -590,6 +590,9 @@ class TypingTransforms:
                 is_expr(index_def, "binop")
                 or self._is_na_filter_pushdown_func(index_def, index_call_name)
                 or self._is_isin_filter_pushdown_func(index_def, index_call_name)
+                or self._starts_ends_with_filter_pushdown_func(
+                    index_def, index_call_name
+                )
             )
             and is_call(value_def)
             and guard(find_callname, self.func_ir, value_def)
@@ -967,7 +970,7 @@ class TypingTransforms:
             return {index_def} | left_nodes | right_nodes
         return {index_def}
 
-    def _get_call_filter(self, call_def, func_ir, df_var):
+    def _get_call_filter(self, call_def, func_ir, df_var, is_snowflake):
         """
         Function used by _get_partition_filters to extract filters
         related to series method calls.
@@ -981,6 +984,14 @@ class TypingTransforms:
             return self._get_null_filter(call_list, func_ir, df_var)
         elif call_list[0] == "isin":
             return self._get_isin_filter(call_list, call_def, func_ir, df_var)
+        elif (
+            call_list[0] in ("startswith", "endswith") and is_snowflake
+        ):  # pragma: no cover
+            # This path is only taken on Azure because snowflake
+            # is not tested on AWS.
+            return self._get_starts_ends_with_filter(
+                call_list, call_def, func_ir, df_var
+            )
         else:
             # Trigger a GuardException because we have hit an unknown function.
             # This should be caught by a surrounding function.
@@ -1018,6 +1029,15 @@ class TypingTransforms:
         op = "in"
         return (colname, op, list_set_arg)
 
+    def _get_starts_ends_with_filter(
+        self, call_list, call_def, func_ir, df_var
+    ):  # pragma: no cover
+        # This path is only taken on Azure because snowflake
+        # is not tested on AWS.
+        colname = self._get_col_name(call_list[1], df_var, func_ir)
+        op = call_list[0]
+        return (colname, op, call_def.args[0])
+
     def _get_partition_filters(
         self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node, from_bodosql
     ):
@@ -1027,6 +1047,8 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
         require(is_expr(index_def, "binop") or is_call(index_def))
+        is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+        is_snowflake = is_sql and read_node.db_type == "snowflake"
         # similar to DNF normalization in Sympy:
         # https://github.com/sympy/sympy/blob/da5cd290017814e6100859e5a3f289b3eda4ca6c/sympy/logic/boolalg.py#L1565
         # Or case: call recursively on arguments and concatenate
@@ -1040,7 +1062,9 @@ class TypingTransforms:
                         lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
                     )
                 else:
-                    left_or = [[self._get_call_filter(lhs_def, func_ir, df_var)]]
+                    left_or = [
+                        [self._get_call_filter(lhs_def, func_ir, df_var, is_snowflake)]
+                    ]
                 if is_expr(rhs_def, "binop"):
                     l_def = get_definition(func_ir, rhs_def.lhs)
                     r_def = get_definition(func_ir, rhs_def.rhs)
@@ -1048,7 +1072,9 @@ class TypingTransforms:
                         rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
                     )
                 else:
-                    right_or = [[self._get_call_filter(rhs_def, func_ir, df_var)]]
+                    right_or = [
+                        [self._get_call_filter(rhs_def, func_ir, df_var, is_snowflake)]
+                    ]
                 return left_or + right_or
 
             # And case: distribute Or over And to normalize if needed
@@ -1128,7 +1154,9 @@ class TypingTransforms:
                         lhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
                     )
                 else:
-                    left_or = [[self._get_call_filter(lhs_def, func_ir, df_var)]]
+                    left_or = [
+                        [self._get_call_filter(lhs_def, func_ir, df_var, is_snowflake)]
+                    ]
                 if is_expr(rhs_def, "binop"):
                     l_def = get_definition(func_ir, rhs_def.lhs)
                     r_def = get_definition(func_ir, rhs_def.rhs)
@@ -1136,7 +1164,9 @@ class TypingTransforms:
                         rhs_def, df_var, l_def, r_def, func_ir, read_node, from_bodosql
                     )
                 else:
-                    right_or = [[self._get_call_filter(rhs_def, func_ir, df_var)]]
+                    right_or = [
+                        [self._get_call_filter(rhs_def, func_ir, df_var, is_snowflake)]
+                    ]
 
                 # If either expression is an AND, we may still have ORs inside
                 # the AND. As a result, distributed ANDs across all ORs.
@@ -1151,7 +1181,6 @@ class TypingTransforms:
 
         # literal case
         # TODO(ehsan): support 'in' and 'not in'
-        is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
         # Iceberg uses arrow operators instead of SQL operators.
         use_sql_ops = is_sql and read_node.db_type != "iceberg"
         op_map = {
@@ -1194,7 +1223,7 @@ class TypingTransforms:
             else:
                 cond = (left_colname, op_map[index_def.fn], index_def.rhs)
         else:
-            cond = self._get_call_filter(index_def, func_ir, df_var)
+            cond = self._get_call_filter(index_def, func_ir, df_var, is_snowflake)
 
         # If this is parquet we need to verify this is a filter we can process.
         # We don't do this check if there is a call expression because isnull
@@ -1224,6 +1253,9 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
         var_def = get_definition(func_ir, var)
+        if is_expr(var_def, "getattr") and var_def.attr == "str":
+            # Convert Series.str back to the original series.
+            var_def = get_definition(func_ir, var_def.value)
         if is_expr(var_def, "getattr") and var_def.value.name == df_var.name:
             return var_def.attr
         if is_expr(var_def, "static_getitem") and var_def.value.name == df_var.name:
@@ -3958,6 +3990,31 @@ class TypingTransforms:
                 list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
         )
+
+    def _starts_ends_with_filter_pushdown_func(self, index_def, index_call_name):
+        """
+        Does an expression match a supported startswith/endswith call that can be
+        used in filter pushdown. Currently these optimizations are only supported
+        when loaded from Snowflake.
+        """
+        if not (
+            is_call(index_def) and index_call_name[0] in ("startswith", "endswith")
+        ):
+            return False
+
+        method_obj_type = self.typemap.get(index_call_name[1].name, None)
+
+        # rerun type inference if we don't have the method's object type yet
+        # read_sql_table (and other I/O calls in the future) is handled in typing pass
+        # so the Series type may not be available yet
+        if method_obj_type in (None, types.unknown, types.undefined):
+            self.needs_transform = True
+            return False
+
+        if not isinstance(method_obj_type, SeriesStrMethodType):
+            return False
+
+        return True
 
 
 def _create_const_var(val, name, scope, loc, nodes):

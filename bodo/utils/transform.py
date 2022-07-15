@@ -317,6 +317,9 @@ no_side_effect_call_tuples = {
     ("table_concat", "table_utils", "utils", bodo),
     ("table_filter", "table", "hiframes", bodo),
     ("table_subset", "table", "hiframes", bodo),
+    # Series.str/string
+    ("startswith",),
+    ("endswith",),
 }
 
 
