@@ -1634,3 +1634,29 @@ def test_df_table_rename(use_copy, datapath, memory_leak_check):
         bodo.jit(rename_table)(use_copy)
         # Check the columns were pruned
         check_logger_msg(stream, "Columns loaded ['Column1', 'Column5']")
+
+
+@pytest.mark.slow
+def test_concat_1d_1dvar():
+    """Tests that 1D input variables are not set to 1DVar if the input is 1dvar"""
+
+    def impl(table1):
+        oned_df = pd.DataFrame({"D": table1["D"].sum()}, pd.RangeIndex(0, 1, 1))
+        out_df = pd.concat(
+            [
+                table1,
+                oned_df,
+            ]
+        )
+        return out_df
+
+    df = pd.DataFrame({"A": [1, 2, 3], "D": [3, 4, 5]})
+
+    check_func(
+        impl,
+        (df,),
+        check_names=False,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
