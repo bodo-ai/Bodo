@@ -2941,7 +2941,7 @@ class TypingTransforms:
             (
                 impl,
                 additional_globals_to_lower,
-            ) = bodosql.context_ext._gen_pd_func_and_glbls_for_query(
+            ) = bodosql.context_ext._gen_pd_func_str_for_query(
                 sql_context_type, sql_str, keys, value_typs
             )
 

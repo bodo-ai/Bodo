@@ -1267,3 +1267,29 @@ def test_print_empty_slice_multi_arg(capsys):
     out, _ = capsys.readouterr()
 
     assert "Empty DataFrame" not in out
+
+
+def test_dict_scalar_to_array(memory_leak_check):
+    """
+    Tests the BodoSQL kernel scalar to array works as expected
+    with various inputs.
+    """
+    arr_type = bodo.dict_str_arr_type
+
+    def impl1(arg, len):
+        return bodo.utils.conversion.coerce_scalar_to_array(arg, len, arr_type)
+
+    def impl2(arg, len, flag):
+        # Test optional type
+        optional_arg = arg if flag else None
+        return bodo.utils.conversion.coerce_scalar_to_array(optional_arg, len, arr_type)
+
+    n = 50
+    scalar_str = "testing"
+    full_output = np.array(["testing"] * 50, dtype=object)
+    null_output = np.array([None] * 50)
+
+    check_func(impl1, (scalar_str, n), py_output=full_output)
+    check_func(impl1, (None, n), py_output=null_output)
+    check_func(impl2, (scalar_str, n, True), py_output=full_output)
+    check_func(impl2, (scalar_str, n, False), py_output=null_output)

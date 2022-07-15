@@ -5,6 +5,7 @@ import snowflake.connector
 
 import bodo
 from bodo.utils import tracing
+from bodo.utils.typing import BodoError
 
 # Mapping of the Snowflake field types to the pyarrow types taken
 # from the snowflake connector. These are not fully accurate and don't match
@@ -68,7 +69,16 @@ def get_connection_params(conn_str):  # pragma: no cover
         path = u.path
         if path.startswith("/"):
             path = path[1:]
-        database, schema = path.split("/")
+        parts = path.split("/")
+        if len(parts) == 2:
+            database, schema = parts
+        elif len(parts) == 1:  # pragma: no cover
+            database = parts[0]
+            schema = None
+        else:  # pragma: no cover
+            raise BodoError(
+                f"Unexpected Snowflake connection string {conn_str}. Path is expected to contain database name and possibly schema"
+            )
         params["database"] = database
         if schema:
             params["schema"] = schema
