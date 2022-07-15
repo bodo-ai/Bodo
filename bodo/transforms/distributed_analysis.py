@@ -3212,10 +3212,14 @@ class DistributedAnalysis:
         array_dists[lhs] = out_dist
 
         # output can cause input REP
-        if out_dist != Distribution.OneD_Var:
+        if out_dist == Distribution.REP:
             in_dist = out_dist
-        for v in in_arrs:
-            array_dists[v.name] = in_dist
+
+        # If any of input arguments are replicated, then all inputs must be replicated
+        if in_dist == Distribution.REP:
+            for v in in_arrs:
+                array_dists[v.name] = Distribution.REP
+
         return
 
     def _analyze_call_np_dot(self, lhs, args, array_dists, loc):
