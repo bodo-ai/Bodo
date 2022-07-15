@@ -12,7 +12,7 @@ from numba.extending import overload
 import bodo
 from bodo.utils.typing import raise_bodo_error
 
-broadcasted_string_functions = {
+broadcasted_fixed_arg_functions = {
     "lpad",
     "rpad",
     "format",
@@ -32,6 +32,8 @@ broadcasted_string_functions = {
     "conv",
     "substring",
     "substring_index",
+    "negate",
+    "log",
     "strcmp",
     "instr",
 }
@@ -223,7 +225,7 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
        is None in order to un-optionalize that argument
 
     Args:
-        func_name (string): the name of hte function with the optional arguments
+        func_name (string): the name of the function with the optional arguments
         arg_names (string list): the name of each argument to the function
         i (integer): the index of the argument from arg_names being unoptionalized
         container_length (optional int): if provided, treat the single arg_name as
@@ -370,7 +372,7 @@ def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
         )
 
 
-def verify_datetime_arg(arg, f_name, a_name):  # pragma: no coverage
+def verify_datetime_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a datetime
        (scalar or vector)
 
@@ -1551,5 +1553,110 @@ def instr_util(arr, target):
     scalar_text = "res[i] = arg0.find(arg1) + 1"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def log(arr, base):
+    """Handles cases where LOG receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    args = [arr, base]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.log",
+                ["arr", "base"],
+                i,
+            )
+
+    def impl(arr, base):  # pragma: no cover
+        return log_util(arr, base)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def log_util(arr, base):
+    """A dedicated kernel for the SQL function LOG which takes in two numbers
+    (or columns) and takes the log of the first one with the second as the base.
+
+
+    Args:
+        arr (float array/series/scalar): the number(s) whose logarithm is being taken
+        target (float array/series/scalar): the base(s) of the logarithm
+
+    Returns:
+        float series/scalar: the output of the logarithm
+    """
+
+    verify_int_float_arg(arr, "log", "arr")
+    verify_int_float_arg(base, "log", "base")
+
+    arg_names = ["arr", "base"]
+    arg_types = [arr, base]
+    propogate_null = [True] * 2
+    scalar_text = "res[i] = np.log(arg0) / np.log(arg1)"
+
+    out_dtype = types.Array(bodo.float64, 1, "C")
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def negate(arr):
+    """Handles cases where -X receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.negate_util",
+            ["arr"],
+            0,
+        )
+
+    def impl(arr):  # pragma: no cover
+        return negate_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def negate_util(arr):
+    """A dedicated kernel for unary negation in SQL
+
+
+    Args:
+        arr (numeric array/series/scalar): the number(s) whose sign is being flipped
+
+    Returns:
+        numeric series/scalar: the opposite of the input array
+    """
+
+    verify_int_float_arg(arr, "negate", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propogate_null = [True]
+    scalar_text = "res[i] = -arg0"
+
+    # Extract the underly scalar dtype, default int32
+    if arr == bodo.none:
+        scalar_type = types.int32
+    elif bodo.utils.utils.is_array_typ(arr, False):
+        scalar_type = arr.dtype
+    elif bodo.utils.utils.is_array_typ(arr, True):
+        scalar_type = arr.data.dtype
+    else:
+        scalar_type = arr
+    # If the dtype is uint, upcast and make it signed
+    scalar_type = {
+        types.uint8: types.int16,
+        types.uint16: types.int32,
+        types.uint32: types.int64,
+        types.uint64: types.int64,
+    }.get(scalar_type, scalar_type)
+    out_dtype = bodo.utils.typing.to_nullable_type(
+        bodo.utils.typing.dtype_to_array_type(scalar_type)
+    )
 
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
