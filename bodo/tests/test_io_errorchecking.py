@@ -4,6 +4,7 @@
 # TODO: Move error checking tests from test_io to here.
 
 import os
+import re
 
 import numba
 import numpy as np
@@ -112,7 +113,9 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="read_parquet\(\): 'storage_options' must be a constant dictionary",
+        match=re.escape(
+            "read_parquet(): 'storage_options' must be a constant dictionary"
+        ),
     ):
         bodo.jit(distributed=["df"])(test_impl3)()
 
@@ -128,7 +131,9 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
 
     with pytest.raises(
         BodoError,
-        match="read_parquet\(\): 'anon' in 'storage_options' must be a constant boolean value",
+        match=re.escape(
+            "read_parquet(): 'anon' in 'storage_options' must be a constant boolean value"
+        ),
     ):
         bodo.jit(distributed=["df"])(test_impl)()
 
@@ -163,14 +168,18 @@ def test_read_parquet_invalid_list_of_files(datapath):
 
     with pytest.raises(
         BodoError,
-        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
+        match=re.escape(
+            "Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
+        ),
     ):
         fnames = [datapath("decimal1.pq"), datapath("dask_data.parquet")]
         bodo.jit(test_impl)(fnames)
 
     with pytest.raises(
         BodoError,
-        match="Make sure the list/glob passed to read_parquet\(\) only contains paths to files \(no directories\)",
+        match=re.escape(
+            "Make sure the list/glob passed to read_parquet() only contains paths to files (no directories)"
+        ),
     ):
         fnames = []
         fnames.append(
@@ -1107,3 +1116,85 @@ def test_csv_usecols_not_found():
 
     with pytest.raises(BodoError, match="does not match columns"):
         bodo.jit(impl1)()
+
+
+@pytest.mark.slow
+def test_csv_sample_nrows_size(memory_leak_check):
+    """
+    Test read_csv(): 'sample_nrows' with a wrong value or type
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.csv")
+
+    # negative values
+    def impl1(fname):
+        return pd.read_csv(fname, sample_nrows=-1)
+
+    # string
+    def impl2(fname):
+        return pd.read_csv(fname, sample_nrows="no thanks")
+
+    # nonconstant
+    def impl3(fname, ilist):
+        return pd.read_csv(fname, sample_nrows=ilist[0])
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "pd.read_csv() 'sample_nrows' must be a constant integer >= 1 if provided."
+        ),
+    ):
+        bodo.jit(impl1)(fname)
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "pd.read_csv() 'sample_nrows' must be a constant integer >= 1 if provided."
+        ),
+    ):
+        bodo.jit(impl2)(fname)
+    ilist = [10]
+    with pytest.raises(
+        BodoError,
+        match=" 'sample_nrows' argument as a constant int",
+    ):
+        bodo.jit(impl3)(fname, ilist)
+
+
+@pytest.mark.slow
+def test_json_sample_nrows_size(memory_leak_check):
+    """
+    Test read_json(): 'sample_nrows' with a wrong value or type
+    """
+    fname = os.path.join("bodo", "tests", "data", "example.json")
+
+    # negative values
+    def impl1(fname):
+        return pd.read_json(fname, sample_nrows=-1)
+
+    # string
+    def impl2(fname):
+        return pd.read_json(fname, sample_nrows="no thanks")
+
+    # nonconstant
+    def impl3(fname, ilist):
+        return pd.read_json(fname, sample_nrows=ilist[0])
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "pd.read_json() 'sample_nrows' must be a constant integer >= 1 if provided."
+        ),
+    ):
+        bodo.jit(impl1)(fname)
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "pd.read_json() 'sample_nrows' must be a constant integer >= 1 if provided."
+        ),
+    ):
+        bodo.jit(impl2)(fname)
+    ilist = [10]
+    with pytest.raises(
+        BodoError,
+        match=" 'sample_nrows' argument as a constant int",
+    ):
+        bodo.jit(impl3)(fname, ilist)
