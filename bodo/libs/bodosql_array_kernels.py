@@ -1652,7 +1652,6 @@ def negate_util(arr):
     arg_names = ["arr"]
     arg_types = [arr]
     propogate_null = [True]
-    scalar_text = "res[i] = -arg0"
 
     # Extract the underly scalar dtype, default int32
     if arr == bodo.none:
@@ -1663,17 +1662,25 @@ def negate_util(arr):
         scalar_type = arr.data.dtype
     else:
         scalar_type = arr
-    # If the dtype is uint, upcast and make it signed
+
+    # If the dtype is unsigned, manually upcast then make it signed before negating
+    scalar_text = {
+        types.uint8: "res[i] = -np.int16(arg0)",
+        types.uint16: "res[i] = -np.int32(arg0)",
+        types.uint32: "res[i] = -np.int64(arg0)",
+    }.get(scalar_type, "res[i] = -arg0")
+
+    # If the dtype is unsigned, make the output dtype signed
     scalar_type = {
         types.uint8: types.int16,
         types.uint16: types.int32,
         types.uint32: types.int64,
         types.uint64: types.int64,
     }.get(scalar_type, scalar_type)
+
     out_dtype = bodo.utils.typing.to_nullable_type(
         bodo.utils.typing.dtype_to_array_type(scalar_type)
     )
-
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
 
 
