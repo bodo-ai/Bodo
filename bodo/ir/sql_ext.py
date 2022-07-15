@@ -273,7 +273,10 @@ def sql_distributed_run(
     func_text = f"def sql_impl(sql_request, conn, database_schema, {extra_args}):\n"
     # If we are doing regular SQL, filters are embedded into the query.
     # Iceberg passes these to parquet instead.
-    if sql_node.filters and sql_node.db_type != "iceberg":
+    if sql_node.filters and sql_node.db_type != "iceberg":  # pragma: no cover
+        # This path is only taken on Azure because snowflake
+        # is not tested on AWS.
+
         # If a predicate should be and together, they will be multiple tuples within the same list.
         # If predicates should be or together, they will be within separate lists.
         # i.e.
@@ -284,23 +287,23 @@ def sql_distributed_run(
         # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
         or_conds = []
         for and_list in sql_node.filters:
-            and_conds = [
+            and_conds = []
+            for p in and_list:
                 # If p[2] is a constant that isn't in the IR (i.e. NULL)
                 # just load the value directly, otherwise load the variable
                 # at runtime.
-                " ".join(
-                    [
-                        "(",
-                        p[0],
-                        p[1],
-                        ("{" + filter_map[p[2].name] + "}")
-                        if isinstance(p[2], ir.Var)
-                        else p[2],
-                        ")",
-                    ]
+                scalar_filter = (
+                    ("{" + filter_map[p[2].name] + "}")
+                    if isinstance(p[2], ir.Var)
+                    else p[2]
                 )
-                for p in and_list
-            ]
+                if p[1] in ("startswith", "endswith"):
+                    # This path should only be taken with Snowflake
+                    single_filter = ["(", p[1], "(", p[0], ",", scalar_filter, ")", ")"]
+                else:
+                    single_filter = ["(", p[0], p[1], scalar_filter, ")"]
+
+                and_conds.append(" ".join(single_filter))
             or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
         where_cond = " WHERE " + " OR ".join(or_conds)
         for i, arg in enumerate(filter_map.values()):

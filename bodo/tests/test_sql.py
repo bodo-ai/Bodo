@@ -772,6 +772,73 @@ def test_sql_snowflake_isin_pushdown(memory_leak_check):
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_startswith_endswith_pushdown(memory_leak_check):
+    """
+    Test that filter pushdown with startswith/endswith works in snowflake.
+    """
+
+    def impl_startswith(query, conn, starts_val):
+        df = pd.read_sql(query, conn)
+        df = df[df["l_shipmode"].str.startswith(starts_val)]
+        return df["l_suppkey"]
+
+    def impl_startswith_or(query, conn, starts_val):
+        df = pd.read_sql(query, conn)
+        df = df[df["l_shipmode"].str.startswith(starts_val) | (df["l_orderkey"] == 32)]
+        return df["l_suppkey"]
+
+    def impl_startswith_and(query, conn, starts_val):
+        df = pd.read_sql(query, conn)
+        df = df[df["l_shipmode"].str.startswith(starts_val) & (df["l_orderkey"] == 32)]
+        return df["l_suppkey"]
+
+    def impl_endswith(query, conn, ends_val):
+        df = pd.read_sql(query, conn)
+        df = df[df["l_shipmode"].str.endswith(ends_val)]
+        return df["l_suppkey"]
+
+    def impl_endswith_or(query, conn, ends_val):
+        df = pd.read_sql(query, conn)
+        df = df[df["l_shipmode"].str.endswith(ends_val) | (df["l_orderkey"] == 32)]
+        return df["l_suppkey"]
+
+    def impl_endswith_and(query, conn, ends_val):
+        df = pd.read_sql(query, conn)
+        df = df[df["l_shipmode"].str.endswith(ends_val) & (df["l_orderkey"] == 32)]
+        return df["l_suppkey"]
+
+    starts_val = "AIR"
+    ends_val = "AIL"
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+
+    for func in (impl_startswith, impl_startswith_or, impl_startswith_and):
+        check_func(func, (query, conn, starts_val), check_dtype=False, reset_index=True)
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(func)(query, conn, starts_val)
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+            # Check for filter pushdown
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+
+    for func in (impl_endswith, impl_endswith_or, impl_endswith_and):
+        check_func(func, (query, conn, ends_val), check_dtype=False, reset_index=True)
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(func)(query, conn, ends_val)
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+            # Check for filter pushdown
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_sql_snowflake_json_url(memory_leak_check):
     """
     Check running a snowflake query with a dictionary for connection parameters
