@@ -1151,7 +1151,8 @@ class UntypedPass:
         # encoding_errors='strict', dialect=None,
         # error_bad_lines=True, warn_bad_lines=True, on_bad_lines='error',
         # delim_whitespace=False, low_memory=True, memory_map=False,
-        # float_precision=None, storage_options=None)
+        # NOTE: sample_nrows is Bodo specific argument
+        # float_precision=None, storage_options=None, sample_nrows=100)
         kws = dict(rhs.kws)
 
         # TODO: Can we use fold the arguments even though this untyped pass?
@@ -1437,6 +1438,22 @@ class UntypedPass:
             default={},
             use_default=True,
         )
+        # sample_nrows
+        csv_sample_nrows = self._get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            52,
+            "sample_nrows",
+            rhs.loc,
+            default=100,
+            use_default=True,
+            typ="int",
+        )
+        if not isinstance(csv_sample_nrows, int) or csv_sample_nrows < 1:
+            raise BodoError(
+                "pd.read_csv() 'sample_nrows' must be a constant integer >= 1 if provided."
+            )
         _check_storage_options(csv_storage_options, "read_csv", rhs)
 
         # Bodo specific arguments. To avoid constantly needing to update Pandas we
@@ -1515,6 +1532,7 @@ class UntypedPass:
             ("storage_options", None),
             # TODO: Specify this is kwonly in error checks
             ("_bodo_upcast_to_float64", False),
+            ("sample_nrows", 100),
         )
         # Arguments that are supported
         supported_args = set(
@@ -1536,6 +1554,7 @@ class UntypedPass:
                 "_bodo_upcast_to_float64",
                 "escapechar",
                 "storage_options",
+                "sample_nrows",
             )
         )
         # Iterate through the provided args. If an argument is in the supported_args,
@@ -1627,6 +1646,7 @@ class UntypedPass:
                     pd_low_memory,
                     escapechar,
                     csv_storage_options,
+                    csv_sample_nrows,
                 ),
             )
             if not isinstance(fname_const, str):
@@ -1654,6 +1674,7 @@ class UntypedPass:
                     pd_low_memory,
                     escapechar,
                     csv_storage_options,
+                    csv_sample_nrows,
                 )
             df_type = df_type.copy(
                 tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
@@ -1864,7 +1885,8 @@ class UntypedPass:
         keep_default_dates=True, numpy=False, precise_float=False,
         date_unit=None, encoding=None, encoding_errors='strict',
         lines=False, chunksize=None, compression='infer'
-        nrows=None, storage_options=None
+        # NOTE: sample_nrows is Bodo specific argument
+        nrows=None, storage_options=None, sample_nrows=100,
         )
         """
         # convert_dates required for date cols
@@ -1911,6 +1933,23 @@ class UntypedPass:
             use_default=True,
         )
         _check_storage_options(json_storage_options, "read_json", rhs)
+
+        # sample_nrows
+        json_sample_nrows = self._get_const_arg(
+            "pd.read_json",
+            rhs.args,
+            kws,
+            17,
+            "sample_nrows",
+            rhs.loc,
+            default=100,
+            use_default=True,
+            typ="int",
+        )
+        if not isinstance(json_sample_nrows, int) or json_sample_nrows < 1:
+            raise BodoError(
+                "pd.read_json() 'sample_nrows' must be a constant integer >= 1 if provided."
+            )
 
         # check unsupported arguments
         unsupported_args = {
@@ -1983,6 +2022,7 @@ class UntypedPass:
                 lines,
                 compression,
                 json_storage_options,
+                json_sample_nrows,
             ),
         )
 
@@ -2015,6 +2055,7 @@ class UntypedPass:
                     lines,
                     compression,
                     json_storage_options,
+                    json_sample_nrows,
                 )
             df_type = df_type.copy(
                 tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
@@ -2776,7 +2817,14 @@ class JSONFileInfo(FileInfo):
     file name arguments that refer to a JSON dataset"""
 
     def __init__(
-        self, orient, convert_dates, precise_float, lines, compression, storage_options
+        self,
+        orient,
+        convert_dates,
+        precise_float,
+        lines,
+        compression,
+        storage_options,
+        json_sample_nrows,
     ):
         self.orient = orient
         self.convert_dates = convert_dates
@@ -2784,6 +2832,7 @@ class JSONFileInfo(FileInfo):
         self.lines = lines
         self.compression = compression
         self.storage_options = storage_options
+        self.json_sample_nrows = json_sample_nrows
         super().__init__()
 
     def _get_schema(self, fname):
@@ -2795,6 +2844,7 @@ class JSONFileInfo(FileInfo):
             self.lines,
             self.compression,
             self.storage_options,
+            self.json_sample_nrows,
         )
 
 
@@ -2806,6 +2856,7 @@ def _get_json_df_type_from_file(
     lines,
     compression,
     storage_options,
+    json_sample_nrows=100,
 ):
     """get dataframe type for read_json() using file path constant or raise error if
     path is invalid.
@@ -2822,7 +2873,6 @@ def _get_json_df_type_from_file(
 
         is_handler = None
         try:
-            rows_to_read = 100  # TODO: tune this
             is_handler, file_name_or_handler, f_size, _ = find_file_name_or_handler(
                 fname_const, "json", storage_options
             )
@@ -2846,7 +2896,7 @@ def _get_json_df_type_from_file(
                 precise_float=precise_float,
                 lines=lines,
                 compression=compression,
-                nrows=rows_to_read,
+                nrows=json_sample_nrows,
             )
 
             # TODO: categorical, etc.
@@ -3244,6 +3294,7 @@ class CSVFileInfo(FileInfo):
         low_memory,
         escapechar,
         storage_options,
+        csv_sample_nrows,
     ):
         self.sep = sep
         self.skiprows = skiprows
@@ -3252,6 +3303,7 @@ class CSVFileInfo(FileInfo):
         self.low_memory = low_memory
         self.escapechar = escapechar
         self.storage_options = storage_options
+        self.csv_sample_nrows = csv_sample_nrows
         super().__init__()
 
     def _get_schema(self, fname):
@@ -3264,6 +3316,7 @@ class CSVFileInfo(FileInfo):
             self.low_memory,
             self.escapechar,
             self.storage_options,
+            self.csv_sample_nrows,
         )
 
 
@@ -3276,6 +3329,7 @@ def _get_csv_df_type_from_file(
     low_memory,
     escapechar,
     csv_storage_options,
+    csv_sample_nrows=100,
 ):
     """get dataframe type for read_csv() using file path constant or raise error if not
     possible (e.g. file doesn't exist).
@@ -3314,11 +3368,10 @@ def _get_csv_df_type_from_file(
                 else:
                     compression = None
 
-            rows_to_read = 100  # TODO: tune this
             df = pd.read_csv(
                 file_name_or_handler,
                 sep=sep,
-                nrows=rows_to_read,
+                nrows=csv_sample_nrows,
                 skiprows=skiprows,
                 header=header,
                 compression=compression,

@@ -4889,6 +4889,60 @@ def test_csv_unsupported_kwarg_match(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_read_csv_sample_nrows(datapath, memory_leak_check):
+    """Test read_csv with sample_nrows argument
+
+    Args:
+        datapath (fixture function): get path to test file
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
+    fname = datapath("large_data.csv")
+
+    def impl1():
+        return pd.read_csv(fname)
+
+    # 1st 100 rows for column b is empty
+    with pytest.raises(TypeError, match="Bodo could not infer dtypes correctly."):
+        bodo.jit(impl1)()
+
+    def impl2():
+        return pd.read_csv(fname, sample_nrows=120)
+
+    bodo_df = bodo.jit(impl2)()
+    py_df = impl1()
+    pd.testing.assert_frame_equal(bodo_df, py_df)
+
+
+@pytest.mark.slow
+def test_read_json_sample_nrows(datapath, memory_leak_check):
+    """Test read_json with sample_nrows argument
+
+    Args:
+        datapath (fixture function): get path to test file
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
+    fname = datapath("large_data.json")
+
+    def impl1():
+        return pd.read_json(fname, lines=True, orient="records")
+
+    # 1st 100 rows for column a is integer, next 100 are floats
+    with pytest.raises(
+        TypeError, match="cannot safely cast non-equivalent float64 to int64"
+    ):
+        bodo.jit(impl1)()
+
+    def impl2():
+        return pd.read_json(fname, sample_nrows=120)
+
+    bodo_df = bodo.jit(impl2)()
+    py_df = impl1()
+    pd.testing.assert_frame_equal(bodo_df, py_df)
+
+
+@pytest.mark.slow
 class TestIO(unittest.TestCase):
     def test_h5_write_parallel(self):
         fname = "lr_w.hdf5"
