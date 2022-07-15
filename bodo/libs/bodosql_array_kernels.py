@@ -32,6 +32,7 @@ broadcasted_fixed_arg_functions = {
     "conv",
     "substring",
     "substring_index",
+    "nullif",
     "negate",
     "log",
     "strcmp",
@@ -401,14 +402,17 @@ def verify_datetime_arg(arg, f_name, a_name):  # pragma: no cover
 def get_common_broadcasted_type(arg_types, func_name):
     """Takes in a list of types from arrays/Series/scalars, verifies that they
     have a common underlying scalar type, and if so returns the corresponding
-    array type (+ ensures that it is nullable).
+    array type (+ ensures that it is nullable). Assumes scalar Nones coerce to any
+    type.  In all other cases, throws an error.
 
     Args:
         arg_types (dtype list/tuple): the types of the arrays/Series/scalars being checked
         func_name (string): the name of the function being compiled
 
     Returns:
-        dtype: the common underlying dtype of the inputted types
+        dtype: the common underlying dtype of the inputted types. If all inputs are
+            Nonetype, returns nonetype, as all inputs are scalar, and there is no need
+            to find a common array type.
 
     raises: BodoError if the underlying types are not compatible
     """
@@ -429,6 +433,8 @@ def get_common_broadcasted_type(arg_types, func_name):
     elif len(elem_types) == 1:
         if bodo.utils.utils.is_array_typ(elem_types[0]):
             return bodo.utils.typing.to_nullable_type(elem_types[0])
+        elif elem_types[0] == bodo.none:
+            out_dtype = bodo.none
         else:
             return bodo.utils.typing.to_nullable_type(
                 bodo.utils.typing.dtype_to_array_type(elem_types[0])
@@ -440,8 +446,17 @@ def get_common_broadcasted_type(arg_types, func_name):
         for i in range(len(arg_types)):
             if bodo.utils.utils.is_array_typ(arg_types[i]):
                 scalar_dtypes.append(elem_types[i].dtype)
+            # Avoid appending nonetypes to elem_types,
+            # as scalar NULL coerces to any type.
+            elif elem_types[i] == bodo.none:
+                pass
             else:
                 scalar_dtypes.append(elem_types[i])
+
+        # All arguments were None scalars, return none
+        if len(scalar_dtypes) == 0:
+            return bodo.none
+
         common_dtype, success = bodo.utils.typing.get_common_scalar_dtype(scalar_dtypes)
         if not success:
             raise_bodo_error(
@@ -1658,5 +1673,62 @@ def negate_util(arr):
     out_dtype = bodo.utils.typing.to_nullable_type(
         bodo.utils.typing.dtype_to_array_type(scalar_type)
     )
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def nullif(arr0, arr1):
+    """Handles cases where NULLIF recieves optional arguments and forwards
+    to args apropriate version of the real implementaiton"""
+    args = [arr0, arr1]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.nullif", ["arr0", "arr1"], i
+            )
+
+    def impl(arr0, arr1):  # pragma: no cover
+        return nullif_util(arr0, arr1)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def nullif_util(arr0, arr1):
+    """A dedicated kernel for the SQL function NULLIF which takes in two
+    scalars (or columns), which returns NULL if the two values are equal, and
+    arg0 otherwise.
+
+
+    Args:
+        arg0 (array/series/scalar): The 0-th argument. This value is returned if
+            the two arguments are equal.
+        arg1 (array/series/scalar): The 1st argument.
+
+    Returns:
+        string series/scalar: the string/column of formatted numbers
+    """
+
+    arg_names = ["arr0", "arr1"]
+    arg_types = [arr0, arr1]
+    # If the first argument is NULL, the output is always NULL
+    propogate_null = [True, False]
+    # NA check needs to come first here, otherwise the equalify check misbehaves
+
+    if arr1 == bodo.none:
+        scalar_text = "res[i] = arg0\n"
+    elif bodo.utils.utils.is_array_typ(arr1, True):
+        scalar_text = "if bodo.libs.array_kernels.isna(arr1, i) or arg0 != arg1:\n"
+        scalar_text += "   res[i] = arg0\n"
+        scalar_text += "else:\n"
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)"
+    else:
+        scalar_text = "if arg0 != arg1:\n"
+        scalar_text += "   res[i] = arg0\n"
+        scalar_text += "else:\n"
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)"
+
+    out_dtype = get_common_broadcasted_type([arr0, arr1], "NULLIF")
 
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
