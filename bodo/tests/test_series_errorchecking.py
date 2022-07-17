@@ -197,7 +197,7 @@ def test_replace_unequal_list_lengths():
 
 @pytest.mark.slow
 def test_series_groupby_args(memory_leak_check):
-    """ Test Series.groupby with all unsupported and wrong arguments"""
+    """Test Series.groupby with all unsupported and wrong arguments"""
 
     def test_impl_by_level(S):
         return S.groupby(by=["a", "b", "a", "b"], level=0).mean()
@@ -245,7 +245,7 @@ def test_series_groupby_args(memory_leak_check):
 
 @pytest.mark.slow
 def test_series_groupby_by_arg_unsupported_types(memory_leak_check):
-    """ Test Series.groupby by argument with Bodo Types that it doesn't currently support"""
+    """Test Series.groupby by argument with Bodo Types that it doesn't currently support"""
 
     def test_by_type(S, byS):
         return S.groupby(byS).max()
@@ -545,3 +545,19 @@ def test_heterogenous_series_unsupported_method(memory_leak_check):
     err_msg = re.escape("HeterogeneousSeries.any not supported yet")
     with pytest.raises(BodoError, match=err_msg):
         test_impl(df)
+
+
+@pytest.mark.slow()
+def test_pd_float_array_err():
+    """Test using a series with an underlying FloatingArray throws a reasonable error"""
+    S = pd.Series(pd.array([1.0, 2.0, 3.0, 4.0, 8.0] * 2))
+
+    @bodo.jit
+    def impl(S):
+        return S
+
+    err_msg = re.escape(
+        "Bodo does not currently support Series constructed with Pandas FloatingArray.\nPlease use Series.astype() to convert any input Series input to Bodo JIT functions."
+    )
+    with pytest.raises(BodoError, match=err_msg):
+        impl(S)

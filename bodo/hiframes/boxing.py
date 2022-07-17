@@ -826,6 +826,13 @@ def _infer_series_dtype(S, array_metadata=None):
 
         return numba.typeof(S.values).dtype
 
+    # Pandas float dtype
+    # We don't currently support pandas floating arrays (https://bodo.atlassian.net/browse/BE-41)
+    # So just throw an error to the user to cast to numpy dtype
+    if isinstance(S.dtype, pd.core.arrays.floating.FloatingDtype):  # pragma: no cover
+        raise BodoError(
+            "Bodo does not currently support Series constructed with Pandas FloatingArray.\nPlease use Series.astype() to convert any input Series input to Bodo JIT functions."
+        )
     # nullable int dtype
     if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
         return typeof_pd_int_dtype(S.dtype, None)
