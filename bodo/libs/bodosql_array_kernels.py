@@ -10,9 +10,16 @@ from numba.core import types
 from numba.extending import overload
 
 import bodo
-from bodo.utils.typing import raise_bodo_error
+from bodo.utils.typing import (
+    is_overload_bool,
+    is_overload_constant_number,
+    is_overload_constant_str,
+    is_overload_int,
+    raise_bodo_error,
+)
 
 broadcasted_fixed_arg_functions = {
+    "cond",
     "lpad",
     "rpad",
     "format",
@@ -97,7 +104,8 @@ def gen_vectorized(
         res = bodo.utils.utils.alloc_type(n, out_dtype, -1)
         left = bodo.utils.conversion.coerce_to_array(left)
         right = bodo.utils.conversion.coerce_to_array(right)
-        for i in range(n):
+        numba.parfors.parfor.init_prange()
+        for i in numba.parfors.parfor.internal_prange(n):
             if bodo.libs.array_kernels.isna(left, i):
                 bodo.libs.array_kernels.setna(res, i)
                 continue
@@ -172,7 +180,8 @@ def gen_vectorized(
 
         func_text += f"   n = {size_text}\n"
         func_text += f"   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
-        func_text += "   for i in range(n):\n"
+        func_text += "   numba.parfors.parfor.init_prange()\n"
+        func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
 
         # If the argument types imply that every row is null, then just set each
         # row of the output array to null
@@ -300,6 +309,7 @@ def verify_int_arg(arg, f_name, a_name):  # pragma: no cover
             bodo.utils.utils.is_array_typ(arg, True)
             and isinstance(arg.dtype, types.Integer)
         )
+        and not is_overload_int(arg)
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be an integer, integer column, or null"
@@ -325,6 +335,7 @@ def verify_int_float_arg(arg, f_name, a_name):  # pragma: no cover
             bodo.utils.utils.is_array_typ(arg, True)
             and isinstance(arg.dtype, (types.Integer, types.Float))
         )
+        and not is_overload_constant_number(arg)
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a numeric, numeric column, or null"
@@ -348,6 +359,7 @@ def verify_string_arg(arg, f_name, a_name):  # pragma: no cover
         and not (
             bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == types.unicode_type
         )
+        and not is_overload_constant_str(arg)
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a string, string column, or null"
@@ -365,8 +377,12 @@ def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
 
     raises: BodoError if the argument is not an boolean, boolean column, or NULL
     """
-    if arg not in (types.none, types.boolean) and not (
-        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == types.boolean
+    if (
+        arg not in (types.none, types.boolean)
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == types.boolean
+        )
+        and not is_overload_bool(arg)
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a boolean, boolean column, or null"
@@ -434,7 +450,7 @@ def get_common_broadcasted_type(arg_types, func_name):
         if bodo.utils.utils.is_array_typ(elem_types[0]):
             return bodo.utils.typing.to_nullable_type(elem_types[0])
         elif elem_types[0] == bodo.none:
-            out_dtype = bodo.none
+            return bodo.none
         else:
             return bodo.utils.typing.to_nullable_type(
                 bodo.utils.typing.dtype_to_array_type(elem_types[0])
@@ -575,6 +591,89 @@ def _install_lpad_rpad_overload():
 
 
 _install_lpad_rpad_overload()
+
+
+@numba.generated_jit(nopython=True)
+def cond(arr, ifbranch, elsebranch):
+    """Handles cases where IF receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    args = [arr, ifbranch, elsebranch]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.cond",
+                ["arr", "ifbranch", "elsebranch"],
+                i,
+            )
+
+    def impl(arr, ifbranch, elsebranch):  # pragma: no cover
+        return cond_util(arr, ifbranch, elsebranch)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def cond_util(arr, ifbranch, elsebranch):
+    """A dedicated kernel for the SQL function IF which takes in 3 values:
+    a boolean (or boolean column) and two values (or columns) with the same
+    type and returns the first or second value depending on whether the boolean
+    is true or false
+
+
+    Args:
+        arr (boolean array/series/scalar): the T/F values
+        ifbranch (any array/series/scalar): the value(s) to return when true
+        elsebranch (any array/series/scalar): the value(s) to return when false
+
+    Returns:
+        int series/scalar: the difference in months between the two dates
+    """
+
+    verify_boolean_arg(arr, "cond", "arr")
+
+    # Both branches cannot be scalar nulls if the output is an array
+    # (causes a typing ambiguity)
+    if (
+        bodo.utils.utils.is_array_typ(arr, True)
+        and ifbranch == bodo.none
+        and elsebranch == bodo.none
+    ):
+        raise_bodo_error("Both branches of IF() cannot be scalar NULL")
+
+    arg_names = ["arr", "ifbranch", "elsebranch"]
+    arg_types = [arr, ifbranch, elsebranch]
+    propogate_null = [True, False, False]
+    scalar_text = "if arg0:\n"
+    # If the ifbranch is an array, add a null check
+    if bodo.utils.utils.is_array_typ(ifbranch, True):
+        scalar_text += "   if bodo.libs.array_kernels.isna(ifbranch, i):\n"
+        scalar_text += "      bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "   else:\n"
+        scalar_text += "      res[i] = arg1\n"
+    # If the ifbranch is a scalar null, just set to null
+    elif ifbranch == bodo.none:
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+    # If the ifbranch is a non-null scalar, then no null check is required
+    else:
+        scalar_text += "   res[i] = arg1\n"
+    scalar_text += "else:\n"
+    # If the elsebranch is an array, add a null check
+    if bodo.utils.utils.is_array_typ(elsebranch, True):
+        scalar_text += "   if bodo.libs.array_kernels.isna(elsebranch, i):\n"
+        scalar_text += "      bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "   else:\n"
+        scalar_text += "      res[i] = arg2\n"
+    # If the elsebranch is a scalar null, just set to null
+    elif elsebranch == bodo.none:
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+    # If the elsebranch is a non-null scalar, then no null check is required
+    else:
+        scalar_text += "   res[i] = arg2\n"
+
+    # Get the common dtype from the two branches
+    out_dtype = get_common_broadcasted_type([ifbranch, elsebranch], "IF")
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)

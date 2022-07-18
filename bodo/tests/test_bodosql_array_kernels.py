@@ -294,6 +294,109 @@ def test_error_lpad_rpad():
     [
         pytest.param(
             (
+                pd.Series(pd.array([True, False, True, False, True, None])),
+                pd.Series(pd.array([None, None, 2, 3, 4, -1])),
+                pd.Series(pd.array([5, 6, None, None, 9, -1])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series(pd.array([True, True, True, False, False])),
+                pd.Series(pd.array(["A", "B", "C", "D", "E"])),
+                "-",
+            ),
+            id="vector_vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.Series(pd.array([False, True, False, True, False])), 1.0, -1.0),
+            id="vector_scalar_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(pd.array([True, True, False, False, True])),
+                pd.Series(pd.array(["A", "B", "C", "D", "E"])),
+                None,
+            ),
+            id="vector_vector_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (True, 42, 16),
+            id="all_scalar_no_null",
+        ),
+        pytest.param(
+            (None, 42, 16),
+            id="all_scalar_with_null_cond",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (True, None, 16),
+            id="all_scalar_with_null_branch",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (True, 13, None),
+            id="all_scalar_with_unused_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (False, None, None),
+            id="all_scalar_both_null_branch",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (None, None, None),
+            id="all_scalar_all_null",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_cond(args):
+    def impl(arr, ifbranch, elsebranch):
+        return bodo.libs.bodosql_array_kernels.cond(arr, ifbranch, elsebranch)
+
+    # Simulates COND on a single row
+    def cond_scalar_fn(arr, ifbranch, elsebranch):
+        if pd.isna(arr):
+            return None
+        else:
+            return ifbranch if arr else elsebranch
+
+    cond_answer = vectorized_sol(args, cond_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=cond_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_cond_option():
+    def impl(A, B, C, flag0, flag1, flag2):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C if flag2 else None
+        return bodo.libs.bodosql_array_kernels.cond(arg0, arg1, arg2)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                answer = "A" if flag0 and flag1 else None
+                check_func(
+                    impl, (True, "A", "B", flag0, flag1, flag2), py_output=answer
+                )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
                 pd.Series(
                     pd.array(
                         [
@@ -674,7 +777,6 @@ def test_option_no_arr_coalesce():
                 answer = "B"
             else:
                 answer = None
-            print(flag1, flag2)
             check_func(
                 impl1,
                 (scale1, scale2, flag1, flag2),
@@ -1238,7 +1340,7 @@ def test_option_int_to_days():
         return bodo.libs.bodosql_array_kernels.int_to_days(arg)
 
     for flag in [True, False]:
-        answer = pd.Timedelta(days=10) if flag else None
+        answer = np.timedelta64(pd.Timedelta(days=10)) if flag else None
         check_func(impl, (10, flag), py_output=answer)
 
 
@@ -1326,11 +1428,11 @@ def test_option_timestamp():
 
     for flag0 in [True, False]:
         for flag1 in [True, False]:
-            A0 = pd.Timestamp(1000000, unit="s") if flag0 else None
-            A1 = pd.Timestamp(10000, unit="D") if flag1 else None
+            A0 = np.datetime64(pd.Timestamp(1000000, unit="s")) if flag0 else None
+            A1 = np.datetime64(pd.Timestamp(10000, unit="D")) if flag1 else None
             check_func(
                 impl,
-                (1000000, 10000, 10, flag0, flag1),
+                (1000000, 10000, flag0, flag1),
                 py_output=(A0, A1),
             )
 
