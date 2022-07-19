@@ -9,7 +9,7 @@ num_processes = int(sys.argv[1])
 # all other args go to pytest
 pytest_args = sys.argv[2:]
 
-logfile_name = "splitting_logs/logfile-03-23-21.txt"
+logfile_name = "splitting_logs/logfile-07-18-22.txt"
 
 # If in AWS Codebuild partition tests
 if "CODEBUILD_BUILD_ID" in os.environ:
