@@ -4995,6 +4995,32 @@ def overload_dataframe_sort_index(
     return _impl
 
 
+@overload_method(DataFrameType, "rank", inline="always", no_unliteral=True)
+def overload_dataframe_rank(
+    df,
+    axis=0,
+    method="average",
+    numeric_only=None,
+    na_option="keep",
+    ascending=True,
+    pct=False,
+):
+    func_text = "def impl(df, axis=0, method='average', numeric_only=None, na_option='keep', ascending=True, pct=False):\n"
+    n_cols = len(df.columns)
+    data_args = ", ".join(
+        "bodo.libs.array_kernels.rank(data_{}, method=method, na_option=na_option, ascending=ascending, pct=pct)".format(
+            i
+        )
+        for i in range(n_cols)
+    )
+    for i in range(n_cols):
+        func_text += "  data_{0} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {0})\n".format(
+            i
+        )
+    index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)"
+    return _gen_init_df(func_text, df.columns, data_args, index)
+
+
 @overload_method(DataFrameType, "fillna", inline="always", no_unliteral=True)
 def overload_dataframe_fillna(
     df, value=None, method=None, axis=None, inplace=False, limit=None, downcast=None
