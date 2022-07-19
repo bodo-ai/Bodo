@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, gen_nonascii_list
 from bodo.utils.typing import BodoError
 
 
@@ -20,6 +20,7 @@ from bodo.utils.typing import BodoError
             pd.CategoricalDtype(["CC", "AA", "B"], True), marks=pytest.mark.slow
         ),
         pytest.param(pd.CategoricalDtype([3, 2, 1, 4]), marks=pytest.mark.slow),
+        pytest.param(pd.CategoricalDtype(gen_nonascii_list(4)), marks=pytest.mark.slow),
     ],
 )
 def test_unbox_dtype(dtype, memory_leak_check):
@@ -47,6 +48,10 @@ def test_unbox_dtype(dtype, memory_leak_check):
         pd.Categorical(["CC", "AA", "B", "D", "AA", None, "B", "CC"]),
         pytest.param(
             pd.Categorical(["CC", "AA", None, "B", "D", "AA", "B", "CC"], ordered=True),
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Categorical(gen_nonascii_list(8)),
             marks=pytest.mark.slow,
         ),
         pytest.param(pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2]), marks=pytest.mark.slow),
@@ -333,7 +338,8 @@ def test_astype(memory_leak_check):
     check_func(impl1, (A,))
     A = pd.Categorical(["CC", "AA", "B", "D", "AA", "B", "CC"])
     check_func(impl2, (A,))
-
+    A = pd.Categorical(gen_nonascii_list(7))
+    check_func(impl2, (A,))
 
 @pytest.mark.slow
 def test_pd_get_dummies(cat_arr_value, memory_leak_check):
@@ -369,6 +375,10 @@ def test_replace():
     A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12] * 10, ordered=True)
     to_replace = 2
     value = 5
+    check_func(test_impl, (A, to_replace, value))
+    A = pd.Categorical(["CC", "AA", "≥", "≡", "≠", None, "B", "≤"])
+    to_replace = "≤"
+    value = "µ"
     check_func(test_impl, (A, to_replace, value))
 
 
@@ -429,6 +439,10 @@ def test_replace_delete():
     A = pd.Categorical([3, 1, 2, -1, 4, 1, 3, 2, 7, 8, 12], ordered=True)
     to_replace = 2
     value = 1
+    check_func(test_impl, (A, to_replace, value))
+    A = pd.Categorical(["CC", "AA", None, "≥", "≡", "≠", None, "B", "≤", None])
+    to_replace = "≤"
+    value = "µ"
     check_func(test_impl, (A, to_replace, value))
 
 

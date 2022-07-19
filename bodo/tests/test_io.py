@@ -847,6 +847,15 @@ def test_read_csv_bad_dtype_column(datapath, memory_leak_check):
     # Set check_dtype=False for nullable differences
     check_func(test_impl, (fname,), check_dtype=False)
 
+def test_read_csv_nonascii(datapath, memory_leak_check):
+    """Checks calling read_csv() with non-ascii data"""
+
+    fname = datapath("csv_data_nonascii1.csv")
+
+    def test_impl(fname):
+        return pd.read_csv(fname)
+
+    check_func(test_impl, (fname,))
 
 @pytest.mark.slow
 def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
@@ -1009,6 +1018,16 @@ def test_read_parquet_list_files(datapath, memory_leak_check):
     check_func(test_impl, (), py_output=py_output)
     fpaths = [datapath("example.parquet"), datapath("example2.parquet")]
     check_func(test_impl2, (fpaths,), py_output=py_output)
+
+def test_read_parquet_nonascii(datapath, memory_leak_check):
+    """Checks calling read_parquet() with non-ascii data"""
+
+    fname = datapath("parquet_data_nonascii1.parquet")
+
+    def test_impl(fname):
+        return pd.read_parquet(fname)
+
+    check_func(test_impl, (fname,))
 
 
 @pytest.mark.slow

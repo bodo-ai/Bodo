@@ -7,7 +7,12 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import SeqTestPipeline, check_func, dist_IR_contains
+from bodo.tests.utils import (
+    SeqTestPipeline,
+    check_func,
+    dist_IR_contains,
+    gen_nonascii_list,
+)
 from bodo.utils.typing import BodoError
 
 
@@ -43,7 +48,7 @@ def test_np_sort(memory_leak_check):
     def impl(arr):
         return np.sort(arr)
 
-    A = pd.array(["AB", "", "ABC", "abcd", "PQ", "DDE"] * 8)
+    A = pd.array((["AB", "", "ABC", "abcd", "PQ", "DDE"] + gen_nonascii_list(2)) * 8)
 
     check_func(impl, (A,))
 
@@ -72,7 +77,7 @@ def test_np_unique(memory_leak_check):
         return np.unique(arr)
 
     # Create an array here because np.unique fails on NA in pandas
-    arr = pd.array(["AB", "", "ABC", "abcd", "ab", "AB"])
+    arr = pd.array((["AB", "", "ABC", "abcd", "ab", "AB"] + gen_nonascii_list(2)))
 
     check_func(impl, (arr,), sort_output=True, is_out_distributed=False)
 
@@ -107,7 +112,9 @@ def test_constant_lowering_refcount(memory_leak_check):
     """make sure refcount handling works for constant globals and destructor is not
     called leading to a segfault.
     """
-    arr = np.array(["AB", "", "ABC", None, "C", "D", "abcd", "ABCD"])
+    arr = np.array(
+        (["AB", "", "ABC", None, "C", "D", "abcd", "ABCD"] + gen_nonascii_list(2))
+    )
 
     @bodo.jit(distributed=False)
     def g(A):
@@ -267,16 +274,18 @@ def test_setitem_slice(memory_leak_check):
     we create a new string array in the test.
     """
 
+    nonascii_val = gen_nonascii_list(1)[0]
+
     def test_impl(val):
         A = bodo.libs.str_arr_ext.pre_alloc_string_array(8, -1)
-        A[0] = "AB"
+        A[0] = nonascii_val
         A[1] = "CD"
         A[2:7] = val
         A[7] = "GH"
         return A
 
     values = (pd.array(["IJ"] * 5), ["IJ"] * 5, "IJ")
-    py_output = pd.array(["AB", "CD"] + ["IJ"] * 5 + ["GH"], "string")
+    py_output = pd.array([nonascii_val, "CD"] + ["IJ"] * 5 + ["GH"], "string")
     for val in values:
         check_func(test_impl, (val,), dist_test=False, py_output=py_output)
 
@@ -424,7 +433,7 @@ def test_dtype(memory_leak_check):
     def test_impl(A):
         return A.dtype
 
-    check_func(test_impl, (pd.array(["AA", "B"] * 4),))
+    check_func(test_impl, (pd.array((["AA", "B"] + gen_nonascii_list(2)) * 4),))
 
 
 @pytest.mark.slow
@@ -448,7 +457,7 @@ def test_ndim(memory_leak_check):
     def test_impl(A):
         return A.ndim
 
-    check_func(test_impl, (pd.array(["AA", "B"] * 4),))
+    check_func(test_impl, (pd.array((["AA", "B"] + gen_nonascii_list(2)) * 4),))
 
 
 @pytest.mark.slow
@@ -457,7 +466,9 @@ def test_tolist(memory_leak_check):
         return A.tolist()
 
     # NOTE: only Numpy array has tolist(), not Pandas arrays
-    check_func(impl, (np.array(["A", "BCD"] * 4),), only_seq=True)
+    check_func(
+        impl, (np.array((["A", "BCD"] + gen_nonascii_list(2)) * 4),), only_seq=True
+    )
     check_func(impl, (np.arange(11),), only_seq=True)
 
 
@@ -466,7 +477,7 @@ def test_astype_str(memory_leak_check):
     def test_impl(A):
         return A.astype(str)
 
-    check_func(test_impl, (pd.array(["AA", "B"] * 4),))
+    check_func(test_impl, (pd.array((["AA", "B"] + gen_nonascii_list(2)) * 4),))
 
 
 @pytest.mark.skipif(

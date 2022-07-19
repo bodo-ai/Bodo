@@ -10,7 +10,7 @@ import pytest
 
 import bodo
 from bodo.libs import bodosql_array_kernels
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, gen_nonascii_list
 from bodo.utils.typing import BodoError
 
 
@@ -806,7 +806,7 @@ def test_error_coalesce():
     err_msg3 = re.escape("Cannot coalesce 0 columns")
 
     A = pd.Series(["A", "B", "C", "D", "E"])
-    B = pd.Series(["D", "E", "F", "G", "H"])
+    B = pd.Series(["D", "E", "F"] + gen_nonascii_list(2))
     C = pd.Series([123, 456, 789, 123, 456])
 
     with pytest.raises(BodoError, match=err_msg1):
@@ -875,6 +875,13 @@ def test_error_coalesce():
             ),
             id="scalar_null",
             marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(gen_nonascii_list(6)),
+                None,
+            ),
+            id="nonascii_vector_null",
         ),
     ],
 )
@@ -1078,6 +1085,11 @@ def test_space(numbers):
             id="vector",
         ),
         pytest.param("racecarsƟ", id="scalar"),
+        pytest.param(
+            pd.Series(pd.array(gen_nonascii_list(6))),
+            id="vector",
+        ),
+        pytest.param(gen_nonascii_list(1)[0], id="scalar"),
     ],
 )
 def test_reverse(strings):

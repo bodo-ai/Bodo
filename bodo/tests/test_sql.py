@@ -348,6 +348,20 @@ def test_sql_snowflake(memory_leak_check):
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_nonascii(memory_leak_check):
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    query = "SELECT * FROM NONASCII_T1"
+    check_func(impl, (query, conn), reset_index=True, sort_output=True)
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_sql_snowflake_single_column(memory_leak_check):
     """
     Test that loading using a single column from snowflake has a correct result
