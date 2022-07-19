@@ -4755,7 +4755,6 @@ dataframe_unsupported = [
     "kurtosis",
     "mad",
     "mode",
-    "rank",
     "round",
     "sem",
     "skew",

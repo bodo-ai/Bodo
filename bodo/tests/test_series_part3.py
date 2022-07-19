@@ -1156,7 +1156,7 @@ def test_iat_control_flow(memory_leak_check):
     "S",
     [
         pd.Series([2, 1, 2, 4, 8, 4]),
-        pd.Series(["b", "a", "b", "c", "d", "c"]),
+        pd.Series([None, "b", "a", "b", "c", "â", "c"]),
         pd.Series([np.nan, 2, 1, 2, 4.2, 8, 4.2, np.nan]),
         pd.Series([None, True, False, False, True, True, None]),
     ],

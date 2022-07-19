@@ -1,6 +1,7 @@
 import datetime
 import io
 import os
+import re
 import time
 
 import numpy as np
@@ -1634,6 +1635,50 @@ def test_df_table_rename(use_copy, datapath, memory_leak_check):
         bodo.jit(rename_table)(use_copy)
         # Check the columns were pruned
         check_logger_msg(stream, "Columns loaded ['Column1', 'Column5']")
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["average", "first", "dense"],
+)
+@pytest.mark.parametrize(
+    "na_option",
+    ["top", "bottom", "keep"],
+)
+@pytest.mark.parametrize("ascending", [False, True])
+@pytest.mark.parametrize("pct", [True, False])
+def test_df_rank(method, na_option, ascending, pct):
+    def impl(df):
+        return df.rank(method=method, na_option=na_option, ascending=ascending, pct=pct)
+
+    df = pd.DataFrame(
+        {
+            "A": [2, 1, 2, 4, 8, None, 4],
+            "B": [None, "b", "a", "b", "c", "d", "c"],
+            "C": [np.nan, 2, 1, 4.2, 8, 4.2, np.nan],
+            "D": [None, True, False, False, True, True, None],
+        }
+    )
+
+    if method == "first":
+        if not ascending:
+            with pytest.raises(
+                BodoError,
+                match=re.escape(
+                    # TODO: separate Series and Dataframe rank() error messages
+                    "Series.rank(): method='first' with ascending=False is currently unsupported."
+                ),
+            ):
+                bodo.jit(impl)(df)
+        else:
+            py_output = df.apply(
+                lambda c: c.rank(
+                    method=method, na_option=na_option, ascending=ascending, pct=pct
+                )
+            )
+            check_func(impl, (df,), dist_test=False, py_output=py_output)
+    else:
+        check_func(impl, (df,), dist_test=False)
 
 
 @pytest.mark.slow

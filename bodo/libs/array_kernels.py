@@ -710,6 +710,43 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
     return ret
 
 
+@numba.generated_jit(nopython=True)
+def _rank_detect_ties(arr):
+    """
+    Helper for forming 'obs', or tie-detecting array, for the rank function.
+    Assumes that arr is sorted.
+    TODO: can be optimized using the fact that all NAs appear consecutively
+    """
+
+    def impl(arr):  # pragma: no cover
+        sorted_nas = np.nonzero(pd.isna(arr))[0]
+        eq_arr_na = arr[1:] != arr[:-1]
+        # eq_arr will be a nullable boolean array rather than a non-nullable boolean and thus must be converted
+        eq_arr_na[pd.isna(eq_arr_na)] = False
+        # astype turns NAs to False but it is done explicitly here in case this changes
+        eq_arr = eq_arr_na.astype(np.bool_)
+        # the first NA entry should be marked True
+        obs = np.concatenate((np.array([True]), eq_arr))
+        if sorted_nas.size:
+            # here we set the first NA entry to True, the repeated NAs (rep_NAs) to False, and
+            # the entry succeeding the NAs (if na_option='first') to True
+            first_na, rep_nas = sorted_nas[0], sorted_nas[1:]
+            # TODO: optimize since all nas will be consecutive, could use make an optimization for non-rank_sql
+            # using first_valid_index() (and?) last_valid_index()
+            obs[first_na] = True
+            if rep_nas.size:
+                obs[rep_nas] = False
+                if (rep_nas[-1] + 1) < obs.size:
+                    # entry suceeding NAs, if there are repeated NAs, when na_option='first'
+                    obs[rep_nas[-1] + 1] = True
+            elif (first_na + 1) < obs.size:
+                # entry suceeding NAs, if there are no repeated NAs, when na_option='first'
+                obs[first_na + 1] = True
+        return obs
+
+    return impl
+
+
 def rank(arr, method="average", na_option="keep", ascending=True, pct=False):
     return arr
 
@@ -771,20 +808,7 @@ def overload_rank(arr, method="average", na_option="keep", ascending=True, pct=F
         func_text += "    ) + 1\n"
     else:
         func_text += "  arr = arr[sorter]\n"
-        func_text += "  sorted_nas = np.nonzero(pd.isna(arr))[0]\n"
-        # eq_arr will be a nullable boolean array rather than a non-nullable boolean and thus must be converted
-        func_text += "  eq_arr_na = arr[1:] != arr[:-1]\n"
-        # astype turns NAs to False but it is done explicitly here in case this changes
-        func_text += "  eq_arr_na[pd.isna(eq_arr_na)] = False\n"
-        func_text += "  eq_arr = eq_arr_na.astype(np.bool_)\n"
-        # the first NA entry should be marked True
-        func_text += "  obs = np.concatenate((np.array([True]), eq_arr))\n"
-        func_text += "  if sorted_nas.size:\n"
-        func_text += "    first_na, rep_nas = sorted_nas[0], sorted_nas[1:]\n"
-        func_text += "    obs[first_na] = True\n"
-        func_text += "    obs[rep_nas] = False\n"
-        func_text += "    if rep_nas.size and (rep_nas[-1] + 1) < obs.size:\n"
-        func_text += "      obs[rep_nas[-1] + 1] = True\n"
+        func_text += "  obs = bodo.libs.array_kernels._rank_detect_ties(arr)\n"
         func_text += "  dense = obs.cumsum()[inv]\n"  # NOTE: replaced inv with sorter
         if method == "dense":
             func_text += "  ret = bodo.utils.conversion.fix_arr_dtype(\n"
