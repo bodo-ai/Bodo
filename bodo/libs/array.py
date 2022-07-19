@@ -2739,7 +2739,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
 
         return getitem_func
 
-    if col_array_typ == bodo.string_array_type:
+    if col_array_typ in (bodo.string_array_type, bodo.binary_array_type):
         # If we have a unicode type we want to leave the raw
         # data pointer as a void* because we don't have a full
         # string yet.
@@ -2879,7 +2879,8 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     """
     if (
         isinstance(col_array_dtype, bodo.libs.int_arr_ext.IntegerArrayType)
-        or col_array_dtype == bodo.libs.bool_arr_ext.boolean_array
+        or col_array_dtype
+        in (bodo.libs.bool_arr_ext.boolean_array, bodo.binary_array_type)
         or is_str_arr_type(col_array_dtype)
         or (
             isinstance(col_array_dtype, types.Array)

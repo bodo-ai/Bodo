@@ -1813,7 +1813,7 @@ def _replace_column_accesses(
             array_typ = typemap[col_vars[0].name].arr_types[c_ind]
         else:
             array_typ = typemap[col_vars[c_ind].name]
-        if is_str_arr_type(array_typ):
+        if is_str_arr_type(array_typ) or array_typ == bodo.binary_array_type:
             # If we have unicode we pass the table variable which is an array info
             func_text += f"  {val_varname}, {val_varname}_size = {getitem_fname}({table_name}_table, {table_name}_ind)\n"
             # Create proper Python string.
@@ -1836,7 +1836,8 @@ def _replace_column_accesses(
             na_val_varname = f"_bodo_isna_{table_name}_val_{c_ind}"
             if (
                 isinstance(array_typ, bodo.libs.int_arr_ext.IntegerArrayType)
-                or array_typ == bodo.libs.bool_arr_ext.boolean_array
+                or array_typ
+                in (bodo.libs.bool_arr_ext.boolean_array, bodo.binary_array_type)
                 or is_str_arr_type(array_typ)
             ):
                 func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_null_bitmap, {table_name}_ind)\n"
