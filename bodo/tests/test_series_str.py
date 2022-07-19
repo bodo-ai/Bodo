@@ -236,6 +236,10 @@ def test_split_n():
     # TODO: support and test NA
     check_func(test_impl, (S,))
 
+    S = pd.Series(
+        ["°, ∞, ‰,", "± × ÷ √", "♩ ♪ ♫ ♬ ♭ ♮ ♯,"] * 5
+    )
+
 
 # TODO: Add memory_leak_check when bugs are resolved.
 @pytest.mark.slow
@@ -259,6 +263,17 @@ def test_split_regex():
     # TODO: support and test NA
     check_func(test_impl, (S,))
 
+    S = pd.Series(
+        [
+            "ƗØƀƗØƀ",
+            "ƗØ|ƀƗ|Øƀ|ƗØ|ƀƗ|Øƀ",
+            "Ɨ Ɨ Ɨ Ɨ Ɨ Ɨ Ɨ Ɨ",
+            "ƀ Ɨ ƀ Ɨ ƀ Ɨ ƀ Ɨ",
+            "Ǎ Ě Ǐ Ǎ Ě Ǐ",
+        ]
+        * 5
+    )
+
 
 def test_series_str_split_explode(memory_leak_check):
     """test split() and explode() combination"""
@@ -277,6 +292,18 @@ def test_series_str_split_explode(memory_leak_check):
     df = pd.DataFrame(
         {"A": pd.array(["A,B,C", "A", "D,E", "", "A,N,C,E,Q  R#R##R#RR,F", np.nan] * 5)}
     )
+    check_func(test_impl2, (df,))
+
+    df = pd.DataFrame(
+        {"A": pd.array(["Ȩ Ç Ḑ", "ẞ", "Ő Ű", "Å Ů ẘ ẙ Q Ð#Ð##Ð#ÐÐ F", np.nan] * 5)}
+    )
+
+    check_func(test_impl1, (df,))
+
+    df = pd.DataFrame(
+        {"A": pd.array(["Ȩ,Ç,Ḑ", "ẞ", "Ő,Ű", "","Å,Ů,ẘ,ẙ,Q Ð#Ð##Ð#ÐÐ,F", np.nan] * 5)}
+    )
+
     check_func(test_impl2, (df,))
 
 

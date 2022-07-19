@@ -15,7 +15,7 @@ import pytest
 
 import bodo
 from bodo.libs.str_arr_ext import str_arr_from_sequence
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, gen_nonascii_list
 from bodo.utils.typing import BodoError
 
 
@@ -184,7 +184,7 @@ def test_string_array_getitem_na(ind, memory_leak_check):
         return S.iloc[index]
 
     bodo_func = bodo.jit(impl)
-    S = pd.Series(["A", np.nan, "CC", "DD", np.nan, "ABC"])
+    S = pd.Series((["A", np.nan, "CC", "DD"] + gen_nonascii_list(2)))
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
     pd.testing.assert_series_equal(impl(S, ind), bodo_func(S, ind), check_dtype=False)
 
@@ -192,7 +192,7 @@ def test_string_array_getitem_na(ind, memory_leak_check):
 ##########################  Test re support  ##########################
 
 
-@pytest.fixture(params=["AB", "A_B", "A_B_C"])
+@pytest.fixture(params=(["AB", "A_B", "A_B_C"] + gen_nonascii_list(3)))
 def test_in_str(request, memory_leak_check):
     return request.param
 
