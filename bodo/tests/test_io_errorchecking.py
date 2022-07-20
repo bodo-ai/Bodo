@@ -1198,3 +1198,53 @@ def test_json_sample_nrows_size(memory_leak_check):
         match=" 'sample_nrows' argument as a constant int",
     ):
         bodo.jit(impl3)(fname, ilist)
+
+
+# TODO: fix memory_leak_check
+@pytest.mark.slow
+def test_read_csv_sample_nrows_error(datapath):
+    """Test read_csv with sample_nrows argument where data type change
+    after sample_nrows
+    See test_read_csv_sample_nrows for fix
+
+    Args:
+        datapath (fixture function): get path to test file
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
+    fname = datapath("large_data.csv")
+
+    def impl1():
+        return pd.read_csv(fname)
+
+    # 1st 100 rows for column b is empty
+    with pytest.raises(TypeError, match="Bodo could not infer dtypes correctly."):
+        bodo.jit(impl1)()
+
+
+# TODO: fix memory_leak_check
+@pytest.mark.slow
+def test_read_json_sample_nrows_error(datapath):
+    """Test read_json with sample_nrows argument where data type change
+    after sample_nrows
+    See test_read_json_sample_nrows for fix
+
+    Args:
+        datapath (fixture function): get path to test file
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
+    # run only on 1 processor
+    # TODO: [BE-3260]
+    if bodo.get_size() != 1:
+        return
+    fname = datapath("large_data.json")
+
+    def impl1():
+        return pd.read_json(fname, lines=True, orient="records")
+
+    # 1st 100 rows for column a is integer, next 100 are floats
+    with pytest.raises(
+        TypeError, match="cannot safely cast non-equivalent float64 to int64"
+    ):
+        bodo.jit(impl1)()
