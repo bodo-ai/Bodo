@@ -5944,3 +5944,54 @@ def test_agg_set(memory_leak_check):
 
     # Specify sort_output because the ordering may not match.
     check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.slow
+def test_groupby_ngroup(memory_leak_check):
+    """Test groupby.ngroup()
+
+    Args:
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
+    # basic case
+    def impl1(df):
+        result = df.groupby("A").ngroup()
+        return result
+
+    # basic case key is string
+    def impl2(df):
+        result = df.groupby("B").ngroup()
+        return result
+
+    # explicit select
+    def impl3(df):
+        result = df.groupby("A")["C"].ngroup()
+        return result
+
+    # multi-key
+    def impl4(df):
+        result = df.groupby(["A", "B"]).ngroup()
+        return result
+
+    # as_index=False
+    def impl5(df):
+        result = df.groupby("A", as_index=False).ngroup()
+        return result
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 3, 2, 1, 2, 3],
+            "B": ["AA", "B", "XXX", "AA", "XXX", "B"],
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        }
+    )
+    check_func(impl1, (df,), sort_output=True, reset_index=True)
+    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    check_func(impl3, (df,), sort_output=True, reset_index=True)
+    check_func(impl4, (df,), sort_output=True, reset_index=True)
+    check_func(impl5, (df,), sort_output=True, reset_index=True)
+
+    # Example to show case when index won't be numericIndex.
+    df.index = ["a", "b", "c", "d", "e", "f"]
+    check_func(impl1, (df,), sort_output=True, reset_index=True)

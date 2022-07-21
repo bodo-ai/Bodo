@@ -248,6 +248,7 @@ AggFuncStruct = namedtuple("AggFuncStruct", ["func", "ftype"])
 # Bodo_FTypes::FTypeEnum in _groupby.cpp
 supported_agg_funcs = [
     "no_op",  # needed to ensure that 0 value isn't matched with any function
+    "ngroup",
     "head",
     "transform",
     "size",
@@ -1823,7 +1824,7 @@ def gen_top_level_agg_func(
     funcs = [func for _, func in agg_node.gb_info_out.values()]
     for f_idx, func in enumerate(funcs):
         func_offsets.append(len(allfuncs))
-        if func.ftype in {"median", "nunique"}:
+        if func.ftype in {"median", "nunique", "ngroup"}:
             # these operations require shuffle at the beginning, so a
             # local aggregation followed by combine is not necessary
             do_combine = False

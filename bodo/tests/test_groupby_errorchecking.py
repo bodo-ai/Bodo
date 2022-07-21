@@ -2017,6 +2017,7 @@ def test_groupby_agg_head(memory_leak_check):
         bodo.jit(impl)(df)
 
 
+@pytest.mark.slow
 def test_unsupported_method(memory_leak_check):
     def impl(df):
         return df.groupby(by=["A"]).groups
@@ -2027,6 +2028,7 @@ def test_unsupported_method(memory_leak_check):
         bodo.jit(impl)(df)
 
 
+@pytest.mark.slow
 def test_unsupported_attr(memory_leak_check):
     def impl(df):
         return df.groupby(by=["A"]).get_group()
@@ -2037,6 +2039,7 @@ def test_unsupported_attr(memory_leak_check):
         bodo.jit(impl)(df)
 
 
+@pytest.mark.slow
 def test_unsupported_series_method(memory_leak_check):
     def impl(S):
         return S.groupby(level=0).nlargest()
@@ -2047,6 +2050,7 @@ def test_unsupported_series_method(memory_leak_check):
         bodo.jit(impl)(S)
 
 
+@pytest.mark.slow
 def test_unsupported_series_attr(memory_leak_check):
     def impl(S):
         return S.groupby(level=0).is_monotonic_increasing
@@ -2057,6 +2061,7 @@ def test_unsupported_series_attr(memory_leak_check):
         bodo.jit(impl)(S)
 
 
+@pytest.mark.slow
 def test_unsupported_df_method(memory_leak_check):
     def impl(df):
         return df.groupby(by=["A"]).corrwith()
@@ -2065,3 +2070,61 @@ def test_unsupported_df_method(memory_leak_check):
     df = pd.DataFrame({"A": [1, 2, 2], "C": ["aa", "b", "c"]})
     with pytest.raises(BodoError, match=msg):
         bodo.jit(impl)(df)
+
+
+@pytest.mark.slow
+def test_ngroup_agg(memory_leak_check):
+    """Test error message is shown when using ngroup inside agg.
+
+    Args:
+        memory_leak_check (fixture function): check memory leak in the test.
+    """
+
+    def impl(df):
+        result = df.groupby("B").agg({"A": "ngroup", "C": "sum"})
+        return result
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 3, 2, 1, 2, 3],
+            "B": ["AA", "B", "XXX", "AA", "XXX", "B"],
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        }
+    )
+    with pytest.raises(
+        BodoError, match="ngroup cannot be mixed with other groupby operations"
+    ):
+        bodo.jit(impl)(df)
+
+
+@pytest.mark.slow
+def test_ngroup_args(memory_leak_check):
+    """Test error message is shown when using ngroup ascending argument with value other than default.
+
+    Args:
+        memory_leak_check (fixture function): check memory leak in the test.
+    """
+
+    # wrong type
+    def impl1(df):
+        result = df.groupby("B").ngroup(ascending=-1.2)
+        return result
+
+    # wrong value
+    def impl2(df):
+        result = df.groupby("B").ngroup(ascending=False)
+        return result
+
+    df = pd.DataFrame(
+        {
+            "A": [1, 3, 2, 1, 2, 3],
+            "B": ["AA", "B", "XXX", "AA", "XXX", "B"],
+            "C": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        }
+    )
+    err_msg = "ascending parameter only supports default value True"
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl1)(df)
+
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)(df)
