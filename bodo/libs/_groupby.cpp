@@ -2815,6 +2815,26 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                 }
             }
             return;
+        // For DICT(dictionary-encoded string) we support count
+        case bodo_array_type::DICT:
+            switch (ftype) {
+                case Bodo_FTypes::count: {
+                    for (int64_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        if (i_grp != -1 && in_col->info2->get_null_bit(i))
+                            count_agg<T, dtype>::apply(
+                                getv<ARR_O, int64_t>(out_col, i_grp),
+                                getv<ARR_I, T>(in_col, i));
+                    }
+                    return;
+                }
+                default:
+                    Bodo_PyErr_SetString(
+                        PyExc_RuntimeError,
+                        "Unsupported groupby aggregate function for dictionary "
+                        "encoded array.");
+            }
+            return;
         // for list strings, we are supporting count, sum, max, min, first, last
         case bodo_array_type::LIST_STRING:
             switch (ftype) {
@@ -5600,11 +5620,25 @@ class GroupbyPipeline {
         // Add key-sorting-column for gb.head() to sort output at the end
         // this is relevant only if data is distributed.
         if (head_i) add_head_key_sort_column();
-        for (int icol = 0; icol < num_keys; icol++) {
+        int k = 0;
+        for (int icol = 0; icol < in_table->ncols() - index_i - head_i;
+             icol++) {
             array_info* a = in_table->columns[icol];
             if ((a->arr_type == bodo_array_type::DICT) &&
                 !a->has_global_dictionary) {
-                convert_local_dictionary_to_global(a);
+                if (icol >= num_keys) {
+                    int start = func_offsets[k];
+                    int end = func_offsets[k + 1];
+                    for (int j = start; j != end; j++) {
+                        // for each function applied to this column
+                        if (ftypes[j] == Bodo_FTypes::count) {
+                            convert_local_dictionary_to_global(a);
+                        }
+                    }
+                    k++;
+                } else {
+                    convert_local_dictionary_to_global(a);
+                }
             }
         }
 
@@ -5706,7 +5740,7 @@ class GroupbyPipeline {
         // construct the column sets, one for each (input_column, func) pair.
         // ftypes is an array of function types received from generated code,
         // and has one ftype for each (input_column, func) pair
-        int k = 0;
+        k = 0;
         n_udf = 0;
         for (int64_t i = num_keys; i < in_table->ncols() - index_i - head_i;
              i++, k++) {  // for each data column

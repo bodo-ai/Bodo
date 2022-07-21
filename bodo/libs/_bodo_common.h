@@ -424,6 +424,8 @@ struct multiple_array_info {
     int64_t n_pivot;
     std::vector<array_info*> vect_arr;
     std::vector<array_info*> vect_access;
+    array_info* info1;  // for dict-encoded arrays
+    array_info* info2;  // for dict-encoded arrays
     explicit multiple_array_info(std::vector<array_info*> _vect_arr)
         : vect_arr(_vect_arr) {
         n_pivot = vect_arr.size();

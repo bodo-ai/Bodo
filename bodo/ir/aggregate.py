@@ -1146,11 +1146,12 @@ def agg_distributed_run(
     # when laying out input columns and functions for C++
     for out_col, (in_col, func) in agg_node.gb_info_out.items():
         if in_col is not None:
-            in_col_typs.append(agg_node.in_col_types[in_col])
+            t = agg_node.in_col_types[in_col]
+            if func.ftype not in ("size", "count"):
+                t = to_str_arr_if_dict_array(t)
+            in_col_typs.append(t)
         funcs.append(func)
         func_out_types.append(out_col_typs[out_col])
-
-    in_col_typs = [to_str_arr_if_dict_array(t) for t in in_col_typs]
 
     glbs = {
         "bodo": bodo,

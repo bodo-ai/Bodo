@@ -292,7 +292,8 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     If the operation is not feasible (e.g. summing dates) then an error message
     is passed upward to be decided according to the context.
     """
-    arr_type = to_str_arr_if_dict_array(arr_type)
+    if func_name not in ("size", "count"):
+        arr_type = to_str_arr_if_dict_array(arr_type)
     is_list_string = arr_type == ArrayItemArrayType(string_array_type)
     in_dtype = arr_type.dtype
     # Bodo don't support DatetimeTimeDeltaType. use (timedelta64 instead)
@@ -1019,7 +1020,8 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         gb_info[(c, name_operation)] = c
         ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
-        data = to_str_arr_if_dict_array(data)
+        if name_operation not in ("size", "count"):
+            data = to_str_arr_if_dict_array(data)
         if name_operation == "cumprod":
             if not isinstance(data.dtype, (types.Integer, types.Float)):
                 raise BodoError(msg)
