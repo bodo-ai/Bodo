@@ -5996,3 +5996,49 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
     numba.core.caching._IPythonCacheLocator.get_cache_path = _get_cache_path
 
 #### END MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
+
+#### BEGIN MONKEY PATCH FOR ENSURING CACHE LOCATION ONLY ON RANK 0 ON PLATFORM ####
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.caching._CacheLocator.ensure_cache_path)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "906b6f516f76927dfbe69602c335fa151b9f33d40dfe171a9190c0d11627bc03"
+    ):
+        warnings.warn("numba.core.caching._CacheLocator.ensure_cache_path has changed")
+
+if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:  # pragma: no cover
+
+    # On platform, we use a shared network file system. If all ranks
+    # try to verify that the cache location is valid, it can cause
+    # filesystem contention and lead to delays in processing. This
+    # is most noticeably seen during `import bodo` (there are few
+    # functions that are declared with cache=True during init), when
+    # import time increases as number of ranks increases. This monkey
+    # patch ensures that when on the platform
+    # (BODO_PLATFORM_CACHE_LOCATION set to a location of /shared),
+    # this cache location check is only done on rank 0 (and any issues
+    # broadcasted to other ranks). See BP-1601 / BE-3232 for more details.
+
+    import tempfile
+
+    def _ensure_cache_path(self):
+        from mpi4py import MPI
+
+        comm = MPI.COMM_WORLD
+        exc = None
+        if comm.Get_rank() == 0:
+            try:
+                path = self.get_cache_path()
+                os.makedirs(path, exist_ok=True)
+                # Ensure the directory is writable by trying to write a temporary file
+                tempfile.TemporaryFile(dir=path).close()
+            except Exception as e:
+                exc = e
+        exc = comm.bcast(exc)
+        if isinstance(exc, Exception):
+            raise exc
+
+    numba.core.caching._CacheLocator.ensure_cache_path = _ensure_cache_path
+
+#### END MONKEY PATCH FOR ENSURING CACHE LOCATION ONLY ON RANK 0 ON PLATFORM ####
