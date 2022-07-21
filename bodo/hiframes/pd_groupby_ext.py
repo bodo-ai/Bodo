@@ -459,13 +459,15 @@ def get_agg_typ(
     out_columns = []  # name of output columns
     out_column_type = []  # ColumnType of output columns (see ColumnType Enum above)
 
-    if func_name == "head":
+    if func_name in ("head", "ngroup"):
         # Per Pandas documentation as_index flag is ignored
         # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.core.groupby.GroupBy.head.html
+        # NOTE: ngroup by testing found this applies. Not mentioned in docs.
+        # The closest I could find is that index is set here (https://github.com/pandas-dev/pandas/blob/v1.4.3/pandas/core/groupby/groupby.py#L3041)
         grp.as_index = True
     if not grp.as_index:
         get_keys_not_as_index(grp, out_columns, out_data, out_column_type)
-    elif func_name == "head":
+    elif func_name in ("head", "ngroup"):
         # TODO: clarify this case with examples
         # Regardless of number of keys, index is always NumericIndex
         # unless it's explicitly assigned
@@ -500,6 +502,25 @@ def get_agg_typ(
         out_data.append(types.Array(types.int64, 1, "C"))
         out_columns.append("size")
         gb_info[(None, "size")] = "size"
+    elif func_name == "ngroup":
+        # ngroup always produces one integer output and doesn't depend on any input
+        out_data.append(types.Array(types.int64, 1, "C"))
+        out_columns.append("ngroup")
+        gb_info[(None, "ngroup")] = "ngroup"
+        # arguments passed to ngroup(ascending=True)
+        kws = dict(kws) if kws else {}
+        ascending = args[0] if len(args) > 0 else kws.pop("ascending", True)
+        unsupported_args = dict(ascending=ascending)
+        arg_defaults = dict(ascending=True)
+        check_unsupported_args(
+            f"Groupby.{func_name}",
+            unsupported_args,
+            arg_defaults,
+            package_name="pandas",
+            module_name="GroupBy",
+        )
+        check_args_kwargs(func_name, 1, args, kws)
+
     else:
         # gb.head() w/o explicit select, has all columns in output (including keys)
         columns = (
@@ -691,15 +712,21 @@ def get_agg_typ(
         tuple(out_data), index, tuple(out_columns), is_table_format=True
     )
     # XXX output becomes series if single output and explicitly selected
-    if (len(grp.selection) == 1 and grp.series_select and grp.as_index) or (
-        func_name == "size" and grp.as_index
+    # or size with as_index=True
+    # or ngroup
+    if (
+        (len(grp.selection) == 1 and grp.series_select and grp.as_index)
+        or (func_name == "size" and grp.as_index)
+        or (func_name == "ngroup")
     ):
         if isinstance(out_data[0], IntegerArrayType):
             dtype = IntDtype(out_data[0].dtype)
         else:
             dtype = out_data[0].dtype
         name_type = (
-            types.none if func_name == "size" else types.StringLiteral(grp.selection[0])
+            types.none
+            if func_name in ("size", "ngroup")
+            else types.StringLiteral(grp.selection[0])
         )
         out_res = SeriesType(dtype, index=index, name_typ=name_type)
     return signature(out_res, *args), gb_info
@@ -796,10 +823,11 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
             col_map = get_overload_constant_dict(func)
             in_col_names = tuple(col_map.keys())
             f_vals = tuple(col_map.values())
-        if "head" in f_vals:
-            raise BodoError(
-                "Groupby.agg()/aggregate(): head cannot be mixed with other groupby operations."
-            )
+        for fn in ("head", "ngroup"):
+            if fn in f_vals:
+                raise BodoError(
+                    f"Groupby.agg()/aggregate(): {fn} cannot be mixed with other groupby operations."
+                )
 
         # make sure selected columns exist in dataframe
         if any(c not in grp.selection and c not in grp.keys for c in in_col_names):
@@ -1381,6 +1409,19 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
             err_msg=msg,
         )[0]
 
+    @bound_function("groupby.ngroup", no_unliteral=True)
+    def resolve_ngroup(self, grp, args, kws):
+        msg = "Unsupported Gropupby head operation.\n"
+        return resolve_gb(
+            grp,
+            args,
+            kws,
+            "ngroup",
+            self.context,
+            numba.core.registry.cpu_target.target_context,
+            err_msg=msg,
+        )[0]
+
     @bound_function("groupby.apply", no_unliteral=True)
     def resolve_apply(self, grp, args, kws):
         kws = dict(kws)
@@ -1945,7 +1986,6 @@ groupby_unsupported = {
     "cummin",
     "cumprod",
     "ffill",
-    "ngroup",
     "nth",
     "ohlc",
     "pad",

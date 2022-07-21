@@ -1588,7 +1588,7 @@ class DataFramePass:
 
         for funcs in gb_info_in.values():
             for func, _ in funcs:
-                if func.ftype in (list_cumulative | {"shift", "transform"}):
+                if func.ftype in (list_cumulative | {"shift", "transform", "ngroup"}):
                     input_has_index = True
                     same_index = True
                     return_key = False
@@ -1603,9 +1603,9 @@ class DataFramePass:
         if (
             same_index
             and isinstance(out_typ.index, RangeIndexType)
-            # unlike cumulative operations gb.head() will always return the same Index
-            # in all cases including RangeIndexType.
-            and func.ftype != "head"
+            # unlike cumulative operations gb.head()/gb.ngroup() will always
+            # return the same Index in all cases including RangeIndexType.
+            and func.ftype not in ("head", "ngroup")
         ):
             same_index = False
             input_has_index = False
@@ -1731,16 +1731,20 @@ class DataFramePass:
             index_var = nodes[-1].target
 
         # NOTE: output becomes series if single output and explicitly selected
+        # or as_index=True and only size
+        # or ngroup
         if isinstance(out_typ, SeriesType):
             assert (
                 len(grp_typ.selection) == 1
                 and grp_typ.series_select
                 and grp_typ.as_index
-            ) or (grp_typ.as_index and func_name == "size")
-            name_val = None if func_name == "size" else grp_typ.selection[0]
+            ) or (grp_typ.as_index and func_name in ("size", "ngroup"))
+            name_val = None if func_name in ("size", "ngroup") else grp_typ.selection[0]
             name_var = ir.Var(lhs.scope, mk_unique_var("S_name"), lhs.loc)
             self.typemap[name_var.name] = (
-                types.none if func_name == "size" else types.StringLiteral(name_val)
+                types.none
+                if func_name in ("size", "ngroup")
+                else types.StringLiteral(name_val)
             )
             nodes.append(ir.Assign(ir.Const(name_val, lhs.loc), name_var, lhs.loc))
             return replace_func(

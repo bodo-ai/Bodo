@@ -25,6 +25,7 @@ struct Bodo_FTypes {
     enum FTypeEnum {
         no_op = 0,  // To make sure ftypes[0] isn't accidently matched with any
                     // of the supported functions.
+        ngroup,
         head,
         transform,
         size,
@@ -2038,7 +2039,62 @@ head_computation(array_info* arr, ARRAY* out_arr,
     throw std::runtime_error(
         "gb.head() is not implemented for multiple_array.");
 }
-
+template <typename T, int dtype, typename Enable = void>
+struct ngroup_agg {
+    /**
+     * Aggregation function for ngroup.
+     * Assign v2 (group number) to v1 (output_column[i])
+     *
+     * @param v1 [out] output value
+     * @param v2 input value.
+     */
+    static void apply(int64_t& v1, T& v2) { v1 = v2; }
+};
+/**
+ * @brief
+ * ngroup assigns the same group number to each row in the group.
+ * If data is replicated, start from 0 and the group number will be the output
+ * value for all rows in that group. If data is distributed, we need to identify
+ * starting group number on each rank. Then, row's output is: start group number
+ * + row's local group number (igrp in current rank) This is done by summing
+ * number of groups of ranks before current rank. This is achieved with
+ * MPI_Exscan: partial reduction excluding current rank value.
+ * @tparam ARRAY array_info type
+ * @param grp_info
+ * @param arr The input column on which we do the computation
+ * @param out_arr[out] The output column which contains ngroup results
+ * @param grp_info grouping_info about groups and rows organization per rank
+ * @param is_parallel: true if data is distributed (used to indicate whether
+ * we need to do cumsum on group numbers or not)
+ */
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
+ngroup_computation(array_info* arr, array_info* out_arr,
+                   grouping_info const& grp_info, bool is_parallel) {
+    //
+    size_t num_group = grp_info.group_to_first_row.size();
+    int64_t start_ngroup = 0;
+    if (is_parallel) {
+        MPI_Datatype mpi_typ = get_MPI_typ(Bodo_CTypes::INT64);
+        MPI_Exscan(&num_group, &start_ngroup, 1, mpi_typ, MPI_SUM,
+                   MPI_COMM_WORLD);
+    }
+    for (int64_t i = 0; i < arr->length; i++) {
+        int64_t i_grp = grp_info.row_to_group[i];
+        if (i_grp != -1) {
+            int64_t val = i_grp + start_ngroup;
+            ngroup_agg<int64_t, Bodo_CTypes::INT64>::apply(
+                getv<ARRAY, int64_t>(out_arr, i), val);
+        }
+    }
+}
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, void>::type
+ngroup_computation(array_info* arr, ARRAY* out_arr,
+                   grouping_info const& grp_info, bool is_parallel) {
+    throw std::runtime_error(
+        "gb.ngroup() is not implemented for multiple_array.");
+}
 /**
  * The median_computation function. It uses the symbolic information to compute
  * the median results.
@@ -4321,6 +4377,7 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum& array_type,
         case Bodo_FTypes::nunique:
         case Bodo_FTypes::count:
         case Bodo_FTypes::size:
+        case Bodo_FTypes::ngroup:
             array_type = bodo_array_type::NUMPY;
             dtype = Bodo_CTypes::INT64;
             return;
@@ -4359,6 +4416,7 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum& array_type,
     switch (ftype) {
         case Bodo_FTypes::nunique:
         case Bodo_FTypes::size:
+        case Bodo_FTypes::ngroup:
         case Bodo_FTypes::count: {
             if (is_crosstab) {
                 array_type = bodo_array_type::NUMPY;
@@ -5412,6 +5470,68 @@ class HeadColSet : public BasicColSet<ARRAY> {
     std::vector<int64_t> head_row_list;
     int64_t head_n;  // number of rows per group to return
 };
+
+/**
+ * @brief NgroupColSet column set for ngroup operation
+ */
+template <typename ARRAY>
+class NgroupColSet : public BasicColSet<ARRAY> {
+   public:
+    /**
+     * Construct Ngroup column set
+     * @param in_col input column of groupby associated with this column set
+     * @param _is_parallel: flag to identify whether data is distributed or
+     * replicated across ranks
+     */
+    NgroupColSet(array_info* in_col, bool _is_parallel)
+        : BasicColSet<ARRAY>(in_col, Bodo_FTypes::ngroup, false),
+          is_parallel(_is_parallel) {}
+    virtual ~NgroupColSet() {}
+
+    /**
+     * Allocate column for update step.
+     * @param num_groups: number of groups found in the input table
+     * @param n_pivot: n_pivot columns (related to pivot operation.)
+     * @param is_crosstab: flag wether operations is crosstab or not.
+     * @param[in,out] out_cols: vector of columns of update table. This method
+     * adds columns to this vector.
+     * NOTE: the added column is an integer array with same length as
+     * input column regardless of input column types (i.e num_groups is not used
+     * in this case)
+     */
+    virtual void alloc_update_columns(size_t num_groups, size_t n_pivot,
+                                      bool is_crosstab,
+                                      std::vector<ARRAY*>& out_cols) {
+        bodo_array_type::arr_type_enum arr_type = this->in_col->arr_type;
+        Bodo_CTypes::CTypeEnum dtype = this->in_col->dtype;
+        int64_t num_categories = this->in_col->num_categories;
+        // calling this modifies arr_type and dtype
+        bool is_combine = false;
+        get_groupby_output_dtype<ARRAY>(this->ftype, arr_type, dtype, false,
+                                        is_combine, is_crosstab);
+        // NOTE: output size of ngroup is the same as input size
+        //       (NOT the number of groups)
+        out_cols.push_back(alloc_array_groupby<ARRAY>(this->in_col->length, 1,
+                                                      1, arr_type, dtype, 0,
+                                                      num_categories, n_pivot));
+        this->update_cols.push_back(out_cols.back());
+    }
+
+    /**
+     * Perform update step for this column set. compute and fill my columns with
+     * the result of the ngroup operation.
+     * @param grp_infos: grouping info calculated by GroupbyPipeline
+     */
+    virtual void update(const std::vector<grouping_info>& grp_infos) {
+        ngroup_computation<ARRAY>(this->in_col, this->update_cols[0],
+                                  grp_infos[0], is_parallel);
+    }
+
+   private:
+    bool is_parallel;  // whether input column data is distributed or
+                       // replicated.
+};
+
 /* When transmitting data with shuffle, we have only functionality for
    array_info.
    For array_info, nothing needs to be done.
@@ -5525,6 +5645,8 @@ BasicColSet<ARRAY>* makeColSet(array_info* in_col, array_info* index_col,
                                               do_combine);
         case Bodo_FTypes::head:
             return new HeadColSet<ARRAY>(in_col, ftype, head_n);
+        case Bodo_FTypes::ngroup:
+            return new NgroupColSet<ARRAY>(in_col, is_parallel);
         default:
             return new BasicColSet<ARRAY>(in_col, ftype, do_combine);
     }
@@ -5594,7 +5716,8 @@ class GroupbyPipeline {
                        ftype == Bodo_FTypes::cummin ||
                        ftype == Bodo_FTypes::cummax ||
                        ftype == Bodo_FTypes::shift ||
-                       ftype == Bodo_FTypes::transform) {
+                       ftype == Bodo_FTypes::transform ||
+                       ftype == Bodo_FTypes::ngroup) {
                 // these operations first require shuffling the data to
                 // gather all rows with the same key in the same process
                 if (is_parallel) shuffle_before_update = true;
@@ -5607,8 +5730,21 @@ class GroupbyPipeline {
                     cumulative_op = true;
                 if (ftype == Bodo_FTypes::shift) shift_op = true;
                 if (ftype == Bodo_FTypes::transform) transform_op = true;
+                if (ftype == Bodo_FTypes::ngroup) ngroup_op = true;
                 break;
             }
+        }
+        // In case of ngroup: previous loop will be skipped
+        // As num_funcs will be 0 since ngroup output is single column
+        // regardless of number of input and key columns
+        // So, set flags for ngroup here.
+        if (num_funcs == 0 && ftypes[0] == Bodo_FTypes::ngroup) {
+            ngroup_op = true;
+            // these operations first require shuffling the data to
+            // gather all rows with the same key in the same process
+            if (is_parallel) shuffle_before_update = true;
+            // these operations require extended group info
+            req_extended_group_info = true;
         }
         if (nunique_op) {
             if (nunique_count == num_funcs) nunique_only = true;
@@ -5712,7 +5848,7 @@ class GroupbyPipeline {
             for (auto a : in_table->columns) incref_array(a);
             in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr,
                                             is_parallel);
-            if (!(cumulative_op || shift_op || transform_op)) {
+            if (!(cumulative_op || shift_op || transform_op || ngroup_op)) {
                 delete[] hashes;
                 delete comm_info_ptr;
             } else {
@@ -5778,9 +5914,10 @@ class GroupbyPipeline {
                                  ftypes[j]);
             }
         }
-        // This is needed if aggregation was just size operation, it will skip
-        // loop (ncols = num_keys + index_i)
-        if (col_sets.size() == 0 && ftypes[0] == Bodo_FTypes::size) {
+        // This is needed if aggregation was just size/ngroup operation, it will
+        // skip loop (ncols = num_keys + index_i)
+        if (col_sets.size() == 0 && (ftypes[0] == Bodo_FTypes::size ||
+                                     ftypes[0] == Bodo_FTypes::ngroup)) {
             col_sets.push_back(makeColSet<ARRAY>(
                 in_table->columns[0], index_col, ftypes[0], do_combine, skipna,
                 periods, transform_func, head_n, n_udf, is_parallel,
@@ -5925,7 +6062,7 @@ class GroupbyPipeline {
 
         if (req_extended_group_info) {
             const bool consider_missing =
-                cumulative_op || shift_op || transform_op;
+                cumulative_op || shift_op || transform_op || ngroup_op;
             get_group_info_iterate(tables, hashes, nunique_hashes, grp_infos,
                                    consider_missing, key_dropna, is_parallel);
         } else
@@ -5944,7 +6081,7 @@ class GroupbyPipeline {
         }
 
         update_table = cur_table = new table_info();
-        if (cumulative_op || shift_op || transform_op || head_op)
+        if (cumulative_op || shift_op || transform_op || head_op || ngroup_op)
             num_keys = 0;  // there are no key columns in output of cumulative
                            // operations
         else
@@ -6075,7 +6212,8 @@ class GroupbyPipeline {
             if (!head_op && return_index)
                 out_table->columns.push_back(cur_table->columns.back());
         }
-        if ((cumulative_op || shift_op || transform_op) && is_parallel) {
+        if ((cumulative_op || shift_op || transform_op || ngroup_op) &&
+            is_parallel) {
             table_info* revshuf_table = reverse_shuffle_table_kernel(
                 out_table, in_hashes, *comm_info_ptr);
             delete[] in_hashes;
@@ -6461,6 +6599,7 @@ class GroupbyPipeline {
     bool shift_op = false;
     bool transform_op = false;
     bool head_op = false;
+    bool ngroup_op = false;
     int64_t head_n;
     bool req_extended_group_info = false;
     bool do_combine;
