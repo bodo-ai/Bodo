@@ -1293,3 +1293,18 @@ def test_dict_scalar_to_array(memory_leak_check):
     check_func(impl1, (None, n), py_output=null_output)
     check_func(impl2, (scalar_str, n, True), py_output=full_output)
     check_func(impl2, (scalar_str, n, False), py_output=null_output)
+
+
+def test_int_scalar_to_array(memory_leak_check):
+    """
+    Tests that coerce_scalar_to_array keeps integers as non-nullable.
+    """
+    arr_type = bodo.IntegerArrayType(types.int64)
+
+    def impl(arg, len):
+        return bodo.utils.conversion.coerce_scalar_to_array(arg, len, arr_type)
+
+    arg = 1
+    n = 100
+    py_output = np.array([arg] * n, dtype=np.int64)
+    check_func(impl, (arg, n), py_output=py_output)

@@ -387,7 +387,7 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type):
     else:
 
         def impl(scalar, length, arr_type):  # pragma: no cover
-            return bodo.utils.conversion.coerce_to_array(scalar, True, False, length)
+            return bodo.utils.conversion.coerce_to_array(scalar, True, None, length)
 
     return impl
 
