@@ -93,6 +93,12 @@ broadcasted_fixed_arg_functions = {
     "cond",
     "lpad",
     "rpad",
+    "last_day",
+    "dayname",
+    "monthname",
+    "weekday",
+    "yearofweekiso",
+    "makedate",
     "format",
     "left",
     "right",
@@ -121,7 +127,7 @@ broadcasted_fixed_arg_functions = {
 def gen_vectorized(
     arg_names,
     arg_types,
-    propogate_null,
+    propagate_null,
     scalar_text,
     out_dtype,
     arg_string=None,
@@ -134,7 +140,7 @@ def gen_vectorized(
     Args:
         arg_names (string list): the names of each argument
         arg_types (dtype list): the types of each argument
-        propogate_null (bool list): a mask indicating which arguments produce
+        propagate_null (bool list): a mask indicating which arguments produce
         an output of null when the input is null
         scalar_text (string): the func_text of the core operation done on each
         set of scalar values after all broadcasting is handled. The string should
@@ -164,7 +170,7 @@ def gen_vectorized(
 
     arg_names = ['left', 'right']
     arg_types = [series(int64, ...), series(int64, ...)]
-    propogate_null = [True, True]
+    propagate_null = [True, True]
     out_dtype = types.int64
     scalar_text = "res[i] = arg0 + arg1"
 
@@ -193,7 +199,7 @@ def gen_vectorized(
     are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
     all_scalar = not any(are_arrays)
     out_null = any(
-        [propogate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none]
+        [propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none]
     )
 
     # Calculate the indentation of the scalar_text so that it can be removed
@@ -260,11 +266,11 @@ def gen_vectorized(
             func_text += f"      bodo.libs.array_kernels.setna(res, i)\n"
 
         else:
-            # For each column that propogates nulls, add an isna check (and
+            # For each column that propagates nulls, add an isna check (and
             # also convert Series to arrays)
             for i in range(len(arg_names)):
                 if are_arrays[i]:
-                    if propogate_null[i]:
+                    if propagate_null[i]:
                         func_text += f"      if bodo.libs.array_kernels.isna({arg_names[i]}, i):\n"
                         func_text += "         bodo.libs.array_kernels.setna(res, i)\n"
                         func_text += "         continue\n"
@@ -282,7 +288,6 @@ def gen_vectorized(
                 func_text += " " * 6 + line[base_indentation:] + "\n"
 
         func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)"
-
     loc_vars = {}
     exec(
         func_text,
@@ -554,6 +559,256 @@ def get_common_broadcasted_type(arg_types, func_name):
         )
 
 
+@numba.generated_jit(nopython=True)
+def last_day(arr):
+    """Handles cases where LAST_DAY receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.last_day_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return last_day_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def last_day_util(arr):
+    """A dedicated kernel for the SQL function LAST_DAY which takes in a datetime
+    and returns the last day from that month
+
+
+    Args:
+        arr (datetime array/series/scalar): the timestamp whose last day is being
+        searched for
+
+    Returns:
+        datetime series/scalar: the last day(s) from the month(s)
+    """
+
+    verify_datetime_arg(arr, "LAST_DAY", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0) + pd.tseries.offsets.MonthEnd(n=0, normalize=True))"
+
+    out_dtype = np.dtype("datetime64[ns]")
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def dayname(arr):
+    """Handles cases where DAYNAME receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.dayname_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return dayname_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def dayname_util(arr):
+    """A dedicated kernel for the SQL function DAYNAME which takes in a datetime
+    and returns the day of the week as a string
+
+
+    Args:
+        arr (datetime array/series/scalar): the timestamp(s) whose dayname is being
+        searched for
+
+    Returns:
+        string series/scalar: the day of the week from the input timestamp(s)
+    """
+
+    verify_datetime_arg(arr, "DAYNAME", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    scalar_text = "res[i] = pd.Timestamp(arg0).day_name()"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def monthname(arr):
+    """Handles cases where MONTHNAME receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.monthname_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return monthname_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def monthname_util(arr):
+    """A dedicated kernel for the SQL function MONTHNAME which takes in a datetime
+    and returns the name of the month
+
+
+    Args:
+        arr (datetime array/series/scalar): the timestamp(s) whose month name is being
+        searched for
+
+    Returns:
+        string series/scalar: the month name from the input timestamp(s)
+    """
+
+    verify_datetime_arg(arr, "MONTHNAME", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    scalar_text = "res[i] = pd.Timestamp(arg0).month_name()"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def weekday(arr):
+    """Handles cases where WEEKDAY receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.weekday_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return weekday_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def weekday_util(arr):
+    """A dedicated kernel for the SQL function WEEKDAY which takes in a datetime
+    and returns the day of the week (enumerated 0-6)
+
+
+    Args:
+        arr (datetime array/series/scalar): the timestamp(s) whose day of the
+        week is being searched for
+
+    Returns:
+        int series/scalar: the day of the week from the input timestamp(s)
+    """
+
+    verify_datetime_arg(arr, "WEEKDAY", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    scalar_text = "dt = pd.Timestamp(arg0)\n"
+    scalar_text += "res[i] = bodo.hiframes.pd_timestamp_ext.get_day_of_week(dt.year, dt.month, dt.day)"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def yearofweekiso(arr):
+    """Handles cases where YEAROFWEEKISO receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.yearofweekiso_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return yearofweekiso_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def yearofweekiso_util(arr):
+    """A dedicated kernel for the SQL function YEAROFWEEKISO which takes in a datetime
+    (or column) and returns the year of the input date(s)
+
+
+    Args:
+        arr (datetime array/series/scalar): the timestamp(s) whose year is being
+        searched for
+
+    Returns:
+        int series/scalar: the year from the input timestamp(s)
+    """
+
+    verify_datetime_arg(arr, "YEAROFWEEKISO", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    scalar_text = "dt = pd.Timestamp(arg0)\n"
+    scalar_text += "res[i] = dt.isocalendar()[0]"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def makedate(year, day):
+    """Handles cases where MAKEDATE receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [year, day]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.makedate", ["year", "day"], i
+            )
+
+    def impl(year, day):  # pragma: no cover
+        return makedate_util(year, day)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def makedate_util(year, day):
+    """A dedicated kernel for the SQL function MAKEDATE which takes in two integers
+    (or columns) and uses them to construct a specific date
+
+
+    Args:
+        year (int array/series/scalar): the year(s) of the timestamp
+        day (int array/series/scalar): the day(s) of the year of the timestamp
+
+    Returns:
+        datetime series/scalar: the constructed date(s)
+    """
+    verify_int_arg(year, "MAKEDATE", "year")
+    verify_int_arg(day, "MAKEDATE", "day")
+
+    arg_names = ["year", "day"]
+    arg_types = [year, day]
+    propagate_null = [True] * 2
+    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(year=arg0, month=1, day=1) + pd.Timedelta(days=arg1-1))"
+
+    out_dtype = np.dtype("datetime64[ns]")
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
 def lpad(arr, length, padstr):  # pragma: no cover
     # Dummy function used for overload
     return
@@ -577,7 +832,7 @@ def rpad_util(arr, length, padstr):  # pragma: no cover
 @overload(lpad)
 def overload_lpad(arr, length, padstr):
     """Handles cases where LPAD recieves optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr, length, padstr]
     for i in range(3):
         if isinstance(args[i], types.optional):
@@ -594,7 +849,7 @@ def overload_lpad(arr, length, padstr):
 @overload(rpad)
 def overload_rpad(arr, length, padstr):
     """Handles cases where RPAD recieves optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr, length, padstr]
     for i in range(3):
         if isinstance(args[i], types.optional):
@@ -633,7 +888,7 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
 
         arg_names = ["arr", "length", "pad_string"]
         arg_types = [arr, length, pad_string]
-        propogate_null = [True] * 3
+        propagate_null = [True] * 3
         scalar_text = f"""\
             if arg1 <= 0:
                 res[i] =  ''
@@ -648,7 +903,7 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
         out_dtype = bodo.string_array_type
 
         return gen_vectorized(
-            arg_names, arg_types, propogate_null, scalar_text, out_dtype
+            arg_names, arg_types, propagate_null, scalar_text, out_dtype
         )
 
     return overload_lpad_rpad_util
@@ -667,7 +922,7 @@ _install_lpad_rpad_overload()
 @numba.generated_jit(nopython=True)
 def cond(arr, ifbranch, elsebranch):
     """Handles cases where IF receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr, ifbranch, elsebranch]
     for i in range(3):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -713,21 +968,31 @@ def cond_util(arr, ifbranch, elsebranch):
 
     arg_names = ["arr", "ifbranch", "elsebranch"]
     arg_types = [arr, ifbranch, elsebranch]
-    propogate_null = [True, False, False]
-    scalar_text = "if arg0:\n"
-    # If the ifbranch is an array, add a null check
-    if bodo.utils.utils.is_array_typ(ifbranch, True):
-        scalar_text += "   if bodo.libs.array_kernels.isna(ifbranch, i):\n"
-        scalar_text += "      bodo.libs.array_kernels.setna(res, i)\n"
-        scalar_text += "   else:\n"
-        scalar_text += "      res[i] = arg1\n"
-    # If the ifbranch is a scalar null, just set to null
-    elif ifbranch == bodo.none:
-        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
-    # If the ifbranch is a non-null scalar, then no null check is required
+    propagate_null = [False] * 3
+    # If the conditional is an array, add a null check (null = False)
+    if bodo.utils.utils.is_array_typ(arr, True):
+        scalar_text = "if (not bodo.libs.array_kernels.isna(arr, i)) and arg0:\n"
+    # If the conditional is a non-null scalar, case on its truthiness
+    elif arr != bodo.none:
+        scalar_text = "if arg0:\n"
+    # Skip the ifbranch if the conditional is a scalar None (since we know that
+    # the condition is always false)
     else:
-        scalar_text += "   res[i] = arg1\n"
-    scalar_text += "else:\n"
+        scalar_text = ""
+    if arr != bodo.none:
+        # If the ifbranch is an array, add a null check
+        if bodo.utils.utils.is_array_typ(ifbranch, True):
+            scalar_text += "   if bodo.libs.array_kernels.isna(ifbranch, i):\n"
+            scalar_text += "      bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "   else:\n"
+            scalar_text += "      res[i] = arg1\n"
+        # If the ifbranch is a scalar null, just set to null
+        elif ifbranch == bodo.none:
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+        # If the ifbranch is a non-null scalar, then no null check is required
+        else:
+            scalar_text += "   res[i] = arg1\n"
+        scalar_text += "else:\n"
     # If the elsebranch is an array, add a null check
     if bodo.utils.utils.is_array_typ(elsebranch, True):
         scalar_text += "   if bodo.libs.array_kernels.isna(elsebranch, i):\n"
@@ -744,13 +1009,13 @@ def cond_util(arr, ifbranch, elsebranch):
     # Get the common dtype from the two branches
     out_dtype = get_common_broadcasted_type([ifbranch, elsebranch], "IF")
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def substring(arr, start, length):
     """Handles cases where SUBSTRING recieves optional arguments and forwards
-    to args apropriate version of the real implementaiton"""
+    to args appropriate version of the real implementation"""
     args = [arr, start, length]
     for i in range(3):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -789,7 +1054,7 @@ def substring_util(arr, start, length):
 
     arg_names = ["arr", "start", "length"]
     arg_types = [arr, start, length]
-    propogate_null = [True] * 3
+    propagate_null = [True] * 3
     scalar_text = "if arg2 <= 0:\n"
     scalar_text += "   res[i] = ''\n"
     scalar_text += "elif arg1 < 0 and arg1 + arg2 >= 0:\n"
@@ -800,13 +1065,13 @@ def substring_util(arr, start, length):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def substring_index(arr, delimiter, occurrences):
     """Handles cases where SUBSTRING_INDEX recieves optional arguments and forwards
-    to args apropriate version of the real implementaiton"""
+    to args appropriate version of the real implementation"""
     args = [arr, delimiter, occurrences]
     for i in range(3):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -846,7 +1111,7 @@ def substring_index_util(arr, delimiter, occurrences):
 
     arg_names = ["arr", "delimiter", "occurrences"]
     arg_types = [arr, delimiter, occurrences]
-    propogate_null = [True] * 3
+    propagate_null = [True] * 3
     scalar_text = "if arg1 == '' or arg2 == 0:\n"
     scalar_text += "   res[i] = ''\n"
     scalar_text += "elif arg2 >= 0:\n"
@@ -856,7 +1121,7 @@ def substring_index_util(arr, delimiter, occurrences):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 def coalesce(A):  # pragma: no cover
@@ -872,7 +1137,7 @@ def coalesce_util(A):  # pragma: no cover
 @overload(coalesce)
 def overload_coalesce(A):
     """Handles cases where COALESCE recieves optional arguments and forwards
-    to the apropriate version of the real implementation"""
+    to the appropriate version of the real implementation"""
     if not isinstance(A, (types.Tuple, types.UniTuple)):
         raise_bodo_error("Coalesce argument must be a tuple")
     for i in range(len(A)):
@@ -924,7 +1189,7 @@ def overload_coalesce_util(A):
 
     arg_names = [f"A{i}" for i in range(len(A)) if i not in dead_cols]
     arg_types = [A[i] for i in range(len(A)) if i not in dead_cols]
-    propogate_null = [False] * (len(A) - len(dead_cols))
+    propagate_null = [False] * (len(A) - len(dead_cols))
     scalar_text = ""
     first = True
     found_scalar = False
@@ -976,7 +1241,7 @@ def overload_coalesce_util(A):
     return gen_vectorized(
         arg_names,
         arg_types,
-        propogate_null,
+        propagate_null,
         scalar_text,
         out_dtype,
         arg_string,
@@ -1008,7 +1273,7 @@ def right_util(arr, n_chars):  # pragma: no cover
 @overload(left)
 def overload_left(arr, n_chars):
     """Handles cases where LEFT recieves optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr, n_chars]
     for i in range(2):
         if isinstance(args[i], types.optional):
@@ -1025,7 +1290,7 @@ def overload_left(arr, n_chars):
 @overload(right)
 def overload_right(arr, n_chars):
     """Handles cases where RIGHT recieves optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr, n_chars]
     for i in range(2):
         if isinstance(args[i], types.optional):
@@ -1058,7 +1323,7 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
 
         arg_names = ["arr", "n_chars"]
         arg_types = [arr, n_chars]
-        propogate_null = [True] * 2
+        propagate_null = [True] * 2
         scalar_text = "if arg1 <= 0:\n"
         scalar_text += "   res[i] = ''\n"
         scalar_text += "else:\n"
@@ -1070,7 +1335,7 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
         out_dtype = bodo.string_array_type
 
         return gen_vectorized(
-            arg_names, arg_types, propogate_null, scalar_text, out_dtype
+            arg_names, arg_types, propagate_null, scalar_text, out_dtype
         )
 
     return overload_left_right_util
@@ -1089,7 +1354,7 @@ _install_left_right_overload()
 @numba.generated_jit(nopython=True)
 def repeat(arr, repeats):
     """Handles cases where REPEEAT receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr, repeats]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -1122,7 +1387,7 @@ def repeat_util(arr, repeats):
 
     arg_names = ["arr", "repeats"]
     arg_types = [arr, repeats]
-    propogate_null = [True] * 2
+    propagate_null = [True] * 2
     scalar_text = "if arg1 <= 0:\n"
     scalar_text += "   res[i] = ''\n"
     scalar_text += "else:\n"
@@ -1130,13 +1395,13 @@ def repeat_util(arr, repeats):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def space(n_chars):
     """Handles cases where SPACE receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     if isinstance(n_chars, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.space_util", ["n_chars"], 0
@@ -1165,7 +1430,7 @@ def space_util(n_chars):
 
     arg_names = ["n_chars"]
     arg_types = [n_chars]
-    propogate_null = [True]
+    propagate_null = [True]
     scalar_text = "if arg0 <= 0:\n"
     scalar_text += "   res[i] = ''\n"
     scalar_text += "else:\n"
@@ -1173,13 +1438,13 @@ def space_util(n_chars):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def reverse(arr):
     """Handles cases where REVERSE receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.reverse_util", ["arr"], 0
@@ -1208,18 +1473,18 @@ def reverse_util(arr):
 
     arg_names = ["arr"]
     arg_types = [arr]
-    propogate_null = [True]
+    propagate_null = [True]
     scalar_text = "res[i] = arg0[::-1]"
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def replace(arr, to_replace, replace_with):
     """Handles cases where REPLACE receives optional arguments and forwards
-    to args apropriate version of the real implementaiton"""
+    to args appropriate version of the real implementation"""
     args = [arr, to_replace, replace_with]
     for i in range(3):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -1258,7 +1523,7 @@ def replace_util(arr, to_replace, replace_with):
 
     arg_names = ["arr", "to_replace", "replace_with"]
     arg_types = [arr, to_replace, replace_with]
-    propogate_null = [True] * 3
+    propagate_null = [True] * 3
     scalar_text = "if arg1 == '':\n"
     scalar_text += "   res[i] = arg0\n"
     scalar_text += "else:\n"
@@ -1266,13 +1531,13 @@ def replace_util(arr, to_replace, replace_with):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def int_to_days(arr):
     """Handles cases where int_to_days receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.int_to_days_util", ["arr"], 0
@@ -1287,7 +1552,7 @@ def int_to_days(arr):
 @numba.generated_jit(nopython=True)
 def second_timestamp(arr):
     """Handles cases where second_timestamp receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.second_timestamp_util", ["arr"], 0
@@ -1302,7 +1567,7 @@ def second_timestamp(arr):
 @numba.generated_jit(nopython=True)
 def day_timestamp(arr):
     """Handles cases where day_timestamp receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.day_timestamp_util", ["arr"], 0
@@ -1317,7 +1582,7 @@ def day_timestamp(arr):
 @numba.generated_jit(nopython=True)
 def month_diff(arr0, arr1):
     """Handles cases where month_diff receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr0, arr1]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -1350,14 +1615,14 @@ def int_to_days_util(arr):
 
     arg_names = ["arr"]
     arg_types = [arr]
-    propogate_null = [True]
+    propagate_null = [True]
     scalar_text = (
         "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timedelta(days=arg0))"
     )
 
     out_dtype = np.dtype("timedelta64[ns]")
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
@@ -1377,12 +1642,12 @@ def second_timestamp_util(arr):
 
     arg_names = ["arr"]
     arg_types = [arr]
-    propogate_null = [True]
+    propagate_null = [True]
     scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0, unit='s'))"
 
     out_dtype = np.dtype("datetime64[ns]")
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
@@ -1402,12 +1667,12 @@ def day_timestamp_util(arr):
 
     arg_names = ["arr"]
     arg_types = [arr]
-    propogate_null = [True]
+    propagate_null = [True]
     scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0, unit='D'))"
 
     out_dtype = np.dtype("datetime64[ns]")
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
@@ -1429,7 +1694,7 @@ def month_diff_util(arr0, arr1):
 
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
-    propogate_null = [True] * 2
+    propagate_null = [True] * 2
     scalar_text = "A0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
     scalar_text += "A1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
     scalar_text += "delta = 12 * (A0.year - A1.year) + (A0.month - A1.month)\n"
@@ -1443,13 +1708,13 @@ def month_diff_util(arr0, arr1):
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def conv(arr, old_base, new_base):
     """Handles cases where CONV receives optional arguments and forwards
-    to args apropriate version of the real implementaiton"""
+    to args appropriate version of the real implementation"""
     args = [arr, old_base, new_base]
     for i in range(3):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -1490,7 +1755,7 @@ def conv_util(arr, old_base, new_base):
 
     arg_names = ["arr", "old_base", "new_base"]
     arg_types = [arr, old_base, new_base]
-    propogate_null = [True] * 3
+    propagate_null = [True] * 3
     scalar_text = "old_val = int(arg0, arg1)\n"
     scalar_text += "if arg2 == 2:\n"
     scalar_text += "   res[i] = format(old_val, 'b')\n"
@@ -1505,7 +1770,7 @@ def conv_util(arr, old_base, new_base):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
@@ -1541,21 +1806,21 @@ def ord_ascii_util(arr):
 
     arg_names = ["arr"]
     arg_types = [arr]
-    propogate_null = [True]
+    propagate_null = [True]
     scalar_text = "if len(arg0) == 0:\n"
-    scalar_text += "   res[i] = 0\n"
+    scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
     scalar_text += "else:\n"
     scalar_text += "   res[i] = ord(arg0[0])"
 
-    out_dtype = bodo.utils.typing.to_nullable_type(np.int32)
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def char(arr):
     """Handles cases where CHAR receives optional arguments and forwards
-    to args apropriate version of the real implementaiton"""
+    to args appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument("bodo.libs.bodosql_array_kernels.char_util", ["arr"], 0)
 
@@ -1584,7 +1849,7 @@ def char_util(arr):
 
     arg_names = ["arr"]
     arg_types = [arr]
-    propogate_null = [True]
+    propagate_null = [True]
     scalar_text = "if 0 <= arg0 <= 127:\n"
     scalar_text += "   res[i] = chr(arg0)\n"
     scalar_text += "else:\n"
@@ -1592,13 +1857,13 @@ def char_util(arr):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def format(arr, places):
     """Handles cases where FORMAT recieves optional arguments and forwards
-    to args apropriate version of the real implementaiton"""
+    to args appropriate version of the real implementation"""
     args = [arr, places]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -1632,19 +1897,19 @@ def format_util(arr, places):
 
     arg_names = ["arr", "places"]
     arg_types = [arr, places]
-    propogate_null = [True] * 2
+    propagate_null = [True] * 2
     scalar_text = "prec = max(arg1, 0)\n"
     scalar_text += "res[i] = format(arg0, f',.{prec}f')"
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def strcmp(arr0, arr1):
     """Handles cases where STRCMP receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr0, arr1]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -1680,7 +1945,7 @@ def strcmp_util(arr0, arr1):
 
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
-    propogate_null = [True] * 2
+    propagate_null = [True] * 2
     scalar_text = "if arg0 < arg1:\n"
     scalar_text += "   res[i] = -1\n"
     scalar_text += "elif arg0 > arg1:\n"
@@ -1690,13 +1955,13 @@ def strcmp_util(arr0, arr1):
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def instr(arr, target):
     """Handles cases where INSTR receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr, target]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -1734,18 +1999,18 @@ def instr_util(arr, target):
 
     arg_names = ["arr", "target"]
     arg_types = [arr, target]
-    propogate_null = [True] * 2
+    propagate_null = [True] * 2
     scalar_text = "res[i] = arg0.find(arg1) + 1"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def log(arr, base):
     """Handles cases where LOG receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     args = [arr, base]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -1780,18 +2045,18 @@ def log_util(arr, base):
 
     arg_names = ["arr", "base"]
     arg_types = [arr, base]
-    propogate_null = [True] * 2
+    propagate_null = [True] * 2
     scalar_text = "res[i] = np.log(arg0) / np.log(arg1)"
 
     out_dtype = types.Array(bodo.float64, 1, "C")
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def negate(arr):
     """Handles cases where -X receives optional arguments and forwards
-    to the apropriate version of the real implementaiton"""
+    to the appropriate version of the real implementation"""
     if isinstance(arr, types.optional):  # pragma: no cover
         return unopt_argument(
             "bodo.libs.bodosql_array_kernels.negate_util",
@@ -1821,7 +2086,7 @@ def negate_util(arr):
 
     arg_names = ["arr"]
     arg_types = [arr]
-    propogate_null = [True]
+    propagate_null = [True]
 
     # Extract the underly scalar dtype, default int32
     if arr == bodo.none:
@@ -1851,13 +2116,13 @@ def negate_util(arr):
     out_dtype = bodo.utils.typing.to_nullable_type(
         bodo.utils.typing.dtype_to_array_type(scalar_type)
     )
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
 def nullif(arr0, arr1):
     """Handles cases where NULLIF recieves optional arguments and forwards
-    to args apropriate version of the real implementaiton"""
+    to args appropriate version of the real implementation"""
     args = [arr0, arr1]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
@@ -1890,7 +2155,7 @@ def nullif_util(arr0, arr1):
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
     # If the first argument is NULL, the output is always NULL
-    propogate_null = [True, False]
+    propagate_null = [True, False]
     # NA check needs to come first here, otherwise the equalify check misbehaves
 
     if arr1 == bodo.none:
@@ -1908,4 +2173,4 @@ def nullif_util(arr0, arr1):
 
     out_dtype = get_common_broadcasted_type([arr0, arr1], "NULLIF")
 
-    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)

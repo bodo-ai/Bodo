@@ -289,6 +289,211 @@ def test_error_lpad_rpad():
         bodo.jit(impl4)(A2, 10, "_")
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.concat(
+                [
+                    pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
+                    pd.Series([None, None]),
+                    pd.Series(pd.date_range("1970-01-01", "2108-01-01", periods=20)),
+                ]
+            ),
+            id="vector",
+        ),
+        pytest.param(pd.Timestamp("2000-10-29"), id="scalar"),
+    ],
+)
+def dates_scalar_vector(request):
+    return request.param
+
+
+def test_last_day(dates_scalar_vector):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.last_day(arr)
+
+    # Simulates LAST_DAY on a single row
+    def last_day_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return np.datetime64(
+                elem + pd.tseries.offsets.MonthEnd(n=0, normalize=True)
+            )
+
+    last_day_answer = vectorized_sol((dates_scalar_vector,), last_day_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=last_day_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_dayname(dates_scalar_vector):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.dayname(arr)
+
+    # Simulates DAYNAME on a single row
+    def dayname_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem.day_name()
+
+    dayname_answer = vectorized_sol((dates_scalar_vector,), dayname_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=dayname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_monthname(dates_scalar_vector):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.monthname(arr)
+
+    # Simulates MONTHNAME on a single row
+    def monthname_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem.month_name()
+
+    monthname_answer = vectorized_sol((dates_scalar_vector,), monthname_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=monthname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_weekday(dates_scalar_vector):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.weekday(arr)
+
+    # Simulates WEEKDAY on a single row
+    def weekday_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem.weekday()
+
+    weekday_answer = vectorized_sol((dates_scalar_vector,), weekday_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=weekday_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_yearofweekiso(dates_scalar_vector):
+    def impl(arr):
+        return bodo.libs.bodosql_array_kernels.yearofweekiso(arr)
+
+    # Simulates YEAROFWEEKISO on a single row
+    def yearofweekiso_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem.isocalendar()[0]
+
+    yearofweekiso_answer = vectorized_sol(
+        (dates_scalar_vector,), yearofweekiso_scalar_fn, None
+    )
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=yearofweekiso_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(pd.array([2001, 2002, 2003, 2004, 2005, None, 2007])),
+                pd.Series(pd.array([None, 32, 90, 180, 150, 365, 225])),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                2007,
+                pd.Series(pd.array([1, 10, 40, None, 80, 120, 200, 350, 360, None])),
+            ),
+            id="scalar_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param((2018, 300), id="all_scalar"),
+    ],
+)
+def test_makedate(args):
+    def impl(year, day):
+        return bodo.libs.bodosql_array_kernels.makedate(year, day)
+
+    # Simulates MAKEDATE on a single row
+    def makedate_scalar_fn(year, day):
+        if pd.isna(year) or pd.isna(day):
+            return None
+        else:
+            return np.datetime64(
+                pd.Timestamp(year=year, month=1, day=1)
+                + pd.Timedelta(day - 1, unit="D")
+            )
+
+    makedate_answer = vectorized_sol(args, makedate_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=makedate_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.slow
+def test_calendar_optional():
+    def impl(A, B, C, flag0, flag1, flag2):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C if flag2 else None
+        return (
+            bodo.libs.bodosql_array_kernels.last_day(arg0),
+            bodo.libs.bodosql_array_kernels.dayname(arg0),
+            bodo.libs.bodosql_array_kernels.monthname(arg0),
+            bodo.libs.bodosql_array_kernels.weekday(arg0),
+            bodo.libs.bodosql_array_kernels.yearofweekiso(arg0),
+            bodo.libs.bodosql_array_kernels.makedate(arg1, arg2),
+        )
+
+    A, B, C = pd.Timestamp("2018-04-01"), 2005, 365
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                a0 = np.datetime64("2018-04-30") if flag0 else None
+                a1 = "Sunday" if flag0 else None
+                a2 = "April" if flag0 else None
+                a3 = 6 if flag0 else None
+                a4 = 2018 if flag0 else None
+                a5 = np.datetime64("2005-12-31") if flag1 and flag2 else None
+                check_func(
+                    impl,
+                    (A, B, C, flag0, flag1, flag2),
+                    py_output=(a0, a1, a2, a3, a4, a5),
+                )
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -360,10 +565,7 @@ def test_cond(args):
 
     # Simulates COND on a single row
     def cond_scalar_fn(arr, ifbranch, elsebranch):
-        if pd.isna(arr):
-            return None
-        else:
-            return ifbranch if arr else elsebranch
+        return ifbranch if ((not pd.isna(arr)) and arr) else elsebranch
 
     cond_answer = vectorized_sol(args, cond_scalar_fn, None)
     check_func(
@@ -1240,10 +1442,8 @@ def test_ord_ascii(s):
 
     # Simulates ORD/ASCII on a single row
     def ord_ascii_scalar_fn(elem):
-        if pd.isna(elem):
+        if pd.isna(elem) or len(elem) == 0:
             return None
-        elif len(elem) == 0:
-            return 0
         else:
             return ord(elem[0])
 
