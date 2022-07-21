@@ -189,7 +189,14 @@ std::shared_ptr<arrow::Schema> ParquetReader::get_schema(PyObject* dataset) {
 }
 
 void ParquetReader::read_all(TableBuilder& builder) {
-    if (get_num_pieces() == 0) return;
+    if (get_num_pieces() == 0) {
+        // get_scanner_batches trace event has to be called by all ranks
+        // Adding call here to avoid hangs in tracing.
+        // This event is used to track load imbalance so we can't use
+        // trace(is_parallel=False) to be able to collect min/max/avg.
+        tracing::Event ev_get_scanner_batches("get_scanner_batches");
+        return;
+    }
 
     size_t cur_piece = 0;
     int64_t rows_left_cur_piece = pieces_nrows[cur_piece];
