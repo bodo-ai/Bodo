@@ -24,19 +24,25 @@ typedef void (*hdfs_get_fs_t)(const std::string &,
 
 /*
  * Generate file names for files in directory: this process writes a file
- * named "part-000X.suffix", where X is myrank, into the directory
- * specified by 'path_name', and suffix is specified by suffix
+ * named "prefix-000X.suffix", where X is myrank, into the directory
+ * specified by 'path_name', and prefix / suffix is specified by arguments
  * @param myrank: current MPI rank
  * @param num_ranks: total MPI ranks
+ * @param prefix: prefix of files in distributed case. This can be specified in
+ * `to_parquet`, `to_csv`, and `to_json` using `_bodo_file_prefix`
  * @param suffix: suffix of file(s), '.csv', '.json' or '.parquet'
  */
 std::string gen_pieces_file_name(int myrank, int num_ranks,
+                                 const std::string &prefix,
                                  const std::string &suffix);
 
 /*
  * Extract file system, and path information
  * @param _path_name: path of output file or directory
  * @param is_parallel: true if the table is part of a distributed table
+ * @param prefix: prefix of files in distributed case. This can be specified in
+ * `to_parquet`, `to_csv`, and `to_json` using `_bodo_file_prefix`
+ * with a default value of 'part-'
  * @param suffix: suffix of file(s), '.csv', '.json', or '.parquet'
  * @param myrank: current MPI rank
  * @param num_ranks: total MPI ranks
@@ -48,10 +54,10 @@ std::string gen_pieces_file_name(int myrank, int num_ranks,
  * @param path_name: name of file to write (exclude prefix, include path)
  */
 void extract_fs_dir_path(const char *_path_name, bool is_parallel,
-                         const std::string &suffix, int myrank, int num_ranks,
-                         Bodo_Fs::FsEnum *fs, std::string *dirname,
-                         std::string *fname, std::string *orig_path,
-                         std::string *path_name);
+                         const std::string &prefix, const std::string &suffix,
+                         int myrank, int num_ranks, Bodo_Fs::FsEnum *fs,
+                         std::string *dirname, std::string *fname,
+                         std::string *orig_path, std::string *path_name);
 
 /*
  * Import file system python module: bodo.io.s3_reader, bodo.io.hdfs_reader or

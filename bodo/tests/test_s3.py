@@ -1,7 +1,10 @@
 # Copyright (C) 2019 Bodo Inc.
+from typing import List
+
 import numpy as np
 import pandas as pd
 import pytest
+from pyarrow import fs as pafs
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
@@ -473,6 +476,46 @@ def test_s3_csv_write_header_1D_var(minio_server, s3_bucket, test_df):
 
     bodo_write = bodo.jit(all_args_distributed_varlength=True)(test_write)
     bodo_write(_get_dist_arg(test_df, False, True))
+
+
+def test_s3_csv_write_file_prefix(minio_server, s3_bucket, test_df):
+    """Test S3 to_csv with unique distributed file prefix"""
+
+    def test_write(test_df):
+        test_df.to_csv(
+            "s3://bodo-test/test_df_bodo_file_prefix.csv", _bodo_file_prefix="test-"
+        )
+
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False))
+    bodo.barrier()
+
+    fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+    info = fs.get_file_info(
+        pafs.FileSelector("bodo-test/test_df_bodo_file_prefix.csv/")
+    )
+    file_names: List[str] = [f.base_name for f in info]
+    assert all(f.startswith("test-") for f in file_names)
+
+
+def test_s3_json_write_file_prefix(minio_server, s3_bucket, test_df):
+    """Test S3 to_json with unique distributed file prefix"""
+
+    def test_write(test_df):
+        test_df.to_json(
+            "s3://bodo-test/test_df_bodo_file_prefix.json", _bodo_file_prefix="test-"
+        )
+
+    bodo_write = bodo.jit(all_args_distributed_block=True)(test_write)
+    bodo_write(_get_dist_arg(test_df, False))
+    bodo.barrier()
+
+    fs = pafs.S3FileSystem(endpoint_override="http://localhost:9000")
+    info = fs.get_file_info(
+        pafs.FileSelector("bodo-test/test_df_bodo_file_prefix.json/")
+    )
+    file_names: List[str] = [f.base_name for f in info]
+    assert all(f.startswith("test-") for f in file_names)
 
 
 @pytest.mark.parametrize(

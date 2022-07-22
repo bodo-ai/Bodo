@@ -49,12 +49,13 @@ ArrowFSWrapper._open = wrap_exceptions(fsspec_arrowfswrapper__open)
 _csv_write = types.ExternalFunction(
     "csv_write",
     types.void(
-        types.voidptr,
-        types.voidptr,
-        types.int64,
-        types.int64,
-        types.bool_,
-        types.voidptr,
+        types.voidptr,  # char *_path_name
+        types.voidptr,  # char *buff
+        types.int64,  # int64_t start
+        types.int64,  # int64_t count
+        types.bool_,  # bool is_parallel
+        types.voidptr,  # char *bucket_region
+        types.voidptr,  # char *prefix
     ),
 )
 ll.add_symbol("csv_write", csv_cpp.csv_write)
@@ -599,14 +600,14 @@ def get_s3_bucket_region_njit(s3_filepath, parallel):  # pragma: no cover
     return bucket_loc
 
 
-def csv_write(path_or_buf, D, is_parallel=False):  # pragma: no cover
+def csv_write(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
     # This is a dummy function used to allow overload.
     return None
 
 
 @overload(csv_write, no_unliteral=True)
-def csv_write_overload(path_or_buf, D, is_parallel=False):
-    def impl(path_or_buf, D, is_parallel=False):  # pragma: no cover
+def csv_write_overload(path_or_buf, D, filename_prefix, is_parallel=False):
+    def impl(path_or_buf, D, filename_prefix, is_parallel=False):  # pragma: no cover
         # Assuming that path_or_buf is a string
         bucket_region = get_s3_bucket_region_njit(path_or_buf, parallel=is_parallel)
         # TODO: support non-ASCII file names?
@@ -623,6 +624,7 @@ def csv_write_overload(path_or_buf, D, is_parallel=False):
             utf8_len,
             is_parallel,
             unicode_to_utf8(bucket_region),
+            unicode_to_utf8(filename_prefix),
         )
         # Check if there was an error in the C++ code. If so, raise it.
         bodo.utils.utils.check_and_propagate_cpp_exception()

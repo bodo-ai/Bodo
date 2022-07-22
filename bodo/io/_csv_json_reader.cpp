@@ -1236,7 +1236,7 @@ void set_skiprows_list(MemReader *mem_reader, int64_t *skiprows,
     // we need to know the row offsets to skip rows
     mem_reader->calc_row_offsets();
     int64_t rows_skipped_bytes = 0;
-    int64_t skip_row, row_pos;
+    int64_t skip_row;
     if (is_parallel) {
         int my_rank = dist_get_rank();
         int num_ranks = dist_get_size();
@@ -2021,7 +2021,7 @@ void read_chunk_data_skiplist(MemReader *mem_reader, PathInfo *path_info,
         // Set start_global to start of next section
         // start_global==0 (to handle case where first row is skipped so
         // local_read=0)
-        if (local_to_read && skiplist_i < skiprows_list_len ||
+        if ((local_to_read && skiplist_i < skiprows_list_len) ||
             (start_global == 0))
             start_global = read_start_offset[skiplist_i + 1];
     }

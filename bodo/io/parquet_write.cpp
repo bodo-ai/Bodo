@@ -475,6 +475,7 @@ static arrow::Status WriteTable(
  * RangeIndex
  * @param idx_name name of the given index
  * @param row_group_size Row group size in number of rows
+ * @param prefix Prefix for parquet files written in distributed case
  */
 void pq_write(const char *_path_name, const table_info *table,
               const array_info *col_names_arr, const array_info *index,
@@ -482,7 +483,7 @@ void pq_write(const char *_path_name, const table_info *table,
               bool is_parallel, bool write_rangeindex_to_metadata,
               const int ri_start, const int ri_stop, const int ri_step,
               const char *idx_name, const char *bucket_region,
-              int64_t row_group_size) {
+              int64_t row_group_size, const char *prefix) {
     tracing::Event ev("pq_write", is_parallel);
     ev.add_attribute("g_path", _path_name);
     ev.add_attribute("g_write_index", write_index);
@@ -526,8 +527,9 @@ void pq_write(const char *_path_name, const table_info *table,
     std::shared_ptr<::arrow::io::OutputStream> out_stream;
     Bodo_Fs::FsEnum fs_option;
 
-    extract_fs_dir_path(_path_name, is_parallel, ".parquet", myrank, num_ranks,
-                        &fs_option, &dirname, &fname, &orig_path, &path_name);
+    extract_fs_dir_path(_path_name, is_parallel, prefix, ".parquet", myrank,
+                        num_ranks, &fs_option, &dirname, &fname, &orig_path,
+                        &path_name);
 
     // We need to create a directory when writing a distributed
     // table to a posix or hadoop filesystem.
@@ -576,7 +578,7 @@ void pq_write(const char *_path_name, const table_info *table,
             "columns in Bodo table");
     bool has_dictionary_columns = false;
     std::shared_ptr<arrow::Field> dict_str_field;
-    for (auto i = 0; i < schema_vector.size(); i++) {
+    for (size_t i = 0; i < schema_vector.size(); i++) {
         auto field = schema_vector[i];
         if (table->columns[i]->arr_type == bodo_array_type::DICT) {
             if (!arrow::is_dictionary(field->type()->id()))
@@ -689,12 +691,12 @@ void pq_write_py_entry(const char *_path_name, const table_info *table,
                        bool write_rangeindex_to_metadata, const int ri_start,
                        const int ri_stop, const int ri_step,
                        const char *idx_name, const char *bucket_region,
-                       int64_t row_group_size) {
+                       int64_t row_group_size, const char *prefix) {
     try {
         pq_write(_path_name, table, col_names_arr, index, write_index, metadata,
                  compression, is_parallel, write_rangeindex_to_metadata,
                  ri_start, ri_stop, ri_step, idx_name, bucket_region,
-                 row_group_size);
+                 row_group_size, prefix);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
@@ -717,6 +719,7 @@ void pq_write_py_entry(const char *_path_name, const table_info *table,
  * @param num_partition_cols number of partition columns
  * @param is_parallel true if the table is part of a distributed table
  * @param row_group_size Row group size in number of rows
+ * @param prefix Prefix to use for each file created in distributed case
  */
 void pq_write_partitioned(const char *_path_name, table_info *table,
                           const array_info *col_names_arr,
@@ -724,7 +727,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                           table_info *categories_table, int *partition_cols_idx,
                           int num_partition_cols, const char *compression,
                           bool is_parallel, const char *bucket_region,
-                          int64_t row_group_size) {
+                          int64_t row_group_size, const char *prefix) {
     // TODOs
     // - Do is parallel here?
     // - sequential (only rank 0 writes, or all write with same name -which?-)
@@ -771,8 +774,8 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
 
         // TODO nullable partition cols?
 
-        std::string fname =
-            gen_pieces_file_name(dist_get_rank(), dist_get_size(), ".parquet");
+        std::string fname = gen_pieces_file_name(
+            dist_get_rank(), dist_get_size(), prefix, ".parquet");
 
         new_table->num_keys = num_partition_cols;
         for (int64_t i = 0; i < new_table->nrows(); i++) {
@@ -828,7 +831,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
                      nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
                      false, -1, -1, -1, /*TODO*/ "", bucket_region,
-                     row_group_size);
+                     row_group_size, prefix);
             delete_table_decref_arrays(part_table);
         }
         delete new_table;

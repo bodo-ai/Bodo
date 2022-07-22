@@ -2697,6 +2697,26 @@ def test_write_parquet_no_empty_files(memory_leak_check):
         assert len(os.listdir(output_filename)) == 1
 
 
+def test_write_parquet_file_prefix(memory_leak_check):
+    """Test to_parquet distributed case when file prefix is provided"""
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, out_name):
+        df.to_parquet(out_name, _bodo_file_prefix="test-")
+
+    if bodo.get_rank() == 0:
+        df = pd.DataFrame({"A": [1, 2, 3], "B": ["a", "b", "c"]})
+    else:
+        df = pd.DataFrame({"A": [4, 5, 6], "B": ["d", "e", "f"]})
+
+    output_filename = "file_prefix_test.pq"
+    with ensure_clean_dir(output_filename):
+        impl(df, output_filename)
+        bodo.barrier()
+        files = os.listdir(output_filename)
+        assert all(file.startswith("test-") for file in files)
+
+
 def test_csv_bool1(datapath, memory_leak_check):
     """Test boolean data in CSV files.
     Also test extra separator at the end of the file
