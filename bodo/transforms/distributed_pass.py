@@ -107,6 +107,7 @@ _csv_write = types.ExternalFunction(
         types.int64,
         types.bool_,
         types.voidptr,
+        types.voidptr,
     ),
 )
 
@@ -124,6 +125,7 @@ _json_write = types.ExternalFunction(
         types.int64,
         types.bool_,
         types.bool_,
+        types.voidptr,
         types.voidptr,
     ),
 )
@@ -2378,14 +2380,15 @@ class DistributedPass:
         elif func_name == "to_csv" and self._is_1D_or_1D_Var_arr(df.name):
             # avoid header for non-zero ranks
             # write to string then parallel file write
-            # df.to_csv(fname) ->
+            # df.to_csv(fname, _bodo_file_prefix) ->
             # header = header and is_root  # only first line has header
             # str_out = df.to_csv(None, header=header)
-            # bodo.io.csv_cpp(fname, str_out)
+            # bodo.io.csv_cpp(fname, str_out, _bodo_file_prefix)
 
             df_typ = self.typemap[df.name]
             rhs = assign.value
             kws = dict(rhs.kws)
+            nodes = []
 
             fname = get_call_expr_arg(
                 "to_csv",
@@ -2396,13 +2399,36 @@ class DistributedPass:
                 default=None,
                 use_default=True,
             )
+
+            if "_bodo_file_prefix" in kws:
+                file_prefix_var = get_call_expr_arg(
+                    "to_csv",
+                    rhs.args,
+                    kws,
+                    21,
+                    "_bodo_file_prefix",
+                    default="part-",
+                    use_default=True,
+                )
+
+                file_prefix_val = self.typemap[file_prefix_var.name].literal_value
+            else:
+                file_prefix_val = "part-"
+
+            file_prefix = ir.Var(
+                assign.target.scope, mk_unique_var("file_prefix"), rhs.loc
+            )
+            self.typemap[file_prefix.name] = types.unicode_type
+            nodes.append(
+                ir.Assign(ir.Const(file_prefix_val, df.loc), file_prefix, df.loc)
+            )
+
             # handle None filepath
             if fname is None or isinstance(self.typemap[fname.name], types.NoneType):
                 return [assign]
             # convert StringLiteral to Unicode to make ._data available
             self.typemap.pop(fname.name)
             self.typemap[fname.name] = string_type
-            nodes = []
 
             true_var = ir.Var(assign.target.scope, mk_unique_var("true"), rhs.loc)
             self.typemap[true_var.name] = types.bool_
@@ -2449,7 +2475,7 @@ class DistributedPass:
             # TODO: fix lazy IO load
             func_text = (
                 ""
-                "def f(fname, str_out):\n"
+                "def f(fname, str_out, file_prefix):\n"
                 "    utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)\n"
                 "    start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)\n"
                 "    # Assuming that path_or_buf is a string\n"
@@ -2462,6 +2488,7 @@ class DistributedPass:
                 "        utf8_len,\n"
                 "        True,\n"
                 "        unicode_to_utf8(bucket_region),\n"
+                "        unicode_to_utf8(file_prefix),\n"
                 "    )\n"
                 "    # Check if there was an error in the C++ code. If so, raise it.\n"
                 "    bodo.utils.utils.check_and_propagate_cpp_exception()\n"
@@ -2471,7 +2498,7 @@ class DistributedPass:
             exec(func_text, globals(), loc_vars)
             return nodes + compile_func_single_block(
                 loc_vars["f"],
-                [fname, str_out],
+                [fname, str_out, file_prefix],
                 assign.target,
                 self,
                 extra_globals={
@@ -2524,6 +2551,29 @@ class DistributedPass:
                 )
             )
 
+            if "_bodo_file_prefix" in kws:
+                file_prefix_var = get_call_expr_arg(
+                    "to_csv",
+                    rhs.args,
+                    kws,
+                    14,
+                    "_bodo_file_prefix",
+                    default="part-",
+                    use_default=True,
+                )
+
+                file_prefix_val = self.typemap[file_prefix_var.name].literal_value
+            else:
+                file_prefix_val = "part-"
+
+            file_prefix = ir.Var(
+                assign.target.scope, mk_unique_var("file_prefix"), rhs.loc
+            )
+            self.typemap[file_prefix.name] = types.unicode_type
+            nodes.append(
+                ir.Assign(ir.Const(file_prefix_val, df.loc), file_prefix, df.loc)
+            )
+
             # fix to_json() type to have None as 1st arg
             call_type = self.calltypes.pop(rhs)
             arg_typs = list((types.none,) + call_type.args[1:])
@@ -2554,7 +2604,7 @@ class DistributedPass:
             # TODO: fix lazy IO load
             func_text = (
                 ""
-                "def f(fname, str_out, is_records_lines):\n"
+                "def f(fname, str_out, is_records_lines, file_prefix):\n"
                 "    utf8_str, utf8_len = unicode_to_utf8_and_len(str_out)\n"
                 "    start = bodo.libs.distributed_api.dist_exscan(utf8_len, _op)\n"
                 "    # Assuming that path_or_buf is a string\n"
@@ -2568,6 +2618,7 @@ class DistributedPass:
                 "        True,\n"
                 "        is_records_lines,\n"
                 "        unicode_to_utf8(bucket_region),\n"
+                "        unicode_to_utf8(file_prefix),\n"
                 "    )\n"
                 "    # Check if there was an error in the C++ code. If so, raise it.\n"
                 "    bodo.utils.utils.check_and_propagate_cpp_exception()\n"
@@ -2577,7 +2628,7 @@ class DistributedPass:
             exec(func_text, globals(), loc_vars)
             return nodes + compile_func_single_block(
                 loc_vars["f"],
-                [fname, str_out, is_records_lines],
+                [fname, str_out, is_records_lines, file_prefix],
                 assign.target,
                 self,
                 extra_globals={

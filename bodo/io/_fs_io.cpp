@@ -62,6 +62,7 @@ MPI_Datatype decimal_mpi_type = MPI_DATATYPE_NULL;
 std::shared_ptr<arrow::fs::S3FileSystem> s3_fs;
 
 std::string gen_pieces_file_name(int myrank, int num_ranks,
+                                 const std::string &prefix,
                                  const std::string &suffix) {
     std::string part_number = std::to_string(myrank);
     std::string max_part_number = std::to_string(num_ranks - 1);
@@ -70,15 +71,15 @@ std::string gen_pieces_file_name(int myrank, int num_ranks,
     std::string new_part_number =
         std::string(n_digits - part_number.length(), '0') + part_number;
     std::stringstream ss;
-    ss << "part-" << new_part_number << suffix;  // this is the actual file name
+    ss << prefix << new_part_number << suffix;  // this is the actual file name
     return ss.str();
 }
 
 void extract_fs_dir_path(const char *_path_name, bool is_parallel,
-                         const std::string &suffix, int myrank, int num_ranks,
-                         Bodo_Fs::FsEnum *fs_option, std::string *dirname,
-                         std::string *fname, std::string *orig_path,
-                         std::string *path_name) {
+                         const std::string &prefix, const std::string &suffix,
+                         int myrank, int num_ranks, Bodo_Fs::FsEnum *fs_option,
+                         std::string *dirname, std::string *fname,
+                         std::string *orig_path, std::string *path_name) {
     *path_name = std::string(_path_name);
 
     if (strncmp(_path_name, "s3://", 5) == 0) {
@@ -104,7 +105,7 @@ void extract_fs_dir_path(const char *_path_name, bool is_parallel,
 
     if (is_parallel) {
         // construct file name for this process' piece
-        *fname = gen_pieces_file_name(myrank, num_ranks, suffix);
+        *fname = gen_pieces_file_name(myrank, num_ranks, prefix, suffix);
         *dirname = *path_name;
     } else {
         // path_name is a file

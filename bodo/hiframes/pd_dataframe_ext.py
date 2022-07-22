@@ -126,6 +126,7 @@ _json_write = types.ExternalFunction(
         types.bool_,
         types.bool_,
         types.voidptr,
+        types.voidptr,
     ),
 )
 ll.add_symbol("json_write", json_cpp.json_write)
@@ -3607,6 +3608,7 @@ def to_parquet_overload(
     partition_cols=None,
     storage_options=None,
     row_group_size=-1,
+    _bodo_file_prefix="part-",
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
@@ -3773,7 +3775,7 @@ def to_parquet_overload(
             for i in range(len(df.columns))
         )
 
-    func_text = "def df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _is_parallel=False):\n"
+    func_text = "def df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _bodo_file_prefix='part-', _is_parallel=False):\n"
     # put arrays in table_info
     if df.is_table_format:
         func_text += "    py_table = get_dataframe_table(df)\n"
@@ -3858,7 +3860,8 @@ def to_parquet_overload(
         func_text += "                            unicode_to_utf8(compression),\n"
         func_text += "                            _is_parallel,\n"
         func_text += "                            unicode_to_utf8(bucket_region),\n"
-        func_text += "                            row_group_size)\n"
+        func_text += "                            row_group_size,\n"
+        func_text += "                            unicode_to_utf8(_bodo_file_prefix))\n"
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names_no_partitions)\n"
@@ -3875,7 +3878,8 @@ def to_parquet_overload(
         func_text += "                            df.index.stop, df.index.step,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region),\n"
-        func_text += "                            row_group_size)\n"
+        func_text += "                            row_group_size,\n"
+        func_text += "                            unicode_to_utf8(_bodo_file_prefix))\n"
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names)\n"
@@ -3888,7 +3892,8 @@ def to_parquet_overload(
         func_text += "                            _is_parallel, 0, 0, 0, 0,\n"
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region),\n"
-        func_text += "                            row_group_size)\n"
+        func_text += "                            row_group_size,\n"
+        func_text += "                            unicode_to_utf8(_bodo_file_prefix))\n"
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names)\n"
@@ -4232,6 +4237,7 @@ def to_csv_overload(
     decimal=".",
     errors="strict",
     storage_options=None,
+    _bodo_file_prefix="part-",
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_csv()")
     check_unsupported_args(
@@ -4312,6 +4318,7 @@ def to_csv_overload(
             decimal=".",
             errors="strict",
             storage_options=None,
+            _bodo_file_prefix="part-",
         ):  # pragma: no cover
             with numba.objmode(D="unicode_type"):
                 D = df.to_csv(
@@ -4364,6 +4371,7 @@ def to_csv_overload(
         decimal=".",
         errors="strict",
         storage_options=None,
+        _bodo_file_prefix="part-",
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to csv
@@ -4392,7 +4400,7 @@ def to_csv_overload(
                 storage_options,
             )
 
-        bodo.io.fs_io.csv_write(path_or_buf, D)
+        bodo.io.fs_io.csv_write(path_or_buf, D, _bodo_file_prefix)
 
     return _impl
 
@@ -4416,6 +4424,7 @@ def to_json_overload(
     index=True,
     indent=None,
     storage_options=None,
+    _bodo_file_prefix="part-",
 ):
     check_runtime_cols_unsupported(df, "DataFrame.to_json()")
     check_unsupported_args(
@@ -4448,6 +4457,7 @@ def to_json_overload(
             index=True,
             indent=None,
             storage_options=None,
+            _bodo_file_prefix="part-",
         ):  # pragma: no cover
             with numba.objmode(D="unicode_type"):
                 D = df.to_json(
@@ -4482,6 +4492,7 @@ def to_json_overload(
         index=True,
         indent=None,
         storage_options=None,
+        _bodo_file_prefix="part-",
     ):  # pragma: no cover
         # passing None for the first argument returns a string
         # containing contents to write to json
@@ -4515,6 +4526,7 @@ def to_json_overload(
                 False,
                 True,
                 unicode_to_utf8(bucket_region),
+                unicode_to_utf8(_bodo_file_prefix),
             )
             # Check if there was an error in the C++ code. If so, raise it.
             bodo.utils.utils.check_and_propagate_cpp_exception()
@@ -4527,6 +4539,7 @@ def to_json_overload(
                 False,
                 False,
                 unicode_to_utf8(bucket_region),
+                unicode_to_utf8(_bodo_file_prefix),
             )
             # Check if there was an error in the C++ code. If so, raise it.
             bodo.utils.utils.check_and_propagate_cpp_exception()

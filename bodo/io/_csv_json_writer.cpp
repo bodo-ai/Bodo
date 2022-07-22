@@ -36,12 +36,13 @@ extern "C" {
  * @param start: offset to write to(for MPI use only)
  * @param count: number of bytes to write
  * @param is_parallel: true if df, from pandas to_csv(df), is distributed
+ * @param prefix: Prefix of file names during distributed write
  * @param suffix: ".csv"/".json"
  * @param is_records_lines: true if df.to_json(orient="records", lines=True), or
  * df.to_csv() false for all other "orient" and "lines" combinations
  */
 void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
-                bool is_parallel, const std::string &suffix,
+                bool is_parallel, const std::string &prefix, const std::string &suffix,
                 bool is_records_lines, char *bucket_region) {
     try {
         int myrank, num_ranks;
@@ -57,7 +58,7 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
         std::shared_ptr<::arrow::io::OutputStream> out_stream;
         Bodo_Fs::FsEnum fs_option;
         arrow::Status status;
-        extract_fs_dir_path(_path_name, is_parallel, suffix, myrank, num_ranks,
+        extract_fs_dir_path(_path_name, is_parallel, prefix, suffix, myrank, num_ranks,
                             &fs_option, &dirname, &fname, &orig_path,
                             &path_name);
         // handling posix with mpi/fwrite
@@ -114,10 +115,12 @@ void write_buff(char *_path_name, char *buff, int64_t start, int64_t count,
  * @param start: offset to write to(for MPI use only)
  * @param count: number of bytes to write
  * @param is_parallel: true if df, from pandas to_csv(df), is distributed
+ * @param prefix: prefix of files written in distributed case
  */
 void csv_write(char *_path_name, char *buff, int64_t start, int64_t count,
-               bool is_parallel, char *bucket_region) {
-    write_buff(_path_name, buff, start, count, is_parallel, ".csv", true,
+               bool is_parallel, char *bucket_region, char *prefix) {
+
+    write_buff(_path_name, buff, start, count, is_parallel, prefix, ".csv", true,
                bucket_region);
 }
 
@@ -129,10 +132,11 @@ void csv_write(char *_path_name, char *buff, int64_t start, int64_t count,
  * @param count: number of bytes to write
  * @param is_parallel: true if df, from pandas to_json(df), is distributed
  * @param is_record_lines: true if pd.to_json(oriend = 'records', lines=True)
+ * @param prefix: prefix of files written in distributed case
  */
 void json_write(char *_path_name, char *buff, int64_t start, int64_t count,
-                bool is_parallel, bool is_records_lines, char *bucket_region) {
-    write_buff(_path_name, buff, start, count, is_parallel, ".json",
+                bool is_parallel, bool is_records_lines, char *bucket_region, char *prefix) {
+    write_buff(_path_name, buff, start, count, is_parallel, prefix, ".json",
                is_records_lines, bucket_region);
 }
 
