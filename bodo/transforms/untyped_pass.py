@@ -637,7 +637,11 @@ class UntypedPass:
         if fdef == ("where", "numpy") and len(rhs.args) == 1:
             return self._handle_np_where_one_arg(assign, lhs, rhs)
 
-        if fdef == ("BodoSQLContext", "bodosql"):  # pragma: no cover
+        # If there is a relative import it uses ('BodoSQLContext', 'bodosql.context')
+        if fdef in (
+            ("BodoSQLContext", "bodosql.context"),
+            ("BodoSQLContext", "bodosql"),
+        ):  # pragma: no cover
             return self._handle_bodosql_BodoSQLContext(assign, lhs, rhs, label)
 
         # add distributed flag input to SparkDataFrame.toPandas() if specified by user
