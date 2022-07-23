@@ -2246,8 +2246,61 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if fdef == ("get_dataframe_all_data", "bodo.hiframes.pd_dataframe_ext"):
+            in_df = rhs.args[0].name
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
+
+            min_dist = Distribution(
+                min(
+                    array_dists[lhs].value
+                    if isinstance(self.typemap[lhs], TableType)
+                    else min(a.value for a in array_dists[lhs]),
+                    array_dists[in_df].value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, min_dist)
+            self._set_var_dist(in_df, array_dists, min_dist)
+            return
+
         if fdef == ("get_table_data", "bodo.hiframes.table"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
+        if fdef == ("logical_table_to_table", "bodo.hiframes.table"):
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD, False)
+
+            # NOTE: replacing dead input arguments with None is done in table column
+            # del pass so there is no None input here
+            in_table = rhs.args[0].name
+            in_extra_arrs = rhs.args[1].name
+
+            in_table_dist = (
+                array_dists[in_table]
+                if in_table in array_dists
+                else [Distribution.OneD]
+            )
+            # input "table" could be a tuple of arrays (list of distributions)
+            in_table_dist = (
+                in_table_dist if isinstance(in_table_dist, list) else [in_table_dist]
+            )
+            in_extra_arrs_dist = (
+                array_dists[in_extra_arrs]
+                if in_extra_arrs in array_dists
+                else [Distribution.OneD]
+            )
+            in_dists = in_extra_arrs_dist + in_table_dist
+
+            min_dist = Distribution(
+                min(
+                    min(a.value for a in in_dists),
+                    array_dists[lhs].value,
+                )
+            )
+            self._set_var_dist(lhs, array_dists, min_dist)
+            self._set_var_dist(in_table, array_dists, min_dist)
+            self._set_var_dist(in_extra_arrs, array_dists, min_dist)
             return
 
         if fdef == ("get_dataframe_column_names", "bodo.hiframes.table"):

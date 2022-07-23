@@ -45,6 +45,7 @@ from bodo.utils.typing import (
     is_overload_true,
     raise_bodo_error,
     to_str_arr_if_dict_array,
+    unwrap_typeref,
 )
 from bodo.utils.utils import is_whole_slice
 
@@ -514,6 +515,14 @@ def get_table_data_codegen(context, builder, table_arg, col_ind, table_type):
     blk = table_type.block_nums[col_ind]
     blk_offset = table_type.block_offsets[col_ind]
     arr_list = getattr(table, f"block_{blk}")
+
+    # unbox the column if necessary
+    unbox_sig = types.none(table_type, types.List(arr_type), types.int64, types.int64)
+    col_ind_arg = context.get_constant(types.int64, col_ind)
+    blk_offset_arg = context.get_constant(types.int64, blk_offset)
+    unbox_args = (table_arg, arr_list, blk_offset_arg, col_ind_arg)
+    ensure_column_unboxed_codegen(context, builder, unbox_sig, unbox_args)
+
     arr_list_inst = ListInstance(context, builder, types.List(arr_type), arr_list)
     arr = arr_list_inst.getitem(blk_offset)
     return arr
@@ -1660,3 +1669,301 @@ def init_runtime_table_from_lists(typingctx, arr_list_tup_typ, nrows_typ=None):
     table_type = TableType(tuple(arr_list_typs), True)
     sig = table_type(arr_list_tup_typ, nrows_typ)
     return sig, codegen
+
+
+@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
+def logical_table_to_table(
+    in_table_t,
+    extra_arrs_t,
+    in_col_inds_t,
+    n_table_cols_t,
+    out_table_type_t=None,
+    used_cols=None,
+):
+    """Convert a logical table formed by table and array data into an actual table.
+    For example, assuming T1 has 3 columns:
+        in_table_t = T1
+        extra_arrs_t = (A, B)
+        in_col_inds_t = (2, 4, 3, 1)
+        output = (T1_2, B, A, T1_1)
+
+    Args:
+        in_table_t (TableType|types.Tuple(array)): input table data (could be a
+            TableType or a tuple of arrays)
+        extra_arrs_t (types.Tuple(array)): extra arrays in addition to previous table
+            argument to form the full logical input table
+        in_col_inds_t (MetaType(list[int])): logical indices in input for each
+            output table column. Actual input data is a table that has logical
+            columns 0..n_in_table_arrs-1, and regular arrays that have the rest of data
+            (n_in_table_arrs, n_in_table_arrs+1, ...).
+        n_table_cols_t (int): number of logical input columns in input table in_table_t.
+            Necessary since in_table_t may be set to none if dead. The number becomes
+            a constant in dataframe pass but not during initial typing.
+        out_table_type_t (TypeRef): output table type. Necessary since some input data
+            may be set to None if dead. Provided in table column del pass after
+            optimization but not before.
+        used_cols (TypeRef(MetaType) | None): Output columns that are actually used
+            as found by table_column_del pass. If None, all columns are used.
+
+    Returns:
+        TableType: converted table
+    """
+    in_col_inds = in_col_inds_t.instance_type.meta
+    assert isinstance(
+        in_table_t, (TableType, types.BaseTuple, types.NoneType)
+    ), "logical_table_to_table: input table must be a TableType or tuple of arrays or None (for dead table)"
+
+    glbls = {}
+    # prune columns if used_cols is provided
+    if not is_overload_none(used_cols):
+        kept_cols = set(used_cols.instance_type.meta)
+        glbls["kept_cols"] = np.array(list(kept_cols), np.int64)
+        skip_cols = True
+    else:
+        kept_cols = set(np.arange(len(in_col_inds)))
+        skip_cols = False
+
+    # handle array-only input data
+    if isinstance(in_table_t, (types.BaseTuple, types.NoneType)):
+        return _logical_tuple_table_to_table_codegen(
+            in_table_t,
+            extra_arrs_t,
+            in_col_inds,
+            kept_cols,
+            n_table_cols_t,
+            out_table_type_t,
+        )
+
+    # at this point in_table is provided as a TableType but extra arrays may be None
+    n_in_table_arrs = len(in_table_t.arr_types)
+
+    out_table_type = (
+        TableType(
+            tuple(
+                in_table_t.arr_types[i]
+                if i < n_in_table_arrs
+                else extra_arrs_t.types[i - n_in_table_arrs]
+                for i in in_col_inds
+            )
+        )
+        if is_overload_none(out_table_type_t)
+        else unwrap_typeref(out_table_type_t)
+    )
+
+    func_text = "def impl(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
+    func_text += f"  T1 = in_table_t\n"
+    func_text += f"  T2 = init_table(out_table_type, False)\n"
+    func_text += f"  T2 = set_table_len(T2, len(T1))\n"
+
+    # If all columns are dead just return the table (only table length is used).
+    if skip_cols and len(kept_cols) == 0:
+        func_text += f"  return T2\n"
+        loc_vars = {}
+        exec(func_text, glbls, loc_vars)
+        return loc_vars["impl"]
+
+    # Create a set for column filtering
+    if skip_cols:
+        func_text += f"  kept_cols_set = set(kept_cols)\n"
+
+    for typ, blk in out_table_type.type_to_blk.items():
+        glbls[f"arr_list_typ_{blk}"] = types.List(typ)
+        n_arrs = len(out_table_type.block_to_arr_ind[blk])
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_typ_{blk}, {n_arrs}, False)\n"
+        # assign arrays that come from input table.
+        if typ in in_table_t.type_to_blk:
+            in_table_blk = in_table_t.type_to_blk[typ]
+            # for each array in output block, get block offset and array index in input
+            # table (if it's coming from the input table)
+            in_blk_idxs = []
+            in_arr_inds = []
+            for out_arr_ind in out_table_type.block_to_arr_ind[blk]:
+                in_arr_ind = in_col_inds[out_arr_ind]
+                if in_arr_ind < n_in_table_arrs:
+                    in_blk_idxs.append(in_table_t.block_offsets[in_arr_ind])
+                    in_arr_inds.append(in_arr_ind)
+                else:
+                    in_blk_idxs.append(-1)
+                    in_arr_inds.append(-1)
+            glbls[f"in_idxs_{blk}"] = np.array(in_blk_idxs, np.int64)
+            glbls[f"in_arr_inds_{blk}"] = np.array(in_arr_inds, np.int64)
+            if skip_cols:
+                glbls[f"out_arr_inds_{blk}"] = np.array(
+                    out_table_type.block_to_arr_ind[blk], dtype=np.int64
+                )
+            func_text += f"  in_arr_list_{blk} = get_table_block(T1, {in_table_blk})\n"
+            func_text += f"  for i in range(len(out_arr_list_{blk})):\n"
+            func_text += f"    in_offset_{blk} = in_idxs_{blk}[i]\n"
+            func_text += f"    if in_offset_{blk} == -1:\n"
+            func_text += f"      continue\n"
+            func_text += f"    in_arr_ind_{blk} = in_arr_inds_{blk}[i]\n"
+            if skip_cols:
+                func_text += (
+                    f"    if out_arr_inds_{blk}[i] not in kept_cols_set: continue\n"
+                )
+            func_text += f"    ensure_column_unboxed(T1, in_arr_list_{blk}, in_offset_{blk}, in_arr_ind_{blk})\n"
+            func_text += (
+                f"    out_arr_list_{blk}[i] = in_arr_list_{blk}[in_offset_{blk}]\n"
+            )
+        # assign arrays that come from extra arrays
+        for i, out_arr_ind in enumerate(out_table_type.block_to_arr_ind[blk]):
+            if out_arr_ind not in kept_cols:
+                continue
+            in_arr_ind = in_col_inds[out_arr_ind]
+            if in_arr_ind >= n_in_table_arrs:
+                func_text += f"  out_arr_list_{blk}[{i}] = extra_arrs_t[{in_arr_ind-n_in_table_arrs}]\n"
+
+        func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+
+    func_text += f"  return T2\n"
+
+    glbls.update(
+        {
+            "init_table": init_table,
+            "alloc_list_like": alloc_list_like,
+            "set_table_block": set_table_block,
+            "set_table_len": set_table_len,
+            "get_table_block": get_table_block,
+            "ensure_column_unboxed": ensure_column_unboxed,
+            "out_table_type": out_table_type,
+        }
+    )
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
+
+
+def _logical_tuple_table_to_table_codegen(
+    in_table_t, extra_arrs_t, in_col_inds, kept_cols, n_table_cols_t, out_table_type_t
+):
+    """generate a function for logical table to table conversion when input "table" is
+    a tuple of arrays. See logical_table_to_table() for details.
+
+    Args:
+        in_table_t (types.Tuple(array)): input table data (tuple of arrays)
+        extra_arrs_t (types.Tuple(array)): extra arrays in addition to previous table
+            argument to form the full logical input table
+        in_col_inds_t (list[int]): logical indices in input for each output table column
+        kept_cols (set[int]): set of output table column indices that are actually used
+        n_table_cols_t (int): number of logical input columns in input table in_table_t.
+            Necessary since in_table_t may be set to none if dead. The number becomes
+            a constant in dataframe pass but not during initial typing.
+        out_table_type_t (TypeRef): output table type. Necessary since some input data
+            may be set to None if dead. Provided in table column del pass after
+            optimization but not before.
+
+    Returns:
+        function: generated function for logical table to table conversion
+    """
+    n_in_table_arrs = (
+        get_overload_const_int(n_table_cols_t)
+        if is_overload_constant_int(n_table_cols_t)
+        else len(in_table_t.types)
+    )
+
+    out_table_type = (
+        TableType(
+            tuple(
+                in_table_t.types[i]
+                if i < n_in_table_arrs
+                else extra_arrs_t.types[i - n_in_table_arrs]
+                for i in in_col_inds
+            )
+        )
+        if is_overload_none(out_table_type_t)
+        else unwrap_typeref(out_table_type_t)
+    )
+
+    # find an array in input data to use for setting length of output that is not None
+    # after dead column elimination. There is always at least one array that is not None
+    # since logical_table_to_table() would be eliminated otherwise.
+    len_arr = None
+    if not is_overload_none(in_table_t):
+        for i, t in enumerate(in_table_t.types):
+            if t != types.none:
+                len_arr = f"in_table_t[{i}]"
+                break
+
+    if len_arr is None:
+        for i, t in enumerate(extra_arrs_t.types):
+            if t != types.none:
+                len_arr = f"extra_arrs_t[{i}]"
+                break
+
+    assert len_arr is not None, "no array found in input data"
+
+    func_text = "def impl(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
+    func_text += f"  T1 = in_table_t\n"
+    func_text += f"  T2 = init_table(out_table_type, False)\n"
+    func_text += f"  T2 = set_table_len(T2, len({len_arr}))\n"
+    glbls = {}
+
+    for typ, blk in out_table_type.type_to_blk.items():
+        glbls[f"arr_list_typ_{blk}"] = types.List(typ)
+        n_arrs = len(out_table_type.block_to_arr_ind[blk])
+        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_typ_{blk}, {n_arrs}, False)\n"
+
+        # assign arrays that come from tuple of arrays or extra arrays
+        for i, out_arr_ind in enumerate(out_table_type.block_to_arr_ind[blk]):
+            if out_arr_ind not in kept_cols:
+                continue
+            in_arr_ind = in_col_inds[out_arr_ind]
+            if in_arr_ind < n_in_table_arrs:
+                func_text += f"  out_arr_list_{blk}[{i}] = T1[{in_arr_ind}]\n"
+            else:
+                func_text += f"  out_arr_list_{blk}[{i}] = extra_arrs_t[{in_arr_ind-n_in_table_arrs}]\n"
+
+        func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+
+    func_text += f"  return T2\n"
+
+    glbls.update(
+        {
+            "init_table": init_table,
+            "alloc_list_like": alloc_list_like,
+            "set_table_block": set_table_block,
+            "set_table_len": set_table_len,
+            "out_table_type": out_table_type,
+        }
+    )
+
+    loc_vars = {}
+    exec(func_text, glbls, loc_vars)
+    return loc_vars["impl"]
+
+
+def logical_table_to_table_equiv(self, scope, equiv_set, loc, args, kws):
+    """array analysis for logical_table_to_table().
+    Output table has the same length as input table or arrays.
+    """
+    table_var = args[0]
+    extra_arrs_var = args[1]
+
+    if equiv_set.has_shape(table_var):
+        return ArrayAnalysis.AnalyzeResult(
+            shape=(equiv_set.get_shape(table_var)[0], None), pre=[]
+        )
+
+    if equiv_set.has_shape(extra_arrs_var):
+        return ArrayAnalysis.AnalyzeResult(
+            shape=(equiv_set.get_shape(extra_arrs_var)[0], None), pre=[]
+        )
+
+
+ArrayAnalysis._analyze_op_call_bodo_hiframes_table_logical_table_to_table = (
+    logical_table_to_table_equiv
+)
+
+
+def alias_ext_logical_table_to_table(lhs_name, args, alias_map, arg_aliases):
+    """add aliasing info for logical_table_to_table(). Output table reuses input table
+    and arrays.
+    """
+    numba.core.ir_utils._add_alias(lhs_name, args[0].name, alias_map, arg_aliases)
+    numba.core.ir_utils._add_alias(lhs_name, args[1].name, alias_map, arg_aliases)
+
+
+numba.core.ir_utils.alias_func_extensions[
+    ("logical_table_to_table", "bodo.hiframes.table")
+] = alias_ext_logical_table_to_table

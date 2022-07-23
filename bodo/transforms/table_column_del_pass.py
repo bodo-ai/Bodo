@@ -797,6 +797,53 @@ def _compute_table_column_use(blocks, func_ir, typemap):
                                 )
                         continue
 
+                    # first argument can be a table or tuple of arrays or None (for dead
+                    # table input)
+                    elif fdef == (
+                        "logical_table_to_table",
+                        "bodo.hiframes.table",
+                    ) and isinstance(typemap[rhs.args[0].name], TableType):
+
+                        rhs_table = rhs.args[0].name
+                        orig_used_cols, use_all, cannot_del_cols = block_use_map[
+                            rhs_table
+                        ]
+                        # Skip if input table uses all columns or cannot be deleted
+                        if use_all or cannot_del_cols:
+                            continue
+
+                        # Create the mapping between the input the types and the output
+                        # types.
+                        (
+                            lhs_used_cols,
+                            lhs_use_all,
+                            lhs_cannot_del_cols,
+                        ) = _compute_table_column_uses(
+                            lhs_name, table_col_use_map, equiv_vars
+                        )
+
+                        in_col_inds = typemap[rhs.args[2].name].instance_type.meta
+                        n_in_table_arrs = len(typemap[rhs_table].arr_types)
+
+                        if lhs_use_all or lhs_cannot_del_cols:
+                            final_used_cols = set(
+                                i for i in in_col_inds if i < n_in_table_arrs
+                            )
+                        else:
+                            final_used_cols = set()
+                            for out_ind, in_ind in enumerate(in_col_inds):
+                                if (
+                                    out_ind in lhs_used_cols
+                                    and in_ind < n_in_table_arrs
+                                ):
+                                    final_used_cols.add(in_ind)
+                        block_use_map[rhs_table] = (
+                            orig_used_cols | final_used_cols,
+                            False,
+                            False,
+                        )
+                        continue
+
                 elif isinstance(stmt.value, ir.Expr) and stmt.value.op == "getattr":
                     if stmt.value.attr == "shape":
                         # Skip ops that shouldn't impact the number of columns. Shape
@@ -1064,6 +1111,83 @@ def remove_dead_columns(
                     new_body += new_nodes
                     # We do not set removed = True here, as this branch does not make
                     # any changes that could allow removal in dead code elimination.
+                    continue
+
+                elif fdef == ("logical_table_to_table", "bodo.hiframes.table"):
+                    used_columns = _find_used_columns(
+                        lhs_name, len(typemap[lhs_name].arr_types), lives, equiv_vars
+                    )
+                    # None means all columns are used
+                    if used_columns is None:
+                        new_body.append(stmt)
+                        continue
+
+                    kws = dict(rhs.kws)
+
+                    if "used_cols" in kws:
+                        prev_used_cols = set(
+                            typemap[kws["used_cols"].name].instance_type.meta
+                        )
+                        # no need to update if used cols aren't changing
+                        # otherwise will get stuck in a loop since we set removed=True
+                        if prev_used_cols == used_columns:
+                            new_body.append(stmt)
+                            continue
+
+                    # set dead input arguments to None to enable dead code elimination
+                    in_col_inds = typemap[rhs.args[2].name].instance_type.meta
+                    in_used_cols = set(
+                        in_ind
+                        for out_ind, in_ind in enumerate(in_col_inds)
+                        if out_ind in used_columns
+                    )
+                    n_in_table_arrs = get_overload_const_int(typemap[rhs.args[3].name])
+
+                    in_table = (
+                        "table"
+                        if any(i < n_in_table_arrs for i in in_used_cols)
+                        else "None"
+                    )
+                    n_extra_arrs = len(typemap[rhs.args[1].name].types)
+                    if all(
+                        i in in_used_cols
+                        for i in range(n_in_table_arrs, n_in_table_arrs + n_extra_arrs)
+                    ):
+                        in_arrs = "arrs"
+                    else:
+                        arr_tup = ", ".join(
+                            f"arrs[{i}]"
+                            if i + n_in_table_arrs in in_used_cols
+                            else "None"
+                            for i in range(n_extra_arrs)
+                        )
+                        in_arrs = f"({arr_tup},)"
+                    nodes = compile_func_single_block(
+                        eval(
+                            f"lambda table, arrs, col_inds, n_cols: bodo.hiframes.table.logical_table_to_table({in_table}, {in_arrs}, col_inds, n_cols, out_table_type_t=out_type, used_cols=used_columns)"
+                        ),
+                        rhs.args,
+                        stmt.target,
+                        typing_info=typing_info,
+                        extra_globals={
+                            "used_columns": bodo.utils.typing.MetaType(
+                                tuple(sorted(used_columns))
+                            ),
+                            "out_type": typemap[lhs_name],
+                        },
+                    )
+
+                    # Replace the variable in the return value to keep
+                    # distributed analysis consistent.
+                    nodes[-1].target = stmt.target
+                    # Update distributed analysis for the replaced function
+                    new_nodes = list(reversed(nodes))
+                    if dist_analysis:
+                        bodo.transforms.distributed_analysis.propagate_assign(
+                            dist_analysis.array_dists, new_nodes
+                        )
+                    new_body += new_nodes
+                    removed = True
                     continue
 
                 elif fdef == (

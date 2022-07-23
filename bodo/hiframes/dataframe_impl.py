@@ -277,9 +277,9 @@ def overload_dataframe_shape(df):
             return (len(t), num_cols)
 
         return impl
+
     ncols = len(df.columns)
-    # using types.int64 due to lowering error (a Numba tuple handling bug)
-    return lambda df: (len(df), types.int64(ncols))  # pragma: no cover
+    return lambda df: (len(df), ncols)  # pragma: no cover
 
 
 @overload_attribute(DataFrameType, "dtypes")
