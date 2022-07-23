@@ -27,6 +27,7 @@ table_usecol_funcs = {
     ("generate_table_nbytes", "bodo.utils.table_utils"),
     ("table_concat", "bodo.utils.table_utils"),
     ("py_data_to_cpp_table", "bodo.libs.array"),
+    ("logical_table_to_table", "bodo.hiframes.table"),
 }
 
 
@@ -127,6 +128,24 @@ def get_table_used_columns(
         used_cols = typemap[call_expr.args[2].name].instance_type.meta
         n_table_cols = len(typemap[call_expr.args[0].name].arr_types)
         return set(i for i in used_cols if i < n_table_cols)
+
+    # NOTE: get_table_used_columns() is called only when first input of
+    # logical_table_to_table() is a table
+    elif fdef == ("logical_table_to_table", "bodo.hiframes.table"):
+        in_col_inds = typemap[call_expr.args[2].name].instance_type.meta
+        n_in_table_arrs = len(typemap[call_expr.args[0].name].arr_types)
+        kws = dict(call_expr.kws)
+        # remove columns that are dead in the output table
+        if "used_cols" in kws:
+            # map output column indices to input column indices
+            used_cols_set = set(typemap[kws["used_cols"].name].instance_type.meta)
+            in_used_cols = set()
+            for out_ind, in_ind in enumerate(in_col_inds):
+                if out_ind in used_cols_set and in_ind < n_in_table_arrs:
+                    in_used_cols.add(in_ind)
+            return in_used_cols
+        else:
+            return set(i for i in in_col_inds if i < n_in_table_arrs)
 
     # If we don't have information about which columns this operation
     # kills, we return to None to indicate we must decref any remaining

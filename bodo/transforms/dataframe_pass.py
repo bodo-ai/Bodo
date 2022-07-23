@@ -420,6 +420,89 @@ class DataFramePass:
             if call_def == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
                 assign.value = var_def.args[1]
 
+        # make sure n_table_cols_t argument is passed as a constant since it's necessary
+        # after optimizations (when input table arg may be eliminated)
+        if fdef == ("logical_table_to_table", "bodo.hiframes.table"):
+            n_cols = guard(find_const, self.func_ir, rhs.args[3])
+            if n_cols is not None:
+                self.typemap.pop(rhs.args[3].name)
+                self.typemap[rhs.args[3].name] = types.IntegerLiteral(n_cols)
+
+        # Optimize out get_table_data() calls which are outputs of
+        # logical_table_to_table().
+        if fdef == ("get_table_data", "bodo.hiframes.table"):
+            table_var = rhs.args[0]
+            ind = guard(find_const, self.func_ir, rhs.args[1])
+            table_def = guard(get_definition, self.func_ir, table_var)
+            call_def = guard(find_callname, self.func_ir, table_def, self.typemap)
+            if call_def == (
+                "logical_table_to_table",
+                "bodo.hiframes.table",
+            ):
+                # first argument is input "table", which could be in actual table
+                # format or tuple of arrays.
+                in_table_var = table_def.args[0]
+                in_table_type = self.typemap[in_table_var.name]
+                n_in_table_cols = (
+                    len(in_table_type.arr_types)
+                    if isinstance(in_table_type, TableType)
+                    else len(in_table_type.types)
+                )
+                extra_arrs_var = table_def.args[1]
+                in_col_inds = self.typemap[table_def.args[2].name].instance_type.meta
+                in_ind = in_col_inds[ind]
+
+                # column is in extra arrays
+                if in_ind >= n_in_table_cols:
+
+                    return compile_func_single_block(
+                        eval(
+                            f"lambda extra_arrs: extra_arrs[{in_ind - n_in_table_cols}]"
+                        ),
+                        (extra_arrs_var,),
+                        lhs,
+                        self,
+                    )
+
+                # column is in the input table
+                return compile_func_single_block(
+                    eval(
+                        f"lambda table: bodo.hiframes.table.get_table_data(table, {in_ind})"
+                        if isinstance(in_table_type, TableType)
+                        else f"lambda table: table[{in_ind}]"
+                    ),
+                    (in_table_var,),
+                    lhs,
+                    self,
+                )
+
+        # inline get_dataframe_all_data() to enable optimizations
+        if fdef == ("get_dataframe_all_data", "bodo.hiframes.pd_dataframe_ext"):
+            df_var = rhs.args[0]
+            df_type = self.typemap[df_var.name]
+            if df_type.is_table_format:
+                # just return the data table in table format case
+                nodes = []
+                in_table_var = self._get_dataframe_table(df_var, nodes)
+                assign.value = in_table_var
+                nodes.append(assign)
+                return nodes
+
+            # create a tuple of data arrays
+            nodes = []
+            in_vars = [
+                self._get_dataframe_data(df_var, c, nodes) for c in df_type.columns
+            ]
+            tuple_var = ir.Var(
+                df_var.scope, mk_unique_var("$table_tuple_var"), df_var.loc
+            )
+            self.typemap[tuple_var.name] = types.BaseTuple.from_types(df_type.data)
+            tuple_call = ir.Expr.build_tuple(in_vars, df_var.loc)
+            nodes.append(ir.Assign(tuple_call, tuple_var, df_var.loc))
+            assign.value = tuple_var
+            nodes.append(assign)
+            return nodes
+
         if fdef == ("join_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_join(assign, lhs, rhs)
 

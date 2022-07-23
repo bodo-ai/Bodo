@@ -1335,6 +1335,68 @@ def get_dataframe_table(typingctx, df_typ=None):
     return df_typ.table_type(df_typ), codegen
 
 
+def get_dataframe_all_data(df):  # pragma: no cover
+    return df.data
+
+
+def get_dataframe_all_data_impl(df):
+    """implementation for get_dataframe_all_data(), which returns the underlying data
+    of a dataframe (TableType in table format case and tuple of arrays in non-table
+    case).
+    Should be rarely actually used since get_dataframe_all_data() should be inlined.
+
+    Args:
+        df (DataFrameType): input dataframe type
+
+    Returns:
+        function (df -> TableType|tuple(array)): implementation for
+            get_dataframe_all_data()
+    """
+    # table format case
+    if df.is_table_format:
+
+        def _impl(df):  # pragma: no cover
+            return get_dataframe_table(df)
+
+        return _impl
+
+    # tuple of arrays case
+    data = ", ".join(
+        f"bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i})"
+        for i in range(len(df.columns))
+    )
+    comma = "," if len(df.columns) > 1 else ""
+    return eval(f"lambda df: ({data}{comma})", {"bodo": bodo})
+
+
+@infer_global(get_dataframe_all_data)
+class GetDataFrameAllDataInfer(AbstractTemplate):
+    """Type inference for get_dataframe_all_data(). Separate from lowering to improve
+    compilation time (since get_dataframe_all_data will be inlined almost always).
+    """
+
+    def generic(self, args, kws):
+        assert not kws
+        assert len(args) == 1
+        df_type = args[0]
+        check_runtime_cols_unsupported(df_type, "get_dataframe_data")
+        ret = (
+            df_type.table_type
+            if df_type.is_table_format
+            else types.BaseTuple.from_types(df_type.data)
+        )
+        return ret(*args)
+
+
+@lower_builtin(get_dataframe_all_data, DataFrameType)
+def lower_get_dataframe_all_data(context, builder, sig, args):
+    """lowering for get_dataframe_all_data()
+    Should be rarely actually used since get_dataframe_all_data() should be inlined.
+    """
+    impl = get_dataframe_all_data_impl(*sig.args)
+    return context.compile_internal(builder, impl, sig, args)
+
+
 @intrinsic
 def get_dataframe_column_names(typingctx, df_typ=None):
     """return internal column names for dataframe with runtime columns"""
@@ -1372,6 +1434,9 @@ numba.core.ir_utils.alias_func_extensions[
 ] = alias_ext_dummy_func
 numba.core.ir_utils.alias_func_extensions[
     ("get_dataframe_table", "bodo.hiframes.pd_dataframe_ext")
+] = alias_ext_dummy_func
+numba.core.ir_utils.alias_func_extensions[
+    ("get_dataframe_all_data", "bodo.hiframes.pd_dataframe_ext")
 ] = alias_ext_dummy_func
 
 

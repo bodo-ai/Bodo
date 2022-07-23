@@ -185,6 +185,7 @@ no_side_effect_call_tuples = {
     # dataframe
     ("init_dataframe", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_data", "pd_dataframe_ext", "hiframes", bodo),
+    ("get_dataframe_all_data", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_table", "pd_dataframe_ext", "hiframes", bodo),
     ("get_dataframe_column_names", "pd_dataframe_ext", "hiframes", bodo),
     ("get_table_data", "table", "hiframes", bodo),
@@ -317,6 +318,7 @@ no_side_effect_call_tuples = {
     ("table_concat", "table_utils", "utils", bodo),
     ("table_filter", "table", "hiframes", bodo),
     ("table_subset", "table", "hiframes", bodo),
+    ("logical_table_to_table", "table", "hiframes", bodo),
     # Series.str/string
     ("startswith",),
     ("endswith",),
