@@ -51,6 +51,10 @@ from numba.core.types import *
 # on the shared filesystem.
 if (cache_loc := os.environ.get("BODO_PLATFORM_CACHE_LOCATION")) is not None:
     numba.config.CACHE_DIR = cache_loc
+    # In certain cases, numba reloads its config variables from the
+    # environment. In those cases, the above line would be overridden.
+    # Therefore, we also set it to the env var that numba reloads from.
+    os.environ["NUMBA_CACHE_DIR"] = cache_loc
 
 from bodo.numba_compat import jitclass
 
