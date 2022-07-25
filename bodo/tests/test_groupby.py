@@ -1174,7 +1174,6 @@ def test_sum_max_min_list_string_random(memory_leak_check):
         reset_index=True,
         convert_columns_to_pandas=True,
     )
-
     # For test_impl7, we have an error in as_index=False function, that is:
     # df1.groupby("A", as_index=False)["B"].agg(("sum", "min", "max"))
     #
@@ -3043,8 +3042,16 @@ def test_max(test_df, memory_leak_check):
             "C": [True, True, False, True, True, False, False, False],
         }
     )
+    df_str = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", "ff", "bb", "rr", "ggg", "aa", "aa"],
+            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
 
     check_func(impl1, (test_df,), sort_output=True)
+    check_func(impl1, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,))
 
@@ -3298,6 +3305,14 @@ def test_min(test_df, memory_leak_check):
         }
     )
 
+    df_str = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", "ff", "bb", "rr", "bb", "ggg", "aa"],
+            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
+    check_func(impl1, (df_str,), sort_output=True, check_typing_issues=False)
     check_func(impl1, (test_df,), sort_output=True)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
@@ -4031,6 +4046,15 @@ def test_sum_one_col(test_df, memory_leak_check):
         A = df.groupby("A")["B"].sum()
         return A
 
+    df_str = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", "ff", "bb", "rr", "bb", "ggg", "aa"],
+            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
+
+    check_func(impl1, (df_str,), sort_output=True)
     check_func(impl1, (test_df,), sort_output=True)
     check_func(impl2, (11,), sort_output=True)
 
@@ -5804,7 +5828,7 @@ def test_head(memory_leak_check):
     )
     check_func(impl1, (df,))
     check_func(impl2, (df,))
-    # check_func(impl3, (df,))
+    check_func(impl3, (df,))
     check_func(impl4, (df,))
 
     df_empty = pd.DataFrame({"A": [], "B": []})

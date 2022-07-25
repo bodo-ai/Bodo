@@ -121,6 +121,10 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         this->precision = other.precision;
         this->scale = other.scale;
         this->num_categories = other.num_categories;
+        this->has_global_dictionary = other.has_global_dictionary;
+        this->has_sorted_dictionary = other.has_sorted_dictionary;
+        this->info1 = other.info1;
+        this->info2 = other.info2;
 
         // reset the other array_info's pointers
         other.data1 = nullptr;
@@ -131,6 +135,8 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         other.meminfo = nullptr;
         other.meminfo_bitmask = nullptr;
         other.array = nullptr;
+        other.info1 = nullptr;
+        other.info2 = nullptr;
     }
     return *this;
 }

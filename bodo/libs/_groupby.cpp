@@ -458,6 +458,35 @@ struct aggstring<Bodo_FTypes::last> {
     static void apply(std::string& v1, std::string& v2) { v1 = v2; }
 };
 
+// aggdict: support for the dictionary-encoded string operations (min, max,
+// last)
+// apply is not invoked for first as only the first element is needed.
+
+template <int ftype, typename Enable = void>
+struct aggdict {
+    /**
+     * Apply the function.
+     * @param[in,out] first input index value to be updated.
+     * @param[in] second input index value.
+     */
+    static void apply(int32_t& v1, int32_t& v2) {}
+};
+
+template <>
+struct aggdict<Bodo_FTypes::min> {
+    static void apply(int32_t& v1, int32_t& v2) { v1 = std::min(v1, v2); }
+};
+
+template <>
+struct aggdict<Bodo_FTypes::max> {
+    static void apply(int32_t& v1, int32_t& v2) { v1 = std::max(v1, v2); }
+};
+
+template <>
+struct aggdict<Bodo_FTypes::last> {
+    static void apply(int32_t& v1, int32_t& v2) { v1 = v2; }
+};
+
 using pair_str_bool = std::pair<std::string, bool>;
 
 template <int ftype, typename Enable = void>
@@ -905,6 +934,38 @@ create_list_string_array(
         iter += len_loc;
     }
     return new multiple_array_info(vect_arr);
+}
+
+/**
+ * @brief Create a dict string array object from the underlying data array and
+ * indices array
+ *
+ * @tparam ARRAY
+ * @param dict_arr: the underlying data array
+ * @param indices_arr: the underlying indices array
+ * @param length: the number of rows of the dict-encoded array(and the indices
+ * array)
+ * @return std::enable_if<!is_multiple_array<ARRAY>::value, ARRAY*>::type
+ */
+template <typename ARRAY>
+typename std::enable_if<!is_multiple_array<ARRAY>::value, ARRAY*>::type
+create_dict_string_array(array_info* dict_arr, array_info* indices_arr,
+                         size_t length) {
+    array_info* out_col = new array_info(
+        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1, -1,
+        NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
+        0, 0, false, false, dict_arr, indices_arr);
+    return out_col;
+}
+
+template <typename ARRAY>
+typename std::enable_if<is_multiple_array<ARRAY>::value, ARRAY*>::type
+create_dict_string_array(array_info* dict_data_arr, array_info* indices_arr,
+                         size_t length) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "create_dict_string_array should not be called when "
+                         "the input array is multiple array.");
+    return nullptr;
 }
 
 /**
@@ -2683,6 +2744,182 @@ apply_sum_to_column_string(ARR_I* in_col, ARR_O* out_col,
     return nullptr;
 }
 
+/**
+ * @brief Applies max/min/first/last to dictionary encoded string column
+ *
+ * @tparam ARR_I
+ * @tparam ARR_O
+ * @tparam F
+ * @tparam ftype
+ * @param in_col: the input dictionary encoded string column
+ * @param out_col: the output dictionary encoded string column
+ * @param grp_info: groupby information
+ * @param f: a function that returns group index given row index
+ * @return std::enable_if<!is_multiple_array<ARR_I>::value, ARR_O*>::type
+ */
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<!is_multiple_array<ARR_I>::value, ARR_O*>::type
+apply_to_column_dict(ARR_I* in_col, ARR_O* out_col,
+                     const grouping_info& grp_info, F f) {
+    size_t num_groups = grp_info.num_groups;
+    size_t n_bytes = (num_groups + 7) >> 3;
+    array_info* indices_arr =
+        alloc_nullable_array(num_groups, Bodo_CTypes::INT32, 0);
+    std::vector<uint8_t> V(n_bytes,
+                           0);  // bitmask to mark if group's been updated
+    char* data_i = in_col->info1->data1;
+    offset_t* offsets_i = (offset_t*)in_col->info1->data2;
+    // Populate the new indices array.
+    for (int64_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = f(i);
+        if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
+            bool out_bit_set = GetBit(V.data(), i_grp);
+            if (ftype == Bodo_FTypes::first && out_bit_set) continue;
+            int32_t& dict_ind = getv<ARR_I, int32_t>(in_col->info2, i);
+            int32_t& org_ind = getv<ARR_I, int32_t>(indices_arr, i_grp);
+            if (out_bit_set) {
+                aggdict<ftype>::apply(org_ind, dict_ind);
+            } else {
+                org_ind = dict_ind;
+                SetBitTo(V.data(), i_grp, true);
+                indices_arr->set_null_bit(i_grp, true);
+            }
+        }
+    }
+    // Start at 1 since 0 is is returned by the hashmap if data needs to be
+    // inserted.
+    int32_t k = 1;
+    int64_t n_chars = 0;
+    UNORD_MAP_CONTAINER<int32_t, int32_t>
+        old_to_new;  // Maps old index to new index
+    old_to_new.reserve(num_groups);
+    for (int64_t i = 0; i < num_groups; i++) {
+        // Insert 0 into the map if key is not in it.
+        int32_t& old_ind = getv<ARR_I, int32_t>(indices_arr, i);
+        int32_t& new_ind = old_to_new[old_ind];
+        if (new_ind == 0) {
+            new_ind =
+                k++;  // Updates the value in the map without another lookup
+            offset_t start_offset = offsets_i[old_ind];
+            offset_t end_offset = offsets_i[old_ind + 1];
+            n_chars += end_offset - start_offset;
+        }
+        old_ind =
+            old_to_new[old_ind] - 1;  // map back from 1-indexing to 0-indexing
+    }
+    // Create new dict string array from map
+    size_t n_dict = old_to_new.size();
+    n_bytes = (n_dict + 7) >> 3;
+    std::vector<uint8_t> bitmask_vec(n_bytes, 0);
+    std::vector<std::string> ListString(n_dict);
+    for (auto& it : old_to_new) {
+        offset_t start_offset = offsets_i[it.first];
+        offset_t end_offset = offsets_i[it.first + 1];
+        offset_t len = end_offset - start_offset;
+        std::string val(&data_i[start_offset], len);
+        ListString[it.second - 1] = val;  // -1 to account for the 1 offset
+        SetBitTo(bitmask_vec.data(), it.second - 1, true);
+    }
+
+    array_info* dict_arr =
+        create_string_array<ARR_I>(grp_info, bitmask_vec, ListString);
+
+    return create_dict_string_array<ARR_O>(dict_arr, indices_arr, num_groups);
+}
+
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<is_multiple_array<ARR_I>::value, ARR_O*>::type
+apply_to_column_dict(ARR_I* in_col, ARR_O* out_col,
+                     const grouping_info& grp_info, F f) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "apply_to_column_dict should not be invoked when "
+                         "input is multiple array.");
+    return nullptr;
+}
+
+/**
+ * @brief Apply sum operation on a dictionary-encoded string column. The
+ * partial_sum trick used for regular string columns to calculate the offsets is
+ * also used here. Returns a regulare string array instead of a
+ * dictionary-encoded string array.
+ *
+ * @tparam ARR_I
+ * @tparam ARR_O
+ * @tparam F
+ * @tparam ftype
+ * @param in_col: the input dictionary-encoded string array
+ * @param out_col: the output string array
+ * @param grp_info: groupby information
+ * @param f: a function that returns the group index given the row index
+ * @return std::enable_if<!(is_multiple_array<ARR_I>::value ||
+ * is_multiple_array<ARR_O>::value),
+ * ARR_O*>::type
+ */
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<!(is_multiple_array<ARR_I>::value ||
+                          is_multiple_array<ARR_O>::value),
+                        ARR_O*>::type
+apply_sum_to_column_dict(ARR_I* in_col, ARR_O* out_col,
+                         const grouping_info& grp_info, F f) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of apply_to_column_dict\n";
+#endif
+    size_t num_groups = grp_info.num_groups;
+    int64_t n_chars = 0;
+    size_t n_bytes = (num_groups + 7) >> 3;
+
+    // calculate the total number of characters in the dict-encoded array
+    // and find offsets for each output string
+    // every string has a start and end offset so len(offsets) == (len(data) +
+    // 1)
+    std::vector<offset_t> str_offsets(num_groups + 1, 0);
+    char* data_i = in_col->info1->data1;
+    offset_t* offsets_i = (offset_t*)in_col->info1->data2;
+    for (int64_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = f(i);
+        if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
+            int32_t dict_ind = getv<ARR_I, int32_t>(in_col->info2, i);
+            offset_t len = offsets_i[dict_ind + 1] - offsets_i[dict_ind];
+            str_offsets[i_grp + 1] += len;
+            n_chars += len;
+        }
+    }
+
+    array_info* out_arr = alloc_string_array(num_groups, n_chars, 0);
+    memset(out_arr->null_bitmask, 0xff, n_bytes);  // null not possible
+    char* data_o = out_arr->data1;
+    offset_t* offsets_o = (offset_t*)out_arr->data2;
+
+    std::partial_sum(str_offsets.begin(), str_offsets.end(),
+                     str_offsets.begin());
+    memcpy(offsets_o, str_offsets.data(), (num_groups + 1) * sizeof(offset_t));
+
+    // copy characters to output
+    for (int64_t i = 0; i < in_col->length; i++) {
+        int64_t i_grp = f(i);
+        if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
+            int32_t dict_ind = getv<ARR_I, int32_t>(in_col->info2, i);
+            offset_t len = offsets_i[dict_ind + 1] - offsets_i[dict_ind];
+            memcpy(&data_o[str_offsets[i_grp]], data_i + offsets_i[dict_ind],
+                   len);
+            str_offsets[i_grp] += len;
+        }
+    }
+    return out_arr;
+}
+
+template <typename ARR_I, typename ARR_O, typename F, int ftype>
+typename std::enable_if<(is_multiple_array<ARR_I>::value ||
+                         is_multiple_array<ARR_O>::value),
+                        ARR_O*>::type
+apply_sum_to_column_dict(ARR_I* in_col, ARR_O* out_col,
+                         const grouping_info& grp_info, F f) {
+    Bodo_PyErr_SetString(PyExc_RuntimeError,
+                         "Groupby sum not supported for dictionary-encoded "
+                         "strings that are multiple arrays.");
+    return nullptr;
+}
+
 template <typename ARR_I>
 typename std::enable_if<!is_multiple_array<ARR_I>::value, bool>::type
 do_computation(ARR_I* in_col, int64_t i) {
@@ -2707,7 +2944,7 @@ do_computation(ARR_I* in_col, int64_t i) {
  * --- during update:
  *    ARR_I = array_info   ARR_O = multiple_array_info
  * --- during combine:
- *    ARR_I = ARR_OI = multiple_array_info
+ *    ARR_I = ARR_O = multiple_array_info
  * During pivot_table / crosstab the "do_computation" is used for the missing
  * data. That is whether it was accessed or not. For groupby, this collapses to
  * true by the template evaluation of the AST.
@@ -2884,13 +3121,23 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                     return;
                 }
+                // optimized groupby sum for strings (concatenation)
+                case Bodo_FTypes::sum: {
+                    ARR_O* new_out_col =
+                        apply_sum_to_column_dict<ARR_I, ARR_O, F, ftype>(
+                            in_col, out_col, grp_info, f);
+                    *out_col = std::move(*new_out_col);
+                    delete new_out_col;
+                    return;
+                }
                 default:
-                    Bodo_PyErr_SetString(
-                        PyExc_RuntimeError,
-                        "Unsupported groupby aggregate function for dictionary "
-                        "encoded array.");
+                    ARR_O* new_out_col =
+                        apply_to_column_dict<ARR_I, ARR_O, F, ftype>(
+                            in_col, out_col, grp_info, f);
+                    *out_col = std::move(*new_out_col);
+                    delete new_out_col;
+                    return;
             }
-            return;
         // for list strings, we are supporting count, sum, max, min, first, last
         case bodo_array_type::LIST_STRING:
             switch (ftype) {
@@ -3127,7 +3374,8 @@ void do_apply_to_column(ARR_I* in_col, ARR_O* out_col,
         return;
     }
     if (in_col->arr_type == bodo_array_type::STRING ||
-        in_col->arr_type == bodo_array_type::LIST_STRING) {
+        in_col->arr_type == bodo_array_type::LIST_STRING ||
+        in_col->arr_type == bodo_array_type::DICT) {
         switch (ftype) {
             // NOTE: The int template argument is not used in this call to
             // apply_to_column
@@ -4387,6 +4635,11 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum& array_type,
         case Bodo_FTypes::std:
             array_type = bodo_array_type::NUMPY;
             dtype = Bodo_CTypes::FLOAT64;
+            return;
+        case Bodo_FTypes::sum:
+            if (dtype == Bodo_CTypes::STRING) {
+                array_type = bodo_array_type::STRING;
+            }
             return;
         default:
             return;
@@ -5767,7 +6020,13 @@ class GroupbyPipeline {
                     int end = func_offsets[k + 1];
                     for (int j = start; j != end; j++) {
                         // for each function applied to this column
-                        if (ftypes[j] == Bodo_FTypes::count) {
+                        if (ftypes[j] == Bodo_FTypes::min ||
+                            ftypes[j] == Bodo_FTypes::max) {
+                            convert_local_dictionary_to_global(a, true);
+                        } else if (ftypes[j] == Bodo_FTypes::count ||
+                                   ftypes[j] == Bodo_FTypes::first ||
+                                   ftypes[j] == Bodo_FTypes::last ||
+                                   ftypes[j] == Bodo_FTypes::sum) {
                             convert_local_dictionary_to_global(a);
                         }
                     }
@@ -5999,6 +6258,7 @@ class GroupbyPipeline {
             shuffle();
             combine();
         }
+
         eval();
         // For gb.head() operation, if data is distributed,
         // sort table based on head_sort_col column.

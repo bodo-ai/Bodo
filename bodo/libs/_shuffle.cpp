@@ -488,9 +488,7 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
 void convert_local_dictionary_to_global(array_info* dict_array,
                                         bool sort_dictionary) {
     if (dict_array->has_global_dictionary) return;
-
     array_info* local_dictionary = dict_array->info1;
-
     // table containing a single column with the dictionary values (not
     // indices/codes)
     table_info* in_dictionary_table = new table_info();
@@ -505,7 +503,6 @@ void convert_local_dictionary_to_global(array_info* dict_array,
         drop_duplicates_table(in_dictionary_table, true, 1, 0, false, false);
     delete in_dictionary_table;  // no array decref because
                                  // drop_duplicates_table stole the reference
-
     // replicate the global dictionary on all ranks
     // allgather
     table_info* global_dictionary_table =

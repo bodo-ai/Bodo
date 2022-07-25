@@ -1148,7 +1148,15 @@ def agg_distributed_run(
     for out_col, (in_col, func) in agg_node.gb_info_out.items():
         if in_col is not None:
             t = agg_node.in_col_types[in_col]
-            if func.ftype not in ("size", "count"):
+            if func.ftype not in (
+                "min",
+                "max",
+                "first",
+                "last",
+                "sum",
+                "size",
+                "count",
+            ):
                 t = to_str_arr_if_dict_array(t)
             in_col_typs.append(t)
         funcs.append(func)
@@ -1714,7 +1722,6 @@ def gen_top_level_agg_func(
     """create the top level aggregation function by generating text"""
     n_keys = len(agg_node.in_key_inds)
     n_out_vars = len(agg_node.out_vars)
-
     # If we output the index then we need to remove it from the list of variables.
     if agg_node.same_index:
         assert (
@@ -1742,23 +1749,46 @@ def gen_top_level_agg_func(
         )
         if table_type is not None:
             for j, t in enumerate(table_type.arr_types):
-                if j not in agg_node.in_key_inds and t == bodo.dict_str_arr_type:
+                unsupported = any(
+                    info[0].ftype not in ("min", "max", "first", "last", "sum")
+                    for info in agg_node.gb_info_in[j]
+                )
+                if (
+                    j not in agg_node.in_key_inds
+                    and t == bodo.dict_str_arr_type
+                    and unsupported
+                ):
                     func_text += f"    arg0 = set_table_data(arg0, {j}, decode_if_dict_array(get_table_data(arg0, {j})))\n"
-
         for i in range(1, len(agg_node.in_vars)):
             v = agg_node.in_vars[i]
             if v is None:
                 continue
             var_typ = typemap[v.name]
             col_no = agg_node.n_in_table_arrays + i - 1
-            if col_no not in agg_node.in_key_inds and var_typ == bodo.dict_str_arr_type:
+            unsupported = any(
+                info[0].ftype not in ("min", "max", "first", "last", "sum")
+                for info in agg_node.gb_info_in[i]
+            )
+            if (
+                col_no not in agg_node.in_key_inds
+                and var_typ == bodo.dict_str_arr_type
+                and unsupported
+            ):
                 func_text += f"    arg{col_no} = decode_if_dict_array(arg{col_no})\n"
     else:
         for i, v in enumerate(agg_node.in_vars):
             if v is None:
                 continue
             var_typ = typemap[v.name]
-            if i not in agg_node.in_key_inds and var_typ == bodo.dict_str_arr_type:
+            unsupported = any(
+                info[0].ftype not in ("min", "max", "first", "last", "sum")
+                for info in agg_node.gb_info_in[i]
+            )
+            if (
+                i not in agg_node.in_key_inds
+                and var_typ == bodo.dict_str_arr_type
+                and unsupported
+            ):
                 func_text += f"    arg{i} = decode_if_dict_array(arg{i})\n"
 
     # convert arrays to cpp table, format: key columns, data columns, Index column
@@ -2139,7 +2169,6 @@ def create_dummy_table(data_types):
             "alloc_type": bodo.utils.utils.alloc_type,
         }
     )
-
     loc_vars = {}
     exec(func_text, glbls, loc_vars)
     return loc_vars["impl"]
