@@ -48,6 +48,7 @@ from bodo.libs.array import (
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.decimal_arr_ext import Decimal128Type
+from bodo.libs.dict_arr_ext import DictionaryArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
@@ -292,8 +293,6 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
     If the operation is not feasible (e.g. summing dates) then an error message
     is passed upward to be decided according to the context.
     """
-    if func_name not in ("size", "count"):
-        arr_type = to_str_arr_if_dict_array(arr_type)
     is_list_string = arr_type == ArrayItemArrayType(string_array_type)
     in_dtype = arr_type.dtype
     # Bodo don't support DatetimeTimeDeltaType. use (timedelta64 instead)
@@ -532,7 +531,8 @@ def get_agg_typ(
         for c in columns:
             ind = grp.df_type.column_index[c]
             data = grp.df_type.data[ind]  # type of input column
-            data = to_str_arr_if_dict_array(data)
+            if func_name not in ("min", "first", "last", "max"):
+                data = to_str_arr_if_dict_array(data)
             e_column_type = ColumnType.NonNumericalColumn.value
             if isinstance(data, (types.Array, IntegerArrayType)) and isinstance(
                 data.dtype, (types.Integer, types.Float)
@@ -658,9 +658,11 @@ def get_agg_typ(
                 out_dtype, err_msg = get_groupby_output_dtype(
                     data, func_name, grp.df_type.index
                 )
-
             if err_msg == "ok":
-                out_arr = to_str_arr_if_dict_array(out_dtype)
+                if func_name not in ("min", "max", "first", "last"):
+                    out_arr = to_str_arr_if_dict_array(out_dtype)
+                else:
+                    out_arr = out_dtype
                 out_data.append(out_arr)
                 out_columns.append(c)
                 if func_name == "agg":
@@ -728,7 +730,8 @@ def get_agg_typ(
             if func_name in ("size", "ngroup")
             else types.StringLiteral(grp.selection[0])
         )
-        out_res = SeriesType(dtype, index=index, name_typ=name_type)
+        is_dict = isinstance(out_data[0], DictionaryArrayType)
+        out_res = SeriesType(dtype, index=index, name_typ=name_type, is_dict=is_dict)
     return signature(out_res, *args), gb_info
 
 
@@ -1048,7 +1051,7 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         gb_info[(c, name_operation)] = c
         ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
-        if name_operation not in ("size", "count"):
+        if name_operation not in ("min", "max", "first", "last", "size", "count"):
             data = to_str_arr_if_dict_array(data)
         if name_operation == "cumprod":
             if not isinstance(data.dtype, (types.Integer, types.Float)):

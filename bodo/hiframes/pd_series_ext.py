@@ -66,14 +66,16 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
 
     ndim = 1
 
-    def __init__(self, dtype, data=None, index=None, name_typ=None, dist=None):
+    def __init__(
+        self, dtype, data=None, index=None, name_typ=None, dist=None, is_dict=False
+    ):
         from bodo.hiframes.pd_index_ext import RangeIndexType
         from bodo.transforms.distributed_analysis import Distribution
 
         # keeping data array in type since operators can make changes such
         # as making array unaligned etc.
         # data is underlying array type and can have different dtype
-        data = dtype_to_array_type(dtype) if data is None else data
+        data = dtype_to_array_type(dtype, is_dict) if data is None else data
         # store regular dtype instead of IntDtype to avoid errors
         dtype = dtype.dtype if isinstance(dtype, IntDtype) else dtype
         self.dtype = dtype
