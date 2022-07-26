@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import pyarrow as pa
 from bodo_iceberg_connector.catalog_conn import gen_file_loc, parse_conn_str
@@ -17,8 +17,8 @@ def commit_write(
     db_name: str,
     table_name: str,
     table_loc: str,
-    fnames: list[str],
-    all_metrics: Dict[str, list[Any]],
+    fnames: List[str],
+    all_metrics: Dict[str, List[Any]],
     iceberg_schema_id: Optional[int],
     pa_schema: pa.Schema,
     partition_spec: Optional[str],
