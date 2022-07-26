@@ -1,12 +1,12 @@
 import os
 import sys
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from bodo_iceberg_connector.errors import IcebergError
 
 
-def _get_first(elems: dict[str, List[str]], param: str) -> Optional[str]:
+def _get_first(elems: Dict[str, List[str]], param: str) -> Optional[str]:
     elem = elems.get(param, None)
     return elem[0] if elem and len(elem) > 0 else None
 
