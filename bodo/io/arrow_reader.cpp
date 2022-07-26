@@ -99,6 +99,9 @@ bool arrowBodoTypesEqual(std::shared_ptr<arrow::DataType> arrow_type,
         return true;
     if (arrow_type->id() == Type::STRING && pq_type == Bodo_CTypes::STRING)
         return true;
+    if (arrow_type->id() == Type::LARGE_STRING &&
+        pq_type == Bodo_CTypes::STRING)
+        return true;
     if (arrow_type->id() == Type::BINARY && pq_type == Bodo_CTypes::BINARY)
         return true;
     // TODO: add timestamp[ns]
@@ -386,15 +389,20 @@ class StringBuilder : public TableBuilder::BuilderColumn {
         // NOTE: arrow::StringArray is a subclass of arrow::BinaryArray.
         // We don't need StringArray specific methods or attributes, so we
         // use BinaryArray everywhere.
+        // Same for arrow::LargeStringArray and arrow::LargeBinaryArray.
         for (auto arr : arrays) {
-            auto str_arr = std::dynamic_pointer_cast<arrow::BinaryArray>(arr);
-            const int64_t n_strings = str_arr->length();
-            const int64_t str_start_offset = str_arr->data()->offset;
-            const uint32_t* in_offsets =
-                (uint32_t*)str_arr->value_offsets()->data();
-            total_n_strings += n_strings;
-            total_n_chars += in_offsets[str_start_offset + n_strings] -
-                             in_offsets[str_start_offset];
+            if (arrow::is_binary_like(arr->type_id())) {
+                this->update_num_strings_num_chars_from_array<
+                    arrow::BinaryArray, uint32_t>(arr, total_n_strings,
+                                                  total_n_chars);
+            } else if (arrow::is_large_binary_like(arr->type_id())) {
+                this->update_num_strings_num_chars_from_array<
+                    arrow::LargeBinaryArray, uint64_t>(arr, total_n_strings,
+                                                       total_n_chars);
+            } else {
+                throw std::runtime_error(
+                    "Unsupported array type provided to StringBuilder.");
+            }
         }
         out_array = alloc_array(total_n_strings, total_n_chars, -1,
                                 bodo_array_type::STRING, dtype, 0, -1);
@@ -405,27 +413,17 @@ class StringBuilder : public TableBuilder::BuilderColumn {
         offset_t* out_offsets = (offset_t*)out_array->data2;
         out_offsets[0] = 0;
         for (auto arr : arrays) {
-            auto str_arr = std::dynamic_pointer_cast<arrow::BinaryArray>(arr);
-            const int64_t n_strings = str_arr->length();
-            const int64_t str_start_offset = str_arr->data()->offset;
-            const uint32_t* in_offsets =
-                (uint32_t*)str_arr->value_offsets()->data();
-            const int64_t n_chars = in_offsets[str_start_offset + n_strings] -
-                                    in_offsets[str_start_offset];
-            memcpy(out_array->data1 + n_chars_copied,
-                   str_arr->value_data()->data() + in_offsets[str_start_offset],
-                   sizeof(char) * n_chars);  // data
-            for (int64_t i = 0; i < n_strings; i++) {
-                out_offsets[n_strings_copied + i + 1] =
-                    out_offsets[n_strings_copied + i] +
-                    in_offsets[str_start_offset + i + 1] -
-                    in_offsets[str_start_offset + i];
-                if (!str_arr->IsNull(i))
-                    SetBitTo((uint8_t*)out_array->null_bitmask,
-                             n_strings_copied + i, true);
+            if (arrow::is_binary_like(arr->type_id())) {
+                this->fill_from_array<arrow::BinaryArray, uint32_t>(
+                    arr, out_array, out_offsets, n_strings_copied,
+                    n_chars_copied);
+            } else {
+                // We don't need to check here since it would've
+                // errored-out in the previous for-loop.
+                this->fill_from_array<arrow::LargeBinaryArray, uint64_t>(
+                    arr, out_array, out_offsets, n_strings_copied,
+                    n_chars_copied);
             }
-            n_strings_copied += n_strings;
-            n_chars_copied += n_chars;
         }
         out_offsets[total_n_strings] = static_cast<offset_t>(total_n_chars);
         arrays.clear();  // free Arrow memory
@@ -433,6 +431,48 @@ class StringBuilder : public TableBuilder::BuilderColumn {
     }
 
    private:
+    template <typename ARROW_ARRAY_TYPE, typename OFFSET_TYPE>
+    void update_num_strings_num_chars_from_array(
+        const std::shared_ptr<arrow::Array>& arr, int64_t& total_n_strings,
+        int64_t& total_n_chars) {
+        auto str_arr = std::dynamic_pointer_cast<ARROW_ARRAY_TYPE>(arr);
+        const int64_t n_strings = str_arr->length();
+        const int64_t str_start_offset = str_arr->data()->offset;
+        const OFFSET_TYPE* in_offsets =
+            (OFFSET_TYPE*)str_arr->value_offsets()->data();
+        total_n_strings += n_strings;
+        total_n_chars += in_offsets[str_start_offset + n_strings] -
+                         in_offsets[str_start_offset];
+    }
+
+    template <typename ARROW_ARRAY_TYPE, typename OFFSET_TYPE>
+    void fill_from_array(const std::shared_ptr<arrow::Array>& arr,
+                         array_info* out_array, offset_t* out_offsets,
+                         int64_t& n_strings_copied, int64_t& n_chars_copied) {
+        auto str_arr = std::dynamic_pointer_cast<ARROW_ARRAY_TYPE>(arr);
+        const int64_t n_strings = str_arr->length();
+        const int64_t str_start_offset = str_arr->data()->offset;
+        const OFFSET_TYPE* in_offsets =
+            (OFFSET_TYPE*)str_arr->value_offsets()->data();
+
+        const int64_t n_chars = in_offsets[str_start_offset + n_strings] -
+                                in_offsets[str_start_offset];
+        memcpy(out_array->data1 + n_chars_copied,
+               str_arr->value_data()->data() + in_offsets[str_start_offset],
+               sizeof(char) * n_chars);  // data
+        for (int64_t i = 0; i < n_strings; i++) {
+            out_offsets[n_strings_copied + i + 1] =
+                out_offsets[n_strings_copied + i] +
+                in_offsets[str_start_offset + i + 1] -
+                in_offsets[str_start_offset + i];
+            if (!str_arr->IsNull(i))
+                SetBitTo((uint8_t*)out_array->null_bitmask,
+                         n_strings_copied + i, true);
+        }
+        n_strings_copied += n_strings;
+        n_chars_copied += n_chars;
+    }
+
     const Bodo_CTypes::CTypeEnum dtype;  // STRING or BINARY
     arrow::ArrayVector arrays;
 };
@@ -447,8 +487,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
                                    int64_t length)
         : length(length) {
         //  'type' comes from the schema returned from
-        //  bodo.io.parquet_pio.get_parquet_dataset() which always has string
-        //  columns as STRING (not DICT)
+        //  bodo.io.parquet_pio.get_parquet_dataset() which always has
+        //  string columns as STRING (not DICT)
         Bodo_CTypes::CTypeEnum dtype = arrow_to_bodo_type(type);
         if (dtype != Bodo_CTypes::CTypeEnum::STRING &&
             dtype != Bodo_CTypes::CTypeEnum::BINARY) {
@@ -634,9 +674,9 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
         if (out_array != nullptr) return out_array;
         std::shared_ptr<::arrow::Array> out_arrow_array;
         // TODO make this more efficient:
-        // This copies to new buffers managed by Arrow, and then we copy again
-        // to our own buffers in nested_array_to_c called by info_to_array
-        // https://bodo.atlassian.net/browse/BE-1426
+        // This copies to new buffers managed by Arrow, and then we copy
+        // again to our own buffers in nested_array_to_c called by
+        // info_to_array https://bodo.atlassian.net/browse/BE-1426
         out_arrow_array =
             arrow::Concatenate(arrays, arrow::default_memory_pool())
                 .ValueOrDie();
@@ -701,7 +741,7 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                    (str_as_dict_cols.count(field->name()) > 0)) {
             columns.push_back(
                 new DictionaryEncodedStringBuilder(field->type(), num_rows));
-        } else if (arrow::is_binary_like(type)) {
+        } else if (arrow::is_base_binary_like(type)) {
             columns.push_back(new StringBuilder(field->type()));
         } else if (type == arrow::Type::LIST &&
                    arrow::is_binary_like(
@@ -718,7 +758,8 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
 
 void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
     // NOTE table could be sliced, so the column builders need to take into
-    // account the offset and length attributes of the Arrow arrays in the table
+    // account the offset and length attributes of the Arrow arrays in the
+    // table
     for (size_t i = 0; i < columns.size(); i++) {
         columns[i]->append(table->column(i));
     }
@@ -813,9 +854,9 @@ void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
         this->count = dist_get_node_portion(total_rows, nranks, rank);
 
         // head-only optimization ("limit pushdown"): user code may only use
-        // df.head() so we just read the necessary rows. This reads the data in
-        // an imbalanced way. The assumed use case is printing df.head() which
-        // looks better if the data is in fewer ranks.
+        // df.head() so we just read the necessary rows. This reads the data
+        // in an imbalanced way. The assumed use case is printing df.head()
+        // which looks better if the data is in fewer ranks.
         // TODO: explore if balancing data is necessary for some use cases
         if (tot_rows_to_read != -1) {
             // no rows to read on this process
@@ -835,8 +876,8 @@ void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
         if (this->count > 0) {
             // total number of rows of all the pieces we iterate through
             int64_t count_rows = 0;
-            // track total rows that this rank will read from pieces we iterate
-            // through
+            // track total rows that this rank will read from pieces we
+            // iterate through
             int64_t rows_added = 0;
             while ((piece = PyIter_Next(iterator))) {
                 PyObject* num_rows_piece_py =
@@ -847,10 +888,10 @@ void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
                 int64_t num_rows_piece = PyLong_AsLongLong(num_rows_piece_py);
                 Py_DECREF(num_rows_piece_py);
 
-                // we skip all initial pieces whose total row count is less than
-                // start_row_global (first row of my chunk). After that, we get
-                // all subsequent pieces until the number of rows is greater or
-                // equal to number of rows in my chunk
+                // we skip all initial pieces whose total row count is less
+                // than start_row_global (first row of my chunk). After
+                // that, we get all subsequent pieces until the number of
+                // rows is greater or equal to number of rows in my chunk
                 if ((num_rows_piece > 0) &&
                     (start_row_global < count_rows + num_rows_piece)) {
                     int64_t rows_added_from_piece;

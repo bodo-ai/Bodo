@@ -71,7 +71,6 @@ from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.distributed_api import bcast_scalar
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.libs.str_ext import string_type, unicode_to_utf8
@@ -412,7 +411,7 @@ class DataFramePayloadType(types.Type):
         return self.__class__.__name__, (self._code,)
 
 
-# TODO: encapsulate in meminfo since dataframe is mutible, for example:
+# TODO: encapsulate in meminfo since dataframe is mutable, for example:
 # df = pd.DataFrame({'A': A})
 # df2 = df
 # if cond:
@@ -4191,7 +4190,11 @@ def to_sql_overload(
     # Additional entry
     _is_parallel=False,
 ):
+    import warnings
+
     check_runtime_cols_unsupported(df, "DataFrame.to_sql()")
+    df: DataFrameType = df
+
     if is_overload_none(schema):
         if bodo.get_rank() == 0:
             import warnings
@@ -4201,79 +4204,144 @@ def to_sql_overload(
                     f"DataFrame.to_sql(): schema argument is recommended to avoid permission issues when writing the table."
                 )
             )
+
     if not (is_overload_none(chunksize) or isinstance(chunksize, types.Integer)):
         raise BodoError(
             "DataFrame.to_sql(): 'chunksize' argument must be an integer if provided."
         )
 
-    def _impl(
-        df,
-        name,
-        con,
-        schema=None,
-        if_exists="fail",
-        index=True,
-        index_label=None,
-        chunksize=None,
-        dtype=None,
-        method=None,
-        _is_parallel=False,
-    ):  # pragma: no cover
-        """Nodes number 0 does the first initial insertion into the database.
-        Following nodes do the insertion of the rest if no error happened.
-        The bcast_scalar is used to synchronize the process between 0 and the rest.
-        """
-        rank = bodo.libs.distributed_api.get_rank()
-        err_msg = "unset"
-        # Rank 0 writes first and we wait for a response. If this is done in parallel,
-        # rank 0 may need to create the table, otherwise if this is replicated only
-        # rank 0 writes and the other ranks wait to propagate any error message.
-        if rank != 0:
-            err_msg = bcast_scalar(err_msg)
-        # Rank 0 creates the table. This only writes a chunk of the data
-        # to enable futher parallelism if data isn't replicated.
-        elif rank == 0:
-            err_msg = to_sql_exception_guard_encaps(
-                df,
-                name,
-                con,
-                schema,
-                if_exists,
-                index,
-                index_label,
-                chunksize,
-                dtype,
-                method,
-                True,
-                _is_parallel,
-            )
-            err_msg = bcast_scalar(err_msg)
+    func_text = f"def df_to_sql(df, name, con, schema=None, if_exists='fail', index=True, index_label=None, chunksize=None, dtype=None, method=None, _is_parallel=False):\n"
 
-        # For all nodes we append to existing table after rank 0 creates the table.
-        if_exists = "append"
+    # Iceberg case:
+    func_text += f"    if con.startswith('iceberg'):\n"
+    func_text += f"        con_str = bodo.io.iceberg.format_iceberg_conn_njit(con)\n"
+    func_text += f"        if schema is None:\n"
+    func_text += f"            raise ValueError('DataFrame.to_sql(): schema must be provided when writing to an Iceberg table.')\n"
+    func_text += f"        if chunksize is not None:\n"
+    func_text += f"            raise ValueError('DataFrame.to_sql(): chunksize not supported for Iceberg tables.')\n"
+    func_text += f"        if index and bodo.get_rank() == 0:\n"
+    func_text += (
+        f"            warnings.warn('index is not supported for Iceberg tables.')\n"
+    )
+    func_text += f"        if index_label is not None and bodo.get_rank() == 0:\n"
+    func_text += f"            warnings.warn('index_label is not supported for Iceberg tables.')\n"
 
-        # The writing of the rest of the data. If data isn't parallel, then
-        # rank 0 has already written all of the data in the previous call.
-        if _is_parallel and err_msg == "all_ok":
-            err_msg = to_sql_exception_guard_encaps(
-                df,
-                name,
-                con,
-                schema,
-                if_exists,
-                index,
-                index_label,
-                chunksize,
-                dtype,
-                method,
-                False,
-                _is_parallel,
-            )
-        if err_msg != "all_ok":
-            # TODO: We cannot do a simple raise ValueError(err_msg).
-            print("err_msg=", err_msg)
-            raise ValueError("error in to_sql() operation")
+    # XXX A lot of this is copied from the to_parquet impl, so might be good to refactor
 
+    if df.is_table_format:
+        func_text += f"        py_table = get_dataframe_table(df)\n"
+        func_text += f"        table = py_table_to_cpp_table(py_table, py_table_typ)\n"
+    else:
+        # convert dataframe columns to array_info
+        data_args = ", ".join(
+            f"array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
+            for i in range(len(df.columns))
+        )
+        func_text += f"        info_list = [{data_args}]\n"
+        func_text += f"        table = arr_info_list_to_table(info_list)\n"
+
+    if df.has_runtime_cols:
+        func_text += f"        columns_index = get_dataframe_column_names(df)\n"
+        # Note: C++ assumes the array is always a string array.
+        func_text += f"        names_arr = index_to_array(columns_index)\n"
+        func_text += f"        col_names = array_to_info(names_arr)\n"
+    else:
+        func_text += f"        col_names = array_to_info(col_names_arr)\n"
+
+    # We don't write pandas metadata for Iceberg (at least for now)
+
+    # Partition columns not supported through this API.
+
+    func_text += (
+        "        bodo.io.iceberg.iceberg_write(\n"
+        "            name,\n"
+        "            con_str,\n"
+        "            schema,\n"
+        "            table,\n"
+        "            col_names,\n"
+        "            if_exists,\n"
+        "            _is_parallel,\n"
+        "            pyarrow_table_schema,\n"
+        "        )\n"
+    )
+    func_text += f"        delete_table_decref_arrays(table)\n"
+    func_text += f"        delete_info_decref_array(col_names)\n"
+
+    if df.has_runtime_cols:
+        col_names_arr = None
+    else:
+        # Pandas raises a ValueError if columns aren't strings.
+        # Similarly if columns aren't strings we have a segfault
+        # in C++.
+        for col in df.columns:
+            if not isinstance(col, str):
+                raise BodoError(
+                    "DataFrame.to_sql(): must have string column names for Iceberg tables"
+                )
+        col_names_arr = pd.array(df.columns)
+
+    # Non-Iceberg case
+    func_text += f"    else:\n"
+    # Nodes number 0 does the first initial insertion into the database.
+    # Following nodes do the insertion of the rest if no error happened.
+    # The bcast_scalar is used to synchronize the process between 0 and the rest.
+    func_text += f"        rank = bodo.libs.distributed_api.get_rank()\n"
+    func_text += f"        err_msg = 'unset'\n"
+    # Rank 0 writes first and we wait for a response. If this is done in parallel,
+    # rank 0 may need to create the table, otherwise if this is replicated only
+    # rank 0 writes and the other ranks wait to propagate any error message.
+    func_text += f"        if rank != 0:\n"
+    func_text += (
+        f"            err_msg = bodo.libs.distributed_api.bcast_scalar(err_msg)\n"
+    )
+    # Rank 0 creates the table. This only writes a chunk of the data
+    # to enable futher parallelism if data isn't replicated.
+    func_text += f"        elif rank == 0:\n"
+    func_text += f"            err_msg = to_sql_exception_guard_encaps(\n"
+    func_text += f"                          df, name, con, schema, if_exists, index, index_label,\n"
+    func_text += f"                          chunksize, dtype, method,\n"
+    func_text += f"                          True, _is_parallel,\n"
+    func_text += f"                      )\n"
+    func_text += (
+        f"            err_msg = bodo.libs.distributed_api.bcast_scalar(err_msg)\n"
+    )
+    # For all nodes we append to existing table after rank 0 creates the table.
+    func_text += f"        if_exists = 'append'\n"
+    # The writing of the rest of the data. If data isn't parallel, then
+    # rank 0 has already written all of the data in the previous call.
+    func_text += f"        if _is_parallel and err_msg == 'all_ok':\n"
+    func_text += f"            err_msg = to_sql_exception_guard_encaps(\n"
+    func_text += f"                          df, name, con, schema, if_exists, index, index_label,\n"
+    func_text += f"                          chunksize, dtype, method,\n"
+    func_text += f"                          False, _is_parallel,\n"
+    func_text += f"                      )\n"
+    func_text += f"        if err_msg != 'all_ok':\n"
+    # TODO: We cannot do a simple raise ValueError(err_msg).
+    func_text += f"            print('err_msg=', err_msg)\n"
+    func_text += f"            raise ValueError('error in to_sql() operation')\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "bodo": bodo,
+            "unicode_to_utf8": unicode_to_utf8,
+            "array_to_info": array_to_info,
+            "get_dataframe_table": get_dataframe_table,
+            "py_table_typ": df.table_type,
+            "col_names_arr": col_names_arr,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
+            "delete_info_decref_array": delete_info_decref_array,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "index_to_array": index_to_array,
+            "pyarrow_table_schema": bodo.io.iceberg.pyarrow_schema(df),
+            "to_sql_exception_guard_encaps": to_sql_exception_guard_encaps,
+            "warnings": warnings,
+        },
+        loc_vars,
+    )
+    _impl = loc_vars["df_to_sql"]
     return _impl
 
 

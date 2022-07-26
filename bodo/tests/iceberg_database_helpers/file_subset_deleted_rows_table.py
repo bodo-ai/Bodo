@@ -26,7 +26,15 @@ def create_table(table_name="file_subset_deleted_rows_table", spark=None):
             "K": np.array([54] * 20, np.int64),
         }
     )
-    schema = spark_types.StructType(
+    sql_schema = [
+        ("A", "string"),
+        ("B", "string"),
+        ("C", "string"),
+        ("D", "int"),
+        ("E", "float"),
+        ("K", "long"),
+    ]
+    spark_schema = spark_types.StructType(
         [
             spark_types.StructField("A", spark_types.StringType(), True),
             spark_types.StructField("B", spark_types.StringType(), True),
@@ -36,7 +44,7 @@ def create_table(table_name="file_subset_deleted_rows_table", spark=None):
             spark_types.StructField("K", spark_types.LongType(), True),
         ]
     )
-    create_iceberg_table(df, schema, table_name, spark)
+    create_iceberg_table(df, sql_schema, spark_schema, table_name, spark)
 
     # Add more data
     print("Adding some data...")

@@ -23,14 +23,19 @@ def create_table(table_name="partitions_general_table", spark=None):
             "C": pd.Series(["ABC", "DEF"] * 10),
         }
     )
-    schema = spark_types.StructType(
+    sql_schema = [
+        ("A", "double"),
+        ("B", "long"),
+        ("C", "string", "not null"),
+    ]
+    spark_schema = spark_types.StructType(
         [
             spark_types.StructField("A", spark_types.DoubleType(), True),
             spark_types.StructField("B", spark_types.LongType(), True),
             spark_types.StructField("C", spark_types.StringType(), False),
         ]
     )
-    create_iceberg_table(df, schema, table_name, spark)
+    create_iceberg_table(df, sql_schema, spark_schema, table_name, spark)
 
     # Add partition field
     print("Adding partition field (year)...")

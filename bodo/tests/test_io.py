@@ -847,6 +847,7 @@ def test_read_csv_bad_dtype_column(datapath, memory_leak_check):
     # Set check_dtype=False for nullable differences
     check_func(test_impl, (fname,), check_dtype=False)
 
+
 def test_read_csv_nonascii(datapath, memory_leak_check):
     """Checks calling read_csv() with non-ascii data"""
 
@@ -856,6 +857,7 @@ def test_read_csv_nonascii(datapath, memory_leak_check):
         return pd.read_csv(fname)
 
     check_func(test_impl, (fname,))
+
 
 @pytest.mark.slow
 def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
@@ -1018,6 +1020,7 @@ def test_read_parquet_list_files(datapath, memory_leak_check):
     check_func(test_impl, (), py_output=py_output)
     fpaths = [datapath("example.parquet"), datapath("example2.parquet")]
     check_func(test_impl2, (fpaths,), py_output=py_output)
+
 
 def test_read_parquet_nonascii(datapath, memory_leak_check):
     """Checks calling read_parquet() with non-ascii data"""
@@ -4120,6 +4123,36 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
     finally:
         if bodo.get_rank() == 0:
             os.remove(fname)
+
+
+def test_read_parquet_large_string_array(memory_leak_check):
+    """
+    Test that we can read `pa.large_string` arrays.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    # Use both large and regular, just to confirm that they both work
+    table = pa.table(
+        [
+            pa.array(["A", "B", "C", "D"] * 25, type=pa.large_string()),
+            pa.array(["lorem", "ipsum"] * 50, type=pa.string()),
+            pa.array((["A"] * 10) + (["b"] * 90), type=pa.large_string()),
+        ],
+        names=["A", "B", "C"],
+    )
+
+    fname = "large_str_eg.pq"
+    with ensure_clean(fname):
+        if bodo.get_rank() == 0:
+            pq.write_table(table, fname)
+        bodo.barrier()
+
+        def impl(path):
+            df = pd.read_parquet(path)
+            return df
+
+        check_func(impl, (fname,))
 
 
 def test_csv_dtype_unicode(memory_leak_check):

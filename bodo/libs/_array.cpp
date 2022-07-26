@@ -71,8 +71,10 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
         if (_null_bitmap)
             null_bitmap = std::make_shared<arrow::Buffer>(_null_bitmap,
                                                           (length + 7) >> 3);
+        // We use `element` for consistency.
+        // TODO [BE-3247] We should specify nullability of the fields here.
         std::shared_ptr<arrow::Field> field =
-            std::make_shared<arrow::Field>("field0", ai.array->type());
+            std::make_shared<arrow::Field>("element", ai.array->type());
         std::shared_ptr<arrow::Array> array =
 #if OFFSET_BITWIDTH == 32
             std::make_shared<arrow::ListArray>(arrow::list(field), length,
@@ -99,6 +101,7 @@ ArrayBuildInfo nested_array_from_c(const int* types, const uint8_t** buffers,
                 types, buffers, lengths, field_names, type_pos, buf_pos,
                 length_pos, name_pos + 1);
             child_arrays.push_back(ai.array);
+            // TODO [BE-3247] We should specify nullability of the fields here.
             fields.push_back(
                 std::make_shared<arrow::Field>(e_name, ai.array->type()));
             type_pos = ai.type_pos;
@@ -1391,9 +1394,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "delete_table_decref_arrays",
         PyLong_FromVoidPtr((void*)(&delete_table_decref_arrays)));
-    PyObject_SetAttrString(
-        m, "decref_table_array",
-        PyLong_FromVoidPtr((void*)(&decref_table_array)));
+    PyObject_SetAttrString(m, "decref_table_array",
+                           PyLong_FromVoidPtr((void*)(&decref_table_array)));
     // Not covered by error handler
     PyObject_SetAttrString(m, "delete_table",
                            PyLong_FromVoidPtr((void*)(&delete_table)));

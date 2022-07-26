@@ -47,7 +47,8 @@ import bodo.ir.sort
 from bodo.ir import csv_ext
 from bodo.ir import sql_ext
 from bodo.ir import json_ext
-from bodo.io.parquet_pio import ParquetHandler, _get_numba_typ_from_pa_typ
+from bodo.io.parquet_pio import ParquetHandler
+from bodo.io.helpers import _get_numba_typ_from_pa_typ
 from bodo.utils.typing import ColNamesMetaType
 
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType

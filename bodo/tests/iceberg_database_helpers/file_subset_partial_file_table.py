@@ -22,13 +22,17 @@ def create_table(table_name="file_subset_partial_file_table", spark=None):
             "B": np.arange(0, 2000000, dtype=np.int64),
         }
     )
-    schema = spark_types.StructType(
+    sql_schema = [
+        ("A", "string"),
+        ("B", "long"),
+    ]
+    spark_schema = spark_types.StructType(
         [
             spark_types.StructField("A", spark_types.StringType(), True),
             spark_types.StructField("B", spark_types.LongType(), True),
         ]
     )
-    create_iceberg_table(df, schema, table_name, spark)
+    create_iceberg_table(df, sql_schema, spark_schema, table_name, spark)
 
     # Delete some rows
     print("Deleting some rows...")

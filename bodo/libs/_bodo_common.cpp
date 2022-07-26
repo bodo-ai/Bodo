@@ -84,6 +84,12 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
         case arrow::Type::TIMESTAMP:
             return Bodo_CTypes::DATETIME;
         case arrow::Type::STRING:
+        case arrow::Type::LARGE_STRING:
+            // The main difference between
+            // STRING and LARGE_STRING is the offset size
+            // (uint32 for STRING and uint64 for LARGE_STRING).
+            // We use 64 bit offsets for everything in Bodo,
+            // so these two types are equivalent for us.
             return Bodo_CTypes::STRING;
         case arrow::Type::BINARY:
             return Bodo_CTypes::BINARY;

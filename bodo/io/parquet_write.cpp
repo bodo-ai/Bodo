@@ -6,15 +6,7 @@
 #undef timezone
 #endif
 
-#include "../libs/_array_hash.h"
-#include "../libs/_bodo_common.h"
-#include "../libs/_datetime_ext.h"
-#include "_fs_io.h"
-#include "arrow/ipc/writer.h"
-#include "arrow/util/base64.h"
-#include "parquet/arrow/schema.h"
-#include "parquet/arrow/writer.h"
-#include "parquet/file_writer.h"
+#include "parquet_write.h"
 
 // In general, when reading a parquet dataset we want it to have at least
 // the same number of row groups as the number of processes we are reading with,
@@ -61,11 +53,32 @@ static void CastBodoDateToArrowDate32(const int64_t *input, int64_t length,
     }
 }
 
+/**
+ * @brief Create Arrow Chunked Array from Bodo's array_info
+ *
+ * @param pool Arrow memory pool
+ * @param array Bodo array to create Arrow array from
+ * @param col_name Name of the column
+ * @param[out] schema_vector Arrow schema to populate
+ * @param[out] out Arrow chunk array created from Bodo Array
+ * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
+ * string ("") to not specify one. This is primarily required for Iceberg, for
+ * which we specify "UTC".
+ * @param time_unit Time-Unit (NANO / MICRO / MILLI / SECOND) to use for
+ * Datetime (/timestamp) arrays. Bodo arrays store information in nanoseconds.
+ * When this is not nanoseconds, the data is converted to the specified type
+ * before being copied to the Arrow array. Note that in case it's not
+ * nanoseconds, we make a copy of the integer array (array->data1) since we
+ * cannot modify the existing array, as it might be used elsewhere. This is
+ * primarily required for Iceberg which requires data to be written in
+ * microseconds.
+ */
 void bodo_array_to_arrow(
     arrow::MemoryPool *pool, const array_info *array,
     const std::string &col_name,
     std::vector<std::shared_ptr<arrow::Field>> &schema_vector,
-    std::shared_ptr<arrow::ChunkedArray> *out) {
+    std::shared_ptr<arrow::ChunkedArray> *out, const std::string &tz,
+    arrow::TimeUnit::type &time_unit) {
     // allocate null bitmap
     std::shared_ptr<arrow::ResizableBuffer> null_bitmap;
     int64_t null_bytes = arrow::bit_util::BytesForBits(array->length);
@@ -130,10 +143,10 @@ void bodo_array_to_arrow(
 
         // Recurse on the dictionary
         bodo_array_to_arrow(pool, array->info1, col_name, dummy_schema_vector,
-                            &dict_parts[0]);
+                            &dict_parts[0], tz, time_unit);
         // Recurse on the index array
         bodo_array_to_arrow(pool, array->info2, col_name, dummy_schema_vector,
-                            &dict_parts[1]);
+                            &dict_parts[1], tz, time_unit);
 
         // Extract the types from the dictionary call.
         std::shared_ptr<arrow::DataType> type = arrow::dictionary(
@@ -217,7 +230,12 @@ void bodo_array_to_arrow(
             case Bodo_CTypes::DATETIME:
                 // input from Bodo uses int64 for datetimes (datetime64[ns])
                 in_num_bytes = sizeof(int64_t) * array->length;
-                type = arrow::timestamp(arrow::TimeUnit::NANO);
+                if (tz.length() > 0) {
+                    type = arrow::timestamp(time_unit, tz);
+                } else {
+                    type = arrow::timestamp(time_unit);
+                }
+
                 // convert Bodo NaT to Arrow null bitmap
                 for (int64_t i = 0; i < array->length; i++) {
                     if (array->at<int64_t>(i) ==
@@ -247,6 +265,44 @@ void bodo_array_to_arrow(
             CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
             CastBodoDateToArrowDate32((int64_t *)array->data1, array->length,
                                       (int32_t *)out_buffer->mutable_data());
+        } else if (array->dtype == Bodo_CTypes::DATETIME &&
+                   time_unit != arrow::TimeUnit::NANO) {
+            // For datetime arrays, Bodo stores information in nanoseconds.
+            // If the Arrow arrays should store them in a different time unit,
+            // we need to convert the nanoseconds into the specified time unit.
+            // This is primarily used for Iceberg, which requires data to be
+            // written in microseconds.
+            int64_t divide_factor;
+            switch (time_unit) {
+                case arrow::TimeUnit::MICRO:
+                    divide_factor = 1000;
+                    break;
+                case arrow::TimeUnit::MILLI:
+                    divide_factor = 1000000;
+                    break;
+                case arrow::TimeUnit::SECOND:
+                    divide_factor = 1000000000;
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "Unrecognized time_unit passed to "
+                        "bodo_array_to_arrow.");
+            };
+
+            // Allocate buffer to store timestamp (int64) values in Arrow
+            // format. We cannot reuse Bodo buffers, since we don't want to
+            // modify values there as they might be used elsewhere.
+            // in_num_bytes in this case is (sizeof(int64_t) * array->length)
+            arrow::Result<std::unique_ptr<arrow::Buffer>> res =
+                AllocateBuffer(in_num_bytes, pool);
+            CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
+
+            int64_t *new_data1 = (int64_t *)out_buffer->mutable_data();
+            for (size_t i = 0; i < array->length; i++) {
+                // convert to the specified time unit
+                new_data1[i] = array->at<int64_t>(i) / divide_factor;
+            }
+
         } else {
             // we can use the same input buffer (no need to cast or convert)
             out_buffer = std::make_shared<arrow::Buffer>(
@@ -456,34 +512,15 @@ static arrow::Status WriteTable(
 }
 // ----------------------------------------------------------------------------
 
-/*
- * Write the Bodo table (the chunk in this process) to a parquet file.
- * @param _path_name path of output file or directory
- * @param table table to write to parquet file
- * @param col_names_arr array containing the table's column names (index not
- * included)
- * @param index array containing the table index
- * @param write_index true if we need to write index passed in 'index', false
- * otherwise
- * @param metadata string containing table metadata
- * @param is_parallel true if the table is part of a distributed table (in this
- *        case, this process writes a file named "part-000X.parquet" where X is
- *        my rank into the directory specified by 'path_name'
- * @param write_rangeindex_to_metadata : true if writing a RangeIndex to
- * metadata
- * @param ri_start,ri_stop,ri_step start,stop,step parameters of given
- * RangeIndex
- * @param idx_name name of the given index
- * @param row_group_size Row group size in number of rows
- * @param prefix Prefix for parquet files written in distributed case
- */
-void pq_write(const char *_path_name, const table_info *table,
-              const array_info *col_names_arr, const array_info *index,
-              bool write_index, const char *metadata, const char *compression,
-              bool is_parallel, bool write_rangeindex_to_metadata,
-              const int ri_start, const int ri_stop, const int ri_step,
-              const char *idx_name, const char *bucket_region,
-              int64_t row_group_size, const char *prefix) {
+int64_t pq_write(
+    const char *_path_name, const table_info *table,
+    const array_info *col_names_arr, const array_info *index, bool write_index,
+    const char *metadata, const char *compression, bool is_parallel,
+    bool write_rangeindex_to_metadata, const int ri_start, const int ri_stop,
+    const int ri_step, const char *idx_name, const char *bucket_region,
+    int64_t row_group_size, const char *prefix,
+    std::unordered_map<std::string, std::string> schema_metadata_pairs,
+    std::string filename, std::string tz, arrow::TimeUnit::type time_unit) {
     tracing::Event ev("pq_write", is_parallel);
     ev.add_attribute("g_path", _path_name);
     ev.add_attribute("g_write_index", write_index);
@@ -531,6 +568,14 @@ void pq_write(const char *_path_name, const table_info *table,
                         num_ranks, &fs_option, &dirname, &fname, &orig_path,
                         &path_name);
 
+    // If filename is provided, use that instead of the generic one.
+    // Currently this is used for Iceberg.
+    // This will be refactored and moved to iceberg_pq_write in the
+    // next PR.
+    if ((filename.length() > 0) && is_parallel) {
+        fname = filename;
+    }
+
     // We need to create a directory when writing a distributed
     // table to a posix or hadoop filesystem.
     if (is_parallel) {
@@ -540,7 +585,7 @@ void pq_write(const char *_path_name, const table_info *table,
 
     // Do not write a file if there are no rows to write.
     if (table->nrows() == 0) {
-        return;
+        return 0;
     }
     open_outstream(fs_option, is_parallel, "parquet", dirname, fname, orig_path,
                    &out_stream, bucket_region);
@@ -565,8 +610,8 @@ void pq_write(const char *_path_name, const table_info *table,
         table->columns.size());
     for (size_t i = 0; i < table->columns.size(); i++) {
         auto col = table->columns[i];
-        bodo_array_to_arrow(pool, col, col_names[i], schema_vector,
-                            &columns[i]);
+        bodo_array_to_arrow(pool, col, col_names[i], schema_vector, &columns[i],
+                            tz, time_unit);
     }
 
     // dictionary-encoded column handling
@@ -603,17 +648,20 @@ void pq_write(const char *_path_name, const table_info *table,
         std::shared_ptr<arrow::ChunkedArray> chunked_arr;
         if (strcmp(idx_name, "null") != 0)
             bodo_array_to_arrow(pool, index, idx_name, schema_vector,
-                                &chunked_arr);
+                                &chunked_arr, tz, time_unit);
         else
             bodo_array_to_arrow(pool, index, "__index_level_0__", schema_vector,
-                                &chunked_arr);
+                                &chunked_arr, tz, time_unit);
         columns.push_back(chunked_arr);
     }
 
     std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
-    if (new_metadata.size() > 0 && new_metadata[0] != 0)
-        schema_metadata =
-            ::arrow::key_value_metadata({{"pandas", new_metadata.data()}});
+    if (new_metadata.size() > 0 && new_metadata[0] != 0) {
+        schema_metadata_pairs.insert(
+            std::make_pair("pandas", new_metadata.data()));
+    }
+    if (schema_metadata_pairs.size() > 0)
+        schema_metadata = ::arrow::key_value_metadata(schema_metadata_pairs);
 
     // make Arrow Schema object
     std::shared_ptr<arrow::Schema> schema =
@@ -648,6 +696,10 @@ void pq_write(const char *_path_name, const table_info *table,
             .coerce_timestamps(::arrow::TimeUnit::MICRO)
             ->allow_truncated_timestamps()
             ->store_schema()
+            // `enable_compliant_nested_types` ensures that nested types have
+            // 'element' as their `name`. This is important for reading Iceberg
+            // datasets written by Bodo, but also for standardization.
+            ->enable_compliant_nested_types()
             ->build();
 
     if (has_dictionary_columns) {
@@ -682,45 +734,33 @@ void pq_write(const char *_path_name, const table_info *table,
         // not needed when moving to parquet 2.0
         arrow_writer_properties, schema_for_metadata);
     CHECK_ARROW(status, "parquet::arrow::WriteTable");
+    arrow::Result<int64_t> tell_result = out_stream->Tell();
+    int64_t file_size;
+    CHECK_ARROW_AND_ASSIGN(tell_result, "arrow::io::OutputStream::Tell",
+                           file_size);
+    return file_size;
 }
 
-void pq_write_py_entry(const char *_path_name, const table_info *table,
-                       const array_info *col_names_arr, const array_info *index,
-                       bool write_index, const char *metadata,
-                       const char *compression, bool is_parallel,
-                       bool write_rangeindex_to_metadata, const int ri_start,
-                       const int ri_stop, const int ri_step,
-                       const char *idx_name, const char *bucket_region,
-                       int64_t row_group_size, const char *prefix) {
+int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
+                          const array_info *col_names_arr,
+                          const array_info *index, bool write_index,
+                          const char *metadata, const char *compression,
+                          bool is_parallel, bool write_rangeindex_to_metadata,
+                          const int ri_start, const int ri_stop,
+                          const int ri_step, const char *idx_name,
+                          const char *bucket_region, int64_t row_group_size,
+                          const char *prefix) {
     try {
-        pq_write(_path_name, table, col_names_arr, index, write_index, metadata,
-                 compression, is_parallel, write_rangeindex_to_metadata,
-                 ri_start, ri_stop, ri_step, idx_name, bucket_region,
-                 row_group_size, prefix);
+        int64_t file_size = pq_write(
+            _path_name, table, col_names_arr, index, write_index, metadata,
+            compression, is_parallel, write_rangeindex_to_metadata, ri_start,
+            ri_stop, ri_step, idx_name, bucket_region, row_group_size, prefix);
+        return file_size;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
     }
 }
 
-/*
- * Write the Bodo table (this process' chunk) to a partitioned directory of
- * parquet files. This process will write N files if it has N partitions in its
- * local data.
- * @param _path_name path of base output directory for partitioned dataset
- * @param table table to write to parquet files
- * @param col_names_arr array containing the table's column names (index not
- * included)
- * @param col_names_arr_no_partitions array containing the table's column names
- * (index and partition columns not included)
- * @param categories_table table containing categories arrays for each partition
- * column that is a categorical array. Categories could be (for example) strings
- * like "2020-01-01", "2020-01-02", etc.
- * @param partition_cols_idx indices of partition columns in table
- * @param num_partition_cols number of partition columns
- * @param is_parallel true if the table is part of a distributed table
- * @param row_group_size Row group size in number of rows
- * @param prefix Prefix to use for each file created in distributed case
- */
 void pq_write_partitioned(const char *_path_name, table_info *table,
                           const array_info *col_names_arr,
                           const array_info *col_names_arr_no_partitions,

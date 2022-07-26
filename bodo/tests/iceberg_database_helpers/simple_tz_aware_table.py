@@ -5,12 +5,12 @@ from bodo.tests.iceberg_database_helpers.utils import (
 )
 
 
-def create_table(table_name="simple_string_table", spark=None):
+def create_table(table_name="simple_tz_aware_table", spark=None):
 
     if spark is None:
         spark = get_spark()
 
-    df, sql_schema, spark_schema = TABLE_MAP["simple_string_table"]
+    df, sql_schema, spark_schema = TABLE_MAP["simple_tz_aware_table"]
 
     create_iceberg_table(df, sql_schema, spark_schema, table_name, spark)
 

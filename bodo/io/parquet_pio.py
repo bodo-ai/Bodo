@@ -3,12 +3,14 @@ import os
 import warnings
 from collections import defaultdict
 from glob import has_magic
+from urllib.parse import urlparse
 
 import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
 import pyarrow  # noqa
+import pyarrow as pa  # noqa
 import pyarrow.dataset as ds
 from numba.core import ir, types
 from numba.core.ir_utils import (
@@ -28,17 +30,12 @@ from numba.extending import (
     register_model,
     unbox,
 )
-from pyarrow import null
 from pyarrow._fs import PyFileSystem
 from pyarrow.fs import FSSpecHandler
 
 import bodo
 import bodo.ir.parquet_ext
 import bodo.utils.tracing as tracing
-from bodo.hiframes.datetime_date_ext import (
-    datetime_date_array_type,
-    datetime_date_type,
-)
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     PDCategoricalDtype,
@@ -50,7 +47,7 @@ from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
-from bodo.io.helpers import is_nullable
+from bodo.io.helpers import _get_numba_typ_from_pa_typ, is_nullable
 from bodo.libs.array import (
     cpp_table_to_py_table,
     delete_table,
@@ -58,16 +55,9 @@ from bodo.libs.array import (
     info_to_array,
     table_type,
 )
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.distributed_api import get_end, get_start
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import string_array_type
-from bodo.libs.str_ext import string_type, unicode_to_utf8
-from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.libs.str_ext import unicode_to_utf8
 from bodo.transforms import distributed_pass
 from bodo.utils.transform import get_const_value
 from bodo.utils.typing import (
@@ -81,12 +71,6 @@ from bodo.utils.utils import (
     numba_to_c_type,
     sanitize_varname,
 )
-
-# read Arrow Int columns as nullable int array (IntegerArrayType)
-use_nullable_int_arr = True
-
-
-from urllib.parse import urlparse
 
 REMOTE_FILESYSTEMS = {"s3", "gcs", "gs", "http", "hdfs", "abfs", "abfss"}
 # the ratio of total_uncompressed_size of a Parquet string column vs number of values,
@@ -790,171 +774,21 @@ def _gen_pq_reader_py(
     return jit_func
 
 
-import pyarrow as pa
-
-_pa_numba_typ_map = {
-    # boolean
-    pa.bool_(): types.bool_,
-    # signed int types
-    pa.int8(): types.int8,
-    pa.int16(): types.int16,
-    pa.int32(): types.int32,
-    pa.int64(): types.int64,
-    # unsigned int types
-    pa.uint8(): types.uint8,
-    pa.uint16(): types.uint16,
-    pa.uint32(): types.uint32,
-    pa.uint64(): types.uint64,
-    # float types (TODO: float16?)
-    pa.float32(): types.float32,
-    pa.float64(): types.float64,
-    # String
-    pa.string(): string_type,
-    pa.binary(): bytes_type,
-    # date
-    pa.date32(): datetime_date_type,
-    pa.date64(): types.NPDatetime("ns"),
-    # time (TODO: time32, time64, ...)
-    # all null column
-    null(): string_type,  # map it to string_type, handle differently at runtime
-    # Timestamp information is computed in get_arrow_timestamp_type,
-    # so we don't store it in this dictionary.
-}
-
-
-def get_arrow_timestamp_type(pa_ts_typ):
-    """
-    Function used to determine the the proper Bodo type for various
-    Arrow timestamp types. This generates different types depending
-    on Timestamp values.
-
-    Returns:
-        - Bodo type
-        - Is the timestamp type supported. This is False if a timezone
-          or frequency cannot currently be supported.
-    """
-    supported_units = ("ns", "us", "ms", "s")
-    if pa_ts_typ.unit not in supported_units:
-        # Unsupported units get typed as numpy dt64 array but
-        # marked not supported.
-        return types.Array(bodo.datetime64ns, 1, "C"), False
-    elif pa_ts_typ.tz is not None:
-        # Timezones use the PandasDatetimeArrayType. Timezone information
-        # is stored in the Pandas type.
-        # List of timezones comes from:
-        # https://arrow.readthedocs.io/en/latest/index.html
-        # https://www.iana.org/time-zones
-        tz_type = pa_ts_typ.to_pandas_dtype().tz
-        tz_val = bodo.libs.pd_datetime_arr_ext.get_pytz_type_info(tz_type)
-        return bodo.DatetimeArrayType(tz_val), True
-    else:
-        # Without timezones Arrow ts arrays are converted to dt64 arrays.
-        return types.Array(bodo.datetime64ns, 1, "C"), True
-
-
-def _get_numba_typ_from_pa_typ(
-    pa_typ,
-    is_index,
-    nullable_from_metadata,
-    category_info,
-    str_as_dict=False,
-):
-    """return Bodo array type from pyarrow Field (column type) and if the type is supported.
-    If a type is not support but can be adequately typed, we return that it isn't supported
-    and later in compilation we will check if dead code/column elimination has successfully
-    removed the column."""
-
-    if isinstance(pa_typ.type, pa.ListType):
-        # nullable_from_metadata is only used for non-nested Int arrays
-        arr_typ, supported = _get_numba_typ_from_pa_typ(
-            pa_typ.type.value_field, is_index, nullable_from_metadata, category_info
-        )
-        return ArrayItemArrayType(arr_typ), supported
-
-    if isinstance(pa_typ.type, pa.StructType):
-        child_types = []
-        field_names = []
-        supported = True
-        for field in pa_typ.flatten():
-            field_names.append(field.name.split(".")[-1])
-            child_arr, child_supported = _get_numba_typ_from_pa_typ(
-                field, is_index, nullable_from_metadata, category_info
-            )
-            child_types.append(child_arr)
-            supported = supported and child_supported
-        return StructArrayType(tuple(child_types), tuple(field_names)), supported
-
-    # Decimal128Array type
-    if isinstance(pa_typ.type, pa.Decimal128Type):
-        return DecimalArrayType(pa_typ.type.precision, pa_typ.type.scale), True
-
-    if str_as_dict:
-        if pa_typ.type != pa.string():
-            raise BodoError(f"Read as dictionary used for non-string column {pa_typ}")
-        return dict_str_arr_type, True
-
-    # Categorical data type
-    if isinstance(pa_typ.type, pa.DictionaryType):
-        # NOTE: non-string categories seems not possible as of Arrow 4.0
-        if pa_typ.type.value_type != pa.string():  # pragma: no cover
-            raise BodoError(
-                f"Parquet Categorical data type should be string, not {pa_typ.type.value_type}"
-            )
-        # data type for storing codes
-        int_type = _pa_numba_typ_map[pa_typ.type.index_type]
-        cat_dtype = PDCategoricalDtype(
-            category_info[pa_typ.name],
-            bodo.string_type,
-            pa_typ.type.ordered,
-            int_type=int_type,
-        )
-        return CategoricalArrayType(cat_dtype), True
-
-    if isinstance(pa_typ.type, pa.lib.TimestampType):
-        return get_arrow_timestamp_type(pa_typ.type)
-    elif pa_typ.type in _pa_numba_typ_map:
-        dtype = _pa_numba_typ_map[pa_typ.type]
-        supported = True
-    else:
-        raise BodoError("Arrow data type {} not supported yet".format(pa_typ.type))
-
-    if dtype == datetime_date_type:
-        return datetime_date_array_type, supported
-
-    if dtype == bytes_type:
-        return binary_array_type, supported
-
-    arr_typ = string_array_type if dtype == string_type else types.Array(dtype, 1, "C")
-
-    if dtype == types.bool_:
-        arr_typ = boolean_array
-
-    if nullable_from_metadata is not None:
-        # do what metadata says
-        _use_nullable_int_arr = nullable_from_metadata
-    else:
-        # use our global default
-        _use_nullable_int_arr = use_nullable_int_arr
-    # TODO: support nullable int for indices
-    if (
-        _use_nullable_int_arr
-        and not is_index
-        and isinstance(dtype, types.Integer)
-        and pa_typ.nullable
-    ):
-        arr_typ = IntegerArrayType(dtype)
-
-    return arr_typ, supported
-
-
 def unify_schemas(schemas):
-    """Same as pyarrow.unify_schemas with the difference
-    that we unify `large_string` and `string` types to `string`
+    """
+    Same as pyarrow.unify_schemas with the difference
+    that we unify `large_string` and `string` types to `string`,
     (Arrow considers them incompatible).
     Note that large_strings is not a property of parquet, but
     rather a decision made by Arrow on how to store string data
     in memory. For Bodo, we can have Arrow always read as regular
-    strings and convert to Bodo's representation during read."""
+    strings and convert to Bodo's representation during read.
+    Similarly, we also unify `large_binary` and `binary` to `binary`.
+    We also convert LargeListType to regular list type (the type inside
+    is not modified).
+    Additionally, pa.list_(pa.large_string()) is converted to
+    pa.list_(pa.string()).
+    """
     # first replace large_string with string in every schema
     new_schemas = []
     for schema in schemas:
@@ -962,10 +796,32 @@ def unify_schemas(schemas):
             f = schema.field(i)
             if f.type == pa.large_string():
                 schema = schema.set(i, f.with_type(pa.string()))
+            elif f.type == pa.large_binary():
+                schema = schema.set(i, f.with_type(pa.binary()))
             elif isinstance(
                 f.type, (pa.ListType, pa.LargeListType)
             ) and f.type.value_type in (pa.string(), pa.large_string()):
-                schema = schema.set(i, f.with_type(pa.list_(pa.string())))
+                # This handles the pa.list_(pa.large_string()) case
+                # that the next `elif` doesn't.
+                schema = schema.set(
+                    i,
+                    f.with_type(
+                        # We want to retain the name (e.g. 'element'), so we pass
+                        # in a field to pa.list_ instead of a simple string type
+                        # which would use 'item' by default.
+                        pa.list_(pa.field(f.type.value_field.name, pa.string()))
+                    ),
+                )
+            elif isinstance(f.type, pa.LargeListType):
+                schema = schema.set(
+                    i,
+                    f.with_type(
+                        # We want to retain the name (e.g. 'element'), so we pass
+                        # in a field to pa.list_ instead of a simple string type
+                        # which would use 'item' by default.
+                        pa.list_(pa.field(f.type.value_field.name, f.type.value_type))
+                    ),
+                )
             # TODO handle arbitrary nested types
         new_schemas.append(schema)
     # now we run Arrow's regular schema unification
@@ -1231,7 +1087,7 @@ def get_parquet_dataset(
                 else get_hdfs_fs(fpath[0])
             )
         else:
-            fs.append(pyarrow.fs.LocalFileSystem())
+            fs.append(pa.fs.LocalFileSystem())
         return fs[0]
 
     def glob(protocol, fs, path):
@@ -1241,7 +1097,7 @@ def get_parquet_dataset(
             from fsspec.implementations.local import LocalFileSystem
 
             fs = LocalFileSystem()
-        if isinstance(fs, pyarrow.fs.FileSystem):
+        if isinstance(fs, pa.fs.FileSystem):
             from fsspec.implementations.arrow import ArrowFSWrapper
 
             fs = ArrowFSWrapper(fs)
@@ -2092,7 +1948,7 @@ def parquet_write_table_cpp(
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.VoidType(),
+            lir.IntType(64),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
@@ -2113,11 +1969,12 @@ def parquet_write_table_cpp(
             ],
         )
         fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="pq_write")
-        builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
 
     return (
-        types.void(
+        types.int64(
             types.voidptr,
             table_t,
             col_names_t,

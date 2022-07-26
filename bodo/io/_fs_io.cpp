@@ -213,7 +213,7 @@ void create_dir_posix(int myrank, std::string &dirname,
         // for the parallel case, 'dirname' is the directory where the
         // different parts of the distributed table are stored (each as
         // a file)
-        std::filesystem::create_directory(dirname);
+        std::filesystem::create_directories(dirname);
     }
     MPI_Allreduce(MPI_IN_PLACE, &error, 1, MPI_INT, MPI_LOR, MPI_COMM_WORLD);
     if (error) {
