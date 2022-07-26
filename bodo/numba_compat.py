@@ -1824,7 +1824,10 @@ def CacheImpl__init__(self, py_func):
 
     fullname = "%s.%s" % (modname, qualname)
     abiflags = getattr(sys, "abiflags", "")
-    self._filename_base = self.get_filename_base(fullname, abiflags)
+    
+    # bodo change: use bodo's version to invalidate cache
+    from bodo import __version__ as bodo_version
+    self._filename_base = self.get_filename_base(fullname, abiflags) + "bodo" + bodo_version
 
 
 if _check_numba_change:  # pragma: no cover
