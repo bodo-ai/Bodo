@@ -25,6 +25,11 @@ os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 
+from ._version import get_versions
+
+__version__ = get_versions()["version"]
+del get_versions
+
 # NOTE: 'pandas_compat' has to be imported first in bodo package to make sure all Numba
 # patches are applied before Bodo's use.
 import bodo.pandas_compat
@@ -150,11 +155,6 @@ from bodo.master_mode import init_master_mode
 
 multithread_mode = False
 parquet_validate_schema = True
-
-from ._version import get_versions
-
-__version__ = get_versions()["version"]
-del get_versions
 
 import bodo.utils.tracing
 import bodo.utils.tracing_py

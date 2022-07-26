@@ -196,3 +196,50 @@ def test_index_info_caching(is_cached, memory_leak_check):
     finally:
         if bodo.get_rank() == 0:
             os.remove("test.pq")
+
+
+def test_caching_version_check(is_cached, memory_leak_check):
+    """
+    test caching version check:
+      - assert that the bodo version string is in the cache filename and change
+        the version of the cached function in first pass
+      - assert that the cache is not used in the second pass because the version doesn't match
+    """
+
+    import bodo
+    import os
+
+    @bodo.jit(cache=True)
+    def impl(x):
+        return x + 1
+
+    bodo.barrier()
+
+    # first pass
+    if not is_cached:
+        impl(1)
+
+        # check that bodo version is in the cache filename
+        cache_file = None
+        for f in os.listdir(impl._cache.cache_path):
+            if bodo.__version__ in f:
+                cache_file = f
+                break
+
+        assert cache_file is not None
+
+        # change the version of the cached filename
+        fake_cache_file = cache_file.replace(bodo.__version__, "0.0.0")
+        os.rename(
+            os.path.join(impl._cache.cache_path, cache_file),
+            os.path.join(impl._cache.cache_path, fake_cache_file),
+        )
+
+    # second pass
+    else:
+        impl(1)
+
+        # assert that it wasn't loaded from cache
+        sig = impl.signatures[0]
+        assert impl._cache_hits[sig] == 0
+        assert impl._cache_misses[sig] == 1
