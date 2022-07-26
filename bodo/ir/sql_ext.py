@@ -5,7 +5,7 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
-from typing import List
+from typing import List, Optional
 from urllib.parse import urlparse
 
 import numba
@@ -788,6 +788,10 @@ def _gen_sql_reader_py(
         f"def sql_reader_py(sql_request, conn, database_schema, {filter_args}):\n"
     )
     if db_type == "iceberg":
+        assert (
+            pyarrow_table_schema is not None
+        ), "SQLNode must contain a pyarrow_table_schema if reading from an Iceberg database"
+
         # Generate the partition filters and predicate filters. Note we pass
         # all col names as possible partitions via partition names.
         dnf_filter_str, expr_filter_str = bodo.ir.connector.generate_arrow_filters(
@@ -1001,8 +1005,10 @@ def _gen_sql_reader_py(
     if db_type == "iceberg":
         glbls.update(
             {
-                f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
-                f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
+                # TODO: Remove type ignores when refactoring Iceberg read code generation
+                # out of this function
+                f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),  # type: ignore
+                f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),  # type: ignore
                 f"py_table_type_{call_id}": py_table_type,
                 f"pyarrow_table_schema_{call_id}": pyarrow_table_schema,
                 "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,

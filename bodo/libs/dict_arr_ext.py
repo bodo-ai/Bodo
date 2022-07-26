@@ -45,6 +45,7 @@ from bodo.libs.str_arr_ext import (
     get_str_arr_item_length,
     overload_str_arr_astype,
     pre_alloc_string_array,
+    string_array_type,
 )
 from bodo.utils.typing import (
     BodoArrayIterator,
@@ -92,11 +93,11 @@ class DictionaryArrayType(types.IterableType, types.ArrayCompatible):
         return dict_indices_arr_type.dtype
 
     def unify(self, typingctx, other):
-        if other == bodo.string_array_type:
-            return bodo.string_array_type
+        if other == string_array_type:
+            return string_array_type
 
 
-dict_str_arr_type = DictionaryArrayType(bodo.string_array_type)
+dict_str_arr_type = DictionaryArrayType(string_array_type)
 
 
 # TODO(ehsan): make DictionaryArrayType inner data mutable using a payload structure?

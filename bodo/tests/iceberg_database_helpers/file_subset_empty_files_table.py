@@ -22,13 +22,17 @@ def create_table(table_name="file_subset_empty_files_table", spark=None):
             "B": np.array([1, 2] * 10, np.float32),
         }
     )
-    schema = spark_types.StructType(
+    sql_schema = [
+        ("A", "string"),
+        ("B", "float"),
+    ]
+    spark_schema = spark_types.StructType(
         [
             spark_types.StructField("A", spark_types.StringType(), True),
             spark_types.StructField("B", spark_types.FloatType(), True),
         ]
     )
-    create_iceberg_table(df, schema, table_name, spark)
+    create_iceberg_table(df, sql_schema, spark_schema, table_name, spark)
 
     # Add more columns
     print("Adding columns...")

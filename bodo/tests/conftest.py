@@ -92,9 +92,9 @@ def pytest_collection_modifyitems(items):
     for item in items[n // 3 : n // 2]:
         item.add_marker(pytest.mark.firsthalf)
         item.add_marker(pytest.mark.secondthird)
-    for item in items[n // 2: 2 * n // 3]:
+    for item in items[n // 2 : 2 * n // 3]:
         item.add_marker(pytest.mark.secondthird)
-    for item in items[2 * n // 3: ]:
+    for item in items[2 * n // 3 :]:
         item.add_marker(pytest.mark.lastthird)
 
     # Check if we should try and mark groups for AWS Codebuild
@@ -438,7 +438,9 @@ def iceberg_table_conn():
         If the table doesn't exist.
     """
 
-    def deco(table_name, database_schema, warehouse_loc, check_exists=True):
+    def deco(
+        table_name: str, database_schema: str, warehouse_loc: str, check_exists=True
+    ):
         path = os.path.join(warehouse_loc, database_schema, table_name)
         if check_exists and not os.path.exists(path):
             msg = "Could not find table {}."

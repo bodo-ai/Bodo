@@ -2385,14 +2385,12 @@ class TypingTransforms:
         table_name, con, database_schema = arg_values
 
         # Parse `con` String and Ensure its an Iceberg Connection
-        parse_res, _ = parse_dbtype(con)
-        if parse_res != "iceberg":  # pragma: no cover
+        try:
+            con = bodo.io.iceberg.format_iceberg_conn(con)
+        except BodoError as e:
             raise BodoError(
-                "'con' must be 'iceberg+glue' or start with one of the following: 'iceberg://', 'iceberg+file://', "
-                "'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://'"
+                "pandas.read_sql_table(): Only Iceberg is currently supported. " + e.msg
             )
-
-        con = remove_iceberg_prefix(con)
 
         # Generate Output DataFrame Type
         arg_defaults = {

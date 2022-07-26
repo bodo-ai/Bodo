@@ -7,11 +7,6 @@ import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.nessie.NessieCatalog;
 
 public class NessieBuilder {
-
-  public static boolean isConnStr(final String catalogType) {
-    return catalogType != null && (catalogType.equals("nessie") || catalogType.equals("arctic"));
-  }
-
   public static Catalog create(Configuration conf, Map<String, String> properties) {
     // Nessie catalog requires the WAREHOUSE_LOCATION property to be set
     // (even if it's an empty string) even though it may not be necessary

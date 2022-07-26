@@ -12,7 +12,7 @@ import datetime
 import numpy as np
 import pandas as pd
 from bodo_iceberg_connector.py4j_support import (
-    get_java_list,
+    convert_list_to_java,
     get_linkedlist_class,
     get_literal_converter_class,
     get_op_enum_class,
@@ -134,7 +134,7 @@ def convert_scalar(val):
         # see predicate(Expression.Operation op, java.lang.String name,
         #               java.lang.Iterable<T> values)
         # https://iceberg.apache.org/javadoc/0.13.1/index.html?org/apache/iceberg/types/package-summary.html
-        return get_java_list(val)
+        return convert_list_to_java(val)
     else:
         # If we don't support a scalar return None and
         # we will generate a NOOP

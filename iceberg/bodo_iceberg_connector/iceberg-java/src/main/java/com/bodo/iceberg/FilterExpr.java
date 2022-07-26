@@ -1,68 +1,12 @@
 package com.bodo.iceberg;
 
-import com.bodo.iceberg.catalog.CatalogHandler;
-import java.net.URISyntaxException;
-import java.util.*;
-import org.apache.iceberg.DeleteFile;
-import org.apache.iceberg.FileScanTask;
-import org.apache.iceberg.Schema;
-import org.apache.iceberg.Table;
-import org.apache.iceberg.TableScan;
-import org.apache.iceberg.arrow.ArrowSchemaUtil;
+import java.util.ArrayList;
+import java.util.LinkedList;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.Literal;
 
-public class BodoIcebergReader {
-  /**
-   * Java Class used to map Bodo's required read operations to a corresponding Iceberg table. This
-   * is meant to provide 1 instance per Table and Bodo is responsible for closing it.
-   */
-
-  // Table instance for the underlying Iceberg table
-  private final Table table;
-
-  public BodoIcebergReader(String connStr, String dbName, String tableName)
-      throws URISyntaxException {
-    CatalogHandler catalogHandler = new CatalogHandler(connStr, dbName, tableName);
-    this.table = catalogHandler.loadTable();
-  }
-
-  public Schema getIcebergSchema() {
-    return this.table.schema();
-  }
-
-  public org.apache.arrow.vector.types.pojo.Schema getArrowSchema() {
-    return ArrowSchemaUtil.convert(this.table.schema());
-  }
-
-  public TableInfo getTableInfo() {
-    return new TableInfo(this.table);
-  }
-
-  /** Returns a list of parquet files that construct the given Iceberg Table. */
-  public List<BodoParquetInfo> getParquetInfo(LinkedList<Object> filters) {
-    Expression filter = filtersToExpr(filters);
-    TableScan scan = table.newScan().filter(filter);
-    List<BodoParquetInfo> parquetPaths = new ArrayList<>();
-    Iterable<FileScanTask> files = scan.planFiles();
-    for (FileScanTask file : files) {
-      // Set to null by default to save memory while we don't support deletes.
-      List<String> deletes = null;
-      // Check for any delete files.
-      List<DeleteFile> deleteFiles = file.deletes();
-      if (!deleteFiles.isEmpty()) {
-        deletes = new LinkedList<>();
-        for (DeleteFile deleteFile : deleteFiles) {
-          deletes.add(String.valueOf(deleteFile.path()));
-        }
-      }
-      parquetPaths.add(
-          new BodoParquetInfo(file.file().path().toString(), file.start(), file.length(), deletes));
-    }
-    return parquetPaths;
-  }
-
+public class FilterExpr {
   /**
    * Parses the filters passed to java, which is a list of operators and filter components and
    * converts them to proper iceberg scalars. Each individual filter consists of column name,
@@ -71,7 +15,7 @@ public class BodoIcebergReader {
    * <p>In addition, filters are joined by other OpEnum values AND/OR. We don't have to worry about
    * operator precedence because the form is always ORing AND expressions.
    */
-  public Expression filtersToExpr(LinkedList<Object> filters) {
+  public static Expression filtersToExpr(LinkedList<Object> filters) {
     if (filters == null || filters.isEmpty()) {
       // If there are no predicates pass the true predicate
       return Expressions.alwaysTrue();
@@ -91,7 +35,7 @@ public class BodoIcebergReader {
     return currentExpr;
   }
 
-  public Expression andFiltersToExpr(LinkedList<Object> filters) {
+  public static Expression andFiltersToExpr(LinkedList<Object> filters) {
     Object andStart = filters.removeFirst();
     assert andStart.equals(OpEnum.AND_START);
     LinkedList<Expression> expressions = new LinkedList<>();
@@ -113,7 +57,7 @@ public class BodoIcebergReader {
     return currentExpr;
   }
 
-  public Expression singleFilterToExpr(LinkedList<Object> filters) {
+  public static Expression singleFilterToExpr(LinkedList<Object> filters) {
     // First value is always a field ID.
     String name = (String) filters.removeFirst();
     // Get the op.

@@ -59,6 +59,6 @@ bodo/io/_hdfs.cpp
 bodo/utils/tracing.c
 
 # Iceberg Connector
+iceberg_db
 iceberg/bodo_iceberg_connector/iceberg-java/target
 iceberg/bodo_iceberg_connector/jars
-iceberg_db

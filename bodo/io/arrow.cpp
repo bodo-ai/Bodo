@@ -42,6 +42,13 @@ void pq_write_partitioned(const char* _path_name, table_info* table,
                           bool is_parallel, const char* bucket_region,
                           int64_t row_group_size, const char* prefix);
 
+// ---------- functions defined in iceberg_parquet_write.cpp ----
+void iceberg_pq_write_py_entry(
+    const char* fname, const char* table_data_loc, const table_info* table,
+    const array_info* col_names_arr, const char* compression, bool is_parallel,
+    const char* bucket_region, int64_t row_group_size, char* iceberg_metadata,
+    int64_t* record_count, int64_t* file_size_in_bytes);
+
 // --------- function defined in snowflake_reader.cpp ---------
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,
                            int64_t n_fields, int32_t* is_nullable);
@@ -61,6 +68,9 @@ PyMODINIT_FUNC PyInit_arrow_cpp(void) {
                            PyLong_FromVoidPtr((void*)(&iceberg_pq_read)));
     PyObject_SetAttrString(m, "pq_write",
                            PyLong_FromVoidPtr((void*)(&pq_write_py_entry)));
+    PyObject_SetAttrString(
+        m, "iceberg_pq_write",
+        PyLong_FromVoidPtr((void*)(&iceberg_pq_write_py_entry)));
     PyObject_SetAttrString(m, "pq_write_partitioned",
                            PyLong_FromVoidPtr((void*)(&pq_write_partitioned)));
     PyObject_SetAttrString(m, "snowflake_read",

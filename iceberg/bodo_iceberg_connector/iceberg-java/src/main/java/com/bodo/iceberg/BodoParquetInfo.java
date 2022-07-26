@@ -43,6 +43,6 @@ public class BodoParquetInfo {
 
   public String toString() {
     return String.format(
-        "(Filepath:%s, Start Offset:%d,  Length:%d)", getFilepath(), getStart(), getLength());
+        "(Filepath: %s, Start Offset: %d, Length: %d)", getFilepath(), getStart(), getLength());
   }
 }
