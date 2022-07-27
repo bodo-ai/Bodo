@@ -455,7 +455,7 @@ def _numba_to_pyarrow_type(numba_type: types.ArrayCompatible):
 
     elif numba_type == boolean_array:
         dtype = pa.bool_()
-    elif numba_type == string_array_type:
+    elif numba_type in (string_array_type, bodo.dict_str_arr_type):
         dtype = pa.string()
     elif numba_type == binary_array_type:
         dtype = pa.binary()
