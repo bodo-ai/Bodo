@@ -133,6 +133,7 @@ def parse_dbtype(con_str):
     if con_str == "iceberg+glue" or parseresult.scheme in (
         "iceberg",
         "iceberg+file",
+        "iceberg+s3",
         "iceberg+thrift",
         "iceberg+http",
         "iceberg+https",

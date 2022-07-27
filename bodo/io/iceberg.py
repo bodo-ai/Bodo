@@ -50,13 +50,14 @@ def format_iceberg_conn(conn_str: str) -> str:
     if not conn_str.startswith("iceberg+glue") and parse_res.scheme not in (
         "iceberg",
         "iceberg+file",
+        "iceberg+s3",
         "iceberg+thrift",
         "iceberg+http",
         "iceberg+https",
     ):
         raise BodoError(
             "'con' must start with one of the following: 'iceberg://', 'iceberg+file://', "
-            "'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://', 'iceberg+glue'"
+            "'iceberg+s3://', 'iceberg+thrift://', 'iceberg+http://', 'iceberg+https://', 'iceberg+glue'"
         )
 
     # Remove Iceberg Prefix when using Internally
@@ -173,7 +174,7 @@ def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
                 isinstance(e, bodo_iceberg_connector.IcebergJavaError)
                 and numba.core.config.DEVELOPER_MODE
             ):  # pragma: no cover
-                col_names_or_err = BodoError(f"{e.message}:\n {str(e.java_error)}")
+                col_names_or_err = BodoError(f"{e.message}: {e.java_error}")
             else:
                 col_names_or_err = BodoError(e.message)
 
@@ -222,7 +223,7 @@ def get_iceberg_file_list(
             isinstance(e, bodo_iceberg_connector.IcebergJavaError)
             and numba.core.config.DEVELOPER_MODE  # type: ignore
         ):  # pragma: no cover
-            raise BodoError(f"{e.message}:\n {str(e.java_error)}")
+            raise BodoError(f"{e.message}:\n{e.java_error}")
         else:
             raise BodoError(e.message)
 
@@ -574,6 +575,16 @@ def get_table_details_before_write(
                 iceberg_schema_str = connector.pyarrow_to_iceberg_schema_str(
                     df_pyarrow_schema
                 )
+        except connector.IcebergError as e:
+            # Only include Java error info in dev mode because it contains at lot of
+            # unnecessary info about internal packages and dependencies.
+            if (
+                isinstance(e, connector.IcebergJavaError)
+                and numba.core.config.DEVELOPER_MODE
+            ):  # pragma: no cover
+                comm_exc = BodoError(f"{e.message}: {e.java_error}")
+            else:
+                comm_exc = BodoError(e.message)
 
         except Exception as e:
             comm_exc = e
