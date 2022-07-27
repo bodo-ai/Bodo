@@ -18,7 +18,7 @@ class IcebergJavaError(IcebergError):
         java_error (JException): Reference to Java exception including Java traceback
     """
 
-    def __init__(self, message: str, java_error: Py4JJavaError):
+    def __init__(self, message: str, java_error: str):
         super().__init__(message)
         self.message = message
         self.java_error = java_error
@@ -30,11 +30,11 @@ class IcebergJavaError(IcebergError):
             str(e.java_exception.getClass())
             == "class org.apache.iceberg.exceptions.NoSuchTableException"
         ):
-            return cls("No such Iceberg table found", e.java_exception)
+            return cls("No such Iceberg table found", str(e.java_exception))
         elif (
             str(e.java_exception.getClass())
             == "class org.apache.iceberg.exceptions.RuntimeIOException"
         ):
-            return cls("Unable to find Iceberg table", e.java_exception)
+            return cls("Unable to find Iceberg table", str(e.java_exception))
         else:
-            return cls("Unknown Iceberg Error", e.java_exception)
+            return cls("Unknown Iceberg Error", str(e.java_exception))

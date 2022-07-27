@@ -46,6 +46,9 @@ public class CatalogCreator {
             HadoopBuilder.create(
                 uriBuilder.removeQuery().setScheme("").build().toString(), conf, params);
         break;
+      case "hadoop-s3":
+        catalog = HadoopBuilder.create(uriBuilder.removeQuery().build().toString(), conf, params);
+        break;
       default:
         throw new UnsupportedOperationException("Should never occur. Captured in Python");
     }

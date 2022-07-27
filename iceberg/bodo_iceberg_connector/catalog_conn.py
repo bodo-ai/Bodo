@@ -29,6 +29,8 @@ def parse_conn_str(
             catalog_type = "hive"
         elif parsed_conn.scheme == "" and parsed_conn.path == "glue":
             catalog_type = "glue"
+        elif parsed_conn.scheme == "s3":
+            catalog_type = "hadoop-s3"
         elif parsed_conn.scheme == "" or parsed_conn.scheme == "file":
             catalog_type = "hadoop"
         else:
@@ -36,13 +38,14 @@ def parse_conn_str(
                 f"Cannot detect Iceberg catalog type from connection string:\n  {conn_str}"
             )
 
-    assert catalog_type in ["hadoop", "hive", "nessie", "glue"]
+    assert catalog_type in ["hadoop-s3", "hadoop", "hive", "nessie", "glue"]
 
     # Get Warehouse Location
     # TODO: Do something more intelligent with thrift
-    if catalog_type == "hadoop":
+    if catalog_type in ["hadoop", "hadoop-s3"]:
         # TODO: assert warehouse query parameter is None ???
-        warehouse = f"{parsed_conn.netloc}{parsed_conn.path}"
+        fs_prefix = "s3://" if parsed_conn.scheme == "s3" else ""
+        warehouse = f"{fs_prefix}{parsed_conn.netloc}{parsed_conn.path}"
     else:
         warehouse = _get_first(conn_query, "warehouse")
 
@@ -69,9 +72,10 @@ def gen_file_loc(
     catalog_type: str, table_loc: str, db_name: str, table_name: str, file_name: str
 ) -> str:
     """Construct Valid Paths for Files Written to Iceberg"""
+
     if catalog_type == "hadoop":
         return os.path.join(db_name, table_name, "data", file_name)
-    elif catalog_type == "glue" or catalog_type == "nessie":
+    elif catalog_type in ["glue", "nessie", "hadoop-s3"]:
         return os.path.join(table_loc, file_name)
     else:
         return file_name
