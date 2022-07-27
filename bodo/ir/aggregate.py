@@ -1154,6 +1154,10 @@ def agg_distributed_run(
                 "first",
                 "last",
                 "sum",
+                "cumsum",
+                "shift",
+                "head",
+                "nunique",
                 "size",
                 "count",
             ):
@@ -1750,7 +1754,18 @@ def gen_top_level_agg_func(
         if table_type is not None:
             for j, t in enumerate(table_type.arr_types):
                 unsupported = any(
-                    info[0].ftype not in ("min", "max", "first", "last", "sum")
+                    info[0].ftype
+                    not in (
+                        "min",
+                        "max",
+                        "first",
+                        "last",
+                        "sum",
+                        "cumsum",
+                        "shift",
+                        "head",
+                        "nunique",
+                    )
                     for info in agg_node.gb_info_in[j]
                 )
                 if (
@@ -1766,7 +1781,18 @@ def gen_top_level_agg_func(
             var_typ = typemap[v.name]
             col_no = agg_node.n_in_table_arrays + i - 1
             unsupported = any(
-                info[0].ftype not in ("min", "max", "first", "last", "sum")
+                info[0].ftype
+                not in (
+                    "min",
+                    "max",
+                    "first",
+                    "last",
+                    "sum",
+                    "cumsum",
+                    "shift",
+                    "head",
+                    "nunique",
+                )
                 for info in agg_node.gb_info_in[i]
             )
             if (
@@ -1781,7 +1807,18 @@ def gen_top_level_agg_func(
                 continue
             var_typ = typemap[v.name]
             unsupported = any(
-                info[0].ftype not in ("min", "max", "first", "last", "sum")
+                info[0].ftype
+                not in (
+                    "min",
+                    "max",
+                    "first",
+                    "last",
+                    "sum",
+                    "cumsum",
+                    "shift",
+                    "head",
+                    "nunique",
+                )
                 for info in agg_node.gb_info_in[i]
             )
             if (

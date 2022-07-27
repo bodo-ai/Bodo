@@ -531,7 +531,7 @@ def get_agg_typ(
         for c in columns:
             ind = grp.df_type.column_index[c]
             data = grp.df_type.data[ind]  # type of input column
-            if func_name not in ("min", "first", "last", "max"):
+            if func_name not in ("min", "first", "last", "max", "shift", "head"):
                 data = to_str_arr_if_dict_array(data)
             e_column_type = ColumnType.NonNumericalColumn.value
             if isinstance(data, (types.Array, IntegerArrayType)) and isinstance(
@@ -659,7 +659,7 @@ def get_agg_typ(
                     data, func_name, grp.df_type.index
                 )
             if err_msg == "ok":
-                if func_name not in ("min", "max", "first", "last"):
+                if func_name not in ("min", "max", "first", "last", "head", "shift"):
                     out_arr = to_str_arr_if_dict_array(out_dtype)
                 else:
                     out_arr = out_dtype
@@ -1051,7 +1051,16 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         gb_info[(c, name_operation)] = c
         ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
-        if name_operation not in ("min", "max", "first", "last", "size", "count"):
+        if name_operation not in (
+            "min",
+            "max",
+            "first",
+            "last",
+            "head",
+            "shift",
+            "size",
+            "count",
+        ):
             data = to_str_arr_if_dict_array(data)
         if name_operation == "cumprod":
             if not isinstance(data.dtype, (types.Integer, types.Float)):

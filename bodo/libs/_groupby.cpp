@@ -1934,6 +1934,98 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
     delete new_out_col;
 }
 
+/**
+ * @brief Perform cumulative computation on dictionary encoded columns.
+ * The function follows the same logic as that for the regular strings. More
+ * specifically, we define a helper function get_entry(i) that returns the
+ * null_bit and string value of row i. We then iterate through each group to
+ * calculate the cumulative sums, and the intermediate result for each row is
+ * stored in a temporary vector null_bit_val_vec. We choose to return a regular
+ * string array instead of a dictionary-encoded one mostly because the return
+ * array is likely to have a large cardinality and wouldn't benefit from
+ * dictionary encoding.
+ *
+ * @param arr: input array, dictionary encoded
+ * @param out_arr: output array, regulat string array
+ * @param grp_info: groupby information
+ * @param ftype: for dictionary encoded strings, only cumsum is supported
+ * @param skipna: boolean
+ */
+void cumulative_computation_dict_encoded_string(array_info* arr,
+                                                array_info* out_arr,
+                                                grouping_info const& grp_info,
+                                                int32_t const& ftype,
+                                                bool const& skipna) {
+#ifdef DEBUG_GROUPBY
+    std::cout << "Beginning of cumulative_computation_dict\n";
+#endif
+    if (ftype != Bodo_FTypes::cumsum) {
+        Bodo_PyErr_SetString(
+            PyExc_RuntimeError,
+            "So far only cumulative sums for dictionary-encoded strings");
+    }
+    int64_t n = arr->length;
+    using T = std::pair<bool, std::string>;
+    std::vector<T> null_bit_val_vec(n);  // a temporary vector that stores the
+                                         // null bit and value for each row
+    uint8_t* null_bitmask = (uint8_t*)arr->info2->null_bitmask;
+    char* data = arr->info1->data1;
+    offset_t* offsets = (offset_t*)arr->info1->data2;
+    auto get_entry = [&](int64_t i) -> T {
+        bool isna = !GetBit(null_bitmask, i);
+        if (isna) {
+            return {isna, ""};
+        }
+        int32_t dict_ind = ((int32_t*)arr->info2->data1)[i];
+        offset_t start_offset = offsets[dict_ind];
+        offset_t end_offset = offsets[dict_ind + 1];
+        offset_t len = end_offset - start_offset;
+        std::string val(&data[start_offset], len);
+        return {isna, val};
+    };
+    size_t num_group = grp_info.group_to_first_row.size();
+    for (size_t igrp = 0; igrp < num_group; igrp++) {
+        int64_t i = grp_info.group_to_first_row[igrp];
+        T ePair{false, ""};
+        while (true) {
+            T fPair = get_entry(i);
+            if (fPair.first) {  // the value is a NaN.
+                if (skipna) {
+                    null_bit_val_vec[i] = fPair;
+                } else {
+                    ePair = fPair;
+                    null_bit_val_vec[i] = ePair;
+                }
+            } else {  // The value is a normal one.
+                ePair.second += fPair.second;
+                null_bit_val_vec[i] = ePair;
+            }
+            i = grp_info.next_row_in_group[i];
+            if (i == -1) break;
+        }
+    }
+    T pairNaN{true, ""};
+    for (auto& idx_miss : grp_info.list_missing)
+        null_bit_val_vec[idx_miss] = pairNaN;
+    // Now writing down in the array.
+    size_t n_bytes = (n + 7) >> 3;
+    std::vector<uint8_t> Vmask(n_bytes, 0);
+    std::vector<std::string> ListString(n);
+    for (int64_t i = 0; i < n; i++) {
+        SetBitTo(Vmask.data(), i, !null_bit_val_vec[i].first);
+        ListString[i] = null_bit_val_vec[i].second;
+    }
+    array_info* new_out_col =
+        create_string_array<array_info>(grp_info, Vmask, ListString);
+    *out_arr = std::move(*new_out_col);
+#ifdef DEBUG_GROUPBY
+    std::cout << "out_arr : ";
+    DEBUG_PrintColumn(std::cout, out_arr);
+    std::cout << "End of cumulative_computation_dict\n";
+#endif
+    delete new_out_col;
+}
+
 template <typename ARRAY>
 typename std::enable_if<!is_multiple_array<ARRAY>::value, void>::type
 cumulative_computation(array_info* arr, array_info* out_arr,
@@ -1943,6 +2035,9 @@ cumulative_computation(array_info* arr, array_info* out_arr,
     if (arr->arr_type == bodo_array_type::STRING)
         return cumulative_computation_string(arr, out_arr, grp_info, ftype,
                                              skipna);
+    if (arr->arr_type == bodo_array_type::DICT)
+        return cumulative_computation_dict_encoded_string(
+            arr, out_arr, grp_info, ftype, skipna);
     if (arr->arr_type == bodo_array_type::LIST_STRING)
         return cumulative_computation_list_string(arr, out_arr, grp_info, ftype,
                                                   skipna);
@@ -2015,7 +2110,6 @@ shift_computation(array_info* arr, array_info* out_arr,
     int64_t tmp_periods = periods;
     // 1. Shift operation taken from pandas
     // https://github.com/pandas-dev/pandas/blob/master/pandas/_libs/groupby.pyx#L293
-
     size_t ii, offset;
     int sign;
     // If periods<0, shift up (i.e. iterate backwards)
@@ -4636,6 +4730,7 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum& array_type,
             array_type = bodo_array_type::NUMPY;
             dtype = Bodo_CTypes::FLOAT64;
             return;
+        case Bodo_FTypes::cumsum:
         case Bodo_FTypes::sum:
             if (dtype == Bodo_CTypes::STRING) {
                 array_type = bodo_array_type::STRING;
@@ -5354,17 +5449,23 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
     }
 
     virtual void update(const std::vector<grouping_info>& grp_infos) {
+        // to support nunique for dictionary-encoded arrays we only need to
+        // perform the nunqiue operation on the indices array(info2), which is a
+        // int32_t numpy array.
+        array_info* input_col = this->in_col->arr_type == bodo_array_type::DICT
+                                    ? this->in_col->info2
+                                    : this->in_col;
         // TODO: check nunique with pivot_table operation
         if (my_nunique_table != nullptr) {
             // use the grouping_info that corresponds to my nunique table
             aggfunc_output_initialize(this->update_cols[0],
                                       Bodo_FTypes::sum);  // zero initialize
-            nunique_computation<ARRAY>(this->in_col, this->update_cols[0],
+            nunique_computation<ARRAY>(input_col, this->update_cols[0],
                                        grp_infos[my_nunique_table->id], dropna,
                                        is_parallel);
         } else {
             // use default grouping_info
-            nunique_computation<ARRAY>(this->in_col, this->update_cols[0],
+            nunique_computation<ARRAY>(input_col, this->update_cols[0],
                                        grp_infos[0], dropna, is_parallel);
         }
     }
@@ -5387,9 +5488,15 @@ class CumOpColSet : public BasicColSet<ARRAY> {
                                       std::vector<ARRAY*>& out_cols) {
         // NOTE: output size of cum ops is the same as input size
         //       (NOT the number of groups)
+        bodo_array_type::arr_type_enum out_type = this->in_col->arr_type;
+        if (out_type == bodo_array_type::DICT) {
+            // for dictionary-encoded input the arrtype of the output is regular
+            // string
+            out_type = bodo_array_type::STRING;
+        }
         out_cols.push_back(alloc_array_groupby<ARRAY>(
-            this->in_col->length, 1, 1, this->in_col->arr_type,
-            this->in_col->dtype, 0, this->in_col->num_categories, n_pivot));
+            this->in_col->length, 1, 1, out_type, this->in_col->dtype, 0,
+            this->in_col->num_categories, n_pivot));
         this->update_cols.push_back(out_cols.back());
     }
 
@@ -6023,10 +6130,14 @@ class GroupbyPipeline {
                         if (ftypes[j] == Bodo_FTypes::min ||
                             ftypes[j] == Bodo_FTypes::max) {
                             convert_local_dictionary_to_global(a, true);
-                        } else if (ftypes[j] == Bodo_FTypes::count ||
-                                   ftypes[j] == Bodo_FTypes::first ||
+                        } else if (ftypes[j] == Bodo_FTypes::first ||
+                                   ftypes[j] == Bodo_FTypes::count ||
                                    ftypes[j] == Bodo_FTypes::last ||
-                                   ftypes[j] == Bodo_FTypes::sum) {
+                                   ftypes[j] == Bodo_FTypes::sum ||
+                                   ftypes[j] == Bodo_FTypes::cumsum ||
+                                   ftypes[j] == Bodo_FTypes::head ||
+                                   ftypes[j] == Bodo_FTypes::shift ||
+                                   ftypes[j] == Bodo_FTypes::nunique) {
                             convert_local_dictionary_to_global(a);
                         }
                     }
