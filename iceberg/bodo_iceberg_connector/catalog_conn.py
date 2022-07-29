@@ -23,7 +23,7 @@ def parse_conn_str(
     conn_query = parse_qs(parsed_conn.query)
 
     # Determine Catalog Type
-    catalog_type = _get_first(conn_query, "catalog")
+    catalog_type = _get_first(conn_query, "type")
     if catalog_type is None:
         if parsed_conn.scheme == "thrift":
             catalog_type = "hive"
@@ -34,8 +34,9 @@ def parse_conn_str(
         elif parsed_conn.scheme == "" or parsed_conn.scheme == "file":
             catalog_type = "hadoop"
         else:
+            types = ", ".join(["hadoop-s3", "hadoop", "hive", "nessie", "glue"])
             raise IcebergError(
-                f"Cannot detect Iceberg catalog type from connection string:\n  {conn_str}"
+                f"Cannot detect Iceberg catalog type from connection string:\n  {conn_str}\nIn the connection string, set the URL parameter `type` to one of the following:\n  {types}"
             )
 
     assert catalog_type in ["hadoop-s3", "hadoop", "hive", "nessie", "glue"]
