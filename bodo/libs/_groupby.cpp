@@ -1587,7 +1587,11 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
     // TODO: if |tables| > 1 then we probably need to use hashes from all the
     // tables to get an accurate nunique_hashes estimate. We can do it, but
     // it would mean calculating all hashes in advance
-    if (hashes == nullptr) {
+    // if |tables| > 1 means nunique is used in agg/aggregate with other
+    // operations. In this case, recalculate hashes since hashes arg. passed is
+    // computed with a different seed which leads to extra fake number of
+    // groups.
+    if (tables.size() > 1 || hashes == nullptr) {
         hashes = hash_keys(key_cols, SEED_HASH_GROUPBY_SHUFFLE, is_parallel);
         nunique_hashes =
             get_nunique_hashes(hashes, table->nrows(), is_parallel);
@@ -2939,10 +2943,8 @@ apply_to_column_dict(ARR_I* in_col, ARR_O* out_col,
         ListString[it.second - 1] = val;  // -1 to account for the 1 offset
         SetBitTo(bitmask_vec.data(), it.second - 1, true);
     }
-
     array_info* dict_arr =
         create_string_array<ARR_I>(grp_info, bitmask_vec, ListString);
-
     return create_dict_string_array<ARR_O>(dict_arr, indices_arr, num_groups);
 }
 
@@ -5664,6 +5666,7 @@ copy_string_values_transform(ARRAY* update_col, ARRAY* tmp_col,
                          "copy_string_values_transform multiple_array_info "
                          "string not supported yet.");
 }
+
 /**
  * @param update_col[out]: column that has the final result for all rows
  * @param tmp_col[in]: column that has the result per group
@@ -5688,6 +5691,43 @@ void copy_values(ARRAY* update_col, ARRAY* tmp_col,
         T& val2 = getv<ARRAY, T>(update_col, iRow);
         val2 = val;
     }
+}
+
+/**
+ * Propagate value from the row in the tmp_col to all the rows in the
+ * group update_col. Both tmp_col and update_col are dictionary encoded
+ * @param update_col[out]: column that has the final result for all rows
+ * @param tmp_col[in]: column that has the result per group
+ * @param grouping_info[in]: structures used to get rows for each group
+ *
+ * */
+template <typename ARRAY>
+typename std::enable_if<!(is_multiple_array<ARRAY>::value), void>::type
+copy_dict_string_values_transform(ARRAY* update_col, ARRAY* tmp_col,
+                                  const grouping_info& grp_info) {
+    int64_t length = update_col->length;
+    array_info* indices_arr =
+        alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
+    copy_values<ARRAY, int32_t>(indices_arr, tmp_col->info2, grp_info);
+    incref_array(tmp_col->info1);  // increase reference because we reuse the
+                                   // underlying data array.
+    array_info* out_col =
+        create_dict_string_array<ARRAY>(tmp_col->info1, indices_arr, length);
+    *update_col = std::move(*out_col);
+    if (!update_col->has_global_dictionary) {
+        // reverse_shuffle_table needs the dictionary to be global
+        convert_local_dictionary_to_global(update_col);
+    }
+    delete out_col;
+}
+template <typename ARRAY>
+typename std::enable_if<(is_multiple_array<ARRAY>::value), void>::type
+copy_dict_string_values_transform(ARRAY* update_col, ARRAY* tmp_col,
+                                  const grouping_info& grp_info) {
+    Bodo_PyErr_SetString(
+        PyExc_RuntimeError,
+        "copy_dict_string_values_transform multiple_array_info "
+        "string not supported yet.");
 }
 
 // Add function declaration before usage in TransformColSet
@@ -5814,8 +5854,13 @@ class TransformColSet : public BasicColSet<ARRAY> {
                                            grp_info);
                 break;
             case Bodo_CTypes::STRING:
-                copy_string_values_transform<ARRAY>(this->update_cols[0],
-                                                    child_out_col, grp_info);
+                if (child_out_col->arr_type == bodo_array_type::DICT) {
+                    copy_dict_string_values_transform<ARRAY>(
+                        this->update_cols[0], child_out_col, grp_info);
+                } else {
+                    copy_string_values_transform<ARRAY>(
+                        this->update_cols[0], child_out_col, grp_info);
+                }
                 break;
         }
         free_array_groupby(child_out_col);
@@ -6147,30 +6192,7 @@ class GroupbyPipeline {
             array_info* a = in_table->columns[icol];
             if ((a->arr_type == bodo_array_type::DICT) &&
                 !a->has_global_dictionary) {
-                if (icol >= num_keys) {
-                    int start = func_offsets[k];
-                    int end = func_offsets[k + 1];
-                    for (int j = start; j != end; j++) {
-                        // for each function applied to this column
-                        // TODO: [BE-3326] Investigate why sorting on indices
-                        // does not work for dict-encoded groupby min/max
-                        if (ftypes[j] == Bodo_FTypes::min ||
-                            ftypes[j] == Bodo_FTypes::max ||
-                            ftypes[j] == Bodo_FTypes::first ||
-                            ftypes[j] == Bodo_FTypes::count ||
-                            ftypes[j] == Bodo_FTypes::last ||
-                            ftypes[j] == Bodo_FTypes::sum ||
-                            ftypes[j] == Bodo_FTypes::cumsum ||
-                            ftypes[j] == Bodo_FTypes::head ||
-                            ftypes[j] == Bodo_FTypes::shift ||
-                            ftypes[j] == Bodo_FTypes::nunique) {
-                            convert_local_dictionary_to_global(a);
-                        }
-                    }
-                    k++;
-                } else {
-                    convert_local_dictionary_to_global(a);
-                }
+                convert_local_dictionary_to_global(a);
             }
         }
 
