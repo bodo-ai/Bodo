@@ -48,7 +48,6 @@ from bodo.libs.array import (
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.decimal_arr_ext import Decimal128Type
-from bodo.libs.dict_arr_ext import DictionaryArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
@@ -531,7 +530,9 @@ def get_agg_typ(
         for c in columns:
             ind = grp.df_type.column_index[c]
             data = grp.df_type.data[ind]  # type of input column
-            if func_name not in ("min", "first", "last", "max", "shift", "head"):
+            # for sum and cumsum we opted to return regular string since
+            # repeated strings are unlikely and this simplifies code on C++ side
+            if func_name in ("sum", "cumsum"):
                 data = to_str_arr_if_dict_array(data)
             e_column_type = ColumnType.NonNumericalColumn.value
             if isinstance(data, (types.Array, IntegerArrayType)) and isinstance(
@@ -659,11 +660,12 @@ def get_agg_typ(
                     data, func_name, grp.df_type.index
                 )
             if err_msg == "ok":
-                if func_name not in ("min", "max", "first", "last", "head", "shift"):
-                    out_arr = to_str_arr_if_dict_array(out_dtype)
-                else:
-                    out_arr = out_dtype
-                out_data.append(out_arr)
+                out_dtype = (
+                    to_str_arr_if_dict_array(out_dtype)
+                    if func_name in ("sum", "cumsum")
+                    else out_dtype
+                )
+                out_data.append(out_dtype)
                 out_columns.append(c)
                 if func_name == "agg":
                     # XXX Can we merge with get_const_func_output_type above?
@@ -730,8 +732,7 @@ def get_agg_typ(
             if func_name in ("size", "ngroup")
             else types.StringLiteral(grp.selection[0])
         )
-        is_dict = isinstance(out_data[0], DictionaryArrayType)
-        out_res = SeriesType(dtype, index=index, name_typ=name_type, is_dict=is_dict)
+        out_res = SeriesType(dtype, data=out_data[0], index=index, name_typ=name_type)
     return signature(out_res, *args), gb_info
 
 
@@ -1051,16 +1052,12 @@ def resolve_transformative(grp, args, kws, msg, name_operation):
         gb_info[(c, name_operation)] = c
         ind = grp.df_type.column_index[c]
         data = grp.df_type.data[ind]
-        if name_operation not in (
-            "min",
-            "max",
-            "first",
-            "last",
-            "head",
-            "shift",
-            "size",
-            "count",
-        ):
+        operation = (
+            name_operation
+            if name_operation != "transform"
+            else get_literal_value(transform_func)
+        )
+        if operation in ("sum", "cumsum"):
             data = to_str_arr_if_dict_array(data)
         if name_operation == "cumprod":
             if not isinstance(data.dtype, (types.Integer, types.Float)):

@@ -1433,13 +1433,12 @@ def can_literalize_type(t, pyobject_to_literal=False):
     )
 
 
-def dtype_to_array_type(dtype, is_dict=False):
+def dtype_to_array_type(dtype):
     """get default array type for scalar dtype
 
 
     Args:
         dtype (IntDtype): scalar data type
-        is_dict (bool): whether the array is dictionary encoded
     """
     dtype = types.unliteral(dtype)
 
@@ -1457,7 +1456,7 @@ def dtype_to_array_type(dtype, is_dict=False):
 
     # string array
     if dtype == bodo.string_type:
-        return bodo.string_array_type if not is_dict else bodo.dict_str_arr_type
+        return bodo.string_array_type
 
     # binary array
     if dtype == bodo.bytes_type:

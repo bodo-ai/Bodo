@@ -1148,20 +1148,6 @@ def agg_distributed_run(
     for out_col, (in_col, func) in agg_node.gb_info_out.items():
         if in_col is not None:
             t = agg_node.in_col_types[in_col]
-            if func.ftype not in (
-                "min",
-                "max",
-                "first",
-                "last",
-                "sum",
-                "cumsum",
-                "shift",
-                "head",
-                "nunique",
-                "size",
-                "count",
-            ):
-                t = to_str_arr_if_dict_array(t)
             in_col_typs.append(t)
         funcs.append(func)
         func_out_types.append(out_col_typs[out_col])
@@ -1288,6 +1274,8 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         return "bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))"
     elif isinstance(t, StringArrayType):
         return "pre_alloc_string_array(1, 1)"
+    elif t == bodo.dict_str_arr_type:
+        return "bodo.libs.dict_arr_ext.init_dict_arr(pre_alloc_string_array(1, 1), bodo.libs.int_arr_ext.alloc_int_array(1, np.int32), False)"
     elif isinstance(t, BinaryArrayType):
         return "pre_alloc_binary_array(1, 1)"
     elif t == ArrayItemArrayType(string_array_type):
@@ -1745,88 +1733,6 @@ def gen_top_level_agg_func(
         in_args = [f"arg{i}" for i, v in enumerate(agg_node.in_vars) if v is not None]
 
     func_text = f"def agg_top({', '.join(in_args)}):\n"
-
-    # convert data columns to regular strings (keys can stay dict-encoded)
-    if agg_node.is_in_table_format:
-        table_type = (
-            None if agg_node.in_vars[0] is None else typemap[agg_node.in_vars[0].name]
-        )
-        if table_type is not None:
-            for j, t in enumerate(table_type.arr_types):
-                unsupported = any(
-                    info[0].ftype
-                    not in (
-                        "min",
-                        "max",
-                        "first",
-                        "last",
-                        "sum",
-                        "cumsum",
-                        "shift",
-                        "head",
-                        "nunique",
-                    )
-                    for info in agg_node.gb_info_in[j]
-                )
-                if (
-                    j not in agg_node.in_key_inds
-                    and t == bodo.dict_str_arr_type
-                    and unsupported
-                ):
-                    func_text += f"    arg0 = set_table_data(arg0, {j}, decode_if_dict_array(get_table_data(arg0, {j})))\n"
-        for i in range(1, len(agg_node.in_vars)):
-            v = agg_node.in_vars[i]
-            if v is None:
-                continue
-            var_typ = typemap[v.name]
-            col_no = agg_node.n_in_table_arrays + i - 1
-            unsupported = any(
-                info[0].ftype
-                not in (
-                    "min",
-                    "max",
-                    "first",
-                    "last",
-                    "sum",
-                    "cumsum",
-                    "shift",
-                    "head",
-                    "nunique",
-                )
-                for info in agg_node.gb_info_in[i]
-            )
-            if (
-                col_no not in agg_node.in_key_inds
-                and var_typ == bodo.dict_str_arr_type
-                and unsupported
-            ):
-                func_text += f"    arg{col_no} = decode_if_dict_array(arg{col_no})\n"
-    else:
-        for i, v in enumerate(agg_node.in_vars):
-            if v is None:
-                continue
-            var_typ = typemap[v.name]
-            unsupported = any(
-                info[0].ftype
-                not in (
-                    "min",
-                    "max",
-                    "first",
-                    "last",
-                    "sum",
-                    "cumsum",
-                    "shift",
-                    "head",
-                    "nunique",
-                )
-                for info in agg_node.gb_info_in[i]
-            )
-            if (
-                i not in agg_node.in_key_inds
-                and var_typ == bodo.dict_str_arr_type
-                and unsupported
-            ):
-                func_text += f"    arg{i} = decode_if_dict_array(arg{i})\n"
 
     # convert arrays to cpp table, format: key columns, data columns, Index column
     # For each unique function applied to a given input column (i.e. each
@@ -2540,7 +2446,12 @@ class RegularUDFGenerator:
         self.redvar_offsets = [0]
 
     def add_udf(self, in_col_typ, func):
-        in_series_typ = SeriesType(in_col_typ.dtype, in_col_typ, None, string_type)
+        # convert dict-encoded string array to regular string array to make sure parfors
+        # are generated instead of optimized dict-encoded calls like dict_arr_eq.
+        # see test_groupby_agg_nullable_or
+        in_series_typ = SeriesType(
+            in_col_typ.dtype, to_str_arr_if_dict_array(in_col_typ), None, string_type
+        )
         # compile UDF to IR
         f_ir, pm = compile_to_optimized_ir(
             func, (in_series_typ,), self.typingctx, self.targetctx

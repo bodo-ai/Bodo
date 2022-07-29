@@ -1633,6 +1633,16 @@ std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
             ListStr[iRow] = strOut;
         }
     }
+    if (arr->arr_type == bodo_array_type::DICT) {
+        nRow = arr->info2->length;
+        std::vector<std::string> dataStr(nRow);
+        dataStr = GetColumn_as_ListString(arr->info1);
+        std::vector<std::string> indexStr(nRow);
+        indexStr = GetColumn_as_ListString(arr->info2);
+        for (size_t iRow = 0; iRow < nRow; iRow++) {
+            ListStr[iRow] = dataStr[std::stoi(indexStr[iRow])];
+        }
+    }
     if (arr->arr_type == bodo_array_type::STRING) {
 #ifdef DEBUG_DEBUG
         std::cout << "DEBUG, Case STRING\n";

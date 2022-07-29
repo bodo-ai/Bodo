@@ -5559,6 +5559,22 @@ def test_groupby_transform_nullable(memory_leak_check):
         A = df.groupby("A").transform("min")
         return A
 
+    def impl_max(df):
+        A = df.groupby("A").transform("max")
+        return A
+
+    def impl_first(df):
+        A = df.groupby("A").transform("first")
+        return A
+
+    def impl_last(df):
+        A = df.groupby("A").transform("last")
+        return A
+
+    def impl_nunique(df):
+        A = df.groupby("A")["D"].transform("nunique")
+        return A
+
     def impl_sum(df):
         A = df.groupby("A").transform("sum")
         return A
@@ -5572,8 +5588,12 @@ def test_groupby_transform_nullable(memory_leak_check):
             ),
         }
     )
-    check_func(impl_sum, (df,))
     check_func(impl_min, (df,))
+    check_func(impl_max, (df,))
+    check_func(impl_first, (df,))
+    check_func(impl_last, (df,))
+    check_func(impl_nunique, (df,))
+    check_func(impl_sum, (df,))
 
 
 @pytest.mark.slow
@@ -5914,7 +5934,7 @@ def test_groupby_agg_list_builtin(memory_leak_check):
     """
 
     def impl(df):
-        b = df.groupby(["A", "C"])["B"].agg(["min", "max"])
+        b = df.groupby(["A", "C"])["B"].agg(["min", "sum", "nunique", "last"])
         return b
 
     df = pd.DataFrame(
@@ -5924,8 +5944,17 @@ def test_groupby_agg_list_builtin(memory_leak_check):
             "C": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] * 2,
         }
     )
+
+    df_str = pd.DataFrame(
+        {
+            "A": ["aa", "b", "b", "b", "aa", "aa", "b"],
+            "B": ["ccc", "ff", "bb", "rr", "bb", "ggg", "aa"],
+            "C": ["cc", "aa", "aa", "bb", "vv", "cc", "cc"],
+        }
+    )
     # Specify sort_output because the ordering may not match.
     check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df_str,), sort_output=True, reset_index=True)
 
 
 def test_groupby_agg_list_lambda(memory_leak_check):
