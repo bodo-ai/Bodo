@@ -86,7 +86,7 @@ TABLE_FORMAT_THRESHOLD = 20
 
 # A flag to use dictionary-encode string arrays for all string arrays
 # Used for testing purposes
-_use_dict_str_type = False
+_use_dict_str_type = True
 
 
 def _set_bodo_meta_in_pandas():

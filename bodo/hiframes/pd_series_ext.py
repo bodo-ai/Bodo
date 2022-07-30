@@ -1151,6 +1151,7 @@ def to_csv_overload(
     escapechar=None,
     decimal=".",
     errors="strict",
+    _bodo_file_prefix="part-",
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
     """Inspired by to_csv_overload in pd_dataframe_ext.py"""
@@ -1187,6 +1188,7 @@ def to_csv_overload(
             escapechar=None,
             decimal=".",
             errors="strict",
+            _bodo_file_prefix="part-",
             _is_parallel=False,
         ):  # pragma: no cover
             with numba.objmode(D="unicode_type"):
@@ -1238,6 +1240,7 @@ def to_csv_overload(
         escapechar=None,
         decimal=".",
         errors="strict",
+        _bodo_file_prefix="part-",
         _is_parallel=False,
     ):  # pragma: no cover
         # passing None for the first argument returns a string
@@ -1270,7 +1273,7 @@ def to_csv_overload(
                 errors,
             )
 
-        bodo.io.fs_io.csv_write(path_or_buf, D, _is_parallel)
+        bodo.io.fs_io.csv_write(path_or_buf, D, _bodo_file_prefix, _is_parallel)
 
     return _impl
 
