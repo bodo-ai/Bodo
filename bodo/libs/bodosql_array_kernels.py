@@ -133,6 +133,7 @@ def gen_vectorized(
     arg_string=None,
     arg_sources=None,
     array_override=None,
+    support_dict_encoding=True,
 ):
     """Creates an impl for a function that has several inputs that could all be
        scalars, nulls, or arrays by broadcasting appropriately.
@@ -156,6 +157,8 @@ def gen_vectorized(
         the length of the final array. If not provided, inferred from arg_types.
         If provided, ensures that the returned answer is always an array,
         even if all of the arg_types are scalars.
+        support_dict_encoding (optional boolean) if true, allows dictionary
+        encoded outputs under certain conditions
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -195,11 +198,46 @@ def gen_vectorized(
         return return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)
 
     (Where out_dtype is mapped to types.int64)
+
+    NOTE: dictionary encoded outputs operate under the following assumptions:
+        - The output will only be dictionary encoded if exactly one of the inputs
+          is dicitonary encoded, and hte rest are all scalars, and support_dict_encoding
+          is True.
+        - The indices do not change, except for some of them becoming null if the
+          string they refer to is also transformed into null
+        - The size of the dictionary will never change, even if several of its
+          values become unused, duplicates, or nulls.
+        - This function cannot be inlined as inlining the dictionary allocation
+          is unsafe.
+        - All functions invoked in scalar_text must be deterministic (no randomness
+          involved).
+        - Nulls are never converted to non-null values.
     """
     are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
     all_scalar = not any(are_arrays)
     out_null = any(
         [propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none]
+    )
+
+    # The output is dictionary-encoded if exactly one of the inputs is
+    # dictionary encoded, the rest are all scalars, and the output dtype
+    # is a string array
+    vector_args = 0
+    dict_encoded_arg = -1
+    for i in range(len(arg_types)):
+        if bodo.utils.utils.is_array_typ(arg_types[i], False):
+            vector_args += 1
+            if arg_types[i] == bodo.dict_str_arr_type:
+                dict_encoded_arg = i
+        elif bodo.utils.utils.is_array_typ(arg_types[i], True):
+            vector_args += 1
+            if arg_types[i].dtype == bodo.dict_str_arr_type:
+                dict_encoded_arg = i
+    use_dict_encoding = (
+        support_dict_encoding
+        and vector_args == 1
+        and dict_encoded_arg >= 0
+        and out_dtype == bodo.string_array_type
     )
 
     # Calculate the indentation of the scalar_text so that it can be removed
@@ -242,23 +280,45 @@ def gen_vectorized(
             func_text += "   return answer"
 
     else:
-        # Determine the size of the final output array and convert Series to arrays
-        if array_override != None:
-            found_size = True
-            size_text = f"len({array_override})"
-        found_size = False
+        # Convert all Series to arrays
         for i in range(len(arg_names)):
-            if are_arrays[i]:
-                if not found_size:
-                    size_text = f"len({arg_names[i]})"
-                    found_size = True
-                if not bodo.utils.utils.is_array_typ(arg_types[i], False):
-                    func_text += f"   {arg_names[i]} = bodo.hiframes.pd_series_ext.get_series_data({arg_names[i]})\n"
+            if bodo.hiframes.pd_series_ext.is_series_type(arg_types[i]):
+                func_text += f"   {arg_names[i]} = bodo.hiframes.pd_series_ext.get_series_data({arg_names[i]})\n"
 
+        # If an array override is provided, use it to obtain the length
+        if array_override != None:
+            size_text = f"len({array_override})"
+
+        # Otherwise, determine the size of the final output array from the
+        # first argument that is an array
+        else:
+            for i in range(len(arg_names)):
+                if are_arrays[i]:
+                    size_text = f"len({arg_names[i]})"
+                    break
+
+        # If using dictionary encoding, ensure that the argument name refers
+        # to the dictionary, and also extract the indices
+        if use_dict_encoding:
+            func_text += f"   indices = {arg_names[dict_encoded_arg]}._indices.copy()\n"
+            func_text += f"   has_global = {arg_names[dict_encoded_arg]}._has_global_dictionary\n"
+            func_text += f"   {arg_names[dict_encoded_arg]} = {arg_names[dict_encoded_arg]}._data\n"
+
+        # If dictionary encoded outputs are not being used, then the output is
+        # still bodo.string_array_type, the number of loop iterations is still the
+        # length of the indices, and scalar_text/propagate_null should work the
+        # same because isna checks the data & indices, and scalar_text uses the
+        # arguments extracted by getitem.
         func_text += f"   n = {size_text}\n"
-        func_text += f"   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
-        func_text += "   numba.parfors.parfor.init_prange()\n"
-        func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
+        if use_dict_encoding:
+            func_text += (
+                "   res = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n"
+            )
+            func_text += "   for i in range(n):\n"
+        else:
+            func_text += f"   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
+            func_text += "   numba.parfors.parfor.init_prange()\n"
+            func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
 
         # If the argument types imply that every row is null, then just set each
         # row of the output array to null
@@ -287,7 +347,20 @@ def gen_vectorized(
             for line in scalar_text.splitlines():
                 func_text += " " * 6 + line[base_indentation:] + "\n"
 
-        func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)"
+        # If using dictionary encoding, construct the output from the
+        # new dictionary + the indices, and also make sure that all nulls in
+        # the dicitonary are propageted back to the indices
+        if use_dict_encoding:
+            func_text += "   for i in range(n):\n"
+            func_text += "      if not bodo.libs.array_kernels.isna(indices, i):\n"
+            func_text += "         loc = indices[i]\n"
+            func_text += "         if bodo.libs.array_kernels.isna(res, loc):\n"
+            func_text += "            bodo.libs.array_kernels.setna(indices, i)\n"
+            func_text += "   res = bodo.libs.dict_arr_ext.init_dict_arr(res, indices, has_global)\n"
+            func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, len(indices), 1), None)"
+        else:
+            func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)"
+
     loc_vars = {}
     exec(
         func_text,
@@ -300,7 +373,6 @@ def gen_vectorized(
         },
         loc_vars,
     )
-
     impl = loc_vars["impl"]
 
     return impl
@@ -1009,7 +1081,13 @@ def cond_util(arr, ifbranch, elsebranch):
     # Get the common dtype from the two branches
     out_dtype = get_common_broadcasted_type([ifbranch, elsebranch], "IF")
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
 
 
 @numba.generated_jit(nopython=True)
@@ -1247,6 +1325,7 @@ def overload_coalesce_util(A):
         arg_string,
         arg_sources,
         array_override,
+        support_dict_encoding=False,
     )
 
 
