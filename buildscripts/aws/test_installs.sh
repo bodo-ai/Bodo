@@ -1,8 +1,8 @@
 #!/bin/bash
+set -exo pipefail
 
 # Installations needed to run unittests. All placed in 1 file for the AWS Codebuild install step.
 
-set -eo pipefail
 # Deactivate env in case this was called by another file that
 # activated the env
 source deactivate || true
@@ -14,12 +14,12 @@ conda install -y -c conda-forge boto3 botocore fsspec>=2021.09 s3fs
 conda install -y -c conda-forge pymysql sqlalchemy
 conda install -y -c conda-forge scikit-learn='1.0.*' gcsfs
 conda install -y -c conda-forge matplotlib
-conda install -y -c conda-forge pyspark openjdk
-conda install -y flake8
+conda install -y -c conda-forge pyspark=3.2 'openjdk>=9.0'
+# conda install -y flake8
 # cx_oracle: Oracle Database
 # psycopg2: PostgreSQL
 if [ "$RUN_NIGHTLY" != "yes" ]; then
     conda install -y -c conda-forge cx_oracle psycopg2
 fi
-conda install pytest pytest-cov -c conda-forge
+conda install -y -c conda-forge pytest pytest-cov
 python -m pip install deltalake

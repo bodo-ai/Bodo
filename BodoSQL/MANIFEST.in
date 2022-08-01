@@ -1,0 +1,2 @@
+include versioneer.py
+include bodosql/_version.py

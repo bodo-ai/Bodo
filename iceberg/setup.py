@@ -7,6 +7,12 @@ from setuptools import find_packages, setup
 from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 
+cwd = os.getcwd()
+setup_py_dir_path = os.path.dirname(os.path.realpath(__file__))
+# despite the name, this also works for directories
+if not os.path.samefile(cwd, setup_py_dir_path):
+    raise Exception("setup.py should only be invoked if the current working directory is in the same directory as Setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules.")
+
 # --------- Trick to pass the Bodo Version in CI ---------
 # During CI, conda copies and isolates the iceberg subfolder from the monorep
 # Thus, we can not import the top-level versioneer.py to get the version

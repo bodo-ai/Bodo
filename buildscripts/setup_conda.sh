@@ -1,12 +1,13 @@
 #!/bin/bash
 set -exo pipefail
 
+unamestr=`uname`
+
 # Install Miniconda
 # Reference:
 # https://github.com/numba/numba/blob/master/buildscripts/incremental/install_miniconda.sh
 if [ "$RUNTIME" != "yes" ];
 then
-  unamestr=`uname`
   if [[ "$unamestr" == 'Linux' ]]; then
     wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
   elif [[ "$unamestr" == 'Darwin' ]]; then
@@ -48,21 +49,24 @@ elif [[ "$unamestr" == 'Darwin' ]]; then
     $CONDA_INSTALL -c conda-forge clang_osx-64 clangxx_osx-64
 else
     echo "Error in compiler install"
+    exit 1
 fi
 
 
 # ---- Conda installs for source build ----
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
+   $CONDA_INSTALL -c conda-forge boost-cpp=1.74.0 cmake h5py mpich mpi
+   $CONDA_INSTALL 'hdf5=1.12.*=*mpich*' -c conda-forge
    $CONDA_INSTALL -c conda-forge pyarrow=7.0.0
    $CONDA_INSTALL fsspec>=2021.09 -c conda-forge
    $CONDA_INSTALL pandas=${BODO_PD_VERSION:-'1.4.*'} -c conda-forge
-   $CONDA_INSTALL numba=0.55.1 -c conda-forge
+   $CONDA_INSTALL numba=0.55.2 -c conda-forge
    $CONDA_INSTALL cython -c conda-forge
    $CONDA_INSTALL mpi4py -c conda-forge
    $CONDA_INSTALL scikit-learn='1.0.*' 'gcsfs>=2022.1' -c conda-forge
    $CONDA_INSTALL matplotlib='3.5.1' -c conda-forge
-   $CONDA_INSTALL pyspark openjdk -c conda-forge
+   $CONDA_INSTALL pyspark=3.2 'openjdk>=9.0' -c conda-forge
    $CONDA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
    if [ "$RUN_COVERAGE" == "yes" ]; then $CONDA_INSTALL coveralls; fi
 else

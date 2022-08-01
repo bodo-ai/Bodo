@@ -1,6 +1,6 @@
 #!/bin/bash
+set -exo pipefail
 # Copied from BodoSQL with updates to use micromamba
-set -xeo pipefail
 
 
 # Install Micromamba. Reference:

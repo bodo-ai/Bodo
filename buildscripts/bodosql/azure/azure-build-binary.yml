@@ -1,0 +1,45 @@
+parameters:
+    name: ''
+    vmImage: ''
+    CONDA_ENV: ''
+    PYTHON_VERSION: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  timeoutInMinutes: 240
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.9'
+    displayName: 'Use Python $(python.version)'
+
+  - script: |
+      set -eo pipefail
+      buildscripts/bodosql/install.sh
+    env:
+      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
+      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
+      TARGET_NAME: ${{ parameters.name }}
+      RUNTIME: "no"
+    displayName: 'Setup Conda Installation + Dependencies'
+
+  - task: DownloadSecureFile@1
+    name: secret_file
+    displayName: 'Download secrets file'
+    inputs:
+      secureFile: 'publish_binary_secrets'
+
+  - script: |
+      set -eo pipefail
+      sudo chmod a+r $(secret_file.secureFilePath)
+      sudo cp $(secret_file.secureFilePath) $HOME/secret_file
+      artifactory_channel=`./buildscripts/bodosql/azure/get_channel.sh`
+      echo "artifactory_channel: $artifactory_channel"
+      ./buildscripts/bodosql/azure/publish_binary.sh $artifactory_channel
+    env:
+      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
+      TARGET_NAME: ${{ parameters.name }}
+    displayName: 'Conda build and publish BodoSQL binary to Artifactory'

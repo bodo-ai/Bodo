@@ -1,8 +1,7 @@
-#!/bin/bash -xe
+#!/bin/bash
+set -exo pipefail
 
 # File for merging with master. Doesn't work if the merge has to be done manually.
-
-set -eo pipefail
 
 # Set info to avoid errors
 git config --global user.email "nick@bodo.ai"

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>com.bodosql</groupId>
+	<artifactId>bodosql-calcite-parent</artifactId>
+	<version>1.0.0.RC</version>
+	<packaging>pom</packaging>
+	<url>https://bodo.ai</url>
+
+	<licenses>
+		<license>
+			<name>Bodo alpha license</name>
+			<url>http://bodo.ai/alpha.pdf</url>
+		</license>
+	</licenses>
+
+	<properties>
+		<sourceEncoding>UTF-8</sourceEncoding>
+		<project.build.sourceEncoding>${sourceEncoding}</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>${sourceEncoding}</project.reporting.outputEncoding>
+		<java.version>1.11</java.version>
+		<org.slf4j-version>1.7.29</org.slf4j-version>
+		<junit.version>4.12</junit.version>
+		<org.testng.version>6.14.3</org.testng.version>
+	</properties>
+
+	<modules>
+		<module>bodosql-calcite-core</module>
+		<module>bodosql-calcite-application</module>
+	</modules>
+
+	<dependencies>
+		<!-- Test Dependencies -->
+		<dependency>
+			<groupId>junit</groupId>
+			<artifactId>junit</artifactId>
+			<version>${junit.version}</version>
+			<scope>test</scope>
+		</dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.20</version>
+            <scope>test</scope>
+        </dependency>
+		<dependency>
+			<groupId>org.testng</groupId>
+			<artifactId>testng</artifactId>
+			<version>${org.testng.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.javatuples/javatuples -->
+	</dependencies>
+	<build>
+		<finalName>${project.artifactId}</finalName>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<version>3.0.1</version>
+			</plugin>
+			<!-- Java version -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<source>${java.version}</source>
+					<target>${java.version}</target>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+</project>

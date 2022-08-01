@@ -1,9 +1,8 @@
-#!/bin/bash -xe
+#!/bin/bash
+set -exo pipefail
 
 # Used to upload files to sonarqube
 
-set -eo pipefail
-  
 # get the sonar token used to authenticate against the sonar server from credstash
 TOKEN=`credstash --kms-region us-east-2 get sonar.analysis.token`
 PULL_REQUEST_ID=`echo $CODEBUILD_WEBHOOK_TRIGGER | cut -f2 -d/`

@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -u -x
+set -exo pipefail
 
 # See https://bodo.atlassian.net/wiki/spaces/DD/pages/946929672/Bodo+Linux+pip+package
 # for more information

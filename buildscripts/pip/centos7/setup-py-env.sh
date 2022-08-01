@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -u -x
+set -exo pipefail
 
 # We don't support Python 3.6, 3.7 (because of Bodo or a dependency of Bodo)
 rm -rf /opt/python/cp36-cp36m

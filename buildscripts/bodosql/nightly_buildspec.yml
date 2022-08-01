@@ -1,0 +1,39 @@
+version: 0.2
+
+# Link to reference documentation: https://docs.aws.amazon.com/codebuild/latest/userguide/build-spec-ref.html
+
+env:
+  shell: /bin/bash
+  git-credential-helper: true
+  variables:
+      CONDA_ENV: "BodoCodeBuild"
+      BODO_CHANNEL_NAME: bodo.ai
+      CI_SOURCE: AWS
+      BODOSQL_CUSTOMER_TESTS: bodosql_customer_tests
+      RUNTIME: "yes"
+      # It seems like RUN_NIGHTLY controls if we install pacakges needed for a source build of Bodo.
+      # we do a source build of Bodo for BodoSQL's nightly
+      RUN_NIGHTLY: "no"
+
+phases:
+    install:
+        commands:
+        - echo merging with master
+        - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/aws/merge_with_master.sh
+        - echo Bodo Install
+        - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/setup_conda.sh
+        - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/aws/test_installs.sh
+        - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/bodosql/install.sh
+
+    build:
+        commands:
+        #TODO: split install_iceberg_connector. Currently we build the iceberg connector twice, since
+        # the install file builds it.
+        - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/install_iceberg_connector.sh
+        - ./buildscripts/bodosql/aws/CI_if_changes.sh ./buildscripts/bodosql/build.sh
+
+
+    post_build:
+        commands:
+        - ./buildscripts/bodosql/aws/CI_if_changes.sh ./buildscripts/bodosql/aws/run_nightly_tests.sh
+

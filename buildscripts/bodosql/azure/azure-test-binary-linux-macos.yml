@@ -1,0 +1,120 @@
+parameters:
+  name: ''
+  vmImage: ''
+  CONDA_ENV: ''
+  BODO_CHANNEL_NAME: ''
+  PYTEST_MARKER: ''
+  NP: ''
+  PYTHON_VERSION: ''
+  CACHE_TEST: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  variables:
+    - group: SnowflakeCredentials
+  timeoutInMinutes: 360
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+  strategy:
+    maxParallel: 11
+    matrix:
+      ${{ insert }}: ${{ parameters.matrix }}
+
+  steps:
+
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: '3.9'
+    displayName: 'Use Python $(python.version)'
+
+  - script: |
+      if [[ "${{ parameters.name }}" == "macOS" ]]; then
+        buildscripts/bodosql/setup_osx_sdk.sh
+      fi
+    displayName: 'Setup OSX SDK'
+
+  - script: |
+      set -eo pipefail
+      ./buildscripts/bodosql/install.sh
+    env:
+      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
+      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
+    displayName: 'Download miniconda and create conda env'
+
+  - task: DownloadSecureFile@1
+    name: secret_file
+    displayName: 'Download secrets file'
+    inputs:
+      secureFile: 'publish_binary_secrets'
+
+
+  - script: |
+      set -eo pipefail
+      sudo chmod a+r $(secret_file.secureFilePath)
+      sudo cp $(secret_file.secureFilePath) $HOME/secret_file
+      export PATH=$HOME/miniconda3/bin:${PATH}
+      source activate $CONDA_ENV
+      export CHECK_LICENSE_PLATFORM=$(CHECK_LICENSE_PLATFORM)
+      export CHECK_LICENSE_EXPIRED=$(CHECK_LICENSE_EXPIRED)
+      export OBFUSCATE=$(OBFUSCATE)
+      if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
+        export PLATFORM_DEV_RELEASE=$(PLATFORM_DEV_RELEASE)
+      else
+        export PLATFORM_DEV_RELEASE="false"
+      fi
+      ./buildscripts/bodosql/azure/install_bodo_and_bodosql.sh $PLATFORM_DEV_RELEASE
+    env:
+      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
+    displayName: 'Install Bodo and BodoSQL from conda'
+
+  - script: |
+      set -eo pipefail
+      mkdir -p $HOME/bodo-inc
+      cd $HOME/bodo-inc
+      mkdir bodosql
+      # Note, I don't think this ever runs? we don't have any tests with the name parameter
+      # Equal to Linux for bodosql
+      if [[ "${{ parameters.name }}" == "Linux" ]]; then
+        cp -avr $(System.DefaultWorkingDirectory)/BodoSQL/bodosql/tests bodosql/
+      else
+        cp -r $(System.DefaultWorkingDirectory)/BodoSQL/bodosql/tests bodosql
+      fi
+    displayName: 'Copy tests and test data'
+
+  - task: DownloadSecureFile@1
+    name: testLicense
+    displayName: 'Download test license'
+    inputs:
+      secureFile: 'bodo.lic'
+
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:${PATH}
+      source activate $CONDA_ENV
+      conda install -y -c conda-forge pytest-azurepipelines
+    env:
+      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
+    displayName: 'Install pytest-azurepipelines'
+
+  - script: |
+      set -exo pipefail
+      sudo chmod a+r $(testLicense.secureFilePath)
+      sudo cp $(testLicense.secureFilePath) $HOME/bodo-inc
+      export PATH=$HOME/miniconda3/bin:${PATH}
+      source activate $CONDA_ENV
+      cd $HOME/bodo-inc
+      cp `python -c "import bodosql; print(bodosql.__file__[:-11])"`pytest.ini .
+      if [[ "$CACHE_TEST" == "true" ]]; then
+        python -u -m bodosql.runtests_caching "$NP" bodosql/tests/caching_tests/
+      else
+        python -u -m bodosql.runtests "$NP" -s -v -p no:faulthandler -m "$PYTEST_MARKER" bodosql/tests/
+      fi
+
+    env:
+      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
+      NP: ${{ parameters.NP }}
+      PYTEST_MARKER: ${{ parameters.PYTEST_MARKER }}
+      CACHE_TEST: ${{ parameters.CACHE_TEST }}
+      SF_USER: $(SNOWFLAKE_USER)
+      SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
+    displayName: 'Test BodoSQL'

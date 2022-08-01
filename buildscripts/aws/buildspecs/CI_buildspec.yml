@@ -8,26 +8,38 @@ env:
   git-credential-helper: true
   shell: /bin/bash
   variables:
+    CI_SOURCE: AWS
     CONDA_ENV: BodoCodeBuild
     RUN_NIGHTLY: "no"
     RUNTIME: "yes"
 
 phases:
+
+  # Note: we need to do all the installation and build steps if BodoSQL has been changed
+  # but we don't need to run Bodo ci unless Bodo itself has been changed
   install:
     commands:
+      - echo merging with master
+      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/aws/merge_with_master.sh
       - echo Entered the install phase...
-      - ./buildscripts/aws/CI_if_changes.sh buildscripts/setup_conda.sh
-      - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/test_installs.sh
-      - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/merge_with_master.sh
+      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/setup_conda.sh
+      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/aws/test_installs.sh
+      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/bodosql/install.sh
+
   build:
     commands:
       - echo Entered the build phase...
-      - ./buildscripts/aws/CI_if_changes.sh buildscripts/install_iceberg_connector.sh
-      - ./buildscripts/aws/CI_if_changes.sh buildscripts/build.sh
+        #TODO: split install_iceberg_connector. Currently we build the iceberg connector twice, since
+        # the install file builds it.
+      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/install_iceberg_connector.sh
+        #BodoSQL version of this also builds Bodo and icerberg
+      - ./buildscripts/bodosql/aws/CI_if_changes.sh ./buildscripts/bodosql/build.sh
+
   post_build:
     commands:
       - echo Entered the post-build phase...
       - ./buildscripts/aws/CI_if_changes.sh buildscripts/aws/run_unittests.sh
+      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/bodosql/test.sh
 
 artifacts:
   files:

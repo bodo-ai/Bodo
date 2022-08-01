@@ -16,7 +16,7 @@ alternatives like [Apache Spark](http://spark.apache.org).
 - [Getting Started](https://bodo.atlassian.net/wiki/spaces/B/pages/1012891649/Getting+Started)
 - [Building Bodo from Source](https://bodo.atlassian.net/wiki/spaces/B/pages/1018986500/Building+Bodo+from+Source)
 - [Bodo Engine Architecture](https://bodo.atlassian.net/wiki/spaces/B/pages/1017905469/Bodo+Engine+Architecture): Compiler Stages, Builtin Functions, IR Extensions.
-- [Development Lifecycle](https://bodo.atlassian.net/wiki/spaces/B/pages/1020788774/Development+Lifecycle): Process of contributing to Bodo. 
+- [Development Lifecycle](https://bodo.atlassian.net/wiki/spaces/B/pages/1020788774/Development+Lifecycle): Process of contributing to Bodo.
 - [How to add Tests](https://bodo.atlassian.net/wiki/spaces/B/pages/998866982/Testing): Writing tests and how to use pytest framework
 - [Debugging](https://bodo.atlassian.net/wiki/spaces/B/pages/998113329/Debugging)
 - [Code Style](https://bodo.atlassian.net/wiki/spaces/B/pages/497876993/CodeStyle+Pre-Commits): Bodo Code style guide
@@ -29,3 +29,15 @@ alternatives like [Apache Spark](http://spark.apache.org).
 - [Release Checklist](https://bodo.atlassian.net/wiki/spaces/B/pages/1020592198/Release+Checklist)
 - [Customer Ops](https://bodo.atlassian.net/wiki/spaces/B/pages/1019674699/Customer+Ops)
 - [Bodo User Documentation](https://docs.bodo.ai)
+
+
+# BodoSQL Documentation
+
+Most the relevant documentation can be found on the [BodoSQL Confluence](https://bodo.atlassian.net/wiki/spaces/BodoSQL/overview). You may also encounter Bodo related issues. For those you should use the [Bodo-Engine Confluence](https://bodo.atlassian.net/wiki/spaces/B/overview).
+
+# Frequently used Pages
+
+- [Getting Started](https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1022492691/Getting+Started)
+- [BodoSQL Overview](https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/1021837518/BodoSQL+Overview)
+- [Installing BodoSQL](https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/497811474/Building+and+Installing+BodoSQL)
+- [Release Checklist](https://bodo.atlassian.net/wiki/spaces/BodoSQL/pages/872251393/BodoSQL+Release+Checklist)

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog
+	xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-2.0.xsd">
+
+	<changeSet id="1"
+		author="ehsan@bodo.ai">
+
+
+
+
+		<createTable tableName="bodosql_catalog_columns">
+			<column name="id" type="BIGINT" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="name" type="varchar(255)"> <!-- whether col name is too long -->
+				<constraints nullable="false" />
+			</column>
+			<column name="data_type" type="smallint">
+				<constraints nullable="false" />
+			</column>
+			<column name="table_id" type="BIGINT">
+				<constraints nullable="false" />
+			</column>
+			<column name="order_value" type="INTEGER">
+				<constraints nullable="false" />
+			</column>
+		</createTable>
+
+
+
+		<createTable tableName="bodosql_catalog_tables">
+			<column name="id" type="BIGINT" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="name" type="varchar(50)">
+				<constraints nullable="false" />
+			</column>
+			<column name="database_id" type="BIGINT">
+				<constraints nullable="false" />
+			</column>
+			<column name="write_name" type="varchar(50)">
+				<constraints nullable="true" />
+			</column>
+			<column name="schema" type="varchar(50)">
+				<constraints nullable="true" />
+			</column>
+			<column name="conn_str" type="varchar(400)">
+				<constraints nullable="true" />
+			</column>
+		</createTable>
+
+
+		<addForeignKeyConstraint
+			constraintName="fk_columns_table"
+			baseTableName="bodosql_catalog_columns" baseColumnNames="table_id"
+			referencedTableName="bodosql_catalog_tables"
+			referencedColumnNames="id" />
+
+		<createIndex tableName="bodosql_catalog_columns"
+			indexName="ix_bodosql_catalog_columns_name">
+			<column name="name" />
+		</createIndex>
+
+
+		<createIndex tableName="bodosql_catalog_tables"
+			indexName="ix_bodosql_catalog_tables_name">
+			<column name="name" />
+		</createIndex>
+
+		<createTable tableName="bodosql_catalog_database">
+			<column name="id" type="BIGINT" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="name" type="varchar(50)">
+				<constraints nullable="false" />
+			</column>
+	<!--		<column name="schema_id" type="BIGINT">
+				<constraints nullable="false" />
+			</column> -->
+		</createTable>
+
+		<addForeignKeyConstraint
+			constraintName="fk_tables_database"
+			baseTableName="bodosql_catalog_tables" baseColumnNames="database_id"
+			referencedTableName="bodosql_catalog_database"
+			referencedColumnNames="id" />
+
+	<!--  Dont think we need schemas 
+		<createTable tableName="bodosql_catalog_schema">
+			<column name="id" type="BIGINT" autoIncrement="true">
+				<constraints primaryKey="true" nullable="false" />
+			</column>
+			<column name="name" type="varchar(50)">
+				<constraints nullable="false" />
+			</column>
+
+		</createTable>
+
+		<addForeignKeyConstraint
+			constraintName="fk_database_schema"
+			baseTableName="bodosql_catalog_database" baseColumnNames="schema_id"
+			referencedTableName="bodosql_catalog_schema"
+			referencedColumnNames="id" />
+-->
+
+
+	</changeSet>
+
+</databaseChangeLog>

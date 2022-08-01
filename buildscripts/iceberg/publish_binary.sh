@@ -1,12 +1,12 @@
 #!/bin/bash
+set -exo pipefail
 # Copied from BodoSQL with micromamba changes
-set -xeo pipefail
 
 
 # Package Setup
 eval "$(./bin/micromamba shell hook -s posix)"
 micromamba activate
-micromamba install -q -y boa anaconda-client conda-verify curl -c conda-forge 
+micromamba install -q -y boa anaconda-client conda-verify curl -c conda-forge
 
 
 # Build Pakcage
@@ -23,13 +23,14 @@ CONNECTOR_VERSION+="alpha"
 export IS_RELEASE=`git tag --points-at HEAD`
 
 # We follow the following convention for release:
-# Major Release: Original month release, i.e. 2021.8beta or 2021.11
+# Major Release: Original month release, i.e. 2021.8b1 or 2021.11
 # There should always be 1 dot, even in beta.
 # Minor Release: Repeat release in a month, there should be a second dot
 # i.e. 2021.8.1beta or 2021.11.2
 # Release Candidate: If we need to test a release before the major release
 # we will create a minor release ending in .0 and append rc#
 # i.e. 2021.9.0betarc1 or 2021.11.0rc2
+# For more information, please see our confluence doc: https://bodo.atlassian.net/wiki/spaces/B/pages/1020592198/Release+Checklist
 IS_MAJOR_RELEASE=0
 if [[ -n "$IS_RELEASE" ]]; then
     IS_MAJOR_RELEASE=`python -c "import os; print(int(len(os.environ[\"CONNECTOR_VERSION\"].split(\".\")) < 3))"`
@@ -44,7 +45,7 @@ elif [[ "$CHANNEL_NAME" == "bodo.ai" ]] && [[ -n "$IS_RELEASE" ]]; then
 fi
 
 cd buildscripts/iceberg/conda-recipe/
-conda mambabuild . --no-test -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge 
+conda mambabuild . --no-test -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${BODO_CHANNEL_NAME} -c conda-forge
 
 # Upload to Anaconda
 package=`ls $CONDA_PREFIX/conda-bld/noarch/bodo-iceberg-connector*.tar.bz2`

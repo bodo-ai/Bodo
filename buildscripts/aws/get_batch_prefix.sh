@@ -1,4 +1,5 @@
 #!/bin/bash
+# We can't add -x or -v, as we explcitly use the output to this function
 set -eo pipefail
 # Script to convert batch specific variable into an S3 prefix
 # for use in generating and extracting artifacts across builds

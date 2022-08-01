@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eo pipefail
+set -exo pipefail
 
 CHANNEL_NAME=${1:-bodo-binary}
 OS_DIR=${2:-linux-64}
@@ -31,7 +31,7 @@ if [[ "$CHANNEL_NAME" == "bodo.ai-platform" ]] && [[ "$OS_DIR" == "linux-64"* ]]
     echo "ONLY_DEV: $ONLY_DEV"
 
     echo "Triggering the AMI-CI on the release_tag"
-    
+
     curl \
     -X POST \
     -H "Accept: application/vnd.github.v3+json" \

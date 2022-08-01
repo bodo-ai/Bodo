@@ -11,6 +11,11 @@ import numpy.distutils.misc_util as np_misc
 
 import versioneer
 
+cwd = os.getcwd()
+setup_py_dir_path = os.path.dirname(os.path.realpath(__file__))
+# despite the name, this also works for directories
+if not os.path.samefile(cwd, setup_py_dir_path):
+    raise Exception("setup.py should only be invoked if the current working directory is in the same directory as Setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules.")
 
 # Inject required options for extensions compiled against the Numpy
 # C API (include dirs, library dirs etc.)

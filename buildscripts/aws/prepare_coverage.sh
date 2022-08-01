@@ -1,7 +1,7 @@
-#!/bin/bash -xe
+#!/bin/bash
+set -exo pipefail
 
 # Used to download and merge files that will be used by sonar
-set -eo pipefail
 
 BATCH_PREFIX=coverage-$(buildscripts/aws/get_batch_prefix.sh)
 
