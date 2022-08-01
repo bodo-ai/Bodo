@@ -41,7 +41,10 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.table import TableType
-from bodo.libs.bodosql_array_kernels import broadcasted_fixed_arg_functions
+from bodo.libs.bodosql_array_kernels import (
+    broadcasted_fixed_arg_functions,
+    broadcasted_variadic_functions,
+)
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.utils.transform import (
@@ -1511,13 +1514,13 @@ class DistributedAnalysis:
                 self._meet_several_array_dists(arrays, array_dists)
             return
 
-        if fdef == ("coalesce", "bodo.libs.bodosql_array_kernels"):
+        if func_name in broadcasted_variadic_functions:
             # Note: this will fail if the tuple argument is not constant,
             # but this should never happen because we control code generation
             elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
             assert (
                 elems is not None
-            ), "Internal error, unable to find build tuple for arg0 of coalesce"
+            ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
 
             arrays = [lhs]
             for arg in elems:
