@@ -18,6 +18,7 @@ bodo/transforms/__pycache__
 bodo/utils/__pycache__
 demo/__pycache__
 iceberg/**/__pycache__
+BodoSql/**/__pycache__
 
 # Python egg metadata, regenerated from source files by setuptools.
 **/*.egg-info
@@ -62,3 +63,58 @@ bodo/utils/tracing.c
 iceberg_db
 iceberg/bodo_iceberg_connector/iceberg-java/target
 iceberg/bodo_iceberg_connector/jars
+iceberg_db
+
+#                                 --------BodoSQL--------
+
+#the current paths of the automatically generated library functions, and test cases
+BodoSQL/bodosql/libs/generated_lib.py
+BodoSQL/bodosql/tests/generated_lib_testcases.py
+
+# Compiled class file
+BodoSQL/**/*.class
+
+# BlueJ files
+BodoSQL/**/*.ctxt
+
+# Mobile Tools for Java (J2ME)
+BodoSQL/.mtj.tmp/
+
+# Package Files #
+BodoSQL/**/*.jar
+BodoSQL/**/*.war
+BodoSQL/**/*.nar
+BodoSQL/**/*.ear
+BodoSQL/**/*.zip
+BodoSQL/**/*.tar.gz
+BodoSQL/**/*.rar
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+BodoSQL/hs_err_pid*
+
+# local maven repo
+bodosql-protocol-mvn/
+
+# Sphinx documentation
+BodoSQL/docs/_build/
+
+# Distribution / packaging
+BodoSQL/.Python
+BodoSQL/build/
+BodoSQL/develop-eggs/
+BodoSQL/dist/
+BodoSQL/downloads/
+BodoSQL/eggs/
+BodoSQL/.eggs/
+BodoSQL/lib/
+BodoSQL/lib64/
+BodoSQL/parts/
+BodoSQL/sdist/
+BodoSQL/var/
+wheels/
+BodoSQL/share/python-wheels/
+BodoSQL/.installed.cfg
+BodoSQL/MANIFEST
+
+# development documentation builds
+BodoSQL/dev_docs/_build

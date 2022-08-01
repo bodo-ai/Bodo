@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eo pipefail
+set -exo pipefail
 
 PLATFORM_DEV_RELEASE=${1:-false}
 IS_RELEASE=`git tag --points-at HEAD`

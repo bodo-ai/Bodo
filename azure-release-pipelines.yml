@@ -11,8 +11,8 @@ schedules:
     - master
 
 stages:
-- stage: Build_Bodo_Binary
-  displayName: 'Build Bodo Binary'
+- stage: Build_Bodo_BodoSQL_Binary
+  displayName: 'Build Bodo and BodoSQL Binary'
   jobs:
   - job: find_suffix
     pool:
@@ -26,6 +26,9 @@ stages:
       displayName: 'write FILE_SUFFIX'
       name: suffix_step
 
+  # Bodo build:
+  # Note: for all the bodo build steps,
+  # the name string is used later in the buildscripts to determine which version of conda to install
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: Linux
@@ -68,134 +71,126 @@ stages:
       useNumbaDev: false
       platformBuild: false
 
-- stage: Test_Bodo_Binary
-  displayName: Test Bodo Binary
+# Note: It is difficult to enforce the exact version of bodo to use for the build, outside of
+# modifying the build recipe. Therefore, if we update BodoSQL's build process to require a specific version
+# of Bodo, I'm requiring that we update the recipe in buildscripts/bodosql/conda-recipe/meta.yaml,
+# and do a mini-release.
+
+  # BodoSQL build:
+  - template: buildscripts/bodosql/azure/azure-build-binary.yml
+    parameters:
+      name: BodoSQL_Conda_Build
+      vmImage: ubuntu-latest
+      CONDA_ENV: build_bodo_sql
+      PYTHON_VERSION: 3.9
+  - template: buildscripts/bodosql/azure/azure-build-binary-pip.yml
+    parameters:
+      name: BodoSQL_Pip_Build
+      vmImage: ubuntu-latest
+      CONDA_ENV: build_bodo_sql
+      PYTHON_VERSION: 3.9
+
+- stage: Test_Bodo_and_BodoSQL_Binary
+  displayName: Test Bodo and BodoSQL Binary
   jobs:
+
+  # Bodo tests:
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
+      # Note: name is used later in the buildscripts to determine which version of conda to install
       name: macOS
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: false
       matrix:
-        TEST_1P_SLOW_FIRST_HALF:
+        BODO_TEST_1P_SLOW_FIRST_HALF:
           NP: 1
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and firsthalf
-        TEST_1P_SLOW_SECOND_HALF:
+        BODO_TEST_1P_SLOW_SECOND_HALF:
           NP: 1
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and not firsthalf
-        TEST_2P_SLOW_FIRST_HALF:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and firsthalf
-        TEST_2P_SLOW_SECOND_HALF:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and not firsthalf
-        TEST_3P_SLOW_FIRST_THIRD:
+        BODO_TEST_3P_SLOW_FIRST_THIRD:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and firstthird
-        TEST_3P_SLOW_SECOND_THIRD:
+        BODO_TEST_3P_SLOW_SECOND_THIRD:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and secondthird
-        TEST_3P_SLOW_LAST_THIRD:
+        BODO_TEST_3P_SLOW_LAST_THIRD:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and lastthird
-        TEST_1P_NOT_SLOW_FIRST_HALF:
+        BODO_TEST_1P_NOT_SLOW_FIRST_HALF:
           NP: 1
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and firsthalf
-        TEST_1P_NOT_SLOW_SECOND_HALF:
+        BODO_TEST_1P_NOT_SLOW_SECOND_HALF:
           NP: 1
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and not firsthalf
-        TEST_2P_NOT_SLOW_FIRST_HALF:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and firsthalf
-        TEST_2P_NOT_SLOW_SECOND_HALF:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and not firsthalf
-        TEST_3P_NOT_SLOW_FIRST_HALF:
+        BODO_TEST_3P_NOT_SLOW_FIRST_HALF:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and firsthalf
-        TEST_3P_NOT_SLOW_SECOND_HALF:
+        BODO_TEST_3P_NOT_SLOW_SECOND_HALF:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and not firsthalf
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
+      # Note: name is used later in the buildscripts to determine which version of conda to install
       name: Linux
       vmImage: ubuntu-latest
       useNumbaDev: false
       caching_test: false
       matrix:
-        TEST_1P_SLOW_FIRST_HALF:
+        BODO_TEST_1P_SLOW_FIRST_HALF:
           NP: 1
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and firsthalf
-        TEST_1P_SLOW_SECOND_HALF:
+        BODO_TEST_1P_SLOW_SECOND_HALF:
           NP: 1
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and not firsthalf
-        TEST_2P_SLOW_FIRST_HALF:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and firsthalf
-        TEST_2P_SLOW_SECOND_HALF:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and not firsthalf
-        TEST_3P_SLOW_FIRST_THIRD:
+        BODO_TEST_3P_SLOW_FIRST_THIRD:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and firstthird
-        TEST_3P_SLOW_SECOND_THIRD:
+        BODO_TEST_3P_SLOW_SECOND_THIRD:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and secondthird
-        TEST_3P_SLOW_LAST_THIRD:
+        BODO_TEST_3P_SLOW_LAST_THIRD:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: slow and lastthird
-        TEST_1P_NOT_SLOW_FIRST_HALF:
+        BODO_TEST_1P_NOT_SLOW_FIRST_HALF:
           NP: 1
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and firsthalf
-        TEST_1P_NOT_SLOW_SECOND_HALF:
+        BODO_TEST_1P_NOT_SLOW_SECOND_HALF:
           NP: 1
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and not firsthalf
-        TEST_2P_NOT_SLOW_FIRST_HALF:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and firsthalf
-        TEST_2P_NOT_SLOW_SECOND_HALF:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and not firsthalf
-        TEST_3P_NOT_SLOW_FIRST_THIRD:
+        BODO_TEST_3P_NOT_SLOW_FIRST_THIRD:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and firstthird
-        TEST_3P_NOT_SLOW_SECOND_THIRD:
+        BODO_TEST_3P_NOT_SLOW_SECOND_THIRD:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and secondthird
-        TEST_3P_NOT_SLOW_LAST_THIRD:
+        BODO_TEST_3P_NOT_SLOW_LAST_THIRD:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: not slow and lastthird
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
+      # Note: name is used later in the buildscripts to determine which version of conda to install
       name: Linux_cache
       vmImage: ubuntu-latest
       useNumbaDev: false
@@ -208,6 +203,7 @@ stages:
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
+      # Note: name is used later in the buildscripts to determine which version of conda to install
       name: macOS_cache
       vmImage: macOS-latest
       useNumbaDev: false
@@ -217,3 +213,133 @@ stages:
           NP: 3
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: ""
+
+  # BodoSQL tests
+
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BODOSQL_Linux_38py
+      vmImage: ubuntu-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: run_bodo_sql
+      PYTHON_VERSION: 3.8
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "slow"
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BODOSQL_Linux_310py
+      vmImage: ubuntu-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: run_bodo_sql
+      PYTHON_VERSION: 3.10
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "slow"
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BODOSQL_Linux_39py
+      vmImage: ubuntu-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: run_bodo_sql
+      PYTHON_VERSION: 3.9
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "slow"
+        TEST_3P_PART1:
+          NP: 3
+          PYTEST_MARKER: "part1 and not part2 and not part3"
+        TEST_3P_PART2:
+          NP: 3
+          PYTEST_MARKER: "part2 and not part1 and not part3"
+        TEST_3P_PART3:
+          NP: 3
+          PYTEST_MARKER: "part3 and not part1 and not part2"
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BODOSQL_macOS_38py
+      vmImage: macOS-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: run_bodo_sql
+      PYTHON_VERSION: 3.8
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "slow"
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BODOSQL_macOS_310py
+      vmImage: macOS-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: run_bodo_sql
+      PYTHON_VERSION: 3.10
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "slow"
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BODOSQL_macOS_39py
+      vmImage: macOS-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: run_bodo_sql
+      PYTHON_VERSION: 3.9
+      matrix:
+        TEST_1P:
+          NP: 1
+          PYTEST_MARKER: "slow"
+        TEST_3P_PART1:
+          NP: 3
+          PYTEST_MARKER: "part1 and not part2 and not part3"
+        TEST_3P_PART2:
+          NP: 3
+          PYTEST_MARKER: "part2 and not part1 and not part3"
+        TEST_3P_PART3:
+          NP: 3
+          PYTEST_MARKER: "part3 and not part1 and not part2"
+
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly pass CACHE_TEST and
+      # check uname to determine the os for the bodoSQL tests
+      name: BODOSQL_Linux_cache
+      vmImage: ubuntu-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: build_bodo_sql
+      PYTHON_VERSION: 3.9
+      CACHE_TEST: true
+      PYTEST_MARKER: ""
+      matrix:
+        TEST_3P:
+          NP: 3
+
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly pass CACHE_TEST and
+      # check uname to determine the os for the bodoSQL tests
+      name: BODOSQL_macOS_cache
+      vmImage: macOS-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: build_bodo_sql
+      PYTHON_VERSION: 3.9
+      CACHE_TEST: true
+      PYTEST_MARKER: ""
+      matrix:
+        TEST_3P:
+          NP: 3
+

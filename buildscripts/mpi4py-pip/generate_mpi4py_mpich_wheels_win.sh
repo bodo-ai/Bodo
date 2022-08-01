@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -u -x
+set -exo pipefail
 
 # See https://bodo.atlassian.net/wiki/spaces/DD/pages/972390401/Windows+pip+package
 # for more information

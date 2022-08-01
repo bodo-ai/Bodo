@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eo pipefail
+set -exo pipefail
 
 pip install credstash
 ADMIN_USERNAME=`credstash -r us-east-2 get artifactory.admin.username`

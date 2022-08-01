@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -u -x
+set -exo pipefail
 
 # obfuscate
 cd obfuscation

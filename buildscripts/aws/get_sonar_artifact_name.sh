@@ -1,4 +1,5 @@
 #!/bin/bash
+# We can't add -x or -v, as we explcitly use the output to this function
 set -eo pipefail
 # Script to convert batch and build specific variables into an artifact
 # name that can be placed in an S3 bucket for sonarqube

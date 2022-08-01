@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eo pipefail
+set -exo pipefail
 # Install Minio on AWS Codebuild (no use of Sudo)
 
 unamestr=`uname`

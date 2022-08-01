@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e -u -x
+set -exo pipefail
 
 # This script assumes you have already built mpich locally.
 # See https://bodo.atlassian.net/wiki/spaces/DD/pages/951058433/macOS+pip+package

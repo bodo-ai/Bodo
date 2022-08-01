@@ -1,4 +1,5 @@
 #!/bin/bash
+set -exo pipefail
 rm -f /home/ubuntu/bodo-inc.zip
 rm -rf /home/ubuntu/bodo-inc
 rm -rf /home/ubuntu/benchmarks

@@ -1,10 +1,10 @@
 #!/bin/bash
+set -exo pipefail
 
 # Installations needed for sonar
-set -eo pipefail
 
 # Install boto3 so we can read the coverage files from S3
-pip3 install boto3 
+pip3 install boto3
 pip3 install botocore
 
 # Install coverage and credstash

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -exo pipefail
 export PATH=/root/miniconda3/bin:$PATH
 cores=16
 today=$(TZ=":US/Eastern" date +%Y_%m_%d)

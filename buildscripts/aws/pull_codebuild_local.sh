@@ -1,5 +1,5 @@
 #!/bin/bash
-set -eo pipefail
+set -exo pipefail
 
 # File that pulls the script needed to run Codebuild in docker on a local machine.
 
