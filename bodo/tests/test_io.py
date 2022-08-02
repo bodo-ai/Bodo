@@ -1325,7 +1325,7 @@ def test_partition_cols(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [0, 0, 0, 0, 1, 1, 1, 1],
-            "B": ["A", "A", "B", "B", "A", "A", "B", "B"],
+            "B": ["AA", "AA", "B", "B", "AA", "AA", "B", "B"],
             "C": [True, True, False, False, True, True, False, False],
             "D": pd.Categorical(date_series_str),
             "E": date_series,

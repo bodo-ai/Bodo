@@ -9,6 +9,7 @@
 #include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_datetime_ext.h"
+#include "../libs/_shuffle.h"
 #include "_fs_io.h"
 #include "arrow/ipc/writer.h"
 #include "arrow/util/base64.h"

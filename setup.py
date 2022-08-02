@@ -464,6 +464,8 @@ ext_parquet = Extension(
         "bodo/io/_fsspec_reader.cpp",
         "bodo/io/_hdfs_reader.cpp",
         "bodo/io/_s3_reader.cpp",
+        "bodo/libs/_array_operations.cpp",
+        "bodo/libs/_shuffle.cpp",
     ],
     depends=[
         "bodo/libs/_bodo_common.h",
@@ -474,6 +476,8 @@ ext_parquet = Extension(
         "bodo/io/parquet_reader.h",
         "bodo/io/parquet_write.h",
         "bodo/libs/_murmurhash3.h",
+        "bodo/libs/_array_operations.h",
+        "bodo/libs/_shuffle.h",
     ],
     libraries=pq_libs + np_compile_args["libraries"] + ["arrow_python"],
     include_dirs=["."] + np_compile_args["include_dirs"] + ind + extra_hash_ind,
