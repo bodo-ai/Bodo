@@ -1824,10 +1824,13 @@ def CacheImpl__init__(self, py_func):
 
     fullname = "%s.%s" % (modname, qualname)
     abiflags = getattr(sys, "abiflags", "")
-    
+
     # bodo change: use bodo's version to invalidate cache
     from bodo import __version__ as bodo_version
-    self._filename_base = self.get_filename_base(fullname, abiflags) + "bodo" + bodo_version
+
+    self._filename_base = (
+        self.get_filename_base(fullname, abiflags) + "bodo" + bodo_version
+    )
 
 
 if _check_numba_change:  # pragma: no cover
@@ -3630,6 +3633,99 @@ numba.core.typing.templates._OverloadFunctionTemplate._get_impl = (
 #########   End Changes for Caching  #########
 
 #########   Start changes to improve parfor dead code elimination #########
+
+
+# Bodo Change: Helper function to replace branches with jump if blocks are empty
+def trim_empty_parfor_branches(parfor):
+    """
+    Iterate through the parfor and replaces branches where the true
+    and false labels lead to the same location and replaces them with a
+    jump to one of the blocks. This is only implemented for only 2 cases:
+
+    1. If both the truebr and falsebr are a single jump to the same
+        location. For example:
+
+        branch $60pred.106, 73, 77               ['$60pred.106']
+    label 73:
+        jump 125                                 []
+    label 77:
+        jump 125                                 []
+
+    is replaced with
+
+        jump 125                                 []
+    label 73:
+        jump 125                                 []
+    label 77:
+        jump 125                                 []
+
+    2. If one of the blocks is a single jump that jumps to the
+        other block. For example:
+
+        branch $108pred.467, 384, 404            ['$108pred.467']
+    label 384:
+        jump 404                                 []
+    label 404:
+        return $48return_value.21                ['$48return_value.21']
+
+    is replaced with
+
+        jump 404                                 []
+    label 384:
+        jump 404                                 []
+    label 404:
+        return $48return_value.21                ['$48return_value.21']
+
+    """
+    changed = False
+    blocks = parfor.loop_body.copy()
+    for label, block in blocks.items():
+        # Only look at the last statment in a block
+        if len(block.body):
+            end_stmt = block.body[-1]
+            if isinstance(end_stmt, ir.Branch):
+                # If true/false conditions jump to blocks with a single jump to the same location,
+                # we can replace the branch with that instruction directly.
+                if (
+                    len(blocks[end_stmt.truebr].body) == 1
+                    and len(blocks[end_stmt.falsebr].body) == 1
+                ):
+                    true_stmt = blocks[end_stmt.truebr].body[0]
+                    false_stmt = blocks[end_stmt.falsebr].body[0]
+                    if (
+                        isinstance(true_stmt, ir.Jump)
+                        and isinstance(false_stmt, ir.Jump)
+                        and true_stmt.target == false_stmt.target
+                    ):
+                        parfor.loop_body[label].body[-1] = ir.Jump(
+                            true_stmt.target, end_stmt.loc
+                        )
+                        changed = True
+                # If either block is just a jump to the other block we can remove the branch
+                elif len(blocks[end_stmt.truebr].body) == 1:
+                    true_stmt = blocks[end_stmt.truebr].body[0]
+                    if (
+                        isinstance(true_stmt, ir.Jump)
+                        and true_stmt.target == end_stmt.falsebr
+                    ):
+                        parfor.loop_body[label].body[-1] = ir.Jump(
+                            true_stmt.target, end_stmt.loc
+                        )
+                        changed = True
+                elif len(blocks[end_stmt.falsebr].body) == 1:
+                    false_stmt = blocks[end_stmt.falsebr].body[0]
+                    if (
+                        isinstance(false_stmt, ir.Jump)
+                        and false_stmt.target == end_stmt.truebr
+                    ):
+                        parfor.loop_body[label].body[-1] = ir.Jump(
+                            false_stmt.target, end_stmt.loc
+                        )
+                        changed = True
+
+    return changed
+
+
 def remove_dead_parfor(
     parfor, lives, lives_n_aliases, arg_aliases, alias_map, func_ir, typemap
 ):
@@ -3759,98 +3855,6 @@ def remove_dead_parfor(
     typemap.pop(tuple_var.name)  # remove dummy tuple type
     blocks[last_label].body.pop()  # remove jump
 
-    # Bodo Change: Helper function to replace branches with jump if blocks are empty
-    def trim_empty_parfor_branches(parfor):
-        """
-        Iterate through the parfor and replaces branches where the true
-        and false labels lead to the same location and replaces them with a
-        jump to one of the blocks. This is only implemented for only 2 cases:
-
-        1. If both the truebr and falsebr are a single jump to the same
-           location. For example:
-
-            branch $60pred.106, 73, 77               ['$60pred.106']
-        label 73:
-            jump 125                                 []
-        label 77:
-            jump 125                                 []
-
-        is replaced with
-
-            jump 125                                 []
-        label 73:
-            jump 125                                 []
-        label 77:
-            jump 125                                 []
-
-        2. If one of the blocks is a single jump that jumps to the
-           other block. For example:
-
-            branch $108pred.467, 384, 404            ['$108pred.467']
-        label 384:
-            jump 404                                 []
-        label 404:
-            return $48return_value.21                ['$48return_value.21']
-
-        is replaced with
-
-            jump 404                                 []
-        label 384:
-            jump 404                                 []
-        label 404:
-            return $48return_value.21                ['$48return_value.21']
-
-        """
-        changed = False
-        blocks = parfor.loop_body.copy()
-        for label, block in blocks.items():
-            # Only look at the last statment in a block
-            if len(block.body):
-                end_stmt = block.body[-1]
-                if isinstance(end_stmt, ir.Branch):
-                    # If true/false conditions jump to blocks with a single jump to the same location,
-                    # we can replace the branch with that instruction directly.
-                    if (
-                        len(blocks[end_stmt.truebr].body) == 1
-                        and len(blocks[end_stmt.falsebr].body) == 1
-                    ):
-                        true_stmt = blocks[end_stmt.truebr].body[0]
-                        false_stmt = blocks[end_stmt.falsebr].body[0]
-                        if (
-                            isinstance(true_stmt, ir.Jump)
-                            and isinstance(false_stmt, ir.Jump)
-                            and true_stmt.target == false_stmt.target
-                        ):
-                            parfor.loop_body[label].body[-1] = ir.Jump(
-                                true_stmt.target, end_stmt.loc
-                            )
-                            changed = True
-                    # If either block is just a jump to the other block we can remove the branch
-                    elif len(blocks[end_stmt.truebr].body) == 1:
-                        true_stmt = blocks[end_stmt.truebr].body[0]
-                        if (
-                            isinstance(true_stmt, ir.Jump)
-                            and true_stmt.target == end_stmt.falsebr
-                        ):
-                            parfor.loop_body[label].body[-1] = ir.Jump(
-                                true_stmt.target, end_stmt.loc
-                            )
-                            changed = True
-                    elif len(blocks[end_stmt.falsebr].body) == 1:
-                        false_stmt = blocks[end_stmt.falsebr].body[0]
-                        if (
-                            isinstance(false_stmt, ir.Jump)
-                            and false_stmt.target == end_stmt.truebr
-                        ):
-                            parfor.loop_body[label].body[-1] = ir.Jump(
-                                false_stmt.target, end_stmt.loc
-                            )
-                            changed = True
-
-        return changed
-
-    # End Bodo change
-
     # Bodo Change: Continue doing dead code elimination so long as the control flow
     # changes + remove unused blocks.
     changed = True
@@ -3908,7 +3912,6 @@ def simplify_parfor_body_CFG(blocks):
     (since it won't exist in the type map).
     """
     from numba.core.analysis import compute_cfg_from_blocks
-    from numba.core.ir_utils import simplify_CFG
     from numba.parfors.parfor import Parfor
 
     n_parfors = 0
@@ -3927,7 +3930,7 @@ def simplify_parfor_body_CFG(blocks):
                 last_block.body.append(ir.Return(const, loc))
                 # Bodo change:
                 # Eliminate any dead blocks as they will break the cfg. Normally
-                # we won't encoutner dead blocks, but when we change the control
+                # we won't encounter dead blocks, but when we change the control
                 # flow we might make a block unreachable.
                 cfg = compute_cfg_from_blocks(parfor.loop_body)
                 for dead in cfg.dead_nodes():
@@ -3960,6 +3963,57 @@ if _check_numba_change:  # pragma: no cover
 
 
 numba.parfors.parfor.simplify_parfor_body_CFG = simplify_parfor_body_CFG
+
+
+def simplify_CFG(blocks):
+    """transform chains of blocks that have no loop into a single block"""
+    from numba.core.analysis import compute_cfg_from_blocks
+    from numba.core.ir_utils import merge_adjacent_blocks, rename_labels
+
+    # first, inline single-branch-block to its predecessors
+    cfg = compute_cfg_from_blocks(blocks)
+
+    def find_single_branch(label):
+        block = blocks[label]
+        # Bodo change: make sure label is not entry point which shouldn't be removed.
+        # see bodo/tests/test_basic.py::test_parfor_empty_entry_block
+        # see bodosql/tests/test_named_param_df_apply.py::test_case
+        return (
+            len(block.body) == 1
+            and isinstance(block.body[0], ir.Branch)
+            and label != cfg.entry_point()
+        )
+
+    single_branch_blocks = list(filter(find_single_branch, blocks.keys()))
+    marked_for_del = set()
+    for label in single_branch_blocks:
+        inst = blocks[label].body[0]
+        predecessors = cfg.predecessors(label)
+        delete_block = True
+        for (p, q) in predecessors:
+            block = blocks[p]
+            if isinstance(block.body[-1], ir.Jump):
+                block.body[-1] = copy.copy(inst)
+            else:
+                delete_block = False
+        if delete_block:
+            marked_for_del.add(label)
+    # Delete marked labels
+    for label in marked_for_del:
+        del blocks[label]
+    merge_adjacent_blocks(blocks)
+    return rename_labels(blocks)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.ir_utils.simplify_CFG)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "0b3f2add05e5691155f08fc5945956d5cca5e068247d52cff8efb161b76388b7"
+    ):  # pragma: no cover
+        warnings.warn("numba.core.ir_utils.simplify_CFG has changed")
+
+numba.core.ir_utils.simplify_CFG = simplify_CFG
 
 
 #########   End changes to improve parfor dead code elimination   #########
