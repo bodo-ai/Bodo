@@ -64,6 +64,7 @@ from numba.experimental.jitclass import base as jitclass_base
 from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.parfors.parfor import get_expr_args
+from numba.parfors.array_analysis import ArrayAnalysis
 
 from bodo.utils.python_310_bytecode_pass import (
     Bodo310ByteCodePass,
@@ -6099,3 +6100,37 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:  # pragma: no cov
     numba.core.caching._CacheLocator.ensure_cache_path = _ensure_cache_path
 
 #### END MONKEY PATCH FOR ENSURING CACHE LOCATION ONLY ON RANK 0 ON PLATFORM ####
+
+#### BEGIN MONKEY PATCH FOR TYPES.BYTES CHECK ON LEN OPERATION IN ARRAY ANALYSIS ####
+
+
+def _analyze_op_call_builtins_len(self, scope, equiv_set, loc, args, kws):
+    # python 3 version of len()
+    require(len(args) == 1)
+    var = args[0]
+    typ = self.typemap[var.name]
+    require(isinstance(typ, types.ArrayCompatible))
+    # Bodo change: Bytes object should not use len operation for Array
+    require(not isinstance(typ, types.Bytes))
+    shape = equiv_set._get_shape(var)
+    return ArrayAnalysis.AnalyzeResult(shape=shape[0], rhs=shape[0])
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(
+        numba.parfors.array_analysis.ArrayAnalysis._analyze_op_call_builtins_len
+    )
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "612cbc67e8e462f25f348b2a5dd55595f4201a6af826cffcd38b16cd85fc70f7"
+    ):
+        warnings.warn(
+            "numba.parfors.array_analysis.ArrayAnalysis._analyze_op_call_builtins_len has changed"
+        )
+
+
+numba.parfors.array_analysis.ArrayAnalysis._analyze_op_call_builtins_len = (
+    _analyze_op_call_builtins_len
+)
+
+#### END MONKEY PATCH FOR TYPES.BYTES CHECK ON LEN OPERATION IN ARRAY ANALYSIS ####
