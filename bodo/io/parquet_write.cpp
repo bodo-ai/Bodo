@@ -805,6 +805,16 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             if (!is_part_col[i])
                 new_table->columns.push_back(table->columns[i]);
         }
+        // Convert all local dictionaries to global for dict columns.
+        // to enable hashing.
+        if (is_parallel) {
+            for (auto a : partition_cols) {
+                if ((a->arr_type == bodo_array_type::DICT) &&
+                    !a->has_global_dictionary) {
+                    convert_local_dictionary_to_global(a);
+                }
+            }
+        }
 
         const uint32_t seed = SEED_HASH_PARTITION;
         uint32_t *hashes = hash_keys(partition_cols, seed, is_parallel);
@@ -835,6 +845,31 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                         // TODO can code be -1 (NA) for partition columns?
                         value_str = categories_table->columns[cat_col_idx++]
                                         ->val_to_str(code);
+                    } else if (part_col->arr_type == bodo_array_type::DICT) {
+                        // check nullable bitmask and set string to empty
+                        // if nan
+                        bool isna = !GetBit(
+                            (uint8_t *)part_col->info2->null_bitmask, i);
+                        if (isna)
+                            value_str = "null";
+                        else {
+                            int32_t dict_ind =
+                                ((int32_t *)part_col->info2->data1)[i];
+                            // get start_offset and end_offset of the string
+                            // value referred to by dict_index i
+                            offset_t start_offset =
+                                ((offset_t *)part_col->info1->data2)[dict_ind];
+                            offset_t end_offset =
+                                ((offset_t *)
+                                     part_col->info1->data2)[dict_ind + 1];
+                            // get length of the string value
+                            offset_t len = end_offset - start_offset;
+                            // extract string value from string buffer
+                            std::string val(
+                                &((char *)part_col->info1->data1)[start_offset],
+                                len);
+                            value_str = val;
+                        }
                     } else {
                         value_str = part_col->val_to_str(i);
                     }

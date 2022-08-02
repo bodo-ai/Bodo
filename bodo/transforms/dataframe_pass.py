@@ -2280,20 +2280,13 @@ class DataFramePass:
                 key_typ = df.data[df.column_index[grp_typ.keys[i]]]
                 if key_typ == bodo.dict_str_arr_type:
                     func_text += f"  out_key_arr_dict_index{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
-                    func_text += f"  out_key_arr{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, out_key_arr_dict_index{i})\n"
+                    func_text += f"  out_key_arr{i} = bodo.libs.dict_arr_ext.init_dict_arr(s_key{i}._data, out_key_arr_dict_index{i}, s_key{i}._has_global_dictionary)\n"
                 else:
                     func_text += f"  out_key_arr{i} = bodo.libs.array_kernels.concat(in_key_arrs{i})\n"
 
             out_key_arr_names = ", ".join(f"out_key_arr{i}" for i in range(n_keys))
         else:
-            key_typ = df.data[df.column_index[grp_typ.keys[0]]]
-            if key_typ == bodo.dict_str_arr_type:
-                func_text += f"  out_key_arr_dict_index = bodo.libs.array_kernels.concat(in_key_arr)\n"
-                func_text += f"  out_key_arr = bodo.libs.dict_arr_ext.init_dict_arr(s_key._data, out_key_arr_dict_index)\n"
-            else:
-                func_text += (
-                    f"  out_key_arr = bodo.libs.array_kernels.concat(in_key_arr)\n"
-                )
+            func_text += f"  out_key_arr = bodo.libs.array_kernels.concat(in_key_arr)\n"
             out_key_arr_names = "out_key_arr"
 
         # create output dataframe

@@ -2478,7 +2478,6 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
             lambda x, V: x + V,
             V="xx",
         )
-        print(df2)
         return df2
 
     # const size series output, as_index=False, input not used
@@ -2547,29 +2546,55 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
             "E": [b"AB", b"DD", bytes(3), b"A", b"DD", b"AB"],
         }
     )
-    # check_func(impl1, (df,), sort_output=True)
-    # # TODO [BE-2246]: Match output dtype by checking null info.
+    check_func(impl1, (df,), sort_output=True)
+    # acc_loop: as_index=False, Series output. (Key has string column)
+    def impl14(df):
+        df2 = df.groupby(["A", "B"], as_index=False).B.apply(
+            lambda x, V: x + V,
+            V="xx",
+        )
+        return df2
 
-    # check_func(impl7, (df,), sort_output=True, reset_index=True, check_dtype=False)
-    # check_func(impl11, (df,), sort_output=True, reset_index=True)
-    # check_func(impl13, (df,), sort_output=True, reset_index=True, check_dtype=False)
-    # if not is_slow_run:
-    #     return
-    # check_func(impl2, (df,), sort_output=True)
-    # # NOTE: Pandas assigns group numbers in sorted order to Index but we don't match it
-    # # since requires expensive sorting
-    # check_func(impl3, (df,), sort_output=True, reset_index=True)
-    # check_func(impl4, (df,), sort_output=True)
-    # check_func(impl5, (df,), sort_output=True)
-    # # NOTE: Pandas bug: drops the key arrays from output Index if it's Series sometimes
-    # # (as of 1.1.5)
+    check_func(impl14, (df,), sort_output=True, reset_index=True)
+    # acc_loop: as_index=True, DataFrame output. (Key has string column)
+    def impl15(df):
+        df2 = df.groupby(["A", "B"]).B.apply(
+            lambda x, V: x + V,
+            V="xx",
+        )
+        return df2
+
+    check_func(impl15, (df,), sort_output=True, reset_index=True)
+    # row_loop: as_index=True, index is single column, output: Series
+    def impl16(df):
+        df2 = df.groupby(["B"]).apply(
+            lambda x: 3.3,
+        )
+        return df2
+
+    check_func(impl16, (df,), sort_output=True)
+    # TODO [BE-2246]: Match output dtype by checking null info.
+
+    check_func(impl7, (df,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl11, (df,), sort_output=True, reset_index=True)
+    check_func(impl13, (df,), sort_output=True, reset_index=True, check_dtype=False)
+    if not is_slow_run:
+        return
+    check_func(impl2, (df,), sort_output=True)
+    # NOTE: Pandas assigns group numbers in sorted order to Index but we don't match it
+    # since requires expensive sorting
+    check_func(impl3, (df,), sort_output=True, reset_index=True)
+    check_func(impl4, (df,), sort_output=True)
+    check_func(impl5, (df,), sort_output=True)
+    # NOTE: Pandas bug: drops the key arrays from output Index if it's Series sometimes
+    # (as of 1.1.5)
     check_func(impl6, (df,), reset_index=True)
-    # check_func(impl8, (df,), sort_output=True, reset_index=True)
-    # # TODO [BE-2246]: Match output dtype by checking null info.
-    # check_func(impl9, (df,), sort_output=True, reset_index=True, check_dtype=False)
-    # # TODO [BE-2246]: Match output dtype by checking null info.
-    # check_func(impl10, (df,), sort_output=True, reset_index=True, check_dtype=False)
-    # check_func(impl12, (df,), sort_output=True, reset_index=True)
+    check_func(impl8, (df,), sort_output=True, reset_index=True)
+    # TODO [BE-2246]: Match output dtype by checking null info.
+    check_func(impl9, (df,), sort_output=True, reset_index=True, check_dtype=False)
+    # TODO [BE-2246]: Match output dtype by checking null info.
+    check_func(impl10, (df,), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl12, (df,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.skip(reason="[BE-1531] test fails in CI")
