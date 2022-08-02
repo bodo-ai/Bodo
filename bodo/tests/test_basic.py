@@ -1308,3 +1308,61 @@ def test_int_scalar_to_array(memory_leak_check):
     n = 100
     py_output = np.array([arg] * n, dtype=np.int64)
     check_func(impl, (arg, n), py_output=py_output)
+
+
+@pytest.mark.slow
+def test_parfor_empty_entry_block(memory_leak_check):
+    """make sure CFG simplification can handle empty entry block corner case properly.
+    See bodosql/tests/test_named_param_df_apply.py::test_case
+    """
+    out_arr_type = bodo.boolean_array
+
+    @bodo.jit
+    def impl(arrs, n, b, c, d, e, f, g):
+        table1_A = arrs[0]
+        numba.parfors.parfor.init_prange()
+        out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))
+        for i in numba.parfors.parfor.internal_prange(n):
+            out_arr[i] = (
+                b
+                if b
+                else (
+                    False
+                    if ((c > 12))
+                    else (
+                        False
+                        if ((d == "hello"))
+                        else (
+                            False
+                            if ((e == "hello"))
+                            else (
+                                False
+                                if ((f > pd.Timestamp("2021-10-14 00:00:00")))
+                                else (
+                                    False
+                                    if ((g > pd.Timestamp("2021-10-14 00:00:00")))
+                                    else (
+                                        (
+                                            None
+                                            if (pd.isna(table1_A[i]))
+                                            else ((table1_A[i] > 1))
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        return out_arr
+
+    A = np.arange(3)
+    b = False
+    c = 12
+    d = "hello"
+    e = "hello2"
+    f = pd.Timestamp("2021-10-14 15:32:28.400163")
+    g = pd.Timestamp("2019-03-04 11:12:28")
+    np.testing.assert_array_equal(
+        impl((A,), len(A), b, c, d, e, f, g), np.array([False, False, False])
+    )

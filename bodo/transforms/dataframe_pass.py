@@ -66,6 +66,7 @@ from bodo.utils.typing import (
     is_overload_constant_tuple,
     is_overload_none,
     list_cumulative,
+    unwrap_typeref,
 )
 from bodo.utils.utils import (
     find_build_tuple,
@@ -506,6 +507,9 @@ class DataFramePass:
         if fdef == ("join_dummy", "bodo.hiframes.pd_dataframe_ext"):
             return self._run_call_join(assign, lhs, rhs)
 
+        if fdef == ("bodosql_case_placeholder", "bodo.utils.typing"):
+            return self._run_call_bodosql_case_placeholder(rhs)
+
         # df/series/groupby.pipe()
         if (
             isinstance(func_mod, ir.Var)
@@ -816,6 +820,55 @@ class DataFramePass:
             col_vars + [df_index_var] + extra_args,
             extra_globals=glbls,
             pre_nodes=nodes,
+        )
+
+    def _run_call_bodosql_case_placeholder(self, rhs):
+        """generate code for BodoSQL CASE statement and replace the placeholder call.
+        BodoSQL provides the body of the loop as well as the output data type
+
+        Args:
+            rhs (ir.Expr.call): placeholder call
+
+        Returns:
+            ReplaceFunc: generated function for replacement
+        """
+        import re
+
+        import bodosql
+
+        init_code = self.typemap[rhs.args[2].name].instance_type.meta
+        body_code = get_overload_const_str(self.typemap[rhs.args[3].name])
+        out_arr_type = unwrap_typeref(self.typemap[rhs.args[4].name])
+
+        named_params = dict(rhs.kws)
+        named_param_args = ", ".join(named_params.keys())
+
+        func_text = f"def f(arrs, n, {named_param_args}):\n"
+        func_text += "\n".join(init_code) + "\n"
+        func_text += "  numba.parfors.parfor.init_prange()\n"
+        func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
+        func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
+        func_text += f"    out_arr[i] = {body_code}\n"
+        func_text += "  return out_arr\n"
+
+        loc_vars = {}
+        glbls = {
+            "numba": numba,
+            "pd": pd,
+            "np": np,
+            "re": re,
+            "bodo": bodo,
+            "bodosql": bodosql,
+            "out_arr_type": out_arr_type,
+        }
+        exec(func_text, glbls, loc_vars)
+        f = loc_vars["f"]
+
+        return replace_func(
+            self,
+            f,
+            rhs.args[:2] + list(named_params.values()),
+            extra_globals=glbls,
         )
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):

@@ -17,7 +17,11 @@ from numba.core import cgutils, ir, ir_utils, types
 from numba.core.errors import NumbaError
 from numba.core.imputils import RefType, iternext_impl
 from numba.core.registry import CPUDispatcher
-from numba.core.typing.templates import AbstractTemplate, signature
+from numba.core.typing.templates import (
+    AbstractTemplate,
+    infer_global,
+    signature,
+)
 from numba.extending import (
     NativeValue,
     box,
@@ -2392,6 +2396,22 @@ def _check_objmode_type(val, typ):
         )
 
     return val
+
+
+def bodosql_case_placeholder(arrs, case_code, out_arr_type):
+    pass
+
+
+@infer_global(bodosql_case_placeholder)
+class CasePlaceholderTyper(AbstractTemplate):
+    """Typing for BodoSQL CASE placeholder that will be replaced in dataframe pass."""
+
+    def generic(self, args, kws):
+        # last argument is the output array type
+        return signature(unwrap_typeref(args[-1]), *args)
+
+
+CasePlaceholderTyper.prefer_literal = True
 
 
 gen_objmode_func_overload(warnings.warn, "none")

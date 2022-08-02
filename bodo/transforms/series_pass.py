@@ -1912,6 +1912,19 @@ class SeriesPass:
                 self, impl, rhs.args, pysig=self.calltypes[rhs].pysig, kws=dict(rhs.kws)
             )
 
+        # inline pd.notna() since used in BodoSQL CASE codegen in dataframe pass (which
+        # doesn't have inline pass)
+        if fdef in (("notna", "pandas"), ("notnull", "pandas")) and not rhs.kws:
+            impl = bodo.hiframes.dataframe_impl.overload_notna(
+                self.typemap[rhs.args[0].name]
+            )
+            return compile_func_single_block(
+                impl,
+                rhs.args,
+                assign.target,
+                self,
+            )
+
         # pattern match pd.isna(A[i]) and replace it with array_kernels.isna(A, i)
         if fdef in (("isna", "pandas"), ("isnull", "pandas")):
             obj = get_call_expr_arg(fdef[0], rhs.args, dict(rhs.kws), 0, "obj")
