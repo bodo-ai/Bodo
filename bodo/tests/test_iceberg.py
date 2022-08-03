@@ -30,6 +30,7 @@ from bodo.tests.utils import (
     reduce_sum,
     sync_dtypes,
 )
+from bodo.utils.testing import ensure_clean2
 from bodo.utils.typing import BodoError
 
 pytestmark = pytest.mark.iceberg
@@ -637,3 +638,41 @@ def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
         AssertionError, match="Iceberg Write only supported for distributed dataframes"
     ):
         bodo.jit(replicated=["df"])(impl3)(df, table_name, conn, db_schema)
+
+
+def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn):
+    """
+    Some compilation errors can only be observed when running multiple steps.
+    This is to test one such common use case, which is reading a table
+    from a parquet file and writing it as an Iceberg table.
+    This unit test was added as part of https://github.com/Bodo-inc/Bodo/pull/4145
+    where an error for such use case was found.
+    """
+
+    # The exact table to use doesn't matter, so picking one at random.
+    df = SIMPLE_TABLES_MAP["simple_numeric_table"][0]
+    fname = "test_read_pq_write_iceberg_ds.pq"
+
+    # Give it a unique name so there's no conflicts.
+    table_name = "test_read_pq_write_iceberg_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    def impl(pq_fname, table_name, conn, db_schema):
+        df = pd.read_parquet(pq_fname)
+        df.to_sql(
+            table_name,
+            conn,
+            db_schema,
+            if_exists="replace",
+            index=False,
+        )
+
+    with ensure_clean2(fname):
+        if bodo.get_rank() == 0:
+            df.to_parquet(fname)
+        bodo.barrier()
+        # We're just running to make sure that it executes,
+        # not for correctness itself, since that is
+        # already being tested by the other unit tests.
+        bodo.jit(impl)(fname, table_name, conn, db_schema)
