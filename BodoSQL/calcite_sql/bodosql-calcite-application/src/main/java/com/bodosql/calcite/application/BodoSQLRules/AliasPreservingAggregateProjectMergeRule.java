@@ -45,11 +45,11 @@ import org.immutables.value.Value;
 // add this annotation to ensure that the style is applied
 @BodoSQLStyleImmutable
 @Value.Enclosing
-public class AliasPreservingAggergateProjectMergeRule
-    extends RelRule<AliasPreservingAggergateProjectMergeRule.Config> implements TransformationRule {
+public class AliasPreservingAggregateProjectMergeRule
+    extends RelRule<AliasPreservingAggregateProjectMergeRule.Config> implements TransformationRule {
 
-  /** Creates an AliasPreservingAggergateProjectMergeRule. */
-  protected AliasPreservingAggergateProjectMergeRule(Config config) {
+  /** Creates an AliasPreservingAggregateProjectMergeRule. */
+  protected AliasPreservingAggregateProjectMergeRule(Config config) {
     super(config);
   }
 
@@ -155,21 +155,21 @@ public class AliasPreservingAggergateProjectMergeRule
   /** Rule configuration. */
   @Value.Immutable
   public interface Config extends RelRule.Config {
-    AliasPreservingAggergateProjectMergeRule.Config DEFAULT =
-        ImmutableAliasPreservingAggergateProjectMergeRule.Config.of()
+    AliasPreservingAggregateProjectMergeRule.Config DEFAULT =
+        ImmutableAliasPreservingAggregateProjectMergeRule.Config.of()
             .withOperandFor(Aggregate.class, Project.class);
 
     @Override
-    default AliasPreservingAggergateProjectMergeRule toRule() {
-      return new AliasPreservingAggergateProjectMergeRule(this);
+    default AliasPreservingAggregateProjectMergeRule toRule() {
+      return new AliasPreservingAggregateProjectMergeRule(this);
     }
 
     /** Defines an operand tree for the given classes. */
-    default AliasPreservingAggergateProjectMergeRule.Config withOperandFor(
+    default AliasPreservingAggregateProjectMergeRule.Config withOperandFor(
         Class<? extends Aggregate> aggregateClass, Class<? extends Project> projectClass) {
       return withOperandSupplier(
               b0 -> b0.operand(aggregateClass).oneInput(b1 -> b1.operand(projectClass).anyInputs()))
-          .as(AliasPreservingAggergateProjectMergeRule.Config.class);
+          .as(AliasPreservingAggregateProjectMergeRule.Config.class);
     }
   }
 }

@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application;
 
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
-import com.bodosql.calcite.application.BodoSQLRules.AliasPreservingAggergateProjectMergeRule;
+import com.bodosql.calcite.application.BodoSQLRules.AliasPreservingAggregateProjectMergeRule;
 import com.bodosql.calcite.application.BodoSQLRules.AliasPreservingProjectJoinTransposeRule;
 import com.bodosql.calcite.application.BodoSQLRules.InnerJoinRemoveRule;
 import com.bodosql.calcite.application.BodoSQLRules.ProjectUnaliasedRemoveRule;
@@ -352,10 +352,15 @@ public class RelationalAlgebraGenerator {
                */
               .addRuleInstance(AggregateJoinJoinRemoveRule.Config.DEFAULT.toRule()) /*
               /*
-               * Planner rule that merges a projection and aggregate together when possible,
+               * Planner rule that merges an Aggregate into a projection when possible,
                * maintaining any aliases.
                */
-              .addRuleInstance(AliasPreservingAggergateProjectMergeRule.Config.DEFAULT.toRule())
+              .addRuleInstance(AliasPreservingAggregateProjectMergeRule.Config.DEFAULT.toRule())
+              /*
+               * Planner rule that merges a Projection into an Aggregate when possible,
+               * maintaining any aliases.
+               */
+              .addRuleInstance(ProjectAggregateMergeRule.Config.DEFAULT.toRule())
               /*
                * Planner rule that ensures filter is always pushed into join. This is needed
                * for complex queries.
