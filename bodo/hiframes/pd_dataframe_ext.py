@@ -4329,6 +4329,7 @@ def to_sql_overload(
             "unicode_to_utf8": unicode_to_utf8,
             "array_to_info": array_to_info,
             "get_dataframe_table": get_dataframe_table,
+            "py_table_to_cpp_table": py_table_to_cpp_table,
             "py_table_typ": df.table_type,
             "col_names_arr": col_names_arr,
             "delete_table_decref_arrays": delete_table_decref_arrays,
