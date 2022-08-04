@@ -778,46 +778,86 @@ def get_str_arr_item_ptr(A, i):  # pragma: no cover
     return get_data_ptr_ind(A, getitem_str_offset(A, i))
 
 
-@numba.njit(no_cpython_wrapper=True)
+@numba.generated_jit(no_cpython_wrapper=True, nopython=True)
 def get_str_arr_item_copy(B, j, A, i):  # pragma: no cover
-    """copy string from A[i] to B[j] without creating intermediate string value"""
+    """copy string from A[i] to B[j] without creating intermediate string value.\
+    This supports both copying from a string array -> string array and a dictionary
+    encoded array to a string array.
+    """
+    if B != string_array_type:
+        raise BodoError("get_str_arr_item_copy(): Output array must be a string array")
+    if not is_str_arr_type(A):
+        raise BodoError(
+            "get_str_arr_item_copy(): Input array must be a string array or dictionary encoded array"
+        )
 
-    if j == 0:
-        setitem_str_offset(B, 0, 0)
-
-    # get input array offsets
-    in_start_offset = getitem_str_offset(A, i)
-    in_end_offset = getitem_str_offset(A, i + 1)
-    val_len = in_end_offset - in_start_offset
-
-    # set output offset
-    out_start_offset = getitem_str_offset(B, j)
-    out_end_offset = out_start_offset + val_len
-    setitem_str_offset(B, j + 1, out_end_offset)
-
-    # set NA
-    if str_arr_is_na(A, i):
-        str_arr_set_na(B, j)
+    # Update the location of the string array + index for dict encoded
+    # array input vs string array input
+    if A == bodo.dict_str_arr_type:
+        load_input_array = "in_str_arr = A._data"
+        input_index = "input_index = A._indices[i]"
     else:
-        str_arr_set_not_na(B, j)
+        load_input_array = "in_str_arr = A"
+        input_index = "input_index = i"
 
-    # copy data
-    if val_len != 0:
-        # ensure required space in output array
-        data_arr = B._data
-        bodo.libs.array_item_arr_ext.ensure_data_capacity(
-            data_arr, np.int64(out_start_offset), np.int64(out_end_offset)
-        )
-        out_data_ptr = get_data_ptr(B).data
-        in_data_ptr = get_data_ptr(A).data
-        memcpy_region(
-            out_data_ptr,
-            out_start_offset,
-            in_data_ptr,
-            in_start_offset,
-            val_len,
-            1,
-        )
+    func_text = f"""def impl(B, j, A, i):
+        if j == 0:
+            setitem_str_offset(B, 0, 0)
+
+        {load_input_array}
+        {input_index}
+
+        # set NA
+        if bodo.libs.array_kernels.isna(A, i):
+            str_arr_set_na(B, j)
+            return
+        else:
+            str_arr_set_not_na(B, j)
+
+        # get input array offsets
+        in_start_offset = getitem_str_offset(in_str_arr, input_index)
+        in_end_offset = getitem_str_offset(in_str_arr, input_index + 1)
+        val_len = in_end_offset - in_start_offset
+
+        # set output offset
+        out_start_offset = getitem_str_offset(B, j)
+        out_end_offset = out_start_offset + val_len
+        setitem_str_offset(B, j + 1, out_end_offset)
+
+        # copy data
+        if val_len != 0:
+            # ensure required space in output array
+            data_arr = B._data
+            bodo.libs.array_item_arr_ext.ensure_data_capacity(
+                data_arr, np.int64(out_start_offset), np.int64(out_end_offset)
+            )
+            out_data_ptr = get_data_ptr(B).data
+            in_data_ptr = get_data_ptr(in_str_arr).data
+            memcpy_region(
+                out_data_ptr,
+                out_start_offset,
+                in_data_ptr,
+                in_start_offset,
+                val_len,
+                1,
+            )"""
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "setitem_str_offset": setitem_str_offset,
+            "memcpy_region": memcpy_region,
+            "getitem_str_offset": getitem_str_offset,
+            "str_arr_set_na": str_arr_set_na,
+            "str_arr_set_not_na": str_arr_set_not_na,
+            "get_data_ptr": get_data_ptr,
+            "bodo": bodo,
+            "np": np,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
 
 
 @numba.njit(no_cpython_wrapper=True)
