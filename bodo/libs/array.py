@@ -2566,6 +2566,7 @@ def groupby_and_aggregate(
     general_udfs_cb,
     udf_table_dummy_t,
     n_out_rows_t,
+    n_shuffle_keys_t,
 ):
     """
     Interface to groupby_and_aggregate function in C++ library for groupby
@@ -2598,6 +2599,7 @@ def groupby_and_aggregate(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(64),  # n_shuffle_keys_t
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -2631,6 +2633,7 @@ def groupby_and_aggregate(
             types.voidptr,
             table_t,
             types.voidptr,
+            types.int64,  # n_shuffle_keys_t
         ),
         codegen,
     )

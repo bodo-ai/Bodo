@@ -1814,6 +1814,11 @@ class DataFramePass:
             lhs.loc,
             func_name,
             grp_typ.dropna,
+            # Subset of keys to use as the key when shuffling across
+            # ranks, keys[:grp_typ._num_shuffle_keys].
+            # If grp_typ._num_shuffle_keys == -1 then we use
+            # all of the keys, which is the common case.
+            grp_typ._num_shuffle_keys,
         )
         nodes.append(agg_node)
 

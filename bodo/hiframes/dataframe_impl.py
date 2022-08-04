@@ -4003,11 +4003,23 @@ def overload_dataframe_groupby(
     squeeze=False,
     observed=True,
     dropna=True,
+    # Bodo specific argument. When provided we shuffle on the first n keys
+    _bodo_num_shuffle_keys=-1,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.groupby()")
 
     validate_groupby_spec(
-        df, by, axis, level, as_index, sort, group_keys, squeeze, observed, dropna
+        df,
+        by,
+        axis,
+        level,
+        as_index,
+        sort,
+        group_keys,
+        squeeze,
+        observed,
+        dropna,
+        _bodo_num_shuffle_keys,
     )
 
     def _impl(
@@ -4021,14 +4033,27 @@ def overload_dataframe_groupby(
         squeeze=False,
         observed=True,
         dropna=True,
+        _bodo_num_shuffle_keys=-1,
     ):  # pragma: no cover
-        return bodo.hiframes.pd_groupby_ext.init_groupby(df, by, as_index, dropna)
+        return bodo.hiframes.pd_groupby_ext.init_groupby(
+            df, by, as_index, dropna, _bodo_num_shuffle_keys
+        )
 
     return _impl
 
 
 def validate_groupby_spec(
-    df, by, axis, level, as_index, sort, group_keys, squeeze, observed, dropna
+    df,
+    by,
+    axis,
+    level,
+    as_index,
+    sort,
+    group_keys,
+    squeeze,
+    observed,
+    dropna,
+    _num_shuffle_keys,
 ):
     """
     validate df.groupby() specifications: In addition to consistent error checking
@@ -4079,6 +4104,11 @@ def validate_groupby_spec(
             "groupby(): 'dropna' parameter must be a constant bool, not {}.".format(
                 dropna
             ),
+        )
+
+    if not is_overload_constant_int(_num_shuffle_keys):  # pragma: no cover
+        raise_bodo_error(
+            f"groupby(): '_num_shuffle_keys' parameter must be a constant integer, not {_num_shuffle_keys}."
         )
 
     # NOTE: sort default value is True in pandas. We opt to set it to False by default for performance
@@ -4490,10 +4520,15 @@ def overload_dataframe_pivot_table(
     else:
         _pivot_values_arr = None
 
-    # Perform the groupby with the agg function
-    func_text += (
-        f"    data = data.groupby({groupby_lit!r}, as_index=False).agg(aggfunc)\n"
+    # Perform the groupby with the agg function. We opt to only
+    # shuffle using the index portion of the key to skip an extra
+    # shuffle at the pivot step. The exception is if we see nunique, which
+    # is not supported.
+    is_nunique = is_overload_constant_str(aggfunc) and (
+        get_overload_const_str(aggfunc) == "nunique"
     )
+    num_shuffle_keys = len(groupby_lit) if is_nunique else len(index_lit_orig)
+    func_text += f"    data = data.groupby({groupby_lit!r}, as_index=False, _bodo_num_shuffle_keys={num_shuffle_keys}).agg(aggfunc)\n"
     if is_overload_none(_pivot_values):
         # Compute the unique columns. This is now always column number
         # len(index_idx), since we have done an iloc on the DataFrame.
@@ -4518,6 +4553,8 @@ def overload_dataframe_pivot_table(
     # We don't need to check for duplicates because we have already
     # done an aggregation.
     func_text += "        check_duplicates=False,\n"
+    # We don't need to shuffle if we matched the shuffle keys when doing the groupby.
+    func_text += f"        is_already_shuffled={not is_nunique},\n"
     func_text += "        _constant_pivot_values=_constant_pivot_values,\n"
     func_text += "    )\n"
     func_text += "    ev.finalize()\n"

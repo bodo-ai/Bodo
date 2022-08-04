@@ -6093,7 +6093,8 @@ class GroupbyPipeline {
                     udf_table_op_fn combine_cb, udf_eval_fn eval_cb,
                     udf_general_fn general_udfs_cb, bool skipna,
                     int64_t periods, int64_t transform_func, int64_t _head_n,
-                    bool _return_key, bool _return_index, bool _key_dropna)
+                    bool _return_key, bool _return_index, bool _key_dropna,
+                    int64_t _n_shuffle_keys)
         : in_table(_in_table),
           orig_in_table(_in_table),
           num_keys(_num_keys),
@@ -6106,7 +6107,8 @@ class GroupbyPipeline {
           key_dropna(_key_dropna),
           udf_table(_udf_table),
           udf_n_redvars(_udf_nredvars),
-          head_n(_head_n) {
+          head_n(_head_n),
+          n_shuffle_keys(_n_shuffle_keys) {
         tracing::Event ev("GroupbyPipeline()", is_parallel);
         if (dispatch_table == nullptr)
             n_pivot = 1;
@@ -6196,9 +6198,19 @@ class GroupbyPipeline {
             }
         }
 
+        int64_t num_shuffle_keys = n_shuffle_keys;
+        bool has_reverse_shuffle =
+            cumulative_op || shift_op || transform_op || ngroup_op;
+        // If we do a reverse shuffle there is no benefit to keeping the shuffle
+        // keys as the data doesn't stay shuffled. nunique is heavily optimized
+        // so we cannot yet use a subset of keys to shuffle
+        if (has_reverse_shuffle || nunique_op) {
+            num_shuffle_keys = num_keys;
+        }
+
         // get hashes of keys
-        hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION,
-                                 is_parallel);
+        hashes = hash_keys_table(in_table, num_shuffle_keys,
+                                 SEED_HASH_PARTITION, is_parallel);
         size_t nunique_hashes_global;
         // get estimate of number of unique hashes to guide optimization.
         // if shuffle_before_update=true we are going to shuffle everything
@@ -6266,7 +6278,7 @@ class GroupbyPipeline {
             for (auto a : in_table->columns) incref_array(a);
             in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr,
                                             is_parallel);
-            if (!(cumulative_op || shift_op || transform_op || ngroup_op)) {
+            if (!has_reverse_shuffle) {
                 delete[] hashes;
                 delete comm_info_ptr;
             } else {
@@ -6545,8 +6557,9 @@ class GroupbyPipeline {
      */
     void shuffle() {
         tracing::Event ev("shuffle", is_parallel);
+        ev.add_attribute("n_shuffle_keys", n_shuffle_keys);
         table_info* shuf_table =
-            shuffle_table(update_table, num_keys, is_parallel);
+            shuffle_table(update_table, n_shuffle_keys, is_parallel);
 
         // NOTE: shuffle_table_kernel decrefs input arrays
         delete_table(update_table);
@@ -7022,6 +7035,7 @@ class GroupbyPipeline {
     int64_t head_n;
     bool req_extended_group_info = false;
     bool do_combine;
+    int64_t n_shuffle_keys;
 
     // column position in in_table -> table that contains key columns + one
     // nunique column after [dropping local duplicates] + shuffling
@@ -7641,7 +7655,7 @@ table_info* groupby_and_aggregate(
     int64_t periods, int64_t transform_func, int64_t head_n, bool return_key,
     bool return_index, bool key_dropna, void* update_cb, void* combine_cb,
     void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table,
-    int64_t* n_out_rows) {
+    int64_t* n_out_rows, int64_t n_shuffle_keys) {
     try {
         tracing::Event ev("groupby_and_aggregate", is_parallel);
         int strategy =
@@ -7658,7 +7672,8 @@ table_info* groupby_and_aggregate(
                 udf_nredvars, udf_dummy_table, (udf_table_op_fn)update_cb,
                 (udf_table_op_fn)combine_cb, (udf_eval_fn)eval_cb,
                 (udf_general_fn)general_udfs_cb, skipdropna, periods,
-                transform_func, head_n, return_key, return_index, key_dropna);
+                transform_func, head_n, return_key, return_index, key_dropna,
+                n_shuffle_keys);
 
             table_info* ret_table = groupby.run(n_out_rows);
 

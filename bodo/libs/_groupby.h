@@ -76,6 +76,9 @@ void groupby_init();
  * redvars columns for udfs
  * @param n_out_rows: the total number of rows in output table, necessary if
  * all the output columns are dead and only number of rows is used.
+ * @param n_shuffle_keys: the number of keys to use when shuffling data across
+ * ranks. For example n_shuffle_keys=2 and the keys are [0, 1, 3, 4] then the
+ * shuffle_table is done on keys [0, 1].
  */
 table_info* groupby_and_aggregate(
     table_info* in_table, int64_t num_keys, bool input_has_index, int* ftypes,
@@ -83,7 +86,7 @@ table_info* groupby_and_aggregate(
     int64_t periods, int64_t transform_func, int64_t head_n, bool return_key,
     bool return_index, bool key_dropna, void* update_cb, void* combine_cb,
     void* eval_cb, void* general_udfs_cb, table_info* udf_dummy_table,
-    int64_t* n_out_rows);
+    int64_t* n_out_rows, int64_t n_shuffle_keys);
 
 /**
  * @brief Get total number of groups for input key arrays
