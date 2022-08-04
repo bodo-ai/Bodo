@@ -16,6 +16,7 @@ broadcasted_fixed_arg_functions = {
     "conv",
     "day_timestamp",
     "dayname",
+    "div0",
     "format",
     "instr",
     "int_to_days",
