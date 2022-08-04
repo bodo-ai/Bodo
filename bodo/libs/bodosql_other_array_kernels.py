@@ -48,6 +48,45 @@ def nullif(arr0, arr1):
 
 
 @numba.generated_jit(nopython=True)
+def regr_valx(y, x):
+    """Handles cases where REGR_VALX receives optional arguments and forwards
+    to the apropriate version of the real implementaiton"""
+    args = [y, x]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.regr_valx",
+                ["y", "x"],
+                i,
+            )
+
+    def impl(y, x):  # pragma: no cover
+        return regr_valx_util(y, x)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def regr_valy(y, x):
+    """Handles cases where REGR_VALY receives optional arguments and forwards
+    to the apropriate version of the real implementaiton (recycles regr_valx
+    by swapping the order of the arguments)"""
+    args = [y, x]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.regr_valy",
+                ["y", "x"],
+                i,
+            )
+
+    def impl(y, x):  # pragma: no cover
+        return regr_valx(x, y)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def cond_util(arr, ifbranch, elsebranch):
     """A dedicated kernel for the SQL function IF which takes in 3 values:
     a boolean (or boolean column) and two values (or columns) with the same
@@ -165,3 +204,29 @@ def nullif_util(arr0, arr1):
     out_dtype = get_common_broadcasted_type([arr0, arr1], "NULLIF")
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def regr_valx_util(y, x):
+    """A dedicated kernel for the SQL function REGR_VALX which takes in two numbers
+    (or columns) and returns NULL if the first argument is NULL, otherwise the
+    second argument
+
+    Args:
+        y (float array/series/scalar): the number(s) whose null-ness is preserved
+        x (float array/series/scalar): the number(s) whose output is copied if no-null
+
+    Returns:
+        float series/scalar: a copy of x, but where nulls from y are propagated
+    """
+    verify_int_float_arg(y, "regr_valx", "y")
+    verify_int_float_arg(x, "regr_valx", "x")
+
+    arg_names = ["y", "x"]
+    arg_types = [y, x]
+    propogate_null = [True] * 2
+    scalar_text = "res[i] = arg1"
+
+    out_dtype = types.Array(bodo.float64, 1, "C")
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)

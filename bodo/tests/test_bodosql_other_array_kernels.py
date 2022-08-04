@@ -263,6 +263,115 @@ def test_nullif(args):
     )
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(
+                    np.array(
+                        [1.0, None, 3.0, 4.0, 5.0, 6.0, None, 8.0], dtype=np.float64
+                    )
+                ),
+                pd.Series(
+                    np.array(
+                        [None, 4.0, 9.0, 16.0, 25.0, 36.0, None, 64.0], dtype=np.float64
+                    )
+                ),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    np.array(
+                        [1.0, None, 3.0, 4.0, 5.0, 6.0, None, 8.0], dtype=np.float64
+                    )
+                ),
+                -42.16,
+            ),
+            id="vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                10875.3115512,
+                pd.Series(
+                    np.array(
+                        [None, 4.0, 9.0, 16.0, 25.0, 36.0, None, 64.0], dtype=np.float64
+                    )
+                ),
+            ),
+            id="scalar_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    np.array(
+                        [1.0, None, 3.0, 4.0, 5.0, 6.0, None, 8.0], dtype=np.float64
+                    )
+                ),
+                None,
+            ),
+            id="vector_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                None,
+                pd.Series(
+                    np.array(
+                        [None, 4.0, 9.0, 16.0, 25.0, 36.0, None, 64.0], dtype=np.float64
+                    )
+                ),
+            ),
+            id="null_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param((100.0, 95.2), id="all_scalar_no_null"),
+        pytest.param((10.03, None), id="all_scalar_with_null"),
+    ],
+)
+def test_regr_valxy(args):
+    def impl1(y, x):
+        return bodo.libs.bodosql_array_kernels.regr_valx(y, x)
+
+    def impl2(y, x):
+        return bodo.libs.bodosql_array_kernels.regr_valy(y, x)
+
+    # Simulates REGR_VALX on a single row
+    def regr_valx_scalar_fn(y, x):
+        if pd.isna(y) or pd.isna(x):
+            return None
+        else:
+            return x
+
+    # Simulates REGR_VALY on a single row
+    def regr_valy_scalar_fn(y, x):
+        if pd.isna(y) or pd.isna(x):
+            return None
+        else:
+            return y
+
+    regr_valx_answer = vectorized_sol(args, regr_valx_scalar_fn, None)
+    regr_valy_answer = vectorized_sol(args, regr_valy_scalar_fn, None)
+    check_func(
+        impl1,
+        args,
+        py_output=regr_valx_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl2,
+        args,
+        py_output=regr_valy_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.slow
 def test_cond_option():
     def impl(A, B, C, flag0, flag1, flag2):
@@ -291,4 +400,21 @@ def test_option_nullif():
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             answer = None if not flag0 else 0.1
+            check_func(impl, (A, B, flag0, flag1), py_output=answer)
+
+
+@pytest.mark.slow
+def test_option_regr_valxy():
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.regr_valx(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.regr_valy(arg0, arg1),
+        )
+
+    A, B = 0.1, 0.5
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (0.5, 0.1) if flag0 and flag1 else (None, None)
             check_func(impl, (A, B, flag0, flag1), py_output=answer)

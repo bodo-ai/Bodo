@@ -36,6 +36,38 @@ public class CondOperatorTable implements SqlOperatorTable {
     return instance;
   }
 
+  public static final SqlFunction REGR_VALX =
+      new SqlFunction(
+          "REGR_VALX",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.DOUBLE_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept. It accepts two doubles
+          OperandTypes.NUMERIC_NUMERIC,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction REGR_VALY =
+      new SqlFunction(
+          "REGR_VALY",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.DOUBLE_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept. It accepts two doubles
+          OperandTypes.NUMERIC_NUMERIC,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
+
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction IF_FUNC =
       new SqlFunction(
@@ -170,7 +202,8 @@ public class CondOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
   private List<SqlOperator> functionList =
-      Arrays.asList(IF_FUNC, IFF_FUNC, IFNULL_FUNC, NULLIFZERO, NVL, NVL2, ZEROIFNULL);
+      Arrays.asList(
+          REGR_VALX, REGR_VALY, IF_FUNC, IFF_FUNC, IFNULL_FUNC, NULLIFZERO, NVL, NVL2, ZEROIFNULL);
 
   @Override
   public void lookupOperatorOverloads(

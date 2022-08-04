@@ -117,7 +117,9 @@ public class ExprTypeVisitor {
           "WEEKDAY",
           "YEAROFWEEKISO",
           "COALESCE",
-          "NULLIF");
+          "NULLIF",
+          "REGR_VALX",
+          "REGR_VALY");
 
   /**
    * Generates a unique key for RelNodes. This done with just RelNode.id. The idea

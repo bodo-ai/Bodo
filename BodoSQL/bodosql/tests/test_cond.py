@@ -7,7 +7,6 @@ import copy
 import numpy as np
 import pandas as pd
 import pytest
-
 from bodosql.tests.string_ops_common import bodosql_string_fn_testing_df  # noqa
 from bodosql.tests.utils import check_query
 
@@ -220,6 +219,85 @@ def test_zeroifnull(spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
         equivalent_spark_query=spark_query,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "SELECT REGR_VALX(Y, X) from table1",
+                pd.DataFrame(
+                    {0: pd.Series([1.0, None, 3.0, 4.0, None, None, None, 8.0])}
+                ),
+            ),
+            id="regr_valx_all_vector",
+        ),
+        pytest.param(
+            (
+                "SELECT REGR_VALY(Y, X) from table1",
+                pd.DataFrame(
+                    {0: pd.Series([1.0, None, 9.0, 16.0, None, None, None, 64.0])}
+                ),
+            ),
+            id="regr_valy_all_vector",
+        ),
+        pytest.param(
+            (
+                "SELECT REGR_VALX(Y, 0.0) FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series([0.0, 0.0, 0.0, 0.0, None, None, None, 0.0])}
+                ),
+            ),
+            id="regr_valx_vector_scalar",
+        ),
+        pytest.param(
+            (
+                "SELECT REGR_VALY(Y, 0.0) FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series([1.0, 4.0, 9.0, 16.0, None, None, None, 64.0])}
+                ),
+            ),
+            id="regr_valy_vector_scalar",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN X IS NULL OR Y IS NULL OR X <> 4 THEN REGR_VALX(Y, X) ELSE -1.0 END FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series([1.0, None, 3.0, -1.0, None, None, None, 8.0])}
+                ),
+            ),
+            id="regr_valx_case",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN X IS NULL OR Y IS NULL OR X <> 4 THEN REGR_VALY(Y, X) ELSE -1.0 END FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series([1.0, None, 9.0, -1.0, None, None, None, 64.0])}
+                ),
+            ),
+            id="regr_valy_case",
+        ),
+    ],
+)
+def test_regr_valx_regr_valy(args, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "X": [1.0, None, 3.0, 4.0, None, 6.0, 7.0, 8.0],
+                "Y": [1.0, 4.0, 9.0, 16.0, None, None, None, 64.0],
+            }
+        )
+    }
+    query, answer = args
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
     )
 
 

@@ -30,6 +30,8 @@ broadcasted_fixed_arg_functions = {
     "negate",
     "nullif",
     "ord_ascii",
+    "regr_valx",
+    "regr_valy",
     "repeat",
     "replace",
     "reverse",

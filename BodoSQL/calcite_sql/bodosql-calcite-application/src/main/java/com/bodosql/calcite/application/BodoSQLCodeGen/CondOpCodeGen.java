@@ -2,13 +2,66 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.Utils.*;
 
+import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import com.bodosql.calcite.application.Utils.BodoCtx;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import org.apache.calcite.rex.RexCall;
 
 public class CondOpCodeGen {
+
+  // Hashmap of functions for which there is a one to one mapping between the SQL function call,
+  // and a function call where any of the arguments can be scalars or vectors.
+  // IE SQLFN(C1, s1, C2, s2) => FN(C1, s1, C2, s2)
+  // EX REGR_VALY(A, 3.1) => bodo.libs.bodosql_array_kernels.regr_valy(table1['A'], 3.1)
+  static HashMap<String, String> equivalentFnMap;
+
+  static {
+    equivalentFnMap = new HashMap<>();
+    equivalentFnMap.put("REGR_VALX", "bodo.libs.bodosql_array_kernels.regr_valx");
+    equivalentFnMap.put("REGR_VALY", "bodo.libs.bodosql_array_kernels.regr_valy");
+  }
+
+  /**
+   * Return a pandas expression that replicates a call to a SQL conditional function call with two
+   * arguments
+   *
+   * @param fnName the name of the function being called
+   * @param name1 the name of the first argument
+   * @param code1 the Python expression to calculate the first argument
+   * @param name2 the name of the second argument
+   * @param code2 the Python expression to calculate the second argument
+   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
+   *     relational expression.
+   */
+  public static RexNodeVisitorInfo getDoubleArgCondFnInfo(
+      String fnName, String name1, String code1, String name2, String code2) {
+
+    StringBuilder name = new StringBuilder(fnName);
+    name.append("(");
+    name.append(name1);
+    name.append(", ");
+    name.append(name2);
+    name.append(")");
+
+    String kernel_str;
+    if (equivalentFnMap.containsKey(fnName)) {
+      kernel_str = equivalentFnMap.get(fnName);
+    } else {
+      // If we made it here, something has gone very wrong
+      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
+    }
+    StringBuilder expr_code = new StringBuilder(kernel_str);
+    expr_code.append("(");
+    expr_code.append(code1);
+    expr_code.append(", ");
+    expr_code.append(code2);
+    expr_code.append(")");
+
+    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+  }
 
   /**
    * Function that returns the name for Case.
