@@ -599,7 +599,8 @@ class Aggregate(ir.Stmt):
         return_key,
         loc,
         func_name,
-        dropna=True,
+        dropna,
+        _num_shuffle_keys,
     ):
         """IR node for groupby operations. It takes a logical table (input data can be
         in a table and arrays, or just arrays), and returns a logical table (table and
@@ -648,8 +649,11 @@ class Aggregate(ir.Stmt):
             return_key (bool): whether groupby returns key columns in output
             loc (ir.Loc): code location of the IR node
             func_name (str): name of the groupby function called (sum, agg, ...)
-            dropna (bool, optional): whether groupby drops NA values in computation.
-                Defaults to True.
+            dropna (bool): whether groupby drops NA values in computation.
+            _num_shuffle_keys (int): How many of the keys should be used in the shuffle
+                table to distribute table across ranks. This leads to shuffling by
+                keys[:_num_shuffle_keys]. If _num_shuffle_keys == -1 then we use all
+                of the keys, which is the common case.
         """
         self.df_out = df_out
         self.df_in = df_in
@@ -668,6 +672,7 @@ class Aggregate(ir.Stmt):
         self.loc = loc
         self.func_name = func_name
         self.dropna = dropna
+        self._num_shuffle_keys = _num_shuffle_keys
         # logical column number of dead inputs
         self.dead_in_inds = set()
         # logical column number of dead outputs
@@ -1959,13 +1964,17 @@ def gen_top_level_agg_func(
     # call C++ groupby
     # We pass the logical arguments to the function (skipdropna, return_key, same_index, ...)
 
+    # Determine the subset of the keys to shuffle on
+    n_shuffle_keys = (
+        agg_node._num_shuffle_keys if agg_node._num_shuffle_keys != -1 else n_keys
+    )
     func_text += (
         f"    out_table = groupby_and_aggregate(table, {n_keys}, "
         f"{agg_node.input_has_index}, ftypes.ctypes, func_offsets.ctypes, "
         f"udf_ncols.ctypes, {parallel}, {skipdropna}, {shift_periods}, "
         f"{transform_func}, {head_n}, {agg_node.return_key}, {agg_node.same_index}, "
         f"{agg_node.dropna}, cpp_cb_update_addr, cpp_cb_combine_addr, cpp_cb_eval_addr,"
-        " cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes)\n"
+        f" cpp_cb_general_addr, udf_table_dummy, total_rows_np.ctypes, {n_shuffle_keys})\n"
     )
 
     out_cpp_col_inds = []

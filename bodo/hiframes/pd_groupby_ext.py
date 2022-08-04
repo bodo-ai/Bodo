@@ -65,6 +65,7 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_bool,
     get_overload_const_func,
+    get_overload_const_int,
     get_overload_const_list,
     get_overload_const_str,
     get_overload_constant_dict,
@@ -74,6 +75,7 @@ from bodo.utils.typing import (
     is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_dict,
+    is_overload_constant_int,
     is_overload_constant_list,
     is_overload_constant_str,
     is_overload_false,
@@ -102,6 +104,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         dropna=True,
         explicit_select=False,
         series_select=False,
+        _num_shuffle_keys=-1,
     ):
         bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
             df_type, "pandas.groupby()"
@@ -114,9 +117,12 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         self.dropna = dropna
         self.explicit_select = explicit_select
         self.series_select = series_select
+        # How many of the keys to use as the keys to the shuffle. If -1
+        # we shuffle on all keys.
+        self._num_shuffle_keys = _num_shuffle_keys
 
         super(DataFrameGroupByType, self).__init__(
-            name=f"DataFrameGroupBy({df_type}, {keys}, {selection}, {as_index}, {dropna}, {explicit_select}, {series_select})"
+            name=f"DataFrameGroupBy({df_type}, {keys}, {selection}, {as_index}, {dropna}, {explicit_select}, {series_select}, {_num_shuffle_keys})"
         )
 
     def copy(self):
@@ -129,6 +135,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
             self.dropna,
             self.explicit_select,
             self.series_select,
+            self._num_shuffle_keys,
         )
 
     @property
@@ -168,7 +175,9 @@ def validate_udf(func_name, func):
 
 
 @intrinsic
-def init_groupby(typingctx, obj_type, by_type, as_index_type=None, dropna_type=None):
+def init_groupby(
+    typingctx, obj_type, by_type, as_index_type, dropna_type, _num_shuffle_keys
+):
     """Initialize a groupby object. The data object inside can be a DataFrame"""
 
     def codegen(context, builder, signature, args):
@@ -205,10 +214,23 @@ def init_groupby(typingctx, obj_type, by_type, as_index_type=None, dropna_type=N
         dropna = is_overload_true(dropna_type)
     else:
         dropna = True
+    if is_overload_constant_int(_num_shuffle_keys):
+        shuffle_keys = get_overload_const_int(_num_shuffle_keys)
+    else:  # pragma: no cover
+        shuffle_keys = -1
     groupby_type = DataFrameGroupByType(
-        obj_type, keys, tuple(selection), as_index, dropna, False
+        obj_type,
+        keys,
+        tuple(selection),
+        as_index,
+        dropna,
+        False,
+        _num_shuffle_keys=shuffle_keys,
     )
-    return groupby_type(obj_type, by_type, as_index_type, dropna_type), codegen
+    return (
+        groupby_type(obj_type, by_type, as_index_type, dropna_type, _num_shuffle_keys),
+        codegen,
+    )
 
 
 # dummy lowering for groupby.size since it is used in Series.value_counts()
@@ -254,6 +276,7 @@ class StaticGetItemDataFrameGroupBy(AbstractTemplate):
                 grpby.dropna,
                 True,
                 series_select,
+                _num_shuffle_keys=grpby._num_shuffle_keys,
             )
             return signature(ret_grp, *args)
 
@@ -757,7 +780,14 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context)
             raise BodoError(f"unsupported aggregate function {f_name}")
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
-            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True, True
+            grp.df_type,
+            grp.keys,
+            (col,),
+            grp.as_index,
+            grp.dropna,
+            True,
+            True,
+            _num_shuffle_keys=grp._num_shuffle_keys,
         )
         out_tp = get_agg_typ(ret_grp, (), f_name, typing_context, target_context)[
             0
@@ -774,7 +804,14 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context)
         f_name = code.co_name
         # run typer on a groupby with just column col
         ret_grp = DataFrameGroupByType(
-            grp.df_type, grp.keys, (col,), grp.as_index, grp.dropna, True, True
+            grp.df_type,
+            grp.keys,
+            (col,),
+            grp.as_index,
+            grp.dropna,
+            True,
+            True,
+            _num_shuffle_keys=grp._num_shuffle_keys,
         )
         # out_tp is series because we are passing only one input column
         out_tp = get_agg_typ(ret_grp, (), "agg", typing_context, target_context, f)[
@@ -1576,7 +1613,14 @@ class DataframeGroupByAttribute(OverloadedKeyAttributeTemplate):
                 f"groupby: invalid attribute {attr} (column not found in dataframe or unsupported function)"
             )
         return DataFrameGroupByType(
-            grpby.df_type, grpby.keys, (attr,), grpby.as_index, grpby.dropna, True, True
+            grpby.df_type,
+            grpby.keys,
+            (attr,),
+            grpby.as_index,
+            grpby.dropna,
+            True,
+            True,
+            _num_shuffle_keys=grpby._num_shuffle_keys,
         )
 
 

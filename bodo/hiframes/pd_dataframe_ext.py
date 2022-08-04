@@ -3156,6 +3156,7 @@ def pivot_impl(
     columns_name,
     value_names,
     check_duplicates=True,
+    is_already_shuffled=False,
     _constant_pivot_values=None,
     parallel=False,
 ):  # pragma: no cover
@@ -3185,6 +3186,8 @@ def pivot_impl(
     check_duplicates - Do we need to add error checking for duplicates. This is a compile
                        time check to generate the bitmaps and can be skipped if we have
                        already done a reduction or removed duplicates (i.e. pivot_table).
+    is_already_shuffled - Is the data already shuffled in a way that is consistent with the
+                          output of a pivot table. This is a compile time check to skip the shuffle.
     _constant_pivot_values - Either None or Typeref of ColNamesMetaType of names for the output columns.
                              If its a ColNamesMetaType then the columns are known at compile time.
     parallel - Are index_tup, columns_tup, and values_tup distributed or replicated.
@@ -3192,6 +3195,7 @@ def pivot_impl(
     if not is_overload_constant_bool(check_duplicates):
         raise BodoError("pivot_impl(): check_duplicates must be a constant boolean")
     check_duplicates_codegen = get_overload_const_bool(check_duplicates)
+    gen_shuffle_codegen = not get_overload_const_bool(is_already_shuffled)
 
     # Check if we have columns known at compile time.
     has_compile_time_columns = not is_overload_none(_constant_pivot_values)
@@ -3239,48 +3243,49 @@ def pivot_impl(
         ]
 
     func_text = "def impl(\n"
-    func_text += "    index_tup, columns_tup, values_tup, pivot_values, index_names, columns_name, value_names, check_duplicates=True, _constant_pivot_values=None, parallel=False\n"
+    func_text += "    index_tup, columns_tup, values_tup, pivot_values, index_names, columns_name, value_names, check_duplicates=True, is_already_shuffled=False, _constant_pivot_values=None, parallel=False\n"
     func_text += "):\n"
-    # If the data is parallel we need to shuffle to get all values
-    # in a row on the same rank.
     func_text += "    ev = tracing.Event('pivot_impl', is_parallel=parallel)\n"
-    func_text += "    if parallel:\n"
-    func_text += "        ev_shuffle = tracing.Event('shuffle_pivot_index')\n"
-    # Shuffle based on index so each rank contains all values for
-    # the same index
-    array_to_infos = ", ".join(
-        [f"array_to_info(index_tup[{i}])" for i in range(len(index_tup))]
-        + [f"array_to_info(columns_tup[{i}])" for i in range(len(columns_tup))]
-        + [f"array_to_info(values_tup[{i}])" for i in range(len(values_tup))]
-    )
-    func_text += f"        info_list = [{array_to_infos}]\n"
-    func_text += "        cpp_table = arr_info_list_to_table(info_list)\n"
-    func_text += f"        out_cpp_table = shuffle_table(cpp_table, {len(index_tup)}, parallel, 0)\n"
-    index_info_to_arrays = ", ".join(
-        [
-            f"info_to_array(info_from_table(out_cpp_table, {i}), index_tup[{i}])"
-            for i in range(len(index_tup))
-        ]
-    )
-    columns_info_to_arrays = ", ".join(
-        [
-            f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup)}), columns_tup[{i}])"
-            for i in range(len(columns_tup))
-        ]
-    )
-    values_info_to_arrays = ", ".join(
-        [
-            f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup) + len(columns_tup)}), values_tup[{i}])"
-            for i in range(len(values_tup))
-        ]
-    )
-    func_text += f"        index_tup = ({index_info_to_arrays},)\n"
-    func_text += f"        columns_tup = ({columns_info_to_arrays},)\n"
-    func_text += f"        values_tup = ({values_info_to_arrays},)\n"
-    # Delete the tables
-    func_text += "        delete_table(cpp_table)\n"
-    func_text += "        delete_table(out_cpp_table)\n"
-    func_text += "        ev_shuffle.finalize()\n"
+    if gen_shuffle_codegen:
+        # If the data is parallel we need to shuffle to get all values
+        # in a row on the same rank.
+        func_text += "    if parallel:\n"
+        func_text += "        ev_shuffle = tracing.Event('shuffle_pivot_index')\n"
+        # Shuffle based on index so each rank contains all values for
+        # the same index
+        array_to_infos = ", ".join(
+            [f"array_to_info(index_tup[{i}])" for i in range(len(index_tup))]
+            + [f"array_to_info(columns_tup[{i}])" for i in range(len(columns_tup))]
+            + [f"array_to_info(values_tup[{i}])" for i in range(len(values_tup))]
+        )
+        func_text += f"        info_list = [{array_to_infos}]\n"
+        func_text += "        cpp_table = arr_info_list_to_table(info_list)\n"
+        func_text += f"        out_cpp_table = shuffle_table(cpp_table, {len(index_tup)}, parallel, 0)\n"
+        index_info_to_arrays = ", ".join(
+            [
+                f"info_to_array(info_from_table(out_cpp_table, {i}), index_tup[{i}])"
+                for i in range(len(index_tup))
+            ]
+        )
+        columns_info_to_arrays = ", ".join(
+            [
+                f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup)}), columns_tup[{i}])"
+                for i in range(len(columns_tup))
+            ]
+        )
+        values_info_to_arrays = ", ".join(
+            [
+                f"info_to_array(info_from_table(out_cpp_table, {i + len(index_tup) + len(columns_tup)}), values_tup[{i}])"
+                for i in range(len(values_tup))
+            ]
+        )
+        func_text += f"        index_tup = ({index_info_to_arrays},)\n"
+        func_text += f"        columns_tup = ({columns_info_to_arrays},)\n"
+        func_text += f"        values_tup = ({values_info_to_arrays},)\n"
+        # Delete the tables
+        func_text += "        delete_table(cpp_table)\n"
+        func_text += "        delete_table(out_cpp_table)\n"
+        func_text += "        ev_shuffle.finalize()\n"
     # Load the index and column arrays. Move value arrays to a
     # list since access won't be known at compile time.
     func_text += "    columns_arr = columns_tup[0]\n"

@@ -6074,3 +6074,102 @@ def test_groupby_ngroup(memory_leak_check):
     # Example to show case when index won't be numericIndex.
     df.index = ["a", "b", "c", "d", "e", "f"]
     check_func(impl1, (df,), sort_output=True, reset_index=True)
+
+
+def test_groupby_num_shuffle_keys(memory_leak_check):
+    """
+    Tests the Bodo optional argument, _bodo_num_shuffle_keys
+    produces a correct output. This argument shuffles on a
+    subset of the groupby keys when manually setting certain
+    operations as being similarly shuffled.
+
+    The shuffling being consistent is not tested here. That is
+    tested by the pivot_table tests as we skip a shuffle that
+    would otherwise be necessary.
+    """
+
+    def impl1(df):
+        return df.groupby(["A", "B"], _bodo_num_shuffle_keys=1)["C"].sum()
+
+    def impl2(df):
+        return df.groupby(["A", "B"], _bodo_num_shuffle_keys=1)["C"].agg("sum")
+
+    def impl3(df):
+        # _bodo_num_shuffle_keys should be ignored
+        return df.groupby(["A", "B"], _bodo_num_shuffle_keys=1)["C"].cumsum()
+
+    def impl4(df):
+        # _bodo_num_shuffle_keys should be ignored
+        return df.groupby(["A", "B"], _bodo_num_shuffle_keys=1)["C"].nunique()
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1, 2, 3] * 5,
+            "B": [1, 2, 3, 4, 5] * 3,
+            "C": np.arange(15),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            # If we only shuffle on A instead of (A, B),
+            # then all of the data should be gathered on a single
+            # rank. We test with this DataFrame to confirm that
+            # even if some ranks are empty it produces the
+            # correct output.
+            "A": [1] * 15,
+            "B": [1, 2, 3, 4, 5] * 3,
+            "C": np.arange(15),
+        }
+    )
+    check_func(
+        impl1,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        py_output=df1.groupby(["A", "B"])["C"].sum(),
+    )
+    check_func(
+        impl1,
+        (df2,),
+        sort_output=True,
+        reset_index=True,
+        py_output=df2.groupby(["A", "B"])["C"].sum(),
+    )
+    check_func(
+        impl2,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        py_output=df1.groupby(["A", "B"])["C"].agg("sum"),
+    )
+    check_func(
+        impl2,
+        (df2,),
+        sort_output=True,
+        reset_index=True,
+        py_output=df2.groupby(["A", "B"])["C"].agg("sum"),
+    )
+    check_func(
+        impl3,
+        (df1,),
+        py_output=df1.groupby(["A", "B"])["C"].cumsum(),
+    )
+    check_func(
+        impl3,
+        (df2,),
+        py_output=df2.groupby(["A", "B"])["C"].cumsum(),
+    )
+    check_func(
+        impl4,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        py_output=df1.groupby(["A", "B"])["C"].nunique(),
+    )
+    check_func(
+        impl4,
+        (df2,),
+        sort_output=True,
+        reset_index=True,
+        py_output=df2.groupby(["A", "B"])["C"].nunique(),
+    )
