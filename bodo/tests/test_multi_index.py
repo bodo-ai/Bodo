@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -88,3 +90,27 @@ def test_multi_index_head(memory_leak_check):
     # Reset the index because the groupby means order
     # won't be maintained
     check_func(impl, (df,), reset_index=True)
+
+
+def test_multi_nbytes(memory_leak_check):
+    """
+    Tests nbytes works as expected with a MultiIndex.
+    """
+
+    def impl(index):
+        return index.nbytes
+
+    arrays = [[1, 1, 2, 2] * 10, ["red", "blue", "red", "blue"] * 10]
+    index = pd.MultiIndex.from_arrays(arrays, names=("number", "color"))
+    py_out = (
+        (40 * 8) + (40 // 8) + (41 * 8) + (40 * 3.5)
+    )  # int data is 40 * 8, string data is 5 bytes null bitmap + 41 * 8 for offset + 170 for string data
+    check_func(impl, (index,), py_output=py_out, only_seq=True)
+    # Same data is distributed on multiple ranks. As a result int is unchanged, but
+    # string needs to account for null bitmap changes and offset changes.
+    # 1 extra offset integer on extra ranks
+    extra_offset_bytes = (bodo.get_size() - 1) * 8
+    # Null bits depends on the bitmap padding
+    extra_null_bitmap = (math.ceil(40 / (8 * bodo.get_size())) * bodo.get_size()) - 5
+    py_out = py_out + extra_offset_bytes + extra_null_bitmap
+    check_func(impl, (index,), py_output=py_out, only_1DVar=True)

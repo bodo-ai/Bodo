@@ -70,6 +70,7 @@ from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.utils import tracing
 from bodo.utils.transform import (
     bodo_types_with_params,
     gen_const_tup,
@@ -4338,10 +4339,11 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
     # without requiring communication. If this value is constant at compile time
     # we don't need table format.
     func_text = "def impl(data, index=None, columns=None, values=None):\n"
+    func_text += "    ev = tracing.Event('df.pivot')\n"
     # Compute the pivot columns
     func_text += f"    pivot_values = data.iloc[:, {columns_idx}].unique()\n"
     # Call the main pivot_impl
-    func_text += "    return bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
+    func_text += "    result = bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
     # Select all of the arrays. TODO: Support table format.
 
     if len(index_idx) == 0:
@@ -4362,6 +4364,8 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
     func_text += "        columns_lit,\n"
     func_text += "        values_lit,\n"
     func_text += "    )\n"
+    func_text += "    ev.finalize()\n"
+    func_text += "    return result\n"
     loc_vars = {}
     exec(
         func_text,
@@ -4370,6 +4374,7 @@ def overload_dataframe_pivot(data, index=None, columns=None, values=None):
             "index_lit": index_lit,
             "columns_lit": columns_lit,
             "values_lit": values_lit,
+            "tracing": tracing,
         },
         loc_vars,
     )
@@ -4458,6 +4463,7 @@ def overload_dataframe_pivot_table(
     func_text += "    _pivot_values=None,\n"
     func_text += "):\n"
     # Truncate the dataframe to just the columns in question.
+    func_text += "    ev = tracing.Event('df.pivot_table')\n"
     total_idx = index_idx + [columns_idx] + values_idx
     func_text += f"    data = data.iloc[:, {total_idx}]\n"
     groupby_lit = index_lit_orig + [columns_lit_org]
@@ -4493,7 +4499,7 @@ def overload_dataframe_pivot_table(
         # len(index_idx), since we have done an iloc on the DataFrame.
         func_text += f"    pivot_values = data.iloc[:, {len(index_idx)}].unique()\n"
     # Call the main pivot_impl
-    func_text += "    return bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
+    func_text += "    result = bodo.hiframes.pd_dataframe_ext.pivot_impl(\n"
     # Select all of the arrays. Since we have applied an iloc/groupby the new
     # locations are now always [0-m), m, [m+1, n)
     func_text += "        (\n"
@@ -4514,6 +4520,8 @@ def overload_dataframe_pivot_table(
     func_text += "        check_duplicates=False,\n"
     func_text += "        _constant_pivot_values=_constant_pivot_values,\n"
     func_text += "    )\n"
+    func_text += "    ev.finalize()\n"
+    func_text += "    return result\n"
     loc_vars = {}
     exec(
         func_text,
@@ -4525,6 +4533,7 @@ def overload_dataframe_pivot_table(
             "values_lit": values_lit,
             "_pivot_values_arr": _pivot_values_arr,
             "_constant_pivot_values": _pivot_values,
+            "tracing": tracing,
         },
         loc_vars,
     )
