@@ -34,6 +34,28 @@ ll.add_symbol("bytes_fromhex", hstr_ext.bytes_fromhex)
 bytes_type = types.Bytes(types.uint8, 1, "C", readonly=True)
 
 
+@overload(len)
+def bytes_len_overload(bytes_obj):
+    if isinstance(bytes_obj, types.Bytes):
+        return lambda bytes_obj: bytes_obj._nitems  # pragma: no cover
+
+
+@overload(operator.getitem, no_unliteral=True)
+def bytes_getitem(byte_obj, ind):
+    if not isinstance(byte_obj, types.Bytes):  # pragma: no cover
+        return
+
+    # Integer indices are handled inside of Numba
+    if isinstance(ind, types.SliceType):
+
+        def impl(byte_obj, ind):  # pragma: no cover
+            arr = cast_bytes_uint8array(byte_obj)
+            new_arr = bodo.utils.conversion.ensure_contig_if_np(arr[ind])
+            return cast_uint8array_bytes(new_arr)
+
+        return impl
+
+
 # type for ndarray with bytes object values
 class BinaryArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self):
@@ -62,6 +84,9 @@ binary_array_type = BinaryArrayType()
 def bin_arr_len_overload(bin_arr):
     if bin_arr == binary_array_type:
         return lambda bin_arr: len(bin_arr._data)  # pragma: no cover
+
+
+make_attribute_wrapper(types.Bytes, "nitems", "_nitems")
 
 
 @overload_attribute(BinaryArrayType, "size")
@@ -165,6 +190,18 @@ def cast_bytes_uint8array(typingctx, data_typ):
         return impl_ret_borrowed(context, builder, sig.return_type, args[0])
 
     return types.Array(types.uint8, 1, "C")(data_typ), codegen
+
+
+@intrinsic
+def cast_uint8array_bytes(typingctx, data_typ):
+    """cast array(uint8) to a bytes array for use in setitem."""
+    assert data_typ == types.Array(types.uint8, 1, "C")
+
+    def codegen(context, builder, sig, args):
+        # Bytes and uint8 have the same model.
+        return impl_ret_borrowed(context, builder, sig.return_type, args[0])
+
+    return bytes_type(data_typ), codegen
 
 
 @overload_method(BinaryArrayType, "copy", no_unliteral=True)
@@ -330,7 +367,7 @@ def binary_arr_setitem(arr, ind, val):
             # TODO: Replace this cast with a direct memcpy into the data. This
             # is not safe in the future since we expect the model for bytes to change
             # and no longer be associated with Array.
-            arr._data[ind] = bodo.libs.binary_arr_ext.cast_bytes_uint8array(val)
+            arr._data[ind] = cast_bytes_uint8array(val)
 
         return impl
 

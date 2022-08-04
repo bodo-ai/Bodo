@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, gen_nonascii_list
 
 
 @pytest.fixture(
@@ -36,9 +36,37 @@ from bodo.tests.utils import check_func
                 "D": [1.2, 5.3231] * 40,
             }
         ),
+        pd.DataFrame(
+            {
+                "A": gen_nonascii_list(10) * 8,
+                "B": gen_nonascii_list(5) * 16,
+                "C": gen_nonascii_list(20) * 4,
+                "D": [1.2, 5.3231] * 40,
+            }
+        ),
     ]
 )
 def dataframe_val(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pd.DataFrame(
+            {
+                "A": [b"a", b"ZZZZZZZ"] * 40,
+                "B": [bytes(10), b"0123123123"] * 40,
+                "C": [
+                    bytes(4),
+                    b"1231",
+                ]
+                * 40,
+                "D": [1.2, 5.3231] * 40,
+            }
+        ),
+    ]
+)
+def binary_dataframe_val(request):
     return request.param
 
 
@@ -69,12 +97,29 @@ def test_concat_strings(dataframe_val, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_concat_binary(binary_dataframe_val, memory_leak_check):
+    def test_impl(df):
+        return df[["A", "B", "C"]].apply(lambda x: b"".join(x), axis=1)
+
+    check_func(test_impl, (binary_dataframe_val,))
+
+
+@pytest.mark.slow
 def test_concat_ws(dataframe_val, memory_leak_check):
     def test_impl(df, sep):
         return df[["A", "B", "C"]].apply(lambda x, sep: sep.join(x), sep=sep, axis=1)
 
     sep = "..."
     check_func(test_impl, (dataframe_val, sep))
+
+
+@pytest.mark.slow
+def test_concat_ws_binary(binary_dataframe_val, memory_leak_check):
+    def test_impl(df, sep):
+        return df[["A", "B", "C"]].apply(lambda x, sep: sep.join(x), sep=sep, axis=1)
+
+    sep = b"..."
+    check_func(test_impl, (binary_dataframe_val, sep))
 
 
 @pytest.mark.slow
