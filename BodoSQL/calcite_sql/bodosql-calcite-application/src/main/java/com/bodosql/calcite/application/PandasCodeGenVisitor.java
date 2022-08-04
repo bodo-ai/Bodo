@@ -9,6 +9,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generat
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastName;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseName;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getDoubleArgCondFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitCoalesce;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitIf;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.*;
@@ -2283,6 +2284,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
                     fnName,
                     operandsInfo.get(0).getExprCode(),
                     exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow));
+          case "REGR_VALX":
+          case "REGR_VALY":
+            return getDoubleArgCondFnInfo(
+                fnName,
+                operandsInfo.get(0).getName(),
+                operandsInfo.get(0).getExprCode(),
+                operandsInfo.get(1).getName(),
+                operandsInfo.get(1).getExprCode());
         }
       default:
         throw new BodoSQLCodegenException(
