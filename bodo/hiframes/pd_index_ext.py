@@ -4505,6 +4505,7 @@ def heter_index_get_name(i):
 @overload_attribute(BinaryIndexType, "nbytes")
 @overload_attribute(CategoricalIndexType, "nbytes")
 @overload_attribute(PeriodIndexType, "nbytes")
+@overload_attribute(MultiIndexType, "nbytes")
 def overload_nbytes(I):
     """Add support for Index.nbytes by computing underlying arrays nbytes"""
     # Note: Pandas have a different underlying data structure
@@ -4519,6 +4520,18 @@ def overload_nbytes(I):
             )
 
         return _impl_nbytes
+    elif isinstance(I, MultiIndexType):
+
+        func_text = "def _impl_nbytes(I):\n"
+        func_text += "    total = 0\n"
+        func_text += "    data = I._data\n"
+        for i in range(I.nlevels):
+            func_text += f"    total += data[{i}].nbytes\n"
+        func_text += "    return total\n"
+        local_vars = {}
+        exec(func_text, {}, local_vars)
+        return local_vars["_impl_nbytes"]
+
     else:
 
         def _impl_nbytes(I):  # pragma: no cover
@@ -6308,7 +6321,6 @@ multi_index_unsupported_atrs = [
     "codes",
     "dtypes",
     "values",
-    "nbytes",
     "is_monotonic",
     "is_monotonic_increasing",
     "is_monotonic_decreasing",

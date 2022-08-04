@@ -75,6 +75,7 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.utils import tracing
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.conversion import fix_arr_dtype, index_to_array
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
@@ -3242,7 +3243,9 @@ def pivot_impl(
     func_text += "):\n"
     # If the data is parallel we need to shuffle to get all values
     # in a row on the same rank.
+    func_text += "    ev = tracing.Event('pivot_impl', is_parallel=parallel)\n"
     func_text += "    if parallel:\n"
+    func_text += "        ev_shuffle = tracing.Event('shuffle_pivot_index')\n"
     # Shuffle based on index so each rank contains all values for
     # the same index
     array_to_infos = ", ".join(
@@ -3277,6 +3280,7 @@ def pivot_impl(
     # Delete the tables
     func_text += "        delete_table(cpp_table)\n"
     func_text += "        delete_table(out_cpp_table)\n"
+    func_text += "        ev_shuffle.finalize()\n"
     # Load the index and column arrays. Move value arrays to a
     # list since access won't be known at compile time.
     func_text += "    columns_arr = columns_tup[0]\n"
@@ -3293,6 +3297,7 @@ def pivot_impl(
     )
     func_text += f"    new_index_tup = ({decoded_index_tup},)\n"
     # Create a map on each rank for the index values.
+    func_text += "    ev_unique = tracing.Event('pivot_unique_index_map', is_parallel=parallel)\n"
     func_text += "    unique_index_arr_tup, row_vector = bodo.libs.array_ops.array_unique_vector_map(\n"
     func_text += "        new_index_tup\n"
     func_text += "    )\n"
@@ -3311,6 +3316,8 @@ def pivot_impl(
     func_text += "                \"DataFrame.pivot(): NA values in 'columns' array not supported\"\n"
     func_text += "            )\n"
     func_text += "        col_map[pivot_values[i]] = i\n"
+    func_text += "    ev_unique.finalize()\n"
+    func_text += "    ev_alloc = tracing.Event('pivot_alloc', is_parallel=parallel)\n"
     # If we have a string array then we need to do 2 passes
     has_str_array = False
     for i, data_arr_typ in enumerate(data_arr_typs):
@@ -3363,6 +3370,7 @@ def pivot_impl(
                     )
 
     # Allocate the data arrays. If we have string data we use the info from the first pass
+    func_text += f"    ev_alloc.add_attribute('num_rows', n_rows)\n"
     for i, data_arr_typ in enumerate(data_arr_typs):
         if is_str_arr_type(data_arr_typ):
             func_text += f"    data_arrs_{i} = [\n"
@@ -3371,6 +3379,9 @@ def pivot_impl(
             func_text += "        )\n"
             func_text += "        for i in range(n_cols)\n"
             func_text += "    ]\n"
+            func_text += f"    if tracing.is_tracing():\n"
+            func_text += "         for i in range(n_cols):"
+            func_text += f"            ev_alloc.add_attribute('total_str_chars_out_column_{i}_' + str(i), total_lens_{i}[i])\n"
         else:
             func_text += f"    data_arrs_{i} = [\n"
             func_text += f"        bodo.libs.array_kernels.gen_na_array(n_rows, data_arr_typ_{i})\n"
@@ -3383,6 +3394,11 @@ def pivot_impl(
         func_text += "    nbytes = (n_rows + 7) >> 3\n"
         # Bitmaps can be allocated per unique value rather than per output column.
         func_text += "    seen_bitmaps = [np.zeros(nbytes, np.int8) for _ in range(n_unique_pivots)]\n"
+
+    func_text += "    ev_alloc.finalize()\n"
+    func_text += (
+        "    ev_fill = tracing.Event('pivot_fill_data', is_parallel=parallel)\n"
+    )
 
     # Set values that aren't NA
     func_text += "    for i in range(len(columns_arr)):\n"
@@ -3423,9 +3439,13 @@ def pivot_impl(
     if len(index_names) == 1:
         func_text += "    index = bodo.utils.conversion.index_from_array(unique_index_arr_tup[0], index_names_lit)\n"
         index_names_lit = index_names.meta[0]
+
     else:
         func_text += "    index = bodo.hiframes.pd_multi_index_ext.init_multi_index(unique_index_arr_tup, index_names_lit, None)\n"
         index_names_lit = tuple(index_names.meta)
+    func_text += f"    if tracing.is_tracing():\n"
+    func_text += f"        index_nbytes = index.nbytes\n"
+    func_text += f"        ev.add_attribute('index_nbytes', index_nbytes)\n"
     if not has_compile_time_columns:
         columns_name_lit = columns_name.meta[0]
         # Convert the columns to a proper index. if they are not known at compile time.
@@ -3468,6 +3488,7 @@ def pivot_impl(
             func_text += "    column_index = bodo.hiframes.pd_multi_index_ext.init_multi_index((new_value_names, new_pivot_values), (None, columns_name_lit), None)\n"
         else:
             func_text += "    column_index =  bodo.utils.conversion.index_from_array(pivot_values, columns_name_lit)\n"
+    func_text += "    ev_fill.finalize()\n"
     # Create the output Table and DataFrame.
     table_type = None
     if has_compile_time_columns:
@@ -3496,17 +3517,19 @@ def pivot_impl(
         for i, typ in enumerate(data_arr_typs):
             # We support constant columns with multiple values
             func_text += f"    table = bodo.hiframes.table.set_table_block(table, data_arrs_{i}, {table_type.type_to_blk[typ]})\n"
-        func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe(\n"
+        func_text += "    result = bodo.hiframes.pd_dataframe_ext.init_dataframe(\n"
         func_text += "        (table,), index, columns_typ\n"
         func_text += "    )\n"
     else:
         data_lists = ", ".join(f"data_arrs_{i}" for i in range(len(data_arr_typs)))
         func_text += f"    table = bodo.hiframes.table.init_runtime_table_from_lists(({data_lists},), n_rows)\n"
         func_text += (
-            "    return bodo.hiframes.pd_dataframe_ext.init_runtime_cols_dataframe(\n"
+            "    result = bodo.hiframes.pd_dataframe_ext.init_runtime_cols_dataframe(\n"
         )
         func_text += "        (table,), index, column_index\n"
         func_text += "    )\n"
+    func_text += "    ev.finalize()\n"
+    func_text += "    return result\n"
     loc_vars = {}
     data_types_dict = {
         f"data_arr_typ_{i}": data_arr_typ
@@ -3527,6 +3550,7 @@ def pivot_impl(
         "value_names_lit": value_names_lit,
         "columns_name_lit": columns_name_lit,
         **data_types_dict,
+        "tracing": tracing,
     }
     exec(func_text, glbls, loc_vars)
     impl = loc_vars["impl"]

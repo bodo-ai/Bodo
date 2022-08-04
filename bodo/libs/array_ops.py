@@ -4,6 +4,7 @@ Implements array operations for usage by DataFrames and Series
 such as count and max.
 """
 
+
 import numba
 import numpy as np
 import pandas as pd
@@ -14,6 +15,7 @@ from numba.extending import overload
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
+from bodo.utils import tracing
 from bodo.utils.typing import (
     element_type,
     is_hashable_type,
@@ -760,6 +762,7 @@ def array_unique_vector_map(in_arr_tup):
     use_tuple = len(in_arr_tup) != 1
     arr_typ_list = list(in_arr_tup.types)
     func_text = "def impl(in_arr_tup):\n"
+    func_text += "  ev = tracing.Event('array_unique_vector_map', is_parallel=False)\n"
     func_text += "  n = len(in_arr_tup[0])\n"
     if use_tuple:
         # If we use a tuple then we generate code per element in the tuple.
@@ -820,6 +823,8 @@ def array_unique_vector_map(in_arr_tup):
             func_text += "    else:\n"
             func_text += f"      out_arr_{i}[j] = in_lst_{i}[j]\n"
         ret_arrs = ", ".join([f"out_arr_{i}" for i in range(len(arr_typ_list))])
+        func_text += "  ev.add_attribute('n_map_entries', n_rows)\n"
+        func_text += "  ev.finalize()\n"
         func_text += f"  return ({ret_arrs},), map_vector\n"
     else:
         # If we have a single array, extract it and generate code for 1 array.
@@ -870,9 +875,11 @@ def array_unique_vector_map(in_arr_tup):
         func_text += "    out_arr[j] = in_lst[j]\n"
         func_text += "  if is_na:\n"
         func_text += "    bodo.libs.array_kernels.setna(out_arr, n_rows - 1)\n"
+        func_text += "  ev.add_attribute('n_map_entries', n_rows)\n"
+        func_text += "  ev.finalize()\n"
         func_text += f"  return (out_arr,), map_vector\n"
 
     loc_vars = {}
-    exec(func_text, {"bodo": bodo, "np": np}, loc_vars)
+    exec(func_text, {"bodo": bodo, "np": np, "tracing": tracing}, loc_vars)
     impl = loc_vars["impl"]
     return impl
