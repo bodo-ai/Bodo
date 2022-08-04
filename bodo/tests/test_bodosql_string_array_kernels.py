@@ -173,6 +173,30 @@ def test_instr(args):
         ),
         pytest.param(
             (
+                pd.Series([b"alpha", b"beta", b"gamma", b"delta", b"epsilon", b"zeta"]),
+                pd.Series([1, -4, 3, 14, 5, 0]),
+            ),
+            id="binary_vector_no_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([b"alpha", b"beta", b"gamma", b"delta", b"epsilon", b"zeta"]),
+                4,
+            ),
+            id="binary_vector_scalar_int",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([b"alpha", b"beta", None, b"delta", b"epsilon", None] * 4),
+                4,
+            ),
+            id="binary_vector_some_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
                 "alphabet",
                 pd.Series(pd.array(list(range(-2, 11)))),
             ),
@@ -221,25 +245,29 @@ def test_left_right(args):
 
     # Simulates LEFT on a single row
     def left_scalar_fn(elem, n_chars):
+        arr_is_string = is_valid_string_arg(elem)
+        empty_char = "" if arr_is_string else b""
         if pd.isna(elem) or pd.isna(n_chars):
             return None
         elif n_chars <= 0:
-            return ""
+            return empty_char
         else:
             return elem[:n_chars]
 
     # Simulates RIGHT on a single row
     def right_scalar_fn(elem, n_chars):
+        arr_is_string = is_valid_string_arg(elem)
+        empty_char = "" if arr_is_string else b""
         if pd.isna(elem) or pd.isna(n_chars):
             return None
         elif n_chars <= 0:
-            return ""
+            return empty_char
         else:
             return elem[-n_chars:]
 
     arr, n_chars = args
-    left_answer = vectorized_sol((arr, n_chars), left_scalar_fn, pd.StringDtype())
-    right_answer = vectorized_sol((arr, n_chars), right_scalar_fn, pd.StringDtype())
+    left_answer = vectorized_sol((arr, n_chars), left_scalar_fn, object)
+    right_answer = vectorized_sol((arr, n_chars), right_scalar_fn, object)
     check_func(
         impl1,
         (arr, n_chars),
@@ -274,6 +302,25 @@ def test_left_right(args):
                 pd.array(["_", "_", None, "_", "_", ""]),
             ),
             id="all_vector_with_null",
+        ),
+        pytest.param(
+            (
+                np.array(
+                    [b"", b"abc", b"c", b"ccdefg", b"abcde", b"poiu", b"abc"], object
+                ),
+                20,
+                b"_",
+            ),
+            id="binary_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series([b"", b"abc", b"c", b"ccdefg", b"abcde", b"poiu", None]),
+                20,
+                b"abc",
+            ),
+            marks=pytest.mark.slow,
+            id="binary_vector_with_null",
         ),
         pytest.param(
             (pd.array(["alpha", "beta", "gamma", "delta", "epsilon", None]), 20, "_"),
@@ -379,12 +426,8 @@ def test_lpad_rpad(args):
             return elem + (pad * length)[: length - len(elem)]
 
     arr, length, pad_string = args
-    lpad_answer = vectorized_sol(
-        (arr, length, pad_string), lpad_scalar_fn, pd.StringDtype()
-    )
-    rpad_answer = vectorized_sol(
-        (arr, length, pad_string), rpad_scalar_fn, pd.StringDtype()
-    )
+    lpad_answer = vectorized_sol((arr, length, pad_string), lpad_scalar_fn, object)
+    rpad_answer = vectorized_sol((arr, length, pad_string), rpad_scalar_fn, object)
     check_func(
         impl1,
         (arr, length, pad_string),
@@ -468,13 +511,11 @@ def test_repeat(args):
         else:
             return elem * repeats
 
-    strings, numbers = args
-    repeat_answer = vectorized_sol(
-        (strings, numbers), repeat_scalar_fn, pd.StringDtype()
-    )
+    strings_binary, numbers = args
+    repeat_answer = vectorized_sol((strings_binary, numbers), repeat_scalar_fn, object)
     check_func(
         impl,
-        (strings, numbers),
+        (strings_binary, numbers),
         py_output=repeat_answer,
         check_dtype=False,
         reset_index=True,
@@ -560,7 +601,7 @@ def test_replace(args):
 
 
 @pytest.mark.parametrize(
-    "strings",
+    "strings_binary",
     [
         pytest.param(
             pd.Series(pd.array(["A", "BƬCD", "EFGH", None, "I", "J✖"])),
@@ -569,12 +610,20 @@ def test_replace(args):
         pytest.param("racecarsƟ", id="scalar"),
         pytest.param(
             pd.Series(pd.array(gen_nonascii_list(6))),
-            id="vector",
+            id="nonascii_vector",
         ),
         pytest.param(gen_nonascii_list(1)[0], id="scalar"),
+        pytest.param(
+            pd.Series([b"abcdef", b"12345", b"AAAA", b"zzzzz", b"z", b"1"]),
+            id="binary_vector",
+        ),
+        pytest.param(
+            np.array([b"a", b"abc", b"c", b"ccdefg", b"abcde", b"poiu", None], object),
+            id="binary_vector_null",
+        ),
     ],
 )
-def test_reverse(strings):
+def test_reverse(strings_binary, memory_leak_check):
     def impl(arr):
         return bodo.libs.bodosql_array_kernels.reverse(arr)
 
@@ -585,10 +634,10 @@ def test_reverse(strings):
         else:
             return elem[::-1]
 
-    reverse_answer = vectorized_sol((strings,), reverse_scalar_fn, pd.StringDtype())
+    reverse_answer = vectorized_sol((strings_binary,), reverse_scalar_fn, object)
     check_func(
         impl,
-        (strings,),
+        (strings_binary,),
         py_output=reverse_answer,
         check_dtype=False,
         reset_index=True,
@@ -721,6 +770,18 @@ def test_strcmp(args):
             id="all_scalar_some_null",
             marks=pytest.mark.slow,
         ),
+        pytest.param(
+            (
+                np.array([b"a", b"abc", b"cd", b"ccdefg", b"abcde", b"poiu"], object),
+                1,
+                3,
+            ),
+            id="binary_vector",
+        ),
+        pytest.param(
+            (pd.Series([b"", b"abc", b"c", b"ccdefg", b"abcde", b"poiu", None]), 10, 8),
+            id="binary_vector_with_null",
+        ),
     ],
 )
 def test_substring(args):
@@ -741,9 +802,7 @@ def test_substring(args):
             return elem[start : start + length]
 
     arr, start, length = args
-    substring_answer = vectorized_sol(
-        (arr, start, length), substring_scalar_fn, pd.StringDtype()
-    )
+    substring_answer = vectorized_sol((arr, start, length), substring_scalar_fn, object)
     check_func(
         impl,
         (arr, start, length),

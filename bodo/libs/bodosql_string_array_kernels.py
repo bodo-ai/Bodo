@@ -397,21 +397,23 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
     """
 
     def overload_left_right_util(arr, n_chars):
-        verify_string_arg(arr, func_name, "arr")
+        arr_is_string = verify_string_binary_arg(arr, func_name, "arr")
         verify_int_arg(n_chars, func_name, "n_chars")
+
+        empty_char = "''" if arr_is_string else "b''"
 
         arg_names = ["arr", "n_chars"]
         arg_types = [arr, n_chars]
         propagate_null = [True] * 2
         scalar_text = "if arg1 <= 0:\n"
-        scalar_text += "   res[i] = ''\n"
+        scalar_text += f"   res[i] = {empty_char}\n"
         scalar_text += "else:\n"
         if func_name == "LEFT":
             scalar_text += "   res[i] = arg0[:arg1]"
         elif func_name == "RIGHT":
             scalar_text += "   res[i] = arg0[-arg1:]"
 
-        out_dtype = bodo.string_array_type
+        out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
         return gen_vectorized(
             arg_names, arg_types, propagate_null, scalar_text, out_dtype
@@ -454,9 +456,17 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
     """
 
     def overload_lpad_rpad_util(arr, length, pad_string):
-        verify_string_arg(arr, func_name, "arr")
+        pad_is_string = verify_string_binary_arg(pad_string, func_name, "pad_string")
+        arr_is_string = verify_string_binary_arg(arr, func_name, "arr")
+        if arr_is_string != pad_is_string:
+            raise bodo.utils.typing.BodoError(
+                "Pad string and arr must be the same type!"
+            )
+
+        out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+
         verify_int_arg(length, func_name, "length")
-        verify_string_arg(pad_string, func_name, f"{func_name.lower()}_string")
+        verify_string_binary_arg(pad_string, func_name, f"{func_name.lower()}_string")
 
         if func_name == "LPAD":
             pad_line = f"(arg2 * quotient) + arg2[:remainder] + arg0"
@@ -466,18 +476,20 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
         arg_names = ["arr", "length", "pad_string"]
         arg_types = [arr, length, pad_string]
         propagate_null = [True] * 3
+
+        empty_char = "''" if arr_is_string else "b''"
+
         scalar_text = f"""\
-            if arg1 <= 0:
-                res[i] =  ''
-            elif len(arg2) == 0:
-                res[i] = arg0
-            elif len(arg0) >= arg1:
-                res[i] = arg0[:arg1]
-            else:
-                quotient = (arg1 - len(arg0)) // len(arg2)
-                remainder = (arg1 - len(arg0)) % len(arg2)
-                res[i] = {pad_line}"""
-        out_dtype = bodo.string_array_type
+                if arg1 <= 0:
+                    res[i] = {empty_char}
+                elif len(arg2) == 0:
+                    res[i] = arg0
+                elif len(arg0) >= arg1:
+                    res[i] = arg0[:arg1]
+                else:
+                    quotient = (arg1 - len(arg0)) // len(arg2)
+                    remainder = (arg1 - len(arg0)) % len(arg2)
+                    res[i] = {pad_line}"""
 
         return gen_vectorized(
             arg_names, arg_types, propagate_null, scalar_text, out_dtype
@@ -602,7 +614,7 @@ def reverse_util(arr):
         string series/scalar: the string/column that has been reversed
     """
 
-    verify_string_arg(arr, "REVERSE", "arr")
+    arr_is_string = verify_string_binary_arg(arr, "REVERSE", "arr")
 
     arg_names = ["arr"]
     arg_types = [arr]
@@ -610,6 +622,7 @@ def reverse_util(arr):
     scalar_text = "res[i] = arg0[::-1]"
 
     out_dtype = bodo.string_array_type
+    out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
@@ -692,22 +705,22 @@ def substring_util(arr, start, length):
         string series/scalar: the string/column of extracted substrings
     """
 
-    verify_string_arg(arr, "SUBSTRING", "arr")
+    arr_is_string = verify_string_binary_arg(arr, "SUBSTRING", "arr")
     verify_int_arg(start, "SUBSTRING", "start")
     verify_int_arg(length, "SUBSTRING", "length")
+
+    out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
     arg_names = ["arr", "start", "length"]
     arg_types = [arr, start, length]
     propagate_null = [True] * 3
     scalar_text = "if arg2 <= 0:\n"
-    scalar_text += "   res[i] = ''\n"
+    scalar_text += "   res[i] = ''\n" if arr_is_string else "   res[i] = b''\n"
     scalar_text += "elif arg1 < 0 and arg1 + arg2 >= 0:\n"
     scalar_text += "   res[i] = arg0[arg1:]\n"
     scalar_text += "else:\n"
     scalar_text += "   if arg1 > 0: arg1 -= 1\n"
     scalar_text += "   res[i] = arg0[arg1:arg1+arg2]\n"
-
-    out_dtype = bodo.string_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 

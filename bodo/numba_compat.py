@@ -64,7 +64,6 @@ from numba.experimental.jitclass import base as jitclass_base
 from numba.experimental.jitclass import decorators as jitclass_decorators
 from numba.extending import NativeValue, lower_builtin, typeof_impl
 from numba.parfors.parfor import get_expr_args
-from numba.parfors.array_analysis import ArrayAnalysis
 
 from bodo.utils.python_310_bytecode_pass import (
     Bodo310ByteCodePass,
@@ -6055,6 +6054,17 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:
 
 #### END MONKEY PATCH FOR CACHING TO SPECIFIC DIRECTORY FROM IPYTHON NOTEBOOKS ####
 
+#### BEGIN MONKEY PATCH FOR BYTES OBJECTS ####
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.types.containers.Bytes)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "977423d833eeb4b8fd0c87f55dce7251c107d8d10793fe5723de6e5452da32e2"
+    ):
+        warnings.warn("numba.core.types.containers.Bytes has changed")
+numba.core.types.containers.Bytes.slice_is_copy = True
+#### END MONKEY PATCH FOR BYTES OBJECTS ####
+
 #### BEGIN MONKEY PATCH FOR ENSURING CACHE LOCATION ONLY ON RANK 0 ON PLATFORM ####
 
 if _check_numba_change:  # pragma: no cover
@@ -6105,6 +6115,8 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:  # pragma: no cov
 
 
 def _analyze_op_call_builtins_len(self, scope, equiv_set, loc, args, kws):
+    from numba.parfors.array_analysis import ArrayAnalysis
+
     # python 3 version of len()
     require(len(args) == 1)
     var = args[0]
@@ -6134,3 +6146,65 @@ numba.parfors.array_analysis.ArrayAnalysis._analyze_op_call_builtins_len = (
 )
 
 #### END MONKEY PATCH FOR TYPES.BYTES CHECK ON LEN OPERATION IN ARRAY ANALYSIS ####
+
+#### BEGIN MONKEY PATCH FOR TYPE.BYTES CHECK IN SIGNATURE GENERATOR FOR LEN ####
+def generic(self, args, kws):
+    assert not kws
+    (val,) = args
+    # Bodo change: add type check to make sure val is not a types.Bytes object
+    if isinstance(val, (types.Buffer, types.BaseTuple)) and not isinstance(
+        val, types.Bytes
+    ):
+        return signature(types.intp, val)
+    elif isinstance(val, (types.RangeType)):
+        return signature(val.dtype, val)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.core.typing.builtins.Len.generic)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "88d54238ebe0896f4s69b7347105a6a68dec443036a61f9e494c1630c62b0fa76"
+    ):
+        warnings.warn("numba.core.typing.builtins.Len.generic has changed")
+
+numba.core.typing.builtins.Len.generic = generic
+
+#### BEGIN MONKEY PATCH FOR SETTING SHAPE AND STRIDES IN MAKE CONSTANT BYTES ####
+from numba.cpython import charseq
+def _make_constant_bytes(context, builder, nbytes):
+    from llvmlite import ir
+
+    bstr_ctor = cgutils.create_struct_proxy(charseq.bytes_type)
+    bstr = bstr_ctor(context, builder)
+
+    if isinstance(nbytes, int):
+        nbytes = ir.Constant(bstr.nitems.type, nbytes)
+
+    bstr.meminfo = context.nrt.meminfo_alloc(builder, nbytes)
+    bstr.nitems = nbytes
+    bstr.itemsize = ir.Constant(bstr.itemsize.type, 1)
+    bstr.data = context.nrt.meminfo_data(builder, bstr.meminfo)
+    bstr.parent = cgutils.get_null_value(bstr.parent.type)
+    # Bodo change: set shape using nitems, strides=1 for bytes
+    bstr.shape = cgutils.pack_array(
+        builder, [bstr.nitems], context.get_value_type(types.intp)
+    )
+    bstr.strides = cgutils.pack_array(
+        builder,
+        [ir.Constant(bstr.strides.type.element, 1)],
+        context.get_value_type(types.intp),
+    )
+    return bstr
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(charseq._make_constant_bytes)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "b3ed23ad58baff7b935912e3e22f4d8af67423d8fd0e5f1836ba0b3028a6eb18"
+    ):
+        warnings.warn("charseq._make_constant_bytes has changed")
+
+charseq._make_constant_bytes = _make_constant_bytes
+#### END MONKEY PATCH FOR SETTING SHAPE AND STRIDES IN MAKE CONSTANT BYTES ####

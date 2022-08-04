@@ -969,7 +969,7 @@ class TestString(unittest.TestCase):
 
     def test_concat(self):
         def test_impl(_str):
-            return _str + "test_str"
+            return _str + "test_str" + "À È Ì"
 
         bodo_func = bodo.jit(test_impl)
         arg = "a_"

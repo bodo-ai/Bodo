@@ -12,6 +12,7 @@ from numba.core import types
 import bodo
 from bodo.utils.typing import (
     is_overload_bool,
+    is_overload_constant_bytes,
     is_overload_constant_number,
     is_overload_constant_str,
     is_overload_int,
@@ -384,27 +385,84 @@ def verify_int_float_arg(arg, f_name, a_name):  # pragma: no cover
         )
 
 
-def verify_string_arg(arg, f_name, a_name):  # pragma: no cover
-    """Verifies that one of the arguments to a SQL function is an string
-       (scalar or vector)
-
+def is_valid_string_arg(arg):  # pragma: no cover
+    """
     Args:
         arg (dtype): the dtype of the argument being checked
-        f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
-
-    raises: BodoError if the argument is not an string, string column, or NULL
+    returns: False if the argument is not a string or string column
     """
-    if (
+    return not (
         arg not in (types.none, types.unicode_type)
         and not isinstance(arg, types.StringLiteral)
         and not (
             bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == types.unicode_type
         )
         and not is_overload_constant_str(arg)
-    ):
+    )
+
+
+def is_valid_binary_arg(arg):  # pragma: no cover
+    """
+    Args:
+        arg (dtype): the dtype of the argument being checked
+    returns: False if the argument is not binary data
+    """
+    return not (
+        arg != bodo.bytes_type
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.bytes_type
+        )
+        and not is_overload_constant_bytes(arg)
+        and not isinstance(arg, types.Bytes)
+    )
+
+
+def verify_string_arg(arg, f_name, a_name):  # pragma: no cover 
+    """Verifies that one of the arguments to a SQL function is a string
+       (scalar or vector)
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+    raises: BodoError if the argument is not a string, string column, or null
+    """
+    if not is_valid_string_arg(arg):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a string, string column, or null"
+        )
+
+
+def verify_binary_arg(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is binary data
+       (scalar or vector)
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+    raises: BodoError if the argument is not binary data or null
+    """
+    if not is_valid_binary_arg(arg):
+        raise_bodo_error(f"{f_name} {a_name} argument must be binary data or null")
+
+
+def verify_string_binary_arg(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is binary data, string, or string column
+       (scalar or vector)
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+    raises: BodoError if the argument is not binary data, string, string column or null
+    returns: True if the argument is a string, False if the argument is binary data
+    """
+    is_string = is_valid_string_arg(arg)
+    is_binary = is_valid_binary_arg(arg)
+
+    if is_string or is_binary:
+        return is_string
+    else:
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a binary data, string, string column, or null"
         )
 
 
