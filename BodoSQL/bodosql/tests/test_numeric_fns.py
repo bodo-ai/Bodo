@@ -7,7 +7,6 @@ Test that various numeric builtin functions are properly supported in BODOSQL
 import numpy as np
 import pandas as pd
 import pytest
-
 from bodosql.tests.utils import check_query
 
 
@@ -276,6 +275,73 @@ def test_log_hybrid(query, spark_info):
         ctx,
         spark_info,
         equivalent_spark_query=spark_query,
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(("A", "B"), id="all_vector"),
+        pytest.param(("A", "0.0"), id="vector_scalar"),
+        pytest.param(("100", "B"), id="scalar_vector"),
+        pytest.param(("72.0", "0.0"), id="all_scalar"),
+    ],
+)
+def test_div0_cols(args, spark_info, memory_leak_check):
+    ctx = {}
+    ctx["table1"] = pd.DataFrame(
+        {
+            "A": [10.0, 12, np.nan, 32, 24, np.nan, 8, np.nan, 14, 28],
+            "B": [1.0, 0, 4, 0, 2, 0, 3, 0, np.nan, 0],
+        }
+    )
+    A, B = args
+    query = f"select div0({A}, {B}) from table1"
+    # TODO: Spark does not interpret NaNs as NULL, but we do (from Pandas behavior).
+    # The following is equiv spark query of above.
+    spark_query = f"select case when ((({A} is not NULL) and (not isnan({A}))) and ({B} = 0)) then 0 else ({A} / {B}) end from table1"
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+    )
+
+
+def test_div0_scalars(spark_info):
+    df = pd.DataFrame(
+        {
+            "A": [10.0, 12, np.nan, 32, 24, np.nan, 8, np.nan, 14, 28],
+            "B": [1.0, -12, 4, 0, 2, 0, -8, 0, np.nan, 0],
+        }
+    )
+    ctx = {"table1": df}
+
+    def _py_output(df):
+        a, b = df["A"], df["B"]
+        ret = np.empty(a.size)
+        sum_ = a + b
+        ret[a > b] = ((a - b) / sum_)[a > b]
+        ret[b > a] = ((b - a) / sum_)[b > a]
+        ret[pd.isna(a) | pd.isna(b)] = np.nan
+        ret[sum_ == 0] = 0
+        return pd.DataFrame({"out": ret})
+
+    output = _py_output(df)
+    query = (
+        "SELECT CASE WHEN A > B THEN DIV0(A-B, A+B) ELSE DIV0(B-A, A+B) END FROM table1"
+    )
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        expected_output=output,
         check_dtype=False,
         check_names=False,
         sort_output=False,

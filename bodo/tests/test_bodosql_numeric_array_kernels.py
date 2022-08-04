@@ -106,6 +106,56 @@ def test_conv(args):
         pytest.param(
             (
                 pd.Series([1.0, 2.0, 3.0, 4.0, 8.0]),
+                pd.Series([6.0, 0.0, 2.0, 0.0, 0.0]),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series([1.1, None, 3.6, 10.0, 16.0, 17.3, 101.0]),
+                0.0,
+            ),
+            id="vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (1.0, 0.0),
+            id="all_scalar_no_null",
+        ),
+        pytest.param((None, 5.6), id="all_scalar_with_null", marks=pytest.mark.slow),
+    ],
+)
+def test_div0(args):
+    def impl(a, b):
+        return bodo.libs.bodosql_array_kernels.div0(a, b)
+
+    def div0_scalar_fn(a, b):
+        if pd.isna(a) or pd.isna(b):
+            return None
+        elif b != 0:
+            return a / b
+        else:
+            return 0
+
+    a, b = args
+    expected_output = vectorized_sol(args, div0_scalar_fn, np.float64)
+
+    check_func(
+        impl,
+        (
+            a,
+            b,
+        ),
+        py_output=expected_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series([1.0, 2.0, 3.0, 4.0, 8.0]),
                 pd.Series([6.0, 2.0, 2.0, 10.5, 2.0]),
             ),
             id="all_vector",
@@ -262,6 +312,19 @@ def test_conv_option():
             for flag2 in [True, False]:
                 answer = "101010" if flag0 and flag1 and flag2 else None
                 check_func(impl, ("42", 10, 2, flag0, flag1, flag2), py_output=answer)
+
+
+@pytest.mark.slow
+def test_div0_option():
+    def impl(a, b, flag0, flag1):
+        arg0 = a if flag0 else None
+        arg1 = b if flag1 else None
+        return bodo.libs.bodosql_array_kernels.div0(arg0, arg1)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = 0.0 if flag0 and flag1 else None
+            check_func(impl, (8.0, 0.0, flag0, flag1), py_output=answer)
 
 
 @pytest.mark.slow

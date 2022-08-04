@@ -40,6 +40,25 @@ def conv(arr, old_base, new_base):
 
 
 @numba.generated_jit(nopython=True)
+def div0(arr, divisor):
+    """
+    Handles cases where DIV0 receives optional arguments and forwards
+    to the appropriate version of the real implementaiton.
+    """
+    args = [arr, divisor]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.div0", ["arr", "divisor"], i
+            )
+
+    def impl(arr, divisor):  # pragma: no cover
+        return div0_util(arr, divisor)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def log(arr, base):
     """Handles cases where LOG receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -116,6 +135,23 @@ def conv_util(arr, old_base, new_base):
     out_dtype = bodo.string_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def div0_util(arr, divisor):
+    """
+    Kernel for div0.
+    """
+    verify_int_float_arg(arr, "DIV0", "arr")
+    verify_int_float_arg(divisor, "DIV0", "divisor")
+
+    arg_names = ["arr", "divisor"]
+    arg_types = [arr, divisor]
+    propogate_null = [True] * 2
+    scalar_text = "res[i] = arg0 / arg1 if arg1 else 0\n"
+    out_dtype = types.float64
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)

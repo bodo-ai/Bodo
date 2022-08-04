@@ -79,6 +79,7 @@ public class ExprTypeVisitor {
           "DATE_ADD",
           "DATE_SUB",
           "DATEDIFF",
+          "DIV0",
           "ATAN2",
           "TRUNCATE",
           "ROUND",
