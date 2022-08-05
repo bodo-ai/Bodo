@@ -17,7 +17,7 @@ public class BodoArrayHelpers {
   public static String sqlTypeToNullableBodoArray(String len, SqlTypeName typ) {
     switch (typ) {
       case BOOLEAN:
-        return String.format("bodo.libs.bool_arr_ext.alloc_bool_array(%s, bodo.int64)", len);
+        return String.format("bodo.libs.bool_arr_ext.alloc_bool_array(%s)", len);
       case TINYINT:
       case SMALLINT:
       case INTEGER:
