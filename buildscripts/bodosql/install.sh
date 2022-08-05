@@ -28,7 +28,7 @@ then
     ./miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
   fi
-  conda create -n $CONDA_ENV -q -y -c conda-forge python=$PYTHON_VERSION
+  conda create -n $CONDA_ENV -q -y -c conda-forge python=$PYTHON_VERSION mamba
 fi
 
 
@@ -46,4 +46,4 @@ source activate $CONDA_ENV
 # ---- Install packages from Conda ----
 
 # Needed for BodoSQL
-$MAMBA_INSTALL -c conda-forge pytest pytest-cov maven py4j credstash pyspark=3.2
+$MAMBA_INSTALL -c conda-forge pytest pytest-cov maven py4j openjdk=11 credstash pyspark=3.2

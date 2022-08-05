@@ -82,13 +82,13 @@ stages:
       name: BodoSQL_Conda_Build
       vmImage: ubuntu-latest
       CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.9
+      PYTHON_VERSION: 3.10
   - template: buildscripts/bodosql/azure/azure-build-binary-pip.yml
     parameters:
       name: BodoSQL_Pip_Build
       vmImage: ubuntu-latest
       CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.9
+      PYTHON_VERSION: 3.10
 
 - stage: Test_Bodo_and_BodoSQL_Binary
   displayName: Test Bodo and BodoSQL Binary
@@ -102,6 +102,7 @@ stages:
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: false
+      PYTHON_VERSION: 3.10
       matrix:
         BODO_TEST_1P_SLOW_FIRST_HALF:
           NP: 1
@@ -146,6 +147,7 @@ stages:
       vmImage: ubuntu-latest
       useNumbaDev: false
       caching_test: false
+      PYTHON_VERSION: 3.10
       matrix:
         BODO_TEST_1P_SLOW_FIRST_HALF:
           NP: 1
@@ -195,6 +197,7 @@ stages:
       vmImage: ubuntu-latest
       useNumbaDev: false
       caching_test: true
+      PYTHON_VERSION: 3.10
       matrix:
         TEST_3P:
           NP: 3
@@ -208,6 +211,7 @@ stages:
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: true
+      PYTHON_VERSION: 3.10
       matrix:
         TEST_3P:
           NP: 3
@@ -215,42 +219,15 @@ stages:
           PYTEST_MARKER: ""
 
   # BodoSQL tests
-
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
-      name: BODOSQL_Linux_38py
-      vmImage: ubuntu-latest
-      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
-      PYTHON_VERSION: 3.8
-      matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "slow"
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly check uname to determine the os
-      # for the bodoSQL tests
-      name: BODOSQL_Linux_310py
+      name: BODOSQL_Linux
       vmImage: ubuntu-latest
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
-      matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "slow"
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly check uname to determine the os
-      # for the bodoSQL tests
-      name: BODOSQL_Linux_39py
-      vmImage: ubuntu-latest
-      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
-      PYTHON_VERSION: 3.9
       matrix:
         TEST_1P:
           NP: 1
@@ -268,37 +245,11 @@ stages:
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
       # for the bodoSQL tests
-      name: BODOSQL_macOS_38py
-      vmImage: macOS-latest
-      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
-      PYTHON_VERSION: 3.8
-      matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "slow"
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly check uname to determine the os
-      # for the bodoSQL tests
-      name: BODOSQL_macOS_310py
+      name: BODOSQL_macOS
       vmImage: macOS-latest
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
-      matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "slow"
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly check uname to determine the os
-      # for the bodoSQL tests
-      name: BODOSQL_macOS_39py
-      vmImage: macOS-latest
-      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
-      PYTHON_VERSION: 3.9
       matrix:
         TEST_1P:
           NP: 1
@@ -321,7 +272,7 @@ stages:
       vmImage: ubuntu-latest
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.9
+      PYTHON_VERSION: 3.10
       CACHE_TEST: true
       PYTEST_MARKER: ""
       matrix:
@@ -336,10 +287,9 @@ stages:
       vmImage: macOS-latest
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.9
+      PYTHON_VERSION: 3.10
       CACHE_TEST: true
       PYTEST_MARKER: ""
       matrix:
         TEST_3P:
           NP: 3
-
