@@ -25,14 +25,14 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             PyObject* pyarrow_table_schema);
 
 // --------- functions defined in parquet_write.cpp ---------
-void pq_write_py_entry(const char* filename, const table_info* table,
-                       const array_info* col_names, const array_info* index,
-                       bool write_index, const char* metadata,
-                       const char* compression, bool parallel,
-                       bool write_rangeindex_to_metadata, const int start,
-                       const int stop, const int step, const char* name,
-                       const char* bucket_region, int64_t row_group_size,
-                       const char* prefix);
+int64_t pq_write_py_entry(const char* filename, const table_info* table,
+                          const array_info* col_names, const array_info* index,
+                          bool write_index, const char* metadata,
+                          const char* compression, bool parallel,
+                          bool write_rangeindex_to_metadata, const int start,
+                          const int stop, const int step, const char* name,
+                          const char* bucket_region, int64_t row_group_size,
+                          const char* prefix);
 
 void pq_write_partitioned(const char* _path_name, table_info* table,
                           const array_info* col_names_arr,

@@ -552,11 +552,20 @@ static void c_comm_create(const int* comm_ranks, int n, MPI_Comm* comm) {
     MPI_Group new_group;
     MPI_Group world_group;
     int err = MPI_Comm_group(MPI_COMM_WORLD, &world_group);
-    assert(err == MPI_SUCCESS);
+    if (err != MPI_SUCCESS) {
+        PyErr_SetString(PyExc_RuntimeError, "MPI_Comm_group failed");
+        return;
+    }
     err = MPI_Group_incl(world_group, n, comm_ranks, &new_group);
-    assert(err == MPI_SUCCESS);
+    if (err != MPI_SUCCESS) {
+        PyErr_SetString(PyExc_RuntimeError, "MPI_Group_incl failed");
+        return;
+    }
     err = MPI_Comm_create(MPI_COMM_WORLD, new_group, comm);
-    assert(err == MPI_SUCCESS);
+    if (err != MPI_SUCCESS) {
+        PyErr_SetString(PyExc_RuntimeError, "MPI_Comm_create failed");
+        return;
+    }
 }
 
 /**
