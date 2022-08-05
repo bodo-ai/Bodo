@@ -12,6 +12,7 @@ env:
     CONDA_ENV: BodoCodeBuild
     RUN_NIGHTLY: "no"
     RUNTIME: "yes"
+    PYTHON_VERSION: 3.10
 
 phases:
 

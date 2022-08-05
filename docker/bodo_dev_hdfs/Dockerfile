@@ -26,7 +26,7 @@ RUN conda install -n BODODEV python pyarrow=7.0.0 fsspec -c conda-forge
 RUN conda install -n BODODEV pytest ipython
 RUN conda install -n BODODEV sqlalchemy pymysql xlrd openpyxl mpi4py cython -c conda-forge
 # RUN conda install -n BODODEV scikit-learn='1.0.*' -c conda-forge
-RUN conda install -n BODODEV openjdk=8
+RUN conda install -n BODODEV openjdk=11
 RUN conda install -n BODODEV hdfs3 -c conda-forge
 RUN conda instal -n BODODEV ccache -c conda-forge
 

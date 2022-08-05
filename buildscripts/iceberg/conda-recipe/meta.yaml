@@ -15,13 +15,13 @@ requirements:
   host:
     - python >=3.8,<3.11
     - setuptools
-    - openjdk >=9.0
+    - openjdk >=9.0,<12
     - maven
     - ninja
 
   run:
     - python >=3.8,<3.11
-    - openjdk >=9.0
+    - openjdk >=9.0,<12
     - py4j ==0.10.9.5
 
 about:

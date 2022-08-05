@@ -10,16 +10,18 @@ export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
 
 # s3fs is required by pandas for S3 IO.
-conda install -y -c conda-forge boto3 botocore fsspec>=2021.09 s3fs
-conda install -y -c conda-forge pymysql sqlalchemy
-conda install -y -c conda-forge scikit-learn='1.0.*' gcsfs
-conda install -y -c conda-forge matplotlib
-conda install -y -c conda-forge pyspark=3.2 'openjdk>=9.0'
-# conda install -y flake8
+mamba install -y -c conda-forge boto3 botocore fsspec>=2021.09 s3fs
+mamba install -y -c conda-forge pymysql sqlalchemy
+mamba install -y -c conda-forge scikit-learn='1.0.*' gcsfs
+mamba install -y -c conda-forge matplotlib
+mamba install -y -c conda-forge pyspark=3.2 'openjdk=11'
+mamba install -y flake8
 # cx_oracle: Oracle Database
 # psycopg2: PostgreSQL
 if [ "$RUN_NIGHTLY" != "yes" ]; then
-    conda install -y -c conda-forge cx_oracle psycopg2
+    mamba install -y -c conda-forge cx_oracle psycopg2
 fi
-conda install -y -c conda-forge pytest pytest-cov
+mamba install -y -c conda-forge pytest pytest-cov
 python -m pip install deltalake
+
+conda clean -a -y

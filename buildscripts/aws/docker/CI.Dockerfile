@@ -8,6 +8,7 @@ ADD buildscripts/aws/setup_minio.sh .
 ADD buildscripts/aws/test_installs.sh .
 
 ENV CONDA_ENV BodoCodeBuild
+ENV PYTHON_VERSION 3.10
 ENV RUN_NIGHTLY no
 
 RUN ./setup_conda.sh

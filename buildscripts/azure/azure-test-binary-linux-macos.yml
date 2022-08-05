@@ -2,6 +2,7 @@ parameters:
   name: ''
   vmImage: ''
   caching_test: false
+  PYTHON_VERSION: ''
   matrix: []
 
 jobs:
@@ -33,7 +34,7 @@ jobs:
       chmod +x miniconda.sh
       ./miniconda.sh -b
       export PATH=$HOME/miniconda3/bin:${PATH}
-      conda create -y -n $CONDA_ENV python=3.9
+      conda create -y -n $CONDA_ENV python=$PYTHON_VERSION mamba -c conda-forge
       source activate $CONDA_ENV
     displayName: 'Download miniconda and create conda env'
 
@@ -42,7 +43,7 @@ jobs:
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate $CONDA_ENV
       if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
-        conda install -y numba -c numba/label/dev
+        mamba install -y numba -c numba/label/dev
         echo "Using Numba-Dev"
       else
         echo "Skipping..."
@@ -104,14 +105,14 @@ jobs:
       # s3fs is required by pandas for S3 IO
       # Cap the botocore version at 1.20.105 because 1.20.106 is incompatable
       # with fsspec.
-      conda install -y -c conda-forge fsspec>=2021.09 boto3 botocore=1.20.105 s3fs
+      mamba install -y -c conda-forge fsspec>=2021.09 boto3 botocore=1.20.105 s3fs
     displayName: 'Setup s3_testing'
 
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge 'gcsfs>=2022.1'
+      mamba install -y -c conda-forge 'gcsfs>=2022.1'
     displayName: 'Setup gcs_testing'
 
   - script: |
@@ -125,22 +126,22 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge pymysql sqlalchemy snowflake-sqlalchemy
-      conda install -y -c conda-forge snowflake-connector-python --force --no-deps
+      mamba install -y -c conda-forge pymysql sqlalchemy snowflake-sqlalchemy
+      mamba install -y -c conda-forge snowflake-connector-python --force --no-deps
     displayName: 'Setup MySQL testing'
 
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge scikit-learn='1.0.*'
+      mamba install -y -c conda-forge scikit-learn='1.0.*'
     displayName: 'Setup scikit-learn testing'
 
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge xlrd xlsxwriter openpyxl
+      mamba install -y -c conda-forge xlrd xlsxwriter openpyxl
     displayName: 'Setup excel testing'
 
   - task: DownloadSecureFile@1
@@ -153,21 +154,21 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y 'matplotlib<=3.5.1' -c conda-forge
+      mamba install -y 'matplotlib<=3.5.1' -c conda-forge
     displayName: 'Matplotlib'
 
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y pyspark 'openjdk>=9.0' -c conda-forge
+      mamba install -y pyspark=3.2 'openjdk=11' -c conda-forge
     displayName: 'PySpark'
 
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge 'openjdk>=9.0' py4j maven pyspark=3.2
+      mamba install -y -c conda-forge 'openjdk=11' py4j maven pyspark=3.2
       cd iceberg
       python setup.py develop
     displayName: "Setup Iceberg Testing"
@@ -176,9 +177,9 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge sqlalchemy cx_oracle unzip
+      mamba install -y -c conda-forge sqlalchemy cx_oracle unzip
       if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
-        conda install -y -c conda-forge  libaio
+        mamba install -y -c conda-forge  libaio
         wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
         sudo unzip instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
       else
@@ -191,7 +192,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      conda install -y -c conda-forge psycopg2
+      mamba install -y -c conda-forge psycopg2
     displayName: 'Setup PostgreSQL testing'
 
   - script: |

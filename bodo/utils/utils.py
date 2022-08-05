@@ -1181,7 +1181,7 @@ def check_java_installation_(fname):
         message = (
             "Java not found. Make sure openjdk is installed for hdfs."
             " openjdk can be installed by calling"
-            " 'conda install 'openjdk>=9.0' -c conda-forge'."
+            " 'conda install 'openjdk>=9.0,<12' -c conda-forge'."
         )
         raise BodoError(message)
 

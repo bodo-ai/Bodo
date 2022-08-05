@@ -1,7 +1,7 @@
 # A initial version
 # TODO: hava Python compiled from source to work with conda
 FROM buildpack-deps:stretch
-ARG PYTHON_VERSION=3.9.2
+ARG PYTHON_VERSION=3.10.1
 
 ENV PYTHONMALLOC malloc
 ENV MKL_DISABLE_FAST_MM 1

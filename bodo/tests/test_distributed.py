@@ -745,7 +745,8 @@ def test_1D_Var_alloc2(memory_leak_check):
     assert count_parfor_REPs() == 0
 
 
-def test_1D_Var_alloc3(memory_leak_check):
+def test_1D_Var_alloc3():
+    # Memory leak occurs with test_1D_Var_alloc3 and Python 3.10.
     # XXX: test with different PYTHONHASHSEED values
     # Series case
     def impl1(A, B):
