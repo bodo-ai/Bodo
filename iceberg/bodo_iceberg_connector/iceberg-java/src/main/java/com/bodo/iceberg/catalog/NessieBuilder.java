@@ -12,7 +12,11 @@ public class NessieBuilder {
     // (even if it's an empty string) even though it may not be necessary
     // https://github.com/apache/iceberg/blob/82db4fa9ef6d958f5b0f9742c16e30d28338a584/nessie/src/main/java/org/apache/iceberg/nessie/NessieCatalog.java#L134
     if (properties.containsKey("warehouse")) {
-      properties.put(CatalogProperties.WAREHOUSE_LOCATION, properties.remove("warehouse"));
+      String warehouseLoc = properties.remove("warehouse");
+      // See HadoopBuilder for explaination
+      if (warehouseLoc.startsWith("s3://"))
+        warehouseLoc = warehouseLoc.replaceFirst("s3://", "s3a://");
+      properties.put(CatalogProperties.WAREHOUSE_LOCATION, warehouseLoc);
     } else {
       properties.put(CatalogProperties.WAREHOUSE_LOCATION, "");
     }
