@@ -758,6 +758,7 @@ int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
         return file_size;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
+        return -1;
     }
 }
 
