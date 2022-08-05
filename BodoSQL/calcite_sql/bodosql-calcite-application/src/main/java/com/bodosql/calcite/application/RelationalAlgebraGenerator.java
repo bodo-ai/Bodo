@@ -408,9 +408,18 @@ public class RelationalAlgebraGenerator {
 
     RelNode lastOptimizedPlan = nonOptimizedPlan;
     RelNode curOptimizedPlan = getOptimizedRelationalAlgebra(nonOptimizedPlan);
-    while (!curOptimizedPlan.deepEquals(lastOptimizedPlan)) {
+
+    // Set an arbitrary upper bound for apply the optimization rules in case
+    // for some reason a plan doesn't converge. While we should always converge,
+    // its more desirable to have a suboptimal plan than an infinite loop.
+    final int maxIterations = 25;
+
+    int currIteration = 0;
+
+    while (!curOptimizedPlan.deepEquals(lastOptimizedPlan) && (currIteration < maxIterations)) {
       lastOptimizedPlan = curOptimizedPlan;
       curOptimizedPlan = getOptimizedRelationalAlgebra(lastOptimizedPlan);
+      currIteration++;
     }
 
     LOGGER.debug("optimized\n" + RelOptUtil.toString(curOptimizedPlan));
