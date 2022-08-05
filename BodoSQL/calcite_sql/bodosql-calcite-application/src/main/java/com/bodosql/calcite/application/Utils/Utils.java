@@ -15,7 +15,15 @@ import org.apache.calcite.sql.type.SqlTypeName;
 public class Utils {
 
   // Name of Dummy Colnames for Bodo Intermediate operations
-  private static String dummyColNameBase = "__bodo_dummy__";
+  private static final String dummyColNameBase = "__bodo_dummy__";
+
+  // two space indent
+  private static final String bodoIndent = "  ";
+
+  /** Function used to return the standard indent used within BodoSql */
+  public static String getBodoIndent() {
+    return bodoIndent;
+  }
 
   /**
    * Function to return the baseDummyColumnName. This should be extended with a counter if an

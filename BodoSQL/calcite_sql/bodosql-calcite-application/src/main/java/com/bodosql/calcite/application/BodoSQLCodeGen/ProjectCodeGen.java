@@ -68,8 +68,8 @@ public class ProjectCodeGen {
       List<SqlTypeName> sqlTypes,
       PandasCodeGenVisitor pdVisitorClass,
       int numInputTableColumns) {
-    // TODO: Parameterize indent?
-    String indent = "  ";
+
+    final String indent = getBodoIndent();
     StringBuilder outString = new StringBuilder();
     List<String> seriesNames = new ArrayList<>();
 
@@ -251,8 +251,8 @@ public class ProjectCodeGen {
       List<String> inColNames,
       List<String> outColNames) {
     StringBuilder locString = new StringBuilder();
-    // TODO: Parameterize indent?
-    String indent = "  ";
+    final String indent = getBodoIndent();
+
     locString.append(indent).append(outVar).append(" = ").append(inVar).append(".loc[:, [");
     for (RexNode r : inputRefs) {
       RexInputRef inputRef = (RexInputRef) r;
@@ -267,8 +267,8 @@ public class ProjectCodeGen {
   public static String generateRenameCode(
       String inVar, String outVar, TreeMap<String, String> colsToRename) {
     StringBuilder renameString = new StringBuilder();
-    // TODO: Parameterize indent?
-    String indent = "  ";
+
+    final String indent = getBodoIndent();
     renameString
         .append(indent)
         .append(outVar)

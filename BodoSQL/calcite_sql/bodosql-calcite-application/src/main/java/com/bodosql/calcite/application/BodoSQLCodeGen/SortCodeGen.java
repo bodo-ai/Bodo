@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import java.util.List;
@@ -32,8 +33,7 @@ public class SortCodeGen {
       String offsetStr) {
     // StringBuilder for the final expr
     StringBuilder sortString = new StringBuilder();
-    // TODO: Parameterize indent?
-    String indent = "  ";
+    final String indent = getBodoIndent();
     sortString.append(indent).append(outVar).append(" = ").append(inVar);
 
     // Sort handles both limit and sort_values (possibly both).

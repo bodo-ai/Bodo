@@ -1,7 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
-import static com.bodosql.calcite.application.Utils.Utils.renameColumns;
+import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import java.util.HashMap;
@@ -40,8 +39,8 @@ public class SetOpCodeGen {
     // expect to see in the output
     assert (childExprColumns.size() == 0
         || childExprColumns.get(0).size() == outputColumnNames.size());
-    // TODO: Parameterize indent?
-    String indent = "  ";
+
+    final String indent = getBodoIndent();
 
     // Panda's Concat function can concatenate along the row index such that
     // the new table will have all of the rows of both the tables, with nulls filled in
@@ -115,8 +114,8 @@ public class SetOpCodeGen {
         && lhsColNames.size() > 0;
 
     StringBuilder intersectBuilder = new StringBuilder();
-    // TODO: Parameterize indent?
-    String indent = "  ";
+
+    final String indent = getBodoIndent();
     // For this, we rename all the columns to be the same as the expected output columns,
     // and perform an inner merge on each of the columns.
     HashMap<String, String> lhsRenameMap = new HashMap<>();
@@ -172,7 +171,7 @@ public class SetOpCodeGen {
       List<String> rhsColNames,
       List<String> columnNames) {
     StringBuilder exceptBuilder = new StringBuilder();
-    String indent = "  ";
+    final String indent = getBodoIndent();
     assert lhsColNames.size() == rhsColNames.size()
         && lhsColNames.size() > 0
         && columnNames.size() == 0;

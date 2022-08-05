@@ -699,7 +699,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               + " API");
     }
     outputCode
-        .append("  ")
+        .append(getBodoIndent())
         .append(outVar)
         .append(".to_sql(")
         .append(makeQuoted(writeName))
@@ -809,7 +809,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         String outDfName = this.genDfVar();
         outputDfNames.add(outDfName);
         this.generatedCode
-            .append("  ")
+            .append(getBodoIndent())
             .append(outDfName)
             .append(" = ")
             .append(curGroupAggExpr)
@@ -837,7 +837,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
           // Assign the dummy df to a variable name,
           this.generatedCode
-              .append("  ")
+              .append(getBodoIndent())
               .append(finalOutVar)
               .append(" = ")
               .append(dummyDfExpr)
@@ -848,7 +848,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
         // Generate the concatenation
         this.generatedCode
-            .append("  ")
+            .append(getBodoIndent())
             .append(finalOutVar)
             .append(" = ")
             .append(concatDataFrames(concatDfs));
@@ -1135,7 +1135,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (generateApply && localCtx.getColsToAddList().size() > 0) {
       // If we do generate an apply, add the columns that we need to the dataframe
       // and change the variables to reference the new dataframe
-      String indent = "  ";
+      final String indent = getBodoIndent();
       String tmp_case_name = "tmp_case_" + genDfVar();
       this.generatedCode.append(
           indent
@@ -1187,7 +1187,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       boolean isSingleRow,
       BodoCtx ctx) {
 
-    String indent = "  ";
+    final String indent = getBodoIndent();
     if (aggOperations.size() == 0) {
       return new ArrayList<>();
     }
