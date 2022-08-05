@@ -270,9 +270,8 @@ public class AggCodeGen {
       String funcName) {
     StringBuilder fnString = new StringBuilder();
 
-    // TODO: Parameterize indent?
-    String indent = "  ";
-    String funcIndent = "    ";
+    final String indent = getBodoIndent();
+    final String funcIndent = indent + indent;
 
     /*
      * First we generate the closure that will be used in the apply. This

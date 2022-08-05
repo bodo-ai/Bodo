@@ -1,5 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
+
 import com.bodosql.calcite.application.BodoSQLExprType;
 
 /**
@@ -20,7 +22,7 @@ public class FilterCodeGen {
       String inVar, String outVar, String filterCode, BodoSQLExprType.ExprType filterExprType) {
     StringBuilder filterBuilder = new StringBuilder();
     // TODO: Parameterize indent?
-    String indent = "  ";
+    final String indent = getBodoIndent();
     filterBuilder.append(indent).append(outVar).append(" = ").append(inVar).append("[(");
     // If we have a scalar we need to convert the filter to an array
     if (filterExprType == BodoSQLExprType.ExprType.SCALAR) {

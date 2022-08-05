@@ -1,7 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
-import static com.bodosql.calcite.application.Utils.Utils.sqlTypenameToPandasTypename;
+import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import java.util.List;
 import org.apache.calcite.rel.type.RelDataType;
@@ -20,8 +19,8 @@ public class LogicalValuesCodeGen {
    */
   public static String generateLogicalValuesCode(
       String outVar, List<String> argExprs, RelDataType rowType) {
-    // TODO: Parameterize indent?
-    String indent = "  ";
+
+    final String indent = getBodoIndent();
 
     StringBuilder outputStr = new StringBuilder();
     List<String> columnNames = rowType.getFieldNames();
@@ -31,10 +30,10 @@ public class LogicalValuesCodeGen {
         SqlTypeName typeName = rowType.getFieldList().get(i).getValue().getSqlTypeName();
         String dType = sqlTypenameToPandasTypename(typeName, false);
         outputStr
-          .append(makeQuoted(rowType.getFieldList().get(i).getKey()))
-          .append(": pd.Series(dtype=")
-          .append(dType)
-          .append("), ");
+            .append(makeQuoted(rowType.getFieldList().get(i).getKey()))
+            .append(": pd.Series(dtype=")
+            .append(dType)
+            .append("), ");
       }
       outputStr.append("})\n");
     } else {

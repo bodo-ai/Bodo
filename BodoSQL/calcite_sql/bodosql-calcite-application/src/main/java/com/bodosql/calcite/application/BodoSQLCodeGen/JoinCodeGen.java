@@ -2,6 +2,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.Utils.AggHelpers.getDummyColName;
 import static com.bodosql.calcite.application.Utils.JoinHelpers.preventColumnCollision;
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import java.util.*;
@@ -185,7 +186,7 @@ public class JoinCodeGen {
     }
 
     generatedJoinCode
-        .append("  ")
+        .append(getBodoIndent())
         .append(outVar)
         .append(" = ")
         .append(joinBuilder.toString())

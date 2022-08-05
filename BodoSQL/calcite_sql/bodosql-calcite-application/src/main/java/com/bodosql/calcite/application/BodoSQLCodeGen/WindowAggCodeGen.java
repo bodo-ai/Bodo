@@ -3,6 +3,7 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.Utils.AggHelpers.getColumnAggCall;
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToNullableBodoArray;
 import static com.bodosql.calcite.application.Utils.Utils.assertWithErrMsg;
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
@@ -31,7 +32,7 @@ public class WindowAggCodeGen {
   // The variable name which stores the length of the argument dataframe
   private static final String argumentDfLen = "argument_df_len";
 
-  private static final String indent = "  ";
+  private static final String indent = getBodoIndent();
 
   /**
    * Generates a function definition to be used in a groupby apply to perform a SQL Lead/Lag
@@ -1241,7 +1242,6 @@ public class WindowAggCodeGen {
       final String NAPositionList,
       final List<String> sortByList,
       final SqlKind agg) {
-    String indent = "  ";
 
     // TODO: support aggregation fusion for the RANK functions
     assert argsListList.size() == 0;
