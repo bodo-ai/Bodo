@@ -1855,6 +1855,25 @@ public class PandasCodeGenVisitor extends RelVisitor {
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
         switch (fnName) {
+          case "HAVERSINE":
+            {
+              assert operandsInfo.size() == 4;
+              StringBuilder newFnName = new StringBuilder("HAVERSINE(");
+              StringBuilder exprCode =
+                  new StringBuilder("bodo.libs.bodosql_array_kernels.haversine(");
+              int numOps = fnOperation.operands.size();
+              for (int i = 0; i < numOps; i++) {
+                newFnName.append(operandsInfo.get(i).getName());
+                exprCode.append(operandsInfo.get(i).getExprCode());
+                if (i != (numOps - 1)) {
+                  newFnName.append(", ");
+                  exprCode.append(", ");
+                }
+              }
+              newFnName.append(")");
+              exprCode.append(")");
+              return new RexNodeVisitorInfo(newFnName.toString(), exprCode.toString());
+            }
           case "DIV0":
             {
               assert operandsInfo.size() == 2 && fnOperation.operands.size() == 2;

@@ -40,6 +40,27 @@ def conv(arr, old_base, new_base):
 
 
 @numba.generated_jit(nopython=True)
+def haversine(lat1, lon1, lat2, lon2):
+    """
+    Handles cases where HAVERSINE receives optional arguments and forwards
+    to the appropriate version of the real implementaiton.
+    """
+    args = [lat1, lon1, lat2, lon2]
+    for i in range(4):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.haversine",
+                ["lat1", "lon1", "lat2", "lon2"],
+                i,
+            )
+
+    def impl(lat1, lon1, lat2, lon2):  # pragma: no cover
+        return haversine_util(lat1, lon1, lat2, lon2)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def div0(arr, divisor):
     """
     Handles cases where DIV0 receives optional arguments and forwards
@@ -138,6 +159,38 @@ def conv_util(arr, old_base, new_base):
 
 
 @numba.generated_jit(nopython=True)
+def haversine_util(lat1, lon1, lat2, lon2):
+    """A dedicated kernel for the SQL function HAVERSINE which takes in
+    four floats representing two latitude and longitude coordinates and
+    returns the haversine or great circle distance between the points
+    (on the Earth).
+    Args:
+        arr (string array/series/scalar): the string(s) being repeated
+        repeats (integer array/series/scalar): the number(s) of repeats
+    Returns:
+        string series/scalar: the repeated string(s)
+    """
+    verify_int_float_arg(lat1, "HAVERSINE", "lat1")
+    verify_int_float_arg(lon1, "HAVERSINE", "lon1")
+    verify_int_float_arg(lat2, "HAVERSINE", "lat2")
+    verify_int_float_arg(lon2, "HAVERSINE", "lon2")
+
+    arg_names = ["lat1", "lon1", "lat2", "lon2"]
+    arg_types = [lat1, lon1, lat2, lon2]
+    propogate_null = [True] * 4
+    scalar_text = "arg0, arg1, arg2, arg3 = map(np.radians, (arg0, arg1, arg2, arg3))\n"
+    dlat = "(arg2 - arg0) * 0.5"
+    dlon = "(arg3 - arg1) * 0.5"
+    h = f"np.square(np.sin({dlat})) + (np.cos(arg0) * np.cos(arg2) * np.square(np.sin({dlon})))"
+    # r = 6731 is used for the radius of Earth (2r below)
+    scalar_text += f"res[i] = 12742.0 * np.arcsin(np.sqrt({h}))\n"
+
+    out_dtype = types.Array(bodo.float64, 1, "C")
+
+    return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
 def div0_util(arr, divisor):
     """
     Kernel for div0.
@@ -149,7 +202,8 @@ def div0_util(arr, divisor):
     arg_types = [arr, divisor]
     propogate_null = [True] * 2
     scalar_text = "res[i] = arg0 / arg1 if arg1 else 0\n"
-    out_dtype = types.float64
+
+    out_dtype = types.Array(bodo.float64, 1, "C")
 
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
 

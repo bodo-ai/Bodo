@@ -105,6 +105,142 @@ def test_conv(args):
     [
         pytest.param(
             (
+                pd.Series(
+                    [
+                        -78.85726945311177,
+                        -156.93375710814954,
+                        -19.04115625541181,
+                        152.50829951977403,
+                        -74.45179663009215,
+                        79.7887184211461,
+                        -138.35469002785266,
+                        67.04585260584803,
+                        -176.64446359700187,
+                        35.80103907658909,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        -20.084286862031966,
+                        10.54265714664346,
+                        -151.46059389329457,
+                        46.01738493171913,
+                        -10.672486935277629,
+                        -13.376068085178595,
+                        4.691735421976833,
+                        -21.386902158059634,
+                        39.163128201592635,
+                        -31.934136047289407,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        -72.87052711351764,
+                        -149.9021469512544,
+                        -150.25995724259116,
+                        164.9038532551427,
+                        114.20487610943262,
+                        -143.57171764060908,
+                        -161.5398050194357,
+                        77.64509120521262,
+                        26.97530674361341,
+                        31.567191669054036,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        -75.6061111037667,
+                        -133.39597066391605,
+                        -73.22893509637717,
+                        -133.28934531314374,
+                        55.532533813250694,
+                        -47.65240562710813,
+                        18.592614860798093,
+                        -12.592941464617144,
+                        -74.84722965705978,
+                        -155.0151916730945,
+                    ]
+                ),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        -78.85726945311177,
+                        np.nan,
+                        -19.04115625541181,
+                        152.50829951977403,
+                        -74.45179663009215,
+                        79.7887184211461,
+                        -138.35469002785266,
+                        67.04585260584803,
+                        -176.64446359700187,
+                        35.80103907658909,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        -20.084286862031966,
+                        10.54265714664346,
+                        -151.46059389329457,
+                        46.01738493171913,
+                        -10.672486935277629,
+                        -13.376068085178595,
+                        None,
+                        -21.386902158059634,
+                        39.163128201592635,
+                        -31.934136047289407,
+                    ]
+                ),
+                26.97530674361341,
+                -74.84722965705978,
+            ),
+            id="vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (40.7127, -74.0059, 34.0500, -118.2500),
+            id="all_scalar_no_null",
+        ),
+        pytest.param(
+            (40.7127, -74.0059, None, -118.2500),
+            id="all_scalar_with_null",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_haversine(args):
+    def impl(lat1, lon1, lat2, lon2):
+        return bodo.libs.bodosql_array_kernels.haversine(lat1, lon1, lat2, lon2)
+
+    def haversine_scalar_fn(lat1, lon1, lat2, lon2):
+        if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+            return None
+        lat1, lon1, lat2, lon2 = map(np.radians, (lat1, lon1, lat2, lon2))
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = np.square(np.sin(dlat / 2))
+        a += np.cos(lat1) * np.cos(lat2) * np.square(np.sin(dlon / 2))
+        d = 2 * 6371 * np.arcsin(np.sqrt(a))
+        return d
+
+    py_output = vectorized_sol(args, haversine_scalar_fn, np.float64)
+    check_func(
+        impl,
+        args,
+        py_output=py_output,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
                 pd.Series([1.0, 2.0, 3.0, 4.0, 8.0]),
                 pd.Series([6.0, 0.0, 2.0, 0.0, 0.0]),
             ),
@@ -315,6 +451,37 @@ def test_conv_option():
 
 
 @pytest.mark.slow
+def test_haversine_option():
+    def impl(a, b, c, d, flag0, flag1, flag2, flag3):
+        arg0 = a if flag0 else None
+        arg1 = b if flag1 else None
+        arg2 = c if flag2 else None
+        arg3 = d if flag3 else None
+        return bodo.libs.bodosql_array_kernels.haversine(arg0, arg1, arg2, arg3)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                for flag3 in [True, False]:
+                    answer = (
+                        3936.385096389 if flag0 and flag1 and flag2 and flag3 else None
+                    )
+                    check_func(
+                        impl,
+                        (
+                            40.7127,
+                            -74.0059,
+                            34.0500,
+                            -118.2500,
+                            flag0,
+                            flag1,
+                            flag2,
+                            flag3,
+                        ),
+                        py_output=answer,
+                    )
+
+
 def test_div0_option():
     def impl(a, b, flag0, flag1):
         arg0 = a if flag0 else None

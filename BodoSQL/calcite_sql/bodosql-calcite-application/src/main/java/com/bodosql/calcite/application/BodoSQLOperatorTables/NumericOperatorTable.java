@@ -63,6 +63,26 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
+  public static final SqlFunction HAVERSINE =
+      new SqlFunction(
+          "HAVERSINE",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.DOUBLE_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept. This function accepts four numeric arguments
+          OperandTypes.family(
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.NUMERIC);
+
   public static final SqlFunction LOG =
       new SqlFunction(
           "LOG",
@@ -142,7 +162,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction LEAST = SqlLibraryOperators.LEAST;
 
   private List<SqlOperator> functionList =
-      Arrays.asList(CEILING, DIV0, LOG, LOG2, POW, CONV, GREATEST, LEAST);
+      Arrays.asList(CEILING, DIV0, HAVERSINE, LOG, LOG2, POW, CONV, GREATEST, LEAST);
 
   @Override
   public void lookupOperatorOverloads(
