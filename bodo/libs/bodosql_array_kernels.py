@@ -18,6 +18,7 @@ broadcasted_fixed_arg_functions = {
     "dayname",
     "div0",
     "format",
+    "haversine",
     "instr",
     "int_to_days",
     "last_day",

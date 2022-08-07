@@ -116,6 +116,7 @@ public class ExprTypeVisitor {
           "YEARWEEK",
           "WEEKDAY",
           "YEAROFWEEKISO",
+          "HAVERSINE",
           "COALESCE",
           "NULLIF",
           "REGR_VALX",

@@ -54,7 +54,7 @@ public class PandasGenTest {
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);
-    System.out.println("UnOptimized plan:");
+    System.out.println("Unoptimized plan:");
     System.out.println(unOptimizedPlanStr + "\n");
     String optimizedPlanStr = generator.getRelationalAlgebraString(sql, true);
     System.out.println("Optimized plan:");
