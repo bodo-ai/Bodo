@@ -96,11 +96,15 @@ for i, m in enumerate(modules):
         mod_pytest_args[mark_arg_idx + 1] += " and single_mod"
     except ValueError:
         mod_pytest_args += ["-m", "single_mod"]
-    # run tests with pytest
-    if num_processes == 1:
-        cmd = ["pytest"] + mod_pytest_args
-    else:
-        cmd = ["mpiexec", "-n", str(num_processes), "pytest"] + mod_pytest_args
+    # run tests with mpiexec + pytest always. If you just use
+    # pytest then out of memory won't tell you which test failed.
+    cmd = [
+        "mpiexec",
+        "-prepend-rank",
+        "-n",
+        str(num_processes),
+        "pytest",
+    ] + mod_pytest_args
     print("Running", " ".join(cmd))
     p = subprocess.Popen(cmd, shell=False)
     rc = p.wait()
