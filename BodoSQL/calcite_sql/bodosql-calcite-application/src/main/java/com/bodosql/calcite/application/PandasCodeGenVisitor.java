@@ -2093,6 +2093,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "LN":
           case "EXP":
           case "SIGN":
+          case "BITNOT":
             return getSingleArgNumericFnInfo(
                 fnName,
                 operandsInfo.get(0).getExprCode(),
@@ -2103,6 +2104,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "TRUNCATE":
           case "POWER":
           case "POW":
+          case "BITAND":
+          case "BITOR":
+          case "BITXOR":
+          case "BITSHIFTLEFT":
+          case "BITSHIFTRIGHT":
+          case "GETBIT":
             return getDoubleArgNumericFnInfo(
                 fnName,
                 operandsInfo.get(0).getExprCode(),

@@ -12,6 +12,345 @@ from bodo.libs.bodosql_array_kernels import *
 from bodo.tests.utils import check_func
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                pd.Series(
+                    [0, 1, -1, 255, 42, 2147483647, None], dtype=pd.Int32Dtype()
+                ).repeat(7),
+                pd.Series(
+                    [0, 1, -1, 255, 42, 2147483647, None] * 7, dtype=pd.Int32Dtype()
+                ),
+            ),
+            id="vector_vector_int32_int32",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [0, 1, 2, 3, 42, 64, 127, 128, 255, None], dtype=pd.UInt8Dtype()
+                ).repeat(10),
+                pd.Series(
+                    [0, 1, -1, 127, 128, -127, -128, 255, 2147483647, None] * 10,
+                    dtype=pd.Int32Dtype(),
+                ),
+            ),
+            id="vector_vector_uint8_int32",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [0, 1, -1, 2**63 - 1, 2**16 - 1, None], dtype=pd.Int64Dtype()
+                ).repeat(7),
+                pd.Series(
+                    [0, 1, 13, 43690, 2**16 - 1, None] * 7, dtype=pd.UInt16Dtype()
+                ),
+            ),
+            id="vector_vector_int64_uint16",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([0, 1, 127, 128, 255, None], dtype=pd.UInt8Dtype()).repeat(6),
+                pd.Series([0, 1, 127, 128, 255, None] * 6, dtype=pd.UInt8Dtype()),
+            ),
+            id="vector_vector_uint8_uint8",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        5566427618757447113,
+                        11811387436593211185,
+                        9116740843431364080,
+                        10956942410480843441,
+                        2266820874918711799,
+                    ],
+                    dtype=pd.UInt64Dtype(),
+                ).repeat(5),
+                pd.Series(
+                    [
+                        8468723804801797255,
+                        5301527685162013423,
+                        16398923257674642784,
+                        11948855153700719831,
+                        16424487987459669129,
+                    ]
+                    * 5,
+                    dtype=pd.UInt64Dtype(),
+                ),
+            ),
+            id="vector_vector_uint64_uint64",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([0, 1, 42, 2**64 - 1, None], dtype=pd.UInt64Dtype()),
+                np.int64(-42),
+            ),
+            id="vector_scalar_uint64_int64",
+        ),
+        pytest.param(
+            (pd.Series([0, 1, 42, 2**64 - 1, None], dtype=pd.UInt64Dtype()), None),
+            id="vector_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (np.uint16(2**16 - 1), np.int32(2**16 - 1)),
+            id="scalar_scalar_uint16_int32",
+        ),
+        pytest.param(
+            (np.uint16(2**16 - 1), None), id="scalar_null", marks=pytest.mark.slow
+        ),
+        pytest.param((None, None), id="null_null", marks=pytest.mark.slow),
+    ]
+)
+def test_bitwise_number_number(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                pd.Series(
+                    [0, 1, -1, 255, 42, 2147483647, 16, 64, None], dtype=pd.Int32Dtype()
+                ).repeat(9),
+                pd.Series(
+                    [0, 1, 2, 3, 10, 29, 30, 31, None] * 9, dtype=pd.Int32Dtype()
+                ),
+            ),
+            id="vector_vector_int32",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [0, 1, 2, 8, 255, 127, 128, 42, None], dtype=pd.UInt8Dtype()
+                ).repeat(9),
+                pd.Series([0, 1, 2, 3, 4, 5, 6, 7, None] * 9, dtype=pd.Int32Dtype()),
+            ),
+            id="vector_vector_uint8",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [0, 1, -1, -42, -127, 127, -128, 42, None],
+                    dtype=pd.Int8Dtype(),
+                ).repeat(9),
+                pd.Series([0, 1, 2, 3, 4, 5, 6, 7, None] * 9, dtype=pd.Int32Dtype()),
+            ),
+            id="vector_vector_int8",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        0,
+                        1,
+                        2,
+                        100,
+                        2**33,
+                        2**63 - 1,
+                        -(2**63),
+                        10**15,
+                        -(10**15),
+                        None,
+                    ],
+                    dtype=pd.Int64Dtype(),
+                ).repeat(10),
+                pd.Series(
+                    [0, 1, 2, 4, 32, 63, 62, 61, 20, None] * 10, dtype=pd.Int32Dtype()
+                ),
+            ),
+            id="vector_vector_int64",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [0, 1, 2, 3, 2**16 - 1, 2**15 - 1, 12345, None],
+                    dtype=pd.UInt16Dtype(),
+                ),
+                8,
+            ),
+            id="vector_scalar_uint16",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (np.uint64(2**64 - 2**62 - 1), np.uint64(60)),
+            id="scalar_scalar_uint64",
+        ),
+        pytest.param((None, np.uint64(42)), id="null_scalar", marks=pytest.mark.slow),
+        pytest.param((None, None), id="null_null", marks=pytest.mark.slow),
+    ]
+)
+def test_bitwise_number_bits(request):
+    return request.param
+
+
+def test_bitand(test_bitwise_number_number):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.bitand(A, B)
+
+    # Simulates BITAND on a single row
+    def bitand_scalar_fn(A, B):
+        if pd.isna(A) or pd.isna(B):
+            return None
+        else:
+            if {type(A), type(B)} == {np.uint64, np.int64}:
+                A, B = np.int64(A), np.int64(B)
+            return A & B
+
+    bitand_answer = vectorized_sol(test_bitwise_number_number, bitand_scalar_fn, None)
+    check_func(
+        impl,
+        test_bitwise_number_number,
+        py_output=bitand_answer,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=False,
+    )
+
+
+def test_bitleftshift(test_bitwise_number_bits):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.bitleftshift(A, B)
+
+    # Simulates BITLEFTSHIFT on a single row
+    def bitleftshift_scalar_fn(A, B):
+        if pd.isna(A) or pd.isna(B):
+            return None
+        else:
+            if not isinstance(A, (np.uint8, np.uint16, np.uint32, np.uint64)):
+                return np.int64(A) << B
+            else:
+                return np.uint64(A) << np.uint8(B)
+
+    bitleftshift_answer = vectorized_sol(
+        test_bitwise_number_bits, bitleftshift_scalar_fn, pd.Int64Dtype()
+    )
+    check_func(
+        impl,
+        test_bitwise_number_bits,
+        py_output=bitleftshift_answer,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=False,
+    )
+
+
+def test_bitnot(test_bitwise_number_number):
+    def impl(A):
+        return bodo.libs.bodosql_array_kernels.bitnot(A)
+
+    # Simulates BITNOT on a single row
+    def bitnot_scalar_fn(A):
+        if pd.isna(A):
+            return None
+        else:
+            return ~A
+
+    bitnot_answer_0 = vectorized_sol(
+        (test_bitwise_number_number[0],), bitnot_scalar_fn, None
+    )
+    bitnot_answer_1 = vectorized_sol(
+        (test_bitwise_number_number[1],), bitnot_scalar_fn, None
+    )
+
+    check_func(
+        impl,
+        (test_bitwise_number_number[0],),
+        py_output=bitnot_answer_0,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=False,
+    )
+    check_func(
+        impl,
+        (test_bitwise_number_number[1],),
+        py_output=bitnot_answer_1,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=False,
+    )
+
+
+def test_bitor(test_bitwise_number_number):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.bitor(A, B)
+
+    # Simulates BITOR on a single row
+    def bitor_scalar_fn(A, B):
+        if pd.isna(A) or pd.isna(B):
+            return None
+        else:
+            if {type(A), type(B)} == {np.uint64, np.int64}:
+                A, B = np.int64(A), np.int64(B)
+            return A | B
+
+    bitor_answer = vectorized_sol(test_bitwise_number_number, bitor_scalar_fn, None)
+    check_func(
+        impl,
+        test_bitwise_number_number,
+        py_output=bitor_answer,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=False,
+    )
+
+
+def test_bitrightshift(test_bitwise_number_bits):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.bitrightshift(A, B)
+
+    # Simulates BITRIGHTSHIFT on a single row
+    def bitrightshift_scalar_fn(A, B):
+        if pd.isna(A) or pd.isna(B):
+            return None
+        else:
+            return A >> B
+
+    bitrightshift_answer = vectorized_sol(
+        test_bitwise_number_bits, bitrightshift_scalar_fn, pd.Int64Dtype()
+    )
+    check_func(
+        impl,
+        test_bitwise_number_bits,
+        py_output=bitrightshift_answer,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=False,
+    )
+
+
+def test_bitxor(test_bitwise_number_number):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.bitxor(A, B)
+
+    # Simulates BITAND on a single row
+    def bitxor_scalar_fn(A, B):
+        if pd.isna(A) or pd.isna(B):
+            return None
+        else:
+            if {type(A), type(B)} == {np.uint64, np.int64}:
+                A, B = np.int64(A), np.int64(B)
+            return A ^ B
+
+    bitxor_answer = vectorized_sol(test_bitwise_number_number, bitxor_scalar_fn, None)
+    check_func(
+        impl,
+        test_bitwise_number_number,
+        py_output=bitxor_answer,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=False,
+    )
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -97,6 +436,30 @@ def test_conv(args):
         py_output=conv_answer,
         check_dtype=False,
         reset_index=True,
+    )
+
+
+def test_getbit(test_bitwise_number_bits):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.getbit(A, B)
+
+    # Simulates BITOR on a single row
+    def getbit_scalar_fn(A, B):
+        if pd.isna(A) or pd.isna(B):
+            return None
+        else:
+            return (A >> B) & type(A)(1)
+
+    getbit_answer = vectorized_sol(
+        test_bitwise_number_bits, getbit_scalar_fn, pd.UInt8Dtype()
+    )
+    check_func(
+        impl,
+        test_bitwise_number_bits,
+        py_output=getbit_answer,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=False,
     )
 
 
@@ -433,6 +796,38 @@ def test_negate(numbers):
         check_dtype=False,
         reset_index=True,
     )
+
+
+@pytest.mark.slow
+def test_bitwise_option():
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.bitand(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.bitor(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.bitxor(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.bitnot(arg0),
+            bodo.libs.bodosql_array_kernels.bitnot(arg1),
+            bodo.libs.bodosql_array_kernels.bitleftshift(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.bitrightshift(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.getbit(arg0, arg1),
+        )
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            A0 = 2 if flag0 and flag1 else None
+            A1 = 43 if flag0 and flag1 else None
+            A2 = 41 if flag0 and flag1 else None
+            A3 = 4294967253 if flag0 else None
+            A4 = -4 if flag1 else None
+            A5 = 336 if flag0 and flag1 else None
+            A6 = 5 if flag0 and flag1 else None
+            A7 = 1 if flag0 and flag1 else None
+            answer = (A0, A1, A2, A3, A4, A5, A6, A7)
+            check_func(
+                impl, (np.uint32(42), np.int16(3), flag0, flag1), py_output=answer
+            )
 
 
 @pytest.mark.slow

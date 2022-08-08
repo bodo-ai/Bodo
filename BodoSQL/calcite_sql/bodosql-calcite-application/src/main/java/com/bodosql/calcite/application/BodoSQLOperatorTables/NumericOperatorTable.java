@@ -30,6 +30,69 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   // TODO: Extend the Library Operator and use the builtin Libraries
 
+  public static final SqlFunction BITAND =
+      new SqlFunction(
+          "BITAND",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction BITOR =
+      new SqlFunction(
+          "BITOR",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction BITXOR =
+      new SqlFunction(
+          "BITXOR",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction BITNOT =
+      new SqlFunction(
+          "BITNOT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.INTEGER,
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction BITSHIFTLEFT =
+      new SqlFunction(
+          "BITSHIFTLEFT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction BITSHIFTRIGHT =
+      new SqlFunction(
+          "BITSHIFTRIGHT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction GETBIT =
+      new SqlFunction(
+          "GETBIT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.family(SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.NUMERIC);
+
   public static final SqlFunction CEILING =
       new SqlFunction(
           "CEILING",
@@ -162,7 +225,23 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction LEAST = SqlLibraryOperators.LEAST;
 
   private List<SqlOperator> functionList =
-      Arrays.asList(CEILING, DIV0, HAVERSINE, LOG, LOG2, POW, CONV, GREATEST, LEAST);
+      Arrays.asList(
+          BITAND,
+          BITOR,
+          BITXOR,
+          BITNOT,
+          BITSHIFTLEFT,
+          BITSHIFTRIGHT,
+          GETBIT,
+          CEILING,
+          DIV0,
+          HAVERSINE,
+          LOG,
+          LOG2,
+          POW,
+          CONV,
+          GREATEST,
+          LEAST);
 
   @Override
   public void lookupOperatorOverloads(

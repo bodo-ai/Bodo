@@ -11,6 +11,12 @@ from bodo.libs.bodosql_string_array_kernels import *  # noqa
 from bodo.libs.bodosql_variadic_array_kernels import *  # noqa
 
 broadcasted_fixed_arg_functions = {
+    "bitand",
+    "bitleftshift",
+    "bitnot",
+    "bitor",
+    "bitrightshift",
+    "bitxor",
     "char",
     "cond",
     "conv",
@@ -20,6 +26,7 @@ broadcasted_fixed_arg_functions = {
     "editdistance_no_max",
     "editdistance_with_max",
     "format",
+    "getbit",
     "haversine",
     "instr",
     "int_to_days",
