@@ -19,11 +19,9 @@ gen_objmode_func_overload(zlib.crc32, "uint32")
 gen_objmode_func_overload(math.factorial, "int64")
 gen_objmode_func_overload(np.math.factorial, "int64")
 
-
-# support scipy.math.factorial if scipy package is installed
 try:
-    import scipy
+    import scipy.special
 
-    gen_objmode_func_overload(scipy.math.factorial, "int64")
+    gen_objmode_func_overload(scipy.special.factorial, "int64")
 except:
     pass

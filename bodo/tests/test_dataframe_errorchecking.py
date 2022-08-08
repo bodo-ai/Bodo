@@ -1587,8 +1587,10 @@ def test_df_error_message_truncates():
 
     with pytest.raises(BodoError) as bodo_err:
         impl(large_df)
-    # 500 insignifigant, expected message should have 453 (without truncation 10,000+)
-    assert len(bodo_err.value.msg) < 500
+    # 1000 is an arbitrary value to allow for small changes due
+    # to internal changes for version updates.
+    # Without truncation the length is > 10,000
+    assert len(bodo_err.value.msg) < 1000
 
 
 def test_df_first_last_invalid_index():
