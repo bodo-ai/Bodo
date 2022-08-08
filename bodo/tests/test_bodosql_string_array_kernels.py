@@ -51,6 +51,261 @@ def test_char(n):
     [
         pytest.param(
             (
+                (
+                    pd.Series(
+                        [
+                            "book",
+                            "book",
+                            "book",
+                            "book",
+                            "alpha",
+                            "alpha",
+                            "kitten",
+                            "alpha",
+                            "alphabet soup is delicious",
+                            "Be careful with the butter knife.",
+                            None,
+                            "A",
+                            None,
+                            "Hello! Goodbye!",
+                            "Hello!",
+                        ]
+                    ),
+                    pd.Series(
+                        [
+                            "books",
+                            "book",
+                            "boo",
+                            "boot",
+                            "beta",
+                            "gamma",
+                            "sitting",
+                            "alphabet",
+                            "alpha beta gamma delta",
+                            "The careful fence was utterly confused.",
+                            "B",
+                            None,
+                            None,
+                            "Goodbye!",
+                            "Hello! Goodbye!",
+                        ]
+                    ),
+                ),
+                pd.Series(
+                    [1, 0, 1, 1, 4, 4, 3, 3, 15, 19, None, None, None, 7, 9],
+                    dtype=pd.UInt16Dtype(),
+                ),
+            ),
+            id="vector_vector_no_max",
+        ),
+        pytest.param(
+            (
+                (
+                    pd.Series(
+                        [
+                            "the world of coca-cola is a museum to the company",
+                            "i'd like to buy the world a coke and keep it company it's the real thing",
+                            "i'd like to buy the world a home and furnish it with love grow apple trees and honey bees and snow white turtle doves",
+                            "i'd like to teach the world to sing in perfect harmony i'd like to buy the world a coke and keep it company that's the real thing",
+                            "",
+                            "id love to buy the world a pepsi and keep it warm it is really sad",
+                            "i'd  buy the world a coke and like to keep it company it's the real thing",
+                        ]
+                    ),
+                    "i'd like to buy the world a coke and keep it company it's the real thing",
+                ),
+                pd.Series([48, 0, 65, 58, 72, 25, 15], dtype=pd.UInt16Dtype()),
+            ),
+            id="vector_scalar_no_max",
+        ),
+        pytest.param(
+            (
+                (
+                    pd.Series(
+                        [
+                            "",
+                            "disappointment",
+                            None,
+                            "corruption",
+                            "jazz",
+                            "admonition",
+                            "revival",
+                            "correspondence",
+                            "infrastructure",
+                            "ventriloquizing",
+                            "municipalizing",
+                            "station",
+                            "blackjack",
+                            "crackerjacks",
+                            "recommend",
+                            "recommend",
+                            "commend",
+                            None,
+                            "accommodate",
+                            "dependable",
+                            "precedented",
+                            "commendation",
+                            "recommendations",
+                            "réccömΣnd@t10n",
+                            "noitadnemmocer",
+                            "nonmetameric",
+                            "coordinate",
+                            "denominator",
+                            "intercommunication",
+                            "gravitation",
+                            "redifferentiation",
+                            "redistribution",
+                            "recognitions",
+                        ]
+                    ),
+                    "recommendation",
+                    10,
+                ),
+                pd.Series(
+                    [
+                        10,
+                        10,
+                        None,
+                        8,
+                        10,
+                        8,
+                        10,
+                        10,
+                        10,
+                        10,
+                        10,
+                        9,
+                        10,
+                        10,
+                        5,
+                        5,
+                        7,
+                        None,
+                        7,
+                        9,
+                        9,
+                        2,
+                        1,
+                        7,
+                        10,
+                        10,
+                        10,
+                        7,
+                        7,
+                        9,
+                        8,
+                        8,
+                        6,
+                    ],
+                    dtype=pd.UInt16Dtype(),
+                ),
+            ),
+            id="vector_scalar_with_scalar_max",
+        ),
+        pytest.param(
+            (
+                (
+                    "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Sociis natoque penatibus et magnis dis parturient montes. Dolor morbi non arcu risus quis varius quam quisque. Sed libero enim sed faucibus. Erat pellentesque adipiscing commodo elit at imperdiet dui accumsan. Nisi porta lorem mollis aliquam ut porttitor. Parturient montes nascetur ridiculus mus mauris vitae. Quis eleifend quam adipiscing vitae proin sagittis. Fusce id velit ut tortor pretium viverra suspendisse potenti nullam. Sit amet mattis vulputate enim nulla aliquet porttitor lacus. Quis imperdiet massa tincidunt nunc pulvinar sapien. Duis tristique sollicitudin nibh sit amet commodo nulla facilisi nullam.",
+                    "Tortor id aliquet lectus proin nibh nisl condimentum id venenatis. Morbi tristique senectus et netus et. Mollis nunc sed id semper risus in. Tristique et egestas quis ipsum. Vel facilisis volutpat est velit egestas dui id ornare arcu. Consequat nisl vel pretium lectus. Ultricies leo integer malesuada nunc vel risus commodo viverra maecenas. Sed vulputate mi sit amet mauris commodo quis imperdiet. Amet dictum sit amet justo donec enim diam vulputate. Facilisi etiam dignissim diam quis enim lobortis scelerisque fermentum dui. Rhoncus urna neque viverra justo nec ultrices dui. Fermentum et sollicitudin ac orci phasellus egestas tellus. Donec pretium vulputate sapien nec. Nunc mattis enim ut tellus elementum sagittis vitae. Commodo viverra maecenas accumsan lacus vel facilisis volutpat est velit. Fringilla ut morbi tincidunt augue interdum. Nunc sed augue lacus viverra vitae congue.",
+                    pd.Series([100, 300, 500, 700, 900, None], dtype=pd.UInt16Dtype()),
+                ),
+                pd.Series([100, 300, 500, 640, 640, None], dtype=pd.UInt16Dtype()),
+            ),
+            id="scalar_scalar_with_vector_max",
+        ),
+        pytest.param(
+            (
+                (
+                    pd.Series(
+                        [
+                            None,
+                            "A",
+                            None,
+                            "book",
+                            "book",
+                            "book",
+                            "book",
+                            "alpha",
+                            "alpha",
+                            "kitten",
+                            "alpha",
+                            "alphabet soup is delicious",
+                            "Be careful with the butter knife.",
+                        ]
+                    ),
+                    pd.Series(
+                        [
+                            "B",
+                            None,
+                            None,
+                            "books",
+                            "book",
+                            "boo",
+                            "boot",
+                            "beta",
+                            "gamma",
+                            "sitting",
+                            "alphabet",
+                            "alpha beta gamma delta",
+                            "The careful fence was utterly confused.",
+                        ]
+                    ),
+                    3,
+                ),
+                pd.Series(
+                    [None, None, None, 1, 0, 1, 1, 3, 3, 3, 3, 3, 3],
+                    dtype=pd.UInt16Dtype(),
+                ),
+            ),
+            id="vector_vector_with_scalar_max",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (("", ""), 0), id="all_scalar_no_max_empty", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (
+                (
+                    "eylsquxvzltzdjakokuchnkaftepittjleqalnerroggysvpwplhchmuvvkaknfclvuskzvpeyqhchuhpddqiaqpndwenlehmxohtyrohedpyeqnxmncpfbimyltuabapamvenenayvwwaszukswevziqjvdlvpypvtdnhtwnuarxeytrotryuoblrebfmksolndgvtlzvqqrmyxxciogvqehrndlbczloupugfaxbtrufnaqwjxizomvhwnhibfxhowguyntthvhxatzvvefsrmycljhrwmisnzsavipdceibrmlxurswirrixhbscypcrpbzvcjadqinhtitpazbmagudkhvggeqnczeteeoqbkiuqkrkuptqcotngyymipwogofxdlghvnbfbnglnltjwurrzkzujcaaxknerwxvrifnvlehuahqmnepmazemupvzadxmigjhrbchsjhkwnnronkuvhbjqrxvgmszlagrcaxahauckxpzcfzdkqqrtehvcjogmbrtjjbemdnevygmwgpbbhertaywzuvowtnpspukqfkidjcufdxdwqpvqygprcmtoqqbjpurpzxqkeyxdafaojsixxqijtukwshscgmeisrxmpfqtgplcdkmlofjrgffwqdykrybwhjzbkzxnalpkrhuorsqsbwxddczjbdhdmtspytpluvyaaftujsrsdilefromyoyuzrwascywcdhsgjwbgdhclladwnpgpyvracukvvfnkcnixqkfchxwagtbbgzjcnwslfdpvojdinkvqpthfqcvfqzhrutbxngsfuccfzsyzfcyrqdcktqfrlrtrwmrxrvrgzjivqftbddgxvacnmgjfkbuhxlanoxpodtzvlxjxlmlpbssogoboawmcgddmrhwjkxvmazmyhaoarpdflsnghfmhapkgawfgtozqheedhzcpzzgkylpaoduyfhkcrsfgbwwjatbanwgfzqibxmvfpm",
+                    "rcjorpssgddcwbuwktpfghklbtkotktjeyyhnrakgnmzuasgsfcvuatcwfsayibwiencbwigkgeowvmwtintxvuigqxnmjpqabiwqmcuothpsqqrkyjcxydbtlzlrfkfaaiquapmfeeaixuluxgjfciqttkqknpemrkxjygdjygwsklyzzuannpjemtuiketxhbebaujorcnbupvflluzbuphavtwiahitubvlljhgkipboskqateqhiaqxpzyceafqjzmenuwzyaywoktecdkgjllvlmeqiqwaeeeoxqqpwwlefpctoddwyxujduwrsspejgsijijapvwiwmspjcbuzznzvtlwfgotipbiaglsggzvvaloxmptiwtrhfpkcsfnupgljizkltzplypcwybiixxcqqhwfxqxnhtlpasegpjlqzjqnggdkafknbetrwqiudftotojpkfjymwlryogcsajwnnhrentiuypyyfbhsldcbxnepkslqslojphugvdjzffgjhqtuowmfxwfaoltiaqkhqbanqrzygacjisspqtrmmbiadqdglevjorfpxovqyqnmkzszkldwznojynegljoikwodklssjfozqyxfrnnijmzhbhgilzabwumzvsrjnsqmtanmfsixqhdunpwnlgztajnmepkhficlyeyuzswlhelhrboecofupivplvwchzlijzlmimmiditxiyegygfigshmaqabumugnliuqnwluqutwwdjrjzisjxqiozquivpifplvidlegtoqptgqaeperpnxcxzalxoymvetwizvtipdnnixncdedkldrbkrbkcpsoouvzndelfxkthtytrerlipyejxjbxagbaqphpijdqsryjenkfcquqevmefktrbxdtqthvlvzaslojfqwwgcpxxlyqfqhzbjvkscrjjsvzcmsaailqpvznqryyvrmfxsuwfrqgbeuhqhmsnxkikinhclcdfvv",
+                ),
+                884,
+            ),
+            id="all_scalar_no_max_large",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (("batman", "superman", 10), 5),
+            id="all_scalar_with_max",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (("yay", None), None), id="all_scalar_with_null", marks=pytest.mark.slow
+        ),
+    ],
+)
+def test_editdistance(args):
+    """Answers calculated with https://planetcalc.com/1721/"""
+
+    def impl1(s, t):
+        return bodo.libs.bodosql_array_kernels.editdistance_no_max(s, t)
+
+    def impl2(s, t, maxDist):
+        return bodo.libs.bodosql_array_kernels.editdistance_with_max(s, t, maxDist)
+
+    args, answer = args
+
+    if len(args) == 2:
+        check_func(impl1, args, py_output=answer, check_dtype=False, reset_index=True)
+    elif len(args) == 3:
+        check_func(impl2, args, py_output=answer, check_dtype=False, reset_index=True)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
                 np.array(
                     [
                         15.112345,

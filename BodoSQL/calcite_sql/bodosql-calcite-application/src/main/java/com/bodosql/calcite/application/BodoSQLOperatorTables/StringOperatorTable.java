@@ -173,6 +173,22 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction EDITDISTANCE =
+      new SqlFunction(
+          "EDITDISTANCE",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.INTEGER_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.or(OperandTypes.STRING_STRING, OperandTypes.STRING_STRING_INTEGER),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
+
   public static final SqlFunction FORMAT =
       new SqlFunction(
           "FORMAT",
@@ -348,6 +364,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           RIGHT,
           REPEAT,
           STRCMP,
+          EDITDISTANCE,
           FORMAT,
           UCASE,
           LCASE,

@@ -2275,6 +2275,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             assert operandsInfo.size() == 3;
             return getThreeArgStringFnInfo(
                 fnName, operandsInfo.get(0), operandsInfo.get(1), operandsInfo.get(2));
+          case "EDITDISTANCE":
+            return generateEditdistance(operandsInfo);
           case "DATE_TRUNC":
             if (!(operandsInfo.size() == 2
                 && exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR)) {

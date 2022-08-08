@@ -4,8 +4,9 @@ Implements string array kernels that are specific to BodoSQL
 """
 
 import numba
+import numpy as np
 from numba.core import types
-from numba.extending import overload
+from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
@@ -20,6 +21,44 @@ def char(arr):
 
     def impl(arr):  # pragma: no cover
         return char_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def editdistance_no_max(s, t):
+    """Handles cases where EDITDISTANCE receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [s, t]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.editdistance_no_max",
+                ["s", "t"],
+                i,
+            )
+
+    def impl(s, t):  # pragma: no cover
+        return editdistance_no_max_util(s, t)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def editdistance_with_max(s, t, maxDistance):
+    """Handles cases where EDITDISTANCE receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [s, t, maxDistance]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.editdistance_with_max",
+                ["s", "t", "maxDistance"],
+                i,
+            )
+
+    def impl(s, t, maxDistance):  # pragma: no cover
+        return editdistance_with_max_util(s, t, maxDistance)
 
     return impl
 
@@ -338,6 +377,182 @@ def instr_util(arr, target):
     arg_types = [arr, target]
     propagate_null = [True] * 2
     scalar_text = "res[i] = arg0.find(arg1) + 1"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@register_jitable
+def min_edit_distance(s, t):  # pragma: no cover
+    """Utility for finding the minimum edit distance between two scalar strings.
+    Algorithm derived from the following:
+    https://en.wikipedia.org/wiki/Levenshtein_distance#Iterative_with_two_matrix_rows
+
+    Args:
+        s (string): the first string being compared
+        t (string): the second string being compared
+
+    Returns:
+        int: the minimum edit distance between s and t.
+    """
+    # Ensure that s is the shorter of the two strings
+    if len(s) > len(t):
+        s, t = t, s
+    m, n = len(s), len(t)
+
+    # Use a 2 x (m + 1) array to represent an n x (m + 1) array since you only
+    # need to consider the previous row to generate the next row, therefore the
+    # same two rows can be recycled
+    row, otherRow = 1, 0
+    arr = np.zeros((2, m + 1), dtype=np.uint32)
+
+    # MED(X, "") = len(X)
+    arr[0, :] = np.arange(m + 1)
+
+    for i in range(1, n + 1):
+        # MED("", X) = len(X)
+        arr[row, 0] = i
+
+        # Loop over the rest of s to see if it matches with the corresponding letter of t
+        for j in range(1, m + 1):
+
+            # If these two characters match, then the diagonal entry above them is the MED
+            if s[j - 1] == t[i - 1]:
+                arr[row, j] = arr[otherRow, j - 1]
+
+            # Otherwise, it is the min of the diagonal entry and the one above / to the left
+            else:
+                arr[row, j] = 1 + min(
+                    arr[row, j - 1], arr[otherRow, j], arr[otherRow, j - 1]
+                )
+
+        row, otherRow = otherRow, row
+
+    return arr[n % 2, m]
+
+
+@register_jitable
+def min_edit_distance_with_max(s, t, maxDistance):  # pragma: no cover
+    """Utility for finding the minimum edit distance between two scalar strings
+    when provided with a maximum distance. This is seperate from
+    min_edit_distance_without_max because it has extra checks inside of the
+    loops. Algorithm derived from the following:
+    https://en.wikipedia.org/wiki/Levenshtein_distance#Iterative_with_two_matrix_rows
+
+
+    Args:
+        s (string): the first string being compared.
+        t (string): the second string being compared.
+        maxDistance (int): the maximum distance to search (ignored if None).
+
+    Returns:
+        int: the minimum edit distance between s and t. If maxDistance is less than
+          the MED, then it is returned instead (or 0 if negative)
+    """
+    if maxDistance < 0:
+        return 0
+
+    # Ensure that s is the shorter of the two strings
+    if len(s) > len(t):
+        s, t = t, s
+    m, n = len(s), len(t)
+
+    # If the max distance is irrelevant, use the other implementation
+    if m <= maxDistance and n <= maxDistance:
+        return min_edit_distance(s, t)
+
+    # Use a 2 x (m + 1) array to represent an n x (m + 1) array since you only
+    # need to consider the previous row to generate the next row, therefore the
+    # same two rows can be recycled
+    row, otherRow = 1, 0
+    arr = np.zeros((2, m + 1), dtype=np.uint32)
+
+    # MED(X, "") = len(X)
+    arr[0, :] = np.arange(m + 1)
+
+    for i in range(1, n + 1):
+        # MED("", X) = len(X)
+        arr[row, 0] = i
+
+        # Loop over the rest of s to see if it matches with the corresponding letter of t
+        for j in range(1, m + 1):
+
+            # If these two characters match, then the diagonal entry above them is the MED
+            if s[j - 1] == t[i - 1]:
+                arr[row, j] = arr[otherRow, j - 1]
+
+            # Otherwise, it is the min of the diagonal entry and the one above / to the left
+            else:
+                arr[row, j] = 1 + min(
+                    arr[row, j - 1], arr[otherRow, j], arr[otherRow, j - 1]
+                )
+
+        # If the entire row is above the max depth, halt early
+        if (arr[row] >= maxDistance).all():
+            return maxDistance
+
+        row, otherRow = otherRow, row
+
+    return min(arr[n % 2, m], maxDistance)
+
+
+@numba.generated_jit(nopython=True)
+def editdistance_no_max_util(s, t):
+    """A dedicated kernel for the SQL function EDITDISTANCE which two strings
+    (or columns) and returns the minimum edit distance between them (i.e. the
+    smallest number of insertions/deletions/replacements required to make the
+    two strings identical)
+
+
+    Args:
+        s (string array/series/scalar): the first string(s) being compared
+        t (string array/series/scalar): the second string(s) being compared
+
+    Returns:
+        int series/scalar: the minimum edit distnace between the two strings
+    """
+
+    verify_string_arg(s, "editdistance_no_max", "s")
+    verify_string_arg(t, "editdistance_no_max", "t")
+
+    arg_names = ["s", "t"]
+    arg_types = [s, t]
+    propagate_null = [True] * 2
+    scalar_text = (
+        "res[i] = bodo.libs.bodosql_array_kernels.min_edit_distance(arg0, arg1)"
+    )
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def editdistance_with_max_util(s, t, maxDistance):
+    """Same as editdistance_no_max_util, except it supports the version with
+    the third argument for hte maximum distance to search before giving up.
+
+
+    Args:
+        s (string array/series/scalar): the first string(s) being compared
+        t (string array/series/scalar): the second string(s) being compared
+        maxDistance (int array/series/scalar): the distance(s) to search before giving up
+
+    Returns:
+        int series/scalar: the minimum edit distnace between the two strings.
+        if it is greater than maxDistance, then maxDistance is returned. If
+        maxDistance is negative, 0 is returned.
+    """
+
+    verify_string_arg(s, "editdistance_no_max", "s")
+    verify_string_arg(t, "editdistance_no_max", "t")
+    verify_int_arg(maxDistance, "editdistance_no_max", "t")
+
+    arg_names = ["s", "t", "maxDistance"]
+    arg_types = [s, t, maxDistance]
+    propagate_null = [True] * 3
+    scalar_text = "res[i] = bodo.libs.bodosql_array_kernels.min_edit_distance_with_max(arg0, arg1, arg2)"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 

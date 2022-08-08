@@ -4,7 +4,6 @@ Test correctness of SQL string operation queries on BodoSQL
 """
 
 import pytest
-
 from bodosql.tests.string_ops_common import *  # noqa
 from bodosql.tests.utils import check_query
 
@@ -416,4 +415,62 @@ def test_utf_scalar(spark_info):
         {},
         spark_info,
         check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "SELECT EDITDISTANCE(A, 'pokerface') FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series([7, None, 4, 6, 5, 1], dtype=pd.Int32Dtype())}
+                ),
+            ),
+            id="scalar_vector_no_case_no_max",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN A IS NULL THEN -1 ELSE EDITDISTANCE(A, 'pokerface') END FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series([7, -1, 4, 6, 5, 1], dtype=pd.Int32Dtype())}
+                ),
+            ),
+            id="scalar_vector_with_case_no_max",
+        ),
+        pytest.param(
+            (
+                "SELECT EDITDISTANCE(A, 'pokerface', 5) FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series([5, None, 4, 5, 5, 1], dtype=pd.Int32Dtype())}
+                ),
+            ),
+            id="scalar_vector_no_case_with_max",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN A IS NULL THEN -1 ELSE EDITDISTANCE(A, 'pokerface', 5) END FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series([5, -1, 4, 5, 5, 1], dtype=pd.Int32Dtype())}
+                ),
+            ),
+            id="scalar_vector_with_case_with_max",
+        ),
+    ],
+)
+def test_editdistance(args, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {"A": ["blackjack", None, "poker", "procedure", "disgrace", "poker face"]}
+        )
+    }
+    query, answer = args
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
     )
