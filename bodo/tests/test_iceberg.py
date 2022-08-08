@@ -23,6 +23,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    DistTestPipeline,
     _gather_output,
     _get_dist_arg,
     _test_equal_guard,
@@ -343,6 +344,40 @@ def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
         sort_output=True,
         reset_index=True,
     )
+
+
+def _check_for_sql_read_head_only(bodo_func, head_size):
+    """Make sure head-only SQL read optimization is recognized"""
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert hasattr(fir, "meta_head_only_info")
+    assert fir.meta_head_only_info[0] == head_size
+
+
+def test_limit_pushdown(iceberg_database, iceberg_table_conn):
+    """Test that Limit Pushdown is successfully enabled"""
+    table_name = "simple_string_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl():
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        return df.head(5)  # type: ignore
+
+    spark = get_spark()
+    py_out = spark.sql(f"select * from hadoop_prod.{db_schema}.{table_name} LIMIT 5;")
+    py_out = py_out.toPandas()
+
+    check_func(
+        impl,
+        (),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+    )
+
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+    bodo_func()
+    _check_for_sql_read_head_only(bodo_func, 5)
 
 
 def test_schema_evolution_detection(iceberg_database, iceberg_table_conn):

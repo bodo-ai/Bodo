@@ -198,7 +198,13 @@ def remove_dead_sql(
 
 
 def sql_distributed_run(
-    sql_node, array_dists, typemap, calltypes, typingctx, targetctx
+    sql_node,
+    array_dists,
+    typemap,
+    calltypes,
+    typingctx,
+    targetctx,
+    meta_head_only_info=None,
 ):
     # Add debug info about column pruning
     if bodo.user_logging.get_verbose_level() >= 1:
@@ -322,6 +328,13 @@ def sql_distributed_run(
     exec(func_text, {}, loc_vars)
     sql_impl = loc_vars["sql_impl"]
 
+    if sql_node.limit is not None:
+        limit = sql_node.limit
+    elif meta_head_only_info and meta_head_only_info[0] is not None:
+        limit = meta_head_only_info[0]
+    else:
+        limit = None
+
     sql_reader_py = _gen_sql_reader_py(
         sql_node.df_colnames,
         sql_node.out_types,
@@ -331,7 +344,7 @@ def sql_distributed_run(
         typingctx,
         targetctx,
         sql_node.db_type,
-        sql_node.limit,
+        limit,
         parallel,
         typemap,
         sql_node.filters,
@@ -701,8 +714,8 @@ def _gen_sql_reader_py(
     out_used_cols: List[int],
     typingctx,
     targetctx,
-    db_type,
-    limit,
+    db_type: str,
+    limit: Optional[int],
     parallel,
     typemap,
     filters,
@@ -816,18 +829,26 @@ def _gen_sql_reader_py(
         nullable_cols = [int(is_nullable(col_typs[i])) for i in selected_cols]
 
         comma = "," if filter_args else ""
-        func_text += f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
-        func_text += f'  dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
-        func_text += f"  out_table = iceberg_read(\n"
-        func_text += f"    unicode_to_utf8(conn), unicode_to_utf8(database_schema),\n"
-        func_text += f"    unicode_to_utf8(sql_request), {parallel}, dnf_filters,\n"
-        # TODO Confirm that we're computing selected_cols correctly
-        func_text += f"    expr_filters, selected_cols_arr_{call_id}.ctypes,\n"
-        # TODO Confirm that we're computing is_nullable correctly
-        func_text += f"    {len(selected_cols)}, nullable_cols_arr_{call_id}.ctypes,\n"
-        func_text += f"    pyarrow_table_schema_{call_id},\n"
-        func_text += f"  )\n"
-        func_text += f"  check_and_propagate_cpp_exception()\n"
+        func_text += (
+            f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
+            f'  dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
+            f"  out_table = iceberg_read(\n"
+            f"    unicode_to_utf8(conn),\n"
+            f"    unicode_to_utf8(database_schema),\n"
+            f"    unicode_to_utf8(sql_request),\n"
+            f"    {parallel},\n"
+            f"    {-1 if limit is None else limit},\n"
+            f"    dnf_filters,\n"
+            f"    expr_filters,\n"
+            #     TODO Confirm that we're computing selected_cols correctly
+            f"    selected_cols_arr_{call_id}.ctypes,\n"
+            f"    {len(selected_cols)},\n"
+            #     TODO Confirm that we're computing is_nullable correctly
+            f"    nullable_cols_arr_{call_id}.ctypes,\n"
+            f"    pyarrow_table_schema_{call_id},\n"
+            f"  )\n"
+            f"  check_and_propagate_cpp_exception()\n"
+        )
 
         # Mostly copied over from _gen_pq_reader_py
         # TODO XXX Refactor?
@@ -1073,6 +1094,7 @@ _iceberg_read = types.ExternalFunction(
         types.voidptr,
         types.voidptr,
         types.boolean,
+        types.int32,
         parquet_predicate_type,  # dnf filters
         parquet_predicate_type,  # expr filters
         types.voidptr,
