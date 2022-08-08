@@ -982,6 +982,17 @@ def test_read_parquet_glob_s3(minio_server, s3_bucket, datapath, memory_leak_che
     check_func(test_impl, (glob_pattern_2,), py_output=pyout, check_dtype=False)
 
 
+def test_read_parquet_trailing_sep_s3(
+    minio_server, s3_bucket, datapath, memory_leak_check
+):
+    def test_impl():
+        df = pd.read_parquet("s3://bodo-test/int_nulls_multi.pq/")
+        return df
+
+    pyout = pd.read_parquet(datapath("int_nulls_multi.pq"))
+    check_func(test_impl, (), py_output=pyout, check_dtype=False)
+
+
 @pytest.mark.slow
 def test_s3_csv_anon_public_dataset(memory_leak_check):
     """

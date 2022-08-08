@@ -108,6 +108,18 @@ def test_hdfs_pq_int_nulls_multi(datapath, hdfs_datapath):
     check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
 
 
+def test_hdfs_pq_trailing_sep(datapath, hdfs_datapath):
+    """Test HDFS read_parquet on a directory works with a trailing sep"""
+    hdfs_fname = hdfs_datapath("int_nulls_multi.pq/")
+
+    def test_impl(hdfs_fname):
+        return pd.read_parquet(hdfs_fname)
+
+    fname = datapath("int_nulls_multi.pq")
+    py_output = pd.read_parquet(fname)
+    check_func(test_impl, (hdfs_fname,), py_output=py_output, check_dtype=False)
+
+
 def test_csv_data1(datapath, hdfs_datapath):
     """
     test hdfs read_csv
