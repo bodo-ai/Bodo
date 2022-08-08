@@ -153,6 +153,400 @@ def test_coalesce(args):
         )
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series((list(range(9)) + [None]) * 2, dtype=pd.Int32Dtype()),
+                pd.Series([0, None] * 10, dtype=pd.Int32Dtype()),
+                pd.Series(["A", None] * 10),
+                pd.Series([1, None] * 10, dtype=pd.Int32Dtype()),
+                "B",
+                pd.Series([2, None] * 10, dtype=pd.Int32Dtype()),
+                None,
+                None,
+                pd.Series(["D", None] * 10),
+                None,
+                "E",
+                None,
+                None,
+                6,
+                pd.Series(["G", None] * 10),
+                7,
+                "H",
+                8,
+                None,
+            ),
+            id="vector_vector_no_default",
+        ),
+        pytest.param(
+            (
+                pd.Series((list(range(9)) + [None]) * 2, dtype=pd.Int32Dtype()),
+                pd.Series([0, None] * 10, dtype=pd.Int32Dtype()),
+                pd.Series(["A", None] * 10),
+                pd.Series([1, None] * 10, dtype=pd.Int32Dtype()),
+                "B",
+                pd.Series([2, None] * 10, dtype=pd.Int32Dtype()),
+                None,
+                None,
+                pd.Series(["D", None] * 10),
+                None,
+                "E",
+                None,
+                None,
+                6,
+                pd.Series(["G", None] * 10),
+                7,
+                "H",
+                8,
+                None,
+                pd.Series(
+                    [
+                        "a",
+                        None,
+                        "c",
+                        None,
+                        "e",
+                        None,
+                        "g",
+                        None,
+                        "i",
+                        None,
+                        "k",
+                        None,
+                        "m",
+                        None,
+                        "o",
+                        None,
+                        "q",
+                        None,
+                        "s",
+                        None,
+                    ]
+                ),
+            ),
+            id="vector_vector_vector_default",
+        ),
+        pytest.param(
+            (
+                pd.Series((list(range(9)) + [None]) * 2, dtype=pd.Int32Dtype()),
+                pd.Series([0, None] * 10, dtype=pd.Int32Dtype()),
+                pd.Series(["A", None] * 10),
+                pd.Series([1, None] * 10, dtype=pd.Int32Dtype()),
+                "B",
+                pd.Series([2, None] * 10, dtype=pd.Int32Dtype()),
+                None,
+                None,
+                "E",
+                None,
+                pd.Series(["D", None] * 10),
+                None,
+                None,
+                6,
+                pd.Series(["G", None] * 10),
+                7,
+                "H",
+                8,
+                None,
+                "J",
+            ),
+            id="vector_scalar_scalar_default",
+        ),
+        pytest.param(
+            (
+                pd.Series((list(range(9)) + [None]) * 2, dtype=pd.Int32Dtype()),
+                pd.Series([0, None] * 10, dtype=pd.Int32Dtype()),
+                pd.Series(["A", None] * 10),
+                pd.Series([1, None] * 10, dtype=pd.Int32Dtype()),
+                "B",
+                pd.Series([2, None] * 10, dtype=pd.Int32Dtype()),
+                None,
+                None,
+                None,
+                None,
+                pd.Series(["D", None] * 10),
+                None,
+                "E",
+                6,
+                pd.Series(["G", None] * 10),
+                7,
+                "H",
+                8,
+                None,
+                None,
+            ),
+            id="vector_null_null_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (1, 1, "X"),
+            id="scalar_scalar_match",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (-2.0, -3.0, "X"),
+            id="scalar_scalar_no_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            ("foo", "bar", "Y", "N"),
+            id="scalar_scalar_scalar_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (np.uint8(42), np.uint8(255), "_", pd.Series(list("uvwxyz"))),
+            id="scalar_scalar_vector_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            ("foo", pd.Series(["foo", "bar", "fizz", "buzz", "foo", None] * 2), ":)"),
+            id="scalar_null_scalar_no_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "foo",
+                pd.Series(["foo", "bar", "fizz", "buzz", "foo", None] * 2),
+                ":)",
+                ":(",
+            ),
+            id="scalar_vector_scalar_scalar_default",
+        ),
+        pytest.param(
+            (
+                None,
+                pd.Series(["A", None, "C", None, "E", None, "G", None] * 2),
+                pd.Series([1, 2, None, None] * 4, dtype=pd.Int32Dtype()),
+                pd.Series(["A", "B", "C", "D", None, None, None, None] * 2),
+                pd.Series([3, 4, None, None] * 4, dtype=pd.Int32Dtype()),
+            ),
+            id="null_four_vector_no_default",
+        ),
+        pytest.param(
+            (
+                None,
+                pd.Series(["A", None, "C", None, "E", None, "G", None] * 2),
+                pd.Series([1, 2, None, None] * 4, dtype=pd.Int32Dtype()),
+                pd.Series(["A", "B", "C", "D", None, None, None, None] * 2),
+                pd.Series([3, 4, None, None] * 4, dtype=pd.Int32Dtype()),
+                42,
+            ),
+            id="null_four_vector_scalar_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                None,
+                pd.Series(["A", None, "C", None, "E", None, "G", None] * 2),
+                pd.Series([1, 2, None, None] * 4, dtype=pd.Int32Dtype()),
+                None,
+                16,
+                pd.Series(["A", "B", "C", "D", None, None, None, None] * 2),
+                pd.Series([3, 4, None, None] * 4, dtype=pd.Int32Dtype()),
+                42,
+            ),
+            id="null_null",
+        ),
+        pytest.param(
+            (None, "A", 42, 16), id="null_no_match_scalar", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (None, "A", 42, pd.Series([0, 1, 2, 3, 4, 5])),
+            id="null_no_match_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        None if i % 5 == 0 else chr(65 + ((i + 13) ** 2) % 15)
+                        for i in range(500)
+                    ]
+                ),
+                pd.Series(
+                    [
+                        None if i % 6 == 0 else chr(65 + ((i + 14) ** 2) % 15)
+                        for i in range(500)
+                    ]
+                ),
+                pd.Series(
+                    [
+                        None if i % 7 == 0 else 65 + ((i + 14) ** 2) % 15
+                        for i in range(500)
+                    ]
+                ),
+                pd.Series(
+                    [
+                        None if i % 8 == 0 else chr(65 + ((i + 15) ** 2) % 15)
+                        for i in range(500)
+                    ]
+                ),
+                pd.Series(
+                    [
+                        None if i % 9 == 0 else 65 + ((i + 15) ** 2) % 15
+                        for i in range(500)
+                    ]
+                ),
+                pd.Series(
+                    [
+                        None if i % 11 == 0 else chr(65 + ((i + 16) ** 2) % 15)
+                        for i in range(500)
+                    ]
+                ),
+                pd.Series(
+                    [
+                        None if i % 13 == 0 else 65 + ((i + 16) ** 2) % 15
+                        for i in range(500)
+                    ]
+                ),
+                pd.Series(
+                    [
+                        None if i % 17 == 0 else 65 + ((i + 17) ** 2) % 15
+                        for i in range(500)
+                    ]
+                ),
+            ),
+            id="all_vector_large",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        None if i % 5 == 0 else chr(65 + ((i + 13) ** 2) % 26)
+                        for i in range(500)
+                    ]
+                ),
+                *("A", 0, "E", 1, "I", 2, "O", 3, "U", 4, "Y", 5, None, -2, -1),
+            ),
+            id="vector_all_scalar_large",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        (lambda x: x / 10 if x < 3 else None)(((i + 20) ** 2) % 4)
+                        for i in range(500)
+                    ]
+                ),
+                0.0,
+                pd.Series((list("AEIOU") + [None] * 5) * 50),
+                0.1,
+                pd.Series(([None] * 5 + list("AEIOU")) * 50),
+                None,
+                pd.Series(["alpha", "beta", "gamma", None, None] * 100),
+                pd.Series([None, "delta", None, "epsilon", None] * 100),
+            ),
+            id="vector_scalar_vectors_large",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        *pd.date_range("2018-01-01", "2018-06-02", freq="M"),
+                        None,
+                        None,
+                        *pd.date_range("2018-03-01", "2018-07-02", freq="M"),
+                    ]
+                    * 2
+                ),
+                np.datetime64(pd.Timestamp("2018-02-28"), "ns"),
+                np.datetime64(pd.Timestamp("2018-02-01"), "ns"),
+                np.datetime64(pd.Timestamp("2018-03-31"), "ns"),
+                np.datetime64(pd.Timestamp("2018-03-01"), "ns"),
+                np.datetime64(pd.Timestamp("2018-05-30"), "ns"),
+                np.datetime64(pd.Timestamp("2018-05-01"), "ns"),
+                pd.Series(pd.date_range("2018", "2019-11-01", freq="M")),
+            ),
+            id="date_vector_output",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                np.datetime64(pd.Timestamp("2018-01-01"), "ns"),
+                np.datetime64(pd.Timestamp("2018-01-01"), "ns"),
+                np.datetime64(pd.Timestamp("2019-06-20"), "ns"),
+            ),
+            id="date_scalar_output",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([0, 127, 128, 255, None] * 5, dtype=pd.UInt8Dtype()),
+                pd.Series([0, 127, -128, -1, None] * 5, dtype=pd.Int8Dtype()),
+                pd.Series([255] * 25, dtype=pd.UInt8Dtype()),
+                pd.Series([-128, -1, 128, -1, -(2**34)] * 5, dtype=pd.Int64Dtype()),
+                pd.Series([2**63 - 1] * 25, dtype=pd.Int64Dtype()),
+            ),
+            id="all_vector_multiple_types",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_decode(args):
+    def impl3(A, B, C):
+        return bodo.libs.bodosql_array_kernels.decode((A, B, C))
+
+    def impl4(A, B, C, D):
+        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D))
+
+    def impl5(A, B, C, D, E):
+        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E))
+
+    def impl6(A, B, C, D, E, F):
+        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E, F))
+
+    def impl8(A, B, C, D, E, F, G, H):
+        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E, F, G, H))
+
+    def impl16(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P):
+        return bodo.libs.bodosql_array_kernels.decode(
+            (A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P)
+        )
+
+    def impl19(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S):
+        return bodo.libs.bodosql_array_kernels.decode(
+            (A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S)
+        )
+
+    def impl20(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T):
+        return bodo.libs.bodosql_array_kernels.decode(
+            (A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T)
+        )
+
+    def decode_scalar_fn(*args):
+        for i in range(1, len(args) - 1, 2):
+            if (pd.isna(args[0]) and pd.isna(args[i])) or (
+                not pd.isna(args[0]) and not pd.isna(args[i]) and args[0] == args[i]
+            ):
+                return args[i + 1]
+        if len(args) % 2 == 0:
+            return args[-1]
+
+    decode_answer = vectorized_sol(args, decode_scalar_fn, None)
+
+    if len(args) == 3:
+        impl = impl3
+    elif len(args) == 4:
+        impl = impl4
+    elif len(args) == 5:
+        impl = impl5
+    elif len(args) == 6:
+        impl = impl6
+    elif len(args) == 8:
+        impl = impl8
+    elif len(args) == 16:
+        impl = impl16
+    elif len(args) == 19:
+        impl = impl19
+    elif len(args) == 20:
+        impl = impl20
+    check_func(impl, args, py_output=decode_answer, check_dtype=False, reset_index=True)
+
+
 @pytest.mark.slow
 def test_option_with_arr_coalesce():
     """tests coalesce behavior with optionals when suplied an array argument"""
@@ -205,3 +599,75 @@ def test_option_no_arr_coalesce():
                 check_dtype=False,
                 reset_index=True,
             )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "flags",
+    [
+        [True, True, True, True, True],
+        [True, True, True, True, False],
+        [False, True, True, False, True],
+        [False, True, True, False, False],
+        [True, False, True, False, True],
+        [True, False, True, False, False],
+        [False, False, True, True, True],
+        [False, False, True, True, False],
+        [True, False, True, True, True],
+        [True, False, True, True, False],
+        [False, False, False, True, True],
+        [False, False, False, True, False],
+        [False, True, False, True, True],
+        [False, True, False, True, False],
+    ],
+)
+def test_option_decode(flags):
+    def impl1(A, B, C, D, E, F, flag0, flag1, flag2, flag3, flag4):
+        arg0 = B if flag0 else None
+        arg1 = C if flag1 else None
+        arg2 = D if flag2 else None
+        arg3 = E if flag3 else None
+        arg4 = F if flag4 else None
+        return bodo.libs.bodosql_array_kernels.decode((A, arg0, arg1, arg2, arg3, arg4))
+
+    def impl2(A, B, C, D, E, flag0, flag1, flag2, flag3):
+        arg0 = B if flag0 else None
+        arg1 = C if flag1 else None
+        arg2 = D if flag2 else None
+        arg3 = E if flag3 else None
+        return bodo.libs.bodosql_array_kernels.decode((A, arg0, arg1, arg2, arg3))
+
+    def decode_scalar_fn(*args):
+        for i in range(1, len(args) - 1, 2):
+            if (pd.isna(args[0]) and pd.isna(args[i])) or (
+                not pd.isna(args[0]) and not pd.isna(args[i]) and args[0] == args[i]
+            ):
+                return args[i + 1]
+        if len(args) % 2 == 0:
+            return args[-1]
+
+    A = pd.Series(["A", "E", None, "I", "O", "U", None, None])
+    B, C, D, E, F = "A", "a", "E", "e", "y"
+
+    flag0, flag1, flag2, flag3, flag4 = flags
+
+    arg0 = B if flag0 else None
+    arg1 = C if flag1 else None
+    arg2 = D if flag2 else None
+    arg3 = E if flag3 else None
+    arg4 = F if flag4 else None
+
+    args = (A, B, C, D, E, F, flag0, flag1, flag2, flag3, flag4)
+    nulled_args = (A, arg0, arg1, arg2, arg3, arg4)
+    decode_answer_A = vectorized_sol(nulled_args, decode_scalar_fn, None)
+    check_func(
+        impl1, args, py_output=decode_answer_A, check_dtype=False, reset_index=True
+    )
+
+    if flag4:
+        args = (A, B, C, D, E, flag0, flag1, flag2, flag3)
+        nulled_args = (A, arg0, arg1, arg2, arg3)
+        decode_answer_B = vectorized_sol(nulled_args, decode_scalar_fn, None)
+        check_func(
+            impl2, args, py_output=decode_answer_B, check_dtype=False, reset_index=True
+        )

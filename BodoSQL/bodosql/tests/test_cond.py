@@ -630,3 +630,138 @@ def test_nullifzero_cols(spark_info, memory_leak_check):
         check_names=False,
         equivalent_spark_query=spark_query,
     )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "SELECT DECODE(A, B, C, D, E) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [1] + [None] * 14 + [6] + [None] * 8 + [5],
+                            dtype=pd.Int32Dtype(),
+                        )
+                    }
+                ),
+            ),
+            id="all_vector_no_default",
+        ),
+        pytest.param(
+            (
+                "SELECT DECODE(A, B, C, D, E, F) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [1]
+                            + ([9, 10, 11, 12, None] * 3)[1:]
+                            + [6]
+                            + [10, 11, 12, None, 9, 10, 11, 12]
+                            + [5],
+                            dtype=pd.Int32Dtype(),
+                        )
+                    }
+                ),
+            ),
+            id="all_vector_with_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT DECODE(A, 'A', 'a', 'a', 'a', 'E', 'e', 'e', 'e', 'I', 'i', 'i', 'i', 'O', 'o', 'o', 'o') FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            list("aaeaaeieaaeioieaaeio") + [None, "i", "e", "a", None]
+                        )
+                    }
+                ),
+            ),
+            id="vector_scalar_no_default",
+        ),
+        pytest.param(
+            (
+                "SELECT DECODE(A, 'A', 'a', 'a', 'a', 'E', 'e', 'e', 'e', 'I', 'i', 'i', 'i', 'O', 'o', 'o', 'o', '_') FROM table1",
+                pd.DataFrame({0: pd.Series(list("aaeaaeieaaeioieaaeio_iea_"))}),
+            ),
+            id="vector_scalar_with_default",
+        ),
+        pytest.param(
+            (
+                "SELECT DECODE(C, 1, 1, 2, 2, NULLIF(C, C), 3, 4, 4, 0) FROM table1",
+                pd.DataFrame({0: pd.Series([1, 2, 3, 4, 0] * 5)}),
+            ),
+            id="vector_scalar_with_null_and_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT DECODE(10, 0, 'A') FROM table1",
+                pd.DataFrame({0: pd.Series([None] * 25, dtype=pd.StringDtype())}),
+            ),
+            id="all_scalar_no_case_no_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT DECODE(10, 0, 'A', 'B') FROM table1",
+                pd.DataFrame({0: ["B"] * 25}),
+            ),
+            id="all_scalar_no_case_with_default",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN B IS NULL THEN -1 ELSE DECODE(B, 'A', 1, 'E', 2, 3) END FROM table1",
+                pd.DataFrame({0: [1, 2, 3, 3, -1] * 5}),
+            ),
+            id="all_scalar_with_case",
+        ),
+        pytest.param(
+            (
+                "SELECT DECODE(G, H, I, J, K) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [255, 255, 2**63 - 1, None, 255] * 5,
+                            dtype=pd.Int64Dtype(),
+                        )
+                    }
+                ),
+            ),
+            id="all_vector_multiple_types",
+        ),
+    ],
+)
+def test_decode(args, spark_info, memory_leak_check):
+    """Checks if function with all column values"""
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": list("AaEaAeIeAaEiOiEaAeIoUiEa") + [None],
+                "B": (list("AEIO") + [None]) * 5,
+                "C": pd.Series([1, 2, None, 4, 5] * 5, dtype=pd.Int32Dtype()),
+                "D": list("aeiou") * 5,
+                "E": pd.Series([6, None, 7, None, 8] * 5, dtype=pd.Int32Dtype()),
+                "F": pd.Series([9, 10, 11, 12, None] * 5, dtype=pd.Int32Dtype()),
+                "G": pd.Series([0, 127, 128, 255, None] * 5, dtype=pd.UInt8Dtype()),
+                "H": pd.Series([0, 127, -128, -1, None] * 5, dtype=pd.Int8Dtype()),
+                "I": pd.Series([255] * 25, dtype=pd.UInt8Dtype()),
+                "J": pd.Series(
+                    [-128, -1, 128, -1, -(2**34)] * 5, dtype=pd.Int64Dtype()
+                ),
+                "K": pd.Series([2**63 - 1] * 25, dtype=pd.Int64Dtype()),
+            }
+        )
+    }
+    query, answer = args
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )

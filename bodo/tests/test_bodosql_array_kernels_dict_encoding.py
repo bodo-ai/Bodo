@@ -368,3 +368,133 @@ def test_dict_nullif(args):
     bodo_func(*A)
     f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        ["E", "I", None, "E", None, "I", "O"] * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    "E",
+                    "e",
+                    "O",
+                    "fudge",
+                ),
+                True,
+            ),
+            id="dict_scalar_no_nulls_no_default",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        ["E", "I", None, "E", None, "I", "O"] * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    "E",
+                    "e",
+                    None,
+                    "uh oh",
+                ),
+                False,
+            ),
+            id="dict_scalar_with_null_input",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        ["E", "I", None, "E", None, "I", "O"] * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    "E",
+                    None,
+                    "I",
+                    "i",
+                ),
+                True,
+            ),
+            id="dict_scalar_with_null_output",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        ["E", "I", None, "E", None, "I", "O"] * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    "E",
+                    "e",
+                    "O",
+                    "o",
+                    "!!!",
+                ),
+                False,
+            ),
+            id="dict_scalar_with_default",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        ["E", "I", None, "E", None, "I", "O"] * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    pd.Series(["E", "I"] * 7),
+                    "A",
+                    "O",
+                    "B",
+                ),
+                False,
+            ),
+            id="dict_vector",
+        ),
+    ],
+)
+def test_dict_decode(args):
+    def impl5(A, B, C, D, E):
+        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E)).str.capitalize()
+
+    def impl6(A, B, C, D, E, F):
+        return bodo.libs.bodosql_array_kernels.decode(
+            (A, B, C, D, E, F)
+        ).str.capitalize()
+
+    # Simulates DECODE on a single row
+    def decode_scalar_fn(*args):
+        for i in range(1, len(args) - 1, 2):
+            if (str(args[0]) == "None" and pd.isna(args[i])) or (
+                str(args[0]) != "None"
+                and not pd.isna(args[i])
+                and str(args[0]) == str(args[i])
+            ):
+                if args[i + 1] == None:
+                    return None
+                return str(args[i + 1]).capitalize()
+        if len(args) % 2 == 0:
+            if args[-1] == None:
+                return None
+            return str(args[-1]).capitalize()
+
+    A, output_encoded = args
+
+    decode_answer = vectorized_sol(A, decode_scalar_fn, None)
+    impl = impl5 if len(A) == 5 else impl6
+    check_func(
+        impl,
+        A,
+        py_output=decode_answer,
+        check_dtype=False,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
+    # Make sure IR has the optimized function if it is supposed to
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+    bodo_func(*A)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded

@@ -1,15 +1,11 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
-import org.apache.calcite.sql.SqlFunction;
-import org.apache.calcite.sql.SqlFunctionCategory;
-import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.SqlOperatorTable;
-import org.apache.calcite.sql.SqlSyntax;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
@@ -22,6 +18,9 @@ public class CondOperatorTable implements SqlOperatorTable {
   // Type for a function with a boolean and then two matching types
   public static final SqlSingleOperandTypeChecker BOOLEAN_SAME_SAME =
       new SameOperandTypeExceptFirstOperandChecker(3, "BOOLEAN");
+
+  // Type for a function with a boolean and then two matching types
+  public static final SqlSingleOperandTypeChecker DECODE_VARIADIC = new DecodeOperandChecker();
 
   /** Returns the Datetime operator table, creating it if necessary. */
   public static synchronized CondOperatorTable instance() {
@@ -201,9 +200,63 @@ public class CondOperatorTable implements SqlOperatorTable {
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  /**
+   * Takes in the arguments to a DECODE call and extracts a subset of the argument types that
+   * correspond to outputs. For example:
+   *
+   * <p>DECODE(A, B, C, D, E) --> [C, E]
+   *
+   * <p>DECODE(A, B, C, D, E, F) --> [C, E, F]
+   *
+   * @param binding a container for all the operands of the DECODE function call
+   * @return a list of all the output types corresponding to output arguments of DECODE
+   */
+  public static List<RelDataType> collectOutputTypes(SqlOperatorBinding binding) {
+    List<RelDataType> operandTypes = binding.collectOperandTypes();
+    List<RelDataType> outputTypes = new ArrayList<RelDataType>();
+    int count = binding.getOperandCount();
+    for (int i = 2; i < count; i++) {
+      if (i % 2 == 0) {
+        outputTypes.add(operandTypes.get(i));
+      }
+    }
+    if (count > 3 && count % 2 == 0) {
+      outputTypes.add(operandTypes.get(count - 1));
+    }
+    return outputTypes;
+  }
+
+  public static final SqlFunction DECODE =
+      new SqlFunction(
+          "DECODE",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // Obtains the least restructive union of all the argument types
+          // corresponding to outputs in the key-value pairs of arguments
+          // (plus the optional default value argument)
+          opBinding -> opBinding.getTypeFactory().leastRestrictive(collectOutputTypes(opBinding)),
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept. See DecodeOperandChecker
+          // for the rules
+          DECODE_VARIADIC,
+          // TODO: Add a proper category
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
-          REGR_VALX, REGR_VALY, IF_FUNC, IFF_FUNC, IFNULL_FUNC, NULLIFZERO, NVL, NVL2, ZEROIFNULL);
+          REGR_VALX,
+          REGR_VALY,
+          IF_FUNC,
+          IFF_FUNC,
+          IFNULL_FUNC,
+          NULLIFZERO,
+          NVL,
+          NVL2,
+          ZEROIFNULL,
+          DECODE);
 
   @Override
   public void lookupOperatorOverloads(

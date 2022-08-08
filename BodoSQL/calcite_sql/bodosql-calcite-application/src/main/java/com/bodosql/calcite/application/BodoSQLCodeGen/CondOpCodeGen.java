@@ -149,20 +149,28 @@ public class CondOpCodeGen {
   }
 
   /**
-   * Return a pandas expression that replicates a SQL COALESCE function call. This function requires
-   * very specific handling of the nullset
+   * Return a pandas expression that replicates a call to the SQL functions COALESCE, DECODE, or any
+   * of their variants.
    *
    * @param names the names of each of the arguments
    * @param codeExprs the Python strings that calculate each of the arguments
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public static RexNodeVisitorInfo visitCoalesce(
+  public static RexNodeVisitorInfo visitVariadic(
       RexCall fnOperation, List<String> names, List<String> codeExprs) {
-
+    String func_name = fnOperation.getOperator().toString();
     int n = fnOperation.operands.size();
-    StringBuilder name = new StringBuilder("COALESCE(");
-    StringBuilder expr_code = new StringBuilder("bodo.libs.bodosql_array_kernels.coalesce((");
+    StringBuilder name = new StringBuilder();
+    StringBuilder expr_code = new StringBuilder();
+    if (func_name == "DECODE") {
+      name.append("DECODE(");
+      expr_code.append("bodo.libs.bodosql_array_kernels.decode((");
+    } else {
+      name.append("COALESCE(");
+      expr_code.append("bodo.libs.bodosql_array_kernels.coalesce((");
+    }
+
     for (int i = 0; i < n; i++) {
       name.append(names.get(i));
       if (i != n - 1) {
@@ -177,7 +185,7 @@ public class CondOpCodeGen {
       if (i != (n - 1)) {
         expr_code.append(", ");
       } else {
-        if (fnOperation.getOperator().toString() == "ZEROIFNULL") {
+        if (func_name == "ZEROIFNULL") {
           expr_code.append(", 0");
         }
         expr_code.append("))");
