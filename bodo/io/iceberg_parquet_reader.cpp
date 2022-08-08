@@ -41,14 +41,14 @@ class IcebergParquetReader : public ParquetReader {
      */
     IcebergParquetReader(const char* _conn, const char* _database_schema,
                          const char* _table_name, bool _parallel,
-                         PyObject* _dnf_filters, PyObject* _expr_filters,
-                         int32_t* _selected_fields, int32_t num_selected_fields,
-                         int32_t* is_nullable, PyObject* _pyarrow_table_schema)
+                         int32_t tot_rows_to_read, PyObject* _dnf_filters,
+                         PyObject* _expr_filters, int32_t* _selected_fields,
+                         int32_t num_selected_fields, int32_t* is_nullable,
+                         PyObject* _pyarrow_table_schema)
         : ParquetReader(/*path*/ nullptr, _parallel, _dnf_filters,
                         _expr_filters,
-                        /*storage_options*/ PyDict_New(),
-                        /*tot_rows_to_read*/ -1, _selected_fields,
-                        num_selected_fields, is_nullable,
+                        /*storage_options*/ PyDict_New(), tot_rows_to_read,
+                        _selected_fields, num_selected_fields, is_nullable,
                         /*input_file_name_col*/ false),
           pyarrow_table_schema(_pyarrow_table_schema),
           conn(_conn),
@@ -129,6 +129,7 @@ class IcebergParquetReader : public ParquetReader {
  * @param database_schema : Database schema in which the iceberg table resides
  * @param table_name : Name of the iceberg table to read
  * @param parallel : true if reading in parallel
+ * @param tot_rows_to_read : limit of rows to read or -1 if not limited
  * @param dnf_filters : filters passed to iceberg for filter pushdown
  * @param expr_filters : PyObject passed to pyarrow.parquet.ParquetDataset
  * filters argument to remove rows from scanned data
@@ -147,15 +148,15 @@ class IcebergParquetReader : public ParquetReader {
  */
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             const char* table_name, bool parallel,
-                            PyObject* dnf_filters, PyObject* expr_filters,
-                            int32_t* selected_fields,
+                            int32_t tot_rows_to_read, PyObject* dnf_filters,
+                            PyObject* expr_filters, int32_t* selected_fields,
                             int32_t num_selected_fields, int32_t* is_nullable,
                             PyObject* pyarrow_table_schema) {
     try {
         IcebergParquetReader reader(conn, database_schema, table_name, parallel,
-                                    dnf_filters, expr_filters, selected_fields,
-                                    num_selected_fields, is_nullable,
-                                    pyarrow_table_schema);
+                                    tot_rows_to_read, dnf_filters, expr_filters,
+                                    selected_fields, num_selected_fields,
+                                    is_nullable, pyarrow_table_schema);
         // initialize reader
         reader.init();
         return reader.read();

@@ -40,7 +40,6 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
 from bodo.hiframes.series_dt_impl import SeriesDatetimePropertiesType
 from bodo.hiframes.series_str_impl import SeriesStrMethodType
-from bodo.ir.sql_ext import parse_dbtype, remove_iceberg_prefix
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.numba_compat import mini_dce
 from bodo.utils.transform import (

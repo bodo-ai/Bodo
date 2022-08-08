@@ -297,12 +297,13 @@ class DistributedPass:
                 out_nodes = None
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]
-                    if isinstance(inst, bodo.ir.parquet_ext.ParquetReader):
+                    if isinstance(inst, bodo.ir.parquet_ext.ParquetReader) or (
+                        isinstance(inst, bodo.ir.sql_ext.SqlReader)
+                        and inst.db_type == "iceberg"
+                    ):
                         # check if getting shape and/or head of parquet dataset is
                         # enough for the program
-                        meta_head_only_info = guard(
-                            self._try_meta_head_only_pq_read, inst
-                        )
+                        meta_head_only_info = guard(self._try_meta_head, inst)
                         # save meta for testing in test_io.py
                         self.func_ir.meta_head_only_info = meta_head_only_info
                         out_nodes = f(
@@ -4468,14 +4469,17 @@ class DistributedPass:
         out += nodes
         return vals_list
 
-    def _try_meta_head_only_pq_read(self, pq_node):
-        """check if reading metadata and/or head rows of Parquet file is enough for the
+    def _try_meta_head(self, io_node):
+        """
+        Check if reading metadata and/or head rows from a data source is enough for the
         program. If so, returns the read size and the variable for setting the total
         size.
         Also, replaces array shapes in the IR with the total size variable.
         Raises GuardException if this optimization is not possible.
+
+        Only tested and used when reading from Parquet Files or an Iceberg DB
         """
-        arr_varnames = {v.name for v in pq_node.out_vars}
+        arr_varnames = {v.name for v in io_node.out_vars}
         # arr.shape nodes to transform
         shape_nodes = []
         read_size = None
@@ -4487,7 +4491,7 @@ class DistributedPass:
             block = self.func_ir.blocks[label]
             for stmt in block.body:
                 # pq read node
-                if stmt is pq_node:
+                if stmt is io_node:
                     scope = block.scope
                     continue
                 if is_assign(stmt):
@@ -4550,9 +4554,13 @@ class DistributedPass:
                 # other nodes, array variables shouldn't be used
                 require(not (arr_varnames & {v.name for v in stmt.list_vars()}))
 
+        # Special Handling for Iceberg Nodes that cant handle shape yet
+        if isinstance(io_node, bodo.ir.sql_ext.SqlReader):
+            return read_size, ()
+
         # optimization is possible, replace the total size variable in shape nodes
         require(scope is not None)
-        total_len_var = ir.Var(scope, mk_unique_var("total_df_len"), pq_node.loc)
+        total_len_var = ir.Var(scope, mk_unique_var("total_df_len"), io_node.loc)
         self.typemap[total_len_var.name] = types.int64
         for stmt in shape_nodes:
             stmt.value = ir.Expr.build_tuple([total_len_var], stmt.loc)
