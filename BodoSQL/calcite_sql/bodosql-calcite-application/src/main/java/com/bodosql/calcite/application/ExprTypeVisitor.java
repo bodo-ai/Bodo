@@ -108,6 +108,7 @@ public class ExprTypeVisitor {
           "LPAD",
           "RPAD",
           "REPLACE",
+          "EDITDISTANCE",
           "MID",
           "SUBSTR",
           "MAKEDATE",

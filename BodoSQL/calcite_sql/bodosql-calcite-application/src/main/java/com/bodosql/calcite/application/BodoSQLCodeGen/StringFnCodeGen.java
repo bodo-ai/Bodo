@@ -260,6 +260,48 @@ public class StringFnCodeGen {
   }
 
   /**
+   * Function that returns the rexInfo for an EDITDISTANCE Function Call.
+   *
+   * @param operandsInfo the information about the two/three arguments
+   * @return The RexNodeVisitorInfo corresponding to the function call
+   */
+  public static RexNodeVisitorInfo generateEditdistance(List<RexNodeVisitorInfo> operandsInfo) {
+
+    StringBuilder name = new StringBuilder();
+    StringBuilder expr_code = new StringBuilder();
+
+    name.append("EDITDISTANCE(");
+
+    if (operandsInfo.size() == 2) {
+      name.append(operandsInfo.get(0).getName());
+      name.append(", ");
+      name.append(operandsInfo.get(1).getName());
+      expr_code.append("bodo.libs.bodosql_array_kernels.editdistance_no_max(");
+      expr_code.append(operandsInfo.get(0).getExprCode());
+      expr_code.append(", ");
+      expr_code.append(operandsInfo.get(1).getExprCode());
+    } else if (operandsInfo.size() == 3) {
+      name.append(operandsInfo.get(0).getName());
+      name.append(", ");
+      name.append(operandsInfo.get(1).getName());
+      name.append(", ");
+      name.append(operandsInfo.get(2).getName());
+      expr_code.append("bodo.libs.bodosql_array_kernels.editdistance_with_max(");
+      expr_code.append(operandsInfo.get(0).getExprCode());
+      expr_code.append(", ");
+      expr_code.append(operandsInfo.get(1).getExprCode());
+      expr_code.append(", ");
+      expr_code.append(operandsInfo.get(2).getExprCode());
+    } else {
+      throw new BodoSQLCodegenException(
+          "Error, invalid number of arguments passed to EDITDISTANCE");
+    }
+    name.append(")");
+    expr_code.append(")");
+    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+  }
+
+  /**
    * Function that returns the rexInfo of a L/R/Trim function Call. Eventually, this may need to be
    * extended to handle trimming non whitespace characters
    *

@@ -17,6 +17,8 @@ broadcasted_fixed_arg_functions = {
     "day_timestamp",
     "dayname",
     "div0",
+    "editdistance_no_max",
+    "editdistance_with_max",
     "format",
     "haversine",
     "instr",
