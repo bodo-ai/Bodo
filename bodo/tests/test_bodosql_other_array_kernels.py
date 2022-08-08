@@ -11,6 +11,194 @@ from bodo.libs.bodosql_array_kernels import *
 from bodo.tests.utils import check_func
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                pd.Series([0, 42, None], dtype=pd.Int32Dtype()).repeat(3),
+                pd.Series([0, 42, None] * 3, dtype=pd.Int32Dtype()),
+            ),
+            id="vector_vector",
+        ),
+        pytest.param(
+            (pd.Series([0, 1, -1, None, 2, -2, 0, None], dtype=pd.Int32Dtype()), 0),
+            id="vector_scalar_zero",
+        ),
+        pytest.param(
+            (0, pd.Series([0, 1, -1, None, 2, -2, 0, None], dtype=pd.Int32Dtype())),
+            id="scalar_vector_zero",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (3, pd.Series([0, 1, -1, None, 2, -2, 0, None], dtype=pd.Int32Dtype())),
+            id="scalar_vector_nonzero",
+        ),
+        pytest.param(
+            (
+                pd.Series([0, 1, -1, None, 2, -2, 0, None], dtype=pd.Int16Dtype()),
+                np.uint8(255),
+            ),
+            id="vector_scalar_nonzero",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.Series([0, 1, -1, None, 2, -2, 0, None], dtype=pd.Int64Dtype()), None),
+            id="vector_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (None, pd.Series([0, 1, -1, None, 2, -2, 0, None], dtype=pd.Int64Dtype())),
+            id="null_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (15, -42),
+            id="scalar_scalar_nonzero",
+        ),
+        pytest.param((0, 13), id="scalar_scalar_mixed", marks=pytest.mark.slow),
+        pytest.param((0, 0), id="scalar_scalar_zero_zero", marks=pytest.mark.slow),
+        pytest.param((0, None), id="scalar_scalar_zero_null", marks=pytest.mark.slow),
+        pytest.param(
+            (64, None), id="scalar_scalar_nonzero_null", marks=pytest.mark.slow
+        ),
+        pytest.param((None, 0), id="scalar_scalar_null_zero", marks=pytest.mark.slow),
+        pytest.param(
+            (None, -15), id="scalar_scalar_null_nonzero", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (None, None), id="scalar_scalar_null_null", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (
+                pd.Series([0, 1, 127, 128, 255, None] * 5, dtype=pd.UInt8Dtype()),
+                pd.Series([0, 1, 127, -128, -1, None], dtype=pd.Int8Dtype()).repeat(5),
+            ),
+            id="mixed_int_vector_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([True, False, None], dtype=pd.BooleanDtype()).repeat(3),
+                pd.Series([True, False, None] * 3, dtype=pd.BooleanDtype()),
+            ),
+            id="boolean_vector_vector",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def boolean_numerical_scalar_vector(request):
+    return request.param
+
+
+def test_booland(boolean_numerical_scalar_vector, memory_leak_check):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.booland(A, B)
+
+    def booland_scalar_fn(A, B):
+        if pd.notna(A) and pd.notna(B) and A != 0 and B != 0:
+            return True
+        elif (pd.notna(A) and A == 0) or (pd.notna(B) and B == 0):
+            return False
+        else:
+            return None
+
+    booland_answer = vectorized_sol(
+        boolean_numerical_scalar_vector, booland_scalar_fn, pd.BooleanDtype()
+    )
+
+    check_func(
+        impl,
+        boolean_numerical_scalar_vector,
+        py_output=booland_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_boolor(boolean_numerical_scalar_vector, memory_leak_check):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.boolor(A, B)
+
+    def boolor_scalar_fn(A, B):
+        if (pd.notna(A) and A != 0) or (pd.notna(B) and B != 0):
+            return True
+        elif pd.notna(A) and A == 0 and pd.notna(B) and B == 0:
+            return False
+        else:
+            return None
+
+    boolor_answer = vectorized_sol(
+        boolean_numerical_scalar_vector, boolor_scalar_fn, pd.BooleanDtype()
+    )
+
+    check_func(
+        impl,
+        boolean_numerical_scalar_vector,
+        py_output=boolor_answer,
+        check_dtype=False,
+        reset_index=True,
+        sort_output=False,
+    )
+
+
+def test_boolxor(boolean_numerical_scalar_vector, memory_leak_check):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.boolxor(A, B)
+
+    def boolxor_scalar_fn(A, B):
+        if pd.isna(A) or pd.isna(B):
+            return None
+        else:
+            return (A == 0) != (B == 0)
+
+    boolxor_answer = vectorized_sol(
+        boolean_numerical_scalar_vector, boolxor_scalar_fn, pd.BooleanDtype()
+    )
+
+    check_func(
+        impl,
+        boolean_numerical_scalar_vector,
+        py_output=boolxor_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_boolnot(boolean_numerical_scalar_vector, memory_leak_check):
+    def impl(A):
+        return bodo.libs.bodosql_array_kernels.boolnot(A)
+
+    def boolnot_scalar_fn(A):
+        if pd.isna(A):
+            return None
+        if A == 0:
+            return True
+        else:
+            return False
+
+    boolxor_answer_0 = vectorized_sol(
+        (boolean_numerical_scalar_vector[0],), boolnot_scalar_fn, pd.BooleanDtype()
+    )
+    boolxor_answer_1 = vectorized_sol(
+        (boolean_numerical_scalar_vector[1],), boolnot_scalar_fn, pd.BooleanDtype()
+    )
+
+    check_func(
+        impl,
+        (boolean_numerical_scalar_vector[0],),
+        py_output=boolxor_answer_0,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl,
+        (boolean_numerical_scalar_vector[1],),
+        py_output=boolxor_answer_1,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -76,7 +264,7 @@ from bodo.tests.utils import check_func
         ),
     ],
 )
-def test_cond(args):
+def test_cond(args, memory_leak_check):
     def impl(arr, ifbranch, elsebranch):
         return bodo.libs.bodosql_array_kernels.cond(arr, ifbranch, elsebranch)
 
@@ -89,6 +277,107 @@ def test_cond(args):
         impl,
         args,
         py_output=cond_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series([0, 42, None] * 3, dtype=pd.Int32Dtype()),
+                pd.Series(
+                    [0, 0, 0, 42, 42, 42, None, None, None], dtype=pd.Int32Dtype()
+                ),
+            ),
+            id="int32_vector_vector",
+        ),
+        pytest.param(
+            (pd.Series([0, 36, 42, None, -42, 1], dtype=pd.Int32Dtype()), 42),
+            id="int32_vector_scalar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                0,
+                pd.Series([0, 36, 42, None, -42, 1], dtype=pd.Int32Dtype()),
+            ),
+            id="int32_scalar_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (pd.Series([0, 36, 42, None, -42, 1], dtype=pd.Int32Dtype()), None),
+            id="int32_vector_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                None,
+                pd.Series([0, 36, 42, None, -42, 1], dtype=pd.Int32Dtype()),
+            ),
+            id="int32_null_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param((42, 42), id="int64_scalar_scalar"),
+        pytest.param((39, None), id="int64_scalar_null"),
+        pytest.param((None, 42), id="int64_null_scalar"),
+        pytest.param((None, None), id="int64_null_null"),
+        pytest.param(
+            (
+                pd.Series([0, 1, 127, 128, 255, None] * 5, dtype=pd.UInt8Dtype()),
+                pd.Series([0, 1, 127, -128, -1, None], dtype=pd.Int8Dtype()).repeat(5),
+            ),
+            id="uint8_int8_vector_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(["A", "B", "a", "AAA", None] * 4),
+                pd.Series(["A", "B", "a", "AAA", None]).repeat(4),
+            ),
+            id="string_vector_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([True, False, None, True] * 4),
+                pd.Series([True, False, None, False]).repeat(4),
+            ),
+            id="boolean_vector_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    (list(pd.date_range("2018", "2019", periods=3)) + [None]) * 4
+                ),
+                pd.Series(
+                    list(pd.date_range("2018", "2019", periods=3)) + [None]
+                ).repeat(4),
+            ),
+            id="date_vector_vector",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_bool_equal_null(args, memory_leak_check):
+    def impl(A, B):
+        return bodo.libs.bodosql_array_kernels.equal_null(A, B)
+
+    def equal_null_scalar_fn(A, B):
+        if (pd.isna(A) and pd.isna(B)) or (pd.notna(A) and pd.notna(B) and A == B):
+            return True
+        else:
+            return False
+
+    equal_null_answer = vectorized_sol(args, equal_null_scalar_fn, None)
+
+    check_func(
+        impl,
+        args,
+        py_output=equal_null_answer,
         check_dtype=False,
         reset_index=True,
     )
@@ -239,7 +528,7 @@ def test_cond(args):
         ),
     ],
 )
-def test_nullif(args):
+def test_nullif(args, memory_leak_check):
     def impl(arg0, arg1):
         return bodo.libs.bodosql_array_kernels.nullif(arg0, arg1)
 
@@ -333,7 +622,7 @@ def test_nullif(args):
         pytest.param((10.03, None), id="all_scalar_with_null"),
     ],
 )
-def test_regr_valxy(args):
+def test_regr_valxy(args, memory_leak_check):
     def impl1(y, x):
         return bodo.libs.bodosql_array_kernels.regr_valx(y, x)
 
@@ -373,7 +662,44 @@ def test_regr_valxy(args):
 
 
 @pytest.mark.slow
-def test_cond_option():
+def test_option_bool_fns(memory_leak_check):
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.booland(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.boolor(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.boolxor(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.boolnot(arg0),
+            bodo.libs.bodosql_array_kernels.equal_null(arg0, arg1),
+        )
+
+    for A in [0, 16]:
+        for B in [0, 16]:
+            for flag0 in [True, False]:
+                for flag1 in [True, False]:
+                    a = A if flag0 else None
+                    b = B if flag1 else None
+                    A0 = (
+                        True
+                        if a == 16 and b == 16
+                        else (False if a == 0 or b == 0 else None)
+                    )
+                    A1 = (
+                        True
+                        if a == 16 or b == 16
+                        else (False if a == 0 and b == 0 else None)
+                    )
+                    A2 = None if a == None or b == None else (a != b)
+                    A3 = None if a == None else not a
+                    A4 = a == b
+                    check_func(
+                        impl, (A, B, flag0, flag1), py_output=(A0, A1, A2, A3, A4)
+                    )
+
+
+@pytest.mark.slow
+def test_cond_option(memory_leak_check):
     def impl(A, B, C, flag0, flag1, flag2):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -390,7 +716,7 @@ def test_cond_option():
 
 
 @pytest.mark.slow
-def test_option_nullif():
+def test_option_nullif(memory_leak_check):
     def impl(A, B, flag0, flag1):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -404,7 +730,7 @@ def test_option_nullif():
 
 
 @pytest.mark.slow
-def test_option_regr_valxy():
+def test_option_regr_valxy(memory_leak_check):
     def impl(A, B, flag0, flag1):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None

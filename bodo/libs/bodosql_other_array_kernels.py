@@ -12,6 +12,70 @@ from bodo.utils.typing import raise_bodo_error
 
 
 @numba.generated_jit(nopython=True)
+def booland(A, B):
+    """Handles cases where BOOLAND receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [A, B]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.booland", ["A", "B"], i
+            )
+
+    def impl(A, B):  # pragma: no cover
+        return booland_util(A, B)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def boolor(A, B):
+    """Handles cases where BOOLOR receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [A, B]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.boolor", ["A", "B"], i
+            )
+
+    def impl(A, B):  # pragma: no cover
+        return boolor_util(A, B)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def boolxor(A, B):
+    """Handles cases where BOOLXOR receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [A, B]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.boolxor", ["A", "B"], i
+            )
+
+    def impl(A, B):  # pragma: no cover
+        return boolxor_util(A, B)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def boolnot(A):
+    """Handles cases where BOOLNOT receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(A, types.optional):  # pragma: no cover
+        return unopt_argument("bodo.libs.bodosql_array_kernels.boolnot_util", ["A"], 0)
+
+    def impl(A):  # pragma: no cover
+        return boolnot_util(A)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def cond(arr, ifbranch, elsebranch):
     """Handles cases where IF receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -28,6 +92,241 @@ def cond(arr, ifbranch, elsebranch):
         return cond_util(arr, ifbranch, elsebranch)
 
     return impl
+
+
+@numba.generated_jit(nopython=True)
+def equal_null(A, B):
+    """Handles cases where EQUAL_NULL receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [A, B]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.equal_null", ["A", "B"], i
+            )
+
+    def impl(A, B):  # pragma: no cover
+        return equal_null_util(A, B)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def booland_util(A, B):
+    """A dedicated kernel for the SQL function BOOLAND which takes in two numbers
+    (or columns) and returns True if they are both not zero and not null,
+    False if one of them is zero, and NULL otherwise.
+
+
+    Args:
+        A (numerical array/series/scalar): the first number(s) being operated on
+        B (numerical array/series/scalar): the second number(s) being operated on
+
+    Returns:
+        boolean series/scalar: the AND of the number(s) with the specified null
+        handling rules
+    """
+
+    verify_int_float_arg(A, "BOOLAND", "A")
+    verify_int_float_arg(B, "BOOLAND", "B")
+
+    arg_names = ["A", "B"]
+    arg_types = [A, B]
+    propagate_null = [False] * 2
+
+    # A = scalar null, B = anything
+    if A == bodo.none:
+        propagate_null = [False, True]
+        scalar_text = "if arg1 != 0:\n"
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "else:\n"
+        scalar_text += "   res[i] = False\n"
+
+    # B = scalar null, A = anything
+    elif B == bodo.none:
+        propagate_null = [True, False]
+        scalar_text = "if arg0 != 0:\n"
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "else:\n"
+        scalar_text += "   res[i] = False\n"
+
+    elif bodo.utils.utils.is_array_typ(A, True):
+
+        # A & B are both vectors
+        if bodo.utils.utils.is_array_typ(B, True):
+            scalar_text = "if bodo.libs.array_kernels.isna(A, i) and bodo.libs.array_kernels.isna(B, i):\n"
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "elif bodo.libs.array_kernels.isna(A, i) and arg1 != 0:\n"
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "elif bodo.libs.array_kernels.isna(B, i) and arg0 != 0:\n"
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+            # This case is only triggered if A[i] and B[i] are both not null
+            scalar_text += "else:\n"
+            scalar_text += "   res[i] = (arg0 != 0) and (arg1 != 0)"
+
+        # A is a vector, B is a non-null scalar
+        else:
+            scalar_text = "if bodo.libs.array_kernels.isna(A, i) and arg1 != 0:\n"
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "else:\n"
+            scalar_text += "   res[i] = (arg0 != 0) and (arg1 != 0)"
+
+    # B is a vector, A is a non-null scalar
+    elif bodo.utils.utils.is_array_typ(B, True):
+        scalar_text = "if bodo.libs.array_kernels.isna(B, i) and arg0 != 0:\n"
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "else:\n"
+        scalar_text += "   res[i] = (arg0 != 0) and (arg1 != 0)"
+
+    # A and B are both non-null scalars
+    else:
+        scalar_text = "res[i] = (arg0 != 0) and (arg1 != 0)"
+
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def boolor_util(A, B):
+    """A dedicated kernel for the SQL function BOOLOR which takes in two numbers
+    (or columns) and returns True if at least one of them is not zero or null,
+    False if both of them are equal to zero, and null otheriwse
+
+
+    Args:
+        A (numerical array/series/scalar): the first number(s) being operated on
+        B (numerical array/series/scalar): the second number(s) being operated on
+
+    Returns:
+        boolean series/scalar: the OR of the number(s) with the specified null
+        handling rules
+    """
+
+    verify_int_float_arg(A, "BOOLOR", "A")
+    verify_int_float_arg(B, "BOOLOR", "B")
+
+    arg_names = ["A", "B"]
+    arg_types = [A, B]
+    propagate_null = [False] * 2
+
+    # A = scalar null, B = anything
+    if A == bodo.none:
+        propagate_null = [False, True]
+        scalar_text = "if arg1 == 0:\n"
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "else:\n"
+        scalar_text += "   res[i] = True\n"
+
+    # B = scalar null, A = anything
+    elif B == bodo.none:
+        propagate_null = [True, False]
+        scalar_text = "if arg0 == 0:\n"
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "else:\n"
+        scalar_text += "   res[i] = True\n"
+
+    elif bodo.utils.utils.is_array_typ(A, True):
+
+        # A & B are both vectors
+        if bodo.utils.utils.is_array_typ(B, True):
+            scalar_text = "if bodo.libs.array_kernels.isna(A, i) and bodo.libs.array_kernels.isna(B, i):\n"
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "elif bodo.libs.array_kernels.isna(A, i) and arg1 != 0:\n"
+            scalar_text += "   res[i] = True\n"
+            scalar_text += "elif bodo.libs.array_kernels.isna(A, i) and arg1 == 0:\n"
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "elif bodo.libs.array_kernels.isna(B, i) and arg0 != 0:\n"
+            scalar_text += "   res[i] = True\n"
+            scalar_text += "elif bodo.libs.array_kernels.isna(B, i) and arg0 == 0:\n"
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+            # This case is only triggered if A[i] and B[i] are both not null
+            scalar_text += "else:\n"
+            scalar_text += "   res[i] = (arg0 != 0) or (arg1 != 0)"
+
+        # A is a vector, B is a non-null scalar
+        else:
+            scalar_text = "if bodo.libs.array_kernels.isna(A, i) and arg1 != 0:\n"
+            scalar_text += "   res[i] = True\n"
+            scalar_text += "elif bodo.libs.array_kernels.isna(A, i) and arg1 == 0:\n"
+            scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+            scalar_text += "else:\n"
+            scalar_text += "   res[i] = (arg0 != 0) or (arg1 != 0)"
+
+    # B is a vector, A is a non-null scalar
+    elif bodo.utils.utils.is_array_typ(B, True):
+        scalar_text = "if bodo.libs.array_kernels.isna(B, i) and arg0 != 0:\n"
+        scalar_text += "   res[i] = True\n"
+        scalar_text += "elif bodo.libs.array_kernels.isna(B, i) and arg0 == 0:\n"
+        scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+        scalar_text += "else:\n"
+        scalar_text += "   res[i] = (arg0 != 0) or (arg1 != 0)"
+
+    # A and B are both non-null scalars
+    else:
+        scalar_text = "res[i] = (arg0 != 0) or (arg1 != 0)"
+
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def boolxor_util(A, B):
+    """A dedicated kernel for the SQL function BOOLXOR which takes in two numbers
+    (or columns) and returns True if one of them is zero and the other is nonzero,
+    NULL if either input is NULL, and False otherwise
+
+
+    Args:
+        A (numerical array/series/scalar): the first number(s) being operated on
+        B (numerical array/series/scalar): the second number(s) being operated on
+
+    Returns:
+        boolean series/scalar: the XOR of the number(s) with the specified null
+        handling rules
+    """
+
+    verify_int_float_arg(A, "BOOLXOR", "A")
+    verify_int_float_arg(B, "BOOLXOR", "B")
+
+    arg_names = ["A", "B"]
+    arg_types = [A, B]
+    propagate_null = [True] * 2
+
+    scalar_text = "res[i] = (arg0 == 0) != (arg1 == 0)"
+
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def boolnot_util(A):
+    """A dedicated kernel for the SQL function BOOLNOT which takes in a number
+    (or column) and returns True if it is zero, False if it is nonzero, and
+    NULL if it is NULL.
+
+
+    Args:
+        A (numerical array/series/scalar): the number(s) being operated on
+
+    Returns:
+        boolean series/scalar: the NOT of the number(s) with the specified null
+        handling rules
+    """
+
+    verify_int_float_arg(A, "BOOLNOT", "A")
+
+    arg_names = ["A"]
+    arg_types = [A]
+    propagate_null = [True]
+
+    scalar_text = "res[i] = arg0 == 0"
+
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)
@@ -164,6 +463,81 @@ def cond_util(arr, ifbranch, elsebranch):
         scalar_text,
         out_dtype,
     )
+
+
+@numba.generated_jit(nopython=True)
+def equal_null_util(A, B):
+    """A dedicated kernel for the SQL function EQUAL_NULL which takes in two values
+    (or columns) and returns True if they are equal (where NULL is treated as
+    a known value)
+
+    Args:
+        A (any array/series/scalar): the first value(s) being compared
+        B (any array/series/scalar): the second value(s) being compared
+
+    Returns:
+        boolean series/scalar: whether the number(s) are equal, or both null
+    """
+
+    get_common_broadcasted_type([A, B], "EQUAL_NULL")
+
+    arg_names = ["A", "B"]
+    arg_types = [A, B]
+    propagate_null = [False] * 2
+
+    if A == bodo.none:
+        # A = scalar null, B = scalar null
+        if B == bodo.none:
+            scalar_text = "res[i] = True"
+
+        # A = scalar null, B is a vector
+        elif bodo.utils.utils.is_array_typ(B, True):
+            scalar_text = "res[i] = bodo.libs.array_kernels.isna(B, i)"
+
+        # A = scalar null, B = non-null scalar
+        else:
+            scalar_text = "res[i] = False"
+
+    elif B == bodo.none:
+
+        # A is a vector, B = null
+        if bodo.utils.utils.is_array_typ(A, True):
+            scalar_text = "res[i] = bodo.libs.array_kernels.isna(A, i)"
+
+        # A = non-null scalar, B = null
+        else:
+            scalar_text = "res[i] = False"
+
+    elif bodo.utils.utils.is_array_typ(A, True):
+
+        # A & B are both vectors
+        if bodo.utils.utils.is_array_typ(B, True):
+            scalar_text = "if bodo.libs.array_kernels.isna(A, i) and bodo.libs.array_kernels.isna(B, i):\n"
+            scalar_text += "   res[i] = True\n"
+            scalar_text += "elif bodo.libs.array_kernels.isna(A, i) or bodo.libs.array_kernels.isna(B, i):\n"
+            scalar_text += "   res[i] = False\n"
+            scalar_text += "else:\n"
+            scalar_text += "   res[i] = arg0 == arg1"
+
+        # A is a vector, B is a non-null scalar
+        else:
+            scalar_text = (
+                "res[i] = (not bodo.libs.array_kernels.isna(A, i)) and arg0 == arg1"
+            )
+
+    # B is a vector, A is a non-null scalar
+    elif bodo.utils.utils.is_array_typ(B, True):
+        scalar_text = (
+            "res[i] = (not bodo.libs.array_kernels.isna(B, i)) and arg0 == arg1"
+        )
+
+    # A and B are both non-null scalars
+    else:
+        scalar_text = "res[i] = arg0 == arg1"
+
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)

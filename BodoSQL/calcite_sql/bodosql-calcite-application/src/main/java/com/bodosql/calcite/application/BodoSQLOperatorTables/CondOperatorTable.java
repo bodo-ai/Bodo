@@ -109,6 +109,51 @@ public class CondOperatorTable implements SqlOperatorTable {
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction BOOLAND =
+      new SqlFunction(
+          "BOOLAND",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN_NULLABLE,
+          null,
+          OperandTypes.NUMERIC_NUMERIC,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction BOOLOR =
+      new SqlFunction(
+          "BOOLOR",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN_NULLABLE,
+          null,
+          OperandTypes.NUMERIC_NUMERIC,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction BOOLXOR =
+      new SqlFunction(
+          "BOOLXOR",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN_NULLABLE,
+          null,
+          OperandTypes.NUMERIC_NUMERIC,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction BOOLNOT =
+      new SqlFunction(
+          "BOOLNOT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN_NULLABLE,
+          null,
+          OperandTypes.NUMERIC,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction EQUAL_NULL =
+      new SqlFunction(
+          "EQUAL_NULL",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN_NULLABLE,
+          null,
+          OperandTypes.SAME_SAME,
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction IFNULL_FUNC =
       new SqlFunction(
           "IFNULL",
@@ -251,6 +296,11 @@ public class CondOperatorTable implements SqlOperatorTable {
           REGR_VALY,
           IF_FUNC,
           IFF_FUNC,
+          BOOLAND,
+          BOOLOR,
+          BOOLXOR,
+          BOOLNOT,
+          EQUAL_NULL,
           IFNULL_FUNC,
           NULLIFZERO,
           NVL,
