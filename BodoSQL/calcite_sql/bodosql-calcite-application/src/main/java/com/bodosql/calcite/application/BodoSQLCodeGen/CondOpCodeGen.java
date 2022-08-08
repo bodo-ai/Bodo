@@ -22,6 +22,44 @@ public class CondOpCodeGen {
     equivalentFnMap = new HashMap<>();
     equivalentFnMap.put("REGR_VALX", "bodo.libs.bodosql_array_kernels.regr_valx");
     equivalentFnMap.put("REGR_VALY", "bodo.libs.bodosql_array_kernels.regr_valy");
+    equivalentFnMap.put("BOOLAND", "bodo.libs.bodosql_array_kernels.booland");
+    equivalentFnMap.put("BOOLOR", "bodo.libs.bodosql_array_kernels.boolor");
+    equivalentFnMap.put("BOOLXOR", "bodo.libs.bodosql_array_kernels.boolxor");
+    equivalentFnMap.put("BOOLNOT", "bodo.libs.bodosql_array_kernels.boolnot");
+    equivalentFnMap.put("EQUAL_NULL", "bodo.libs.bodosql_array_kernels.equal_null");
+  }
+
+  /**
+   * Return a pandas expression that replicates a call to a SQL conditional function call with one
+   * argument
+   *
+   * @param fnName the name of the function being called
+   * @param name1 the name of the argument
+   * @param code1 the Python expression to calculate the argument
+   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
+   *     relational expression.
+   */
+  public static RexNodeVisitorInfo getSingleArgCondFnInfo(
+      String fnName, String name1, String code1) {
+
+    StringBuilder name = new StringBuilder(fnName);
+    name.append("(");
+    name.append(name1);
+    name.append(")");
+
+    String kernel_str;
+    if (equivalentFnMap.containsKey(fnName)) {
+      kernel_str = equivalentFnMap.get(fnName);
+    } else {
+      // If we made it here, something has gone very wrong
+      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
+    }
+    StringBuilder expr_code = new StringBuilder(kernel_str);
+    expr_code.append("(");
+    expr_code.append(code1);
+    expr_code.append(")");
+
+    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
   }
 
   /**

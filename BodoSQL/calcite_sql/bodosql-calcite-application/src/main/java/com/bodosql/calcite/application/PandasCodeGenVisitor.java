@@ -10,6 +10,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generat
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseName;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getDoubleArgCondFnInfo;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getSingleArgCondFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitIf;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitVariadic;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.*;
@@ -1748,6 +1749,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (fnName == "COALESCE"
         || fnName == "NVL"
         || fnName == "NVL2"
+        || fnName == "BOOLAND"
+        || fnName == "BOOLOR"
+        || fnName == "BOOLXOR"
+        || fnName == "BOOLNOT"
+        || fnName == "EQUAL_NULL"
         || fnName == "ZEROIFNULL"
         || fnName == "IFNULL"
         || fnName == "IF"
@@ -1775,10 +1781,31 @@ public class PandasCodeGenVisitor extends RelVisitor {
       }
 
       RexNodeVisitorInfo result;
-      if (fnName == "IF" || fnName == "IFF") {
-        result = visitIf(fnOperation, names, codeExprs);
-      } else {
-        result = visitVariadic(fnOperation, names, codeExprs);
+      switch (fnName) {
+        case "IF":
+        case "IFF":
+          result = visitIf(fnOperation, names, codeExprs);
+          break;
+        case "BOOLNOT":
+          result = getSingleArgCondFnInfo(fnName, names.get(0), codeExprs.get(0));
+          break;
+        case "BOOLAND":
+        case "BOOLOR":
+        case "BOOLXOR":
+        case "EQUAL_NULL":
+          result =
+              getDoubleArgCondFnInfo(
+                  fnName, names.get(0), codeExprs.get(0), names.get(1), codeExprs.get(1));
+          break;
+        case "COALESCE":
+        case "ZEROIFNULL":
+        case "NVL":
+        case "NVL2":
+        case "DECODE":
+          result = visitVariadic(fnOperation, names, codeExprs);
+          break;
+        default:
+          throw new BodoSQLCodegenException("Internal Error: reached unreachable code");
       }
 
       // If we're not the top level apply, we need to pass back the information so that it is
