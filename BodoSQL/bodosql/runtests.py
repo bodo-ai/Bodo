@@ -50,17 +50,23 @@ for i, m in enumerate(modules):
         mod_pytest_args[mark_arg_idx + 1] += " and single_mod"
     except ValueError:
         mod_pytest_args += ["-m", "single_mod"]
-    # run tests with pytest
-    if num_processes == 1:
-        cmd = ["pytest"] + mod_pytest_args
-    else:
-        cmd = ["mpiexec", "-prepend-rank", "-n", str(num_processes), "pytest"] + mod_pytest_args
+    # run tests with mpiexec + pytest always. If you just use
+    # pytest then out of memory won't tell you which test failed.
+    cmd = [
+        "mpiexec",
+        "-prepend-rank",
+        "-n",
+        str(num_processes),
+        "pytest",
+    ] + mod_pytest_args
     print(f"Running: {' '.join(cmd)} with module {m}")
     p = subprocess.Popen(cmd, shell=False)
     rc = p.wait()
     if rc not in (0, 5):  # pytest returns error code 5 when no tests found
         # raise RuntimeError("An error occurred when running the command " + str(cmd))
-        print(f"Failure exit code encountered while running: {' '.join(cmd)} with module {m}\nExit code found was: {rc}")
+        print(
+            f"Failure exit code encountered while running: {' '.join(cmd)} with module {m}\nExit code found was: {rc}"
+        )
         tests_failed = True
         continue  # continue with rest of the tests
 
