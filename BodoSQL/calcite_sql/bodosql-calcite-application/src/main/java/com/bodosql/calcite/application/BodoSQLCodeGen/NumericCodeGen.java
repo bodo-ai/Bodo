@@ -56,6 +56,21 @@ public class NumericCodeGen {
     equivalentFnMapScalars.put("POW", "bodosql.libs.generated_lib.sql_null_checking_power");
     equivalentPandasMethodMapColumns.put("POWER", "pow");
     equivalentFnMapScalars.put("POWER", "bodosql.libs.generated_lib.sql_null_checking_power");
+
+    equivalentFnMapColumns.put("BITAND", "bodo.libs.bodosql_array_kernels.bitand");
+    equivalentFnMapScalars.put("BITAND", "bodo.libs.bodosql_array_kernels.bitand");
+    equivalentFnMapColumns.put("BITOR", "bodo.libs.bodosql_array_kernels.bitor");
+    equivalentFnMapScalars.put("BITOR", "bodo.libs.bodosql_array_kernels.bitor");
+    equivalentFnMapColumns.put("BITXOR", "bodo.libs.bodosql_array_kernels.bitxor");
+    equivalentFnMapScalars.put("BITXOR", "bodo.libs.bodosql_array_kernels.bitxor");
+    equivalentFnMapColumns.put("BITNOT", "bodo.libs.bodosql_array_kernels.bitnot");
+    equivalentFnMapScalars.put("BITNOT", "bodo.libs.bodosql_array_kernels.bitnot");
+    equivalentFnMapColumns.put("BITSHIFTLEFT", "bodo.libs.bodosql_array_kernels.bitleftshift");
+    equivalentFnMapScalars.put("BITSHIFTLEFT", "bodo.libs.bodosql_array_kernels.bitleftshift");
+    equivalentFnMapColumns.put("BITSHIFTRIGHT", "bodo.libs.bodosql_array_kernels.bitrightshift");
+    equivalentFnMapScalars.put("BITSHIFTRIGHT", "bodo.libs.bodosql_array_kernels.bitrightshift");
+    equivalentFnMapColumns.put("GETBIT", "bodo.libs.bodosql_array_kernels.getbit");
+    equivalentFnMapScalars.put("GETBIT", "bodo.libs.bodosql_array_kernels.getbit");
   }
 
   /**
