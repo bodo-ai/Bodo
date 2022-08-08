@@ -10,8 +10,8 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generat
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseName;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getDoubleArgCondFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitCoalesce;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitIf;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitVariadic;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateSubCodeGen.*;
@@ -1744,14 +1744,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
       exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)));
     }
 
-    // Handle IF, COALESCE, IFNULL & NVL seperately
+    // Handle IF, COALESCE, DECODE and their variants seperately
     if (fnName == "COALESCE"
         || fnName == "NVL"
         || fnName == "NVL2"
         || fnName == "ZEROIFNULL"
         || fnName == "IFNULL"
         || fnName == "IF"
-        || fnName == "IFF") {
+        || fnName == "IFF"
+        || fnName == "DECODE") {
       List<String> names = new ArrayList<>();
       List<String> codeExprs = new ArrayList<>();
       List<HashSet<String>> nullsets = new ArrayList<>();
@@ -1777,7 +1778,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       if (fnName == "IF" || fnName == "IFF") {
         result = visitIf(fnOperation, names, codeExprs);
       } else {
-        result = visitCoalesce(fnOperation, names, codeExprs);
+        result = visitVariadic(fnOperation, names, codeExprs);
       }
 
       // If we're not the top level apply, we need to pass back the information so that it is

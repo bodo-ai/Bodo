@@ -51,4 +51,4 @@ broadcasted_fixed_arg_functions = {
 }
 
 
-broadcasted_variadic_functions = {"coalesce"}
+broadcasted_variadic_functions = {"coalesce", "decode"}

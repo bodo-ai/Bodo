@@ -88,6 +88,7 @@ public class ExprTypeVisitor {
           "LOG",
           "CONCAT",
           "CONCAT_WS",
+          "DECODE",
           "IF",
           "IFF",
           "IFNULL",
