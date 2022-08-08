@@ -288,8 +288,10 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
 
         s3_get_fs(&s3_fs, bucket_region, false);
         if (is_parallel) {
-            open_file_outstream(fs_option, file_type, dirname + "/" + fname,
-                                s3_fs, NULL, out_stream);
+            std::filesystem::path out_path(dirname);
+            out_path /= fname;  // append file name to output path
+            open_file_outstream(fs_option, file_type, out_path.string(), s3_fs,
+                                NULL, out_stream);
         } else {
             open_file_outstream(fs_option, file_type, fname, s3_fs, NULL,
                                 out_stream);
@@ -312,8 +314,10 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
         hdfs_get_fs(orig_path, &hdfs_fs);
         if (is_parallel) {
             // assumes that the directory has already been created
-            open_file_outstream(fs_option, file_type, dirname + "/" + fname,
-                                NULL, hdfs_fs, out_stream);
+            std::filesystem::path out_path(dirname);
+            out_path /= fname;
+            open_file_outstream(fs_option, file_type, out_path.string(), NULL,
+                                hdfs_fs, out_stream);
         } else {
             open_file_outstream(fs_option, file_type, fname, NULL, hdfs_fs,
                                 out_stream);
@@ -331,8 +335,10 @@ void open_outstream(Bodo_Fs::FsEnum fs_option, bool is_parallel,
         std::shared_ptr<::arrow::py::fs::PyFileSystem> fs;
         gcs_get_fs(&fs);
         if (is_parallel) {
-            open_file_outstream_gcs(fs_option, file_type, dirname + "/" + fname,
-                                    fs, out_stream);
+            std::filesystem::path out_path(dirname);
+            out_path /= fname;
+            open_file_outstream_gcs(fs_option, file_type, out_path.string(), fs,
+                                    out_stream);
         } else {
             open_file_outstream_gcs(fs_option, file_type, fname, fs,
                                     out_stream);

@@ -165,6 +165,15 @@ def test_read_parquet_from_deltalake(memory_leak_check):
     check_func(impl, (), py_output=py_output, check_dtype=False)
 
 
+def test_read_pq_trailing_sep(datapath, memory_leak_check):
+    folder_name = datapath("list_int.pq/")
+
+    def impl():
+        return pd.read_parquet(folder_name)
+
+    check_func(impl, ())
+
+
 @pytest.mark.parametrize(
     "df",
     [
