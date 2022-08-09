@@ -41,12 +41,12 @@ public class ApplicationContext {
    */
   private ApplicationContext() {
     catalogService = new CatalogServiceImpl();
-    CatalogDatabaseImpl db = catalogService.getDatabase("main");
+    CatalogDatabaseImpl db = catalogService.getDatabase("__bodolocal__");
     if (db == null) {
-      db = new CatalogDatabaseImpl("main");
+      db = new CatalogDatabaseImpl("__bodolocal__");
       catalogService.createDatabase(db);
     }
-    db = catalogService.getDatabase("main");
+    db = catalogService.getDatabase("__bodolocal__");
     schema = new BodoSqlSchema(db);
     relationalAlgebraGenerator = new RelationalAlgebraGenerator(schema, "");
   }
@@ -100,7 +100,7 @@ public class ApplicationContext {
    * we update the ddl right now. Synchronizes access to avoid two threads doing this at once.
    */
   private synchronized void updateSchema() {
-    schema = new BodoSqlSchema(catalogService.getDatabase("main"));
+    schema = new BodoSqlSchema(catalogService.getDatabase("__bodolocal__"));
     relationalAlgebraGenerator = new RelationalAlgebraGenerator(schema, "");
   }
 

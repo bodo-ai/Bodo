@@ -51,7 +51,7 @@ public class TPCHSchemaTest {
 
     System.out.println(sql);
 
-    CatalogDatabaseImpl db = new CatalogDatabaseImpl("main");
+    CatalogDatabaseImpl db = new CatalogDatabaseImpl("__bodolocal__");
     /*
      * Schema derived from: http://www.tpc.org/tpc_documents_current_versions/pdf
      */

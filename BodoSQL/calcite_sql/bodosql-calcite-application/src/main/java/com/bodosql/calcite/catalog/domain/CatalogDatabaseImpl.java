@@ -20,8 +20,8 @@ import org.hibernate.annotations.Cascade;
  * <h1>Representation of a Database</h1>
  *
  * This domain class is a database which stores a map of tables that it contains. It is named but
- * currentl we are always defaulting to the same database called "main" as can be seen in {@see
- * com.bodosql.calcite.application.ApplicationContext}.
+ * currently we are always defaulting to the same database called "__bodolocal__" as can be seen in
+ * {@see com.bodosql.calcite.application.ApplicationContext}.
  *
  * @author bodo
  */
