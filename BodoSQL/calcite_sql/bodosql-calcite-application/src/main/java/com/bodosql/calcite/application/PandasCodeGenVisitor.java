@@ -1799,6 +1799,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           break;
         case "COALESCE":
         case "ZEROIFNULL":
+        case "IFNULL":
         case "NVL":
         case "NVL2":
         case "DECODE":
