@@ -2,18 +2,18 @@ import re
 import warnings
 from enum import Enum
 
-import bodo
 import numba
 import numpy as np
 import pandas as pd
-from bodo.ir.sql_ext import parse_dbtype, remove_iceberg_prefix
-from bodo.libs.distributed_api import bcast_scalar
-from bodo.utils.typing import BodoError
-from numba.core import ir, types
-
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.py4j_gateway import get_gateway
 from bodosql.utils import BodoSQLWarning, java_error_to_msg
+from numba.core import ir, types
+
+import bodo
+from bodo.ir.sql_ext import parse_dbtype, remove_iceberg_prefix
+from bodo.libs.distributed_api import bcast_scalar
+from bodo.utils.typing import BodoError
 
 # Name for paramter table
 NAMED_PARAM_TABLE_NAME = "__$bodo_named_param_table__"
@@ -709,7 +709,7 @@ def intialize_database(name_to_df_type, name_to_bodo_type, param_key_values=None
 
     # TODO(ehsan): create and store generator during bodo_sql_context initialization
     if bodo.get_rank() == 0:
-        db = DatabaseClass("main")
+        db = DatabaseClass("__bodolocal__")
         table_conversions = {}
     else:
         db = None
@@ -775,8 +775,8 @@ def generate_used_table_func_text(
     inserted_code = []
     for i, df_name in enumerate(table_names):
         # used_tables contains a set of tuples with (schema, table_name)
-        # By default, tables are part of the main schema
-        key = ("main", df_name)
+        # By default, tables are part of the __bodolocal__ schema
+        key = ("__bodolocal__", df_name)
         column_conversions = table_conversions[df_name]
         if key in used_tables:
             table_typ = table_types[i]
