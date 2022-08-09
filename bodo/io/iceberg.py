@@ -307,7 +307,7 @@ def get_iceberg_pq_dataset(
 
     comm = MPI.COMM_WORLD
 
-    pq_file_list_or_e = []
+    pq_file_list_or_e = None
     # Get the list on just one rank to reduce JVM overheads
     # and general traffic to table for when there are
     # catalogs in the future.
