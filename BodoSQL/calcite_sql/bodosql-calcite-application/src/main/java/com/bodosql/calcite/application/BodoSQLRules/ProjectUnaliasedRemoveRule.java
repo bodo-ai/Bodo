@@ -96,7 +96,7 @@ public class ProjectUnaliasedRemoveRule extends RelRule<ProjectUnaliasedRemoveRu
   @Value.Immutable
   public interface Config extends RelRule.Config {
     // Descriptions of classes to match. The rule matches any node, b,
-    // so long as it is its type is Project and the predicate is true.
+    // so long as its type is Project, and the predicate is true.
     Config DEFAULT =
         ImmutableProjectUnaliasedRemoveRule.Config.of()
             .withOperandSupplier(

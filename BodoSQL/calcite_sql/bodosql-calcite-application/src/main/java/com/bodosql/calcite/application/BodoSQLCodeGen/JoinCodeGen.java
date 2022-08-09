@@ -137,9 +137,12 @@ public class JoinCodeGen {
             .append(makeQuoted(rightName))
             .append(", ");
         if (updateOnStr) {
-          onStr = onStr.replaceAll("left\\." + '`' + name + '`', "left\\." + '`' + leftName + '`');
-          onStr =
-              onStr.replaceAll("right\\." + '`' + name + '`', "right\\." + '`' + rightName + '`');
+          String prevLeft = "left." + '`' + name + '`';
+          String newLeft = "left." + '`' + leftName + '`';
+          onStr = onStr.replace(prevLeft, newLeft);
+          String prevRight = "right." + '`' + name + '`';
+          String newRight = "right." + '`' + rightName + '`';
+          onStr = onStr.replace(prevRight, newRight);
         }
       }
       leftRename.append("}, copy=False)");
