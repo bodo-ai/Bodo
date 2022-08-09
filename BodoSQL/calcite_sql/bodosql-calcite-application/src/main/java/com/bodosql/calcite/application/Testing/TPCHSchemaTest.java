@@ -1,5 +1,6 @@
-package com.bodosql.calcite.application;
+package com.bodosql.calcite.application.Testing;
 
+import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.catalog.domain.CatalogColumnDataType;
 import com.bodosql.calcite.catalog.domain.CatalogColumnImpl;
 import com.bodosql.calcite.catalog.domain.CatalogDatabaseImpl;

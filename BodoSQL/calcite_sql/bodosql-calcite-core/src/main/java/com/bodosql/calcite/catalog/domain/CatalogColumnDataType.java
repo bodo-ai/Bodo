@@ -1,22 +1,8 @@
 package com.bodosql.calcite.catalog.domain;
 
-//// TODO: handle situations where our column type is timestamp of not the default millisecond
-// resolution
-// GDF_invalid,
-// GDF_INT8,
-// GDF_INT16,
-// GDF_INT32,
-// GDF_INT64,
-// GDF_FLOAT32,
-// GDF_FLOAT64,
-// GDF_BOOL8,
-// GDF_DATE32,	/**< int32_t days since the UNIX epoch */
-// GDF_DATE64,	/**< int64_t milliseconds since the UNIX epoch */
-// GDF_TIMESTAMP, /**< Exact timestamp encoded with int64 since UNIX epoch (Default unit
-// millisecond) */
-// GDF_CATEGORY,
-// GDF_STRING,
-// GDF_STRING_CATEGORY;
+import static java.sql.Types.BIGINT;
+
+import java.sql.JDBCType;
 
 public enum CatalogColumnDataType {
   // See cudf/types.hpp type_id enum
@@ -65,9 +51,9 @@ public enum CatalogColumnDataType {
     return EMPTY;
   }
 
-  public static CatalogColumnDataType fromString(final String type_id_name) {
+  public static CatalogColumnDataType fromString(final String typeIDName) {
     CatalogColumnDataType dataType = null;
-    switch (type_id_name) {
+    switch (typeIDName) {
       case "EMPTY":
         return EMPTY;
       case "INT8":
@@ -104,7 +90,45 @@ public enum CatalogColumnDataType {
         return BINARY;
       case "NUM_TYPE_IDS":
         return NUM_TYPE_IDS;
+      default:
+        throw new RuntimeException(String.format("Unsupported SQL Type: %s", typeIDName));
     }
-    return dataType;
+  }
+
+  public static CatalogColumnDataType fromJavaSqlType(final JDBCType typID) {
+    switch (typID) {
+      case BIGINT:
+        return INT64;
+      case BINARY:
+      case LONGVARBINARY:
+      case VARBINARY:
+        return BINARY;
+      case BOOLEAN:
+        return BOOL8;
+      case CHAR:
+      case LONGVARCHAR:
+      case LONGNVARCHAR:
+      case NCHAR:
+      case VARCHAR:
+        return STRING;
+      case DATE:
+        return DATE;
+      case DECIMAL:
+      case DOUBLE:
+      case NUMERIC:
+        return FLOAT64;
+      case FLOAT:
+        return FLOAT32;
+      case INTEGER:
+        return INT32;
+      case SMALLINT:
+        return INT16;
+      case TIMESTAMP:
+        return DATETIME;
+      case TINYINT:
+        return INT8;
+      default:
+        throw new RuntimeException(String.format("Unsupported Java SQL Type: %s", typID.getName()));
+    }
   }
 }
