@@ -48,9 +48,9 @@ from bodo.libs.array import (
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType, offset_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.dict_arr_ext import DictionaryArrayType
+from bodo.libs.dict_arr_ext import DictionaryArrayType, init_dict_arr
 from bodo.libs.distributed_api import Reduce_Type
-from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.int_arr_ext import IntegerArrayType, alloc_int_array
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import str_arr_set_na, string_array_type
 from bodo.libs.struct_arr_ext import StructArrayType
@@ -2680,10 +2680,25 @@ def repeat_kernel_overload(A, repeats):
 
     # int case
     if isinstance(repeats, types.Integer):
+        if A == bodo.dict_str_arr_type:
+
+            def impl_dict_int(A, repeats):  # pragma: no cover
+                data_arr = A._data.copy()
+                indices_arr = A._indices
+                l = len(indices_arr)
+                out_ind_arr = alloc_int_array(l * repeats, np.int32)
+                for i in range(l):
+                    idx = i * repeats
+                    if bodo.libs.array_kernels.isna(indices_arr, i):
+                        for j in range(repeats):
+                            bodo.libs.array_kernels.setna(out_ind_arr, idx + j)
+                    else:
+                        out_ind_arr[idx : idx + repeats] = indices_arr[i]
+                return init_dict_arr(data_arr, out_ind_arr, A._has_global_dictionary)
+
+            return impl_dict_int
 
         def impl_int(A, repeats):  # pragma: no cover
-            # TODO(Nick): Add a check that repeats > 0
-            A = decode_if_dict_array(A)
             l = len(A)
             out_arr = bodo.utils.utils.alloc_type(l * repeats, _dtype, (-1,))
             for i in range(l):
@@ -2698,8 +2713,29 @@ def repeat_kernel_overload(A, repeats):
         return impl_int
 
     # array case
+    if A == bodo.dict_str_arr_type:
+
+        def impl_dict_arr(A, repeats):  # pragma: no cover
+            data_arr = A._data.copy()
+            indices_arr = A._indices
+            l = len(indices_arr)
+            out_ind_arr = alloc_int_array(repeats.sum(), np.int32)
+            idx = 0
+            for i in range(l):
+                r = repeats[i]
+                if r < 0:
+                    raise ValueError("repeats may not contain negative values.")
+                if bodo.libs.array_kernels.isna(indices_arr, i):
+                    for j in range(r):
+                        bodo.libs.array_kernels.setna(out_ind_arr, idx + j)
+                else:
+                    out_ind_arr[idx : idx + r] = indices_arr[i]
+                idx += r
+            return init_dict_arr(data_arr, out_ind_arr, A._has_global_dictionary)
+
+        return impl_dict_arr
+
     def impl_arr(A, repeats):  # pragma: no cover
-        A = decode_if_dict_array(A)
         l = len(A)
         # TODO(ehsan): Add a check to ensure non-negative repeat values
         # and that l is 1 (in which case, broadcast) or equal to len(A)
@@ -2707,6 +2743,8 @@ def repeat_kernel_overload(A, repeats):
         idx = 0
         for i in range(l):
             r = repeats[i]
+            if r < 0:
+                raise ValueError("repeats may not contain negative values.")
             if bodo.libs.array_kernels.isna(A, i):
                 for j in range(r):
                     bodo.libs.array_kernels.setna(out_arr, idx + j)
