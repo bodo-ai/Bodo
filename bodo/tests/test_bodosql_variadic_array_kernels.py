@@ -659,15 +659,27 @@ def test_option_decode(flags):
 
     args = (A, B, C, D, E, F, flag0, flag1, flag2, flag3, flag4)
     nulled_args = (A, arg0, arg1, arg2, arg3, arg4)
-    decode_answer_A = vectorized_sol(nulled_args, decode_scalar_fn, None)
+    decode_answer_A = vectorized_sol(nulled_args, decode_scalar_fn, pd.StringDtype())
     check_func(
-        impl1, args, py_output=decode_answer_A, check_dtype=False, reset_index=True
+        impl1,
+        args,
+        py_output=decode_answer_A,
+        check_dtype=False,
+        reset_index=True,
+        dist_test=False,
     )
 
     if flag4:
         args = (A, B, C, D, E, flag0, flag1, flag2, flag3)
         nulled_args = (A, arg0, arg1, arg2, arg3)
-        decode_answer_B = vectorized_sol(nulled_args, decode_scalar_fn, None)
+        decode_answer_B = vectorized_sol(
+            nulled_args, decode_scalar_fn, pd.StringDtype()
+        )
         check_func(
-            impl2, args, py_output=decode_answer_B, check_dtype=False, reset_index=True
+            impl2,
+            args,
+            py_output=decode_answer_B,
+            check_dtype=False,
+            reset_index=True,
+            dist_test=False,
         )
