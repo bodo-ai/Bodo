@@ -6087,6 +6087,11 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:  # pragma: no cov
     # (BODO_PLATFORM_CACHE_LOCATION set to a location of /shared),
     # this cache location check is only done on rank 0 (and any issues
     # broadcasted to other ranks). See BP-1601 / BE-3232 for more details.
+    # We do not synchronize the errors since in some cases (such as as part
+    # of the compile function that is monkey-patched earlier in this file)
+    # we only call `save_overload` on a single rank (which internally calls
+    # this function), and that can lead to hangs
+    # (e.g. https://bodo.atlassian.net/browse/BE-3245).
 
     import tempfile
 
@@ -6094,18 +6099,11 @@ if os.environ.get("BODO_PLATFORM_CACHE_LOCATION") is not None:  # pragma: no cov
         from mpi4py import MPI
 
         comm = MPI.COMM_WORLD
-        exc = None
         if comm.Get_rank() == 0:
-            try:
-                path = self.get_cache_path()
-                os.makedirs(path, exist_ok=True)
-                # Ensure the directory is writable by trying to write a temporary file
-                tempfile.TemporaryFile(dir=path).close()
-            except Exception as e:
-                exc = e
-        exc = comm.bcast(exc)
-        if isinstance(exc, Exception):
-            raise exc
+            path = self.get_cache_path()
+            os.makedirs(path, exist_ok=True)
+            # Ensure the directory is writable by trying to write a temporary file
+            tempfile.TemporaryFile(dir=path).close()
 
     numba.core.caching._CacheLocator.ensure_cache_path = _ensure_cache_path
 
@@ -6172,6 +6170,8 @@ numba.core.typing.builtins.Len.generic = generic
 
 #### BEGIN MONKEY PATCH FOR SETTING SHAPE AND STRIDES IN MAKE CONSTANT BYTES ####
 from numba.cpython import charseq
+
+
 def _make_constant_bytes(context, builder, nbytes):
     from llvmlite import ir
 
