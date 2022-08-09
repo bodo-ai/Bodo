@@ -3292,19 +3292,10 @@ def pivot_impl(
     # If the values_tup is a unituple we can generate code as a list
     if use_single_list:
         func_text += "    values_arrs = [arr for arr in values_tup]\n"
-    # If the index is all dictionary encoded arrays, this segfaults in compilation
-    # time. Its unclear why this is the case, but manually decoding fixes this issue.
-    decoded_index_tup = ", ".join(
-        [
-            f"bodo.utils.typing.decode_if_dict_array(index_tup[{i}])"
-            for i in range(len(index_tup))
-        ]
-    )
-    func_text += f"    new_index_tup = ({decoded_index_tup},)\n"
     # Create a map on each rank for the index values.
     func_text += "    ev_unique = tracing.Event('pivot_unique_index_map', is_parallel=parallel)\n"
     func_text += "    unique_index_arr_tup, row_vector = bodo.libs.array_ops.array_unique_vector_map(\n"
-    func_text += "        new_index_tup\n"
+    func_text += "        index_tup\n"
     func_text += "    )\n"
     func_text += "    n_rows = len(unique_index_arr_tup[0])\n"
     # Create a map for columns using the unique values
