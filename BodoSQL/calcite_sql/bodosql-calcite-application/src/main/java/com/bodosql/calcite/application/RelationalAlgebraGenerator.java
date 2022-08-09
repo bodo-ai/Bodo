@@ -1,10 +1,7 @@
 package com.bodosql.calcite.application;
 
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
-import com.bodosql.calcite.application.BodoSQLRules.AliasPreservingAggregateProjectMergeRule;
-import com.bodosql.calcite.application.BodoSQLRules.AliasPreservingProjectJoinTransposeRule;
-import com.bodosql.calcite.application.BodoSQLRules.InnerJoinRemoveRule;
-import com.bodosql.calcite.application.BodoSQLRules.ProjectUnaliasedRemoveRule;
+import com.bodosql.calcite.application.BodoSQLRules.*;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import java.sql.Connection;
@@ -368,6 +365,15 @@ public class RelationalAlgebraGenerator {
               .addRuleInstance(FilterProjectTransposeRule.Config.DEFAULT.toRule())
               // Prune trivial cross-joins
               .addRuleInstance(InnerJoinRemoveRule.Config.DEFAULT.toRule())
+              // Rewrite filters in either Filter or Join to convert OR with shared subexpression
+              // into
+              // an AND and then OR. For example
+              // OR(AND(A > 1, B < 10), AND(A > 1, A < 5)) -> AND(A > 1, OR(B < 10 , A < 5))
+              // Another rule pushes filters into join and we do not know if the LogicalFilter
+              // optimization will get to run before its pushed into the join. As a result,
+              // we write a duplicate rule that operates directly on the condition of the join.
+              .addRuleInstance(JoinReorderConditionRule.Config.DEFAULT.toRule())
+              .addRuleInstance(LogicalFilterReorderConditionRule.Config.DEFAULT.toRule())
               .build();
 
     } else {

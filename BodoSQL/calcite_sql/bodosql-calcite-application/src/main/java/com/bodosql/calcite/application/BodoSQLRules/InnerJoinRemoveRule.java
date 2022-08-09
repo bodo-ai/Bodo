@@ -16,7 +16,7 @@ import org.immutables.value.Value;
 public class InnerJoinRemoveRule extends RelRule<InnerJoinRemoveRule.Config>
     implements SubstitutionRule {
 
-  /** Creates a ProjectUnaliasedRemoveRule. */
+  /** Creates a InnerJoinRemoveRule. */
   protected InnerJoinRemoveRule(InnerJoinRemoveRule.Config config) {
     super(config);
   }
@@ -44,7 +44,7 @@ public class InnerJoinRemoveRule extends RelRule<InnerJoinRemoveRule.Config>
    * @param join The join mode that may be possible to optimize out.
    * @return If we can remove the join.
    */
-  public static boolean is_empty_join(Join join) {
+  public static boolean isEmptyJoin(Join join) {
     boolean emptyLeft = join.getLeft().getRowType().getFieldNames().size() == 0;
     boolean emptyRight = join.getRight().getRowType().getFieldNames().size() == 0;
     return ((emptyLeft || emptyRight) && join.getCondition().isAlwaysTrue());
@@ -69,12 +69,12 @@ public class InnerJoinRemoveRule extends RelRule<InnerJoinRemoveRule.Config>
   @Value.Immutable
   public interface Config extends RelRule.Config {
     // Descriptions of classes to match. The rule matches any node, b,
-    // so long as it is its type is Project and the predicate is true.
+    // so long as its type is Join, the "how" is inner, and either left
+    // or right outputs 0 columns.
     InnerJoinRemoveRule.Config DEFAULT =
         ImmutableInnerJoinRemoveRule.Config.of()
             .withOperandSupplier(
-                b ->
-                    b.operand(Join.class).predicate(InnerJoinRemoveRule::is_empty_join).anyInputs())
+                b -> b.operand(Join.class).predicate(InnerJoinRemoveRule::isEmptyJoin).anyInputs())
             .as(InnerJoinRemoveRule.Config.class);
 
     @Override
