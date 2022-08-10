@@ -53,6 +53,7 @@ from bodo.utils.typing import (
     is_str_arr_type,
     raise_bodo_error,
 )
+from bodo.utils.utils import synchronize_error_njit
 
 
 class SeriesStrMethodType(types.Type):
@@ -796,6 +797,118 @@ def overload_str_method_rfind(S_str, sub, start=0, end=None):
                 bodo.libs.array_kernels.setna(out_arr, i)
             else:
                 out_arr[i] = str_arr[i].rfind(sub, start, end)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
+
+
+@overload_method(SeriesStrMethodType, "index", inline="always", no_unliteral=True)
+def overload_str_method_index(S_str, sub, start=0, end=None):
+    """returns the implementation for Series.str.index based on whether the
+    underlying data is dictionary-encoded or not. To facilitate error
+    synchronization across ranks, we call find instead of index on the
+    each string and raise error when -1 is present
+
+    Args:
+        S_str: input string series
+        sub (string): substring being searched
+        start (int, optional): left edge index. Defaults to 0.
+        end (int, optional): right edge index. Defaults to None.
+    """
+    str_arg_check("index", "sub", sub)
+    int_arg_check("index", "start", start)
+    if not is_overload_none(end):
+        int_arg_check("index", "end", end)
+
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_index_dict_impl(S_str, sub, start=0, end=None):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_index(arr, sub, start, end)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_index_dict_impl
+
+    def impl(S_str, sub, start=0, end=None):  # pragma: no cover
+        S = S_str._obj
+        str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        l = len(str_arr)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
+        numba.parfors.parfor.init_prange()
+        error_flag = False
+        for i in numba.parfors.parfor.internal_prange(l):
+            if bodo.libs.array_kernels.isna(str_arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+            else:
+                # index raises ValueError when substring is not found
+                # try...except does not work with numba prange so we do not call synchronize_error
+                # We work around this by calling find and raise error when -1 is present
+                out_arr[i] = str_arr[i].find(sub, start, end)
+                if out_arr[i] == -1:
+                    error_flag = True
+        error_message = "substring not found" if error_flag else ""
+        synchronize_error_njit("ValueError", error_message)
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+    return impl
+
+
+@overload_method(SeriesStrMethodType, "rindex", inline="always", no_unliteral=True)
+def overload_str_method_rindex(S_str, sub, start=0, end=None):
+    """returns the implementation for Series.str.rindex based on whether the
+    underlying data is dictionary-encoded or not. To facilitate error
+    synchronization across ranks, we call find instead of index on the
+    each string and raise error when -1 is present
+
+    Args:
+        S_str: input string series
+        sub (string): substring being searched
+        start (int, optional): left edge index. Defaults to 0.
+        end (int, optional): right edge index. Defaults to None.
+    """
+    str_arg_check("rindex", "sub", sub)
+    int_arg_check("rindex", "start", start)
+    if not is_overload_none(end):
+        int_arg_check("rindex", "end", end)
+
+    # optimized version for dictionary encoded arrays
+    if S_str.stype.data == bodo.dict_str_arr_type:
+
+        def _str_rindex_dict_impl(S_str, sub, start=0, end=None):  # pragma: no cover
+            S = S_str._obj
+            arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+            index = bodo.hiframes.pd_series_ext.get_series_index(S)
+            name = bodo.hiframes.pd_series_ext.get_series_name(S)
+            out_arr = bodo.libs.dict_arr_ext.str_rindex(arr, sub, start, end)
+            return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
+
+        return _str_rindex_dict_impl
+
+    def impl(S_str, sub, start=0, end=None):  # pragma: no cover
+        S = S_str._obj
+        str_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
+        name = bodo.hiframes.pd_series_ext.get_series_name(S)
+        index = bodo.hiframes.pd_series_ext.get_series_index(S)
+        l = len(str_arr)
+        out_arr = bodo.libs.int_arr_ext.alloc_int_array(l, np.int64)
+        numba.parfors.parfor.init_prange()
+        error_flag = False
+        for i in numba.parfors.parfor.internal_prange(l):
+            if bodo.libs.array_kernels.isna(str_arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+            else:
+                # rindex raises ValueError when substring is not found
+                out_arr[i] = str_arr[i].rindex(sub, start, end)
+                if out_arr[i] == -1:
+                    error_flag = True
+        error_message = "substring not found" if error_flag else ""
+        synchronize_error_njit("ValueError", error_message)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl

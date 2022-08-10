@@ -1334,6 +1334,8 @@ class DistributedAnalysis:
             "str_zfill",
             "str_find",
             "str_rfind",
+            "str_index",
+            "str_rindex",
             "str_slice",
             "str_len",
             "str_count",

@@ -282,6 +282,8 @@ no_side_effect_call_tuples = {
     ("str_rjust", "dict_arr_ext", "libs", bodo),
     ("str_find", "dict_arr_ext", "libs", bodo),
     ("str_rfind", "dict_arr_ext", "libs", bodo),
+    ("str_index", "dict_arr_ext", "libs", bodo),
+    ("str_rindex", "dict_arr_ext", "libs", bodo),
     ("str_slice", "dict_arr_ext", "libs", bodo),
     ("str_extract", "dict_arr_ext", "libs", bodo),
     ("str_extractall", "dict_arr_ext", "libs", bodo),

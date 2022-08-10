@@ -11,6 +11,11 @@ def test_sr(request, memory_leak_check):
     return request.param
 
 
+@pytest.fixture(params=[pd.Series(["New_York", "Lisbon", "Tokyo", "Paris", "Munich"])])
+def test_sr_no_memory_leak_check(request):
+    return request.param
+
+
 # ------------------------------ center() ------------------------------ #
 def test_center_fillchar_nonchar(test_sr, memory_leak_check):
     """
@@ -217,6 +222,85 @@ def test_rfind_start_end(test_sr, memory_leak_check):
         bodo.jit(impl2)(test_sr)
     with pytest.raises(BodoError, match="expected an int object, not"):
         bodo.jit(impl3)(test_sr)
+
+
+# ------------------------------ index/rindex() ------------------------------ #
+@pytest.mark.parametrize("method", ["index", "rindex"])
+def test_index_rindex_sub(test_sr, method, memory_leak_check):
+    """
+    tests error for index/rindex with the argument 'sub' being non-str type
+    """
+    func_text = (
+        "def impl1(test_sr):\n"
+        f"  return test_sr.str.{method}(123)\n"
+        "def impl2(test_sr):\n"
+        f"  return test_sr.str.{method}(None)\n"
+    )
+    local_vars = {}
+    exec(func_text, {}, local_vars)
+    impl1 = local_vars["impl1"]
+    impl2 = local_vars["impl2"]
+    with pytest.raises(BodoError, match="expected a string object, not"):
+        bodo.jit(impl1)(test_sr)
+    with pytest.raises(BodoError, match="expected a string object, not"):
+        bodo.jit(impl2)(test_sr)
+
+
+@pytest.mark.parametrize("method", ["index", "rindex"])
+def test_index_rindex_start_end(test_sr, method, memory_leak_check):
+    """
+    tests error for index/rindex with the argument start/end NOT being integer or None type
+    """
+    func_text = (
+        "def impl(test_sr):\n"
+        f"    return test_sr.str.{method}('123', 'x', 5)\n"
+        "def impl2(test_sr):\n"
+        f"    return test_sr.str.{method}('123', 5, 'x')\n"
+        "def impl3(test_sr):\n"
+        f"    return test_sr.str.{method}('123', 'x', 'x')\n"
+    )
+    local_vars = {}
+    exec(func_text, {}, local_vars)
+    impl = local_vars["impl"]
+    impl2 = local_vars["impl2"]
+    impl3 = local_vars["impl3"]
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl)(test_sr)
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl2)(test_sr)
+    with pytest.raises(BodoError, match="expected an int object, not"):
+        bodo.jit(impl3)(test_sr)
+
+
+@pytest.mark.parametrize("method", ["index", "rindex"])
+def test_index_rindex_not_found(test_sr_no_memory_leak_check, method):
+    """
+    tests error for index/rindex with the substring not found
+    """
+    func_text = (
+        "def impl1(test_sr):\n"
+        f"    return test_sr.str.{method}('123')\n"
+        "def impl2(test_sr):\n"
+        f"    return test_sr.str.{method}('123', 1, 4)\n"
+        "def impl3(test_sr):\n"
+        f"    return test_sr.str.{method}('123', end=2)\n"
+        "def impl4(test_sr):\n"
+        f"    return test_sr.str.{method}('123', start=7)\n"
+    )
+    local_vars = {}
+    exec(func_text, {}, local_vars)
+    impl1 = local_vars["impl1"]
+    impl2 = local_vars["impl2"]
+    impl3 = local_vars["impl3"]
+    impl4 = local_vars["impl4"]
+    with pytest.raises(ValueError, match="substring not found"):
+        bodo.jit(impl1)(test_sr_no_memory_leak_check)
+    with pytest.raises(ValueError, match="substring not found"):
+        bodo.jit(impl2)(test_sr_no_memory_leak_check)
+    with pytest.raises(ValueError, match="substring not found"):
+        bodo.jit(impl3)(test_sr_no_memory_leak_check)
+    with pytest.raises(ValueError, match="substring not found"):
+        bodo.jit(impl4)(test_sr_no_memory_leak_check)
 
 
 # ------------------------------ get() ------------------------------ #
