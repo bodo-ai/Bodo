@@ -2090,6 +2090,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateDateFnCode(operandsInfo.get(0).getExprCode());
           case "TIMESTAMP":
             return generateTimestampFnCode(operandsInfo.get(0).getExprCode());
+          case "ASINH":
+          case "ACOSH":
+          case "ATANH":
+          case "SINH":
+          case "COSH":
+          case "TANH":
           case "COS":
           case "SIN":
           case "TAN":
@@ -2100,12 +2106,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DEGREES":
           case "RADIANS":
             return getSingleArgTrigFnInfo(
-                fnName,
-                operandsInfo.get(0).getExprCode(),
-                operandsInfo.get(0).getName(),
-                isSingleRow
-                    || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                        == BodoSQLExprType.ExprType.SCALAR));
+                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(0).getName());
 
           case "ATAN2":
             return getDoubleArgTrigFnInfo(
@@ -2113,11 +2114,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 operandsInfo.get(0).getExprCode(),
                 operandsInfo.get(0).getName(),
                 operandsInfo.get(1).getExprCode(),
-                operandsInfo.get(1).getName(),
-                isSingleRow
-                    || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                        == BodoSQLExprType.ExprType.SCALAR));
-
+                operandsInfo.get(1).getName());
           case "ABS":
           case "LOG2":
           case "LOG10":

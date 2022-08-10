@@ -183,16 +183,6 @@ def generate_and_write_library():
             ("ln", generate_standard_python_fn_call("np.log"), 1),
             ("exp", generate_standard_python_fn_call("np.exp"), 1),
             ("pow", generate_standard_python_fn_call("pow"), 2),
-            # Trig functions
-            ("arccos", generate_standard_python_fn_call("np.arccos"), 1),
-            ("arcsin", generate_standard_python_fn_call("np.arcsin"), 1),
-            ("arctan", generate_standard_python_fn_call("np.arctan"), 1),
-            ("arctan2", generate_standard_python_fn_call("np.arctan2"), 2),
-            ("cos", generate_standard_python_fn_call("np.cos"), 1),
-            ("sin", generate_standard_python_fn_call("np.sin"), 1),
-            ("tan", generate_standard_python_fn_call("np.tan"), 1),
-            ("radians", generate_standard_python_fn_call("np.radians"), 1),
-            ("degrees", generate_standard_python_fn_call("np.degrees"), 1),
             # Scalar Conversion functions
             ("scalar_conv_bool", generate_standard_python_fn_call("np.bool_"), 1),
             ("scalar_conv_int8", generate_standard_python_fn_call("np.int8"), 1),
