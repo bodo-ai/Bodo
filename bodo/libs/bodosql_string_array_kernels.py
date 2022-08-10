@@ -267,6 +267,25 @@ def space(n_chars):
 
 
 @numba.generated_jit(nopython=True)
+def split_part(source, delim, part):
+    """Handles cases where SPLIT_PART receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [source, delim, part]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.split_part",
+                ["source", "delim", "part"],
+                i,
+            )
+
+    def impl(source, delim, part):  # pragma: no cover
+        return split_part_util(source, delim, part)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def strcmp(arr0, arr1):
     """Handles cases where STRCMP receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -281,6 +300,23 @@ def strcmp(arr0, arr1):
 
     def impl(arr0, arr1):  # pragma: no cover
         return strcmp_util(arr0, arr1)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def strtok(source, delim, part):
+    """Handles cases where STRTOK receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [source, delim, part]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.strtok", ["source", "delim", "part"], i
+            )
+
+    def impl(source, delim, part):  # pragma: no cover
+        return strtok_util(source, delim, part)
 
     return impl
 
@@ -871,6 +907,48 @@ def space_util(n_chars):
 
 
 @numba.generated_jit(nopython=True)
+def split_part_util(source, delim, part):
+    """A dedicated kernel for the SQL function SPLIT_PART which takes in a
+    source string (or column), a delimeter string (or column), and a part
+    integer (or column), then splits the source string by occurrences of
+    the entire delimeter string and outputs the value specified by the part.
+    Part is allowed to be negative.
+
+    Has the following edge cases:
+    - Outputs NULL if source and delim are empty
+    - If delim is otherwise empty, the source string is not split
+    - Outputs "" if part is too small or too big
+
+
+    Args:
+        source (string array/series/scalar): the string(s) to be parsed
+        delim (string array/series/scalar): the string(s) to split on
+        part (integer array/series/scalar): the occurrence to return
+
+    Returns:
+        string series/scalar: the extracted part of the string
+    """
+
+    verify_string_arg(source, "SPLIT_PART", "source")
+    verify_string_arg(delim, "SPLIT_PART", "delim")
+    verify_int_arg(part, "SPLIT_PART", "part")
+
+    arg_names = ["source", "delim", "part"]
+    arg_types = [source, delim, part]
+    propagate_null = [True] * 3
+    # Splitting by '' is valid in SQL, but not in Python
+    scalar_text = "tokens = arg0.split(arg1) if arg1 != '' else [arg0]\n"
+    scalar_text += "if abs(arg2) > len(tokens):\n"
+    scalar_text += "    res[i] = ''\n"
+    scalar_text += "else:\n"
+    scalar_text += "    res[i] = tokens[arg2 if arg2 <= 0 else arg2-1]\n"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
 def strcmp_util(arr0, arr1):
     """A dedicated kernel for the SQL function STRCMP which takes in 2 strings
     (or string columns) and returns 1 if the first is greater than the second,
@@ -899,6 +977,57 @@ def strcmp_util(arr0, arr1):
     scalar_text += "   res[i] = 0\n"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def strtok_util(source, delim, part):
+    """A dedicated kernel for the SQL function STRTOK which works the same
+    as SPLIT_PART with the following differences:
+
+    - Splits by occurrences of any character in delim instead of occurrences
+      of the entire delim string
+    - If part is 0, negative, or too big, returns NULL instead of ""
+    - If source and delim are both empty, outputs NULL
+    - Does not count the empty string as a token under any circumstances
+
+    Args:
+        source (string array/series/scalar): the string(s) to be parsed
+        delim (string array/series/scalar): the string(s) to split on
+        part (integer array/series/scalar): the occurrence to return
+
+    Returns:
+        string series/scalar: the extracted part of the string
+    """
+
+    verify_string_arg(source, "STRTOK", "source")
+    verify_string_arg(delim, "STRTOK", "delim")
+    verify_int_arg(part, "STRTOK", "part")
+
+    arg_names = ["source", "delim", "part"]
+    arg_types = [source, delim, part]
+    propagate_null = [True] * 3
+    scalar_text = "if (arg0 == '' and arg1 == '') or arg2 <= 0:\n"
+    scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+    scalar_text += "else:\n"
+    scalar_text += "   tokens = []\n"
+    scalar_text += "   buffer = ''\n"
+    scalar_text += "   for j in range(len(arg0)):\n"
+    scalar_text += "      if arg0[j] in arg1:\n"
+    scalar_text += "         if buffer != '':"
+    scalar_text += "            tokens.append(buffer)\n"
+    scalar_text += "         buffer = ''\n"
+    scalar_text += "      else:\n"
+    scalar_text += "         buffer += arg0[j]\n"
+    scalar_text += "   if buffer != '':\n"
+    scalar_text += "      tokens.append(buffer)\n"
+    scalar_text += "   if arg2 > len(tokens):\n"
+    scalar_text += "      bodo.libs.array_kernels.setna(res, i)\n"
+    scalar_text += "   else:\n"
+    scalar_text += "      res[i] = tokens[arg2-1]\n"
+
+    out_dtype = bodo.string_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 

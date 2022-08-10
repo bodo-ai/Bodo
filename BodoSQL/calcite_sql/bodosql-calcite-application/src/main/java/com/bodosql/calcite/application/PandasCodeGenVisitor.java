@@ -2304,6 +2304,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 fnName, inputVar, operandsInfo.get(0), operandsInfo.get(1));
           case "RPAD":
           case "LPAD":
+          case "SPLIT_PART":
           case "REPLACE":
           case "MID":
           case "SUBSTR":
@@ -2311,6 +2312,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             assert operandsInfo.size() == 3;
             return getThreeArgStringFnInfo(
                 fnName, operandsInfo.get(0), operandsInfo.get(1), operandsInfo.get(2));
+          case "STRTOK":
+            return generateStrtok(operandsInfo);
           case "EDITDISTANCE":
             return generateEditdistance(operandsInfo);
           case "DATE_TRUNC":

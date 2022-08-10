@@ -334,6 +334,25 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction SPLIT_PART =
+      new SqlFunction(
+          "SPLIT_PART",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          null,
+          OperandTypes.STRING_STRING_INTEGER,
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction STRTOK =
+      new SqlFunction(
+          "STRTOK",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          null,
+          OperandTypes.or(
+              OperandTypes.STRING, OperandTypes.STRING_STRING, OperandTypes.STRING_STRING_INTEGER),
+          SqlFunctionCategory.STRING);
+
   public static final SqlFunction LTRIM = SqlLibraryOperators.LTRIM;
   public static final SqlFunction RTRIM = SqlLibraryOperators.RTRIM;
 
@@ -373,6 +392,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           CHR,
           CHAR,
           SPACE,
+          SPLIT_PART,
+          STRTOK,
           SUBSTRING_INDEX,
           LTRIM,
           RTRIM,

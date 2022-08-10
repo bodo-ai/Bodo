@@ -243,6 +243,167 @@ def test_dict_replace(args):
                 (
                     pa.array(
                         [
+                            "alpha beta gamma delta",
+                            "alpha beta gamma",
+                            None,
+                            "alphabet soup is very delicious",
+                            None,
+                            "alpha beta gamma delta",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    " ",
+                    -2,
+                ),
+                pd.Series(["Gamma", "Beta", None, "Very", None, "Gamma"] * 2),
+                True,
+            ),
+            id="dict_scalar_scalar",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "alpha beta gamma delta",
+                            "alpha beta gamma",
+                            None,
+                            "alphabet soup is very delicious",
+                            None,
+                            "alpha beta gamma delta",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    "a",
+                    pd.Series([4, 4, 4, 4, 2, 2, 2, 2, 3, 3, 3, 3]),
+                ),
+                pd.Series(
+                    [
+                        " g",
+                        " g",
+                        None,
+                        "",
+                        None,
+                        "Lph",
+                        "Lph",
+                        "Lph",
+                        None,
+                        "Bet soup is very delicious",
+                        None,
+                        " bet",
+                    ]
+                ),
+                False,
+            ),
+            id="dict_scalar_vector",
+        ),
+    ],
+)
+def test_dict_split_part(args):
+    def impl(source, delim, part):
+        return bodo.libs.bodosql_array_kernels.split_part(
+            source, delim, part
+        ).str.capitalize()
+
+    args, answer, output_encoded = args
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
+    # Make sure IR has the optimized function if it is supposed to
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+    bodo_func(*args)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "25..115..22.13",
+                            "168.....227....48.212.",
+                            "25,\n115,\n22,\n13,\n",
+                            "200  107   58 89",
+                            "200.107..58......89",
+                            None,
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    " \n\t,.-",
+                    2,
+                ),
+                pd.Series(["115", "227", "115", "107", "107", None] * 2),
+                True,
+            ),
+            id="dict_scalar_scalar",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "25..115..22.13",
+                            "168.....227....48.212.",
+                            "25,\n115,\n22,\n13,\n",
+                            "200  107   58 89",
+                            "200.107..58......89",
+                            None,
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    " \n\t,.-",
+                    pd.Series([2] * 12),
+                ),
+                pd.Series(["115", "227", "115", "107", "107", None] * 2),
+                False,
+            ),
+            id="dict_scalar_vector",
+        ),
+    ],
+)
+def test_dict_strtok(args):
+    def impl(source, delim, part):
+        return bodo.libs.bodosql_array_kernels.strtok(
+            source, delim, part
+        ).str.capitalize()
+
+    args, answer, output_encoded = args
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
+    # Make sure IR has the optimized function if it is supposed to
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+    bodo_func(*args)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
                             "alpha beta",
                             "soup is very very",
                             None,

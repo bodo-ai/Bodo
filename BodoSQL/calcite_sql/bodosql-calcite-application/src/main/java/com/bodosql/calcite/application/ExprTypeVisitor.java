@@ -129,6 +129,8 @@ public class ExprTypeVisitor {
           "REPLACE",
           "EDITDISTANCE",
           "MID",
+          "SPLIT_PART",
+          "STRTOK",
           "SUBSTR",
           "MAKEDATE",
           "ADDDATE",
