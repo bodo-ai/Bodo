@@ -541,9 +541,12 @@ def int_arr_setitem(A, idx, val):
 
     typ_err_msg = f"setitem for IntegerArray with indexing type {idx} received an incorrect 'value' type {val}."
 
-    # Pandas allows booleans and integers
-    # TODO(Nick): Verify inputs can be safely case to an integer
-    is_scalar = isinstance(val, (types.Integer, types.Boolean))
+    # Pandas allows booleans and integers but floats are necessary in many practical
+    # cases in BodoSQL and otherwise. Numba unifies signed and unsigned integers into
+    # Float currently. Numpy allows floats.
+    # See test_bitwise.py::test_bitshiftright[vector_scalar_uint64_case]
+    # TODO(Nick): Verify inputs can be safely cast to an integer
+    is_scalar = isinstance(val, (types.Integer, types.Boolean, types.Float))
 
     # scalar case
     if isinstance(idx, types.Integer):
@@ -559,12 +562,12 @@ def int_arr_setitem(A, idx, val):
         else:
             raise BodoError(typ_err_msg)
 
-    # Pandas allows booleans and integers
+    # Pandas allows booleans and integers. We allow float also (see comment above).
     # TODO(Nick): Verify inputs can be safely case to an integer
     if not (
         (
             is_iterable_type(val)
-            and isinstance(val.dtype, (types.Integer, types.Boolean))
+            and isinstance(val.dtype, (types.Integer, types.Boolean, types.Float))
         )
         or is_scalar
     ):

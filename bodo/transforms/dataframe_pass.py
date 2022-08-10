@@ -848,7 +848,9 @@ class DataFramePass:
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += f"    out_arr[i] = {body_code}\n"
+        func_text += (
+            f"    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp({body_code})\n"
+        )
         func_text += "  return out_arr\n"
 
         loc_vars = {}

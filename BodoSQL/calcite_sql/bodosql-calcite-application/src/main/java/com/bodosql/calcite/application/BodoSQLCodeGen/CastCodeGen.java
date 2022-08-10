@@ -16,7 +16,7 @@ public class CastCodeGen {
    */
   public static String generateCastCode(String arg, SqlTypeName typeName, boolean outputScalar) {
     StringBuilder codeBuilder = new StringBuilder();
-    String dtype = sqlTypenameToPandasTypename(typeName, outputScalar);
+    String dtype = sqlTypenameToPandasTypename(typeName, outputScalar, false);
     if (outputScalar) {
       codeBuilder.append(dtype).append("(").append(arg).append(")");
     } else {
@@ -26,9 +26,9 @@ public class CastCodeGen {
     // TODO: Remove once we support Date type natively
     if (typeName == SqlTypeName.DATE) {
       if (outputScalar) {
-        codeBuilder.append(".floor(freq='D')");
+        codeBuilder.append(".floor(freq=\"D\")");
       } else {
-        codeBuilder.append(".dt.floor(freq='D')");
+        codeBuilder.append(".dt.floor(freq=\"D\")");
       }
     }
     return codeBuilder.toString();

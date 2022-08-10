@@ -3,12 +3,14 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import org.apache.calcite.rex.RexCall;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 public class CondOpCodeGen {
 
@@ -136,7 +138,10 @@ public class CondOpCodeGen {
       boolean generateApply,
       List<HashSet<String>> nullSets,
       BodoCtx ctx,
-      String inputVar) {
+      String inputVar,
+      SqlTypeName outputType,
+      List<String> colNames,
+      PandasCodeGenVisitor pdVisitorClass) {
     StringBuilder genCode = new StringBuilder();
     genCode.append("(");
     /*case statements are essentially an infinite number of Then/When clauses, followed by an
@@ -149,11 +154,11 @@ public class CondOpCodeGen {
       String then = args.get(i + 1);
       // If any column is NULL and unchecked, we return NULL because in general
       // op(NULL, val, ...) == NULL
-      genCode.append(generateNullCheck(inputVar, thenCols, "None", then));
+      genCode.append(generateNullCheck(inputVar, colNames, thenCols, "None", then, true));
       genCode.append(" if ");
       String whenCheck = "";
       // If there are no columns to check, whenCheck will return an empty string
-      whenCheck = checkNotNullColumns(inputVar, whenCols);
+      whenCheck = checkNotNullColumns(inputVar, colNames, whenCols, true);
       if (!whenCheck.equals("")) {
         // If any column is not null checked we assume the condition evaluates to
         // NULL because in general op(NULL, val, ...) == NULL
@@ -168,7 +173,7 @@ public class CondOpCodeGen {
     String else_ = args.get(args.size() - 1);
     // If any column is NULL and unchecked, we return NULL because in general
     // op(NULL, val, ...) == NULL
-    genCode.append(generateNullCheck(inputVar, elseCols, "None", else_));
+    genCode.append(generateNullCheck(inputVar, colNames, elseCols, "None", else_, true));
     // append R parens equal to the number of Then/When clauses
     for (int j = 0; j < args.size() / 2; j++) {
       genCode.append(")");
@@ -179,8 +184,12 @@ public class CondOpCodeGen {
       // Generate the apply, but ignore the nullset, as it was already taken care of above
       return generateDfApply(
           inputVar,
-          new BodoCtx(ctx.getColsToAddList(), new HashSet<>(), ctx.getNamedParams()),
-          genCode.toString());
+          new BodoCtx(
+              ctx.getColsToAddList(), new HashSet<>(), ctx.getUsedColumns(), ctx.getNamedParams()),
+          genCode.toString(),
+          outputType,
+          colNames,
+          pdVisitorClass);
     }
 
     return genCode.toString();

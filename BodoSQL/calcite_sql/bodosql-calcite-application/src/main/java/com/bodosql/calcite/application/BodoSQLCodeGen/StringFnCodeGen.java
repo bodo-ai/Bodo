@@ -344,9 +344,9 @@ public class StringFnCodeGen {
               + "("
               + stringToBeTrimmed.getExprCode()
               + ", "
-              + "' ')";
+              + "\" \")";
     } else {
-      outputExpr = stringToBeTrimmed.getExprCode() + ".str." + trimFn + "(' ')";
+      outputExpr = stringToBeTrimmed.getExprCode() + ".str." + trimFn + "(\" \")";
     }
     return new RexNodeVisitorInfo(outputName, outputExpr);
   }

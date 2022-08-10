@@ -29,7 +29,7 @@ public class BodoArrayHelpers {
         return String.format("np.empty(%s, dtype=np.float64)", len);
       case DATE:
       case TIMESTAMP:
-        return String.format("np.empty(%s, dtype='datetime64[ns]')", len);
+        return String.format("np.empty(%s, dtype=\"datetime64[ns]\")", len);
       case INTERVAL_DAY_HOUR:
       case INTERVAL_DAY_MINUTE:
       case INTERVAL_DAY_SECOND:
@@ -40,7 +40,7 @@ public class BodoArrayHelpers {
       case INTERVAL_MINUTE:
       case INTERVAL_SECOND:
       case INTERVAL_DAY:
-        return String.format("np.empty(%s, dtype='timedelta64[ns]')", len);
+        return String.format("np.empty(%s, dtype=\"timedelta64[ns]\")", len);
       case CHAR:
       case VARCHAR:
         return String.format("bodo.libs.str_arr_ext.pre_alloc_string_array(%s, -1)", len);

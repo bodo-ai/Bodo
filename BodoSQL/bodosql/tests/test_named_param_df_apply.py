@@ -7,7 +7,6 @@ import re
 # Copyright (C) 2021 Bodo Inc. All rights reserved.
 import pandas as pd
 import pytest
-
 from bodosql.tests.named_params_common import *  # noqa
 from bodosql.tests.utils import check_query
 
@@ -41,7 +40,7 @@ def test_case(basic_df, spark_info, many_params_fixture, memory_leak_check):
 
     # Check pandas code has appropriate appliesc
     regexp = re.compile(
-        r".*lambda .*, a, b, c, d, e, f, g:.*, a=a, b=b, c=c, d=d, e=e, f=f, g=g, axis=1.*"
+        r".*bodosql_case_placeholder.*a=a, b=b, c=c, d=d, e=e, f=f, g=g.*"
     )
     assert bool(regexp.search(pandas_code))
 
@@ -64,7 +63,7 @@ def test_repeated_param_usage(
     )["pandas_code"]
 
     # check pandas code has appropriate applies
-    regexp = re.compile(r".*lambda .*, c:.*, c=c, axis=1")
+    regexp = re.compile(r".*bodosql_case_placeholder.*c=c")
     assert bool(regexp.search(pandas_code))
 
 
@@ -84,7 +83,7 @@ def test_nested_and_or(basic_df, spark_info, many_params_fixture, memory_leak_ch
     )["pandas_code"]
 
     # check pandas code has appropriate applies
-    regexp = re.compile(r".*lambda .*, a, c:.*, a=a, c=c, axis=1")
+    regexp = re.compile(r".*bodosql_case_placeholder.*a=a, c=c")
     assert bool(regexp.search(pandas_code))
 
 
@@ -104,7 +103,5 @@ def test_nested_case(basic_df, spark_info, many_params_fixture, memory_leak_chec
     )["pandas_code"]
 
     # check pandas code has appropriate applies
-    regexp = re.compile(
-        r".*lambda .*, a, b, c, d, e:.*, a=a, b=b, c=c, d=d, e=e, axis=1.*"
-    )
+    regexp = re.compile(r".*bodosql_case_placeholder.*a=a, b=b, c=c, d=d, e=e")
     assert bool(regexp.search(pandas_code))

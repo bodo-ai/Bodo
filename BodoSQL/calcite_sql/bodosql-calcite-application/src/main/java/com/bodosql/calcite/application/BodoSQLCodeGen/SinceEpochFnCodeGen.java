@@ -86,10 +86,13 @@ public class SinceEpochFnCodeGen {
     String secondsSinceUnixEpoch;
     if (arg1ExprType == BodoSQLExprType.ExprType.SCALAR || isSingleRow) {
       // TODO: null checking this
+      // using np.int64() since TO_SECONDS() output is integer but pd.Timedelta().total_seconds()
+      // returns floats
+      // See test_to_seconds_scalars[bodosql_datetime_types0]
       secondsSinceUnixEpoch =
-          "bodosql.libs.generated_lib.sql_null_checking_pd_timedelta_total_seconds("
+          "np.int64(bodosql.libs.generated_lib.sql_null_checking_pd_timedelta_total_seconds("
               + TimeDeltaFromUnixEpoch
-              + ")";
+              + "))";
     } else {
       secondsSinceUnixEpoch = TimeDeltaFromUnixEpoch + ".dt.total_seconds()";
     }

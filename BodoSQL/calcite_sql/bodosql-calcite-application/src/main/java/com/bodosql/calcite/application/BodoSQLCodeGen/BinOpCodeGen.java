@@ -226,18 +226,23 @@ public class BinOpCodeGen {
    * @param nullSet Set of columns that may need to be treated as null. If this argument is treated
    *     as column then the set will be empty.
    * @param isScalar Is this function used inside an apply and should always generate scalar code.
+   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
+   *     Operations that operate per row (i.e. Case switch this to True). This is used for
+   *     determining if an expr returns a scalar or a column.
    * @return The code generated for that single argument.
    */
   public static String generateOrCode(
       String argCode,
       boolean appendOperator,
       String inputVar,
+      List<String> colNames,
       HashSet<String> nullSet,
-      boolean isScalar) {
+      boolean isScalar,
+      boolean isSingleRow) {
     StringBuilder newArg = new StringBuilder();
     // This generates code as (False if (pd.isna(col0) or ... pd.isna(coln)) else argCode)
     // There may be ways to refactor this to generate more efficient code.
-    newArg.append(generateNullCheck(inputVar, nullSet, "False", argCode));
+    newArg.append(generateNullCheck(inputVar, colNames, nullSet, "False", argCode, isSingleRow));
     if (appendOperator) {
       if (isScalar) {
         newArg.append(" or ");

@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.Utils;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -94,16 +95,22 @@ public class Utils {
    * @param colSet Set of columns names
    * @param ifCase Code to return if any column is null.
    * @param elseCase Code to return if no column is null.
+   * @param isInsideCase flag for whether this is inside CASE codegen
    * @return A string representing the code generated to check if any of the columns is null.
    */
   public static String generateNullCheck(
-      String inputVar, HashSet<String> colSet, String ifCase, String elseCase) {
+      String inputVar,
+      List<String> colNames,
+      HashSet<String> colSet,
+      String ifCase,
+      String elseCase,
+      boolean isInsideCase) {
     if (colSet.size() == 0) {
       return elseCase;
     }
     StringBuilder result = new StringBuilder();
     result.append("(").append(ifCase).append(" if ");
-    result.append(checkNullColumns(inputVar, colSet));
+    result.append(checkNullColumns(inputVar, colNames, colSet, isInsideCase));
     result.append(" else ").append(elseCase).append(")");
     return result.toString();
   }
@@ -113,9 +120,11 @@ public class Utils {
    *
    * @param inputVar Name of the input table, which the columns reference
    * @param colSet Set of column names
+   * @param isInsideCase flag for whether this is inside CASE codegen
    * @return A string representing the code generated to check if any of the columns is null.
    */
-  public static String checkNullColumns(String inputVar, HashSet<String> colSet) {
+  public static String checkNullColumns(
+      String inputVar, List<String> colNames, HashSet<String> colSet, boolean isInsideCase) {
     if (colSet.size() == 0) {
       return "";
     }
@@ -125,7 +134,14 @@ public class Utils {
     // on very core.
     TreeSet<String> sortedColSet = new TreeSet<>(colSet);
     for (String col : sortedColSet) {
-      nullCheck.append(String.format("pd.isna(%s) or ", inputVar + "[" + makeQuoted(col) + "]"));
+      String isNullCode = String.format("pd.isna(%s) or ", inputVar + "[" + makeQuoted(col) + "]");
+      if (isInsideCase) {
+        // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value
+        // accesses (e.g. T1_1[i])
+        isNullCode =
+            String.format("pd.isna(%s) or ", inputVar + "_" + colNames.indexOf(col) + "[i]");
+      }
+      nullCheck.append(isNullCode);
     }
     // Remove the final OR
     nullCheck.delete(nullCheck.length() - 3, nullCheck.length());
@@ -138,9 +154,11 @@ public class Utils {
    *
    * @param inputVar Name of the input table, which the columns reference
    * @param colSet Set of column names
+   * @param isInsideCase flag for whether this is inside CASE codegen
    * @return A string representing the code generated that no column is null.
    */
-  public static String checkNotNullColumns(String inputVar, HashSet<String> colSet) {
+  public static String checkNotNullColumns(
+      String inputVar, List<String> colNames, HashSet<String> colSet, boolean isInsideCase) {
     if (colSet.size() == 0) {
       return "";
     }
@@ -150,7 +168,16 @@ public class Utils {
     // on very core.
     TreeSet<String> sortedColSet = new TreeSet<>(colSet);
     for (String col : sortedColSet) {
-      nullCheck.append(String.format("pd.notna(%s) and ", inputVar + "[" + makeQuoted(col) + "]"));
+      String notNullCode =
+          String.format("pd.notna(%s) and ", inputVar + "[" + makeQuoted(col) + "]");
+      if (isInsideCase) {
+        // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value
+        // accesses (e.g. T1_1[i])
+        // notna() is same as not isna() for scalars (eliminates notna function inlining)
+        notNullCode =
+            String.format("(not pd.isna(%s)) and ", inputVar + "_" + colNames.indexOf(col) + "[i]");
+      }
+      nullCheck.append(notNullCode);
     }
     // Remove the final AND
     nullCheck.delete(nullCheck.length() - 4, nullCheck.length());
@@ -163,14 +190,19 @@ public class Utils {
    *
    * @param typeName SQL Type.
    * @param outputScalar Should the output generate a type for converting scalars.
+   * @param outputArrayType flag for returning an array type instead of dtype
    * @return The pandas type
    */
-  public static String sqlTypenameToPandasTypename(SqlTypeName typeName, boolean outputScalar) {
+  public static String sqlTypenameToPandasTypename(
+      SqlTypeName typeName, boolean outputScalar, boolean outputArrayType) {
     String dtype;
+    assert !(outputScalar && outputArrayType);
     switch (typeName) {
       case BOOLEAN:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_bool";
+        } else if (outputArrayType) {
+          return "bodo.boolean_array";
         } else {
           dtype = makeQuoted("boolean");
         }
@@ -178,6 +210,8 @@ public class Utils {
       case TINYINT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int8";
+        } else if (outputArrayType) {
+          return "bodo.IntegerArrayType(bodo.int8)";
         } else {
           dtype = "pd.Int8Dtype()";
         }
@@ -185,6 +219,8 @@ public class Utils {
       case SMALLINT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int16";
+        } else if (outputArrayType) {
+          return "bodo.IntegerArrayType(bodo.int16)";
         } else {
           dtype = "pd.Int16Dtype()";
         }
@@ -192,6 +228,8 @@ public class Utils {
       case INTEGER:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int32";
+        } else if (outputArrayType) {
+          return "bodo.IntegerArrayType(bodo.int32)";
         } else {
           dtype = "pd.Int32Dtype()";
         }
@@ -199,15 +237,19 @@ public class Utils {
       case BIGINT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int64";
+        } else if (outputArrayType) {
+          return "bodo.IntegerArrayType(bodo.int64)";
         } else {
           dtype = "pd.Int64Dtype()";
         }
         break;
       case FLOAT:
+        if (outputArrayType) return "bodo.float32[::1]";
         dtype = "np.float32";
         break;
       case DOUBLE:
       case DECIMAL:
+        if (outputArrayType) return "bodo.float64[::1]";
         dtype = "np.float64";
         break;
       case DATE:
@@ -217,14 +259,18 @@ public class Utils {
           // This should likely be in the engine itself, to match pandas behavior
           // BE-2882
           dtype = "pd.to_datetime";
+        } else if (outputArrayType) {
+          return "bodo.datetime64ns[::1]";
         } else {
-          dtype = "np.dtype('datetime64[ns]')";
+          dtype = "np.dtype(\"datetime64[ns]\")";
         }
         break;
       case VARCHAR:
       case CHAR:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_str";
+        } else if (outputArrayType) {
+          return "bodo.string_array_type";
         } else {
           dtype = "str";
         }
@@ -244,8 +290,10 @@ public class Utils {
           // This should likely be in the engine itself, to match pandas behavior
           // BE-2882
           dtype = "pd.to_timedelta";
+        } else if (outputArrayType) {
+          return "bodo.timedelta64ns[::1]";
         } else {
-          dtype = "np.dtype('timedelta64[ns]')";
+          dtype = "np.dtype(\"timedelta64[ns]\")";
         }
         break;
       case INTERVAL_YEAR:
@@ -258,18 +306,6 @@ public class Utils {
             "Internal Error: Calcite Plan Produced an Unsupported Type: " + typeName.getName());
     }
     return dtype;
-  }
-
-  /**
-   * In Bodo, when you get an scalar value from a column, the value may be of a non-nullable type
-   * but Still have a null value. This code will wrap scalar a column reference, converting null
-   * values with non-nullable types to null values with null types.
-   *
-   * @param colExpr The string value that represents the column expression
-   * @return A string representing the column expression,
-   */
-  public static String nullcheckScalarColumnReference(String colExpr) {
-    return "(None if pd.isna(" + colExpr + ") else " + colExpr + ")";
   }
 
   /**
@@ -450,28 +486,74 @@ public class Utils {
     String makeLambdaStr(List<String> operandExpressions);
   }
 
-  public static String generateDfApply(String inputVar, BodoCtx ctx, String lambdaFnStr) {
+  public static String generateDfApply(
+      String inputVar,
+      BodoCtx ctx,
+      String lambdaFnStr,
+      SqlTypeName outputType,
+      List<String> colNames,
+      PandasCodeGenVisitor pdVisitorClass) {
     // We assume, at this point, that the ctx.colsToAddList has been added to inputVar, and
     // the arguments/nullset have been renamed appropriately.
     // TODO: Do everything needed for df applies in this function, so it's more understandable.
 
+    lambdaFnStr =
+        generateNullCheck(
+            inputVar, colNames, ctx.getNeedNullCheckColumns(), "None", lambdaFnStr, true);
+
+    // pass named parameters as kws to bodosql_case_placeholder()
+    // sorting to make sure the same code is generated on each rank
     TreeSet<String> sortedParamSet = new TreeSet<>(ctx.getNamedParams());
-
-    StringBuilder applyStr = new StringBuilder(inputVar + ".apply(lambda " + inputVar);
-
+    StringBuilder namedParamArgs = new StringBuilder();
     for (String param : sortedParamSet) {
-      applyStr.append(", ").append(param);
+      namedParamArgs.append(param + "=" + param + ", ");
     }
 
-    lambdaFnStr = generateNullCheck(inputVar, ctx.getNullSet(), "None", lambdaFnStr);
-    applyStr.append(":").append(lambdaFnStr).append(", ");
+    // generate bodosql_case_placeholder() call with inputs:
+    // 1) a tuple of necessary input arrays
+    // 2) number of output rows (same as input rows, needed for allocation)
+    // 3) initialization code for unpacking the input array tuple with the right array names
+    // (MetaType global)
+    // 4) body of the CASE loop (global constant)
+    // 5) output array type
+    // For example:
+    // S5 = pd.Series(bodo.utils.typing.bodosql_case_placeholder(
+    //   (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df3, 0), ),
+    //   len(df3),
+    //   MetaType(('  df3_0 = arrs[0]',)),
+    //   '((None if (pd.isna(df3_0[i]) ) else np.int64(1),
+    //   IntegerArrayType(int64),
+    //   )
+    //  )
+    StringBuilder inputDataStr = new StringBuilder();
+    inputDataStr.append("(");
+    StringBuilder initCode = new StringBuilder();
+    initCode.append("(");
 
-    for (String param : sortedParamSet) {
-      applyStr.append(param + "=" + param).append(", ");
+    int i = 0;
+    TreeSet<Integer> sortedUsedColumns = new TreeSet<>(ctx.getUsedColumns());
+    for (int colNo : sortedUsedColumns) {
+      inputDataStr.append(
+          String.format(
+              "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(%s, %d), ", inputVar, colNo));
+      initCode
+          .append(makeQuoted(String.format("  %s = arrs[%d]", inputVar + "_" + colNo, i)))
+          .append(", ");
+      i++;
     }
-    applyStr.append("axis=1)");
+    inputDataStr.append(")");
+    initCode.append(")");
+    String initGlobal = pdVisitorClass.lowerAsMetaType(initCode.toString());
+    // have to use single quotes here since lambdaFnStr has double quotes inside leading to syntax
+    // errors later
+    String bodyGlobal = pdVisitorClass.lowerAsGlobal("'" + lambdaFnStr + "'");
 
-    return applyStr.toString();
+    String outputArrayType = sqlTypenameToPandasTypename(outputType, false, true);
+    String outputArrayTypeGlobal = pdVisitorClass.lowerAsGlobal(outputArrayType);
+
+    return String.format(
+        "pd.Series(bodo.utils.typing.bodosql_case_placeholder(%s, len(%s), %s, %s, %s, %s))",
+        inputDataStr, inputVar, initGlobal, bodyGlobal, outputArrayTypeGlobal, namedParamArgs);
   }
 
   static HashSet<SqlTypeName> validDateCastTypes;
