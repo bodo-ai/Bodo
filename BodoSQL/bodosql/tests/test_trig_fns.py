@@ -20,17 +20,11 @@ def bodosql_trig_values(request):
     """certain Trig functions are only valid for a given range of inputs."""
     dtype = request.param
     trig_data = {
-        "abs_lteq_1": [0, 1, -1, 0.5, -0.5, 0.3212, -0.78],
-        "any_numeric": [
-            0,
-            1,
-            -1,
-            10000,
-            -100000,
-            20,
-            -139,
-        ],
-        "any_non_zero": [1, -1, 0.1, -0.1, 1234, -4321, 3],
+        "abs_lteq_1": [0, 1, -1, 0.5, -0.5, 0.3212, -0.78, None],
+        "any_numeric": pd.Series(
+            [0, 1, -1, 10000, -100000, 10, -15, None], dtype="Int64"
+        ),
+        "any_non_zero": [1, -1, 0.1, -0.1, 1234, -4321, 3, None],
     }
     return {"table1": pd.DataFrame(data=trig_data, dtype=dtype)}
 
@@ -40,11 +34,17 @@ def bodosql_trig_values(request):
         (x, "any_numeric")
         for x in [
             "ACOS",
+            "ACOSH",
             "ASIN",
+            "ASINH",
             "COS",
+            "COSH",
             "SIN",
+            "SINH",
             "TAN",
+            "TANH",
             "ATAN",
+            "ATANH",
             "RADIANS",
             "DEGREES",
             "COT",

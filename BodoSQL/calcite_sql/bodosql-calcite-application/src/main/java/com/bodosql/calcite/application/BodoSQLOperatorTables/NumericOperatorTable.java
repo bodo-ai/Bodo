@@ -221,11 +221,48 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
+  public static final SqlFunction ACOSH =
+      new SqlFunction(
+          "ACOSH",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.DOUBLE_NULLABLE,
+          null,
+          OperandTypes.NUMERIC,
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction ASINH =
+      new SqlFunction(
+          "ASINH",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.DOUBLE_NULLABLE,
+          null,
+          OperandTypes.NUMERIC,
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction ATANH =
+      new SqlFunction(
+          "ATANH",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.DOUBLE_NULLABLE,
+          null,
+          OperandTypes.NUMERIC,
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction COSH = SqlLibraryOperators.COSH;
+  public static final SqlFunction SINH = SqlLibraryOperators.SINH;
+  public static final SqlFunction TANH = SqlLibraryOperators.TANH;
+
   public static final SqlFunction GREATEST = SqlLibraryOperators.GREATEST;
   public static final SqlFunction LEAST = SqlLibraryOperators.LEAST;
 
   private List<SqlOperator> functionList =
       Arrays.asList(
+          ACOSH,
+          ASINH,
+          ATANH,
+          COSH,
+          SINH,
+          TANH,
           BITAND,
           BITOR,
           BITXOR,

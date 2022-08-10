@@ -8,9 +8,25 @@ from bodo.libs.bodosql_datetime_array_kernels import *  # noqa
 from bodo.libs.bodosql_numeric_array_kernels import *  # noqa
 from bodo.libs.bodosql_other_array_kernels import *  # noqa
 from bodo.libs.bodosql_string_array_kernels import *  # noqa
+from bodo.libs.bodosql_trig_array_kernels import *  # noqa
 from bodo.libs.bodosql_variadic_array_kernels import *  # noqa
 
 broadcasted_fixed_arg_functions = {
+    "acos",
+    "acosh",
+    "asin",
+    "asinh",
+    "atan",
+    "atan2",
+    "atanh",
+    "cos",
+    "cosh",
+    "sin",
+    "sinh",
+    "tan",
+    "tanh",
+    "radians",
+    "degrees",
     "bitand",
     "bitleftshift",
     "bitnot",
