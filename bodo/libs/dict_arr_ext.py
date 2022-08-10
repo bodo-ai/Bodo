@@ -52,6 +52,7 @@ from bodo.utils.typing import (
     is_overload_none,
     raise_bodo_error,
 )
+from bodo.utils.utils import synchronize_error_njit
 
 ll.add_symbol("box_dict_str_array", hstr_ext.box_dict_str_array)
 
@@ -858,6 +859,84 @@ def _register_simple_str2str_methods():
 
 
 _register_simple_str2str_methods()
+
+
+@register_jitable
+def str_index(arr, sub, start, end):  # pragma: no cover
+    """Implement optimized string index for dictionary encoded arrays
+    The function will return the index of the first occurence of
+    sub in arr[start, end) if sub is present and raise ValueError instead of -1
+     if the value is not found
+
+    Args:
+        arr : dictionary encoded array
+        sub (str): the substring to search for
+        start (int): where to start the search
+        end (int): where to end the search
+    """
+    data_arr = arr._data
+    indices_arr = arr._indices
+    n_data = len(data_arr)
+    n_indices = len(indices_arr)
+    out_dict_arr = bodo.libs.int_arr_ext.alloc_int_array(n_data, np.int64)
+    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n_indices, np.int64)
+    error_flag = False
+    for i in range(n_data):
+        if bodo.libs.array_kernels.isna(data_arr, i):
+            bodo.libs.array_kernels.setna(out_dict_arr, i)
+        else:
+            out_dict_arr[i] = data_arr[i].find(sub, start, end)
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(arr, i) or bodo.libs.array_kernels.isna(
+            out_dict_arr, indices_arr[i]
+        ):
+            bodo.libs.array_kernels.setna(out_arr, i)
+        else:
+            out_arr[i] = out_dict_arr[indices_arr[i]]
+            if out_arr[i] == -1:
+                error_flag = True
+    error_message = "substring not found" if error_flag else ""
+    synchronize_error_njit("ValueError", error_message)
+    return out_arr
+
+
+@register_jitable
+def str_rindex(arr, sub, start, end):  # pragma: no cover
+    """Implement optimized string rindex for dictionary encoded arrays
+    The function will return the index of the last occurence of
+    sub in arr[start, end) if sub is present and raise ValueError instead of -1
+     if the value is not found
+
+    Args:
+        arr : dictionary encoded array
+        sub (str): the substring to search for
+        start (int): where to start the search
+        end (int): where to end the search
+    """
+    data_arr = arr._data
+    indices_arr = arr._indices
+    n_data = len(data_arr)
+    n_indices = len(indices_arr)
+    out_dict_arr = bodo.libs.int_arr_ext.alloc_int_array(n_data, np.int64)
+    out_arr = bodo.libs.int_arr_ext.alloc_int_array(n_indices, np.int64)
+    error_flag = False
+    for i in range(n_data):
+        if bodo.libs.array_kernels.isna(data_arr, i):
+            bodo.libs.array_kernels.setna(out_dict_arr, i)
+        else:
+            out_dict_arr[i] = data_arr[i].rindex(sub, start, end)
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(arr, i) or bodo.libs.array_kernels.isna(
+            out_dict_arr, indices_arr[i]
+        ):
+            bodo.libs.array_kernels.setna(out_arr, i)
+        else:
+            out_arr[i] = out_dict_arr[indices_arr[i]]
+            if out_arr[i] == -1:
+                error_flag = True
+    error_message = "substring not found" if error_flag else ""
+    synchronize_error_njit("ValueError", error_message)
+    return out_arr
 
 
 def create_find_methods(func_name):

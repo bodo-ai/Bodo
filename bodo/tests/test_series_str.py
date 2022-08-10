@@ -236,9 +236,7 @@ def test_split_n():
     # TODO: support and test NA
     check_func(test_impl, (S,))
 
-    S = pd.Series(
-        ["°, ∞, ‰,", "± × ÷ √", "♩ ♪ ♫ ♬ ♭ ♮ ♯,"] * 5
-    )
+    S = pd.Series(["°, ∞, ‰,", "± × ÷ √", "♩ ♪ ♫ ♬ ♭ ♮ ♯,"] * 5)
 
 
 # TODO: Add memory_leak_check when bugs are resolved.
@@ -301,7 +299,7 @@ def test_series_str_split_explode(memory_leak_check):
     check_func(test_impl1, (df,))
 
     df = pd.DataFrame(
-        {"A": pd.array(["Ȩ,Ç,Ḑ", "ẞ", "Ő,Ű", "","Å,Ů,ẘ,ẙ,Q Ð#Ð##Ð#ÐÐ,F", np.nan] * 5)}
+        {"A": pd.array(["Ȩ,Ç,Ḑ", "ẞ", "Ő,Ű", "", "Å,Ů,ẘ,ẙ,Q Ð#Ð##Ð#ÐÐ,F", np.nan] * 5)}
     )
 
     check_func(test_impl2, (df,))
@@ -827,6 +825,57 @@ def test_rfind(test_unicode, memory_leak_check):
 
     check_func(test_impl, (test_unicode,), check_dtype=False)
     check_func(test_impl2, (test_unicode,), check_dtype=False)
+
+
+@pytest.mark.parametrize(
+    "S, sub, start, end",
+    [
+        (
+            pd.Series(
+                ["alpha", "beta", "alphabet", "patatasbravas", np.nan, "houseofcards"]
+            ),
+            "a",
+            0,
+            10,
+        ),
+        (
+            pd.Series(["alpha", "beta", "alphabet", "patatasbravas", "emeralds"]),
+            "a",
+            2,
+            6,
+        ),
+        (
+            pd.Series(
+                ["bagel", np.nan, "gelatin", "gelato", "angelfish", "evangelist"]
+            ),
+            "gel",
+            0,
+            10,
+        ),
+    ],
+)
+@pytest.mark.parametrize("method", ["index", "rindex"])
+def test_index_rindex(S, sub, start, end, method, memory_leak_check):
+    func_text = (
+        "def test_impl1(S, sub):\n"
+        f"    return S.str.{method}(sub)\n"
+        "def test_impl2(S, sub, start):\n"
+        f"    return S.str.{method}(sub, start=start)\n"
+        "def test_impl3(S, sub, end):\n"
+        f"    return S.str.{method}(sub, end=end)\n"
+        "def test_impl4(S, sub, start, end):\n"
+        f"    return S.str.{method}(sub, start, end)\n"
+    )
+    local_vars = {}
+    exec(func_text, {}, local_vars)
+    test_impl1 = local_vars["test_impl1"]
+    test_impl2 = local_vars["test_impl2"]
+    test_impl3 = local_vars["test_impl3"]
+    test_impl4 = local_vars["test_impl4"]
+    check_func(test_impl1, (S, sub), check_dtype=False)
+    check_func(test_impl2, (S, sub, start), check_dtype=False)
+    check_func(test_impl3, (S, sub, end), check_dtype=False)
+    check_func(test_impl4, (S, sub, start, end), check_dtype=False)
 
 
 @pytest.mark.slow

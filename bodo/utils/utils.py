@@ -13,6 +13,7 @@ import numba
 import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
+from mpi4py import MPI
 from numba.core import cgutils, ir, ir_utils, types
 from numba.core.imputils import lower_builtin, lower_constant
 from numba.core.ir_utils import (
@@ -1356,3 +1357,39 @@ def lower_constant_dict(context, builder, typ, pyval):
         )
 
     return dict_val
+
+
+def synchronize_error(exception_str, error_message):
+    """Syncrhonize error state across ranks
+
+    Args:
+        exception (Exception): exception, e.x. RuntimeError, ValueError
+        error (string): error message, empty string means no error
+
+    Raises:
+        Exception: user supplied exception with custom error message
+    """
+    # TODO: Support pattern matching for more exceptions
+    if exception_str == "ValueError":
+        exception = ValueError
+    else:
+        exception = RuntimeError
+
+    comm = MPI.COMM_WORLD
+    # synchronize error state
+    if comm.allreduce(error_message != "", op=MPI.LOR):
+        for error_message in comm.allgather(error_message):
+            if error_message:
+                raise exception(error_message)
+
+
+@numba.njit
+def synchronize_error_njit(exception_str, error_message):
+    """An njit wrapper around syncrhonize_error
+
+    Args:
+        exception_str (string): string representation of exception, e.x. 'RuntimeError', 'ValueError'
+        error_message (string): error message, empty string means no error
+    """
+    with numba.objmode():
+        synchronize_error(exception_str, error_message)

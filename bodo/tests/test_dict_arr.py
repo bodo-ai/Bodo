@@ -609,6 +609,119 @@ def test_str_slice(test_unicode_dict_str_arr, memory_leak_check):
     assert dist_IR_contains(f_ir, "str_slice")
 
 
+@pytest.mark.parametrize(
+    "S, sub, start, end",
+    [
+        (
+            pa.array(
+                ["alpha", "beta", "alphabet", "patatasbravas", None, "houseofcards"]
+                * 5,
+                type=pa.dictionary(pa.int32(), pa.string()),
+            ),
+            "a",
+            0,
+            10,
+        ),
+        (
+            pa.array(
+                ["alpha", "beta", "alphabet", "patatasbravas", "emeralds"],
+                type=pa.dictionary(pa.int32(), pa.string()),
+            ),
+            "a",
+            2,
+            6,
+        ),
+        (
+            pa.array(
+                ["bagel", None, "gelatin", "gelato", "angelfish", "evangelist"],
+                type=pa.dictionary(pa.int32(), pa.string()),
+            ),
+            "gel",
+            0,
+            10,
+        ),
+    ],
+)
+@pytest.mark.parametrize("method", ["index", "rindex"])
+def test_str_index_rindex(S, sub, start, end, method, memory_leak_check):
+    """Test optimization of pd.Series.str.index/rindex"""
+    func_dict = {
+        "index": pd.Series(S).str.index,
+        "rindex": pd.Series(S).str.rindex,
+    }
+    func_text = (
+        "def test_impl1(S, sub):\n"
+        f"    return pd.Series(S).str.{method}(sub)\n"
+        "def test_impl2(S, sub, start):\n"
+        f"    return pd.Series(S).str.{method}(sub, start=start)\n"
+        "def test_impl3(S, sub, end):\n"
+        f"    return pd.Series(S).str.{method}(sub, end=end)\n"
+        "def test_impl4(S, sub, start, end):\n"
+        f"    return pd.Series(S).str.{method}(sub, start, end)\n"
+    )
+    local_vars = {}
+    exec(func_text, {"pd": pd}, local_vars)
+    test_impl1 = local_vars["test_impl1"]
+    test_impl2 = local_vars["test_impl2"]
+    test_impl3 = local_vars["test_impl3"]
+    test_impl4 = local_vars["test_impl4"]
+    check_func(
+        test_impl1, (S, sub), py_output=func_dict[method](sub), check_dtype=False
+    )
+    check_func(
+        test_impl2,
+        (S, sub, start),
+        py_output=func_dict[method](sub, start=start),
+        check_dtype=False,
+    )
+    check_func(
+        test_impl3,
+        (S, sub, end),
+        py_output=func_dict[method](sub, end=end),
+        check_dtype=False,
+    )
+    check_func(
+        test_impl4,
+        (S, sub, start, end),
+        py_output=func_dict[method](sub, start, end),
+        check_dtype=False,
+    )
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(test_impl1)
+    bodo_func(S, sub)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, f"str_{method}")
+
+
+@pytest.mark.parametrize("method", ["index", "rindex"])
+def test_str_index_rindex_not_found(test_unicode_dict_str_arr, method):
+    """Test error handling for Series.str.index/rindex"""
+    func_text = (
+        "def test_impl1(A):\n"
+        f"    return pd.Series(A).str.{method}('123')\n"
+        "def test_impl2(A, start):\n"
+        f"    return pd.Series(A).str.{method}('123', start=start)\n"
+        "def test_impl3(A, end):\n"
+        f"    return pd.Series(A).str.{method}('123', end=end)\n"
+        "def test_impl4(A, start, end):\n"
+        f"    return pd.Series(A).str.{method}('123', start, end)\n"
+    )
+    local_vars = {}
+    exec(func_text, {"pd": pd}, local_vars)
+    test_impl1 = local_vars["test_impl1"]
+    test_impl2 = local_vars["test_impl2"]
+    test_impl3 = local_vars["test_impl3"]
+    test_impl4 = local_vars["test_impl4"]
+    with pytest.raises(ValueError, match="substring not found"):
+        bodo.jit(test_impl1)(test_unicode_dict_str_arr)
+    with pytest.raises(ValueError, match="substring not found"):
+        bodo.jit(test_impl2)(test_unicode_dict_str_arr, start=2)
+    with pytest.raises(ValueError, match="substring not found"):
+        bodo.jit(test_impl3)(test_unicode_dict_str_arr, end=10)
+    with pytest.raises(ValueError, match="substring not found"):
+        bodo.jit(test_impl4)(test_unicode_dict_str_arr, start=2, end=10)
+
+
 @pytest.mark.parametrize("method", ["find", "rfind"])
 def test_str_find(test_unicode_dict_str_arr, memory_leak_check, method):
     """
