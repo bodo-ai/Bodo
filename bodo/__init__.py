@@ -4,6 +4,84 @@ Top-level init file for bodo package
 
 isort:skip_file
 """
+
+
+def _global_except_hook(exctype, value, traceback):
+    """Custom excepthook function that replaces sys.excepthook (see sys.excepthook
+    documentation for more details on its API)
+    Our function calls MPI_Abort() to force all processes to abort *if not all
+    processes raise the same unhandled exception*
+    """
+
+    import sys
+    import time
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    # Calling MPI_Abort() aborts the program with a non-zero exit code and
+    # MPI will print a message such as
+    # "application called MPI_Abort(MPI_COMM_WORLD, 1) - process 0"
+    # Therefore, we only want to call MPI_Abort if there is going to be a hang
+    # (for example when some processes but not all exit with an unhandled
+    # exception). To detect a hang, we wait on a non-blocking barrier for a
+    # specified amount of time.
+    HANG_TIMEOUT = 3.0
+    is_hang = True
+    req = comm.Ibarrier()
+    start = time.time()
+    while time.time() - start < HANG_TIMEOUT:
+        time.sleep(0.1)
+        if req.Test():
+            # everyone reached the barrier before the timeout, so there is no hang
+            is_hang = False
+            break
+
+    try:
+        global _orig_except_hook
+        # first we print the exception with the original excepthook
+        if _orig_except_hook:
+            _orig_except_hook(exctype, value, traceback)
+        else:
+            sys.__excepthook__(exctype, value, traceback)
+        if is_hang:
+            # if we are aborting, print a message
+            sys.stderr.write(
+                "\n*****************************************************\n"
+            )
+            sys.stderr.write(f"   Uncaught exception detected on rank {rank}. \n")
+            sys.stderr.write("   Calling MPI_Abort() to shut down MPI...\n")
+            sys.stderr.write("*****************************************************\n")
+            sys.stderr.write("\n")
+        sys.stderr.flush()
+    finally:
+        if is_hang:
+            try:
+                MPI.COMM_WORLD.Abort(1)
+            except:
+                sys.stderr.write(
+                    "*****************************************************\n"
+                )
+                sys.stderr.write(
+                    "We failed to stop MPI, this process will likely hang.\n"
+                )
+                sys.stderr.write(
+                    "*****************************************************\n"
+                )
+                sys.stderr.flush()
+                raise
+
+
+import sys
+
+# Add a global hook function that captures unhandled exceptions.
+# The function calls MPI_Abort() to force all processes to abort *if not all
+# processes raise the same unhandled exception*
+_orig_except_hook = sys.excepthook
+sys.excepthook = _global_except_hook
+
+
 import os
 import platform
 
@@ -165,82 +243,6 @@ parquet_validate_schema = True
 import bodo.utils.tracing
 import bodo.utils.tracing_py
 from bodo.user_logging import set_bodo_verbose_logger, set_verbose_level
-
-
-def _global_except_hook(exctype, value, traceback):
-    """Custom excepthook function that replaces sys.excepthook (see sys.excepthook
-    documentation for more details on its API)
-    Our function calls MPI_Abort() to force all processes to abort *if not all
-    processes raise the same unhandled exception*
-    """
-
-    import sys
-    import time
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-
-    # Calling MPI_Abort() aborts the program with a non-zero exit code and
-    # MPI will print a message such as
-    # "application called MPI_Abort(MPI_COMM_WORLD, 1) - process 0"
-    # Therefore, we only want to call MPI_Abort if there is going to be a hang
-    # (for example when some processes but not all exit with an unhandled
-    # exception). To detect a hang, we wait on a non-blocking barrier for a
-    # specified amount of time.
-    HANG_TIMEOUT = 3.0
-    is_hang = True
-    req = comm.Ibarrier()
-    start = time.time()
-    while time.time() - start < HANG_TIMEOUT:
-        time.sleep(0.1)
-        if req.Test():
-            # everyone reached the barrier before the timeout, so there is no hang
-            is_hang = False
-            break
-
-    try:
-        global _orig_except_hook
-        # first we print the exception with the original excepthook
-        if _orig_except_hook:
-            _orig_except_hook(exctype, value, traceback)
-        else:
-            sys.__excepthook__(exctype, value, traceback)
-        if is_hang:
-            # if we are aborting, print a message
-            sys.stderr.write(
-                "\n*****************************************************\n"
-            )
-            sys.stderr.write(f"   Uncaught exception detected on rank {rank}. \n")
-            sys.stderr.write("   Calling MPI_Abort() to shut down MPI...\n")
-            sys.stderr.write("*****************************************************\n")
-            sys.stderr.write("\n")
-        sys.stderr.flush()
-    finally:
-        if is_hang:
-            try:
-                MPI.COMM_WORLD.Abort(1)
-            except:
-                sys.stderr.write(
-                    "*****************************************************\n"
-                )
-                sys.stderr.write(
-                    "We failed to stop MPI, this process will likely hang.\n"
-                )
-                sys.stderr.write(
-                    "*****************************************************\n"
-                )
-                sys.stderr.flush()
-                raise
-
-
-import sys
-
-# Add a global hook function that captures unhandled exceptions.
-# The function calls MPI_Abort() to force all processes to abort *if not all
-# processes raise the same unhandled exception*
-_orig_except_hook = sys.excepthook
-sys.excepthook = _global_except_hook
 
 # clear thread limit. We don't want to limit other libraries like Arrow
 os.environ.pop("OPENBLAS_NUM_THREADS", None)
