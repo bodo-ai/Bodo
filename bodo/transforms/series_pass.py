@@ -1703,7 +1703,11 @@ class SeriesPass:
         # Inlining astype with nullable tuple can lead to to_datetime
         # or to_timedelta remaining in the IR. Since we have already
         # passed the inlining stage we need to manually inline.
+        # BodoSQL also uses these and could be inside of CASE so needs inlined.
+        # see test_datetime_fns.py::test_to_date_scalar
         if fdef in (
+            ("to_datetime", "pandas"),
+            ("to_timedelta", "pandas"),
             ("to_datetime", "pandas.core.tools.datetimes"),
             ("to_timedelta", "pandas.core.tools.timedeltas"),
         ):

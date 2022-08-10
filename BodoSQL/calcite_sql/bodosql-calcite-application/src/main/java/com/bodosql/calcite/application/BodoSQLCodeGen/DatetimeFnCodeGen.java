@@ -111,7 +111,7 @@ public class DatetimeFnCodeGen {
   public static RexNodeVisitorInfo generateUTCDateCode() {
     String fnName = "UTC_Date()";
     // use utcnow if/when we decide to support timezones
-    String fnExpression = "pd.Timestamp.now().floor(freq='D')";
+    String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
     return new RexNodeVisitorInfo(fnName, fnExpression);
   }
 
@@ -177,22 +177,22 @@ public class DatetimeFnCodeGen {
               "DATE_TRUNC(): Specifying 'Quarter' for <date_or_time_part> not supported.");
         case "DAY":
           // For all timedelta valid values we can use .dt.floor
-          outputExpression = arg2Info.getExprCode() + ".dt.floor('D')";
+          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"D\")";
           break;
         case "HOUR":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor('H')";
+          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"H\")";
           break;
         case "MINUTE":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor('min')";
+          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"min\")";
           break;
         case "SECOND":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor('S')";
+          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"S\")";
           break;
         case "MILLISECOND":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor('ms')";
+          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"ms\")";
           break;
         case "MICROSECOND":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor('us')";
+          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"us\")";
           break;
         case "NANOSECOND":
           // Timestamps have nanosecond precision so we don't need to round.
@@ -251,7 +251,7 @@ public class DatetimeFnCodeGen {
    */
   public static RexNodeVisitorInfo generateCurdateCode(String opName) {
     String fnName = opName + "()";
-    String fnExpression = "pd.Timestamp.now().floor(freq='D')";
+    String fnExpression = "pd.Timestamp.now().floor(freq=\"D\")";
     return new RexNodeVisitorInfo(fnName, fnExpression);
   }
 

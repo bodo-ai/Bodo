@@ -62,7 +62,7 @@ public class StrToDateCodeGen {
    */
   public static RexNodeVisitorInfo generateDateFnCode(String datetimeStr) {
     return new RexNodeVisitorInfo(
-        "DATE(" + datetimeStr + ")", "pd.Timestamp(" + datetimeStr + ").floor(freq='D')");
+        "DATE(" + datetimeStr + ")", "pd.Timestamp(" + datetimeStr + ").floor(freq=\"D\")");
   }
 
   /**

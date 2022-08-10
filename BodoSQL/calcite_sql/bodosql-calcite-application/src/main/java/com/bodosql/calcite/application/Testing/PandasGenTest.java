@@ -12,7 +12,8 @@ import java.util.ArrayList;
 public class PandasGenTest {
 
   public static void main(String[] args) throws Exception {
-    String sql = " select a from __bodolocal__.table1 limit @cwsfe_21";
+
+    String sql = "select a from __bodolocal__.table1 limit @cwsfe_21";
 
     CatalogDatabaseImpl db = new CatalogDatabaseImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
@@ -39,7 +40,7 @@ public class PandasGenTest {
     CatalogTableImpl table3 = new CatalogTableImpl("table3", db, arr);
     db.addTable(table3);
 
-    // Define the Paramter table
+    // Define the Parameter table
     String paramTableName = "ParamTable";
     arr = new ArrayList();
     arr.add(column);
@@ -63,5 +64,7 @@ public class PandasGenTest {
     String pandasStr = generator.getPandasString(sql);
     System.out.println("Generated code:");
     System.out.println(pandasStr + "\n");
+    System.out.println("Lowered globals:");
+    System.out.println(generator.getLoweredGlobalVariables() + "\n");
   }
 }

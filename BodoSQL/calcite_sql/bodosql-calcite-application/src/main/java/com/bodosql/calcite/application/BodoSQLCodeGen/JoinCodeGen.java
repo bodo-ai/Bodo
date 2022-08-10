@@ -107,10 +107,11 @@ public class JoinCodeGen {
       String dummyColumn = getDummyColName(dummyCounter) + "_key";
       leftTable =
           String.format(
-              "pd.concat((%s, pd.DataFrame({'%s': left_arr})), axis=1)", leftTable, dummyColumn);
+              "pd.concat((%s, pd.DataFrame({\"%s\": left_arr})), axis=1)", leftTable, dummyColumn);
       rightTable =
           String.format(
-              "pd.concat((%s, pd.DataFrame({'%s': right_arr})), axis=1)", rightTable, dummyColumn);
+              "pd.concat((%s, pd.DataFrame({\"%s\": right_arr})), axis=1)",
+              rightTable, dummyColumn);
       onStr = makeQuoted(dummyColumn);
     } else {
       onStr = makeQuoted(joinCond);

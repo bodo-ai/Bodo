@@ -49,7 +49,7 @@ public class DateDiffCodeGen {
           .append(arg)
           .append(")");
     } else {
-      floorBuilder.append(arg).append(".dt.floor(freq='D')");
+      floorBuilder.append(arg).append(".dt.floor(freq=\"D\")");
     }
     return floorBuilder.toString();
   }
