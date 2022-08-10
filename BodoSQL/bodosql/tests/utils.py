@@ -8,14 +8,14 @@ import warnings
 from decimal import Decimal
 from enum import Enum
 
-import bodo
+import bodosql
 import numba
 import numpy as np
 import pandas as pd
 from mpi4py import MPI
 from pyspark.sql.functions import col
 
-import bodosql
+import bodo
 
 
 class InputDist(Enum):
@@ -70,6 +70,7 @@ def check_query(
     convert_columns_timedelta=None,
     convert_columns_decimal=None,
     convert_float_nan=False,
+    convert_columns_bool=None,
     return_codegen=False,
     return_seq_dataframe=False,
     run_dist_tests=True,
@@ -139,6 +140,9 @@ def check_query(
         convert_float_nan: Convert NaN values in float columns to None.
             This is used when Spark and Bodo will have different output
             types.
+
+        convert_columns_bool: Convert NaN values to None by setting datatype
+            to boolean.
 
         convert_columns_decimal: Convert the given list of
             decimal columns to float64 types.
@@ -322,6 +326,8 @@ def check_query(
             expected_output = convert_spark_decimal(
                 expected_output, convert_columns_decimal
             )
+        if convert_columns_bool:
+            expected_output = convert_spark_bool(expected_output, convert_columns_bool)
 
     if run_python:
         check_query_python(
@@ -782,6 +788,14 @@ def check_efficient_join(pandas_code):
     merging the whole table on a dummy column.
     """
     assert "$__bodo_dummy__" not in pandas_code
+
+
+def convert_spark_bool(df, columns):
+    """
+    Converts Spark Boolean object columns to boolean type to match BodoSQL.
+    """
+    df[columns] = df[columns].astype("boolean")
+    return df
 
 
 def convert_spark_bytearray(df, columns):

@@ -13,6 +13,7 @@ import java.util.Properties;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.Quoting;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
+import org.apache.calcite.config.NullCollation;
 import org.apache.calcite.jdbc.CalciteConnection;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
@@ -147,6 +148,7 @@ public class RelationalAlgebraGenerator {
               .sqlValidatorConfig(
                   SqlValidator.Config.DEFAULT
                       .withNamedParamTableName(namedParamTableName)
+                      .withDefaultNullCollation(NullCollation.LOW)
                       .withCallRewrite(
                           false)) /* setting with withCallRewrite to false disables the rewriting of
                                   "macro-like" functions. Namely:

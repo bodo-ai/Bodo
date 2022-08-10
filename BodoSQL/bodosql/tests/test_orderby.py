@@ -4,7 +4,6 @@ Test correctness of SQL queries containing orderby on BodoSQL
 """
 import pandas as pd
 import pytest
-
 from bodosql.tests.utils import check_query
 
 
@@ -75,7 +74,6 @@ def test_orderby_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip("[BS-585] Update Null ordering behavior to match Spark")
 def test_orderby_nullable_numeric(
     bodosql_nullable_numeric_types, spark_info, memory_leak_check
 ):
@@ -114,7 +112,6 @@ def test_orderby_nullable_numeric(
     )
 
 
-@pytest.mark.skip("[BS-585] Update Null ordering behavior to match Spark")
 def test_orderby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     Tests orderby works in the simple case for boolean types
@@ -125,7 +122,7 @@ def test_orderby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
         FROM
             table1
         ORDER BY
-            A
+            A, B, C
         """
     query2 = f"""
         SELECT
@@ -133,13 +130,23 @@ def test_orderby_bool(bodosql_boolean_types, spark_info, memory_leak_check):
         FROM
             table1
         ORDER BY
-            A DESC
+            A, B, C DESC
         """
     check_query(
-        query, bodosql_boolean_types, spark_info, check_dtype=False, sort_output=False
+        query,
+        bodosql_boolean_types,
+        spark_info,
+        check_dtype=False,
+        sort_output=False,
+        convert_columns_bool=["A", "B", "C"],
     )
     check_query(
-        query2, bodosql_boolean_types, spark_info, check_dtype=False, sort_output=False
+        query2,
+        bodosql_boolean_types,
+        spark_info,
+        check_dtype=False,
+        sort_output=False,
+        convert_columns_bool=["A", "B", "C"],
     )
 
 
@@ -168,7 +175,6 @@ def test_orderby_str(bodosql_string_types, spark_info, memory_leak_check):
     check_query(query2, bodosql_string_types, spark_info, sort_output=False)
 
 
-@pytest.mark.skip("Sorting doesn't work properly with binary data: See BE-3279")
 def test_orderby_binary(bodosql_binary_types, spark_info, memory_leak_check):
     """
     Tests orderby works in the simple case for binary types
@@ -190,7 +196,6 @@ def test_orderby_binary(bodosql_binary_types, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip("[BS-585] Update Null ordering behavior to match Spark")
 def test_orderby_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
     """
     Tests orderby works in the simple case for datetime types
@@ -201,7 +206,7 @@ def test_orderby_datetime(bodosql_datetime_types, spark_info, memory_leak_check)
         FROM
             table1
         ORDER BY
-            A
+            A, B, C
         """
     query2 = f"""
         SELECT
@@ -209,7 +214,7 @@ def test_orderby_datetime(bodosql_datetime_types, spark_info, memory_leak_check)
         FROM
             table1
         ORDER BY
-            A DESC
+            A, B, C DESC
         """
     check_query(query1, bodosql_datetime_types, spark_info, sort_output=False)
     check_query(query2, bodosql_datetime_types, spark_info, sort_output=False)
@@ -267,7 +272,6 @@ def test_distinct_orderby(bodosql_numeric_types, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip("[BS-585] Update Null ordering behavior to match Spark")
 def test_orderby_multiple_cols(col_a_identical_tables, spark_info, memory_leak_check):
     """
     checks that orderby works correctly when sorting by multiple columns
@@ -301,7 +305,6 @@ def null_ordering_table(request):
     return request.param
 
 
-@pytest.mark.skip("[BS-585] Update Null ordering behavior to match Spark")
 def test_orderby_nulls_defaults(null_ordering_table, spark_info, memory_leak_check):
     """
     checks that order by null ordering matches the spark
@@ -321,7 +324,6 @@ def test_orderby_nulls_defaults(null_ordering_table, spark_info, memory_leak_che
 
 
 @pytest.mark.slow
-@pytest.mark.skip("[BS-585] Update Null ordering behavior to match Spark")
 def test_orderby_nulls_defaults_asc(null_ordering_table, spark_info, memory_leak_check):
     """
     checks that order by null ordering matches the spark
@@ -340,7 +342,6 @@ def test_orderby_nulls_defaults_asc(null_ordering_table, spark_info, memory_leak
     )
 
 
-@pytest.mark.skip("[BS-585] Update Null ordering behavior to match Spark")
 def test_orderby_nulls_defaults_desc(
     null_ordering_table, spark_info, memory_leak_check
 ):
