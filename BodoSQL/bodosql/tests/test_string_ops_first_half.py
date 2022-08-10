@@ -474,3 +474,211 @@ def test_editdistance(args, spark_info, memory_leak_check):
         check_dtype=False,
         expected_output=answer,
     )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "SELECT SPLIT_PART(A, ' ', 1) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            ["alphabet", "aaeaaeieaaeioiea", "alpha", "", "a", None]
+                        )
+                    }
+                ),
+            ),
+            id="vector_space_1",
+        ),
+        pytest.param(
+            (
+                "SELECT SPLIT_PART(A, 'a', 2) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "lph",
+                                "",
+                                "lph",
+                                "",
+                                "  b     c  d e        f  g     h  i        j ",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_a_2",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT SPLIT_PART(A, '  ', -1) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "alphabet soup is delicious",
+                                "aaeaaeieaaeioiea",
+                                "delta epsilon",
+                                "",
+                                "j ",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_doublespace_-1",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT SPLIT_PART(A, RIGHT(A, 1), 1 + (LENGTH(A) % 6)) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                " deliciou",
+                                "eie",
+                                "",
+                                "",
+                                "",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_lastchar_vector",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN INSTR(A, '  ') > 0 THEN SPLIT_PART(A, '  ', 3) ELSE SPLIT_PART(A, 'e', -2) END FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "t soup is d",
+                                "ioi",
+                                "delta epsilon",
+                                "",
+                                "",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="case",
+        ),
+    ],
+)
+def test_split_part(args, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": [
+                    "alphabet soup is delicious",
+                    "aaeaaeieaaeioiea",
+                    "alpha  beta gamma  delta epsilon",
+                    "",
+                    "a  b     c  d e        f  g     h  i        j ",
+                    None,
+                ]
+            }
+        )
+    }
+    query, answer = args
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "SELECT STRTOK(A) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "alphabet",
+                                "aaeaaeieaaeioiea",
+                                "A.BCD.E.FGH.I.JKLMN.O.PQRST.U.VWXYZ",
+                                "415-555-1234,",
+                                "a",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_default_default",
+        ),
+        pytest.param(
+            (
+                "SELECT STRTOK(A, ' .,-') FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            ["alphabet", "aaeaaeieaaeioiea", "A", "415", "a", None]
+                        )
+                    }
+                ),
+            ),
+            id="vector_symbols_default",
+        ),
+        pytest.param(
+            (
+                "SELECT STRTOK(A, ' ', 3) FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series(["is", None, None, "937-555-3456", "c", None])}
+                ),
+            ),
+            id="vector_space_5",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN INSTR(A, 'a') + INSTR(A, ' ') > 0 THEN STRTOK(A, 'a ', 1) ELSE 'xxx' END FROM table1",
+                pd.DataFrame(
+                    {0: pd.Series(["lph", "e", "xxx", "415-555-1234,", "b", "xxx"])}
+                ),
+            ),
+            id="vector_aspace_1",
+        ),
+    ],
+)
+def test_strtok(args, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": [
+                    "alphabet soup is delicious",
+                    "aaeaaeieaaeioiea",
+                    "A.BCD.E.FGH.I.JKLMN.O.PQRST.U.VWXYZ",
+                    "415-555-1234, 412-555-2345, 937-555-3456",
+                    "a  b     c  d e        f  g     h  i        j ",
+                    None,
+                ]
+            }
+        )
+    }
+    query, answer = args
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )

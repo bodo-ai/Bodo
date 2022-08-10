@@ -75,6 +75,8 @@ public class StringFnCodeGen {
     equivalentFnMapBroadcast.put("MID", "bodo.libs.bodosql_array_kernels.substring");
     equivalentFnMapBroadcast.put(
         "SUBSTRING_INDEX", "bodo.libs.bodosql_array_kernels.substring_index");
+    equivalentFnMapBroadcast.put("SPLIT_PART", "bodo.libs.bodosql_array_kernels.split_part");
+    equivalentFnMapBroadcast.put("STRTOK", "bodo.libs.bodosql_array_kernels.strtok");
   }
 
   /**
@@ -257,6 +259,56 @@ public class StringFnCodeGen {
 
     String concatExpression = generateBinOpCode(concatWsArgs, concatWsExprTypes, op, isScalar);
     return new RexNodeVisitorInfo(concatWsName.toString(), concatExpression);
+  }
+
+  /**
+   * Function that returns the rexInfo for an STRTOK Function Call.
+   *
+   * @param operandsInfo the information about the 1-3 arguments
+   * @return The RexNodeVisitorInfo corresponding to the function call
+   */
+  public static RexNodeVisitorInfo generateStrtok(List<RexNodeVisitorInfo> operandsInfo) {
+    int argCount = operandsInfo.size();
+
+    if (!(1 <= argCount && argCount <= 3)) {
+      throw new BodoSQLCodegenException("Error, invalid number of arguments passed to STRTOK");
+    }
+
+    StringBuilder name = new StringBuilder();
+    StringBuilder expr_code = new StringBuilder();
+
+    name.append("STRTOK(");
+    name.append(operandsInfo.get(0).getName());
+    expr_code.append("bodo.libs.bodosql_array_kernels.strtok(");
+    expr_code.append(operandsInfo.get(0).getExprCode());
+
+    // If 1 argument is provided, use space as the delimeter
+    if (argCount == 1) {
+      name.append(", ' '");
+      expr_code.append(", ' '");
+      // Otherwise, extract the delimeter argument
+    } else {
+      name.append(", ");
+      name.append(operandsInfo.get(1).getName());
+      expr_code.append(", ");
+      expr_code.append(operandsInfo.get(1).getExprCode());
+    }
+
+    // If 1-2 arguments are provided, use 1 as the part
+    if (argCount < 3) {
+      name.append(", 1");
+      expr_code.append(", 1");
+      // Otherwise, extract the part argument
+    } else {
+      name.append(", ");
+      name.append(operandsInfo.get(2).getName());
+      expr_code.append(", ");
+      expr_code.append(operandsInfo.get(2).getExprCode());
+    }
+
+    name.append(")");
+    expr_code.append(")");
+    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
   }
 
   /**

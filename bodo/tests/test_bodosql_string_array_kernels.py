@@ -938,6 +938,121 @@ def test_space(numbers):
     [
         pytest.param(
             (
+                (
+                    pd.Series(
+                        pd.array(
+                            ["alpha beta gamma"] * 4
+                            + ["oh what a beautiful morning"] * 4
+                            + ["aaeaaeieaaeioiea"] * 4
+                        )
+                    ),
+                    pd.Series(pd.array([" ", " ", "a", "a"] * 3)),
+                    pd.Series(pd.array([1, 3] * 6)),
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            "alpha",
+                            "gamma",
+                            "",
+                            " bet",
+                            "oh",
+                            "a",
+                            "oh wh",
+                            " be",
+                            "aaeaaeieaaeioiea",
+                            "",
+                            "",
+                            "e",
+                        ]
+                    )
+                ),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                (
+                    "oh what a beautiful morning",
+                    " ",
+                    pd.Series(
+                        pd.array([-6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, None])
+                    ),
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            "",
+                            "oh",
+                            "what",
+                            "a",
+                            "beautiful",
+                            "morning",
+                            "oh",
+                            "oh",
+                            "what",
+                            "a",
+                            "beautiful",
+                            "morning",
+                            "",
+                            None,
+                        ]
+                    )
+                ),
+            ),
+            id="scalar_scalar_vector",
+        ),
+        pytest.param(
+            (
+                (
+                    "alphabet soup is delicious",
+                    pd.Series(pd.array(["", " ", "ou", " is ", "yay"] * 2)),
+                    pd.Series([1] * 5 + [2] * 5),
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            "alphabet soup is delicious",
+                            "alphabet",
+                            "alphabet s",
+                            "alphabet soup",
+                            "alphabet soup is delicious",
+                            "",
+                            "soup",
+                            "p is delici",
+                            "delicious",
+                            "",
+                        ]
+                    )
+                ),
+            ),
+            id="scalar_vector_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (("255.136.64.224", ".", 3), "64"), id="all_scalar", marks=pytest.mark.slow
+        ),
+    ],
+)
+def test_split_part(args):
+    def impl(source, delim, target):
+        return bodo.libs.bodosql_array_kernels.split_part(source, delim, target)
+
+    args, answer = args
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
                 pd.Series(pd.array(["ABC", "25", "X", None, "A"])),
                 pd.Series(pd.array(["abc", "123", "X", "B", None])),
             ),
@@ -967,6 +1082,117 @@ def test_strcmp(args):
         impl,
         args,
         py_output=strcmp_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                (
+                    pd.Series(
+                        pd.array(
+                            [""] * 4
+                            + ["110,112,122,150\n210,213,251\n451"] * 4
+                            + [None]
+                        )
+                    ),
+                    pd.Series(pd.array(["", "", ",\n ", ",\n "] * 2 + ["a"])),
+                    pd.Series(pd.array([1, 5] * 4 + [2])),
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            None,
+                            None,
+                            None,
+                            None,
+                            "110,112,122,150\n210,213,251\n451",
+                            None,
+                            "110",
+                            "210",
+                            None,
+                        ]
+                    )
+                ),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                (
+                    "Odysseus,Achilles,Diomedes,Ajax,Agamemnon\nParis,Hector,Helen,Aeneas",
+                    "\n,",
+                    pd.Series(pd.array(list(range(-2, 11)))),
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            None,
+                            None,
+                            None,
+                            "Odysseus",
+                            "Achilles",
+                            "Diomedes",
+                            "Ajax",
+                            "Agamemnon",
+                            "Paris",
+                            "Hector",
+                            "Helen",
+                            "Aeneas",
+                            None,
+                        ]
+                    )
+                ),
+            ),
+            id="scalar_scalar_vector",
+        ),
+        pytest.param(
+            (
+                (
+                    "The quick brown fox jumps over the lazy dog",
+                    pd.Series(pd.array(["aeiou"] * 5 + [" "] * 5)),
+                    pd.Series([1, 2, 4, 8, 16] * 2),
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            "Th",
+                            " q",
+                            "wn f",
+                            "r th",
+                            None,
+                            "The",
+                            "quick",
+                            "fox",
+                            "lazy",
+                            None,
+                        ]
+                    )
+                ),
+            ),
+            id="scalar_vector_vector",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (("aaeaaeieaaeioiea", "a", 3), "eioie"),
+            id="all_scalar",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_strtok(args):
+    def impl(source, delim, target):
+        return bodo.libs.bodosql_array_kernels.strtok(source, delim, target)
+
+    args, answer = args
+    check_func(
+        impl,
+        args,
+        py_output=answer,
         check_dtype=False,
         reset_index=True,
     )
@@ -1167,7 +1393,7 @@ def test_option_char_ord_ascii():
         for flag1 in [True, False]:
             a0 = 65 if flag0 else None
             a1 = "a" if flag1 else None
-            check_func(impl, (A, B, flag0, flag1), py_output=(a0, a1))
+            check_func(impl, (A, B, flag0, flag1), py_output=(a0, a1), dist_test=False)
 
 
 @pytest.mark.slow
@@ -1181,7 +1407,7 @@ def test_option_format():
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             answer = "12,345,678,910.1112" if flag0 and flag1 else None
-            check_func(impl, (A, B, flag0, flag1), py_output=answer)
+            check_func(impl, (A, B, flag0, flag1), py_output=answer, dist_test=False)
 
 
 @pytest.mark.slow
@@ -1210,12 +1436,14 @@ def test_option_left_right():
                 (scale1, scale2, flag1, flag2),
                 py_output=answer1,
                 check_dtype=False,
+                dist_test=False,
             )
             check_func(
                 impl2,
                 (scale1, scale2, flag1, flag2),
                 py_output=answer2,
                 check_dtype=False,
+                dist_test=False,
             )
 
 
@@ -1244,6 +1472,7 @@ def test_option_lpad_rpad():
                 (arr, length, pad_string, flag1, flag2),
                 py_output=answer,
                 check_dtype=False,
+                dist_test=False,
             )
 
     val, length, pad_string = "alpha", 10, "01"
@@ -1258,6 +1487,7 @@ def test_option_lpad_rpad():
                     impl2,
                     (val, length, pad_string, flag1, flag2, flag3),
                     py_output=answer,
+                    dist_test=False,
                 )
 
 
@@ -1288,6 +1518,7 @@ def test_option_reverse_repeat_replace_space():
                         impl,
                         (A, B, C, D, flag0, flag1, flag2, flag3),
                         py_output=(a0, a1, a2, a3),
+                        dist_test=False,
                     )
 
 
@@ -1304,7 +1535,32 @@ def test_strcmp_instr_option():
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             answer = (1, 0) if flag0 and flag1 else None
-            check_func(impl, ("a", "Z", flag0, flag1), py_output=answer)
+            check_func(
+                impl, ("a", "Z", flag0, flag1), py_output=answer, dist_test=False
+            )
+
+
+@pytest.mark.slow
+def test_option_strtok_split_part():
+    def impl(A, B, C, flag0, flag1, flag2):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C if flag2 else None
+        return (
+            bodo.libs.bodosql_array_kernels.split_part(arg0, arg1, arg2),
+            bodo.libs.bodosql_array_kernels.strtok(arg0, arg1, arg2),
+        )
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                answer = ("b", "c") if flag0 and flag1 and flag2 else None
+                check_func(
+                    impl,
+                    ("a  b  c", " ", 3, flag0, flag1, flag2),
+                    py_output=answer,
+                    dist_test=False,
+                )
 
 
 @pytest.mark.slow
@@ -1332,4 +1588,5 @@ def test_option_substring():
                             impl,
                             (A, B, C, D, E, flag0, flag1, flag2, flag3, flag4),
                             py_output=(a0, a1),
+                            dist_test=False,
                         )
