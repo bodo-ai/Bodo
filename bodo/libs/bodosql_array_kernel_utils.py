@@ -130,10 +130,21 @@ def gen_vectorized(
             if arg_types[i].dtype == bodo.dict_str_arr_type:
                 dict_encoded_arg = i
     use_dict_encoding = (
-        support_dict_encoding
-        and vector_args == 1
-        and dict_encoded_arg >= 0
+        support_dict_encoding and vector_args == 1 and dict_encoded_arg >= 0
+    )
+    # Flushing nulls from the new dictionary array back to the new index array
+    # is only required if the scalar_text contains a setna call, or if one of
+    # the arguments with null propagation is a scalar NULL
+    use_null_flushing = (
+        use_dict_encoding
         and out_dtype == bodo.string_array_type
+        and (
+            any(
+                arg_types[i] == bodo.none and propagate_null[i]
+                for i in range(len(arg_types))
+            )
+            or "bodo.libs.array_kernels.setna" in scalar_text
+        )
     )
 
     # Calculate the indentation of the scalar_text so that it can be removed
@@ -196,9 +207,23 @@ def gen_vectorized(
         # If using dictionary encoding, ensure that the argument name refers
         # to the dictionary, and also extract the indices
         if use_dict_encoding:
-            func_text += f"   indices = {arg_names[dict_encoded_arg]}._indices.copy()\n"
-            func_text += f"   has_global = {arg_names[dict_encoded_arg]}._has_global_dictionary\n"
-            func_text += f"   {arg_names[i]} = {arg_names[dict_encoded_arg]}._data\n"
+            # In this path the output is still dictionary encoded, so the indices
+            # and other attributes need to be copied
+            if out_dtype == bodo.string_array_type:
+                func_text += (
+                    f"   indices = {arg_names[dict_encoded_arg]}._indices.copy()\n"
+                )
+                func_text += f"   has_global = {arg_names[dict_encoded_arg]}._has_global_dictionary\n"
+                func_text += (
+                    f"   {arg_names[i]} = {arg_names[dict_encoded_arg]}._data\n"
+                )
+            # In this path the output is not dictionary encoded, so the data
+            # and indices are needed but no copies are required
+            else:
+                func_text += f"   indices = {arg_names[dict_encoded_arg]}._indices\n"
+                func_text += (
+                    f"   {arg_names[i]} = {arg_names[dict_encoded_arg]}._data\n"
+                )
 
         # If dictionary encoded outputs are not being used, then the output is
         # still bodo.string_array_type, the number of loop iterations is still the
@@ -207,12 +232,17 @@ def gen_vectorized(
         # arguments extracted by getitem.
         func_text += f"   n = {size_text}\n"
         if use_dict_encoding:
-            func_text += (
-                "   res = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n"
-            )
+            if out_dtype == bodo.string_array_type:
+                func_text += (
+                    "   res = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n"
+                )
+            else:
+                func_text += (
+                    "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
+                )
             func_text += "   for i in range(n):\n"
         else:
-            func_text += f"   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
+            func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
             func_text += "   numba.parfors.parfor.init_prange()\n"
             func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
 
@@ -244,19 +274,44 @@ def gen_vectorized(
                 func_text += " " * 6 + line[base_indentation:] + "\n"
 
         # If using dictionary encoding, construct the output from the
-        # new dictionary + the indices, and also make sure that all nulls in
-        # the dicitonary are propageted back to the indices
+        # new dictionary + the indices
         if use_dict_encoding:
-            func_text += "   for i in range(n):\n"
-            func_text += "      if not bodo.libs.array_kernels.isna(indices, i):\n"
-            func_text += "         loc = indices[i]\n"
-            func_text += "         if bodo.libs.array_kernels.isna(res, loc):\n"
-            func_text += "            bodo.libs.array_kernels.setna(indices, i)\n"
-            func_text += "   res = bodo.libs.dict_arr_ext.init_dict_arr(res, indices, has_global)\n"
+            # Flush the nulls back to the index array, if necessary
+            if use_null_flushing:
+                func_text += "   numba.parfors.parfor.init_prange()\n"
+                func_text += (
+                    "   for i in numba.parfors.parfor.internal_prange(len(indices)):\n"
+                )
+                func_text += "      if not bodo.libs.array_kernels.isna(indices, i):\n"
+                func_text += "         loc = indices[i]\n"
+                func_text += "         if bodo.libs.array_kernels.isna(res, loc):\n"
+                func_text += "            bodo.libs.array_kernels.setna(indices, i)\n"
+            # If the output dtype is a string array, create the new dictionary encoded array
+            if out_dtype == bodo.string_array_type:
+                func_text += "   res = bodo.libs.dict_arr_ext.init_dict_arr(res, indices, has_global)\n"
+            # Otherwise, use the indices to copy the values from the smaller array
+            # into a larger one (flushing nulls along the way)
+            else:
+                func_text += "   res2 = bodo.utils.utils.alloc_type(len(indices), out_dtype, (-1,))\n"
+                func_text += "   numba.parfors.parfor.init_prange()\n"
+                func_text += (
+                    "   for i in numba.parfors.parfor.internal_prange(len(indices)):\n"
+                )
+                # Copy nulls from the old index array to the output array
+                func_text += "      if bodo.libs.array_kernels.isna(indices, i):\n"
+                func_text += "         bodo.libs.array_kernels.setna(res2, i)\n"
+                func_text += "      else:\n"
+                func_text += "         loc = indices[i]\n"
+                # Copy nulls from the smaller array to the output array
+                func_text += "         if bodo.libs.array_kernels.isna(res, loc):\n"
+                func_text += "            bodo.libs.array_kernels.setna(res2, i)\n"
+                # Copy values from the smaller array to the larger array
+                func_text += "         else:\n"
+                func_text += "            res2[i] = res[loc]\n"
+                func_text += "   res = res2\n"
             func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, len(indices), 1), None)"
         else:
             func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)"
-
     loc_vars = {}
     exec(
         func_text,
@@ -417,7 +472,7 @@ def is_valid_binary_arg(arg):  # pragma: no cover
     )
 
 
-def verify_string_arg(arg, f_name, a_name):  # pragma: no cover 
+def verify_string_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a string
        (scalar or vector)
     Args:
