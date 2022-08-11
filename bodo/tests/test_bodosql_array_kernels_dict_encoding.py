@@ -12,6 +12,25 @@ from bodo.libs.bodosql_array_kernels import *
 from bodo.tests.utils import SeriesOptTestPipeline, check_func, dist_IR_contains
 
 
+def verify_dictionary_optimization(func, args, dict_func, output_encoded):
+    """Verifies whether or not the output to a function with certain arguments
+    is dictionary encoded by looking for an occurrence of a certain funciton
+    that only operates on dictionary encoded arrays.
+
+    Args:
+        func (function): the function being tested
+        args (any tuple): the arguments to the function
+        dict_func (string): the string function being used to detect whether
+        the output is dictionary encoded
+        output_encoded (boolean): whether the output should be dictionary encoded
+
+    """
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(func)
+    bodo_func(*args)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, dict_func) == output_encoded
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "args",
@@ -115,11 +134,156 @@ def test_dict_other_string_kernels(args):
         reset_index=True,
         additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
-    # Make sure IR has the optimized function
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-    bodo_func(dictionary, *args)
-    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert dist_IR_contains(f_ir, "str_capitalize")
+    verify_dictionary_optimization(impl, (dictionary, *args), "str_capitalize", True)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "editdistance_no_max",
+                (
+                    pa.array(
+                        [
+                            "wonderlust",
+                            "wonder",
+                            None,
+                            "terrible",
+                            None,
+                            "wendigo",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    "wonderful",
+                ),
+                pd.Series([3, 3, None, 8, None, 6] * 2, dtype=pd.Int32Dtype()),
+            ),
+            id="editdistance_no_max",
+        ),
+        pytest.param(
+            (
+                "editdistance_with_max",
+                (
+                    pa.array(
+                        [
+                            "wonderlust",
+                            "wonder",
+                            None,
+                            "terrible",
+                            None,
+                            "wendigo",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    "wonderful",
+                    5,
+                ),
+                pd.Series([3, 3, None, 5, None, 5] * 2, dtype=pd.Int32Dtype()),
+            ),
+            id="editdistance_with_max",
+        ),
+        pytest.param(
+            (
+                "instr",
+                (
+                    pa.array(
+                        [
+                            "alphabet soup is delicious",
+                            "yay",
+                            None,
+                            " a b c ",
+                            None,
+                            "alphabet soup is delicious",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    " ",
+                ),
+                pd.Series([9, 0, None, 1, None, 9] * 2, dtype=pd.Int32Dtype()),
+            ),
+            id="instr",
+        ),
+        pytest.param(
+            (
+                "strcmp",
+                (
+                    pa.array(
+                        [
+                            "alpha",
+                            "beta",
+                            None,
+                            "alphabet",
+                            None,
+                            "alphabets",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    "alphabet",
+                ),
+                pd.Series([-1, 1, None, 0, None, 1] * 2, dtype=pd.Int32Dtype()),
+            ),
+            id="strcmp",
+        ),
+        pytest.param(
+            (
+                "ord_ascii",
+                (
+                    pa.array(
+                        [
+                            "abc",
+                            "DEF",
+                            None,
+                            "a",
+                            None,
+                            "!@#$%",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                ),
+                pd.Series([97, 68, None, 97, None, 33] * 2, dtype=pd.Int32Dtype()),
+            ),
+            id="ord_ascii",
+        ),
+    ],
+)
+def test_dict_str2int(args):
+    def impl1(s, t):
+        return bodo.libs.bodosql_array_kernels.editdistance_no_max(s, t)
+
+    def impl2(s, t, n):
+        return bodo.libs.bodosql_array_kernels.editdistance_with_max(s, t, n)
+
+    def impl3(s, t):
+        return bodo.libs.bodosql_array_kernels.instr(s, t)
+
+    def impl4(s, t):
+        return bodo.libs.bodosql_array_kernels.strcmp(s, t)
+
+    def impl5(s):
+        return bodo.libs.bodosql_array_kernels.ord_ascii(s)
+
+    func, args, answer = args
+    impl = {
+        "editdistance_no_max": impl1,
+        "editdistance_with_max": impl2,
+        "instr": impl3,
+        "strcmp": impl4,
+        "ord_ascii": impl5,
+    }[func]
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
 
 
 @pytest.mark.parametrize(
@@ -168,7 +332,6 @@ def test_dict_other_string_kernels(args):
                 True,
             ),
             id="scalar_dict_null",
-            marks=pytest.mark.slow,
         ),
         pytest.param(
             (
@@ -228,11 +391,9 @@ def test_dict_replace(args):
         reset_index=True,
         additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
-    # Make sure IR has the optimized function if it is supposed to
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-    bodo_func(arr, to_replace, replace_with)
-    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded
+    verify_dictionary_optimization(
+        impl, (arr, to_replace, replace_with), "str_capitalize", output_encoded
+    )
 
 
 @pytest.mark.parametrize(
@@ -316,11 +477,7 @@ def test_dict_split_part(args):
         reset_index=True,
         additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
-    # Make sure IR has the optimized function if it is supposed to
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-    bodo_func(*args)
-    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded
+    verify_dictionary_optimization(impl, args, "str_capitalize", output_encoded)
 
 
 @pytest.mark.parametrize(
@@ -389,11 +546,7 @@ def test_dict_strtok(args):
         reset_index=True,
         additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
-    # Make sure IR has the optimized function if it is supposed to
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-    bodo_func(*args)
-    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded
+    verify_dictionary_optimization(impl, args, "str_capitalize", output_encoded)
 
 
 @pytest.mark.parametrize(
@@ -456,11 +609,7 @@ def test_dict_coalesce(args):
         reset_index=True,
         additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
-    # Make sure IR has the optimized function if it is supposed to
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-    bodo_func(*A)
-    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded
+    verify_dictionary_optimization(impl, A, "str_capitalize", output_encoded)
 
 
 @pytest.mark.parametrize(
@@ -524,11 +673,7 @@ def test_dict_nullif(args):
         reset_index=True,
         additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
-    # Make sure IR has the optimized function if it is supposed to
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-    bodo_func(*A)
-    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded
+    verify_dictionary_optimization(impl, A, "str_capitalize", output_encoded)
 
 
 @pytest.mark.parametrize(
@@ -654,8 +799,5 @@ def test_dict_decode(args):
         reset_index=True,
         additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
-    # Make sure IR has the optimized function if it is supposed to
-    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
-    bodo_func(*A)
-    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    assert (dist_IR_contains(f_ir, "str_capitalize")) == output_encoded
+
+    verify_dictionary_optimization(impl, A, "str_capitalize", output_encoded)
