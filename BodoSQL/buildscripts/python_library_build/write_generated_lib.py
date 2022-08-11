@@ -4,8 +4,6 @@
 """
 import os
 
-import numpy as np
-
 import buildscripts.python_library_build.generate_libraries
 import buildscripts.python_library_build.generate_library_tests
 
@@ -722,65 +720,6 @@ def generate_and_write_library_tests():
             False,
         ),
     ]
-
-    # Trig functions
-
-    # these trig functions do not return NaN
-    flatened_tests = [0, -1, 1, np.pi, -np.pi, 10702.12310, -12312.21421]
-    tests = [[x] for x in flatened_tests]
-    for fn_name, fn in [
-        ("arctan", np.arctan),
-        ("cos", np.cos),
-        ("sin", np.sin),
-        ("tan", np.tan),
-        ("radians", np.radians),
-        ("degrees", np.degrees),
-    ]:
-        test_case = (
-            fn_name,
-            library_fn_from_name(fn_name),
-            tests,
-            [fn(x) for x in flatened_tests],
-            True,
-        )
-        library_tests_info.append(test_case)
-
-    # arccos and arcsin have inputs for which they return NaN
-    # and np.isclose(NaN, NaN) == False, and NaN != NaN so we check the
-    # NaN cases seperatley
-
-    in_range_values = [0, -1, 1, 0.523]
-    in_range_tests = [[x] for x in in_range_values]
-    for fn_name, fn in [
-        ("arcsin", np.arcsin),
-        ("arccos", np.arccos),
-    ]:
-        test_case = (
-            fn_name,
-            library_fn_from_name(fn_name),
-            in_range_tests,
-            [fn(x) for x in in_range_values],
-            True,
-        )
-        library_tests_info.append(test_case)
-
-    # TODO: may want to reduce the number of tests here
-    arctan2_tests = []
-    arctan2_outputs = []
-    for x in flatened_tests:
-        for y in flatened_tests:
-            arctan2_tests.append([x, y])
-            arctan2_outputs.append(np.arctan2(x, y))
-
-    arctan2_test = (
-        "arctan2",
-        library_fn_from_name("arctan2"),
-        arctan2_tests,
-        arctan2_outputs,
-        True,
-    )
-
-    library_tests_info.append(arctan2_test)
 
     library_tests = []
     for (
