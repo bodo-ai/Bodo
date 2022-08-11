@@ -1,10 +1,10 @@
 # Copyright (C) 2021 Bodo Inc. All rights reserved.
 """contains the tests for the generated library fn that need special handling, for one reason or another"""
-import bodo
+import bodosql
 import numpy as np
 import pytest
 
-import bodosql
+import bodo
 
 
 def test_re_match_default_input_0():
@@ -128,12 +128,12 @@ def test_arccos():
         if optional_num == 0:
             if flag:
                 arg0 = None
-            return bodosql.libs.generated_lib.sql_null_checking_arccos(arg0)
+            return bodo.libs.bodosql_array_kernels.acos(arg0)
 
         else:
             if flag:
                 arg0 = None
-            return bodosql.libs.generated_lib.sql_null_checking_arccos(arg0)
+            return bodo.libs.bodosql_array_kernels.acos(arg0)
 
     for x in [-np.pi, np.pi, 2, -2, 131.20, -12.312]:
         normal_out = arccos_run_with_optional_args(False, x, 0)
@@ -150,12 +150,12 @@ def test_arcsin():
         if optional_num == 0:
             if flag:
                 arg0 = None
-            return bodosql.libs.generated_lib.sql_null_checking_arcsin(arg0)
+            return bodo.libs.bodosql_array_kernels.asin(arg0)
 
         else:
             if flag:
                 arg0 = None
-            return bodosql.libs.generated_lib.sql_null_checking_arcsin(arg0)
+            return bodo.libs.bodosql_array_kernels.asin(arg0)
 
     for x in [-np.pi, np.pi, 2, -2, 131.20, -12.312]:
         normal_out = arcsin_run_with_optional_args(False, x, 0)
