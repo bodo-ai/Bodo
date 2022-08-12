@@ -507,20 +507,11 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
             context, builder, sig, (indices_arr,), False
         )
 
-        # get null bitmap ptr since used in C++ directly (get_null_bit, ...)
-        indices_arr_struct = cgutils.create_struct_proxy(
-            bodo.libs.dict_arr_ext.dict_indices_arr_type
-        )(context, builder, indices_arr)
-        null_bitmap_ptr = context.make_array(types.Array(types.uint8, 1, "C"))(
-            context, builder, indices_arr_struct.null_bitmap
-        ).data
-
         fnty = lir.FunctionType(
             lir.IntType(8).as_pointer(),
             [
                 lir.IntType(8).as_pointer(),  # string_array_info
                 lir.IntType(8).as_pointer(),  # indices_arr_info
-                lir.IntType(8).as_pointer(),  # null_bitmap_ptr
                 lir.IntType(32),  # has_global_dictionary flag
             ],
         )
@@ -535,7 +526,6 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
             [
                 str_arr_info,
                 indices_arr_info,
-                builder.bitcast(null_bitmap_ptr, lir.IntType(8).as_pointer()),
                 has_global_dictionary,
             ],
         )

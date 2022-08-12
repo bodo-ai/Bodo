@@ -250,8 +250,9 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
         alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
 
     return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-                          length, -1, -1, NULL, NULL, NULL, NULL, NULL, NULL,
-                          NULL, NULL, 0, 0, 0, has_global_dictionary, false,
+                          length, -1, -1, NULL, NULL, NULL,
+                          indices_data_arr->null_bitmask, NULL, NULL, NULL,
+                          NULL, 0, 0, 0, has_global_dictionary, false,
                           dict_data_arr, indices_data_arr);
 }
 

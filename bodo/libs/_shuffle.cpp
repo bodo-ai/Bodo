@@ -591,6 +591,7 @@ void convert_local_dictionary_to_global(array_info* dict_array,
         array_info* dict_indices = copy_array(dict_array->info2);
         delete_info_decref_array(dict_array->info2);
         dict_array->info2 = dict_indices;
+        dict_array->null_bitmask = dict_indices->null_bitmask;
     }
 
     uint8_t* null_bitmask = (uint8_t*)dict_array->null_bitmask;
