@@ -5722,6 +5722,13 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
                 "B": [1.0, 2.0, 2, 1, 3],
             },
         ),
+        # String Repeat keys
+        pd.DataFrame(
+            {
+                "A": ["CC", "aa", "b", np.nan] * 20,
+                "B": [10.2, 11.1, 1.1, 2.2] * 20,
+            },
+        ),
     ],
 )
 def test_groupby_na_key(df, memory_leak_check):
