@@ -95,7 +95,12 @@ def test_table_len(file_type, datapath, memory_leak_check):
         bodo_func()
         # There shouldn't be any del_column calls
         _check_column_dels(bodo_func, [])
-        check_logger_msg(stream, "Columns loaded ['Column0']")
+        if file_type == "parquet":
+            # Parquet can determine length without loading any columns.
+            loaded_columns = []
+        else:
+            loaded_columns = ["Column0"]
+        check_logger_msg(stream, f"Columns loaded {loaded_columns}")
 
 
 def test_table_filter_dead_columns(datapath, memory_leak_check):
@@ -124,8 +129,8 @@ def test_table_filter_dead_columns(datapath, memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(distributed=False)(impl)
         bodo_func(idx)
-        # Only load column0 for length.
-        check_logger_msg(stream, "Columns loaded ['Column0']")
+        # Parquet can determine length without loading any columns.
+        check_logger_msg(stream, "Columns loaded []")
 
 
 def test_table_len_with_idx_col(datapath, memory_leak_check):
@@ -179,7 +184,12 @@ def test_table_shape(file_type, datapath, memory_leak_check):
         bodo_func()
         # There shouldn't be any del_column calls
         _check_column_dels(bodo_func, [])
-        check_logger_msg(stream, "Columns loaded ['Column0']")
+        if file_type == "parquet":
+            # Parquet can determine length without loading any columns.
+            loaded_columns = []
+        else:
+            loaded_columns = ["Column0"]
+        check_logger_msg(stream, f"Columns loaded {loaded_columns}")
 
 
 def test_table_del_single_block(file_type, datapath, memory_leak_check):
@@ -748,7 +758,12 @@ def test_table_len_alias(file_type, datapath, memory_leak_check):
         bodo_func()
         # There shouldn't be any del_column calls
         _check_column_dels(bodo_func, [])
-        check_logger_msg(stream, "Columns loaded ['Column0']")
+        if file_type == "parquet":
+            # Parquet can determine length without loading any columns.
+            loaded_columns = []
+        else:
+            loaded_columns = ["Column0"]
+        check_logger_msg(stream, f"Columns loaded {loaded_columns}")
 
 
 def test_table_shape_alias(file_type, datapath, memory_leak_check):
@@ -775,7 +790,12 @@ def test_table_shape_alias(file_type, datapath, memory_leak_check):
         bodo_func()
         # There shouldn't be any del_column calls
         _check_column_dels(bodo_func, [])
-        check_logger_msg(stream, "Columns loaded ['Column0']")
+        if file_type == "parquet":
+            # Parquet can determine length without loading any columns.
+            loaded_columns = []
+        else:
+            loaded_columns = ["Column0"]
+        check_logger_msg(stream, f"Columns loaded {loaded_columns}")
 
 
 def test_table_del_single_block_alias(file_type, datapath, memory_leak_check):
@@ -2648,3 +2668,21 @@ def test_merge_del_columns_tuple(datapath, memory_leak_check):
         check_logger_msg(stream, f"Columns loaded ['Column0', 'Column1', 'Column2']")
         check_logger_msg(stream, f"Output columns: ['Column1_x', 'Column2_y']")
         _check_column_dels(bodo_func, [[0], [1], [2], [1], [11]])
+
+
+def test_parquet_tail(datapath, memory_leak_check):
+    def impl():
+        df = pd.read_parquet(filename)
+        return len(df.tail(10000))
+
+    filename = datapath(f"many_columns.parquet")
+    check_func(impl, (), sort_output=True, reset_index=True)
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
+        bodo_func()
+        # There shouldn't be any del_column calls
+        _check_column_dels(bodo_func, [])
+        # There shouldn't be a need to load any columns.
+        check_logger_msg(stream, f"Columns loaded []")
