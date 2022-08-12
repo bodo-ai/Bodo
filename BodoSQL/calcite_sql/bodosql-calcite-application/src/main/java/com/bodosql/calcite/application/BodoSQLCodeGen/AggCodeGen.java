@@ -32,6 +32,7 @@ public class AggCodeGen {
     equivalentPandasMethodMap.put(SqlKind.AVG, "mean");
     equivalentPandasMethodMap.put(SqlKind.STDDEV_SAMP, "std");
     equivalentPandasMethodMap.put(SqlKind.VAR_SAMP, "var");
+    equivalentPandasMethodMap.put(SqlKind.ANY_VALUE, "iloc");
   }
 
   static {
@@ -108,20 +109,26 @@ public class AggCodeGen {
           && a.getAggregation().getKind() != SqlKind.SUM0) {
         aggString.append("bodosql.libs.null_handling.null_if_not_flag(");
       }
-
-      if (!isMethod) {
-        // If we have a function surround the column
-        aggString.append(aggFunc).append("(");
+      // If the aggregation function is ANY_VALUE, manually alter syntax
+      // to use brackets
+      if (aggFunc == "iloc") {
+        aggString.append(seriesBuilder);
+        aggString.append(".iloc[0]");
+      } else {
+        if (!isMethod) {
+          // If we have a function surround the column
+          aggString.append(aggFunc).append("(");
+        }
+        // append the column and if necessary filter
+        aggString.append(seriesBuilder);
+        if (isMethod) {
+          // If we have a method do the method call instead.
+          // We currently don't support any extra arguments
+          aggString.append(".").append(aggFunc).append("(");
+        }
+        // Both func and method need a closing )
+        aggString.append(")");
       }
-      // append the column and if necessary filter
-      aggString.append(seriesBuilder);
-      if (isMethod) {
-        // If we have a method do the method call instead.
-        // We currently don't support any extra arguments
-        aggString.append(".").append(aggFunc).append("(");
-      }
-      // Both func and method need a closing )
-      aggString.append(")");
 
       if (a.getAggregation().getKind() != SqlKind.COUNT
           && a.getAggregation().getKind() != SqlKind.SUM0) {
@@ -227,7 +234,12 @@ public class AggCodeGen {
       }
 
       Pair<String, Boolean> funcInfo = getAggFuncInfo(a, true);
-      String aggFunc = makeQuoted(funcInfo.getKey());
+      String aggFunc = funcInfo.getKey();
+      // When inside of a Group By, use .iloc[0] instead of .head(1)[0]
+      if (aggFunc == "iloc") {
+        aggFunc = "first";
+      }
+      aggFunc = makeQuoted(aggFunc);
 
       aggString
           .append(tempName)

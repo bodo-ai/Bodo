@@ -5,7 +5,6 @@ Test correctness of SQL aggregation operations with groupby on BodoSQL
 import numpy as np
 import pandas as pd
 import pytest
-
 from bodosql.tests.utils import check_query
 
 
@@ -634,4 +633,60 @@ def test_nested_grouping_clauses(
         check_dtype=False,
         check_names=False,
         sort_output=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (["A"], ["B"]),
+            id="int32_groupby_string",
+        ),
+        pytest.param((["B"], ["A"]), id="string_groupby_int32", marks=pytest.mark.slow),
+        pytest.param((["C"], ["B"]), id="float_groupby_string", marks=pytest.mark.slow),
+        pytest.param(
+            (["C"], ["A", "B"]), id="float_groupby_int32_string", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            (["A", "B", "C"], ["B"]),
+            id="all_groupby_string",
+        ),
+        pytest.param(
+            (["A", "B", "C"], ["A", "B", "C"]),
+            id="all_groupby_all",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_any_value(args, spark_info, memory_leak_check):
+    """Tests ANY_VALUE, which is normally nondeterministic but has been
+    implemented in a way that is reproducible (by always returning the first
+    value)"""
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series([1, 2, 3, 4, None] * 5, dtype=pd.Int32Dtype()),
+                "B": pd.Series(["A", "B", None, "C", "D"] * 5),
+                "C": pd.Series([1.0, None, None, 13.0, -1.5] * 5),
+            }
+        )
+    }
+
+    val_cols, group_cols = args
+    query = (
+        "SELECT "
+        + ", ".join([f"ANY_VALUE({col})" for col in val_cols])
+        + " FROM table1 GROUP BY "
+        + ", ".join(group_cols)
+    )
+    equivalent_query = query.replace("ANY_VALUE", "FIRST")
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        equivalent_spark_query=equivalent_query,
     )

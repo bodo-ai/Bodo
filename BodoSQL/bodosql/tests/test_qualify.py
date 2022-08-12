@@ -5,7 +5,6 @@ Test correctness of SQL queries containing qualify clauses in BodoSQL
 
 import os
 
-import bodo
 import numpy as np
 import pandas as pd
 import pytest
@@ -18,6 +17,8 @@ from bodosql.tests.test_rows import (  # noqa
     over_clause_bounds,
 )
 from bodosql.tests.utils import check_query
+
+import bodo
 
 # Helper environment variable to allow for testing locally, while avoiding
 # memory issues on CI
@@ -110,7 +111,7 @@ def test_QUALIFY_upper_lower_bound_numeric(
         query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=spark_query.replace("ANY_VALUE", "FIRST"),
         sort_output=False,
         check_dtype=False,
         check_names=False,

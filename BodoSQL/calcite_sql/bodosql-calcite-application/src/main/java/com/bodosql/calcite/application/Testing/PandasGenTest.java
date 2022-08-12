@@ -13,7 +13,7 @@ public class PandasGenTest {
 
   public static void main(String[] args) throws Exception {
 
-    String sql = "select a from __bodolocal__.table1 limit @cwsfe_21";
+    String sql = "select conditional_change_event(A) over (order by D) from __bodolocal__.table1";
 
     CatalogDatabaseImpl db = new CatalogDatabaseImpl("__bodolocal__");
     ArrayList arr = new ArrayList();

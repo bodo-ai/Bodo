@@ -76,33 +76,37 @@ def lead_or_lag(request):
 
 @pytest.fixture(
     params=[
-        "MAX",
+        pytest.param("MAX", id="MAX"),
         pytest.param(
             "MIN",
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
+            id="MIN",
         ),
-        pytest.param("COUNT", marks=pytest.mark.slow),
-        "COUNT(*)",
-        pytest.param("SUM", marks=pytest.mark.slow),
-        "AVG",
-        "STDDEV",
+        pytest.param("COUNT", marks=pytest.mark.slow, id="COUNT"),
+        pytest.param("COUNT(*)", id="COUNT(*)"),
+        pytest.param("SUM", marks=pytest.mark.slow, id="SUM"),
+        pytest.param("AVG", id="AVG"),
+        pytest.param("STDDEV", id="STDEV"),
         pytest.param(
             "STDDEV_POP",
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
+            id="STDEV_POP",
         ),
-        pytest.param("VARIANCE", marks=pytest.mark.slow),
+        pytest.param("VARIANCE", marks=pytest.mark.slow, id="VARIANCE"),
         pytest.param(
             "VAR_POP",
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
+            id="VAR_POP",
         ),
-        "FIRST_VALUE",
-        "LAST_VALUE",
+        pytest.param("FIRST_VALUE", id="FIRST_VALUE"),
+        pytest.param("LAST_VALUE", id="LAST_VALUE"),
+        pytest.param("ANY_VALUE", id="ANY_VALUE"),
     ]
 )
 def numeric_agg_funcs_subset(request):
@@ -112,17 +116,18 @@ def numeric_agg_funcs_subset(request):
 
 @pytest.fixture(
     params=[
-        "MAX",
+        pytest.param("MAX", id="MAX"),
         pytest.param(
             "MIN",
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
+            id="MIN",
         ),
-        "COUNT",
-        "COUNT(*)",
-        "FIRST_VALUE",
-        "LAST_VALUE",
+        pytest.param("COUNT", id="COUNT"),
+        pytest.param("COUNT(*)", id="COUNT(*)"),
+        pytest.param("FIRST_VALUE", id="FIRST_VALUE"),
+        pytest.param("LAST_VALUE", id="LAST_VALUE"),
     ]
 )
 def non_numeric_agg_funcs_subset(request):
@@ -160,7 +165,6 @@ def test_windowed_upper_lower_bound_numeric(
     # doing an orderby in the query so it's easier to tell what the error is by visual comparison
     # should an error occur
     query = f"select A, B, C, {agg_fn_call} OVER {window_ASC} as WINDOW_AGG_ASC, {agg_fn_call} OVER {window_DESC} as WINDOW_AGG_DESC FROM table1 ORDER BY B, C"
-
     check_query(
         query,
         bodosql_numeric_types,
@@ -169,6 +173,7 @@ def test_windowed_upper_lower_bound_numeric(
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        equivalent_spark_query=query.replace("ANY_VALUE", "FIRST"),
     )
 
 
@@ -210,6 +215,7 @@ def test_windowed_upper_lower_bound_numeric_inside_case(
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+        equivalent_spark_query=query.replace("ANY_VALUE", "FIRST"),
     )
 
 
@@ -404,6 +410,7 @@ def test_windowed_only_upper_bound(
         check_names=False,
         spark_output_cols_to_cast=cols_to_cast,
         only_jit_1DVar=True,
+        equivalent_spark_query=query.replace("ANY_VALUE", "FIRST"),
     )
 
 
@@ -431,6 +438,7 @@ def test_empty_window(
         check_names=False,
         spark_output_cols_to_cast=cols_to_cast,
         only_jit_1DVar=True,
+        equivalent_spark_query=query.replace("ANY_VALUE", "FIRST"),
     )
 
 
@@ -460,6 +468,7 @@ def test_nested_windowed_agg(
         check_names=False,
         spark_output_cols_to_cast=cols_to_cast,
         only_jit_1DVar=True,
+        equivalent_spark_query=query.replace("ANY_VALUE", "FIRST"),
     )
 
 
@@ -1366,6 +1375,50 @@ def test_count_null(spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param(
+            "select ANY_VALUE(A) OVER (PARTITION BY B ORDER BY C) from table1",
+            id="float_string_int",
+        ),
+        pytest.param(
+            "select ANY_VALUE(B) OVER (PARTITION BY C ORDER BY A ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING) from table1",
+            id="string_int_float_frame",
+        ),
+        pytest.param(
+            "select ANY_VALUE(C) OVER (PARTITION BY A ORDER BY B ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING) from table1",
+            id="int_float_string_frame",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "select ANY_VALUE(B) OVER (PARTITION BY A ORDER BY C) from table1",
+            id="string_int_float",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_any_value(query, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series([i / 10 for i in range(10)] * 6),
+                "B": pd.Series(list("ABCDEFGHIJ") * 6),
+                "C": pd.Series(list(range(60))),
+            }
+        )
+    }
+    spark_query = query.replace("ANY_VALUE", "FIRST")
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        equivalent_spark_query=spark_query,
     )
 
 

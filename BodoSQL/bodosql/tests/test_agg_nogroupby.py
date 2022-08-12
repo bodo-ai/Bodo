@@ -3,8 +3,8 @@
 Test correctness of SQL aggregation operations without groupby on BodoSQL
 """
 import numpy as np
+import pandas as pd
 import pytest
-
 from bodosql.tests.utils import check_query
 
 
@@ -338,4 +338,53 @@ def test_having_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param("SELECT ANY_VALUE(A) FROM table1", id="int32"),
+        pytest.param(
+            "SELECT ANY_VALUE(B) FROM table1", id="string", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            "SELECT ANY_VALUE(C) FROM table1", id="float", marks=pytest.mark.slow
+        ),
+        pytest.param(
+            "SELECT ANY_VALUE(A), ANY_VALUE(B), ANY_VALUE(C) FROM table1", id="all"
+        ),
+    ],
+)
+def test_any_value(query, spark_info, memory_leak_check):
+    """Tests ANY_VALUE, which is normally nondeterministic but has been
+    implemented in a way that is reproducible (by always returning the first
+    value)"""
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [5, 3, 1, 10, 30, -1, 0, None, 3, 1, 5, 4, -1, None, 10] * 2,
+                    dtype=pd.Int32Dtype(),
+                ),
+                "B": pd.Series(list("AABAABCBAABCDCB") * 2),
+                "C": pd.Series(
+                    [
+                        (((i + 3) ** 2) % 50) / 10 if i % 5 != 2 else None
+                        for i in range(30)
+                    ]
+                ),
+            }
+        )
+    }
+
+    equivalent_query = query.replace("ANY_VALUE", "FIRST")
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        equivalent_spark_query=equivalent_query,
     )

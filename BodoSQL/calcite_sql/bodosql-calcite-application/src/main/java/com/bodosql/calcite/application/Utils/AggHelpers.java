@@ -89,6 +89,7 @@ public class AggHelpers {
         // function, generateWindowedAggFn
       case LAST_VALUE:
         return colExpr + ".iloc[-1]";
+      case ANY_VALUE:
       case FIRST_VALUE:
         return colExpr + ".iloc[0]";
       default:
