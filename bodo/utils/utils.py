@@ -394,6 +394,11 @@ def is_distributable_typ(var_typ):
 
 
 def is_distributable_tuple_typ(var_typ):
+    try:
+        from bodosql.context_ext import BodoSQLContextType
+    except ImportError:  # pragma: no cover
+        # ignore if None.
+        BodoSQLContextType = None
     return (
         (
             isinstance(var_typ, types.BaseTuple)
@@ -416,6 +421,11 @@ def is_distributable_tuple_typ(var_typ):
                 is_distributable_typ(var_typ.yield_type[1])
                 or is_distributable_tuple_typ(var_typ.yield_type[1])
             )
+        )
+        or (
+            BodoSQLContextType is not None
+            and isinstance(var_typ, BodoSQLContextType)
+            and any([is_distributable_typ(df) for df in var_typ.dataframes])
         )
     )
 

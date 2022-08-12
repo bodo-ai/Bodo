@@ -1,15 +1,5 @@
 from typing import Optional
 
-import bodo
-from bodo.utils.typing import (
-    BodoError,
-    get_literal_value,
-    get_overload_const_str,
-    is_overload_constant_bool,
-    is_overload_constant_str,
-    is_overload_none,
-    raise_bodo_error,
-)
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
 from numba.core.typing import signature
@@ -23,6 +13,17 @@ from numba.extending import (
     register_model,
     typeof_impl,
     unbox,
+)
+
+import bodo
+from bodo.utils.typing import (
+    BodoError,
+    get_literal_value,
+    get_overload_const_str,
+    is_overload_constant_bool,
+    is_overload_constant_str,
+    is_overload_none,
+    raise_bodo_error,
 )
 
 
@@ -141,7 +142,14 @@ class TablePath:
         """
         if isinstance(other, TablePath):
             return self.__key() == other.__key()
-        return NotImplemented
+        return False
+
+    def equals(self, other):
+        """
+        Equivalent to ==. Done to ensure DataFrame and TablePath
+        can use the same API for equality when testing a BodoSQLContext.
+        """
+        return self == other
 
     def __repr__(self):
         return f"TablePath({self._file_path!r}, {self._file_type!r}, conn_str={self._conn_str!r}, reorder_io={self._reorder_io!r}), db_schema={self._db_schema!r}"

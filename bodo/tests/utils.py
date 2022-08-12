@@ -544,8 +544,26 @@ def _get_dist_arg(a, copy=False, var_length=False, check_typing_issues=True):
     if copy and hasattr(a, "copy"):
         a = a.copy()
 
-    if isinstance(a, pytypes.FunctionType) or not is_distributable_typ(bodo.typeof(a)):
+    if isinstance(a, pytypes.FunctionType):
         return a
+
+    bodo_typ = bodo.typeof(a)
+    if not (is_distributable_typ(bodo_typ) or is_distributable_tuple_typ(bodo_typ)):
+        return a
+
+    try:
+        from bodosql import BodoSQLContext
+        from bodosql.context_ext import BodoSQLContextType
+    except ImportError:  # pragma: no cover
+        BodoSQLContextType = None
+
+    if BodoSQLContextType is not None and isinstance(bodo_typ, BodoSQLContextType):
+        # Distribute each of the DataFrames.
+        new_dict = {
+            name: _get_dist_arg(df, copy, var_length, check_typing_issues)
+            for name, df in a.tables.items()
+        }
+        return BodoSQLContext(new_dict)
 
     # PyArrow doesn't support shape
     l = len(a) if isinstance(a, pa.Array) else a.shape[0]

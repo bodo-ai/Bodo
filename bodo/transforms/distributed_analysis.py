@@ -1247,6 +1247,63 @@ class DistributedAnalysis:
             )
             return
 
+        # handle bodosql context calls
+        if isinstance(func_mod, ir.Var) and func_name in [
+            "add_or_replace_view",
+            "remove_view",
+        ]:
+            # The BodoSQLContext behaves like a tuple. We need to verify that
+            # each entry matches.
+            if func_mod not in array_dists:
+                self._set_var_dist(func_mod.name, array_dists, Distribution.OneD)
+            if lhs not in array_dists:
+                self._set_var_dist(lhs, array_dists, Distribution.OneD)
+            old_lhs_dists = array_dists[lhs]
+            old_rhs_var_dists = array_dists[func_mod.name]
+            lhs_dists = []
+            rhs_var_dists = []
+            skip_table_name = get_overload_const_str(self.typemap[rhs.args[0].name])
+            old_typ = self.typemap[func_mod.name]
+            # Iterate over the old type. If the name matches we skip it.
+            new_typ_offset = 0
+            for i, name in enumerate(old_typ.names):
+                if name != skip_table_name:
+                    if old_rhs_var_dists[i] is None:
+                        # TablePath is not distributed
+                        new_dist = None
+                    else:
+                        new_dist = Distribution(
+                            min(
+                                old_rhs_var_dists[i].value,
+                                old_lhs_dists[i + new_typ_offset].value,
+                            )
+                        )
+                    rhs_var_dists.append(new_dist)
+                    lhs_dists.append(new_dist)
+                else:
+                    rhs_var_dists.append(old_rhs_var_dists[i])
+                    new_typ_offset = -1
+
+            if func_name == "add_or_replace_view":
+                # If we are adding a DataFrame it is always
+                # at the end.
+                if old_lhs_dists[-1] is None:
+                    # TablePath is not distributed
+                    new_dist = None
+                else:
+                    new_dist = Distribution(
+                        min(
+                            old_lhs_dists[-1].value, array_dists[rhs.args[1].name].value
+                        )
+                    )
+                    # Set the distribution for the dataframe
+                    array_dists[rhs.args[1].name] = new_dist
+                lhs_dists.append(new_dist)
+            # Update the final distributions
+            array_dists[lhs] = lhs_dists
+            array_dists[func_mod.name] = rhs_var_dists
+            return
+
         # handle df.func calls
         if isinstance(func_mod, ir.Var) and isinstance(
             self.typemap[func_mod.name], DataFrameType
@@ -3871,6 +3928,10 @@ class DistributedAnalysis:
         """get proper distribution value for type. Returns list of distributions for
         tuples (but just the input 'dist' otherwise).
         """
+        try:
+            from bodosql.context_ext import BodoSQLContextType
+        except ImportError:  # pragma: no cover
+            BodoSQLContextType = None
         if is_distributable_tuple_typ(typ):
             if isinstance(typ, types.iterators.EnumerateType):
                 typ = typ.yield_type[1]
@@ -3878,13 +3939,17 @@ class DistributedAnalysis:
                 return [None, self._get_dist(typ, dist)]
             if isinstance(typ, types.List):
                 typ = typ.dtype
+            if BodoSQLContextType is not None and isinstance(typ, BodoSQLContextType):
+                typs = typ.dataframes
+            else:
+                typs = typ.types
             if not isinstance(dist, list):
-                dist = [dist] * len(typ.types)
+                dist = [dist] * len(typs)
             return [
                 self._get_dist(t, dist[i])
                 if (is_distributable_typ(t) or is_distributable_tuple_typ(t))
                 else None
-                for i, t in enumerate(typ.types)
+                for i, t in enumerate(typs)
             ]
         return dist
 
