@@ -362,6 +362,86 @@ def test_format(args):
     [
         pytest.param(
             (
+                (
+                    pd.Series(
+                        pd.array(
+                            ["aLpHaBET Soup iS DeLicious"] * 3
+                            + ["alpha beta gamma delta epsilon"] * 3
+                        )
+                    ),
+                    pd.Series(pd.array([" ", "", "aeiou"] * 2)),
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            "Alphabet Soup Is Delicious",
+                            "Alphabet soup is delicious",
+                            "ALphaBet soUP iS deLiCiOUS",
+                            "Alpha Beta Gamma Delta Epsilon",
+                            "Alpha beta gamma delta epsilon",
+                            "ALpha beTa gaMma deLta ePsiLoN",
+                        ]
+                    )
+                ),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                (
+                    pd.Series(
+                        pd.array(
+                            [
+                                "sansa,arya+gendry,\nrob,jon,bran,rickon",
+                                "cersei+jaime,\ntyrion",
+                                "daenerys+daario,missandei+grey_worm,\njorah,selmy",
+                                "\nrobert,stannis,renly+loras",
+                                None,
+                            ]
+                        )
+                    ),
+                    " \n\t.,;~!@#$%^&*()-+_=",
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            "Sansa,Arya+Gendry,\nRob,Jon,Bran,Rickon",
+                            "Cersei+Jaime,\nTyrion",
+                            "Daenerys+Daario,Missandei+Grey_Worm,\nJorah,Selmy",
+                            "\nRobert,Stannis,Renly+Loras",
+                            None,
+                        ]
+                    )
+                ),
+            ),
+            id="vector_scalar",
+        ),
+        pytest.param(
+            (("a+b=c,a+d=e,b-c=d", "+-=,"), "A+B=C,A+D=E,B-C=D"),
+            id="all_scalar",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_initcap(args):
+    def impl(arr, delim):
+        return bodo.libs.bodosql_array_kernels.initcap(arr, delim)
+
+    args, answer = args
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
                 pd.Series(pd.array(["alpha", "beta", "gamma", None, "epsilon"])),
                 pd.Series(pd.array(["a", "b", "c", "t", "n"])),
             ),
@@ -1378,6 +1458,134 @@ def test_substring_index(args):
     )
 
 
+@pytest.mark.parametrize(
+    "numbers",
+    [
+        pytest.param(
+            pd.Series(pd.array([2, 6, -1, 3, None, 3])),
+            id="vector",
+        ),
+        pytest.param(
+            4,
+            id="scalar",
+        ),
+    ],
+)
+def test_space(numbers):
+    def impl(n_chars):
+        return bodo.libs.bodosql_array_kernels.space(n_chars)
+
+    # Simulates SPACE on a single row
+    def space_scalar_fn(n_chars):
+        if pd.isna(n_chars):
+            return None
+        else:
+            return " " * n_chars
+
+    space_answer = vectorized_sol((numbers,), space_scalar_fn, pd.StringDtype())
+    check_func(
+        impl,
+        (numbers,),
+        py_output=space_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                (
+                    pd.Series(
+                        pd.array(
+                            ["alphabet soup is delicious"] * 4
+                            + ["Where others saw order, I saw a straitjacket."] * 4
+                        )
+                    ),
+                    pd.Series(
+                        pd.array(
+                            [
+                                " aeiou,.",
+                                " aeiou,.",
+                                "abcdefghijklmnopqrstuvwxyz",
+                                "abcdefghijklmnopqrstuvwxyz",
+                            ]
+                            * 2
+                        )
+                    ),
+                    pd.Series(pd.array(["_AEIOU", "zebracdfghijklmnopqstuvwxy"] * 4)),
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            "AlphAbEt_sOUp_Is_dElIcIOUs",
+                            "elphebbtzsacpzrszdblrcracs",
+                            "__AO   IOE",
+                            "zjnfzeas qmtn gq rajgbgmtq",
+                            "WhErE_OthErs_sAw_OrdEr_I_sAw_A_strAItjAckEt",
+                            "WhbrbzathbrszsewzardbrdzIzsewzezstrertjeckbtf",
+                            "WOO O _ IO, I _ _ __EO.",
+                            "Wfapa msfapq qzv mprap, I qzv z qspzgshzbias.",
+                        ]
+                    )
+                ),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                (
+                    "what do we say to the god of death?",
+                    " aeioubcdfghjklmnpqrstvwxyz",
+                    pd.Series(
+                        pd.array(
+                            [
+                                " aeiou",
+                                " aeiou********************",
+                                "_AEIOUbcdfghjklmnpqrstvwxyz",
+                                "",
+                                None,
+                            ]
+                        )
+                    ),
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            "a o e a o e o o ea?",
+                            "**a* *o *e *a* *o **e *o* o* *ea**?",
+                            "whAt_dO_wE_sAy_tO_thE_gOd_Of_dEAth?",
+                            "?",
+                            None,
+                        ]
+                    )
+                ),
+            ),
+            id="scalar_scalar_vector",
+        ),
+        pytest.param(
+            (("WE ATTACK AT DAWN", "ACDEKTNW ", "acdektnw"), "weattackatdawn"),
+            id="all_scalar",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_translate(args):
+    def impl(arr, source, target):
+        return bodo.libs.bodosql_array_kernels.translate(arr, source, target)
+
+    args, answer = args
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.slow
 def test_option_char_ord_ascii():
     def impl(A, B, flag0, flag1):
@@ -1590,3 +1798,36 @@ def test_option_substring():
                             py_output=(a0, a1),
                             dist_test=False,
                         )
+
+
+@pytest.mark.slow
+def test_option_translate_initcap():
+    def impl(A, B, C, flag0, flag1, flag2):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C if flag2 else None
+        return (
+            bodo.libs.bodosql_array_kernels.initcap(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.translate(arg0, arg1, arg2),
+        )
+
+    A, B, C = "The night is dark and full of terrors.", " .", "_"
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                a0 = (
+                    "The Night Is Dark And Full Of Terrors."
+                    if flag0 and flag1
+                    else None
+                )
+                a1 = (
+                    "The_night_is_dark_and_full_of_terrors"
+                    if flag0 and flag1 and flag2
+                    else None
+                )
+                check_func(
+                    impl,
+                    (A, B, C, flag0, flag1, flag2),
+                    py_output=(a0, a1),
+                    dist_test=False,
+                )

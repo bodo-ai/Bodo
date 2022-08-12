@@ -2309,6 +2309,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "MID":
           case "SUBSTR":
           case "SUBSTRING_INDEX":
+          case "TRANSLATE3":
             assert operandsInfo.size() == 3;
             return getThreeArgStringFnInfo(
                 fnName, operandsInfo.get(0), operandsInfo.get(1), operandsInfo.get(2));
@@ -2316,6 +2317,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateStrtok(operandsInfo);
           case "EDITDISTANCE":
             return generateEditdistance(operandsInfo);
+          case "INITCAP":
+            return generateInitcapInfo(operandsInfo);
           case "DATE_TRUNC":
             if (!(operandsInfo.size() == 2
                 && exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR)) {

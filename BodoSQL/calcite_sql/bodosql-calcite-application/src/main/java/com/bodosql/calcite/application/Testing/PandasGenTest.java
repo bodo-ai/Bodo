@@ -17,7 +17,7 @@ public class PandasGenTest {
 
     CatalogDatabaseImpl db = new CatalogDatabaseImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
-    CatalogColumnDataType dataType = CatalogColumnDataType.DATETIME;
+    CatalogColumnDataType dataType = CatalogColumnDataType.STRING;
     CatalogColumnDataType paramType = CatalogColumnDataType.INT64;
     CatalogColumnImpl column = new CatalogColumnImpl("A", dataType, 0);
     arr.add(column);

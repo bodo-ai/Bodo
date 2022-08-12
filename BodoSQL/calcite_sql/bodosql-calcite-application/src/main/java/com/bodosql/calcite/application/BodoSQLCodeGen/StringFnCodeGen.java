@@ -75,6 +75,7 @@ public class StringFnCodeGen {
     equivalentFnMapBroadcast.put("MID", "bodo.libs.bodosql_array_kernels.substring");
     equivalentFnMapBroadcast.put(
         "SUBSTRING_INDEX", "bodo.libs.bodosql_array_kernels.substring_index");
+    equivalentFnMapBroadcast.put("TRANSLATE3", "bodo.libs.bodosql_array_kernels.translate");
     equivalentFnMapBroadcast.put("SPLIT_PART", "bodo.libs.bodosql_array_kernels.split_part");
     equivalentFnMapBroadcast.put("STRTOK", "bodo.libs.bodosql_array_kernels.strtok");
   }
@@ -262,6 +263,43 @@ public class StringFnCodeGen {
   }
 
   /**
+   * Function that returns the rexInfo for a INITCAP Function call
+   *
+   * @param operandsInfo the information about the 1-2 arguments
+   * @return The RexNodeVisitorInfo corresponding to the function call
+   */
+  public static RexNodeVisitorInfo generateInitcapInfo(List<RexNodeVisitorInfo> operandsInfo) {
+    StringBuilder name = new StringBuilder();
+    StringBuilder expr_code = new StringBuilder();
+
+    int argCount = operandsInfo.size();
+    if (!(1 <= argCount && argCount <= 2)) {
+      throw new BodoSQLCodegenException("Error, invalid number of arguments passed to INITCAP");
+    }
+
+    name.append("INITCAP(");
+    name.append(operandsInfo.get(0));
+    name.append(", ");
+
+    expr_code.append("bodo.libs.bodosql_array_kernels.initcap(");
+    expr_code.append(operandsInfo.get(0).getExprCode());
+    expr_code.append(", ");
+
+    // If 1 arguments was provided, provide a default delimeter string
+    if (argCount == 1) {
+      name.append("' \\t\\n\\r\\f\\u000b!?@\\\"^#$&~_,.:;+-*%/|\\[](){}<>'");
+      expr_code.append("' \\t\\n\\r\\f\\u000b!?@\\\"^#$&~_,.:;+-*%/|\\[](){}<>'");
+      // Otherwise, extract the delimeter string argument
+    } else {
+      name.append(operandsInfo.get(1).getName());
+      expr_code.append(operandsInfo.get(1).getExprCode());
+    }
+
+    name.append(")");
+    expr_code.append(")");
+    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+  }
+  /*
    * Function that returns the rexInfo for an STRTOK Function Call.
    *
    * @param operandsInfo the information about the 1-3 arguments

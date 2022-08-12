@@ -423,6 +423,180 @@ def test_utf_scalar(spark_info):
     [
         pytest.param(
             (
+                "SELECT TRANSLATE(A, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "we've had vicious kings and idiot kings, but i don't know if we've ever been cursed with a vicious idiot for a king.",
+                                "the next time i have an idea like that, punch me in the face.",
+                                "that's what i do. i drink and i know things.",
+                                "an unhappy wife is a wine merchant's best friend.",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_scalar_scalar_upper_to_lower",
+        ),
+        pytest.param(
+            (
+                "SELECT TRANSLATE(A, ' ,.'';:!?', '_') FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "Weve_had_vicious_kings_and_idiot_kings_but_I_dont_know_if_weve_ever_been_cursed_with_a_vicious_idiot_for_a_king",
+                                "The_next_time_I_have_an_idea_like_that_punch_me_in_the_face",
+                                "Thats_what_I_do_I_drink_and_I_know_things",
+                                "An_unhappy_wife_is_a_wine_merchants_best_friend",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_scalar_scalar_remove_punct_transform_space",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN LENGTH(A) < 10 THEN 'xxx' ELSE TRANSLATE(A, 'abcdefghijklmnopqrstuvwxyz', 'silverabcdfghjkmnopqtuwxyz') END FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "We'ue bsv uclcktp fcjap sjv cvckq fcjap, itq I vkj'q fjkw cr we'ue eueo ieej ltopev wcqb s uclcktp cvckq rko s fcja.",
+                                "Tbe jexq qche I bsue sj cves gcfe qbsq, mtjlb he cj qbe rsle.",
+                                "Tbsq'p wbsq I vk. I vocjf sjv I fjkw qbcjap.",
+                                "Aj tjbsmmy wcre cp s wcje heolbsjq'p iepq rocejv.",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_scalar_scalar_subst_cipher_case",
+        ),
+    ],
+)
+def test_translate(args, spark_info, memory_leak_check):
+    query, answer = args
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": [
+                    "We've had vicious kings and idiot kings, but I don't know if we've ever been cursed with a vicious idiot for a king.",
+                    "The next time I have an idea like that, punch me in the face.",
+                    "That's what I do. I drink and I know things.",
+                    "An unhappy wife is a wine merchant's best friend.",
+                    None,
+                ]
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "SELECT INITCAP(A) FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "Alphabet Soup Is Delicious",
+                                ' Yay\tAb\nCd\rEf\fGh\u000bIj!Kl?Mn@Op"Qr^St#Uv$Wx&Yz~Ab_Cd,Ef.Gh:Ij;Kl+Mn-Op*Qr%St/Uv|Wx\\Yz[Ab]Cd(Ef)Gh{Ij}Kl<Mn>Op1qr¢stπuv',
+                                "Alpha,Beta,Gamma,Delta,Epsilon\nDo,Re,Mi,Fa,So,La,Ti,Do",
+                                "Run-Of-The-Mill",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_default",
+        ),
+        pytest.param(
+            (
+                "SELECT INITCAP(A, ' ,') FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "Alphabet Soup Is Delicious",
+                                ' Yay\tab\ncd\ref\fgh\u000bij!kl?mn@op"qr^st#uv$wx&yz~ab_cd,Ef.gh:ij;kl+mn-op*qr%st/uv|wx\\yz[ab]cd(ef)gh{ij}kl<mn>op1qr¢stπuv',
+                                "Alpha,Beta,Gamma,Delta,Epsilon\ndo,Re,Mi,Fa,So,La,Ti,Do",
+                                "Run-of-the-mill",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_space_comma",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN INSTR(A, ',') > 0 AND INSTR(A, ',') < 10 THEN 'xxx' ELSE INITCAP(A, '') END FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [
+                                "Alphabet soup is delicious",
+                                ' yay\tab\ncd\ref\fgh\u000bij!kl?mn@op"qr^st#uv$wx&yz~ab_cd,ef.gh:ij;kl+mn-op*qr%st/uv|wx\\yz[ab]cd(ef)gh{ij}kl<mn>op1qr¢stπuv',
+                                "xxx",
+                                "Run-of-the-mill",
+                                None,
+                            ]
+                        )
+                    }
+                ),
+            ),
+            id="vector_empty_case",
+        ),
+    ],
+)
+def test_initcap(args, spark_info, memory_leak_check):
+    query, answer = args
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": [
+                    "alphabet SOUP is DELICIOUS",
+                    ' yay\tab\ncd\ref\fgh\u000bij!kl?mn@op"qr^st#uv$wx&yz~ab_cd,ef.gh:ij;kl+mn-op*qr%st/uv|wx\\yz[ab]cd(ef)gh{ij}kl<mn>op1qr¢stπuv',
+                    "alpha,beta,gamma,delta,epsilon\nDO,RE,MI,FA,SO,LA,TI,DO",
+                    "Run-of-the-mill",
+                    None,
+                ]
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
                 "SELECT EDITDISTANCE(A, 'pokerface') FROM table1",
                 pd.DataFrame(
                     {0: pd.Series([7, None, 4, 6, 5, 1], dtype=pd.Int32Dtype())}

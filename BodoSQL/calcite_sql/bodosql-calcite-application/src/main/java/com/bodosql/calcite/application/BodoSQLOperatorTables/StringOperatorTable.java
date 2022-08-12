@@ -372,6 +372,15 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction INITCAP =
+      new SqlFunction(
+          "INITCAP",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          null,
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_STRING),
+          SqlFunctionCategory.STRING);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           CONCAT,
@@ -395,6 +404,8 @@ public final class StringOperatorTable implements SqlOperatorTable {
           SPLIT_PART,
           STRTOK,
           SUBSTRING_INDEX,
+          SqlLibraryOperators.TRANSLATE3,
+          INITCAP,
           LTRIM,
           RTRIM,
           LENGTH);
