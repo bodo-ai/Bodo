@@ -1414,12 +1414,13 @@ class TypingTransforms:
             df_dict_def_items[1:split_idx],
             df_dict_def_items[split_idx:],
         )
-        df_name_typs = tuple(
-            [
-                self.typemap.get(df_name_var.name, None).literal_value
-                for df_name_var in df_name_vars
-            ]
-        )
+        df_name_typs = []
+        for df_name_var in df_name_vars:
+            name_val = self.typemap.get(df_name_var.name, None)
+            if name_val is not None:
+                name_val = name_val.literal_value
+            df_name_typs.append(name_val)
+        df_name_typs = tuple(df_name_typs)
         df_typs = tuple([self.typemap.get(df_var.name, None) for df_var in df_vars])
 
         return df_name_typs, df_typs
@@ -2787,21 +2788,77 @@ class TypingTransforms:
 
         # In order to inline the sql() call, we must insure that the type of the input dataframe(s)
         # are finalized. dataframe type may have changed in typing pass (e.g. due to df setitem)
-        # so we shouldn't use the actuall type of the dataframes used to initialize the sql_context_var
-        names, df_typs = self._get_bodosql_ctx_name_df_typs(sql_context_var)
+        # so we shouldn't use the actual type of the dataframes used to initialize the sql_context_var
+        def determine_bodosql_context_type(sql_context_var):
+            """
+            Determine the output type of a BodoSQL context after
+            potentially many transformations. Returns None if the
+            type cannot be determined.
+            """
+            sql_ctx_def = guard(get_definition, self.func_ir, sql_context_var)
+            if isinstance(sql_ctx_def, ir.Arg):
+                return self.typemap[sql_context_var.name]
+            fdef = guard(find_callname, self.func_ir, sql_ctx_def)
+            if fdef is None or len(fdef) < 2:
+                # len(fdef) < 2 should always be False, but check
+                # ensure we don't have an indexError in another pass.
+                return None
+            if fdef[0] == "BodoSQLContext":
+                names, df_typs = self._get_bodosql_ctx_name_df_typs(sql_context_var)
+                for df_typ in df_typs:
+                    if df_typ is None:
+                        # Return None if a transformation failed
+                        # because a dataframe type is unknown.
+                        return None
+                return BodoSQLContextType(names, df_typs)
+            elif fdef[0] == "add_or_replace_view":
+                context_type = determine_bodosql_context_type(fdef[1])
+                name_typ = self.typemap.get(sql_ctx_def.args[0].name, None)
+                if name_typ is None or not is_literal_type(name_typ):
+                    # If we can't determine a literal type for name
+                    # we must fail.
+                    return None
+                name_typ = name_typ.literal_value
+                df_typ = self.typemap.get(sql_ctx_def.args[1].name, None)
+                # Map to a new BodoSQLContextType
+                new_names = []
+                new_df_typs = []
+                for old_name_typ, old_df_typ in zip(
+                    context_type.names, context_type.dataframes
+                ):
+                    if old_name_typ != name_typ:
+                        new_names.append(old_name_typ)
+                        new_df_typs.append(old_df_typ)
+                new_names.append(name_typ)
+                new_df_typs.append(df_typ)
+                return BodoSQLContextType(tuple(new_names), tuple(new_df_typs))
+            elif fdef[0] == "remove_view":
+                context_type = determine_bodosql_context_type(fdef[1])
+                name_typ = self.typemap.get(sql_ctx_def.args[0].name, None)
+                if name_typ is None or not is_literal_type(name_typ):
+                    # If we can't determine a literal type for name
+                    # we must fail.
+                    return None
+                name_typ = name_typ.literal_value
+                # Map to a new BodoSQLContextType
+                new_names = []
+                new_df_typs = []
+                for old_name_typ, old_df_typ in zip(
+                    context_type.names, context_type.dataframes
+                ):
+                    if old_name_typ != name_typ:
+                        new_names.append(old_name_typ)
+                        new_df_typs.append(old_df_typ)
+                return BodoSQLContextType(tuple(new_names), tuple(new_df_typs))
+            return None
 
-        for df_typ in df_typs:
-            if df_typ is None:
-                return [assign]
-
-        sql_context_type = BodoSQLContextType(names, df_typs)
-        # cannot transform yet if type is not available yet
+        sql_context_type = determine_bodosql_context_type(sql_context_var)
         if sql_context_type is None:
+            # cannot transform yet if type is not available yet
             return [assign]
 
         # TODO: Add argument error handling (should reuse signature error checking
         # that will be created in df.head PR).
-
         kws = dict(rhs.kws)
         sql_var = get_call_expr_arg(
             f"BodoSQLContextType.{func_name}", rhs.args, kws, 0, "sql"

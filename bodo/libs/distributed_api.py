@@ -1237,6 +1237,39 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
             lambda data, allgather=False, warn_if_rep=True, root=MPI_ROOT: None
         )  # pragma: no cover
 
+    try:
+        import bodosql
+        from bodosql.context_ext import BodoSQLContextType
+    except ImportError:  # pragma: no cover
+        BodoSQLContextType = None
+    if BodoSQLContextType is not None and isinstance(data, BodoSQLContextType):
+        func_text = f"def impl_bodosql_context(data, allgather=False, warn_if_rep=True, root={MPI_ROOT}):\n"
+        comma_sep_names = ", ".join([f"'{name}'" for name in data.names])
+        comma_sep_dfs = ", ".join(
+            [
+                f"bodo.gatherv(data.dataframes[{i}], allgather, warn_if_rep, root)"
+                for i in range(len(data.dataframes))
+            ]
+        )
+        func_text += f"  return bodosql.context_ext.init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ))\n"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo, "bodosql": bodosql}, loc_vars)
+        impl_bodosql_context = loc_vars["impl_bodosql_context"]
+        return impl_bodosql_context
+    try:
+        import bodosql
+        from bodosql import TablePathType
+    except ImportError:  # pragma: no cover
+        TablePathType = None
+    if TablePathType is not None and isinstance(data, TablePathType):
+        # Table Path info is all compile time so we return the same data.
+        func_text = f"def impl_table_path(data, allgather=False, warn_if_rep=True, root={MPI_ROOT}):\n"
+        func_text += f"  return data\n"
+        loc_vars = {}
+        exec(func_text, {}, loc_vars)
+        impl_table_path = loc_vars["impl_table_path"]
+        return impl_table_path
+
     raise BodoError("gatherv() not available for {}".format(data))  # pragma: no cover
 
 

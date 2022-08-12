@@ -1,6 +1,7 @@
 import re
 import warnings
 from enum import Enum
+from typing import Union
 
 import numba
 import numpy as np
@@ -691,6 +692,71 @@ class BodoSQLContext:
         for key in self.tables.keys():
             table_names.append(key)
         return table_names, self.orig_bodo_types
+
+    def add_or_replace_view(self, name: str, table: Union[pd.DataFrame, TablePath]):
+        """Create a new BodoSQLContext that contains all of the old DataFrames and the
+        new table being provided. If there is a DataFrame in the old BodoSQLContext with
+        the same name, it is replaced by the new table in the new BodoSQLContext. Otherwise
+        the new table is just added under the new name.
+
+        Args:
+            name (str): Name of the new table
+            table (Union[pd.DataFrame,  TablePath]): New tables
+
+        Returns:
+            BodoSQLContext: A new BodoSQL context.
+
+        Raises BodoError
+        """
+        if not isinstance(name, str):
+            raise BodoError(
+                "BodoSQLContext.add_or_replace_view(): 'name' must be a string"
+            )
+        if not isinstance(table, (pd.DataFrame, TablePath)):
+            raise BodoError(
+                "BodoSQLContext.add_or_replace_view(): 'table' must be a Pandas DataFrame or BodoSQL TablePath"
+            )
+        new_tables = self.tables.copy()
+        new_tables[name] = table
+        return BodoSQLContext(new_tables)
+
+    def remove_view(self, name: str):
+        """Create a new BodoSQLContext by removing the table with the
+        given name.
+
+        Args:
+            name (str): Name of the table to remove.
+
+        Returns:
+            BodoSQLContext: A new BodoSQL context.
+
+        Raises BodoError
+        """
+        if not isinstance(name, str):
+            raise BodoError(
+                "BodoSQLContext.remove_view(): 'name' must be a constant string"
+            )
+        new_tables = self.tables.copy()
+        if name not in new_tables:
+            raise BodoError(
+                "BodoSQLContext.remove_view(): 'name' must refer to a registered view"
+            )
+        del new_tables[name]
+        return BodoSQLContext(new_tables)
+
+    def __eq__(self, bc: object) -> bool:
+        if isinstance(bc, BodoSQLContext):
+            # Since the dictionary can contain either
+            # DataFrames or table paths, we must add separate
+            # checks for both.
+            curr_keys = set(self.tables.keys())
+            bc_keys = set(bc.tables.keys())
+            if curr_keys == bc_keys:
+                for key in curr_keys:
+                    if not self.tables[key].equals(bc.tables[key]):  # pragma: no cover
+                        return False
+                return True
+        return False  # pragma: no cover
 
 
 def intialize_database(name_to_df_type, name_to_bodo_type, param_key_values=None):

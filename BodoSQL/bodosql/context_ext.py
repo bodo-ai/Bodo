@@ -4,24 +4,9 @@ which allows typing and optimization.
 """
 import re
 
-import bodo
 import numba
 import numpy as np
 import pandas as pd
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
-from bodo.libs.distributed_api import bcast_scalar
-from bodo.utils.typing import BodoError, get_overload_const
-from numba.core import cgutils, types
-from numba.extending import (
-    intrinsic,
-    make_attribute_wrapper,
-    models,
-    overload,
-    overload_method,
-    register_model,
-    typeof_impl,
-)
-
 from bodosql.bodosql_types.table_path import TablePathType
 from bodosql.context import (
     NAMED_PARAM_TABLE_NAME,
@@ -34,6 +19,30 @@ from bodosql.context import (
     intialize_database,
 )
 from bodosql.utils import java_error_to_msg
+from numba.core import cgutils, types
+from numba.extending import (
+    NativeValue,
+    box,
+    intrinsic,
+    make_attribute_wrapper,
+    models,
+    overload,
+    overload_method,
+    register_model,
+    typeof_impl,
+    unbox,
+)
+
+import bodo
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.libs.distributed_api import bcast_scalar
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const,
+    get_overload_const_str,
+    is_overload_constant_str,
+    raise_bodo_error,
+)
 
 
 class BodoSQLContextType(types.Type):
@@ -88,6 +97,53 @@ def lower_init_sql_context(context, builder, signature, args):
     return sql_ctx_struct._getvalue()
 
 
+@box(BodoSQLContextType)
+def box_bodosql_context(typ, val, c):
+    """
+    Boxes a BodoSQLContext into a Python value.
+    """
+    # Create a dictionary for python
+    py_dict_obj = c.pyapi.dict_new(len(typ.names))
+    bodosql_context_struct = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
+    dataframes = bodosql_context_struct.dataframes
+    for i, name in enumerate(typ.names):
+        df = c.builder.extract_value(dataframes, i)
+        c.context.nrt.incref(c.builder, typ.dataframes[i], df)
+        df_obj = c.pyapi.from_native_value(typ.dataframes[i], df, c.env_manager)
+        c.context.nrt.decref(c.builder, typ.dataframes[i], df)
+        # dict_setitem_string borrows a reference, so avoid decrefing.
+        c.pyapi.dict_setitem_string(py_dict_obj, name, df_obj)
+
+    mod_name = c.context.insert_const_string(c.builder.module, "bodosql")
+    bodosql_class_obj = c.pyapi.import_module_noblock(mod_name)
+    res = c.pyapi.call_method(bodosql_class_obj, "BodoSQLContext", (py_dict_obj,))
+    c.pyapi.decref(bodosql_class_obj)
+    c.pyapi.decref(py_dict_obj)
+    return res
+
+
+@unbox(BodoSQLContextType)
+def unbox_bodosql_context(typ, val, c):
+    """
+    Unboxes a BodoSQLContext into a native value.
+    """
+    py_dfs_obj = c.pyapi.object_getattr_string(val, "tables")
+    native_dfs = []
+    for i, name in enumerate(typ.names):
+        df_obj = c.pyapi.dict_getitem_string(py_dfs_obj, name)
+        df_struct = c.pyapi.to_native_value(typ.dataframes[i], df_obj)
+        # Set the parent value
+        c.pyapi.incref(df_obj)
+        df_struct.parent = df_obj
+        native_dfs.append(df_struct.value)
+        c.pyapi.decref(df_obj)
+    c.pyapi.decref(py_dfs_obj)
+    df_tuple = c.context.make_tuple(c.builder, types.Tuple(typ.dataframes), native_dfs)
+    bodosql_context_struct = cgutils.create_struct_proxy(typ)(c.context, c.builder)
+    bodosql_context_struct.dataframes = df_tuple
+    return NativeValue(bodosql_context_struct._getvalue())
+
+
 @intrinsic
 def init_sql_context(typingctx, names_type, dataframes_type=None):
     """Create a BodoSQLContext given table names and dataframes."""
@@ -120,6 +176,72 @@ def bodo_sql_context_overload(tables):
 
     func_text = (
         f"def impl(tables):\n  return init_sql_context({names_tup}, {df_args})\n"
+    )
+    loc_vars = {}
+    _global = {"init_sql_context": init_sql_context}
+    exec(func_text, _global, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+@overload_method(BodoSQLContextType, "add_or_replace_view", no_unliteral="True")
+def overload_bodosql_context_add_or_replace_view(bc, name, table):
+    if not is_overload_constant_str(name):
+        raise_bodo_error(
+            "BodoSQLContext.add_or_replace_view(): 'name' must be a constant string"
+        )
+    name = get_overload_const_str(name)
+    if not isinstance(table, (bodo.DataFrameType, TablePathType)):
+        raise BodoError(
+            "BodoSQLContext.add_or_replace_view(): 'table' must be a DataFrameType or TablePathType"
+        )
+    new_names = []
+    new_dataframes = []
+    for i, old_name in enumerate(bc.names):
+        if old_name != name:
+            new_names.append(f"'{old_name}'")
+            new_dataframes.append(f"bc.dataframes[{i}]")
+    new_names.append(f"'{name}'")
+    new_dataframes.append("table")
+    comma_sep_names = ", ".join(new_names)
+    comma_sep_dfs = ", ".join(new_dataframes)
+    func_text = "def impl(bc, name, table):\n"
+    func_text += (
+        f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ))\n"
+    )
+    loc_vars = {}
+    _global = {"init_sql_context": init_sql_context}
+    exec(func_text, _global, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+@overload_method(BodoSQLContextType, "remove_view", no_unliteral="True")
+def overload_bodosql_context_remove_view(bc, name):
+    if not is_overload_constant_str(name):
+        raise_bodo_error(
+            "BodoSQLContext.remove_view(): 'name' must be a constant string"
+        )
+    name = get_overload_const_str(name)
+    new_names = []
+    new_dataframes = []
+    found = False
+    for i, old_name in enumerate(bc.names):
+        if old_name != name:
+            new_names.append(f"'{old_name}'")
+            new_dataframes.append(f"bc.dataframes[{i}]")
+        else:
+            found = True
+    if not found:
+        raise BodoError(
+            "BodoSQLContext.remove_view(): 'name' must refer to a registered view"
+        )
+
+    comma_sep_names = ", ".join(new_names)
+    comma_sep_dfs = ", ".join(new_dataframes)
+    func_text = "def impl(bc, name):\n"
+    func_text += (
+        f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ))\n"
     )
     loc_vars = {}
     _global = {"init_sql_context": init_sql_context}
