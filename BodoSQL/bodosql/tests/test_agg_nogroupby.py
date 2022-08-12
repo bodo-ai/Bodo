@@ -2,10 +2,20 @@
 """
 Test correctness of SQL aggregation operations without groupby on BodoSQL
 """
+import bodosql
 import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
+
+import bodo
+from bodo.tests.utils import (
+    DistTestPipeline,
+    check_func,
+    count_array_OneDs,
+    count_array_REPs,
+    dist_IR_contains,
+)
 
 
 def test_agg_numeric(
@@ -339,6 +349,36 @@ def test_having_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
     )
+
+
+def test_agg_replicated(memory_leak_check):
+    """
+    Tests that an aggregation query produces a
+    replicated output.
+    """
+
+    def impl(filename):
+        bc = bodosql.BodoSQLContext({"t1": bodosql.TablePath(filename, "parquet")})
+        return bc.sql("select count(B) as cnt from t1")
+
+    filename = "bodosql/tests/data/sample-parquet-data/no_index.pq"
+    read_df = pd.read_parquet(filename)
+    count = read_df.B.count()
+    expected_output = pd.DataFrame({"cnt": count}, index=pd.Index([0]))
+    check_func(impl, (filename,), py_output=expected_output, is_out_distributed=False)
+    # Check that the function returns replicated data.
+    bodo_func = bodo.jit(distributed_block={"A"}, pipeline_class=DistTestPipeline)(impl)
+    bodo_func(filename)
+    # This function needs to return at least two distributed outputs, the data column
+    # and the index. This functions may contain more if there are aliases or other
+    # intermediate variables.
+    assert count_array_REPs() > 2, "Expected replicated return value"
+    # The parquet data should still be loaded as 1D
+    assert count_array_OneDs() > 1, "Expected distributed read from parquet"
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(
+        f_ir, "dist_reduce"
+    ), "Expected distributed reduction in the compute."
 
 
 @pytest.mark.parametrize(
