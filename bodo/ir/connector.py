@@ -320,7 +320,13 @@ def connector_table_column_use(
 
 
 def base_connector_remove_dead_columns(
-    node, column_live_map, equiv_vars, typemap, nodename, possible_cols
+    node,
+    column_live_map,
+    equiv_vars,
+    typemap,
+    nodename,
+    possible_cols,
+    require_one_column=True,
 ):
     """
     Function that tracks which columns to prune from a connector IR node.
@@ -344,7 +350,7 @@ def base_connector_remove_dead_columns(
         )
         if not (use_all or cannot_del_cols):
             used_columns = trim_extra_used_columns(used_columns, len(possible_cols))
-            if not used_columns:
+            if not used_columns and require_one_column:
                 # If we see no specific column is need some operations need some
                 # column but no specific column. For example:
                 # T = read_parquet(table(0, 1, 2, 3))

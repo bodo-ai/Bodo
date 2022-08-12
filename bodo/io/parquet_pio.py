@@ -429,6 +429,7 @@ def pq_distributed_run(
         pq_node.index_column_index,
         pq_node.index_column_type,
         pq_node.input_file_name_col,
+        not pq_node.is_live_table,
     )
     # First arg is the path to the parquet dataset, and can be a string or a list
     # of strings
@@ -459,12 +460,12 @@ def pq_distributed_run(
     # can be dead because otherwise the whole
     # node should have already been removed.
     assert not (
-        pq_node.index_column_index is None and not pq_node.out_used_cols
+        pq_node.index_column_index is None and not pq_node.is_live_table
     ), "At most one of table and index should be dead if the Parquet IR node is live"
     if pq_node.index_column_index is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
-    elif not pq_node.out_used_cols:
+    elif not pq_node.is_live_table:
         # If the table is dead, remove the node
         nodes.pop(-2)
 
@@ -522,6 +523,7 @@ def _gen_pq_reader_py(
     index_column_index,
     index_column_type,
     input_file_name_col,
+    is_dead_table,
 ):
 
     # a unique int used to create global variables with unique names
@@ -548,9 +550,6 @@ def _gen_pq_reader_py(
 
     # NOTE: col_indices are the indices of columns in the parquet file (not in
     # the output of read_parquet)
-
-    # If we aren't loading any column the table is dead
-    is_dead_table = not out_used_cols
 
     sanitized_col_names = [sanitize_varname(c) for c in col_names]
     partition_names = [sanitize_varname(c) for c in partition_names]
@@ -684,17 +683,19 @@ def _gen_pq_reader_py(
     func_text += f"    )\n"
     func_text += f"    check_and_propagate_cpp_exception()\n"
 
-    # handle index column
-    index_arr = "None"
+    func_text += f"    total_rows = total_rows_np[0]\n"
+    # Compute the number of rows that are stored in your chunk of the data.
+    # This is necessary because we may avoid reading any columns but may not
+    # be able to do the head only optimization.
+    if is_parallel:
+        func_text += f"    local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
+    else:
+        func_text += f"    local_rows = total_rows\n"
+
     index_arr_type = index_column_type
     py_table_type = TableType(tuple(out_types))
     if is_dead_table:
         py_table_type = types.none
-
-    if index_column_index is not None:
-        index_arr_ind = selected_cols_map[index_column_index]
-        index_arr = f"info_to_array(info_from_table(out_table, {index_arr_ind}), index_arr_type)"
-    func_text += f"    index_arr = {index_arr}\n"
 
     # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
     # For a list column, the value is an integer which is the location of the column in the C++ Table.
@@ -737,12 +738,19 @@ def _gen_pq_reader_py(
                 table_idx.append(-1)
         table_idx = np.array(table_idx, dtype=np.int64)
 
+    # Extract the table and index from C++.
     if is_dead_table:
         func_text += "    T = None\n"
     else:
         func_text += f"    T = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
+        # Set the table length
+        func_text += f"    T = set_table_len(T, local_rows)\n"
+    if index_column_index is None:
+        func_text += "    index_arr = None\n"
+    else:
+        index_arr_ind = selected_cols_map[index_column_index]
+        func_text += f"    index_arr = info_to_array(info_from_table(out_table, {index_arr_ind}), index_arr_type)\n"
     func_text += f"    delete_table(out_table)\n"
-    func_text += f"    total_rows = total_rows_np[0]\n"
     func_text += f"    ev.finalize()\n"
     func_text += f"    return (total_rows, T, index_arr)\n"
     loc_vars = {}
@@ -765,6 +773,8 @@ def _gen_pq_reader_py(
         "np": np,
         "pd": pd,
         "bodo": bodo,
+        "get_node_portion": bodo.libs.distributed_api.get_node_portion,
+        "set_table_len": bodo.hiframes.table.set_table_len,
     }
 
     exec(func_text, glbs, loc_vars)

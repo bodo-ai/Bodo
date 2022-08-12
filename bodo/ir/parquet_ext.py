@@ -71,6 +71,9 @@ class ParquetReader(ir.Stmt):
         # get eliminated.
         self.unsupported_columns = unsupported_columns
         self.unsupported_arrow_types = unsupported_arrow_types
+        # Is the variable currently alive. This should be replaced with most
+        # robust handling in connectors.
+        self.is_live_table = True
 
     def __repr__(self):  # pragma: no cover
         # TODO
@@ -113,6 +116,7 @@ def remove_dead_pq(
         pq_node.col_indices = []
         pq_node.df_colnames = []
         pq_node.out_used_cols = []
+        pq_node.is_live_table = False
     elif index_var not in lives:
         # If the index_var not in lives we don't load the index.
         # To do this we mark the index_column_index as None
@@ -139,6 +143,8 @@ def pq_remove_dead_column(pq_node, column_live_map, equiv_vars, typemap):
         # col_indices is set to an empty list if the table is dead
         # see 'remove_dead_pq'
         pq_node.col_indices,
+        # Parquet can track length without loading any columns.
+        require_one_column=False,
     )
 
 
