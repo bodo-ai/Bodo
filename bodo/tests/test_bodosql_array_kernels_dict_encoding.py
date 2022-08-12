@@ -799,5 +799,175 @@ def test_dict_decode(args):
         reset_index=True,
         additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
-
     verify_dictionary_optimization(impl, A, "str_capitalize", output_encoded)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "15-112 15-122 15-150",
+                            "15-210 15-213 15-251\n15-281",
+                            "15-312 15-330",
+                            "15-451",
+                            None,
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    " \n-",
+                    ",,",
+                ),
+                pd.Series(
+                    [
+                        "15112,15122,15150",
+                        "15210,15213,15251,15281",
+                        "15312,15330",
+                        "15451",
+                        None,
+                    ]
+                    * 2
+                ),
+                True,
+            ),
+            id="dict_scalar_scalar",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "15-112 15-122 15-150",
+                            "15-210 15-213 15-251\n15-281",
+                            "15-312 15-330",
+                            "15-451",
+                            None,
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    " \n-",
+                    pd.Series([",,"] * 12),
+                ),
+                pd.Series(
+                    [
+                        "15112,15122,15150",
+                        "15210,15213,15251,15281",
+                        "15312,15330",
+                        "15451",
+                        None,
+                    ]
+                    * 2
+                ),
+                False,
+            ),
+            id="dict_scalar_vector",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_dict_translate(args):
+    def impl(arr, source, target):
+        return bodo.libs.bodosql_array_kernels.translate(
+            arr, source, target
+        ).str.capitalize()
+
+    args, answer, output_encoded = args
+
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
+    verify_dictionary_optimization(impl, args, "str_capitalize", output_encoded)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "alpha beta gamma delta",
+                            "ALPHABET SOUP IS DELICIOUS",
+                            "epsilon,theta.iota;pi\tsigma",
+                            "The cheese will be served when I want it served. And I want it served now.",
+                            None,
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    " ",
+                ),
+                pd.Series(
+                    [
+                        "Alpha Beta Gamma Delta",
+                        "Alphabet Soup Is Delicious",
+                        "Epsilon,theta.iota;pi\tsigma",
+                        "The Cheese Will Be Served When I Want It Served. And I Want It Served Now.",
+                        None,
+                    ]
+                    * 2
+                ),
+                True,
+            ),
+            id="dict_scalar",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "alpha beta gamma delta",
+                            "ALPHABET SOUP IS DELICIOUS",
+                            "epsilon,theta.iota;pi\tsigma",
+                            "The cheese will be served when I want it served. And I want it served now.",
+                            None,
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    pd.Series([" "] * 12),
+                ),
+                pd.Series(
+                    [
+                        "Alpha Beta Gamma Delta",
+                        "Alphabet Soup Is Delicious",
+                        "Epsilon,theta.iota;pi\tsigma",
+                        "The Cheese Will Be Served When I Want It Served. And I Want It Served Now.",
+                        None,
+                    ]
+                    * 2
+                ),
+                False,
+            ),
+            id="dict_vector",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_dict_initcap(args):
+    def impl(arr, delim):
+        return bodo.libs.bodosql_array_kernels.initcap(arr, delim).str.strip()
+
+    args, answer, output_encoded = args
+
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
+
+    verify_dictionary_optimization(impl, args, "str_strip", output_encoded)

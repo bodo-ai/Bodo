@@ -81,6 +81,25 @@ def format(arr, places):
 
 
 @numba.generated_jit(nopython=True)
+def initcap(arr, delim):
+    """Handles cases where INITCAP recieves optional arguments and forwards
+    to args appropriate version of the real implementation"""
+    args = [arr, delim]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.initcap",
+                ["arr", "delim"],
+                i,
+            )
+
+    def impl(arr, delim):  # pragma: no cover
+        return initcap_util(arr, delim)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def instr(arr, target):
     """Handles cases where INSTR recieves optional arguments and forwards
     to args appropriate version of the real implementation"""
@@ -360,6 +379,25 @@ def substring_index(arr, delimiter, occurrences):
 
 
 @numba.generated_jit(nopython=True)
+def translate(arr, source, target):
+    """Handles cases where TRANSLATE recieves optional arguments and forwards
+    to args appropriate version of the real implementation"""
+    args = [arr, source, target]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.translate",
+                ["arr", "source", "target"],
+                i,
+            )
+
+    def impl(arr, source, target):  # pragma: no cover
+        return translate_util(arr, source, target)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def char_util(arr):
     """A dedicated kernel for the SQL function CHAR which takes in an integer
        (or integer column) and returns the character corresponding to the
@@ -383,6 +421,41 @@ def char_util(arr):
     scalar_text += "   res[i] = chr(arg0)\n"
     scalar_text += "else:\n"
     scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def initcap_util(arr, delim):
+    """A dedicated kernel for the SQL function INITCAP which takes in a source
+    string (or column) and a delimeter string (or column) capitalizes the first
+    character and every character after the characters in the delimeter string.
+
+
+    Args:
+        arr (string array/series/scalar): the string(s) being capitalized
+        delim (string array/series/scalar): the delimeter string(s) to capitalize
+        after
+
+    Returns:
+        string series/scalar: the capitalized string(s)
+    """
+
+    verify_string_arg(arr, "INITCAP", "arr")
+    verify_string_arg(delim, "INITCAP", "delim")
+
+    arg_names = ["arr", "delim"]
+    arg_types = [arr, delim]
+    propagate_null = [True] * 2
+    scalar_text = "capitalized = arg0[:1].upper()\n"
+    scalar_text += "for j in range(1, len(arg0)):\n"
+    scalar_text += "   if arg0[j-1] in arg1:\n"
+    scalar_text += "      capitalized += arg0[j].upper()\n"
+    scalar_text += "   else:\n"
+    scalar_text += "      capitalized += arg0[j].lower()\n"
+    scalar_text += "res[i] = capitalized"
 
     out_dtype = bodo.string_array_type
 
@@ -1100,6 +1173,46 @@ def substring_index_util(arr, delimiter, occurrences):
     scalar_text += "   res[i] = arg1.join(arg0.split(arg1, arg2+1)[:arg2])\n"
     scalar_text += "else:\n"
     scalar_text += "   res[i] = arg1.join(arg0.split(arg1)[arg2:])\n"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def translate_util(arr, source, target):
+    """A dedicated kernel for the SQL function TRANSLATE which takes in a string
+       (or string column) and two alphabet strings (or columns) and replaces
+       each character in the source string from the first alphabet with the
+       corresponding character from the second character (or deletes the
+       character if the second alphabet is shorter)
+
+
+    Args:
+        arr (string array/series/scalar): the string(s) being translated
+        source (string array/series/scalar): the characters being converted
+        target (string array/series/scalar): the characters replacing the source
+        alphabet
+
+    Returns:
+        string series/scalar: the translated string(s)
+    """
+
+    verify_string_arg(arr, "translate", "arr")
+    verify_string_arg(source, "translate", "source")
+    verify_string_arg(target, "translate", "target")
+
+    arg_names = ["arr", "source", "target"]
+    arg_types = [arr, source, target]
+    propagate_null = [True] * 3
+    scalar_text = "translated = ''\n"
+    scalar_text += "for char in arg0:\n"
+    scalar_text += "   index = arg1.find(char)\n"
+    scalar_text += "   if index == -1:\n"
+    scalar_text += "      translated += char\n"
+    scalar_text += "   elif index < len(arg2):\n"
+    scalar_text += "      translated += arg2[index]\n"
+    scalar_text += "res[i] = translated"
 
     out_dtype = bodo.string_array_type
 
