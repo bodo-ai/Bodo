@@ -138,8 +138,11 @@ public class AggCodeGen {
 
       aggString.append(", ");
     }
-    // Aggregation without groupby should always have one element, so create a range index
-    aggString.append("}, index=pd.RangeIndex(0, 1, 1))");
+    // Aggregation without groupby should always have one element.
+    // To force this value to be replicated (the correct output),
+    // we use coerce to array.
+    aggString.append(
+        "}, index=bodo.hiframes.pd_index_ext.init_numeric_index(bodo.utils.conversion.coerce_to_array([0])))");
     return aggString.toString();
   }
 
