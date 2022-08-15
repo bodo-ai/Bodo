@@ -21,6 +21,10 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_array_type,
     datetime_date_type,
 )
+from bodo.hiframes.time_ext import (
+    TimeType,
+    TimeArrayType,
+)
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     PDCategoricalDtype,
@@ -122,7 +126,11 @@ _pyarrow_numba_type_map = {
     # date
     pa.date32(): datetime_date_type,
     pa.date64(): types.NPDatetime("ns"),
-    # time (TODO: time32, time64, ...)
+    # time
+    pa.time32("s"): TimeType(0),
+    pa.time32("ms"): TimeType(3),
+    pa.time64("us"): TimeType(6),
+    pa.time64("ns"): TimeType(9),
     # all null column
     pa.null(): string_type,  # map it to string_type, handle differently at runtime
     # Timestamp information is computed in get_arrow_timestamp_type,
@@ -231,6 +239,9 @@ def _get_numba_typ_from_pa_typ(
 
     if dtype == datetime_date_type:
         return datetime_date_array_type, supported
+
+    if isinstance(dtype, TimeType):
+        return TimeArrayType(dtype.precision), supported
 
     if dtype == bytes_type:
         return binary_array_type, supported

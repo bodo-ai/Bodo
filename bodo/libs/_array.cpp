@@ -368,6 +368,16 @@ array_info* decimal_array_to_info(uint64_t n_items, char* data, int typ_enum,
                           meminfo_bitmask, NULL, precision, scale);
 }
 
+array_info* time_array_to_info(uint64_t n_items, char* data, int typ_enum,
+                               char* null_bitmap, NRT_MemInfo* meminfo,
+                               NRT_MemInfo* meminfo_bitmask,
+                               int32_t precision) {
+    return new array_info(bodo_array_type::NULLABLE_INT_BOOL,
+                          (Bodo_CTypes::CTypeEnum)typ_enum, n_items, -1, -1,
+                          data, NULL, NULL, null_bitmap, NULL, meminfo,
+                          meminfo_bitmask, NULL, precision);
+}
+
 void info_to_list_string_array(array_info* info,
                                NRT_MemInfo** array_item_meminfo) {
     if (info->arr_type != bodo_array_type::LIST_STRING) {
@@ -1360,6 +1370,8 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // Not covered by error handler
     PyObject_SetAttrString(m, "decimal_array_to_info",
                            PyLong_FromVoidPtr((void*)(&decimal_array_to_info)));
+    PyObject_SetAttrString(m, "time_array_to_info",
+                           PyLong_FromVoidPtr((void*)(&time_array_to_info)));
     PyObject_SetAttrString(m, "info_to_string_array",
                            PyLong_FromVoidPtr((void*)(&info_to_string_array)));
     PyObject_SetAttrString(

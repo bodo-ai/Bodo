@@ -24,6 +24,17 @@ inline void convertArrowToDT64(const uint8_t* buff, uint8_t* out_data,
     }
 }
 
+template <typename T, int64_t MULTIPLIER>
+inline void convertArrowToTime64(const uint8_t* buff, uint8_t* out_data,
+                                 int64_t rows_to_skip, int64_t rows_to_read) {
+    int64_t* out_values = (int64_t*)out_data;
+    const T* in_values = (const T*)buff;
+    for (int64_t i = 0; i < rows_to_read; ++i) {
+        *out_values++ =
+            (static_cast<int64_t>(in_values[rows_to_skip + i]) * MULTIPLIER);
+    }
+}
+
 // copied from Arrow since not in exported APIs
 // https://github.com/apache/arrow/blob/329c9944554ddb142b0a2ac26a4abdf477636e37/cpp/src/arrow/python/datetime.cc#L150
 // Extracts the month and year and day number from a number of days
@@ -158,6 +169,30 @@ inline void copy_data_dispatch(uint8_t* out_data, const uint8_t* buff,
             throw std::runtime_error(
                 "arrow read: Invalid datetime conversion " +
                 arrow_type->ToString());
+        }
+    } else if (arrow_type->id() == Type::TIME32) {
+        const auto& t_type = static_cast<const arrow::Time32Type&>(*arrow_type);
+        if (t_type.unit() == arrow::TimeUnit::MILLI) {
+            convertArrowToTime64<int32_t, 1000000>(buff, out_data, rows_to_skip,
+                                             rows_to_read);
+        } else if (t_type.unit() == arrow::TimeUnit::SECOND) {
+            convertArrowToTime64<int32_t, 1000000000>(buff, out_data, rows_to_skip,
+                                                rows_to_read);
+        } else {
+            throw std::runtime_error("arrow read: Invalid time unit " +
+                                     arrow_type->ToString());
+        }
+    } else if (arrow_type->id() == Type::TIME64) {
+        const auto& t_type = static_cast<const arrow::Time64Type&>(*arrow_type);
+        if (t_type.unit() == arrow::TimeUnit::NANO) {
+            convertArrowToTime64<int64_t, 1>(buff, out_data, rows_to_skip,
+                                                rows_to_read);
+        } else if (t_type.unit() == arrow::TimeUnit::MICRO) {
+            convertArrowToTime64<int64_t, 1000>(buff, out_data, rows_to_skip,
+                                                rows_to_read);
+        } else {
+            throw std::runtime_error("arrow read: Invalid time unit " +
+                                     arrow_type->ToString());
         }
     } else {
         throw std::runtime_error("arrow read: invalid dtype conversion for " +

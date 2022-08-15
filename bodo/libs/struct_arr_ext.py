@@ -30,6 +30,7 @@ from numba.typed.typedobjectutils import _cast
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
+from bodo.hiframes.time_ext import TimeType
 from bodo.libs import array_ext
 from bodo.utils.cg_helpers import (
     gen_allocate_array,
@@ -303,12 +304,15 @@ def unbox_struct_array(typ, val, c, is_tuple_array=False):
     # can be handled in C if all data arrays are Numpy and in handled dtypes
     handle_in_c = all(
         isinstance(t, types.Array)
-        and t.dtype
-        in (
-            types.int64,
-            types.float64,
-            types.bool_,
-            datetime_date_type,
+        and (
+            t.dtype
+            in (
+                types.int64,
+                types.float64,
+                types.bool_,
+                datetime_date_type,
+            )
+            or isinstance(t.dtype, TimeType)
         )
         for t in typ.data
     )
@@ -498,12 +502,15 @@ def box_struct_arr(typ, val, c, is_tuple_array=False):
     # can be handled in C if all data arrays are Numpy and in handled dtypes
     handle_in_c = all(
         isinstance(t, types.Array)
-        and t.dtype
-        in (
-            types.int64,
-            types.float64,
-            types.bool_,
-            datetime_date_type,
+        and (
+            t.dtype
+            in (
+                types.int64,
+                types.float64,
+                types.bool_,
+                datetime_date_type,
+            )
+            or (isinstance(t.dtype, TimeType))
         )
         for t in typ.data
     )

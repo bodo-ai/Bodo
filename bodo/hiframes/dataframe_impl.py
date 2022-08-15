@@ -34,6 +34,7 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.datetime_timedelta_ext import (
     _no_input,
     datetime_timedelta_array_type,
@@ -3469,6 +3470,7 @@ def common_validate_merge_merge_asof_spec(
         DecimalArrayType,
         IntervalArrayType,
         bodo.DatetimeArrayType,
+        TimeArrayType,
     )
     valid_dataframe_column_insts = {
         string_array_type,

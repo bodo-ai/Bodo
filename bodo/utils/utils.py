@@ -30,6 +30,7 @@ from numba.extending import intrinsic, overload
 from numba.np.arrayobj import get_itemsize, make_array, populate_array
 
 import bodo
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
@@ -69,15 +70,16 @@ class CTypeEnum(Enum):
     Bool = 11
     Decimal = 12
     Date = 13
-    Datetime = 14
-    Timedelta = 15
+    Time = 14
+    Datetime = 15
+    Timedelta = 16
     # NOTE: currently, only used for handling decimal array's data array for scatterv
     # since it handles the data array inside decimal array separately
-    Int128 = 16
+    Int128 = 17
     # NOTE: 17 is used by LIST_STRING in bodo_common.h
-    LIST = 18
-    STRUCT = 19
-    BINARY = 20
+    LIST = 19
+    STRUCT = 20
+    BINARY = 21
 
 
 _numba_to_c_type_map = {
@@ -142,6 +144,9 @@ def numba_to_c_type(t):
 
     if t == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return CTypeEnum.Date.value
+
+    if isinstance(t, bodo.hiframes.time_ext.TimeType):
+        return CTypeEnum.Time.value
 
     # TODO: Timedelta arrays need to be supported
     #    if t == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:
@@ -356,6 +361,7 @@ def is_array_typ(var_typ, include_index_series=True):
                 bodo.libs.map_arr_ext.MapArrayType,
                 bodo.libs.csr_matrix_ext.CSRMatrixType,
                 bodo.DatetimeArrayType,
+                TimeArrayType,
             ),
         )
         or (
@@ -511,6 +517,13 @@ def empty_like_type_overload(n, arr):
             return bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(n)
 
         return empty_like_type_datetime_date_arr
+
+    if isinstance(arr, bodo.hiframes.time_ext.TimeArrayType):
+
+        def empty_like_type_time_arr(n, arr):
+            return bodo.hiframes.time_ext.alloc_time_array(n)
+
+        return empty_like_type_time_arr
 
     if arr == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_array_type:
 
@@ -775,6 +788,11 @@ def overload_alloc_type(n, t, s=None):
 
     if typ.dtype == bodo.hiframes.datetime_date_ext.datetime_date_type:
         return lambda n, t, s=None: bodo.hiframes.datetime_date_ext.alloc_datetime_date_array(
+            n
+        )  # pragma: no cover
+
+    if isinstance(typ.dtype, bodo.hiframes.time_ext.TimeType):
+        return lambda n, t, s=None: bodo.hiframes.time_ext.alloc_time_array(
             n
         )  # pragma: no cover
 

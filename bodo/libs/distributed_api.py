@@ -495,6 +495,7 @@ def dist_reduce(value, reduce_op):
             supported_typs.append(bodo.datetime64ns)
             supported_typs.append(bodo.timedelta64ns)
             supported_typs.append(bodo.datetime_date_type)
+            supported_typs.append(bodo.TimeType)
         if target_typ not in supported_typs:  # pragma: no cover
             raise BodoError(
                 "argmin/argmax not supported for type {}".format(target_typ)
