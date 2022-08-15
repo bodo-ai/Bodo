@@ -48,13 +48,14 @@ struct Bodo_CTypes {
         _BOOL = 11,
         DECIMAL = 12,
         DATE = 13,
-        DATETIME = 14,
-        TIMEDELTA = 15,
-        INT128 = 16,
-        LIST_STRING = 17,
-        LIST = 18,    // for nested datastructures, maps to Arrow List
-        STRUCT = 19,  // for nested datastructures, maps to Arrow Struct
-        BINARY = 20,
+        TIME = 14,
+        DATETIME = 15,
+        TIMEDELTA = 16,
+        INT128 = 17,
+        LIST_STRING = 18,
+        LIST = 19,    // for nested datastructures, maps to Arrow List
+        STRUCT = 20,  // for nested datastructures, maps to Arrow Struct
+        BINARY = 21,
         _numtypes
     };
 };
@@ -228,7 +229,7 @@ struct array_info {
     NRT_MemInfo* meminfo;
     NRT_MemInfo* meminfo_bitmask;
     std::shared_ptr<arrow::Array> array;
-    int32_t precision;           // for array of decimals
+    int32_t precision;           // for array of decimals and times
     int32_t scale;               // for array of decimals
     int64_t num_categories;      // for categorical arrays
     bool has_global_dictionary;  // for dict-encoded arrays

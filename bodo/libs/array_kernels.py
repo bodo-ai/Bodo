@@ -27,6 +27,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
@@ -103,7 +104,7 @@ def overload_isna(arr, i):
         )  # pragma: no cover
 
     # masked Integer array, boolean array
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
+    if isinstance(arr, (IntegerArrayType, DecimalArrayType, TimeArrayType)) or arr in (
         boolean_array,
         datetime_date_array_type,
         datetime_timedelta_array_type,

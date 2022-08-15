@@ -227,6 +227,28 @@ void bodo_array_to_arrow(
                 in_num_bytes = sizeof(int64_t) * array->length;
                 type = arrow::date32();
                 break;
+            case Bodo_CTypes::TIME:
+                in_num_bytes = sizeof(int64_t) * array->length;
+                switch (array->precision) {
+                    case 0:
+                        type = arrow::time32(arrow::TimeUnit::SECOND);
+                        break;
+                    case 3:
+                        type = arrow::time32(arrow::TimeUnit::MILLI);
+                        break;
+                    case 6:
+                        type = arrow::time64(arrow::TimeUnit::MICRO);
+                        break;
+                    case 9:
+                        type = arrow::time64(arrow::TimeUnit::NANO);
+                        break;
+                    default:
+                        throw std::runtime_error(
+                            "Unrecognized precision passed to "
+                            "bodo_array_to_arrow." +
+                            std::to_string(array->precision));
+                }
+                break;
             case Bodo_CTypes::DATETIME:
                 // input from Bodo uses int64 for datetimes (datetime64[ns])
                 in_num_bytes = sizeof(int64_t) * array->length;
@@ -265,6 +287,32 @@ void bodo_array_to_arrow(
             CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
             CastBodoDateToArrowDate32((int64_t *)array->data1, array->length,
                                       (int32_t *)out_buffer->mutable_data());
+        } else if (array->dtype == Bodo_CTypes::TIME && array->precision != 9) {
+            if (array->precision == 6) {
+                int64_t divide_factor = 1000;
+                arrow::Result<std::unique_ptr<arrow::Buffer>> res =
+                    AllocateBuffer(in_num_bytes, pool);
+                CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
+
+                int64_t *new_data1 = (int64_t *)out_buffer->mutable_data();
+                for (size_t i = 0; i < array->length; i++) {
+                    // convert to the specified time unit
+                    new_data1[i] = array->at<int64_t>(i) / divide_factor;
+                }
+            } else {
+                int64_t divide_factor =
+                    array->precision == 3 ? 1000000 : 1000000000;
+                arrow::Result<std::unique_ptr<arrow::Buffer>> res =
+                    AllocateBuffer(in_num_bytes / 2, pool);
+                CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
+
+                int32_t *new_data1 = (int32_t *)out_buffer->mutable_data();
+                for (size_t i = 0; i < array->length; i++) {
+                    // convert to the specified time unit
+                    new_data1[i] = array->at<int64_t>(i) / divide_factor;
+                }
+            }
+
         } else if (array->dtype == Bodo_CTypes::DATETIME &&
                    time_unit != arrow::TimeUnit::NANO) {
             // For datetime arrays, Bodo stores information in nanoseconds.
@@ -302,7 +350,6 @@ void bodo_array_to_arrow(
                 // convert to the specified time unit
                 new_data1[i] = array->at<int64_t>(i) / divide_factor;
             }
-
         } else {
             // we can use the same input buffer (no need to cast or convert)
             out_buffer = std::make_shared<arrow::Buffer>(

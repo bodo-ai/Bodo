@@ -20,6 +20,7 @@ from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     get_categories_int_type,
 )
+from bodo.hiframes.time_ext import TimeArrayType, TimeType
 from bodo.libs import array_ext
 from bodo.libs.array_item_arr_ext import (
     ArrayItemArrayPayloadType,
@@ -81,6 +82,7 @@ ll.add_symbol("categorical_array_to_info", array_ext.categorical_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
 ll.add_symbol("interval_array_to_info", array_ext.interval_array_to_info)
 ll.add_symbol("decimal_array_to_info", array_ext.decimal_array_to_info)
+ll.add_symbol("time_array_to_info", array_ext.time_array_to_info)
 ll.add_symbol("info_to_nested_array", array_ext.info_to_nested_array)
 ll.add_symbol("info_to_list_string_array", array_ext.info_to_list_string_array)
 ll.add_symbol("info_to_string_array", array_ext.info_to_string_array)
@@ -620,7 +622,9 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
             )
 
     # nullable integer/bool array
-    if isinstance(arr_type, (IntegerArrayType, DecimalArrayType)) or arr_type in (
+    if isinstance(
+        arr_type, (IntegerArrayType, DecimalArrayType, TimeArrayType)
+    ) or arr_type in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -672,6 +676,34 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                     bitmap_arr.meminfo,
                     context.get_constant(types.int32, arr_type.precision),
                     context.get_constant(types.int32, arr_type.scale),
+                ],
+            )
+        elif isinstance(arr_type, TimeArrayType):
+            fnty = lir.FunctionType(
+                lir.IntType(8).as_pointer(),
+                [
+                    lir.IntType(64),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(8).as_pointer(),
+                    lir.IntType(32),
+                ],
+            )
+            fn_tp = cgutils.get_or_insert_function(
+                builder.module, fnty, name="time_array_to_info"
+            )
+            return builder.call(
+                fn_tp,
+                [
+                    length,
+                    builder.bitcast(data_arr.data, lir.IntType(8).as_pointer()),
+                    builder.load(typ_arg),
+                    builder.bitcast(bitmap_arr.data, lir.IntType(8).as_pointer()),
+                    data_arr.meminfo,
+                    bitmap_arr.meminfo,
+                    lir.Constant(lir.IntType(32), arr_type.precision),
                 ],
             )
         else:
@@ -1333,7 +1365,9 @@ def info_to_array_codegen(context, builder, sig, args):
         return _lower_info_to_array_numpy(arr_type, context, builder, in_info)
 
     # nullable integer/bool array
-    if isinstance(arr_type, (IntegerArrayType, DecimalArrayType)) or arr_type in (
+    if isinstance(
+        arr_type, (IntegerArrayType, DecimalArrayType, TimeArrayType)
+    ) or arr_type in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -2706,7 +2740,7 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
 
     col_dtype = col_array_typ.dtype
 
-    if isinstance(col_dtype, types.Number) or col_dtype in [
+    if isinstance(col_dtype, (types.Number, TimeType)) or col_dtype in [
         bodo.datetime_date_type,
         bodo.datetime64ns,
         bodo.timedelta64ns,
@@ -2877,7 +2911,10 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
         or is_str_arr_type(col_array_dtype)
         or (
             isinstance(col_array_dtype, types.Array)
-            and col_array_dtype.dtype == bodo.datetime_date_type
+            and (
+                col_array_dtype.dtype == bodo.datetime_date_type
+                or isinstance(col_array_dtype.dtype, bodo.TimeType)
+            )
         )
     ):
         # These arrays use a null bitmap to store NA values.

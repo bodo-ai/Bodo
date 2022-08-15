@@ -38,6 +38,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_index_ext import (
     HeterogeneousIndexType,
@@ -3616,6 +3617,9 @@ def gen_pandas_parquet_metadata(
                 )
             numpy_type = col_type.dtype.name
         elif col_type == datetime_date_array_type:
+            pandas_type = "datetime"
+            numpy_type = "object"
+        elif isinstance(col_type, TimeArrayType):
             pandas_type = "datetime"
             numpy_type = "object"
         elif isinstance(col_type, (StructArrayType, ArrayItemArrayType)):

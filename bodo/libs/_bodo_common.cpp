@@ -95,6 +95,10 @@ Bodo_CTypes::CTypeEnum arrow_to_bodo_type(
             return Bodo_CTypes::BINARY;
         case arrow::Type::DATE32:
             return Bodo_CTypes::DATE;
+        case arrow::Type::TIME32:
+            return Bodo_CTypes::TIME;
+        case arrow::Type::TIME64:
+            return Bodo_CTypes::TIME;
         case arrow::Type::BOOL:
             return Bodo_CTypes::_BOOL;
         // TODO Date, Datetime, Timedelta, String, Bool

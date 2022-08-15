@@ -20,6 +20,7 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_type,
     datetime_timedelta_type,
 )
+from bodo.hiframes.time_ext import TimeType
 from bodo.hiframes.datetime_timedelta_ext import (
     datetime_datetime_type,
     datetime_timedelta_array_type,
@@ -501,6 +502,10 @@ def create_overload_cmp_operator(op):
         # datetime.date to datetime.date comparison
         if lhs == datetime_date_type and rhs == datetime_date_type:
             return bodo.hiframes.datetime_date_ext.create_cmp_op_overload(op)(lhs, rhs)
+
+        # time to time comparison
+        if isinstance(lhs, TimeType) and isinstance(rhs, TimeType):
+            return bodo.hiframes.time_ext.create_cmp_op_overload(op)(lhs, rhs)
 
         # datetime.date and datetime.datetime
         if can_cmp_date_datetime(lhs, rhs, op):

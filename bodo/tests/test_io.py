@@ -1345,6 +1345,7 @@ def test_partition_cols(memory_leak_check):
             # in _get_dist_arg with this:
             # "F": pd.Categorical(date_series),
             "G": range(8),
+            "H": [bodo.Time(h, 30) for h in range(8)],
         }
     )
 

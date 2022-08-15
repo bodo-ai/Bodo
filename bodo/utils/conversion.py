@@ -11,6 +11,7 @@ from numba.core import types
 from numba.extending import overload
 
 import bodo
+from bodo.hiframes.time_ext import TimeArrayType, cast_time_to_int
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_dtype
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
@@ -258,6 +259,22 @@ def overload_coerce_to_ndarray(
 
             return impl_ts
 
+        if isinstance(data, bodo.hiframes.time_ext.TimeType):
+
+            def impl_ts(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                n = scalar_to_arr_len
+                A = bodo.hiframes.time_ext.alloc_time_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    A[i] = data
+                return A
+
+            return impl_ts
+
         # Timestamp values are stored as dt64 arrays
         if data == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
             dt64_dtype = np.dtype("datetime64[ns]")
@@ -482,6 +499,7 @@ def overload_coerce_to_array(
             bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
             bodo.libs.csr_matrix_ext.CSRMatrixType,
             bodo.DatetimeArrayType,
+            TimeArrayType,
         ),
     ):
         return (
@@ -1036,6 +1054,24 @@ def overload_fix_arr_dtype(
                     return bodo.libs.dict_arr_ext.convert_dict_arr_to_int(data, _dtype)
 
                 return impl_dict
+
+            # perform specific time cast
+            if isinstance(data, bodo.hiframes.time_ext.TimeArrayType):
+
+                def impl(
+                    data, new_dtype, copy=None, nan_to_str=True, from_series=False
+                ):  # pragma: no cover
+                    n = len(data)
+                    numba.parfors.parfor.init_prange()
+                    B = bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
+                    for i in numba.parfors.parfor.internal_prange(n):
+                        if bodo.libs.array_kernels.isna(data, i):
+                            bodo.libs.array_kernels.setna(B, i)
+                        else:
+                            B[i] = cast_time_to_int(data[i])
+                    return B
+
+                return impl
 
             # data is a string array or integer array (nullable or non-nullable)
             def impl(
