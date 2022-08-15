@@ -2186,18 +2186,15 @@ def _cast_df_data_to_tuple_format(
             args = (df, context.get_constant(types.int64, i))
             context.compile_internal(builder, impl, sig, args)
 
-        blk = table_type.type_to_blk[t]
+        blk = table_type.type_to_blk[in_type]
         arr_list = getattr(table, f"block_{blk}")
-        arr_list_inst = ListInstance(context, builder, types.List(t), arr_list)
+        arr_list_inst = ListInstance(context, builder, types.List(in_type), arr_list)
         offset = context.get_constant(types.int64, table_type.block_offsets[i])
         arr = arr_list_inst.getitem(offset)
         if t != in_type:
             new_arr = context.cast(builder, arr, in_type, t)
-            should_incref = False
         else:
             new_arr = arr
-            should_incref = True
-        if should_incref:
             context.nrt.incref(builder, t, new_arr)
         data_arrs.append(new_arr)
 

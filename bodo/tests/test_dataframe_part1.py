@@ -27,11 +27,16 @@ from bodo.tests.utils import (
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
 
+
 @pytest.mark.slow
 def test_init_empty_df():
     def test_impl():
         return pd.DataFrame()
-    check_func(test_impl, (),)
+
+    check_func(
+        test_impl,
+        (),
+    )
 
 
 @pytest.mark.slow
@@ -1901,9 +1906,8 @@ def test_df_cumsum2(numeric_df_value, memory_leak_check):
     check_func(impl, (numeric_df_value,))
 
 
-# TODO: add memory_leak_check
 @pytest.mark.slow
-def test_df_nunique(df_value):
+def test_df_nunique(df_value, memory_leak_check):
     # not supported for dt64 yet, TODO: support and test
     if any(d == np.dtype("datetime64[ns]") for d in df_value.dtypes):
         return

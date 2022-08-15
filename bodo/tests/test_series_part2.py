@@ -1567,7 +1567,7 @@ def test_series_fillna_inplace(S, value, memory_leak_check):
     def test_impl(A, val):
         return A.fillna(val, inplace=True)
 
-    check_func(test_impl, (S, value))
+    check_func(test_impl, (S, value), use_dict_encoded_strings=False)
 
 
 @pytest.mark.parametrize(

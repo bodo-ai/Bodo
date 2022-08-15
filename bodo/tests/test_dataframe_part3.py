@@ -898,7 +898,10 @@ def test_astype_dtypes_optimization(memory_leak_check):
         ),
         axis=1,
     )
-    check_func(test_impl, (df1, df2), py_output=py_output)
+    # use_dict_encoded_strings=False since cannot cast int to dict-encoded strings
+    check_func(
+        test_impl, (df1, df2), py_output=py_output, use_dict_encoded_strings=False
+    )
 
 
 def test_df_getitem_columname_func(memory_leak_check):
@@ -1356,18 +1359,30 @@ def test_unify_dict_string_dataframes():
         df.to_parquet(temp_file, index=False)
     bodo.barrier()
     # use dictionary-encoded arrays for strings
-    saved_dict_arr_flag = bodo.hiframes.boxing._use_dict_str_type
     saved_read_as_dict_threshold = bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD
     try:
         bodo.hiframes.boxing._use_dict_str_type = True
         bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = 1000.0
-        check_func(impl1, (df,))
-        check_func(impl2, (temp_file,), py_output=df)
-        check_func(impl3, (temp_file,))
+        check_func(impl1, (df,), use_table_format=False, use_dict_encoded_strings=True)
+        check_func(
+            impl2,
+            (temp_file,),
+            py_output=df,
+            use_table_format=False,
+            use_dict_encoded_strings=True,
+        )
+        check_func(
+            impl3, (temp_file,), use_table_format=False, use_dict_encoded_strings=True
+        )
         if bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD > len(df.columns):
-            check_func(impl4, (df,), py_output=df)
+            check_func(
+                impl4,
+                (df,),
+                py_output=df,
+                use_table_format=False,
+                use_dict_encoded_strings=True,
+            )
     finally:
-        bodo.hiframes.boxing._use_dict_str_type = saved_dict_arr_flag
         bodo.io.parquet_pio.READ_STR_AS_DICT_THRESHOLD = saved_read_as_dict_threshold
         if bodo.get_rank() == 0:
             os.remove(temp_file)
