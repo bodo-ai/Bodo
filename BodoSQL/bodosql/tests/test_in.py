@@ -17,7 +17,7 @@ def test_in_columns(basic_df, spark_info, memory_leak_check):
 def test_in_scalars(basic_df, spark_info, memory_leak_check):
     "tests the in operation on scalar values"
     query = "SELECT CASE WHEN 1 in (A,B,C) THEN -1 else 100 END from table1"
-    check_query(query, basic_df, spark_info, check_names=False)
+    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
 def test_not_in_columns(basic_df, spark_info, memory_leak_check):
