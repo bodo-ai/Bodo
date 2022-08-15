@@ -33,6 +33,7 @@ def test_like_scalar(
         bodosql_string_types,
         spark_info,
         check_names=False,
+        check_dtype=False,
     )
 
 
@@ -226,6 +227,7 @@ def test_all_percent_scalar(
         bodosql_string_types,
         spark_info,
         check_names=False,
+        check_dtype=False,
     )
 
 
@@ -271,6 +273,7 @@ def test_leading_percent_scalar(
         bodosql_string_types,
         spark_info,
         check_names=False,
+        check_dtype=False,
     )
 
 
@@ -318,6 +321,7 @@ def test_trailing_percent_scalar(
         bodosql_string_types,
         spark_info,
         check_names=False,
+        check_dtype=False,
     )
 
 
@@ -365,12 +369,14 @@ def test_both_percent_scalar(
         bodosql_string_types,
         spark_info,
         check_names=False,
+        check_dtype=False,
     )
     check_query(
         f"select case when A {like_expression} '%e.%' then 1 else 0 end from table1",
         bodosql_string_types,
         spark_info,
         check_names=False,
+        check_dtype=False,
     )
 
 
