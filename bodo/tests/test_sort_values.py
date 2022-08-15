@@ -339,7 +339,8 @@ def test_sort_values_1col_inplace(df_value, memory_leak_check):
         check_func(impl, (df_value,), check_dtype=False)
         return
 
-    check_func(impl, (df_value,))
+    # inplace sort not supported for dict-encoded string arrays
+    check_func(impl, (df_value,), use_dict_encoded_strings=False)
 
 
 @pytest.mark.slow
@@ -377,7 +378,8 @@ def test_sort_values_2col_inplace(df_value, memory_leak_check):
         check_func(impl, (df_value,), check_dtype=False)
         return
 
-    check_func(impl, (df_value,))
+    # inplace sort not supported for dict-encoded string arrays
+    check_func(impl, (df_value,), use_dict_encoded_strings=False)
 
 
 @pytest.mark.slow

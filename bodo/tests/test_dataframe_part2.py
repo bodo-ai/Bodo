@@ -2229,7 +2229,9 @@ def test_loc_setitem_str(memory_leak_check):
             "B": ["AA", None, "ABC", "DD", None, "AAA", "", "EFG", None],
         }
     )
-    check_func(impl, (df,), copy_input=True, only_1D=True)
+    check_func(
+        impl, (df,), copy_input=True, only_1D=True, use_dict_encoded_strings=False
+    )
 
 
 def test_iat_getitem(df_value, memory_leak_check):
@@ -2266,7 +2268,12 @@ def test_iat_setitem_all_types(df_value, memory_leak_check):
     else:
         val = non_null_vals.iat[0, 0]
 
-    check_func(impl, (df_value, len(df_value), val), copy_input=True)
+    check_func(
+        impl,
+        (df_value, len(df_value), val),
+        copy_input=True,
+        use_dict_encoded_strings=False,
+    )
 
 
 @pytest.mark.smoke
@@ -2431,7 +2438,7 @@ def test_df_fillna_str_inplace(memory_leak_check):
     df_str = pd.DataFrame(
         {"A": [2, 1, 1, 1, 2, 2, 1], "B": ["ab", "b", np.nan, "c", "bdd", "c", "a"]}
     )
-    check_func(test_impl, (df_str,), copy_input=True)
+    check_func(test_impl, (df_str,), copy_input=True, use_dict_encoded_strings=False)
 
 
 def test_df_fillna_binary_inplace(memory_leak_check):

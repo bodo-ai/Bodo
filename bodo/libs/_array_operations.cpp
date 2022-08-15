@@ -385,11 +385,16 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         // NOTE: shuffle_table_kernel decrefs input arrays
         delete_table(local_sort);
 
+        // NOTE: local sort doesn't change the number of rows
+        // ret_table cannot be used since all output columns may be dead (only
+        // length is needed)
+        if (out_n_rows != nullptr)
+            *out_n_rows = (int64_t)collected_table->nrows();
+
         // Final local sorting
         table_info* ret_table =
             sort_values_table_local(collected_table, n_key_t, vect_ascending,
                                     na_position, dead_keys, parallel);
-        if (out_n_rows != nullptr) *out_n_rows = (int64_t)ret_table->nrows();
         delete_table(collected_table);
         return ret_table;
     } catch (const std::exception& e) {

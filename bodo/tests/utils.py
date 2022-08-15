@@ -143,6 +143,8 @@ def check_func(
     check_categorical=True,
     atol=1e-08,
     rtol=1e-05,
+    use_table_format=None,
+    use_dict_encoded_strings=None,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -177,6 +179,11 @@ def check_func(
     floating point percision can vary due to differences in underlying floating point libraries.
     - rtol: Argument to pass to Pandas assert equals functions. This argument will be used if
     floating point percision can vary due to differences in underlying floating point libraries.
+    - use_table_format: flag for loading dataframes in table format for testing.
+    If None, tests both formats if input arguments have dataframes.
+    - use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
+    format for testing.
+    If None, tests both formats if input arguments have string arrays.
     """
     run_seq, run_1D, run_1DVar = False, False, False
     if only_seq:
@@ -226,30 +233,22 @@ def check_func(
     if reorder_columns:
         py_output.sort_index(axis=1, inplace=True)
 
-    # sequential
-    if run_seq:
-        w = check_func_seq(
-            func,
-            args,
-            py_output,
-            copy_input,
-            sort_output,
-            check_names,
-            check_dtype,
-            reset_index,
-            convert_columns_to_pandas,
-            additional_compiler_arguments,
-            set_columns_name_to_none,
-            reorder_columns,
-            n_pes,
-            check_categorical,
-            atol,
-            rtol,
-        )
-        # test string arguments as StringLiteral type also (since StringLiteral is not a
-        # subtype of UnicodeType)
-        if any(isinstance(a, str) for a in args):
-            check_func_seq(
+    saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
+    saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
+    try:
+        # test table format for dataframes (non-table format tested below if flag is
+        # None)
+        if use_table_format is None or use_table_format:
+            bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = 0
+
+        # test dict-encoded string arrays if flag is set (dict-encoded tested below if
+        # flag is None)
+        if use_dict_encoded_strings:
+            bodo.hiframes.boxing._use_dict_str_type = True
+
+        # sequential
+        if run_seq:
+            w = check_func_seq(
                 func,
                 args,
                 py_output,
@@ -266,75 +265,182 @@ def check_func(
                 check_categorical,
                 atol,
                 rtol,
-                True,
+            )
+            # test string arguments as StringLiteral type also (since StringLiteral is
+            # not a subtype of UnicodeType)
+            if any(isinstance(a, str) for a in args):
+                check_func_seq(
+                    func,
+                    args,
+                    py_output,
+                    copy_input,
+                    sort_output,
+                    check_names,
+                    check_dtype,
+                    reset_index,
+                    convert_columns_to_pandas,
+                    additional_compiler_arguments,
+                    set_columns_name_to_none,
+                    reorder_columns,
+                    n_pes,
+                    check_categorical,
+                    atol,
+                    rtol,
+                    True,
+                )
+
+        # distributed test is not needed
+        if not dist_test:
+            return
+
+        if is_out_distributed is None:
+            # assume all distributable output is distributed if not specified
+            is_out_distributed = is_distributable_typ(
+                _typeof(py_output)
+            ) or is_distributable_tuple_typ(_typeof(py_output))
+
+        # skip 1D distributed and 1D distributed variable length tests
+        # if no parallelism is found
+        # and if neither inputs nor outputs are distributable
+        if (
+            w is not None  # if no parallelism is found
+            and not is_out_distributed  # if output is not distributable
+            and not any(
+                is_distributable_typ(_typeof(a))
+                or is_distributable_tuple_typ(_typeof(a))
+                for a in args
+            )  # if none of the inputs is distributable
+        ):
+            return  # no need for distributed checks
+
+        if run_1D:
+            check_func_1D(
+                func,
+                args,
+                py_output,
+                is_out_distributed,
+                copy_input,
+                sort_output,
+                check_names,
+                check_dtype,
+                reset_index,
+                check_typing_issues,
+                convert_columns_to_pandas,
+                additional_compiler_arguments,
+                set_columns_name_to_none,
+                reorder_columns,
+                n_pes,
+                check_categorical,
+                atol,
+                rtol,
             )
 
-    # distributed test is not needed
-    if not dist_test:
-        return
+        if run_1DVar:
+            check_func_1D_var(
+                func,
+                args,
+                py_output,
+                is_out_distributed,
+                copy_input,
+                sort_output,
+                check_names,
+                check_dtype,
+                reset_index,
+                check_typing_issues,
+                convert_columns_to_pandas,
+                additional_compiler_arguments,
+                set_columns_name_to_none,
+                reorder_columns,
+                n_pes,
+                check_categorical,
+                atol,
+                rtol,
+            )
+    finally:
+        bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
+        bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
 
-    if is_out_distributed is None:
-        # assume all distributable output is distributed if not specified
-        is_out_distributed = is_distributable_typ(
-            _typeof(py_output)
-        ) or is_distributable_tuple_typ(_typeof(py_output))
-
-    # skip 1D distributed and 1D distributed variable length tests
-    # if no parallelism is found
-    # and if neither inputs nor outputs are distributable
-    if (
-        w is not None  # if no parallelism is found
-        and not is_out_distributed  # if output is not distributable
-        and not any(
-            is_distributable_typ(_typeof(a)) or is_distributable_tuple_typ(_typeof(a))
-            for a in args
-        )  # if none of the inputs is distributable
+    # test non-table format case if there is any dataframe in input
+    if use_table_format is None and any(
+        isinstance(_typeof(a), bodo.DataFrameType) for a in args
     ):
-        return  # no need for distributed checks
-
-    if run_1D:
-        check_func_1D(
+        check_func(
             func,
             args,
-            py_output,
             is_out_distributed,
-            copy_input,
             sort_output,
             check_names,
+            copy_input,
             check_dtype,
             reset_index,
-            check_typing_issues,
             convert_columns_to_pandas,
+            py_output,
+            dist_test,
+            check_typing_issues,
             additional_compiler_arguments,
             set_columns_name_to_none,
             reorder_columns,
-            n_pes,
+            only_seq,
+            only_1D,
+            only_1DVar,
             check_categorical,
             atol,
             rtol,
+            use_table_format=False,
+            use_dict_encoded_strings=use_dict_encoded_strings,
         )
 
-    if run_1DVar:
-        check_func_1D_var(
+    # test dict-encoded string type if there is any string array in input
+    if use_dict_encoded_strings is None and any(
+        _type_has_str_array(_typeof(a)) for a in args
+    ):
+        check_func(
             func,
             args,
-            py_output,
             is_out_distributed,
-            copy_input,
             sort_output,
             check_names,
+            copy_input,
             check_dtype,
             reset_index,
-            check_typing_issues,
             convert_columns_to_pandas,
+            py_output,
+            dist_test,
+            check_typing_issues,
             additional_compiler_arguments,
             set_columns_name_to_none,
             reorder_columns,
-            n_pes,
+            only_seq,
+            only_1D,
+            only_1DVar,
             check_categorical,
             atol,
             rtol,
+            # the default case use_table_format=None already tests
+            # use_table_format=False above so we just test use_table_format=True for it
+            use_table_format=True if use_table_format is None else use_table_format,
+            use_dict_encoded_strings=True,
         )
+
+
+def _type_has_str_array(t):
+    """Return True if input type 't' has a string array component: string array,
+    string Series, DataFrame with one or more string columns.
+
+    Args:
+        t (types.Type): input type
+
+    Returns:
+        bool: True if input type 't' has a string array component
+    """
+    return (
+        (t == bodo.string_array_type)
+        or (isinstance(t, bodo.SeriesType) and t.data == bodo.string_array_type)
+        or (
+            isinstance(t, bodo.DataFrameType)
+            and any(a == bodo.string_array_type for a in t.data)
+        )
+    )
 
 
 def check_func_seq(
@@ -966,6 +1072,9 @@ def _typeof(val):
             index=numba.typeof(val.index),
             name_typ=numba.typeof(val.name),
         )
+    elif isinstance(val, pytypes.FunctionType):
+        # function type isn't accurate, but good enough for the purposes of _typeof
+        return types.FunctionType(types.none())
     return bodo.typeof(val)
 
 

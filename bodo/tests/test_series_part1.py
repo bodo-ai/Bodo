@@ -202,14 +202,16 @@ def test_string_series_fillna_inplace():
     def impl3(S1, S2):
         return S1.fillna(S2, inplace=True)
 
-    check_func(impl0, (A,), check_dtype=False)
-    check_func(impl0, (A2,), dist_test=False, check_dtype=False)
-    check_func(impl1, (A,), check_dtype=False)
-    check_func(impl1, (A2,), check_dtype=False)
-    check_func(impl2, (A,), check_dtype=False)
-    check_func(impl2, (A2,), check_dtype=False)
-    check_func(impl3, (A, A2), check_dtype=False)
-    check_func(impl3, (A2, A), check_dtype=False)
+    check_func(impl0, (A,), check_dtype=False, use_dict_encoded_strings=False)
+    check_func(
+        impl0, (A2,), dist_test=False, check_dtype=False, use_dict_encoded_strings=False
+    )
+    check_func(impl1, (A,), check_dtype=False, use_dict_encoded_strings=False)
+    check_func(impl1, (A2,), check_dtype=False, use_dict_encoded_strings=False)
+    check_func(impl2, (A,), check_dtype=False, use_dict_encoded_strings=False)
+    check_func(impl2, (A2,), check_dtype=False, use_dict_encoded_strings=False)
+    check_func(impl3, (A, A2), check_dtype=False, use_dict_encoded_strings=False)
+    check_func(impl3, (A2, A), check_dtype=False, use_dict_encoded_strings=False)
 
 
 def test_binary_series_fillna_inplace():
@@ -2041,11 +2043,13 @@ def test_series_loc_setitem_bool(memory_leak_check):
         return S
 
     S = pd.Series(["A", "AB", None, "ABC", "AB", "D", ""])
-    check_func(impl, (S, S == "AB", "ABC"), copy_input=True)
+    check_func(
+        impl, (S, S == "AB", "ABC"), copy_input=True, use_dict_encoded_strings=False
+    )
     S = pd.Series([4.8, 1.1, 2.2, np.nan, 3.3, 4.4])
-    check_func(impl, (S, S < 4.0, 1.8), copy_input=True)
+    check_func(impl, (S, S < 4.0, 1.8), copy_input=True, use_dict_encoded_strings=False)
     S = pd.Series([4, 1, 2, None, 3, 4], dtype="Int64")
-    check_func(impl, (S, S < 4, -2), copy_input=True)
+    check_func(impl, (S, S < 4, -2), copy_input=True, use_dict_encoded_strings=False)
 
 
 ############################ binary ops #############################

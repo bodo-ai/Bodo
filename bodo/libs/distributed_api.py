@@ -1732,7 +1732,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
             data, send_counts
         )  # pragma: no cover
 
-    if is_str_arr_type(data) or data == binary_array_type:
+    if data in (string_array_type, binary_array_type):
         int32_typ_enum = np.int32(numba_to_c_type(types.int32))
         char_typ_enum = np.int32(numba_to_c_type(types.uint8))
 
@@ -1744,7 +1744,6 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         func_text = f"""def impl(
             data, send_counts=None, warn_if_dist=True
         ):  # pragma: no cover
-            data = decode_if_dict_array(data)
             rank = bodo.libs.distributed_api.get_rank()
             n_pes = bodo.libs.distributed_api.get_size()
             n_all = bodo.libs.distributed_api.bcast_scalar(len(data))
@@ -2132,17 +2131,20 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
 
     if isinstance(data, bodo.hiframes.pd_dataframe_ext.DataFrameType):
         n_cols = len(data.columns)
-        data_args = ", ".join("g_data_{}".format(i) for i in range(n_cols))
         __col_name_meta_scaterv_impl = ColNamesMetaType(data.columns)
 
         func_text = "def impl_df(data, send_counts=None, warn_if_dist=True):\n"
-        for i in range(n_cols):
-            func_text += "  data_{} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {})\n".format(
-                i, i
+        if data.is_table_format:
+            func_text += (
+                "  table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(data)\n"
             )
-            func_text += "  g_data_{} = bodo.libs.distributed_api.scatterv_impl(data_{}, send_counts)\n".format(
-                i, i
-            )
+            func_text += "  g_table = bodo.libs.distributed_api.scatterv_impl(table, send_counts)\n"
+            data_args = "g_table"
+        else:
+            for i in range(n_cols):
+                func_text += f"  data_{i} = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(data, {i})\n"
+                func_text += f"  g_data_{i} = bodo.libs.distributed_api.scatterv_impl(data_{i}, send_counts)\n"
+            data_args = ", ".join(f"g_data_{i}" for i in range(n_cols))
         func_text += (
             "  index = bodo.hiframes.pd_dataframe_ext.get_dataframe_index(data)\n"
         )
@@ -2162,6 +2164,74 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         impl_df = loc_vars["impl_df"]
         return impl_df
 
+    if isinstance(data, bodo.TableType):
+        func_text = "def impl_table(data, send_counts=None, warn_if_dist=True):\n"
+        func_text += "  T = data\n"
+        func_text += "  T2 = init_table(T, False)\n"
+        func_text += "  l = 0\n"
+
+        glbls = {}
+        for blk in data.type_to_blk.values():
+            glbls[f"arr_inds_{blk}"] = np.array(
+                data.block_to_arr_ind[blk], dtype=np.int64
+            )
+            func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
+            func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), False)\n"
+            func_text += f"  for i in range(len(arr_list_{blk})):\n"
+            func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
+            func_text += (
+                f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
+            )
+            func_text += f"    out_arr_{blk} = bodo.libs.distributed_api.scatterv_impl(arr_list_{blk}[i], send_counts)\n"
+            func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
+            func_text += f"    l = len(out_arr_{blk})\n"
+            func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+        func_text += f"  T2 = set_table_len(T2, l)\n"
+        func_text += f"  return T2\n"
+
+        glbls.update(
+            {
+                "bodo": bodo,
+                "init_table": bodo.hiframes.table.init_table,
+                "get_table_block": bodo.hiframes.table.get_table_block,
+                "ensure_column_unboxed": bodo.hiframes.table.ensure_column_unboxed,
+                "set_table_block": bodo.hiframes.table.set_table_block,
+                "set_table_len": bodo.hiframes.table.set_table_len,
+                "alloc_list_like": bodo.hiframes.table.alloc_list_like,
+            }
+        )
+        loc_vars = {}
+        exec(func_text, glbls, loc_vars)
+        return loc_vars["impl_table"]
+
+    if data == bodo.dict_str_arr_type:
+
+        def impl_dict_arr(
+            data, send_counts=None, warn_if_dist=True
+        ):  # pragma: no cover
+            # broadcast the dictionary data (string array)
+            # (needs length and number of chars to be broadcast first for pre-allocation
+            # of output string array)
+            if bodo.get_rank() == 0:
+                str_arr = data._data
+                bodo.libs.distributed_api.bcast_scalar(len(str_arr))
+                bodo.libs.distributed_api.bcast_scalar(
+                    np.int64(bodo.libs.str_arr_ext.num_total_chars(str_arr))
+                )
+            else:
+                l = bodo.libs.distributed_api.bcast_scalar(0)
+                n_chars = bodo.libs.distributed_api.bcast_scalar(0)
+                str_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(l, n_chars)
+            bodo.libs.distributed_api.bcast(str_arr)
+            # scatter indices array
+            new_indices = bodo.libs.distributed_api.scatterv_impl(
+                data._indices, send_counts
+            )
+            # the dictionary is global by construction (broadcast)
+            return bodo.libs.dict_arr_ext.init_dict_arr(str_arr, new_indices, True)
+
+        return impl_dict_arr
+
     if isinstance(data, CategoricalArrayType):
 
         def impl_cat(data, send_counts=None, warn_if_dist=True):  # pragma: no cover
@@ -2177,9 +2247,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         func_text = "def impl_tuple(data, send_counts=None, warn_if_dist=True):\n"
         func_text += "  return ({}{})\n".format(
             ", ".join(
-                "bodo.libs.distributed_api.scatterv_impl(data[{}], send_counts)".format(
-                    i
-                )
+                f"bodo.libs.distributed_api.scatterv_impl(data[{i}], send_counts)"
                 for i in range(len(data))
             ),
             "," if len(data) > 0 else "",

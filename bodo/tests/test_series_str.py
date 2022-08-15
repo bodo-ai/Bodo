@@ -1060,8 +1060,7 @@ def test_add_series(test_unicode, memory_leak_check):
     S2 = test_unicode.map(lambda x: np.nan if pd.isna(x) else x[::-1])
     # dict arr unboxing sets nulls to None to avoid PyArrow issues but None causes
     # issues with Series.add. Setting back to np.nan here:
-    if bodo.hiframes.boxing._use_dict_str_type:
-        test_unicode = test_unicode.map(lambda x: np.nan if pd.isna(x) else x)
+    test_unicode = test_unicode.map(lambda x: np.nan if pd.isna(x) else x)
     check_func(test_impl, (test_unicode, S2))
 
 

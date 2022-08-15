@@ -449,7 +449,15 @@ def test_nbytes(memory_leak_check):
         # Each rank has a dictionary with 3 8-byte offsets, 3 characters and a null byte
         # There is also an index array with 8 4-byte offsets
         py_output = (8 * 3 + 3 + 1) * bodo.get_size() + 8 * 4 + bodo.get_size()
-    check_func(impl, (A,), py_output=py_output)
+
+    # set use_dict_encoded_strings to avoid automatic testing of dict-encoded strings
+    # since py_output will be different leading to errors
+    check_func(
+        impl,
+        (A,),
+        py_output=py_output,
+        use_dict_encoded_strings=bodo.hiframes.boxing._use_dict_str_type,
+    )
 
 
 @pytest.mark.slow
