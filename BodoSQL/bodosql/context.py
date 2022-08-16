@@ -42,6 +42,10 @@ if bodo.get_rank() == 0:
         RelationalAlgebraGeneratorClass = (
             gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
         )
+        PropertiesClass = gateway.jvm.java.util.Properties
+        SnowflakeCatalogImplClass = (
+            gateway.jvm.com.bodosql.calcite.catalog.connection.SnowflakeCatalogImpl
+        )
     except Exception as e:
         saw_error = True
         msg = str(e)
@@ -53,6 +57,8 @@ else:
     DatabaseClass = None
     BodoSqlSchemaClass = None
     RelationalAlgebraGeneratorClass = None
+    PropertiesClass = None
+    SnowflakeCatalogImplClass = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
