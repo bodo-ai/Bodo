@@ -174,6 +174,7 @@ public class Utils {
         // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value
         // accesses (e.g. T1_1[i])
         // notna() is same as not isna() for scalars (eliminates notna function inlining)
+        assert colNames.contains(col);
         notNullCode =
             String.format("(not pd.isna(%s)) and ", inputVar + "_" + colNames.indexOf(col) + "[i]");
       }
@@ -433,7 +434,9 @@ public class Utils {
   }
 
   /***
-   * Searches the input expression for table references to oldTableName, and replaces them to reference the new Table
+   * Searches the input expression for table references to oldTableName, and replaces them to reference the new Table.
+   * Only used inside CASE when there are window functions (so a new dataframe has to be created).
+   * For example, table1_1[i] -> tmp_case_df2_1[i]
    *
    * @param expr The expression to replace table references
    * @param oldTableName The old table name, that the input expr uses for table references
@@ -441,11 +444,16 @@ public class Utils {
    * @return
    */
   public static String renameTableRef(String expr, String oldTableName, String newTableName) {
-    return expr.replaceAll(Pattern.quote(oldTableName + "["), newTableName + "[");
+    // check word boundary with \b to reduce chance of name conflicts with oldTableName
+    return expr.replaceAll("\\b" + Pattern.quote(oldTableName + "_"), newTableName + "_");
   }
 
   /***
-   *  Renames a list of codeExpressions to use a new table reference
+   *  Renames a list of codeExpressions that are input to CASE to use a new table reference.
+   *  Used for handling window functions inside CASE where a new dataframe is created
+   *  to include window function output as columns.
+   *  For example, table1_1[i] -> tmp_case_df2_1[i]
+   *
    *
    * @param codeExprs The list of expressions to replace table references
    * @param oldTableName The old table name, that the input expr uses for table references
@@ -459,31 +467,6 @@ public class Utils {
       outputExprs.add(renameTableRef(codeExprs.get(i), oldTableName, newTableName));
     }
     return outputExprs;
-  }
-
-  /***
-   *  Renames a hashset of codeExpressions to use a new table reference
-   *
-   * @param codeExprs The hashset of expressions to replace table references
-   * @param oldTableName The old table name, that the input expr uses for table references
-   * @param newTableName The new table name, that the output expr will use for table references
-   * @return
-   */
-  public static HashSet<String> renameExprsHashset(
-      HashSet<String> codeExprs, String oldTableName, String newTableName) {
-    HashSet<String> outputExprs = new HashSet<>();
-    // In this case, we don't have to sort before iterating over the hashset, as the
-    // output will still be sorted in the relevant check null function, meaning the
-    // code generated on each rank will still be the same.
-    for (String curExpr : codeExprs) {
-      outputExprs.add(renameTableRef(curExpr, oldTableName, newTableName));
-    }
-    return outputExprs;
-  }
-
-  // TODO: use this interface in a later rewrite of generateDfApply
-  interface OpsToLambdaStrFn {
-    String makeLambdaStr(List<String> operandExpressions);
   }
 
   public static String generateDfApply(
