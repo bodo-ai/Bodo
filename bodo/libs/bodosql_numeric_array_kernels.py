@@ -3,6 +3,7 @@
 Implements numerical array kernels that are specific to BodoSQL
 """
 
+
 import numba
 import numpy as np
 import pandas as pd
@@ -242,6 +243,27 @@ def negate(arr):
 
     def impl(arr):  # pragma: no cover
         return negate_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def width_bucket(arr, min_val, max_val, num_buckets):
+    """
+    Handles cases where WIDTH_BUCKET receives optional arguments and forwards
+    the arguments to appropriate version of the real implementation.
+    """
+    args = [arr, min_val, max_val, num_buckets]
+    for i in range(4):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.width_bucket",
+                ["arr", "min_val", "max_val", "num_buckets"],
+                i,
+            )
+
+    def impl(arr, min_val, max_val, num_buckets):  # pragma: no cover
+        return width_bucket_util(arr, min_val, max_val, num_buckets)
 
     return impl
 
@@ -615,6 +637,29 @@ def negate_util(arr):
     out_dtype = bodo.utils.typing.to_nullable_type(
         bodo.utils.typing.dtype_to_array_type(scalar_type)
     )
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def width_bucket_util(arr, min_val, max_val, num_buckets):
+    verify_int_float_arg(arr, "WIDTH_BUCKET", "arr")
+    verify_int_float_arg(min_val, "WIDTH_BUCKET", "min_val")
+    verify_int_float_arg(max_val, "WIDTH_BUCKET", "max_val")
+    verify_int_arg(num_buckets, "WIDTH_BUCKET", "num_buckets")
+
+    arg_names = ["arr", "min_val", "max_val", "num_buckets"]
+    arg_types = [arr, min_val, max_val, num_buckets]
+    propagate_null = [True] * 4
+    scalar_text = (
+        "if arg1 >= arg2: raise ValueError('min_val must be less than max_val')\n"
+    )
+    scalar_text += (
+        "if arg3 <= 0: raise ValueError('num_buckets must be a positive integer')\n"
+    )
+    scalar_text += "res[i] = min(max(-1.0, math.floor((arg0 - arg1) / ((arg2 - arg1) / arg3))), arg3) + 1.0"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
+
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 

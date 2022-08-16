@@ -2,6 +2,7 @@
 """Test Bodo's array kernel utilities for BodoSQL numeric functions
 """
 
+import math
 
 import numpy as np
 import pandas as pd
@@ -798,6 +799,75 @@ def test_negate(numbers):
     )
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series([-0.5, -1, 2, 3, np.nan, 5, 6, 7, 8, 9, 11]),
+                pd.Series([0, -1, -2, -3, -4, -5, -6, -7, -8, -9, -10]),
+                pd.Series([1, 10, 11, 12, 13, 14, 15, np.nan, 17, 18, 19, 20]),
+                pd.Series([20, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+            ),
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series([-1, 2, 3, np.nan, 5, 6, 7, 8, 9, 11]),
+                0,
+                10,
+                5,
+            ),
+            id="vectors_scalars",
+        ),
+        pytest.param((7, 0, 10, 3), id="all_scalar_no_null"),
+        pytest.param((7, None, 10, 3), id="all_scalar_with_null"),
+    ],
+)
+def test_width_bucket(args):
+    def impl(arr, min_val, max_val, num_buckets):
+        return bodo.libs.bodosql_array_kernels.width_bucket(
+            arr, min_val, max_val, num_buckets
+        )
+
+    def wb_scalar_fn(arr, mnv, mxv, nb):
+        if pd.isna(arr) or pd.isna(mnv) or pd.isna(mxv) or pd.isna(nb):
+            return None
+        return min(max(-1.0, math.floor((arr - mnv) / ((mxv - mnv) / nb))), nb) + 1.0
+
+    py_output = vectorized_sol(args, wb_scalar_fn, pd.Int32Dtype())
+    check_func(
+        impl,
+        args,
+        py_output=py_output,
+        check_dtype=False,
+        dist_test=False,
+        is_out_distributed=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param((2, 3, 2, 2), id="min_over_max"),
+        pytest.param((2, 1, 3, -1), id="neg_num_buckets"),
+    ],
+)
+def test_width_bucket_error(args):
+    @bodo.jit
+    def impl(arr, min_val, max_val, num_buckets):
+        return bodo.libs.bodosql_array_kernels.width_bucket(
+            arr, min_val, max_val, num_buckets
+        )
+
+    if args[-1] < 0:
+        with pytest.raises(ValueError, match="num_buckets must be a positive integer"):
+            impl(*args)
+    else:
+        with pytest.raises(ValueError, match="min_val must be less than max_val"):
+            impl(*args)
+
+
 @pytest.mark.slow
 def test_bitwise_option():
     def impl(A, B, flag0, flag1):
@@ -911,3 +981,32 @@ def test_negate_option():
     for flag0 in [True, False]:
         answer = -42 if flag0 else None
         check_func(impl, (42, flag0), py_output=answer)
+
+
+@pytest.mark.slow
+def test_width_bucket_option():
+    def impl(a, b, c, d, flag0, flag1, flag2, flag3):
+        arg0 = a if flag0 else None
+        arg1 = b if flag1 else None
+        arg2 = c if flag2 else None
+        arg3 = d if flag3 else None
+        return bodo.libs.bodosql_array_kernels.width_bucket(arg0, arg1, arg2, arg3)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                for flag3 in [True, False]:
+                    check_func(
+                        impl,
+                        (
+                            7,
+                            0,
+                            10,
+                            3,
+                            flag0,
+                            flag1,
+                            flag2,
+                            flag3,
+                        ),
+                        py_output=3 if flag0 and flag1 and flag2 and flag3 else None,
+                    )
