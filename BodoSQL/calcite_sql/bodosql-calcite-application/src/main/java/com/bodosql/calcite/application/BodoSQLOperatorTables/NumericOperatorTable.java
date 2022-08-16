@@ -221,6 +221,27 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
+  public static final SqlFunction WIDTH_BUCKET =
+      new SqlFunction(
+          "WIDTH_BUCKET",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.INTEGER_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept. This function accepts three numeric
+          // arguments
+          OperandTypes.family(
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.NUMERIC,
+              SqlTypeFamily.INTEGER),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.NUMERIC);
+
   public static final SqlFunction ACOSH =
       new SqlFunction(
           "ACOSH",
@@ -277,6 +298,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           LOG2,
           POW,
           CONV,
+          WIDTH_BUCKET,
           GREATEST,
           LEAST);
 

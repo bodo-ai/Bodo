@@ -3,6 +3,8 @@
 Common utilities for all BodoSQL array kernels
 """
 
+import math
+
 import numba
 import numpy as np
 import pandas as pd
@@ -317,6 +319,7 @@ def gen_vectorized(
         func_text,
         {
             "bodo": bodo,
+            "math": math,
             "numba": numba,
             "np": np,
             "out_dtype": out_dtype,

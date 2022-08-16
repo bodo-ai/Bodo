@@ -78,6 +78,7 @@ broadcasted_fixed_arg_functions = {
     "substring_index",
     "translate",
     "weekday",
+    "width_bucket",
     "year_timestamp",
     "yearofweekiso",
 }

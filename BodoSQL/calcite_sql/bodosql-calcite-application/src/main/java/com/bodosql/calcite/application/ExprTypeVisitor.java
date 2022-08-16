@@ -132,6 +132,7 @@ public class ExprTypeVisitor {
           "SPLIT_PART",
           "STRTOK",
           "SUBSTR",
+          "WIDTH_BUCKET",
           "TRANSLATE3",
           "INITCAP",
           "MAKEDATE",

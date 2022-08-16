@@ -165,6 +165,56 @@ def test_double_op_numeric_fns_cols(
     "query_args",
     [
         pytest.param(("A", "B", "C", "D"), id="all_vector"),
+        pytest.param(("A", "-2", "12", "20"), id="vector_scalar"),
+        pytest.param(("20", "B", "C", "D"), id="scalar_vector"),
+        pytest.param(("0.5", "-0.5", "2", "12"), id="all_scalar"),
+    ],
+)
+def test_width_bucket_cols(query_args, spark_info, memory_leak_check):
+    t0 = pd.DataFrame(
+        {
+            "A": [-1, -0.5, 0, 0.5, 1, 2.5, None, 10, 15, 200],
+            "B": [0, 0, 0, 0, 1, 1, None, -1, 2, 20],
+            "C": [2, 2, 2, None, 3, 4, 4, 5, 10, 300],
+            "D": pd.Series([2, None, 2, 2, 4, 5, 10, 20, 5, 20], dtype="Int32"),
+        }
+    )
+    ctx = {"table0": t0}
+    A, B, C, D = query_args
+    query = f"SELECT WIDTH_BUCKET({A}, {B}, {C}, {D}) from table0"
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+def test_width_bucket_scalars(spark_info, memory_leak_check):
+    t0 = pd.DataFrame(
+        {
+            "A": [-1, -0.5, 0, 0.5, 1, 2.5, None, -2, 15, 200],
+            "B": [-2, -1, 0, 0, 1, 1, None, -1, 2, 20],
+            "C": [2, 2, 2, None, 3, 4, 4, 5, 10, 300],
+            "D": pd.Series([2, None, 2, 2, 4, 5, 10, 20, 5, 20], dtype="Int32"),
+        }
+    )
+    ctx = {"table0": t0}
+    query = f"SELECT CASE WHEN A <= 0.0 THEN WIDTH_BUCKET(-A, B, C, D) ELSE WIDTH_BUCKET(A, B, C, 2*D) END FROM table0"
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "query_args",
+    [
+        pytest.param(("A", "B", "C", "D"), id="all_vector"),
         pytest.param(
             ("A", "142.78966505413766", "3.7502297731338663", "D"), id="scalar_vector"
         ),
