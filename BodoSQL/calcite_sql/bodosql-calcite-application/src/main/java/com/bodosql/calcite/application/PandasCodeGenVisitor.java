@@ -1136,11 +1136,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
               + generateCombinedDf(inputVar, colNames, localCtx.getColsToAddList())
               + "\n");
       args = renameExprsList(args, inputVar, tmp_case_name);
-      for (int i = 0; i < needNullCheckColumns.size(); i++) {
-        needNullCheckColumns.set(
-            i, renameExprsHashset(needNullCheckColumns.get(i), inputVar, tmp_case_name));
-      }
       inputVar = tmp_case_name;
+      // get column names including the added columns
+      List<String> newColNames = new ArrayList<>();
+      for (String col : colNames) newColNames.add(col);
+      for (String col : localCtx.getColsToAddList()) newColNames.add(col);
+      colNames = newColNames;
     } else if (!generateApply) {
       // If we're not the top level apply, we need to pass back the information so that it is
       // properly handled
@@ -1214,7 +1215,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         break;
       }
     }
-    // TODO: upate when we support more aggregation fusion.
+    // TODO: update when we support more aggregation fusion.
     canFuse = fnKinds.get(0).equals(SqlKind.FIRST_VALUE) & canFuse;
 
     List<String> outputColExprs = new ArrayList<>();
@@ -1278,6 +1279,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // and add the column to colsToAddList. This will result in
         // the precomputed column being added to the dataframe before the apply.
         String colName = genTempColumnVar();
+        int colInd = colNames.size() + ctx.getColsToAddList().size();
         ctx.getColsToAddList().add(colName);
 
         this.generatedCode
@@ -1289,9 +1291,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
         // Since we're adding the column to the dataframe before the apply, we return
         // an expression that references the added column.
-        String returnExpr = inputVar + "[" + makeQuoted(colName) + "]";
         // Since the column may contain null values, we have to null check the column
         ctx.getNeedNullCheckColumns().add(colName);
+        ctx.getUsedColumns().add(colInd);
+        // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value
+        // accesses
+        // (e.g. T1_1[i])
+        String returnExpr = "bodo.utils.conversion.box_if_dt64(" + inputVar + "_" + colInd + "[i])";
         outputRexInfoList.add(new RexNodeVisitorInfo(curAggOp.toString(), returnExpr));
       } else {
         outputRexInfoList.add(new RexNodeVisitorInfo(curAggOp.toString(), outputColExprs.get(i)));
