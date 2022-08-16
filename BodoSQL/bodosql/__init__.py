@@ -1,7 +1,13 @@
+from .bodosql_types.database_catalog import DatabaseCatalog, DatabaseCatalogType
 import bodosql.context_ext
 
 # Import BodoSQL types
-import bodosql.bodosql_types.table_path
+from bodosql.bodosql_types.table_path import TablePath, TablePathType
+from bodosql.bodosql_types.database_catalog import DatabaseCatalog, DatabaseCatalogType
+from bodosql.bodosql_types.snowflake_catalog import (
+    SnowflakeCatalog,
+    SnowflakeCatalogType,
+)
 
 # Import BodoSQL libs
 import bodosql.libs.regex
@@ -25,9 +31,6 @@ else:
     )
 
 from bodosql.context import BodoSQLContext
-from bodosql.bodosql_types.table_path import TablePath, TablePathType
-
-
 from ._version import get_versions
 
 __version__ = get_versions()["version"]

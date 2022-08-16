@@ -24,7 +24,7 @@ repos:
             "--in-place",
             "--remove-all-unused-imports",
             "--exclude",
-            "bodo/__init__.py, iceberg/bodo_iceberg_connector/__init__.py",
+            "bodo/__init__.py, iceberg/bodo_iceberg_connector/__init__.py, BodoSQL/bodosql/__init__.py",
           ]
   - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
     rev: v2.3.0
