@@ -14,6 +14,10 @@ from numba.core.compiler_machinery import (
     FunctionPass,
     register_pass,
 )
+from numba.core.errors import (
+    NumbaExperimentalFeatureWarning,
+    NumbaPendingDeprecationWarning,
+)
 from numba.core.inline_closurecall import inline_closure_call
 from numba.core.ir_utils import (
     build_definitions,
@@ -58,20 +62,13 @@ from bodo.transforms.typing_pass import BodoTypeInference
 from bodo.transforms.untyped_pass import UntypedPass
 from bodo.utils.utils import is_assign, is_call_assign, is_expr
 
-# avoid Numba warning when there is no Parfor in the IR
-numba.core.config.DISABLE_PERFORMANCE_WARNINGS = 1
-
-
 # avoid Numba warning for UDFs: "First-class function type feature is experimental"
-from numba.core.errors import (
-    NumbaExperimentalFeatureWarning,
-    NumbaPendingDeprecationWarning,
-)
-
 warnings.simplefilter("ignore", category=NumbaExperimentalFeatureWarning)
 # avoid Numba warning when there is a list argument to JIT function
 warnings.simplefilter("ignore", category=NumbaPendingDeprecationWarning)
 
+# Numba performance warning is disabled by setting environment variable
+# NUMBA_DISABLE_PERFORMANCE_WARNINGS = 1 in __init__.py
 
 # global flag for whether all Bodo functions should be inlined
 inline_all_calls = False
