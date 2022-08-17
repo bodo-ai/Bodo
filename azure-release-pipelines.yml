@@ -232,8 +232,8 @@ stages:
         TEST_1P:
           NP: 1
           PYTEST_MARKER: "slow"
-        TEST_3P_PART1:
-          NP: 3
+        TEST_2P_PART1:
+          NP: 2
           PYTEST_MARKER: "part1 and not part2 and not part3"
         TEST_2P_PART2:
           NP: 2
@@ -254,8 +254,8 @@ stages:
         TEST_1P:
           NP: 1
           PYTEST_MARKER: "slow"
-        TEST_3P_PART1:
-          NP: 3
+        TEST_2P_PART1:
+          NP: 2
           PYTEST_MARKER: "part1 and not part2 and not part3"
         TEST_2P_PART2:
           NP: 2
@@ -291,5 +291,5 @@ stages:
       CACHE_TEST: true
       PYTEST_MARKER: ""
       matrix:
-        TEST_3P:
-          NP: 3
+        TEST_2P:
+          NP: 2
