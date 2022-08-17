@@ -562,12 +562,11 @@ def int_arr_setitem(A, idx, val):
         else:
             raise BodoError(typ_err_msg)
 
-    # Pandas allows booleans and integers. We allow float also (see comment above).
     # TODO(Nick): Verify inputs can be safely case to an integer
     if not (
         (
             is_iterable_type(val)
-            and isinstance(val.dtype, (types.Integer, types.Boolean, types.Float))
+            and isinstance(val.dtype, (types.Integer, types.Boolean))
         )
         or is_scalar
     ):
