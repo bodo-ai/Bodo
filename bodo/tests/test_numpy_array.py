@@ -1006,15 +1006,18 @@ def test_bad_setitem(mutable_bodo_arr):
     else:
         err_typ = BodoError
         error_msg = "received an incorrect 'value' type"
-    with pytest.raises(err_typ, match=error_msg):
-        bodo.jit(test_impl_scalar)(mutable_bodo_arr)
+
+    # we support setting a float scalar value to IntegerArray (see int_arr_setitem)
+    if not isinstance(mutable_bodo_arr, pd.arrays.IntegerArray):
+        with pytest.raises(err_typ, match=error_msg):
+            bodo.jit(test_impl_scalar)(mutable_bodo_arr)
+
     indices = [
         np.array([False, True, True, False, False]),
         np.random.randint(0, len(mutable_bodo_arr), 2),
         [1, 2],
         slice(0, 2),
     ]
-    print(error_msg)
     for ind in indices:
         with pytest.raises(err_typ, match=error_msg):
             bodo.jit(test_impl_arr_like)(mutable_bodo_arr, ind)
