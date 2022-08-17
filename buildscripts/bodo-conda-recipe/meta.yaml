@@ -19,7 +19,10 @@ requirements:
 
   host:
     - python
-    - setuptools
+    # setuptools>=65 removes the msvc compilers that
+    # distutils/extension uses.
+    # TODO[BE-3467]: remove distutils
+    - setuptools <60
     - numba 0.55.2
     # Compatable with Numba requirements.
     # Resolves build issues on nightly
