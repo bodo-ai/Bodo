@@ -467,23 +467,39 @@ struct aggdict {
      * Apply the function.
      * @param[in,out] first input index value to be updated.
      * @param[in] second input index value.
+     * @param[in] first_string input string value.
+     * @param[in] second_string input string value.
      */
-    static void apply(int32_t& v1, int32_t& v2) {}
+    static void apply(int32_t& v1, int32_t& v2, std::string& s1,
+                      std::string& s2) {}
 };
 
 template <>
 struct aggdict<Bodo_FTypes::min> {
-    static void apply(int32_t& v1, int32_t& v2) { v1 = std::min(v1, v2); }
+    static void apply(int32_t& v1, int32_t& v2, std::string& s1,
+                      std::string& s2) {
+        if (s1.compare(s2) > 0) {
+            v1 = v2;
+        }
+    }
 };
 
 template <>
 struct aggdict<Bodo_FTypes::max> {
-    static void apply(int32_t& v1, int32_t& v2) { v1 = std::max(v1, v2); }
+    static void apply(int32_t& v1, int32_t& v2, std::string& s1,
+                      std::string& s2) {
+        if (s1.compare(s2) < 0) {
+            v1 = v2;
+        }
+    }
 };
 
 template <>
 struct aggdict<Bodo_FTypes::last> {
-    static void apply(int32_t& v1, int32_t& v2) { v1 = v2; }
+    static void apply(int32_t& v1, int32_t& v2, std::string& s1,
+                      std::string& s2) {
+        v1 = v2;
+    }
 };
 
 using pair_str_bool = std::pair<std::string, bool>;
@@ -2875,7 +2891,17 @@ apply_to_column_dict(ARR_I* in_col, ARR_O* out_col,
             int32_t& dict_ind = getv<ARR_I, int32_t>(in_col->info2, i);
             int32_t& org_ind = getv<ARR_I, int32_t>(indices_arr, i_grp);
             if (out_bit_set) {
-                aggdict<ftype>::apply(org_ind, dict_ind);
+                // Ge the address and length of the new value to be compared
+                offset_t start_offset = offsets_i[dict_ind];
+                offset_t end_offset = offsets_i[dict_ind + 1];
+                offset_t len = end_offset - start_offset;
+                std::string s2(&data_i[start_offset], len);
+                // Get the address and length of the cumulative result
+                offset_t start_offset_org = offsets_i[org_ind];
+                offset_t end_offset_org = offsets_i[org_ind + 1];
+                offset_t len_org = end_offset_org - start_offset_org;
+                std::string s1(&data_i[start_offset_org], len_org);
+                aggdict<ftype>::apply(org_ind, dict_ind, s1, s2);
             } else {
                 org_ind = dict_ind;
                 SetBitTo(V.data(), i_grp, true);
