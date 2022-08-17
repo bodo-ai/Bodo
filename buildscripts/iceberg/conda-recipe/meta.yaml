@@ -14,7 +14,10 @@ build:
 requirements:
   host:
     - python >=3.8,<3.11
-    - setuptools
+    # setuptools>=65 removes the msvc compilers that
+    # distutils/extension uses.
+    # TODO[BE-3467]: remove distutils
+    - setuptools <60
     - openjdk >=9.0,<12
     - maven
     - ninja
