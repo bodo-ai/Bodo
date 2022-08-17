@@ -10,7 +10,6 @@ env:
   variables:
       CONDA_ENV: "BodoCodeBuild"
       RUN_NIGHTLY: "yes"
-      ENGINE_E2E_TESTS: "engine-e2e-tests"
       RUNTIME: "yes"
       PYTHON_VERSION: 3.10
 
