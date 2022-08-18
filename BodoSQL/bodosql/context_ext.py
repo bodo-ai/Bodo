@@ -7,6 +7,7 @@ import re
 import numba
 import numpy as np
 import pandas as pd
+from bodosql.bodosql_types.snowflake_catalog import DatabaseCatalogType
 from bodosql.bodosql_types.table_path import TablePathType
 from bodosql.context import (
     NAMED_PARAM_TABLE_NAME,
@@ -41,6 +42,7 @@ from bodo.utils.typing import (
     get_overload_const,
     get_overload_const_str,
     is_overload_constant_str,
+    is_overload_none,
     raise_bodo_error,
 )
 
@@ -50,7 +52,7 @@ class BodoSQLContextType(types.Type):
     Requires table names and dataframe types.
     """
 
-    def __init__(self, names, dataframes):
+    def __init__(self, names, dataframes, catalog):
         if not (isinstance(names, tuple) and all(isinstance(v, str) for v in names)):
             raise BodoError("BodoSQLContext(): 'table' keys must be constant strings")
         if not (
@@ -60,17 +62,25 @@ class BodoSQLContextType(types.Type):
             raise BodoError(
                 "BodoSQLContext(): 'table' values must be DataFrames or TablePaths"
             )
+        if not (isinstance(catalog, DatabaseCatalogType) or is_overload_none(catalog)):
+            raise BodoError(
+                "BodoSQLContext(): 'catalog' must be a bodosql.DatabaseCatalog if provided"
+            )
         self.names = names
         self.dataframes = dataframes
+        # Map None to types.none to use the type in the data model.
+        self.catalog_type = types.none if is_overload_none(catalog) else catalog
         super(BodoSQLContextType, self).__init__(
-            name=f"BodoSQLContextType({names}, {dataframes})"
+            name=f"BodoSQLContextType({names}, {dataframes}, {catalog})"
         )
 
 
 @typeof_impl.register(BodoSQLContext)
 def typeof_bodo_sql(val, c):
     return BodoSQLContextType(
-        tuple(val.tables.keys()), tuple(numba.typeof(v) for v in val.tables.values())
+        tuple(val.tables.keys()),
+        tuple(numba.typeof(v) for v in val.tables.values()),
+        numba.typeof(val.catalog),
     )
 
 
@@ -81,11 +91,13 @@ class BodoSQLContextModel(models.StructModel):
     def __init__(self, dmm, fe_type):
         members = [
             ("dataframes", types.BaseTuple.from_types(fe_type.dataframes)),
+            ("catalog", fe_type.catalog_type),
         ]
         super(BodoSQLContextModel, self).__init__(dmm, fe_type, members)
 
 
 make_attribute_wrapper(BodoSQLContextType, "dataframes", "dataframes")
+make_attribute_wrapper(BodoSQLContextType, "catalog", "catalog")
 
 
 def lower_init_sql_context(context, builder, signature, args):
@@ -94,6 +106,7 @@ def lower_init_sql_context(context, builder, signature, args):
     sql_ctx_struct = cgutils.create_struct_proxy(sql_context_type)(context, builder)
     context.nrt.incref(builder, signature.args[1], args[1])
     sql_ctx_struct.dataframes = args[1]
+    sql_context_type.catalog = args[2]
     return sql_ctx_struct._getvalue()
 
 
@@ -114,11 +127,25 @@ def box_bodosql_context(typ, val, c):
         # dict_setitem_string borrows a reference, so avoid decrefing.
         c.pyapi.dict_setitem_string(py_dict_obj, name, df_obj)
 
+    # Box the catalog if it exists
+    if is_overload_none(typ.catalog_type):
+        catalog_obj = c.pyapi.make_none()
+    else:
+        c.context.nrt.incref(
+            c.builder, typ.catalog_type, bodosql_context_struct.catalog
+        )
+        catalog_obj = c.pyapi.from_native_value(
+            typ.catalog_type, bodosql_context_struct.catalog, c.env_manager
+        )
+
     mod_name = c.context.insert_const_string(c.builder.module, "bodosql")
     bodosql_class_obj = c.pyapi.import_module_noblock(mod_name)
-    res = c.pyapi.call_method(bodosql_class_obj, "BodoSQLContext", (py_dict_obj,))
+    res = c.pyapi.call_method(
+        bodosql_class_obj, "BodoSQLContext", (py_dict_obj, catalog_obj)
+    )
     c.pyapi.decref(bodosql_class_obj)
     c.pyapi.decref(py_dict_obj)
+    c.pyapi.decref(catalog_obj)
     return res
 
 
@@ -127,6 +154,7 @@ def unbox_bodosql_context(typ, val, c):
     """
     Unboxes a BodoSQLContext into a native value.
     """
+    # Unbox the tables
     py_dfs_obj = c.pyapi.object_getattr_string(val, "tables")
     native_dfs = []
     for i, name in enumerate(typ.names):
@@ -139,19 +167,27 @@ def unbox_bodosql_context(typ, val, c):
         c.pyapi.decref(df_obj)
     c.pyapi.decref(py_dfs_obj)
     df_tuple = c.context.make_tuple(c.builder, types.Tuple(typ.dataframes), native_dfs)
+    # Unbox the catalog
+    catalog_obj = c.pyapi.object_getattr_string(val, "catalog")
+    catalog_value = c.pyapi.to_native_value(typ.catalog_type, catalog_obj).value
+    c.pyapi.decref(catalog_obj)
+    # Populate the struct
     bodosql_context_struct = cgutils.create_struct_proxy(typ)(c.context, c.builder)
     bodosql_context_struct.dataframes = df_tuple
+    bodosql_context_struct.catalog = catalog_value
     return NativeValue(bodosql_context_struct._getvalue())
 
 
 @intrinsic
-def init_sql_context(typingctx, names_type, dataframes_type=None):
+def init_sql_context(typingctx, names_type, dataframes_type, catalog):
     """Create a BodoSQLContext given table names and dataframes."""
     table_names = tuple(get_overload_const(names_type))
     n_tables = len(names_type.types)
     assert len(dataframes_type.types) == n_tables
-    sql_ctx_type = BodoSQLContextType(table_names, tuple(dataframes_type.types))
-    return sql_ctx_type(names_type, dataframes_type), lower_init_sql_context
+    sql_ctx_type = BodoSQLContextType(
+        table_names, tuple(dataframes_type.types), catalog
+    )
+    return sql_ctx_type(names_type, dataframes_type, catalog), lower_init_sql_context
 
 
 # enable dead call elimination for init_sql_context()
@@ -159,7 +195,7 @@ bodo.utils.transform.no_side_effect_call_tuples.add((init_sql_context,))
 
 
 @overload(BodoSQLContext, inline="always", no_unliteral=True)
-def bodo_sql_context_overload(tables):
+def bodo_sql_context_overload(tables, catalog=None):
     """constructor for creating BodoSQLContext"""
     # bodo untyped pass transforms const dict to tuple with sentinel in first element
     assert isinstance(tables, types.BaseTuple) and tables.types[
@@ -174,9 +210,7 @@ def bodo_sql_context_overload(tables):
     name_args = ", ".join(f"'{c}'" for c in names)
     names_tup = "({}{})".format(name_args, "," if len(names) == 1 else "")
 
-    func_text = (
-        f"def impl(tables):\n  return init_sql_context({names_tup}, {df_args})\n"
-    )
+    func_text = f"def impl(tables, catalog=None):\n  return init_sql_context({names_tup}, {df_args}, catalog)\n"
     loc_vars = {}
     _global = {"init_sql_context": init_sql_context}
     exec(func_text, _global, loc_vars)
@@ -206,9 +240,7 @@ def overload_bodosql_context_add_or_replace_view(bc, name, table):
     comma_sep_names = ", ".join(new_names)
     comma_sep_dfs = ", ".join(new_dataframes)
     func_text = "def impl(bc, name, table):\n"
-    func_text += (
-        f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ))\n"
-    )
+    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), bc.catalog)\n"
     loc_vars = {}
     _global = {"init_sql_context": init_sql_context}
     exec(func_text, _global, loc_vars)
@@ -240,8 +272,52 @@ def overload_bodosql_context_remove_view(bc, name):
     comma_sep_names = ", ".join(new_names)
     comma_sep_dfs = ", ".join(new_dataframes)
     func_text = "def impl(bc, name):\n"
+    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), bc.catalog)\n"
+    loc_vars = {}
+    _global = {"init_sql_context": init_sql_context}
+    exec(func_text, _global, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+@overload_method(BodoSQLContextType, "add_or_replace_catalog")
+def overload_add_or_replace_catalog(bc, catalog):
+    if not isinstance(catalog, DatabaseCatalogType):
+        raise_bodo_error(
+            "BodoSQLContext.add_or_replace_catalog(): 'catalog' must be a bodosql.DatabaseCatalog type"
+        )
+    names = []
+    dataframes = []
+    for i, name in enumerate(bc.names):
+        names.append(f"'{name}'")
+        dataframes.append(f"bc.dataframes[{i}]")
+    comma_sep_names = ", ".join(names)
+    comma_sep_dfs = ", ".join(dataframes)
+    func_text = "def impl(bc, catalog):\n"
+    func_text += f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), catalog)\n"
+    loc_vars = {}
+    _global = {"init_sql_context": init_sql_context}
+    exec(func_text, _global, loc_vars)
+    impl = loc_vars["impl"]
+    return impl
+
+
+@overload_method(BodoSQLContextType, "remove_catalog")
+def overload_remove_catalog(bc):
+    if is_overload_none(bc.catalog_type):
+        raise_bodo_error(
+            "BodoSQLContext.remove_catalog(): BodoSQLContext must have an existing catalog registered."
+        )
+    names = []
+    dataframes = []
+    for i, name in enumerate(bc.names):
+        names.append(f"'{name}'")
+        dataframes.append(f"bc.dataframes[{i}]")
+    comma_sep_names = ", ".join(names)
+    comma_sep_dfs = ", ".join(dataframes)
+    func_text = "def impl(bc):\n"
     func_text += (
-        f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ))\n"
+        f"  return init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), None)\n"
     )
     loc_vars = {}
     _global = {"init_sql_context": init_sql_context}

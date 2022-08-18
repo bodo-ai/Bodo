@@ -1252,7 +1252,7 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
                 for i in range(len(data.dataframes))
             ]
         )
-        func_text += f"  return bodosql.context_ext.init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ))\n"
+        func_text += f"  return bodosql.context_ext.init_sql_context(({comma_sep_names}, ), ({comma_sep_dfs}, ), data.catalog)\n"
         loc_vars = {}
         exec(func_text, {"bodo": bodo, "bodosql": bodosql}, loc_vars)
         impl_bodosql_context = loc_vars["impl_bodosql_context"]
