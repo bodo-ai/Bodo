@@ -14,6 +14,16 @@ import numpy as np
 import pandas as pd
 from mpi4py import MPI
 from pyspark.sql.functions import col
+from pyspark.sql.types import (
+    ByteType,
+    DoubleType,
+    FloatType,
+    IntegerType,
+    LongType,
+    ShortType,
+    StructField,
+    StructType,
+)
 
 import bodo
 
@@ -1043,3 +1053,29 @@ def get_snowflake_connection_string(db, schema):
     warehouse = "DEMO_WH"
     conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
     return conn
+
+
+def create_pyspark_schema_from_dataframe(df):
+    """Constructs a Pyspark schema for an appropriately typed
+    DataFrame. This is used for tests whose output depends on
+    maintaining precision.
+    """
+    int_byte_type_map = {
+        1: ByteType(),
+        2: ShortType(),
+        4: IntegerType(),
+        8: LongType(),
+    }
+    float_byte_type_map = {4: FloatType(), 8: DoubleType()}
+
+    field_list = []
+    for i, col in enumerate(df.columns):
+        dtype = df.dtypes[i]
+        if np.issubdtype(dtype, np.integer):
+            pyspark_type = int_byte_type_map[dtype.itemsize]
+        elif np.issubdtype(dtype, np.floating):
+            pyspark_type = float_byte_type_map[dtype.itemsize]
+        else:
+            raise TypeError("Type mapping to Pyspark Schema not implemented yet.")
+        field_list.append(StructField(col, pyspark_type, True))
+    return StructType(field_list)

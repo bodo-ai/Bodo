@@ -5,8 +5,10 @@ Test correctness of SQL arithmetic operations on BodoSQL
 
 
 import pytest
-
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import (
+    check_query,
+    create_pyspark_schema_from_dataframe,
+)
 
 
 @pytest.mark.slow
@@ -346,6 +348,16 @@ def test_add_sub_intervals(
 )
 def test_negation(query, bodosql_numeric_types, spark_info, memory_leak_check):
     """Tests unary negation"""
+    # Exact value depends on bitwidth so we have to pass the Spark schema
+    pyspark_schemas = {}
+    for table_name, df in bodosql_numeric_types.items():
+        pyspark_schemas[table_name] = create_pyspark_schema_from_dataframe(df)
+
     check_query(
-        query, bodosql_numeric_types, spark_info, check_dtype=False, check_names=False
+        query,
+        bodosql_numeric_types,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        pyspark_schemas=pyspark_schemas,
     )
