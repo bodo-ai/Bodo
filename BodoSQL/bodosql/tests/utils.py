@@ -96,6 +96,8 @@ def check_query(
     pyspark_schemas=None,
     named_params_timedelta_interval=False,
     convert_nullable_bodosql=True,
+    use_table_format=None,
+    use_dict_encoded_strings=None,
 ):
     """
     Evaluates the correctness of a BodoSQL query by comparing SparkSQL
@@ -214,6 +216,12 @@ def check_query(
 
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
 
+        use_table_format: flag for loading dataframes in table format for testing.
+            If None, tests both formats.
+
+        use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
+            format for testing.
+            If None, tests both formats if input arguments have string arrays.
     """
     # Determine which bodo versions to run
     if only_python:
@@ -351,42 +359,23 @@ def check_query(
             optimize_calcite_plan,
             convert_nullable_bodosql,
         )
-    if run_jit_seq:
-        check_query_jit_seq(
-            query,
-            dataframe_dict,
-            named_params,
-            check_names,
-            check_dtype,
-            sort_output,
-            expected_output,
-            optimize_calcite_plan,
-            convert_nullable_bodosql,
-        )
-    if run_jit_1D:
-        check_query_jit_1D(
-            query,
-            dataframe_dict,
-            named_params,
-            check_names,
-            check_dtype,
-            sort_output,
-            expected_output,
-            optimize_calcite_plan,
-            convert_nullable_bodosql,
-        )
-    if run_jit_1DVar:
-        check_query_jit_1DVar(
-            query,
-            dataframe_dict,
-            named_params,
-            check_names,
-            check_dtype,
-            sort_output,
-            expected_output,
-            optimize_calcite_plan,
-            convert_nullable_bodosql,
-        )
+
+    check_query_jit(
+        run_jit_seq,
+        run_jit_1D,
+        run_jit_1DVar,
+        query,
+        dataframe_dict,
+        named_params,
+        check_names,
+        check_dtype,
+        sort_output,
+        expected_output,
+        optimize_calcite_plan,
+        convert_nullable_bodosql,
+        use_table_format,
+        use_dict_encoded_strings,
+    )
 
     result = dict()
 
@@ -410,6 +399,159 @@ def check_query(
             result["output_df"] = bc._test_sql_unoptimized(query, named_params)
 
     return result
+
+
+def check_query_jit(
+    run_jit_seq,
+    run_jit_1D,
+    run_jit_1DVar,
+    query,
+    dataframe_dict,
+    named_params,
+    check_names,
+    check_dtype,
+    sort_output,
+    expected_output,
+    optimize_calcite_plan,
+    convert_nullable_bodosql,
+    use_table_format,
+    use_dict_encoded_strings,
+):
+    """
+    Evaluates the correctness of a BodoSQL query against expected_output.
+    This function creates the BodoSQL context in a JIT function.
+
+    @params:
+
+        run_jit_seq: pass arguments as REP and make the function sequential
+
+        run_jit_1D: pass arguments as 1D
+
+        run_jit_1DVar: pass arguments as 1D_Var
+
+        query: The SQL query to execute.
+
+        dataframe_dict: A dictionary mapping Table names -> DataFrames.
+            These tables will be placed inside a BodoSQL context
+            for query execution.
+
+        named_params: Dictionary of mapping constant values to Bodo variable
+            names used in query.
+
+        check_names: Compare BodoSQL and expected_output names for equality.
+
+        check_dtype: Compare BodoSQL and expected_output types for equality.
+
+        sort_output: Compare the tables after sorting the results. Most
+            queries need to be sorted because the order isn't defined.
+
+        expected_output: The expected result of running the query.
+
+        convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
+
+        use_table_format: flag for loading dataframes in table format for testing.
+            If None, tests both formats.
+
+        use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
+            format for testing.
+            If None, tests both formats if input arguments have string arrays.
+    """
+
+    saved_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
+    saved_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
+    try:
+        # test table format for dataframes (non-table format tested below if flag is
+        # None)
+        if use_table_format is None or use_table_format:
+            bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = 0
+
+        # test dict-encoded string arrays if flag is set (dict-encoded tested below if
+        # flag is None)
+        if use_dict_encoded_strings:
+            bodo.hiframes.boxing._use_dict_str_type = True
+
+        if run_jit_seq:
+            check_query_jit_seq(
+                query,
+                dataframe_dict,
+                named_params,
+                check_names,
+                check_dtype,
+                sort_output,
+                expected_output,
+                optimize_calcite_plan,
+                convert_nullable_bodosql,
+            )
+        if run_jit_1D:
+            check_query_jit_1D(
+                query,
+                dataframe_dict,
+                named_params,
+                check_names,
+                check_dtype,
+                sort_output,
+                expected_output,
+                optimize_calcite_plan,
+                convert_nullable_bodosql,
+            )
+        if run_jit_1DVar:
+            check_query_jit_1DVar(
+                query,
+                dataframe_dict,
+                named_params,
+                check_names,
+                check_dtype,
+                sort_output,
+                expected_output,
+                optimize_calcite_plan,
+                convert_nullable_bodosql,
+            )
+    finally:
+        bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
+        bodo.hiframes.boxing._use_dict_str_type = saved_use_dict_str_type
+
+    # test non-table format case
+    if use_table_format is None:
+        check_query_jit(
+            run_jit_seq,
+            run_jit_1D,
+            run_jit_1DVar,
+            query,
+            dataframe_dict,
+            named_params,
+            check_names,
+            check_dtype,
+            sort_output,
+            expected_output,
+            optimize_calcite_plan,
+            convert_nullable_bodosql,
+            use_table_format=False,
+            use_dict_encoded_strings=use_dict_encoded_strings,
+        )
+
+    # test dict-encoded string type if there is any string array in input
+    if use_dict_encoded_strings is None and any(
+        any(t == bodo.string_array_type for t in bodo.tests.utils._typeof(df).data)
+        for df in dataframe_dict.values()
+    ):
+        check_query_jit(
+            run_jit_seq,
+            run_jit_1D,
+            run_jit_1DVar,
+            query,
+            dataframe_dict,
+            named_params,
+            check_names,
+            check_dtype,
+            sort_output,
+            expected_output,
+            optimize_calcite_plan,
+            convert_nullable_bodosql,
+            # the default case use_table_format=None already tests
+            # use_table_format=False above so we just test use_table_format=True for it
+            use_table_format=True if use_table_format is None else use_table_format,
+            use_dict_encoded_strings=True,
+        )
 
 
 def check_query_python(

@@ -689,4 +689,6 @@ def test_any_value(args, spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
         equivalent_spark_query=equivalent_query,
+        # TODO[BE-3456]: enable dict-encoded string test when segfault is fixed
+        use_dict_encoded_strings=False,
     )

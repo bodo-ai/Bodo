@@ -5,15 +5,15 @@ Test correctness of SQL join queries on BodoSQL
 
 import copy
 
-import bodo
 import pandas as pd
 import pytest
-
 from bodosql.tests.utils import (
     bodo_version_older,
     check_efficient_join,
     check_query,
 )
+
+import bodo
 
 
 @pytest.fixture(params=["INNER", "LEFT", "RIGHT", "FULL OUTER"])
@@ -55,6 +55,8 @@ def test_join(join_dataframes, spark_info, comparison_ops, memory_leak_check):
         return_codegen=True,
         convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
+        # TODO[BE-3478]: enable dict-encoded string test when fixed
+        use_dict_encoded_strings=False,
     )
     pandas_code = result["pandas_code"]
     if comparison_ops == "=":
@@ -156,7 +158,13 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
             (table1.A = table2.A and table1.B = table2.B)
         """
     result = check_query(
-        query, join_dataframes, spark_info, return_codegen=True, check_dtype=check_dtype
+        query,
+        join_dataframes,
+        spark_info,
+        return_codegen=True,
+        check_dtype=check_dtype,
+        # TODO[BE-3478]: enable dict-encoded string test when fixed
+        use_dict_encoded_strings=False,
     )
     pandas_code = result["pandas_code"]
     check_efficient_join(pandas_code)
@@ -390,6 +398,8 @@ def test_nested_and_join(join_dataframes, spark_info, memory_leak_check):
         check_names=False,
         return_codegen=True,
         check_dtype=False,
+        # TODO[BE-3479]: enable when bug is fixed
+        use_table_format=False,
     )
     pandas_code = result["pandas_code"]
     check_efficient_join(pandas_code)
