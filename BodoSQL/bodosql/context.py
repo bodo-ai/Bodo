@@ -6,6 +6,7 @@ from typing import Union
 import numba
 import numpy as np
 import pandas as pd
+from bodosql.bodosql_types.database_catalog import DatabaseCatalog
 from bodosql.bodosql_types.table_path import TablePath, TablePathType
 from bodosql.py4j_gateway import get_gateway
 from bodosql.utils import BodoSQLWarning, java_error_to_msg
@@ -381,7 +382,7 @@ def get_param_table_type(table_name, db, param_keys, param_values):
 
 
 class BodoSQLContext:
-    def __init__(self, tables=None):
+    def __init__(self, tables=None, catalog=None):
         # We only need to initialize the tables values on all ranks, since that is needed for
         # creating the JIT function on all ranks for bc.sql calls. We also intialize df_types on all ranks,
         # for consistency. All the other attributes
@@ -402,6 +403,12 @@ class BodoSQLContext:
             raise BodoError(
                 "BodoSQLContext(): 'table' values must be DataFrames or TablePaths"
             )
+
+        if not (catalog is None or isinstance(catalog, DatabaseCatalog)):
+            raise BodoError(
+                "BodoSQLContext(): 'catalog' must be a bodosql.DatabaseCatalog if provided"
+            )
+        self.catalog = catalog
 
         # This except block can run in the case that our iceberg connector raises an error
         failed = False
@@ -724,7 +731,7 @@ class BodoSQLContext:
             )
         new_tables = self.tables.copy()
         new_tables[name] = table
-        return BodoSQLContext(new_tables)
+        return BodoSQLContext(new_tables, self.catalog)
 
     def remove_view(self, name: str):
         """Create a new BodoSQLContext by removing the table with the
@@ -748,7 +755,41 @@ class BodoSQLContext:
                 "BodoSQLContext.remove_view(): 'name' must refer to a registered view"
             )
         del new_tables[name]
-        return BodoSQLContext(new_tables)
+        return BodoSQLContext(new_tables, self.catalog)
+
+    def add_or_replace_catalog(self, catalog: DatabaseCatalog):
+        """
+        Creates a new BodoSQL context by replacing the previous catalog,
+        if it exists, with the provided catalog.
+
+        Args:
+            catalog (DatabaseCatalog): DatabaseCatalog to add to the context.
+
+        Returns:
+            BodoSQLContext: A new BodoSQL context.
+
+        Raises BodoError
+        """
+        if not isinstance(catalog, DatabaseCatalog):
+            raise BodoError(
+                "BodoSQLContext.add_or_replace_catalog(): 'catalog' must be a bodosql.DatabaseCatalog"
+            )
+        return BodoSQLContext(self.tables, catalog)
+
+    def remove_catalog(self):
+        """
+        Creates a new BodoSQL context by remove the previous catalog.
+
+        Returns:
+            BodoSQLContext: A new BodoSQL context.
+
+        Raises BodoError
+        """
+        if self.catalog is None:
+            raise BodoError(
+                "BodoSQLContext.remove_catalog(): BodoSQLContext must have an existing catalog registered."
+            )
+        return BodoSQLContext(self.tables)
 
     def __eq__(self, bc: object) -> bool:
         if isinstance(bc, BodoSQLContext):
@@ -761,7 +802,7 @@ class BodoSQLContext:
                 for key in curr_keys:
                     if not self.tables[key].equals(bc.tables[key]):  # pragma: no cover
                         return False
-                return True
+                return self.catalog == bc.catalog
         return False  # pragma: no cover
 
 

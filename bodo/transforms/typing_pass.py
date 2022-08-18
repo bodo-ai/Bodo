@@ -1395,16 +1395,19 @@ class TypingTransforms:
             raise BodoError("Invalid df.loc/iloc[] setitem")
         return loc_def.value
 
-    def _get_bodosql_ctx_name_df_typs(self, sql_context_var):  # pragma: no cover
+    def _get_bodosql_ctx_name_df_typs(self, folded_args):  # pragma: no cover
         """
         Extracts the names/types of the dataframes used to intialize the bodosql context.
         This is converted into a tuple of the names/values in
         untyped pass (see _handle_bodosql_BodoSQLContext).
         This function extracts the dataframe types directly from the IR, to avoid any issues
         with incorrect type propogation (specifically, from df setitem).
+
+        folded_args are the arguments passed to the BodoSQLContext constructor, placing
+        any KWS into their standard location. This ensures the DataFrames are always at
+        the same location if passed by keyword instead.
         """
-        sql_ctx_def = guard(get_definition, self.func_ir, sql_context_var)
-        df_dict_var = sql_ctx_def.args[0]
+        df_dict_var = folded_args[0]
         df_dict_def = guard(get_definition, self.func_ir, df_dict_var)
         df_dict_def_items = df_dict_def.items
         # floor divide
@@ -2804,13 +2807,26 @@ class TypingTransforms:
                 # ensure we don't have an indexError in another pass.
                 return None
             if fdef[0] == "BodoSQLContext":
-                names, df_typs = self._get_bodosql_ctx_name_df_typs(sql_context_var)
+                # Fold arguments in case someone passes catalog via kwargs
+                _, folded_args = bodo.utils.typing.fold_typing_args(
+                    fdef[0],
+                    sql_ctx_def.args,
+                    sql_ctx_def.kws,
+                    ("dataframes", "catalog"),
+                    {"catalog": None},
+                )
+                names, df_typs = self._get_bodosql_ctx_name_df_typs(folded_args)
                 for df_typ in df_typs:
                     if df_typ is None:
                         # Return None if a transformation failed
                         # because a dataframe type is unknown.
                         return None
-                return BodoSQLContextType(names, df_typs)
+                catalog_var = folded_args[1]
+                if isinstance(catalog_var, ir.Var):
+                    catalog_typ = self.typemap[catalog_var.name]
+                else:
+                    catalog_typ = types.none
+                return BodoSQLContextType(names, df_typs, catalog_typ)
             elif fdef[0] == "add_or_replace_view":
                 context_type = determine_bodosql_context_type(fdef[1])
                 name_typ = self.typemap.get(sql_ctx_def.args[0].name, None)
@@ -2831,7 +2847,9 @@ class TypingTransforms:
                         new_df_typs.append(old_df_typ)
                 new_names.append(name_typ)
                 new_df_typs.append(df_typ)
-                return BodoSQLContextType(tuple(new_names), tuple(new_df_typs))
+                return BodoSQLContextType(
+                    tuple(new_names), tuple(new_df_typs), context_type.catalog_type
+                )
             elif fdef[0] == "remove_view":
                 context_type = determine_bodosql_context_type(fdef[1])
                 name_typ = self.typemap.get(sql_ctx_def.args[0].name, None)
@@ -2849,7 +2867,22 @@ class TypingTransforms:
                     if old_name_typ != name_typ:
                         new_names.append(old_name_typ)
                         new_df_typs.append(old_df_typ)
-                return BodoSQLContextType(tuple(new_names), tuple(new_df_typs))
+                return BodoSQLContextType(
+                    tuple(new_names), tuple(new_df_typs), context_type.catalog_type
+                )
+            elif fdef[0] in ("add_or_replace_catalog", "remove_catalog"):
+                context_type = determine_bodosql_context_type(fdef[1])
+                if fdef[0] == "add_or_replace_catalog":
+                    catalog_typ = self.typemap.get(sql_ctx_def.args[0].name, None)
+                    if catalog_typ is None:
+                        # If we can't determine a type for the catalog
+                        # we must fail.
+                        return None
+                else:
+                    catalog_typ = types.none
+                return BodoSQLContextType(
+                    context_type.names, context_type.dataframes, catalog_typ
+                )
             return None
 
         sql_context_type = determine_bodosql_context_type(sql_context_var)

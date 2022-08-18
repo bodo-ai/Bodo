@@ -1,13 +1,42 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tests for user facing BodoSQL APIs.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql import BodoSQLContext, TablePath
+from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
 
+import bodo
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
+
+
+@pytest.fixture(
+    params=[
+        (
+            SnowflakeCatalog(
+                "myusername",
+                "mypassword",
+                "myaccount",
+                "mywarehouse",
+                "mydatabase",
+            ),
+            SnowflakeCatalog(
+                "myusername2",
+                "mypassword2",
+                "myaccount",
+                "mywarehouse",
+                "mydatabase",
+            ),
+        )
+    ]
+)
+def dummy_snowflake_catalogs(request):
+    """Return a tuple with 2 dummy snowflake catalogs to use
+    for testing.
+    """
+    return request.param
 
 
 def test_add_or_replace_view(memory_leak_check):
@@ -68,7 +97,47 @@ def test_remove_view(memory_leak_check):
     pd.testing.assert_frame_equal(bc_orig.sql("select * from t2"), df2)
 
 
-def test_bodosql_context_boxing(memory_leak_check):
+@pytest.mark.parametrize(
+    "bc",
+    [
+        pytest.param(
+            BodoSQLContext(
+                {
+                    "t1": pd.DataFrame(
+                        {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
+                    ),
+                    "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+                    "t3": TablePath(
+                        "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
+                    ),
+                },
+            ),
+            id="no-catalog",
+        ),
+        pytest.param(
+            BodoSQLContext(
+                {
+                    "t1": pd.DataFrame(
+                        {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
+                    ),
+                    "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+                    "t3": TablePath(
+                        "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
+                    ),
+                },
+                SnowflakeCatalog(
+                    "myusername",
+                    "mypassword",
+                    "myaccount",
+                    "mywarehouse",
+                    "mydatabase",
+                ),
+            ),
+            id="snowflake-catalog",
+        ),
+    ],
+)
+def test_bodosql_context_boxing(bc, memory_leak_check):
     """
     Tests boxing and unboxing with a BodoSQL context.
     """
@@ -76,21 +145,44 @@ def test_bodosql_context_boxing(memory_leak_check):
     def impl(bc):
         return bc
 
-    bc = BodoSQLContext(
-        {
-            "t1": pd.DataFrame(
-                {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
-            ),
-            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
-            "t3": TablePath(
-                "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
-            ),
-        }
-    )
     check_func(impl, (bc,))
 
 
-def test_bodosql_context_boxed_sql(memory_leak_check):
+@pytest.mark.parametrize(
+    "bc",
+    [
+        pytest.param(
+            BodoSQLContext(
+                {
+                    "t1": pd.DataFrame(
+                        {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
+                    ),
+                    "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+                },
+            ),
+            id="no-catalog",
+        ),
+        pytest.param(
+            BodoSQLContext(
+                {
+                    "t1": pd.DataFrame(
+                        {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
+                    ),
+                    "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+                },
+                SnowflakeCatalog(
+                    "myusername",
+                    "mypassword",
+                    "myaccount",
+                    "mywarehouse",
+                    "mydatabase",
+                ),
+            ),
+            id="snowflake-catalog",
+        ),
+    ],
+)
+def test_bodosql_context_boxed_sql(bc, memory_leak_check):
     """
     Tests boxing and unboxing with a BodoSQL context.
     """
@@ -98,15 +190,7 @@ def test_bodosql_context_boxed_sql(memory_leak_check):
     def impl(bc):
         return bc.sql("select * from t1")
 
-    py_output = pd.DataFrame(
-        {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
-    )
-    bc = BodoSQLContext(
-        {
-            "t1": py_output,
-            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
-        }
-    )
+    py_output = bc.tables["t1"]
     check_func(impl, (bc,), py_output=py_output)
 
 
@@ -175,7 +259,7 @@ def test_remove_view_jit(memory_leak_check):
     )
     # check removing a table
     with pytest.raises(BodoError):
-        impl1(bc)
+        bodo.jit(impl1)(bc)
     # Check that the original isn't updated
     check_func(impl2, (bc,), py_output=df1)
 
@@ -256,3 +340,124 @@ def test_bodosql_context_closure_import(memory_leak_check):
 
     df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
     check_func(impl, (df,), py_output=df)
+
+
+def test_add_or_replace_catalog(dummy_snowflake_catalogs, memory_leak_check):
+    """
+    Verify add_or_replace_catalog properly updates a BodoSQLContext
+    with the correct catalog. This is tested by comparing a local table
+    and two different Snowflake account and relying on the resolution
+    searching the catalog first and then the local table.
+    """
+
+    def impl(bc):
+        return bc.sql("select * from catalog_table")
+
+    local_df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
+    # TODO: Update with real catalogs
+    catalog1, catalog2 = dummy_snowflake_catalogs
+
+    bc = BodoSQLContext({"catalog_table": local_df})
+    check_func(impl, (bc,), py_output=local_df)
+    bc2 = bc.add_or_replace_catalog(catalog1)
+    # TODO: Update the expected output
+    check_func(impl, (bc2,), py_output=local_df)
+    # Verify the old BodoSQLContext is unchanged
+    check_func(impl, (bc,), py_output=local_df)
+    bc3 = bc2.add_or_replace_catalog(catalog2)
+    # TODO: Update the expected output
+    check_func(impl, (bc3,), py_output=local_df)
+    # Verify the old BodoSQLContext is unchanged
+    # TODO: Update the expected output
+    check_func(impl, (bc2,), py_output=local_df)
+
+
+def test_remove_catalog(dummy_snowflake_catalogs, memory_leak_check):
+    """
+    Verify remove_catalog properly updates a BodoSQLContext
+    output. This is tested by comparing a local table
+    and a Snowflake account and relying on the resolution
+    searching the catalog first and then the local table.
+    """
+
+    def impl(bc):
+        return bc.sql("select * from catalog_table")
+
+    local_df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
+    # TODO: Update with a real catalog
+    catalog = dummy_snowflake_catalogs[0]
+    bc = BodoSQLContext({"catalog_table": local_df}, catalog)
+    # TODO: Update the expected output
+    check_func(impl, (bc,), py_output=local_df)
+    bc2 = bc.remove_catalog()
+    check_func(impl, (bc2,), py_output=local_df)
+    # Verify the old BodoSQLContext is unchanged
+    # TODO: Update the expected output
+    check_func(impl, (bc,), py_output=local_df)
+    with pytest.raises(
+        BodoError, match="BodoSQLContext must have an existing catalog registered"
+    ):
+        bc2.remove_catalog()
+
+
+def test_add_or_replace_catalog_jit(dummy_snowflake_catalogs, memory_leak_check):
+    """
+    Verify add_or_replace_catalog properly updates a BodoSQLContext
+    with the correct catalog inside JIT. This is tested by comparing
+    a local table and two different Snowflake account and relying on
+    the resolution searching the catalog first and then the local table.
+    """
+
+    def impl(bc, catalog):
+        # Load with a new context.
+        bc2 = bc.add_or_replace_catalog(catalog)
+        df2 = bc2.sql("select * from catalog_table")
+        # Reload from the original context
+        df1 = bc.sql("select * from catalog_table")
+        return (df2, df1)
+
+    local_df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
+    # Unused table path for checking typing/distribution info
+    table_path = TablePath(
+        "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
+    )
+    # TODO: Update with real catalogs
+    catalog1, catalog2 = dummy_snowflake_catalogs
+
+    bc = BodoSQLContext({"catalog_table": local_df, "t2": table_path})
+    check_func(impl, (bc, catalog1))
+    bc = bc.add_or_replace_catalog(catalog1)
+    check_func(impl, (bc, catalog2))
+
+
+def test_remove_catalog_jit(dummy_snowflake_catalogs, memory_leak_check):
+    """
+    Verify remove_catalog properly updates a BodoSQLContext
+    with the correct catalog inside JIT. This is tested by comparing
+    a local table and a Snowflake account and relying on
+    the resolution searching the catalog first and then the local table.
+    """
+
+    def impl(bc):
+        # Load with a new context.
+        bc2 = bc.remove_catalog()
+        df2 = bc2.sql("select * from catalog_table")
+        # Reload from the original context
+        df1 = bc.sql("select * from catalog_table")
+        return (df2, df1)
+
+    local_df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
+    # Unused table path for checking typing/distribution info
+    table_path = TablePath(
+        "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
+    )
+    # TODO: Update with a real catalog
+    catalog = dummy_snowflake_catalogs[0]
+
+    bc = BodoSQLContext({"catalog_table": local_df, "t2": table_path}, catalog)
+    check_func(impl, (bc,))
+    bc = bc.remove_catalog()
+    with pytest.raises(
+        BodoError, match="BodoSQLContext must have an existing catalog registered"
+    ):
+        bodo.jit(impl)(bc)

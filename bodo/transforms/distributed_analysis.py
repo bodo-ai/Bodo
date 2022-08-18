@@ -1247,11 +1247,21 @@ class DistributedAnalysis:
             )
             return
 
+        # handle bodosql context calls for catalogs
+        if isinstance(func_mod, ir.Var) and func_name in (
+            "add_or_replace_catalog",
+            "remove_catalog",
+        ):
+            # Updating a catalog doesn't change the underlying dataframes,
+            # so we can do a simple meet on each entry.
+            self._meet_array_dists(lhs, func_mod.name, array_dists)
+            return
+
         # handle bodosql context calls
-        if isinstance(func_mod, ir.Var) and func_name in [
+        if isinstance(func_mod, ir.Var) and func_name in (
             "add_or_replace_view",
             "remove_view",
-        ]:
+        ):
             # The BodoSQLContext behaves like a tuple. We need to verify that
             # each entry matches.
             if func_mod not in array_dists:
