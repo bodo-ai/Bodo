@@ -176,7 +176,11 @@ jobs:
         export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
       fi
 
-      conda-build . -c conda-forge --no-test
+      # Nightly tests only run Linux, so build Mac and other packages only
+      # for releases
+      if [[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.name }}" == "Linux" ]]; then
+        conda-build . -c conda-forge --no-test
+      fi
     displayName: 'Conda build Bodo'
 
   - task: DownloadSecureFile@1
@@ -217,7 +221,11 @@ jobs:
         fi
       fi
       echo "artifactory_os_dir: $artifactory_os_dir"
-      ./buildscripts/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
+
+      # we build non-Linux packages only for releases, see conda-build command
+      if [[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.name }}" == "Linux" ]]; then
+        ./buildscripts/azure/publish_binary.sh $artifactory_channel $artifactory_os_dir $BODO_VERSION
+      fi
       if [[ "${{ parameters.platformBuild }}" == "true" ]]; then
         ./buildscripts/azure/trigger_ami_build.sh $artifactory_channel $artifactory_os_dir $PLATFORM_DEV_RELEASE $BODO_VERSION
       fi
