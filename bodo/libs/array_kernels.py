@@ -27,13 +27,13 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     init_categorical_array,
 )
 from bodo.hiframes.split_impl import string_array_split_view_type
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import quantile_alg
 from bodo.libs.array import (
     arr_info_list_to_table,
@@ -66,6 +66,7 @@ from bodo.utils.typing import (
     get_overload_const_bool,
     get_overload_const_list,
     get_overload_const_str,
+    is_bin_arr_type,
     is_overload_constant_bool,
     is_overload_constant_str,
     is_overload_none,
@@ -2080,6 +2081,7 @@ def overload_get_arr_lens(arr, na_empty_as_one=True):
         isinstance(arr, ArrayItemArrayType)
         or arr == string_array_split_view_type
         or (is_str_arr_type(arr) and not na_empty_as_one)
+        or (is_bin_arr_type(arr) and not na_empty_as_one)
     ), f"get_arr_lens: invalid input array type {arr}"
     if na_empty_as_one:
         init_str = "np.empty(n, np.int64)"

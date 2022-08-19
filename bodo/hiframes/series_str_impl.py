@@ -42,6 +42,7 @@ from bodo.utils.typing import (
     get_overload_const_list,
     get_overload_const_str,
     get_overload_const_str_len,
+    is_bin_arr_type,
     is_list_like_index_type,
     is_overload_constant_bool,
     is_overload_constant_int,
@@ -168,8 +169,11 @@ def overload_series_str(S):
         is_str_arr_type(S.data)
         or S.data == string_array_split_view_type
         or isinstance(S.data, ArrayItemArrayType)
+        or is_bin_arr_type(S.data)
     ):
-        raise_bodo_error("Series.str: input should be a series of string or arrays")
+        raise_bodo_error(
+            "Series.str: input should be a series of string/binary or arrays"
+        )
     return lambda S: bodo.hiframes.series_str_impl.init_series_str_method(S)
 
 
