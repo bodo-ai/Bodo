@@ -6128,7 +6128,7 @@ class GroupbyPipeline {
         // aggregate.py
 
         bool has_udf = false;
-        bool nunique_op = false;
+        nunique_op = false;
         int nunique_count = 0;
         const int num_funcs =
             func_offsets[in_table->ncols() - num_keys - index_i];
@@ -6202,19 +6202,13 @@ class GroupbyPipeline {
             }
         }
 
-        int64_t num_shuffle_keys = n_shuffle_keys;
-        bool has_reverse_shuffle =
-            cumulative_op || shift_op || transform_op || ngroup_op;
-        // If we do a reverse shuffle there is no benefit to keeping the shuffle
-        // keys as the data doesn't stay shuffled. nunique is heavily optimized
-        // so we cannot yet use a subset of keys to shuffle
-        if (has_reverse_shuffle || nunique_op) {
-            num_shuffle_keys = num_keys;
-        }
-
         // get hashes of keys
-        hashes = hash_keys_table(in_table, num_shuffle_keys,
-                                 SEED_HASH_PARTITION, is_parallel);
+        // NOTE: this has to be num_keys and not n_shuffle_keys
+        // to avoid having a far off estimated nunique_hashes
+        // which could lead to having large chance of map insertion collisions.
+        // See [BE-3371] for more context.
+        hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION,
+                                 is_parallel);
         size_t nunique_hashes_global;
         // get estimate of number of unique hashes to guide optimization.
         // if shuffle_before_update=true we are going to shuffle everything
@@ -6282,6 +6276,8 @@ class GroupbyPipeline {
             for (auto a : in_table->columns) incref_array(a);
             in_table = shuffle_table_kernel(in_table, hashes, *comm_info_ptr,
                                             is_parallel);
+            has_reverse_shuffle =
+                cumulative_op || shift_op || transform_op || ngroup_op;
             if (!has_reverse_shuffle) {
                 delete[] hashes;
                 delete comm_info_ptr;
@@ -6561,9 +6557,17 @@ class GroupbyPipeline {
      */
     void shuffle() {
         tracing::Event ev("shuffle", is_parallel);
-        ev.add_attribute("n_shuffle_keys", n_shuffle_keys);
+        int64_t num_shuffle_keys = n_shuffle_keys;
+        // If we do a reverse shuffle there is no benefit to keeping the shuffle
+        // keys as the data doesn't stay shuffled. nunique is heavily optimized
+        // so we cannot yet use a subset of keys to shuffle
+        if (has_reverse_shuffle || nunique_op) {
+            num_shuffle_keys = num_keys;
+        }
+        ev.add_attribute("passed_n_shuffle_keys", n_shuffle_keys);
+        ev.add_attribute("num_shuffle_keys", num_shuffle_keys);
         table_info* shuf_table =
-            shuffle_table(update_table, n_shuffle_keys, is_parallel);
+            shuffle_table(update_table, num_shuffle_keys, is_parallel);
 
         // NOTE: shuffle_table_kernel decrefs input arrays
         delete_table(update_table);
@@ -7034,8 +7038,10 @@ class GroupbyPipeline {
     bool cumulative_op = false;
     bool shift_op = false;
     bool transform_op = false;
+    bool nunique_op = false;
     bool head_op = false;
     bool ngroup_op = false;
+    bool has_reverse_shuffle = false;
     int64_t head_n;
     bool req_extended_group_info = false;
     bool do_combine;
