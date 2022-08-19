@@ -11,7 +11,7 @@ from bodo.tests.test_metadata import (  # noqa
     str_gen_dist_df,
     struct_gen_dist_df,
 )
-from bodo.tests.utils import InputDist, check_caching
+from bodo.tests.utils import InputDist, check_caching, reduce_sum
 
 
 def test_groupby_agg_caching(fn_distribution, is_cached, memory_leak_check):
@@ -206,8 +206,9 @@ def test_caching_version_check(is_cached, memory_leak_check):
       - assert that the cache is not used in the second pass because the version doesn't match
     """
 
-    import bodo
     import os
+
+    import bodo
 
     @bodo.jit(cache=True)
     def impl(x):
@@ -220,21 +221,36 @@ def test_caching_version_check(is_cached, memory_leak_check):
         impl(1)
 
         # check that bodo version is in the cache filename
-        cache_file = None
-        for f in os.listdir(impl._cache.cache_path):
-            if bodo.__version__ in f:
-                cache_file = f
-                break
+        passed = 1
+        try:
+            # Since these are filesystem operations, we only perform them on rank 0
+            # to avoid race conditions (e.g. during the rename).
+            if bodo.get_rank() == 0:
+                cache_file = None
+                for f in os.listdir(impl._cache.cache_path):
+                    if bodo.__version__ in f:
+                        cache_file = f
+                        break
 
-        assert cache_file is not None
+                assert cache_file is not None
 
-        # change the version of the cached filename
-        fake_cache_file = cache_file.replace(bodo.__version__, "0.0.0")
-        os.rename(
-            os.path.join(impl._cache.cache_path, cache_file),
-            os.path.join(impl._cache.cache_path, fake_cache_file),
-        )
+                # change the version of the cached filename
+                fake_cache_file = cache_file.replace(bodo.__version__, "0.0.0")
+                os.rename(
+                    os.path.join(impl._cache.cache_path, cache_file),
+                    os.path.join(impl._cache.cache_path, fake_cache_file),
+                )
+        except Exception as e:
+            passed = 0
+            print(e)
+        
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size()
 
+        bodo.barrier()
+
+
+        
     # second pass
     else:
         impl(1)
