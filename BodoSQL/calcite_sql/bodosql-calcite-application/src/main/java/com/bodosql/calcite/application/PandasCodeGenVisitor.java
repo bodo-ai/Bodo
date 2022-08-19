@@ -777,6 +777,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // If any group is missing a column we may need to do a concat.
       boolean hasMissingColsGroup = false;
 
+      boolean distIfNoGroup = groups.size() > 1;
+
       // Naive implementation for handling multiple aggregation groups, where we repeatedly call
       // group
       // by, and append the dataframes together
@@ -794,7 +796,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
         /* aggregate without group : e.g. select sum(A) from table1 */
         else if (curGroup.isEmpty()) {
           curGroupAggExpr =
-              generateAggCodeNoGroupBy(inVar, inputColumnNames, aggCallList, aggCallNames);
+              generateAggCodeNoGroupBy(
+                  inVar, inputColumnNames, aggCallList, aggCallNames, distIfNoGroup);
         }
         /* group with aggregation : e.g. select sum(B) from table1 group by A */
         else {
