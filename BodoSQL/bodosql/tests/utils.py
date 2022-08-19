@@ -77,6 +77,7 @@ def check_query(
     sort_output=True,
     expected_output=None,
     convert_columns_bytearray=None,
+    convert_columns_string=None,
     convert_columns_timedelta=None,
     convert_columns_decimal=None,
     convert_float_nan=False,
@@ -143,6 +144,11 @@ def check_query(
         convert_columns_bytearray: Convert the given list of
             columns to bytes types. This is because BodoSQL always
             outputs bytes types, but Spark outputs binaryarray.
+
+        convert_columns_string: Convert the given list of string
+            columns to bytes types. This is needed when the SUBSTR function
+            in Spark is run on binary data and returns a string slice
+            rather than a binary slice.
 
         convert_columns_timedelta: Convert the given list of
             columns to td64 types. This is because SparkSQL doesn't
@@ -333,6 +339,10 @@ def check_query(
         if convert_columns_bytearray:
             expected_output = convert_spark_bytearray(
                 expected_output, convert_columns_bytearray
+            )
+        if convert_columns_string:
+            expected_output = convert_spark_string(
+                expected_output, convert_columns_string
             )
         if convert_columns_timedelta:
             expected_output = convert_spark_timedelta(
@@ -956,6 +966,18 @@ def convert_spark_bytearray(df, columns):
     """
     df[columns] = df[columns].apply(
         lambda x: [bytes(y) if isinstance(y, bytearray) else y for y in x],
+        axis=1,
+        result_type="expand",
+    )
+    return df
+
+
+def convert_spark_string(df, columns):
+    """
+    Converts Spark String columns to bytes to match BodoSQL.
+    """
+    df[columns] = df[columns].apply(
+        lambda x: [y.encode("utf-8") if isinstance(y, str) else y for y in x],
         axis=1,
         result_type="expand",
     )

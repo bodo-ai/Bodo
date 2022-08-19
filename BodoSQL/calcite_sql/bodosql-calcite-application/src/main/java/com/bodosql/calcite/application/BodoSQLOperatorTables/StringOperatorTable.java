@@ -70,8 +70,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept. CHAR_INT_INT
-          OperandTypes.family(
-              SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
@@ -87,8 +86,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // this so we set it to None.
           null,
           // What Input Types does the function accept. CHAR_INT_INT
-          OperandTypes.family(
-              SqlTypeFamily.CHARACTER, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
+          OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.INTEGER, SqlTypeFamily.INTEGER),
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 

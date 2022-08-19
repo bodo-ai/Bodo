@@ -76,6 +76,11 @@ def is_str_arr_type(t):
     return t == bodo.string_array_type or t == bodo.dict_str_arr_type
 
 
+def is_bin_arr_type(t):
+    """check if 't' is a binary array type"""
+    return t == bodo.binary_array_type
+
+
 def type_has_unknown_cats(typ):
     """Return True if typ is a (or in case of tables has a) CategoricalArrayType with
     unknown categories (i.e. categories are created during runtime)

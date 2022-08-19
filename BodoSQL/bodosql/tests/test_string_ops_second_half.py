@@ -1,6 +1,5 @@
 import pandas as pd
 import pytest
-
 from bodosql.tests.string_ops_common import *  # noqa
 from bodosql.tests.utils import check_query
 
@@ -584,4 +583,156 @@ def test_substring(query, spark_info, memory_leak_check):
         check_dtype=False,
         sort_output=False,
         equivalent_spark_query=spark_query,
+    )
+
+
+def test_length(bodosql_string_types, spark_info, memory_leak_check):
+    query = "SELECT LENGTH(A) as OUT1 FROM table1"
+    check_query(
+        query,
+        bodosql_string_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+    )
+
+
+def test_length_binary(bodosql_binary_types, spark_info, memory_leak_check):
+    query = "SELECT LENGTH(A) as OUT1 FROM table1"
+    check_query(
+        query,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+    )
+
+
+def test_reverse_binary(bodosql_binary_types, spark_info, memory_leak_check):
+    query = "SELECT REVERSE(A) as OUT1 FROM table1"
+    expected_output1 = pd.DataFrame(
+        {
+            "OUT1": [b"cba", b"c", None, b"gfedcc"] * 3,
+        }
+    )
+    check_query(
+        query,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=expected_output1,
+    )
+
+
+def test_substring_binary(bodosql_binary_types, spark_info, memory_leak_check):
+    query = "SELECT SUBSTR(A, 2, 3) as OUT1 FROM table1"
+    check_query(
+        query,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        convert_columns_bytearray=["OUT1"],
+    )
+
+    query1 = "SELECT SUBSTRING(A, 2, 3) as OUT1 FROM table1"
+    check_query(
+        query1,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        convert_columns_string=["OUT1"],
+    )
+
+    query2 = (
+        "SELECT A, REVERSE(A) as OUT1, SUBSTRING(REVERSE(A), 2, 3) as OUT2 FROM table1"
+    )
+    check_query(
+        query2,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        convert_columns_string=["OUT1", "OUT2"],
+    )
+
+
+def test_left_right_binary(bodosql_binary_types, spark_info, memory_leak_check):
+    query1 = "SELECT LEFT(B,3) as OUT1, RIGHT(B,3) as OUT2 FROM table1"
+    query2 = "SELECT LEFT(A,10) as OUT1, RIGHT(C,10) as OUT2 FROM table1"
+
+    expected_output1 = pd.DataFrame(
+        {
+            "OUT1": [bytes(3), b"abc", b"iho", None] * 3,
+            "OUT2": [bytes(3), b"cde", b"324", None] * 3,
+        }
+    )
+    expected_output2 = pd.DataFrame(
+        {
+            "OUT1": [b"abc", b"c", None, b"ccdefg"] * 3,
+            "OUT2": [None, b"poiu", b"fewfqqqqq", b"3f3"] * 3,
+        }
+    )
+    check_query(
+        query1,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=expected_output1,
+    )
+    check_query(
+        query2,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=expected_output2,
+    )
+
+
+def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
+    query1 = "SELECT LEFT(B,3) as OUT1, RPAD(A, 6, LEFT(B, 3)) as OUT2 FROM table1"
+    query2 = "SELECT RIGHT(B,3) as OUT1, LPAD(A, 6, RIGHT(B, 3)) as OUT2 FROM table1"
+
+    expected_output1 = pd.DataFrame(
+        {
+            "OUT1": [bytes(3), b"abc", b"iho", None] * 3,
+            "OUT2": [b"abc" + bytes(3), b"cabcab", None, None] * 3,
+        }
+    )
+    expected_output2 = pd.DataFrame(
+        {
+            "OUT1": [bytes(3), b"cde", b"324", None] * 3,
+            "OUT2": [bytes(3) + b"abc", b"cdecdc", None, None] * 3,
+        }
+    )
+
+    check_query(
+        query1,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=expected_output1,
+    )
+    check_query(
+        query2,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=expected_output2,
     )

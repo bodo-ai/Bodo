@@ -3,9 +3,9 @@
 Test correctness of SQL case queries on BodoSQL
 """
 import pytest
-from bodo.tests.utils import gen_nonascii_list
-
 from bodosql.tests.utils import check_query
+
+from bodo.tests.utils import gen_nonascii_list
 
 
 @pytest.fixture(

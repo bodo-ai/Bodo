@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+
 from bodo.tests.utils import gen_nonascii_list
 
 
