@@ -176,10 +176,18 @@ jobs:
         export CHECK_LICENSE_CORE_COUNT=$(CHECK_LICENSE_CORE_COUNT)
       fi
 
+      # release conda variant file builds Python 3.8/3.9/3.10,
+      # but the nightly one builds only Python 3.10 (nightly tests use 3.10)
+      if [[ ! -z $IS_RELEASE ]]; then
+        export CONDA_VARIANT_ARG="-e release_conda_build_config.yaml"
+      else
+        export CONDA_VARIANT_ARG="-e nightly_conda_build_config.yaml"
+      fi
+
       # Nightly tests only run Linux, so build Mac and other packages only
       # for releases
       if [[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.name }}" == "Linux" ]]; then
-        conda-build . -c conda-forge --no-test
+        conda-build . -c conda-forge --no-test $CONDA_VARIANT_ARG
       fi
     displayName: 'Conda build Bodo'
 
