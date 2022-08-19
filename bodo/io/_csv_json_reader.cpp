@@ -85,417 +85,46 @@
         throw std::runtime_error(err_msg_var);                          \
     }
 
-// read local files
-// currently using ifstream, TODO: benchmark Arrow's LocalFS
-class LocalFileReader : public SingleFileReader {
-   public:
-    std::ifstream *fstream;
-    LocalFileReader(const char *_fname, const char *f_type, bool csv_header,
-                    bool json_lines)
-        : SingleFileReader(_fname, f_type, csv_header, json_lines) {
-        this->fstream = new std::ifstream(fname);
-        CHECK(fstream->good() && !fstream->eof() && fstream->is_open(),
-              "could not open file.");
-    }
-    uint64_t getSize() { return std::filesystem::file_size(fname); }
-    bool seek(int64_t pos) {
-        this->fstream->seekg(pos + this->csv_header_bytes, std::ios_base::beg);
-        return this->ok();
-    }
-    bool ok() { return (this->fstream->good() and !this->fstream->eof()); }
-    bool read_to_buff(char *s, int64_t size) {
-        this->fstream->read(s, size);
-        return this->ok();
-    }
-    virtual ~LocalFileReader() {
-        if (fstream) delete fstream;
-    }
-};
-
-class LocalDirectoryFileReader : public DirectoryFileReader {
-   public:
-    path_vec
-        file_paths;  // sorted paths of each csv/json file inside the directory
-    LocalDirectoryFileReader(const char *_dirname, const char *f_type,
-                             bool csv_header, bool json_lines)
-        : DirectoryFileReader(_dirname, f_type, csv_header, json_lines) {
-        // only keep the files that are csv/json files
-        std::string dirname(_dirname);
-        const char *suffix = this->f_type_to_string();
-
-        auto nonEmptyEndsWithSuffix =
-            [suffix](const std::filesystem::path &path) -> bool {
-            return (std::filesystem::is_regular_file(path) &&
-                    boost::ends_with(path.string(), suffix) &&
-                    std::filesystem::file_size(path) > 0);
-        };
-
-        std::copy_if(std::filesystem::directory_iterator(_dirname),
-                     std::filesystem::directory_iterator(),
-                     std::back_inserter(this->file_paths),
-                     nonEmptyEndsWithSuffix);
-
-        if ((this->file_paths).size() == 0) {
-            Bodo_PyErr_SetString(
-                PyExc_RuntimeError,
-                ("No valid file to read from directory: " + dirname).c_str());
-        }
-        // sort all files in directory
-        std::sort(this->file_paths.begin(), this->file_paths.end());
-
-        // find & set all file name
-        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
-             ++it) {
-            (this->file_names).push_back((*it).string());
-        }
-
-        // find and set header row size in bytes
-        this->findHeaderRowSize();
-
-        // find dir_size and construct file_sizes
-        // assuming the directory contains files only, i.e. no subdirectory
-        this->dir_size = 0;
-        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
-             ++it) {
-            (this->file_sizes).push_back(this->dir_size);
-            this->dir_size += std::filesystem::file_size(*it);
-            this->dir_size -= this->csv_header_bytes;
-        }
-        this->file_sizes.push_back(this->dir_size);
-    };
-
-    void initFileReader(const char *fname) {
-        this->f_reader =
-            new LocalFileReader(fname, this->f_type_to_string(),
-                                this->csv_header, this->json_lines);
-        this->f_reader->csv_header_bytes = this->csv_header_bytes;
-    };
-};
-#undef CHECK
-
-// ***********************************************************************************
-// Our file-like object for reading chunks in a std::istream
-// ***********************************************************************************
-
-typedef struct {
-    PyObject_HEAD
-        /* Your internal buffer, size and pos */
-        FileReader *ifs;  // input stream
-    size_t chunk_start;   // start of our chunk
-    size_t chunk_size;    // size of our chunk
-    size_t chunk_pos;     // current position in our chunk
-    std::vector<char>
-        buf;  // internal buffer for converting stream input to Unicode object
-
-    // The following attributes are needed for chunksize Iterator support
-    bool first_read;     // Flag used by iterator to track if the first read was
-                         // performed.
-    int64_t first_pos;   // global first offset byte for the first chunk. Use to
-                         // account for skipped bytes if skiprows is used
-                         // (excluding header_size_bytes)
-    int64_t global_end;  // global end offset byte for the current chunk
-    int64_t g_total_bytes;      // Total number of bytes for the whole file(s)
-    int64_t chunksize_rows;     // chunksize (num. of rows per chunk for chunk
-                                // iterator)
-    class PathInfo *path_info;  // PathInfo struct
-    bool is_parallel;  // Flag to say whether data is distributed or replicated.
-    int64_t header_size_bytes;  // store header size to avoid computing
-                                // for every chunk/iterator read
-    // needed for use of skiprows as list with chunksize
-    class SkiprowsListInfo *skiprows_list_info;
-    bool csv_header;  // whether file(s) has header or not (needed for knowing
-                      // whether skiprows are 1-based or 0-based indexing)
-} stream_reader;
-
-static void stream_reader_dealloc(stream_reader *self) {
-    // we own the stream!
-    if (self->ifs) delete self->ifs;
-    if (self->path_info) delete self->path_info;
-    if (self->skiprows_list_info) delete self->skiprows_list_info;
-    Py_TYPE(self)->tp_free(self);
-}
-
-// Needed to return size of data to Python code
-static PyObject *stream_reader_get_chunk_size(stream_reader *self) {
-    return PyLong_FromSsize_t(self->chunk_size);
-}
-
-// Needed to return parallel value to Python code
-static PyObject *stream_reader_is_parallel(stream_reader *self) {
-    return PyBool_FromLong(self->is_parallel);
-}
-
-// alloc a HPTAIO object
-static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
-                                   PyObject *kwds) {
-    stream_reader *self = (stream_reader *)type->tp_alloc(type, 0);
-    if (PyErr_Occurred()) {
-        PyErr_Print();
-        return NULL;
-    }
-    self->ifs = NULL;
-    self->chunk_start = 0;
-    self->chunk_size = 0;
-    self->chunk_pos = 0;
-    self->first_pos = 0;
-    self->global_end = 0;
-    self->g_total_bytes = 0;
-    self->chunksize_rows = 0;
-    self->is_parallel = false;
-    self->header_size_bytes = 0;
-    self->path_info = NULL;
-    self->first_read = false;
-
-    return (PyObject *)self;
-}
-// we provide this mostly for testing purposes
-// users are not supposed to use this
-static int stream_reader_pyinit(PyObject *self, PyObject *args,
-                                PyObject *kwds) {
-    // char* str = NULL;
-    // Py_ssize_t count = 0;
-
-    // if(!PyArg_ParseTuple(args, "|z#", &str, &count) || str == NULL) {
-    //     if(PyErr_Occurred()) PyErr_Print();
-    //     return 0;
-    // }
-
-    // ((stream_reader*)self)->chunk_start = 0;
-    // ((stream_reader*)self)->chunk_pos = 0;
-    // ((stream_reader*)self)->ifs = new std::istringstream(str);
-    // if(!((stream_reader*)self)->ifs->good()) {
-    //     std::cerr << "Could not create istrstream from string.\n";
-    //     ((stream_reader*)self)->chunk_size = 0;
-    //     return -1;
-    // }
-    // ((stream_reader*)self)->chunk_size = count;
-
-    return 0;
-}
-
 /**
- * We use this (and not the above) from C to init our StreamReader object
- * Will seek to chunk beginning and store metadata needed for chunksize_iterator
- * reads
- * @param[out] self: stream_reader wrapper used by Pandas to read data
- * @param[in] ifs: MemReader that has the data
- * @param[in] start: start reading position
- * @param[in] sz: size of the data read (in bytes)
- * These are used only with chunksize mode
- * @param[in] skipped_bytes: number of bytes skipped (if using skiprows)
- * @param[in] global_end: end of current chunk across all ranks
- * @param[in] g_total_bytes: size of total data to read
- * @param[in] chunksize: number of rows per chunk
- * @param[in] is_parallel: whether data is distributed or replicated
- * @param[in] path_info: information about file(s) (file_names, file_sizes, ...)
- * @param[in] header_size_bytes: number of bytes in the header
+ * A SkiprowsListInfo object collects information about the skiprows with list
+ * to avoid reading certain rows. It's needed when low_memory path is used.
+ * With skipping rows, the read operation is not contiguous anymore and the data
+ * to read is split into sections. This object stores start/end offsets to read
+ * for each section and
+ * - Flag whether it's a list or just one element
+ * - Length of the list
+ * - skiprows list values
+ * In addition, since the read of the file can happen in chunks
+ * (if file is too large or chunksize is used), we need to keep track of
+ * - current index of skiprows list
+ * - current index of how many rows are scanned so far.
  */
-static void stream_reader_init(stream_reader *self, FileReader *ifs,
-                               size_t start, size_t sz, int64_t skipped_bytes,
-                               int64_t global_end, int64_t g_total_bytes,
-                               int64_t chunksize, bool is_parallel,
-                               PathInfo *path_info, int64_t header_size_bytes,
-                               SkiprowsListInfo *skiprows_list_info,
-                               bool csv_header) {
-    if (!ifs) {
-        std::cerr << "Can't handle NULL pointer as input stream.\n";
-        return;
+class SkiprowsListInfo {
+   public:
+    SkiprowsListInfo(bool is_list, int64_t len, int64_t *_skiprows)
+        : is_skiprows_list(is_list),
+          num_skiprows(len),
+          skiprows(_skiprows, _skiprows + len) {
+        // add 1 to account for last section to read.
+        // e.g with 1 row to skip, read from start to beginning of skipped row
+        // next section from after skipped rows to the end.
+        read_start_offset.resize(len + 1);
+        read_end_offset.resize(len + 1);
     }
-    self->ifs = ifs;
-    if (!self->ifs->ok()) {
-        std::cerr << "Got bad istream in initializing StreamReader object."
-                  << std::endl;
-        return;
-    }
-    // seek to our chunk beginning
-    // only if sz > 0
-    bool ok = true;
-    if (sz > 0) ok = self->ifs->seek(start);
-    if (!ok) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "Could not seek to start position");
-        return;
-    }
-    self->chunk_start = start;
-    self->chunk_size = sz;
-    self->chunk_pos = 0;
-    self->first_pos = skipped_bytes;
-    self->global_end = global_end;
-    self->g_total_bytes = g_total_bytes;
-    self->chunksize_rows = chunksize;
-    self->is_parallel = is_parallel;
-    self->path_info = path_info;
-    self->header_size_bytes = header_size_bytes;
-    self->skiprows_list_info = skiprows_list_info;
-    self->csv_header = csv_header;
-}
+    ~SkiprowsListInfo() {}
 
-// read given number of bytes from our chunk and return a Unicode Object
-// returns NULL if an error occured.
-// does not read beyond end of our chunk (even if file continues)
-static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
-    // partially copied from from CPython's stringio.c
-    if (self->ifs == NULL) {
-        PyErr_SetString(PyExc_ValueError,
-                        "I/O operation on uninitialized StreamReader object");
-        return NULL;
-    }
-    Py_ssize_t size, n;
-
-    PyObject *arg = Py_None;
-    if (!PyArg_ParseTuple(args, "|O:read", &arg)) {
-        return NULL;
-    }
-    if (PyNumber_Check(arg)) {
-        size = PyNumber_AsSsize_t(arg, PyExc_OverflowError);
-        if (size == -1 && PyErr_Occurred()) {
-            return NULL;
-        }
-    } else if (arg == Py_None) {
-        /* Read until EOF is reached, by default. */
-        size = -1;
-    } else {
-        PyErr_Format(PyExc_TypeError, "integer argument expected, got '%s'",
-                     Py_TYPE(arg)->tp_name);
-        return NULL;
-    }
-    /* adjust invalid sizes */
-    n = self->chunk_size - self->chunk_pos;
-    if (size < 0 || size > n) {
-        size = n;
-        if (size < 0) size = 0;
-    }
-
-    self->buf.resize(size);
-    bool ok = self->ifs->read(self->buf.data(), size);
-    self->chunk_pos += size;
-    if (!ok) {
-        std::cerr << "Failed reading " << size << " bytes" << std::endl;
-        return NULL;
-    }
-    // buffer_rd_bytes() function of pandas expects a Bytes object
-    // using PyUnicode_FromStringAndSize is wrong since 'size'
-    // may end up in the middle a multi-byte UTF-8 character
-    return PyBytes_FromStringAndSize(self->buf.data(), size);
-}
-
-// Needed to make Pandas accept it, never used
-static PyObject *stream_reader_iternext(PyObject *self) {
-    std::cerr << "iternext not implemented";
-    return NULL;
+    bool is_skiprows_list;
+    int64_t num_skiprows;
+    std::vector<int64_t> skiprows;
+    int64_t skiprows_list_idx = 0;
+    int64_t rows_read = 0;
+    std::vector<int64_t> read_start_offset;
+    std::vector<int64_t> read_end_offset;
 };
-
-// Update stream_reader with next chunk data and update its metadata
-// returns false if EOF
-static bool stream_reader_update_reader(stream_reader *self);
-
-static PyMethodDef stream_reader_methods[] = {
-    {
-        "read",
-        (PyCFunction)stream_reader_read,
-        METH_VARARGS,
-        "Read at most n characters, returned as a unicode.",
-    },
-    {
-        "get_chunk_size",
-        (PyCFunction)stream_reader_get_chunk_size,
-        METH_VARARGS,
-        "Return size of the chunk in bytes.",
-    },
-    {
-        "is_parallel",
-        (PyCFunction)stream_reader_is_parallel,
-        METH_VARARGS,
-        "Return the stored parallel flag for the reader.",
-    },
-    {
-        "update_reader",
-        (PyCFunction)stream_reader_update_reader,
-        METH_VARARGS,
-        "Update reader with next chunk info.",
-    },
-    {NULL} /* Sentinel */
-};
-
-// the actual Python type class
-static PyTypeObject stream_reader_type = {
-    PyObject_HEAD_INIT(NULL) "bodo.libs.hio.StreamReader", /*tp_name*/
-    sizeof(stream_reader),                                 /*tp_basicsize*/
-    0,                                                     /*tp_itemsize*/
-    (destructor)stream_reader_dealloc,                     /*tp_dealloc*/
-    0,                                                     /*tp_print*/
-    0,                                                     /*tp_getattr*/
-    0,                                                     /*tp_setattr*/
-    0,                                                     /*tp_compare*/
-    0,                                                     /*tp_repr*/
-    0,                                                     /*tp_as_number*/
-    0,                                                     /*tp_as_sequence*/
-    0,                                                     /*tp_as_mapping*/
-    0,                                                     /*tp_hash */
-    0,                                                     /*tp_call*/
-    0,                                                     /*tp_str*/
-    0,                                                     /*tp_getattro*/
-    0,                                                     /*tp_setattro*/
-    0,                                                     /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,              /*tp_flags*/
-    "stream_reader objects",                               /* tp_doc */
-    0,                                                     /* tp_traverse */
-    0,                                                     /* tp_clear */
-    0,                                                     /* tp_richcompare */
-    0,                      /* tp_weaklistoffset */
-    stream_reader_iternext, /* tp_iter */
-    stream_reader_iternext, /* tp_iternext */
-    stream_reader_methods,  /* tp_methods */
-    0,                      /* tp_members */
-    0,                      /* tp_getset */
-    0,                      /* tp_base */
-    0,                      /* tp_dict */
-    0,                      /* tp_descr_get */
-    0,                      /* tp_descr_set */
-    0,                      /* tp_dictoffset */
-    stream_reader_pyinit,   /* tp_init */
-    0,                      /* tp_alloc */
-    stream_reader_new,      /* tp_new */
-};
-
-// at module load time we need to make our type known ot Python
-extern "C" void PyInit_csv(PyObject *m) {
-    if (PyType_Ready(&stream_reader_type) < 0) return;
-    Py_INCREF(&stream_reader_type);
-    PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    PyObject_SetAttrString(
-        m, "csv_file_chunk_reader",
-        PyLong_FromVoidPtr((void *)(&csv_file_chunk_reader)));
-    PyObject_SetAttrString(m, "update_csv_reader",
-                           PyLong_FromVoidPtr((void *)(&update_csv_reader)));
-    PyObject_SetAttrString(
-        m, "initialize_csv_reader",
-        PyLong_FromVoidPtr((void *)(&initialize_csv_reader)));
-    // NOTE: old testing code that is commented out due to
-    // introduction of FileReader interface.
-    // TODO: update testing code
-    // PyObject_SetAttrString(m, "csv_string_chunk_reader",
-    //                        PyLong_FromVoidPtr((void*)(&csv_string_chunk_reader)));
-}
-
-extern "C" void PyInit_json(PyObject *m) {
-    if (PyType_Ready(&stream_reader_type) < 0) return;
-    Py_INCREF(&stream_reader_type);
-    PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
-    PyObject_SetAttrString(
-        m, "json_file_chunk_reader",
-        PyLong_FromVoidPtr((void *)(&json_file_chunk_reader)));
-}
 
 // ***********************************************************************************
 // C interface for getting the file-like chunk reader
 // ***********************************************************************************
-
-#define CHECK(expr, msg)                                    \
-    if (!(expr)) {                                          \
-        std::cerr << "Error in read: " << msg << std::endl; \
-        return NULL;                                        \
-    }
 
 // ----------------------------------------------------------------------------
 /**
@@ -829,6 +458,407 @@ class PathInfo {
     bool s3fs_anon = false;
 };
 
+// read local files
+// currently using ifstream, TODO: benchmark Arrow's LocalFS
+class LocalFileReader : public SingleFileReader {
+   public:
+    std::ifstream *fstream;
+    LocalFileReader(const char *_fname, const char *f_type, bool csv_header,
+                    bool json_lines)
+        : SingleFileReader(_fname, f_type, csv_header, json_lines) {
+        this->fstream = new std::ifstream(fname);
+        CHECK(fstream->good() && !fstream->eof() && fstream->is_open(),
+              "could not open file.");
+    }
+    uint64_t getSize() { return std::filesystem::file_size(fname); }
+    bool seek(int64_t pos) {
+        this->fstream->seekg(pos + this->csv_header_bytes, std::ios_base::beg);
+        return this->ok();
+    }
+    bool ok() { return (this->fstream->good() and !this->fstream->eof()); }
+    bool read_to_buff(char *s, int64_t size) {
+        this->fstream->read(s, size);
+        return this->ok();
+    }
+    virtual ~LocalFileReader() {
+        if (fstream) delete fstream;
+    }
+};
+
+class LocalDirectoryFileReader : public DirectoryFileReader {
+   public:
+    path_vec
+        file_paths;  // sorted paths of each csv/json file inside the directory
+    LocalDirectoryFileReader(const char *_dirname, const char *f_type,
+                             bool csv_header, bool json_lines)
+        : DirectoryFileReader(_dirname, f_type, csv_header, json_lines) {
+        // only keep the files that are csv/json files
+        std::string dirname(_dirname);
+        const char *suffix = this->f_type_to_string();
+
+        auto nonEmptyEndsWithSuffix =
+            [suffix](const std::filesystem::path &path) -> bool {
+            return (std::filesystem::is_regular_file(path) &&
+                    boost::ends_with(path.string(), suffix) &&
+                    std::filesystem::file_size(path) > 0);
+        };
+
+        std::copy_if(std::filesystem::directory_iterator(_dirname),
+                     std::filesystem::directory_iterator(),
+                     std::back_inserter(this->file_paths),
+                     nonEmptyEndsWithSuffix);
+
+        if ((this->file_paths).size() == 0) {
+            Bodo_PyErr_SetString(
+                PyExc_RuntimeError,
+                ("No valid file to read from directory: " + dirname).c_str());
+        }
+        // sort all files in directory
+        std::sort(this->file_paths.begin(), this->file_paths.end());
+
+        // find & set all file name
+        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
+             ++it) {
+            (this->file_names).push_back((*it).string());
+        }
+
+        // find and set header row size in bytes
+        this->findHeaderRowSize();
+
+        // find dir_size and construct file_sizes
+        // assuming the directory contains files only, i.e. no subdirectory
+        this->dir_size = 0;
+        for (auto it = this->file_paths.begin(); it != this->file_paths.end();
+             ++it) {
+            (this->file_sizes).push_back(this->dir_size);
+            this->dir_size += std::filesystem::file_size(*it);
+            this->dir_size -= this->csv_header_bytes;
+        }
+        this->file_sizes.push_back(this->dir_size);
+    };
+
+    void initFileReader(const char *fname) {
+        this->f_reader =
+            new LocalFileReader(fname, this->f_type_to_string(),
+                                this->csv_header, this->json_lines);
+        this->f_reader->csv_header_bytes = this->csv_header_bytes;
+    };
+};
+
+// ***********************************************************************************
+// Our file-like object for reading chunks in a std::istream
+// ***********************************************************************************
+
+typedef struct {
+    PyObject_HEAD
+        /* Your internal buffer, size and pos */
+        FileReader *ifs;  // input stream
+    size_t chunk_start;   // start of our chunk
+    size_t chunk_size;    // size of our chunk
+    size_t chunk_pos;     // current position in our chunk
+    std::vector<char>
+        buf;  // internal buffer for converting stream input to Unicode object
+
+    // The following attributes are needed for chunksize Iterator support
+    bool first_read;     // Flag used by iterator to track if the first read was
+                         // performed.
+    int64_t first_pos;   // global first offset byte for the first chunk. Use to
+                         // account for skipped bytes if skiprows is used
+                         // (excluding header_size_bytes)
+    int64_t global_end;  // global end offset byte for the current chunk
+    int64_t g_total_bytes;      // Total number of bytes for the whole file(s)
+    int64_t chunksize_rows;     // chunksize (num. of rows per chunk for chunk
+                                // iterator)
+    class PathInfo *path_info;  // PathInfo struct
+    bool is_parallel;  // Flag to say whether data is distributed or replicated.
+    int64_t header_size_bytes;  // store header size to avoid computing
+                                // for every chunk/iterator read
+    // needed for use of skiprows as list with chunksize
+    class SkiprowsListInfo *skiprows_list_info;
+    bool csv_header;  // whether file(s) has header or not (needed for knowing
+                      // whether skiprows are 1-based or 0-based indexing)
+} stream_reader;
+
+static void stream_reader_dealloc(stream_reader *self) {
+    // we own the stream!
+    if (self->ifs) delete self->ifs;
+    if (self->path_info) delete self->path_info;
+    if (self->skiprows_list_info) delete self->skiprows_list_info;
+    Py_TYPE(self)->tp_free(self);
+}
+
+// Needed to return size of data to Python code
+static PyObject *stream_reader_get_chunk_size(stream_reader *self) {
+    return PyLong_FromSsize_t(self->chunk_size);
+}
+
+// Needed to return parallel value to Python code
+static PyObject *stream_reader_is_parallel(stream_reader *self) {
+    return PyBool_FromLong(self->is_parallel);
+}
+
+// alloc a HPTAIO object
+static PyObject *stream_reader_new(PyTypeObject *type, PyObject *args,
+                                   PyObject *kwds) {
+    stream_reader *self = (stream_reader *)type->tp_alloc(type, 0);
+    if (PyErr_Occurred()) {
+        PyErr_Print();
+        return NULL;
+    }
+    self->ifs = NULL;
+    self->chunk_start = 0;
+    self->chunk_size = 0;
+    self->chunk_pos = 0;
+    self->first_pos = 0;
+    self->global_end = 0;
+    self->g_total_bytes = 0;
+    self->chunksize_rows = 0;
+    self->is_parallel = false;
+    self->header_size_bytes = 0;
+    self->path_info = NULL;
+    self->first_read = false;
+
+    return (PyObject *)self;
+}
+// we provide this mostly for testing purposes
+// users are not supposed to use this
+static int stream_reader_pyinit(PyObject *self, PyObject *args,
+                                PyObject *kwds) {
+    // char* str = NULL;
+    // Py_ssize_t count = 0;
+
+    // if(!PyArg_ParseTuple(args, "|z#", &str, &count) || str == NULL) {
+    //     if(PyErr_Occurred()) PyErr_Print();
+    //     return 0;
+    // }
+
+    // ((stream_reader*)self)->chunk_start = 0;
+    // ((stream_reader*)self)->chunk_pos = 0;
+    // ((stream_reader*)self)->ifs = new std::istringstream(str);
+    // if(!((stream_reader*)self)->ifs->good()) {
+    //     std::cerr << "Could not create istrstream from string.\n";
+    //     ((stream_reader*)self)->chunk_size = 0;
+    //     return -1;
+    // }
+    // ((stream_reader*)self)->chunk_size = count;
+
+    return 0;
+}
+
+/**
+ * We use this (and not the above) from C to init our StreamReader object
+ * Will seek to chunk beginning and store metadata needed for chunksize_iterator
+ * reads
+ * @param[out] self: stream_reader wrapper used by Pandas to read data
+ * @param[in] ifs: MemReader that has the data
+ * @param[in] start: start reading position
+ * @param[in] sz: size of the data read (in bytes)
+ * These are used only with chunksize mode
+ * @param[in] skipped_bytes: number of bytes skipped (if using skiprows)
+ * @param[in] global_end: end of current chunk across all ranks
+ * @param[in] g_total_bytes: size of total data to read
+ * @param[in] chunksize: number of rows per chunk
+ * @param[in] is_parallel: whether data is distributed or replicated
+ * @param[in] path_info: information about file(s) (file_names, file_sizes, ...)
+ * @param[in] header_size_bytes: number of bytes in the header
+ */
+static void stream_reader_init(stream_reader *self, FileReader *ifs,
+                               size_t start, size_t sz, int64_t skipped_bytes,
+                               int64_t global_end, int64_t g_total_bytes,
+                               int64_t chunksize, bool is_parallel,
+                               PathInfo *path_info, int64_t header_size_bytes,
+                               SkiprowsListInfo *skiprows_list_info,
+                               bool csv_header) {
+    if (!ifs) {
+        std::cerr << "Can't handle NULL pointer as input stream.\n";
+        return;
+    }
+    self->ifs = ifs;
+    if (!self->ifs->ok()) {
+        std::cerr << "Got bad istream in initializing StreamReader object."
+                  << std::endl;
+        return;
+    }
+    // seek to our chunk beginning
+    // only if sz > 0
+    bool ok = true;
+    if (sz > 0) ok = self->ifs->seek(start);
+    if (!ok) {
+        Bodo_PyErr_SetString(PyExc_RuntimeError,
+                             "Could not seek to start position");
+        return;
+    }
+    self->chunk_start = start;
+    self->chunk_size = sz;
+    self->chunk_pos = 0;
+    self->first_pos = skipped_bytes;
+    self->global_end = global_end;
+    self->g_total_bytes = g_total_bytes;
+    self->chunksize_rows = chunksize;
+    self->is_parallel = is_parallel;
+    self->path_info = path_info;
+    self->header_size_bytes = header_size_bytes;
+    self->skiprows_list_info = skiprows_list_info;
+    self->csv_header = csv_header;
+}
+
+// read given number of bytes from our chunk and return a Unicode Object
+// returns NULL if an error occured.
+// does not read beyond end of our chunk (even if file continues)
+static PyObject *stream_reader_read(stream_reader *self, PyObject *args) {
+    // partially copied from from CPython's stringio.c
+    if (self->ifs == NULL) {
+        PyErr_SetString(PyExc_ValueError,
+                        "I/O operation on uninitialized StreamReader object");
+        return NULL;
+    }
+    Py_ssize_t size, n;
+
+    PyObject *arg = Py_None;
+    if (!PyArg_ParseTuple(args, "|O:read", &arg)) {
+        return NULL;
+    }
+    if (PyNumber_Check(arg)) {
+        size = PyNumber_AsSsize_t(arg, PyExc_OverflowError);
+        if (size == -1 && PyErr_Occurred()) {
+            return NULL;
+        }
+    } else if (arg == Py_None) {
+        /* Read until EOF is reached, by default. */
+        size = -1;
+    } else {
+        PyErr_Format(PyExc_TypeError, "integer argument expected, got '%s'",
+                     Py_TYPE(arg)->tp_name);
+        return NULL;
+    }
+    /* adjust invalid sizes */
+    n = self->chunk_size - self->chunk_pos;
+    if (size < 0 || size > n) {
+        size = n;
+        if (size < 0) size = 0;
+    }
+
+    self->buf.resize(size);
+    bool ok = self->ifs->read(self->buf.data(), size);
+    self->chunk_pos += size;
+    if (!ok) {
+        std::cerr << "Failed reading " << size << " bytes" << std::endl;
+        return NULL;
+    }
+    // buffer_rd_bytes() function of pandas expects a Bytes object
+    // using PyUnicode_FromStringAndSize is wrong since 'size'
+    // may end up in the middle a multi-byte UTF-8 character
+    return PyBytes_FromStringAndSize(self->buf.data(), size);
+}
+
+// Needed to make Pandas accept it, never used
+static PyObject *stream_reader_iternext(PyObject *self) {
+    std::cerr << "iternext not implemented";
+    return NULL;
+};
+
+// Update stream_reader with next chunk data and update its metadata
+// returns false if EOF
+static bool stream_reader_update_reader(stream_reader *self);
+
+static PyMethodDef stream_reader_methods[] = {
+    {
+        "read",
+        (PyCFunction)stream_reader_read,
+        METH_VARARGS,
+        "Read at most n characters, returned as a unicode.",
+    },
+    {
+        "get_chunk_size",
+        (PyCFunction)stream_reader_get_chunk_size,
+        METH_VARARGS,
+        "Return size of the chunk in bytes.",
+    },
+    {
+        "is_parallel",
+        (PyCFunction)stream_reader_is_parallel,
+        METH_VARARGS,
+        "Return the stored parallel flag for the reader.",
+    },
+    {
+        "update_reader",
+        (PyCFunction)stream_reader_update_reader,
+        METH_VARARGS,
+        "Update reader with next chunk info.",
+    },
+    {NULL} /* Sentinel */
+};
+
+// the actual Python type class
+static PyTypeObject stream_reader_type = {
+    PyVarObject_HEAD_INIT(NULL, 0) "bodo.libs.hio.StreamReader", /*tp_name*/
+    sizeof(stream_reader),                    /*tp_basicsize*/
+    0,                                        /*tp_itemsize*/
+    (destructor)stream_reader_dealloc,        /*tp_dealloc*/
+    0,                                        /*tp_print*/
+    0,                                        /*tp_getattr*/
+    0,                                        /*tp_setattr*/
+    0,                                        /*tp_compare*/
+    0,                                        /*tp_repr*/
+    0,                                        /*tp_as_number*/
+    0,                                        /*tp_as_sequence*/
+    0,                                        /*tp_as_mapping*/
+    0,                                        /*tp_hash */
+    0,                                        /*tp_call*/
+    0,                                        /*tp_str*/
+    0,                                        /*tp_getattro*/
+    0,                                        /*tp_setattro*/
+    0,                                        /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
+    "stream_reader objects",                  /* tp_doc */
+    0,                                        /* tp_traverse */
+    0,                                        /* tp_clear */
+    0,                                        /* tp_richcompare */
+    0,                                        /* tp_weaklistoffset */
+    stream_reader_iternext,                   /* tp_iter */
+    stream_reader_iternext,                   /* tp_iternext */
+    stream_reader_methods,                    /* tp_methods */
+    0,                                        /* tp_members */
+    0,                                        /* tp_getset */
+    0,                                        /* tp_base */
+    0,                                        /* tp_dict */
+    0,                                        /* tp_descr_get */
+    0,                                        /* tp_descr_set */
+    0,                                        /* tp_dictoffset */
+    stream_reader_pyinit,                     /* tp_init */
+    0,                                        /* tp_alloc */
+    stream_reader_new,                        /* tp_new */
+};
+
+// at module load time we need to make our type known ot Python
+extern "C" void PyInit_csv(PyObject *m) {
+    if (PyType_Ready(&stream_reader_type) < 0) return;
+    Py_INCREF(&stream_reader_type);
+    PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
+    PyObject_SetAttrString(
+        m, "csv_file_chunk_reader",
+        PyLong_FromVoidPtr((void *)(&csv_file_chunk_reader)));
+    PyObject_SetAttrString(m, "update_csv_reader",
+                           PyLong_FromVoidPtr((void *)(&update_csv_reader)));
+    PyObject_SetAttrString(
+        m, "initialize_csv_reader",
+        PyLong_FromVoidPtr((void *)(&initialize_csv_reader)));
+    // NOTE: old testing code that is commented out due to
+    // introduction of FileReader interface.
+    // TODO: update testing code
+    // PyObject_SetAttrString(m, "csv_string_chunk_reader",
+    //                        PyLong_FromVoidPtr((void*)(&csv_string_chunk_reader)));
+}
+
+extern "C" void PyInit_json(PyObject *m) {
+    if (PyType_Ready(&stream_reader_type) < 0) return;
+    Py_INCREF(&stream_reader_type);
+    PyModule_AddObject(m, "StreamReader", (PyObject *)&stream_reader_type);
+    PyObject_SetAttrString(
+        m, "json_file_chunk_reader",
+        PyLong_FromVoidPtr((void *)(&json_file_chunk_reader)));
+}
+
 /**
  * Get size of header in bytes. Header is understood to be the first row of the
  * file (up to and including the first row_separator). This is only used for
@@ -1124,43 +1154,6 @@ class MemReader : public FileReader {
             }
         }
     }
-};
-
-/**
- * A SkiprowsListInfo object collects information about the skiprows with list
- * to avoid reading certain rows. It's needed when low_memory path is used.
- * With skipping rows, the read operation is not contiguous anymore and the data
- * to read is split into sections. This object stores start/end offsets to read
- * for each section and
- * - Flag whether it's a list or just one element
- * - Length of the list
- * - skiprows list values
- * In addition, since the read of the file can happen in chunks
- * (if file is too large or chunksize is used), we need to keep track of
- * - current index of skiprows list
- * - current index of how many rows are scanned so far.
- */
-class SkiprowsListInfo {
-   public:
-    SkiprowsListInfo(bool is_list, int64_t len, int64_t *_skiprows)
-        : is_skiprows_list(is_list),
-          num_skiprows(len),
-          skiprows(_skiprows, _skiprows + len) {
-        // add 1 to account for last section to read.
-        // e.g with 1 row to skip, read from start to beginning of skipped row
-        // next section from after skipped rows to the end.
-        read_start_offset.resize(len + 1);
-        read_end_offset.resize(len + 1);
-    }
-    ~SkiprowsListInfo() {}
-
-    bool is_skiprows_list;
-    int64_t num_skiprows;
-    std::vector<int64_t> skiprows;
-    int64_t skiprows_list_idx = 0;
-    int64_t rows_read = 0;
-    std::vector<int64_t> read_start_offset;
-    std::vector<int64_t> read_end_offset;
 };
 
 /**
@@ -1770,7 +1763,7 @@ void read_file_info(const std::vector<std::string> &file_names,
         // Read file in chunks of CHUNK_SIZE bytes
         // Scan for row_separator to identify position of the row to skip and/or
         // read (and end of chunksize if requested)
-        while ((chunk_start - header_size_bytes) < fsize) {
+        while ((chunk_start - header_size_bytes) < uint64_t(fsize)) {
             int64_t chunk_end =
                 chunk_start + std::min(CHUNK_SIZE, bytes_left_to_read);
             int64_t read_size = chunk_end - chunk_start;

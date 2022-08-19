@@ -912,3 +912,13 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
         infos[infos_pos++] = data;
     }
 }
+
+/**
+ * @brief Get the name for Bodo CTypes object
+ *
+ * @param enumVal
+ * @return const char* Name
+ */
+const char* get_name_for_Bodo_CTypes(int enumVal) {
+    return Bodo_CTypes_names[enumVal];
+}

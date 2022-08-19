@@ -216,7 +216,6 @@ def test_join(decimal_arr_value, memory_leak_check):
     check_func(test_impl, (df1, df2), sort_output=True, reset_index=True)
 
 
-@pytest.mark.slow
 def test_constructor(memory_leak_check):
     def test_impl1():
         return Decimal("1.1")

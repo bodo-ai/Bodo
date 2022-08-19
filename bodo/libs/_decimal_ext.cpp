@@ -11,54 +11,46 @@
 // using scale 18 when converting from Python Decimal objects (same as Spark)
 #define PY_DECIMAL_SCALE 18
 
-
-
-std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal, int const& scale) {
+std::string decimal_to_std_string(arrow::Decimal128 const& arrow_decimal,
+                                  int const& scale) {
     std::string str = arrow_decimal.ToString(scale);
     // str may be of the form 0.45000000000 or 4.000000000
     size_t last_char = str.length();
-    while(true) {
-        if (str[last_char-1] != '0')
-            break;
+    while (true) {
+        if (str[last_char - 1] != '0') break;
         last_char--;
     }
     // position reduce str to 0.45  or 4.
-    if (str[last_char-1] == '.')
-        last_char--;
+    if (str[last_char - 1] == '.') last_char--;
     // position reduce str to 0.45 or 4
-    str = str.substr(0,last_char);
-    if (str == "0.E-18")
-        return "0";
+    str = str.substr(0, last_char);
+    if (str == "0.E-18") return "0";
     return str;
 }
 
-std::string decimal_value_cpp_to_std_string(decimal_value_cpp const & val, int const& scale) {
+std::string decimal_value_cpp_to_std_string(decimal_value_cpp const& val,
+                                            int const& scale) {
     arrow::Decimal128 arrow_decimal(val.high, val.low);
     return decimal_to_std_string(arrow_decimal, scale);
 }
 
-bool operator<(decimal_value_cpp const& left, decimal_value_cpp const& right)
-{
+bool operator<(decimal_value_cpp const& left, decimal_value_cpp const& right) {
     arrow::Decimal128 arrow_decimal_left(left.high, left.low);
     arrow::Decimal128 arrow_decimal_right(right.high, right.low);
     return arrow_decimal_left < arrow_decimal_right;
 }
 
-bool operator>(decimal_value_cpp const& left, decimal_value_cpp const& right)
-{
+bool operator>(decimal_value_cpp const& left, decimal_value_cpp const& right) {
     arrow::Decimal128 arrow_decimal_left(left.high, left.low);
     arrow::Decimal128 arrow_decimal_right(right.high, right.low);
     return arrow_decimal_left > arrow_decimal_right;
 }
 
-double decimal_to_double(decimal_value_cpp const& val)
-{
+double decimal_to_double(decimal_value_cpp const& val) {
     int scale = 18;
     std::string str = decimal_value_cpp_to_std_string(val, scale);
     return std::stod(str);
 }
-
-extern "C" {
 
 void* box_decimal_array(int64_t n, const uint8_t* data,
                         const uint8_t* null_bitmap, int scale);
@@ -75,19 +67,25 @@ struct decimal_value {
 void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
                     int64_t* len_ptr, int scale);
 
-arrow::Decimal128 str_to_decimal(const std::string &str_val);
+arrow::Decimal128 str_to_decimal(const std::string& str_val);
 
-bool decimal_cmp_eq(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2);
+bool decimal_cmp_eq(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2);
 
-bool decimal_cmp_ne(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2);
+bool decimal_cmp_ne(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2);
 
-bool decimal_cmp_gt(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2);
+bool decimal_cmp_gt(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2);
 
-bool decimal_cmp_ge(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2);
+bool decimal_cmp_ge(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2);
 
-bool decimal_cmp_lt(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2);
+bool decimal_cmp_lt(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2);
 
-bool decimal_cmp_le(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2);
+bool decimal_cmp_le(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2);
 
 PyMODINIT_FUNC PyInit_decimal_ext(void) {
     PyObject* m;
@@ -200,15 +198,13 @@ void* box_decimal_array(int64_t n, const uint8_t* data,
 #undef CHECK
 }
 
-
 /**
  * @brief unbox a single Decimal object into a native Decimal128Type
  *
  * @param obj single decimal object
  * @param data pointer to 128-bit data
  */
-void unbox_decimal(PyObject* obj, uint8_t* data_ptr)
-{
+void unbox_decimal(PyObject* obj, uint8_t* data_ptr) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
@@ -230,8 +226,7 @@ void unbox_decimal(PyObject* obj, uint8_t* data_ptr)
     int32_t precision;
     int32_t scale;
     arrow::Status status = arrow::Decimal128::FromString(
-        (const char*)PyUnicode_DATA(str_obj), &d128, &precision,
-        &scale);
+        (const char*)PyUnicode_DATA(str_obj), &d128, &precision, &scale);
     CHECK(status.ok(), "decimal rescale faild");
     // rescale decimal to 18 (default scale converting from Python)
     CHECK_ARROW_AND_ASSIGN(d128.Rescale(scale, PY_DECIMAL_SCALE),
@@ -242,9 +237,6 @@ void unbox_decimal(PyObject* obj, uint8_t* data_ptr)
 
     PyGILState_Release(gilstate);
 }
-
-
-
 
 /**
  * @brief unbox ndarray of Decimal objects into native DecimalArray
@@ -349,19 +341,19 @@ void decimal_to_str(decimal_value val, NRT_MemInfo** meminfo_ptr,
     *meminfo_ptr = meminfo;
 }
 
-arrow::Decimal128 str_to_decimal(const std::string &str_val) {
+arrow::Decimal128 str_to_decimal(const std::string& str_val) {
     /*
         str_to_decimal ignores a scale and precision value from
         Python code because the user cannot specify them directly. Precision
         currently matches the arrow default value of 38 and scale is set in
         the global variable. If this should ever change this function will need
         to be adjusted.
-    */ 
+    */
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
-        return -1;                        \
+        return -1;                     \
     }
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
@@ -372,9 +364,8 @@ arrow::Decimal128 str_to_decimal(const std::string &str_val) {
     arrow::Decimal128 decimal;
     int32_t precision;
     int32_t scale;
-    arrow::Status status = arrow::Decimal128::FromString(
-        str_val, &decimal, &precision,
-        &scale);
+    arrow::Status status =
+        arrow::Decimal128::FromString(str_val, &decimal, &precision, &scale);
     CHECK(status.ok(), "decimal rescale failed");
     // rescale decimal to 18 (default scale converting from Python)
     CHECK_ARROW_AND_ASSIGN(decimal.Rescale(scale, PY_DECIMAL_SCALE),
@@ -383,20 +374,21 @@ arrow::Decimal128 str_to_decimal(const std::string &str_val) {
 #undef CHECK
 }
 
-
-// TODO: Make sure comparitors have the correct precision values/consider precision values
-bool decimal_cmp_eq(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2) {
+// TODO: Make sure comparitors have the correct precision values/consider
+// precision values
+bool decimal_cmp_eq(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
-        return -1;                        \
+        return -1;                     \
     }
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
 
-    auto gilstate = PyGILState_Ensure();  
+    auto gilstate = PyGILState_Ensure();
     arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
     CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
                            "decimal rescale error", arrow_decimal1);
@@ -407,18 +399,19 @@ bool decimal_cmp_eq(decimal_value val1, int64_t scale1, decimal_value val2, int6
 #undef CHECK
 }
 
-bool decimal_cmp_ne(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2) {
+bool decimal_cmp_ne(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
-        return -1;                        \
+        return -1;                     \
     }
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
 
-    auto gilstate = PyGILState_Ensure();  
+    auto gilstate = PyGILState_Ensure();
     arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
     CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
                            "decimal rescale error", arrow_decimal1);
@@ -429,18 +422,19 @@ bool decimal_cmp_ne(decimal_value val1, int64_t scale1, decimal_value val2, int6
 #undef CHECK
 }
 
-bool decimal_cmp_gt(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2) {
+bool decimal_cmp_gt(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
-        return -1;                        \
+        return -1;                     \
     }
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
 
-    auto gilstate = PyGILState_Ensure();  
+    auto gilstate = PyGILState_Ensure();
     arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
     CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
                            "decimal rescale error", arrow_decimal1);
@@ -451,18 +445,19 @@ bool decimal_cmp_gt(decimal_value val1, int64_t scale1, decimal_value val2, int6
 #undef CHECK
 }
 
-bool decimal_cmp_ge(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2) {
+bool decimal_cmp_ge(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
-        return -1;                        \
+        return -1;                     \
     }
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
 
-    auto gilstate = PyGILState_Ensure();  
+    auto gilstate = PyGILState_Ensure();
     arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
     CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
                            "decimal rescale error", arrow_decimal1);
@@ -473,18 +468,19 @@ bool decimal_cmp_ge(decimal_value val1, int64_t scale1, decimal_value val2, int6
 #undef CHECK
 }
 
-bool decimal_cmp_lt(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2) {
+bool decimal_cmp_lt(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
-        return -1;                        \
+        return -1;                     \
     }
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
 
-    auto gilstate = PyGILState_Ensure();  
+    auto gilstate = PyGILState_Ensure();
     arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
     CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
                            "decimal rescale error", arrow_decimal1);
@@ -495,18 +491,19 @@ bool decimal_cmp_lt(decimal_value val1, int64_t scale1, decimal_value val2, int6
 #undef CHECK
 }
 
-bool decimal_cmp_le(decimal_value val1, int64_t scale1, decimal_value val2, int64_t scale2) {
+bool decimal_cmp_le(decimal_value val1, int64_t scale1, decimal_value val2,
+                    int64_t scale2) {
 #define CHECK(expr, msg)               \
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         PyGILState_Release(gilstate);  \
-        return -1;                        \
+        return -1;                     \
     }
 #define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
     CHECK(res.status().ok(), msg)             \
     lhs = std::move(res).ValueOrDie();
 
-    auto gilstate = PyGILState_Ensure();  
+    auto gilstate = PyGILState_Ensure();
     arrow::Decimal128 arrow_decimal1(val1.high, val1.low);
     CHECK_ARROW_AND_ASSIGN(arrow_decimal1.Rescale(scale1, PY_DECIMAL_SCALE),
                            "decimal rescale error", arrow_decimal1);
@@ -516,5 +513,3 @@ bool decimal_cmp_le(decimal_value val1, int64_t scale1, decimal_value val2, int6
     return arrow_decimal1 <= arrow_decimal2;
 #undef CHECK
 }
-
-}  // extern "C"

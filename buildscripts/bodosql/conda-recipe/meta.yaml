@@ -15,7 +15,7 @@ requirements:
         # distutils/extension uses.
         # TODO[BE-3467]: remove distutils
         - setuptools <60
-        - openjdk >=9.0
+        - openjdk >=9.0, <12
         - maven
         - ninja
         - bodo =2022.7.*

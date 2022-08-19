@@ -7,6 +7,11 @@
 #endif
 
 #include "parquet_write.h"
+#include "../libs/_array_hash.h"
+#include "../libs/_bodo_common.h"
+#include "../libs/_datetime_utils.h"
+#include "../libs/_shuffle.h"
+#include "_fs_io.h"
 
 // In general, when reading a parquet dataset we want it to have at least
 // the same number of row groups as the number of processes we are reading with,
@@ -79,6 +84,9 @@ void bodo_array_to_arrow(
     std::vector<std::shared_ptr<arrow::Field>> &schema_vector,
     std::shared_ptr<arrow::ChunkedArray> *out, const std::string &tz,
     arrow::TimeUnit::type &time_unit) {
+    // Track statuses of arrow operations.
+    arrow::Status arrowOpStatus;
+
     // allocate null bitmap
     std::shared_ptr<arrow::ResizableBuffer> null_bitmap;
     int64_t null_bytes = arrow::bit_util::BytesForBits(array->length);
@@ -98,7 +106,7 @@ void bodo_array_to_arrow(
     if (array->arr_type == bodo_array_type::NULLABLE_INT_BOOL ||
         array->arr_type == bodo_array_type::STRING) {
         // set arrow bit mask based on bodo bitmask
-        for (int64_t i = 0; i < array->length; i++) {
+        for (size_t i = 0; i < array->length; i++) {
             if (!GetBit((uint8_t *)array->null_bitmask, i)) {
                 null_count_++;
                 SetBitTo(null_bitmap->mutable_data(), i, false);
@@ -259,7 +267,7 @@ void bodo_array_to_arrow(
                 }
 
                 // convert Bodo NaT to Arrow null bitmap
-                for (int64_t i = 0; i < array->length; i++) {
+                for (size_t i = 0; i < array->length; i++) {
                     if (array->at<int64_t>(i) ==
                         std::numeric_limits<int64_t>::min()) {
                         // if value is NaT (equals
@@ -407,31 +415,40 @@ void bodo_array_to_arrow(
             pool, std::make_shared<arrow::StringBuilder>(pool));
         arrow::StringBuilder &string_builder = *(
             static_cast<arrow::StringBuilder *>(list_builder.value_builder()));
+        bool failed = false;
         for (int64_t i = 0; i < num_lists; i++) {
             bool is_null = !GetBit((uint8_t *)array->null_bitmask, i);
             if (is_null) {
-                list_builder.AppendNull();
+                arrowOpStatus = list_builder.AppendNull();
+                failed = failed || !arrowOpStatus.ok();
             } else {
-                list_builder.Append();
+                arrowOpStatus = list_builder.Append();
+                failed = failed || !arrowOpStatus.ok();
                 int64_t l_string = string_offsets[i];
                 int64_t r_string = string_offsets[i + 1];
                 for (int64_t j = l_string; j < r_string; j++) {
                     bool is_null =
                         !GetBit((uint8_t *)array->sub_null_bitmask, j);
                     if (is_null) {
-                        string_builder.AppendNull();
+                        arrowOpStatus = string_builder.AppendNull();
                     } else {
                         int64_t l_char = char_offsets[j];
                         int64_t r_char = char_offsets[j + 1];
                         int64_t length = r_char - l_char;
-                        string_builder.Append((uint8_t *)(chars + l_char),
-                                              length);
+                        arrowOpStatus = string_builder.Append(
+                            (uint8_t *)(chars + l_char), length);
                     }
+                    failed = failed || !arrowOpStatus.ok();
                 }
             }
         }
         std::shared_ptr<arrow::Array> result;
-        list_builder.Finish(&result);
+        arrowOpStatus = list_builder.Finish(&result);
+        failed = failed || !arrowOpStatus.ok();
+        if (failed) {
+            throw std::runtime_error(
+                "Error occured while creating arrow string list array");
+        }
         *out = std::make_shared<arrow::ChunkedArray>(result);
     }
 }
@@ -641,7 +658,7 @@ int64_t pq_write(
     std::vector<std::string> col_names;
     char *cur_str = col_names_arr->data1;
     offset_t *offsets = (offset_t *)col_names_arr->data2;
-    for (int64_t i = 0; i < col_names_arr->length; i++) {
+    for (size_t i = 0; i < col_names_arr->length; i++) {
         size_t len = offsets[i + 1] - offsets[i];
         col_names.emplace_back(cur_str, len);
         cur_str += len;
@@ -755,8 +772,13 @@ int64_t pq_write(
         // inserted in the parquet metadata we are saying that it's a string
         // column
         std::shared_ptr<parquet::schema::Node> node;
-        parquet::arrow::FieldToNode(dict_str_field, *writer_properties,
-                                    *arrow_writer_properties, &node);
+        arrow::Status arrowOpStatus =
+            parquet::arrow::FieldToNode(dict_str_field, *writer_properties,
+                                        *arrow_writer_properties, &node);
+        if (!arrowOpStatus.ok()) {
+            throw std::runtime_error(
+                "Arrow unable to convert dictionary array to node.");
+        }
         if (node->is_primitive()) {
             auto primitive_node =
                 std::dynamic_pointer_cast<parquet::schema::PrimitiveNode>(node);
@@ -849,7 +871,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             size_t len = offsets[j + 1] - offsets[j];
             part_col_names.emplace_back(cur_str, len);
         }
-        for (int64_t i = 0; i < table->ncols(); i++) {
+        for (uint64_t i = 0; i < table->ncols(); i++) {
             if (!is_part_col[i])
                 new_table->columns.push_back(table->columns[i]);
         }
@@ -876,7 +898,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             dist_get_rank(), dist_get_size(), prefix, ".parquet");
 
         new_table->num_keys = num_partition_cols;
-        for (int64_t i = 0; i < new_table->nrows(); i++) {
+        for (uint64_t i = 0; i < new_table->nrows(); i++) {
             multi_col_key key(hashes[i], new_table, i);
             partition_write_info &p = key_to_partition[key];
             if (p.rows.size() == 0) {

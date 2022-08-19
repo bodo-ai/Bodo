@@ -17,9 +17,9 @@
  */
 inline bool TestRowsEqualGivenColumns(std::vector<array_info*> table,
                                       size_t const& iRow1, size_t const& iRow2,
-                                      int64_t* col_nums, int64_t n_cols) {
+                                      uint64_t* col_nums, uint64_t n_cols) {
     // iteration over the list of columns for the comparison.
-    for (int64_t i = 0; i < n_cols; i++) {
+    for (uint64_t i = 0; i < n_cols; i++) {
         size_t col_num = col_nums[i];
         bool test =
             TestEqualColumn(table[col_num], iRow1, table[col_num], iRow2, true);
@@ -162,8 +162,8 @@ struct SecondLevelKeyEqualHashJoinTable {
                                          short_data_key_n_cols);
     }
     table_info* short_table;
-    int64_t* short_data_key_cols;
-    int64_t short_data_key_n_cols;
+    uint64_t* short_data_key_cols;
+    uint64_t short_data_key_n_cols;
 };
 }  // namespace joinHashFcts
 
@@ -178,7 +178,7 @@ struct SecondLevelKeyEqualHashJoinTable {
  *
  */
 uint32_t* hash_data_cols_table(const std::vector<array_info*>& in_table,
-                               int64_t* col_nums, size_t n_cols, uint32_t seed,
+                               uint64_t* col_nums, size_t n_cols, uint32_t seed,
                                bool is_parallel);
 
 #endif  // _JOIN_HASHING_H_INCLUDED

@@ -217,10 +217,10 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     if (dead_keys == nullptr) {
         ret_table = RetrieveTable(in_table, ListIdx, -1);
     } else {
-        size_t n_cols = (size_t)in_table->ncols();
+        uint64_t n_cols = in_table->ncols();
         std::vector<size_t> colInds;
-        for (size_t i = 0; i < n_cols; i++) {
-            if (i < n_key_t && dead_keys[i]) {
+        for (uint64_t i = 0; i < n_cols; i++) {
+            if (i < n_key && dead_keys[i]) {
                 array_info* in_arr = in_table->columns[i];
                 // decref dead keys since not used anymore
                 // RetrieveTable decrefs other arrays
@@ -560,7 +560,8 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
                                         bool is_parallel, bool dropna,
                                         uint32_t* hashes) {
     tracing::Event ev("drop_duplicates_table_inner", is_parallel);
-    ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
+    ev.add_attribute("table_nrows_before",
+                     static_cast<size_t>(in_table->nrows()));
     if (ev.is_tracing()) {
         size_t global_table_nbytes = table_global_memory_size(in_table);
         ev.add_attribute("g_table_nbytes", global_table_nbytes);
@@ -656,7 +657,8 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
     if (delete_hashes) {
         delete[] hashes;
     }
-    ev.add_attribute("table_nrows_after", size_t(ret_table->nrows()));
+    ev.add_attribute("table_nrows_after",
+                     static_cast<size_t>(ret_table->nrows()));
     return ret_table;
 }
 
@@ -994,7 +996,7 @@ void get_search_regex(array_info* in_arr, const bool case_sensitive,
         boost::xpressive::cregex::compile(pat, flag);
     // Use of cmatch is needed to achieve better performance.
     boost::xpressive::cmatch m;
-    const int64_t nRow = in_arr->length;
+    const size_t nRow = in_arr->length;
     ev.add_attribute("local_nRows", nRow);
     int64_t num_match = 0;
     if (in_arr->arr_type == bodo_array_type::STRING) {

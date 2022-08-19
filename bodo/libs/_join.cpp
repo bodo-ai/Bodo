@@ -27,9 +27,9 @@ table_info* hash_join_table(
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* vect_need_typechange, bool is_left, bool is_right, bool is_join,
     bool extra_data_col, bool indicator, bool is_na_equal,
-    cond_expr_fn_t cond_func, int64_t* cond_func_left_columns,
-    int64_t cond_func_left_column_len, int64_t* cond_func_right_columns,
-    int64_t cond_func_right_column_len, int64_t* num_rows_ptr) {
+    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
+    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr) {
     // XXX Not sure if this is needed. has_global_dictionary
     // should be set by the compiler automatically for
     // replicated data
@@ -79,8 +79,10 @@ table_info* hash_join_table(
         }
 
         if (ev.is_tracing()) {
-            ev.add_attribute("in_left_table_nrows", left_table->nrows());
-            ev.add_attribute("in_right_table_nrows", right_table->nrows());
+            ev.add_attribute("in_left_table_nrows",
+                             static_cast<size_t>(left_table->nrows()));
+            ev.add_attribute("in_right_table_nrows",
+                             static_cast<size_t>(right_table->nrows()));
             ev.add_attribute("g_left_parallel", left_parallel);
             ev.add_attribute("g_right_parallel", right_parallel);
             ev.add_attribute("g_n_key", n_key_t);
@@ -185,9 +187,9 @@ table_info* hash_join_table(
                 // for shuffling of dictionary-encoded arrays we need the
                 // dictionaries to be global, and for coherent hashing between
                 // left and right tables we need dictionaries to be unified
-                for (auto i = 0; i < n_key; i++) {
-                    auto arr1 = left_table->columns[i];
-                    auto arr2 = right_table->columns[i];
+                for (size_t i = 0; i < n_key; i++) {
+                    array_info* arr1 = left_table->columns[i];
+                    array_info* arr2 = right_table->columns[i];
                     if ((arr1->arr_type == bodo_array_type::DICT) &&
                         (arr2->arr_type == bodo_array_type::DICT)) {
                         if (!arr1->has_global_dictionary)
@@ -374,9 +376,9 @@ table_info* hash_join_table(
 
         // Unify dictionaries of DICT key columns (required for key comparison)
         // IMPORTANT: need to do this before computing the hashes
-        for (auto i = 0; i < n_key; i++) {
-            auto arr1 = work_left_table->columns[i];
-            auto arr2 = work_right_table->columns[i];
+        for (size_t i = 0; i < n_key; i++) {
+            array_info* arr1 = work_left_table->columns[i];
+            array_info* arr2 = work_right_table->columns[i];
             if ((arr1->arr_type == bodo_array_type::DICT) &&
                 (arr2->arr_type == bodo_array_type::DICT)) {
                 if (!arr1->has_global_dictionary)
@@ -398,8 +400,8 @@ table_info* hash_join_table(
 
         // Non-keys used in cond_func need global dictionaries
         // for hashing, but no unifying is necessary.
-        for (auto i = 0; i < cond_func_left_column_len; i++) {
-            int64_t col_num = cond_func_left_columns[i];
+        for (size_t i = 0; i < cond_func_left_column_len; i++) {
+            uint64_t col_num = cond_func_left_columns[i];
             if (col_num >= n_key) {
                 auto arr = left_table->columns[col_num];
                 if (arr->arr_type == bodo_array_type::DICT) {
@@ -409,8 +411,8 @@ table_info* hash_join_table(
                 left_cond_func_cols_set.insert(col_num);
             }
         }
-        for (auto i = 0; i < cond_func_right_column_len; i++) {
-            int64_t col_num = cond_func_right_columns[i];
+        for (size_t i = 0; i < cond_func_right_column_len; i++) {
+            uint64_t col_num = cond_func_right_columns[i];
             if (col_num >= n_key) {
                 auto arr = right_table->columns[col_num];
                 if (arr->arr_type == bodo_array_type::DICT) {
@@ -609,8 +611,8 @@ table_info* hash_join_table(
             second_level_hash_maps;
         // Keep track of which table to use to populate the second level hash
         // table if 'uses_cond_func'
-        int64_t* short_data_key_cols = nullptr;
-        int64_t short_data_key_n_cols = 0;
+        uint64_t* short_data_key_cols = nullptr;
+        uint64_t short_data_key_n_cols = 0;
 
         if (uses_cond_func) {
             if (short_is_left) {
@@ -1112,7 +1114,7 @@ table_info* hash_join_table(
         }
         // Determine the number of rows in your local chunk of the output.
         // This is passed to Python in case all columns are dead.
-        int64_t num_rows = ListPairWrite.size();
+        uint64_t num_rows = ListPairWrite.size();
         *num_rows_ptr = num_rows;
 
         // Construct the output tables. This merges the results in the left and

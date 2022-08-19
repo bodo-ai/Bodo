@@ -98,26 +98,27 @@ PyMODINIT_FUNC PyInit_quantile_alg(void) {
         m, "compute_series_monotonicity",
         PyLong_FromVoidPtr((void *)(&compute_series_monotonicity)));
     PyObject_SetAttrString(m, "get_stats_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
+                           PyLong_FromVoidPtr((void *)(&get_stats_alloc)));
     PyObject_SetAttrString(m, "get_stats_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
+                           PyLong_FromVoidPtr((void *)(&get_stats_free)));
     PyObject_SetAttrString(m, "get_stats_mi_alloc",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
+                           PyLong_FromVoidPtr((void *)(&get_stats_mi_alloc)));
     PyObject_SetAttrString(m, "get_stats_mi_free",
-                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
+                           PyLong_FromVoidPtr((void *)(&get_stats_mi_free)));
     return m;
 }
 
 double quantile_sequential(void *data, int64_t local_size, double quantile,
                            int type_enum) {
     try {
-    // return NA if no elements
-    if (local_size == 0) {
-        return std::nan("");
-    }
+        // return NA if no elements
+        if (local_size == 0) {
+            return std::nan("");
+        }
 
-    double at = quantile * (local_size - 1);
-    return quantile_dispatch(data, local_size, quantile, at, type_enum, false);
+        double at = quantile * (local_size - 1);
+        return quantile_dispatch(data, local_size, quantile, at, type_enum,
+                                 false);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return -1;
@@ -127,17 +128,18 @@ double quantile_sequential(void *data, int64_t local_size, double quantile,
 double quantile_parallel(void *data, int64_t local_size, int64_t total_size,
                          double quantile, int type_enum) {
     try {
-    if (total_size == 0)
-        MPI_Allreduce(&local_size, &total_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                      MPI_COMM_WORLD);
+        if (total_size == 0)
+            MPI_Allreduce(&local_size, &total_size, 1, MPI_LONG_LONG_INT,
+                          MPI_SUM, MPI_COMM_WORLD);
 
-    // return NA if no elements
-    if (total_size == 0) {
-        return std::nan("");
-    }
+        // return NA if no elements
+        if (total_size == 0) {
+            return std::nan("");
+        }
 
-    double at = quantile * (total_size - 1);
-    return quantile_dispatch(data, local_size, quantile, at, type_enum, true);
+        double at = quantile * (total_size - 1);
+        return quantile_dispatch(data, local_size, quantile, at, type_enum,
+                                 true);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return -1;
@@ -491,14 +493,14 @@ collecting_non_nan_entries(std::vector<T> &my_array, array_info *arr,
         my_array = std::vector<T>(data, data + e_stat.loc_nb_ok);
     } else {
         if (arr->arr_type == bodo_array_type::NUMPY) {
-            for (int64_t i_row = 0; i_row < arr->length; i_row++) {
+            for (size_t i_row = 0; i_row < arr->length; i_row++) {
                 T eVal = arr->at<T>(i_row);
                 bool isna = isnan_alltype<T, dtype>(eVal);
                 if (!isna) my_array.emplace_back(eVal);
             }
         }
         if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-            for (int64_t i_row = 0; i_row < arr->length; i_row++) {
+            for (size_t i_row = 0; i_row < arr->length; i_row++) {
                 if (GetBit((uint8_t *)arr->null_bitmask, i_row)) {
                     T eVal = arr->at<T>(i_row);
                     my_array.emplace_back(eVal);
@@ -522,7 +524,7 @@ template <class T, int dtype>
 inline typename std::enable_if<is_decimal<dtype>::value, void>::type
 collecting_non_nan_entries(std::vector<T> &my_array, array_info *arr,
                            local_global_stat_nan const &e_stat) {
-    for (int64_t i_row = 0; i_row < arr->length; i_row++) {
+    for (size_t i_row = 0; i_row < arr->length; i_row++) {
         if (GetBit((uint8_t *)arr->null_bitmask, i_row)) {
             decimal_value_cpp eVal = arr->at<decimal_value_cpp>(i_row);
             double eVal_d = decimal_to_double(eVal);
@@ -565,7 +567,7 @@ template <typename T, int dtype>
 std::pair<int64_t, int64_t> nb_entries_local(array_info *arr) {
     int64_t nb_ok = 0, nb_miss = 0;
     if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
-        for (int i_row = 0; i_row < arr->length; i_row++) {
+        for (size_t i_row = 0; i_row < arr->length; i_row++) {
             if (GetBit((uint8_t *)arr->null_bitmask, i_row))
                 nb_ok++;
             else
@@ -573,7 +575,7 @@ std::pair<int64_t, int64_t> nb_entries_local(array_info *arr) {
         }
     }
     if (arr->arr_type == bodo_array_type::NUMPY) {
-        for (int i_row = 0; i_row < arr->length; i_row++) {
+        for (size_t i_row = 0; i_row < arr->length; i_row++) {
             T eVal = arr->at<T>(i_row);
             bool isna = isnan_alltype<T, dtype>(eVal);
             if (isna)
@@ -677,49 +679,55 @@ void median_series_computation_T(double *res, array_info *arr, bool parallel,
 void median_series_computation(double *res, array_info *arr, bool parallel,
                                bool skipna) {
     try {
-    Bodo_CTypes::CTypeEnum dtype = arr->dtype;
-    switch (dtype) {
-        case Bodo_CTypes::INT8:
-            return median_series_computation_T<int8_t, Bodo_CTypes::INT8>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::UINT8:
-            return median_series_computation_T<uint8_t, Bodo_CTypes::UINT8>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::INT16:
-            return median_series_computation_T<int16_t, Bodo_CTypes::INT16>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::UINT16:
-            return median_series_computation_T<uint16_t, Bodo_CTypes::UINT16>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::INT32:
-            return median_series_computation_T<int32_t, Bodo_CTypes::INT32>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::UINT32:
-            return median_series_computation_T<uint32_t, Bodo_CTypes::UINT32>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::INT64:
-            return median_series_computation_T<int64_t, Bodo_CTypes::INT64>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::UINT64:
-            return median_series_computation_T<uint64_t, Bodo_CTypes::UINT64>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::FLOAT32:
-            return median_series_computation_T<float, Bodo_CTypes::FLOAT32>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::FLOAT64:
-            return median_series_computation_T<double, Bodo_CTypes::FLOAT64>(
-                res, arr, parallel, skipna);
-        case Bodo_CTypes::DECIMAL:
-            // We choose to return double in case of decimal (while a decimal
-            // return is conceptually feasible) because it would require more
-            // work and pandas uses double in that case as well.
-            return median_series_computation_T<double, Bodo_CTypes::DECIMAL>(
-                res, arr, parallel, skipna);
-        default:
-            throw std::runtime_error(
-                "_quantile_alg.cpp::median_series_computation: type not "
-                "supported by median_series_computation");
-    }
+        Bodo_CTypes::CTypeEnum dtype = arr->dtype;
+        switch (dtype) {
+            case Bodo_CTypes::INT8:
+                return median_series_computation_T<int8_t, Bodo_CTypes::INT8>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::UINT8:
+                return median_series_computation_T<uint8_t, Bodo_CTypes::UINT8>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::INT16:
+                return median_series_computation_T<int16_t, Bodo_CTypes::INT16>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::UINT16:
+                return median_series_computation_T<uint16_t,
+                                                   Bodo_CTypes::UINT16>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::INT32:
+                return median_series_computation_T<int32_t, Bodo_CTypes::INT32>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::UINT32:
+                return median_series_computation_T<uint32_t,
+                                                   Bodo_CTypes::UINT32>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::INT64:
+                return median_series_computation_T<int64_t, Bodo_CTypes::INT64>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::UINT64:
+                return median_series_computation_T<uint64_t,
+                                                   Bodo_CTypes::UINT64>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::FLOAT32:
+                return median_series_computation_T<float, Bodo_CTypes::FLOAT32>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::FLOAT64:
+                return median_series_computation_T<double,
+                                                   Bodo_CTypes::FLOAT64>(
+                    res, arr, parallel, skipna);
+            case Bodo_CTypes::DECIMAL:
+                // We choose to return double in case of decimal (while a
+                // decimal return is conceptually feasible) because it would
+                // require more work and pandas uses double in that case as
+                // well.
+                return median_series_computation_T<double,
+                                                   Bodo_CTypes::DECIMAL>(
+                    res, arr, parallel, skipna);
+            default:
+                throw std::runtime_error(
+                    "_quantile_alg.cpp::median_series_computation: type not "
+                    "supported by median_series_computation");
+        }
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
@@ -820,10 +828,10 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
             if (idx_recv_prev != -1) ListPrevSizes.push_back(V[idx_recv_prev]);
             if (idx_recv_next != -1) ListNextSizes.push_back(V[idx_recv_next]);
         }
-        size_t sumprev =
-            std::accumulate(ListPrevSizes.begin(), ListPrevSizes.end(), size_t(0));
-        size_t sumnext =
-            std::accumulate(ListNextSizes.begin(), ListNextSizes.end(), size_t(0));
+        size_t sumprev = std::accumulate(ListPrevSizes.begin(),
+                                         ListPrevSizes.end(), size_t(0));
+        size_t sumnext = std::accumulate(ListNextSizes.begin(),
+                                         ListNextSizes.end(), size_t(0));
         bool test_final;
         // If myrank - k > 0 we can continue.
         // If myrank + k < n_pes - 1 we can continue
@@ -912,62 +920,65 @@ array_info *compute_ghost_rows(array_info *arr, uint64_t const &level_next) {
 void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
                                  bool is_parallel) {
     try {
-    int64_t n_rows = arr->length;
-    uint64_t siztype = numpy_item_size[arr->dtype];
-    // First checking monotonicity locally
-    auto do_local_computation = [&]() -> int {
-        for (int64_t i_row = 0; i_row < n_rows - 1; i_row++) {
-            char *ptr1 = arr->data1 + siztype * i_row;
-            char *ptr2 = arr->data1 + siztype * (i_row + 1);
+        int64_t n_rows = arr->length;
+        uint64_t siztype = numpy_item_size[arr->dtype];
+        // First checking monotonicity locally
+        auto do_local_computation = [&]() -> int {
+            for (int64_t i_row = 0; i_row < n_rows - 1; i_row++) {
+                char *ptr1 = arr->data1 + siztype * i_row;
+                char *ptr2 = arr->data1 + siztype * (i_row + 1);
+                bool na_position = false;
+                int test =
+                    NumericComparison(arr->dtype, ptr1, ptr2, na_position);
+                if (test == -1) {  // this corresponds to *ptr1 > *ptr2
+                    if (inc_dec == 1) return 1;  // We reach a contradiction
+                }
+                if (test == 1) {  // this corresponds to *ptr1 < *ptr2
+                    if (inc_dec == 2) return 1;  // We reach a contradiction
+                }
+            }
+            return 0;
+        };
+        int value = do_local_computation();
+        if (!is_parallel) {
+            if (value > 0)
+                *res = 0.0;
+            else
+                *res = 1.0;
+            return;
+        }
+        int value_tot;
+        MPI_Allreduce(&value, &value_tot, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+        if (value_tot > 0) {  // At least one node find a contradiction locally.
+                              // Enough to conclude
+            *res = 0.0;
+            return;
+        }
+        // We need to compute the ghost rows to conclude
+        array_info *ghost_arr = compute_ghost_rows(arr, 1);
+        int value_glob_tot, value_glob = 0;
+        if (ghost_arr->length > 0 &&
+            n_rows >
+                0) {  // It will be empty on the last node and maybe others.
+            char *ptr1 = arr->data1 + siztype * (n_rows - 1);
+            char *ptr2 = ghost_arr->data1;
             bool na_position = false;
             int test = NumericComparison(arr->dtype, ptr1, ptr2, na_position);
             if (test == -1) {  // this corresponds to *ptr1 > *ptr2
-                if (inc_dec == 1) return 1;  // We reach a contradiction
+                if (inc_dec == 1) value_glob = 1;  // We reach a contradiction
             }
             if (test == 1) {  // this corresponds to *ptr1 < *ptr2
-                if (inc_dec == 2) return 1;  // We reach a contradiction
+                if (inc_dec == 2) value_glob = 1;  // We reach a contradiction
             }
         }
-        return 0;
-    };
-    int value = do_local_computation();
-    if (!is_parallel) {
-        if (value > 0)
+        MPI_Allreduce(&value_glob, &value_glob_tot, 1, MPI_INT, MPI_SUM,
+                      MPI_COMM_WORLD);
+        if (value_glob_tot > 0) {
             *res = 0.0;
-        else
+        } else {
             *res = 1.0;
-        return;
-    }
-    int value_tot;
-    MPI_Allreduce(&value, &value_tot, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    if (value_tot > 0) {  // At least one node find a contradiction locally.
-                          // Enough to conclude
-        *res = 0.0;
-        return;
-    }
-    // We need to compute the ghost rows to conclude
-    array_info *ghost_arr = compute_ghost_rows(arr, 1);
-    int value_glob_tot, value_glob = 0;
-    if (ghost_arr->length > 0 && n_rows > 0) {  // It will be empty on the last node and maybe others.
-        char *ptr1 = arr->data1 + siztype * (n_rows - 1);
-        char *ptr2 = ghost_arr->data1;
-        bool na_position = false;
-        int test = NumericComparison(arr->dtype, ptr1, ptr2, na_position);
-        if (test == -1) {  // this corresponds to *ptr1 > *ptr2
-            if (inc_dec == 1) value_glob = 1;  // We reach a contradiction
         }
-        if (test == 1) {  // this corresponds to *ptr1 < *ptr2
-            if (inc_dec == 2) value_glob = 1;  // We reach a contradiction
-        }
-    }
-    MPI_Allreduce(&value_glob, &value_glob_tot, 1, MPI_INT, MPI_SUM,
-                  MPI_COMM_WORLD);
-    if (value_glob_tot > 0) {
-        *res = 0.0;
-    } else {
-        *res = 1.0;
-    }
-    delete_info_decref_array(ghost_arr);
+        delete_info_decref_array(ghost_arr);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;
@@ -977,89 +988,89 @@ void compute_series_monotonicity(double *res, array_info *arr, int64_t inc_dec,
 void autocorr_series_computation(double *res, array_info *arr, int64_t lag,
                                  bool is_parallel) {
     try {
-    uint64_t n_rows = arr->length;
-    uint64_t siztype = numpy_item_size[arr->dtype];
-    if (!is_parallel) {
-        if (uint64_t(lag) >= n_rows - 1) {
+        uint64_t n_rows = arr->length;
+        uint64_t siztype = numpy_item_size[arr->dtype];
+        if (!is_parallel) {
+            if (uint64_t(lag) >= n_rows - 1) {
+                *res = std::nan("1.0");
+                return;
+            }
+            double sum1 = 0, sum2 = 0, sum12 = 0, sum11 = 0, sum22 = 0;
+            for (uint64_t i_row = 0; i_row < n_rows - lag; i_row++) {
+                char *ptr1 = arr->data1 + siztype * i_row;
+                char *ptr2 = arr->data1 + siztype * (i_row + lag);
+                double val1 = GetDoubleEntry(arr->dtype, ptr1);
+                double val2 = GetDoubleEntry(arr->dtype, ptr2);
+                sum1 += val1;
+                sum2 += val2;
+                sum12 += val1 * val2;
+                sum11 += val1 * val1;
+                sum22 += val2 * val2;
+            }
+            double fac = double(1) / double(n_rows - lag);
+            double avg1 = sum1 * fac;
+            double avg2 = sum2 * fac;
+            double avg11 = sum11 * fac;
+            double avg12 = sum12 * fac;
+            double avg22 = sum22 * fac;
+            double scal = avg12 - avg1 * avg2;
+            double norm1 = sqrt(avg11 - avg1 * avg1);
+            double norm2 = sqrt(avg22 - avg2 * avg2);
+            double autocorr = scal / (norm1 * norm2);
+            *res = autocorr;
+            return;
+        }
+        uint64_t n_rows_tot;
+        MPI_Allreduce(&n_rows, &n_rows_tot, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM,
+                      MPI_COMM_WORLD);
+        if (uint64_t(lag) >= n_rows_tot - 1) {
             *res = std::nan("1.0");
             return;
         }
-        double sum1 = 0, sum2 = 0, sum12 = 0, sum11 = 0, sum22 = 0;
-        for (uint64_t i_row = 0; i_row < n_rows - lag; i_row++) {
-            char *ptr1 = arr->data1 + siztype * i_row;
-            char *ptr2 = arr->data1 + siztype * (i_row + lag);
-            double val1 = GetDoubleEntry(arr->dtype, ptr1);
-            double val2 = GetDoubleEntry(arr->dtype, ptr2);
-            sum1 += val1;
-            sum2 += val2;
-            sum12 += val1 * val2;
-            sum11 += val1 * val1;
-            sum22 += val2 * val2;
+        array_info *ghost_arr = compute_ghost_rows(arr, lag);
+        uint64_t ghost_siz = ghost_arr->length;
+        std::vector<double> V(5, 0);
+        double &sum1 = V[0];
+        double &sum2 = V[1];
+        double &sum11 = V[2];
+        double &sum12 = V[3];
+        double &sum22 = V[4];
+        if (n_rows + ghost_siz >= uint64_t(lag)) {
+            uint64_t n_rows_cons =
+                n_rows + ghost_siz -
+                lag;  // the ghost may provide the additional rows or may not
+            for (uint64_t i_row = 0; i_row < n_rows_cons; i_row++) {
+                char *ptr1 = arr->data1 + siztype * i_row;
+                double val1 = GetDoubleEntry(arr->dtype, ptr1);
+                char *ptr2;
+                if (i_row < n_rows - lag) {
+                    ptr2 = arr->data1 + siztype * (i_row + lag);
+                } else {
+                    ptr2 = ghost_arr->data1 + siztype * (i_row - n_rows + lag);
+                }
+                double val2 = GetDoubleEntry(arr->dtype, ptr2);
+                sum1 += val1;
+                sum2 += val2;
+                sum11 += val1 * val1;
+                sum12 += val1 * val2;
+                sum22 += val2 * val2;
+            }
         }
-        double fac = double(1) / double(n_rows - lag);
-        double avg1 = sum1 * fac;
-        double avg2 = sum2 * fac;
-        double avg11 = sum11 * fac;
-        double avg12 = sum12 * fac;
-        double avg22 = sum22 * fac;
+        std::vector<double> Vtot(5);
+        MPI_Allreduce(V.data(), Vtot.data(), 5, MPI_DOUBLE, MPI_SUM,
+                      MPI_COMM_WORLD);
+        double fac = double(1) / double(n_rows_tot - lag);
+        double avg1 = Vtot[0] * fac;
+        double avg2 = Vtot[1] * fac;
+        double avg11 = Vtot[2] * fac;
+        double avg12 = Vtot[3] * fac;
+        double avg22 = Vtot[4] * fac;
         double scal = avg12 - avg1 * avg2;
         double norm1 = sqrt(avg11 - avg1 * avg1);
         double norm2 = sqrt(avg22 - avg2 * avg2);
         double autocorr = scal / (norm1 * norm2);
         *res = autocorr;
-        return;
-    }
-    uint64_t n_rows_tot;
-    MPI_Allreduce(&n_rows, &n_rows_tot, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM,
-                  MPI_COMM_WORLD);
-    if (uint64_t(lag) >= n_rows_tot - 1) {
-        *res = std::nan("1.0");
-        return;
-    }
-    array_info *ghost_arr = compute_ghost_rows(arr, lag);
-    uint64_t ghost_siz = ghost_arr->length;
-    std::vector<double> V(5, 0);
-    double &sum1 = V[0];
-    double &sum2 = V[1];
-    double &sum11 = V[2];
-    double &sum12 = V[3];
-    double &sum22 = V[4];
-    if (n_rows + ghost_siz >= uint64_t(lag)) {
-        uint64_t n_rows_cons =
-            n_rows + ghost_siz -
-            lag;  // the ghost may provide the additional rows or may not
-        for (uint64_t i_row = 0; i_row < n_rows_cons; i_row++) {
-            char *ptr1 = arr->data1 + siztype * i_row;
-            double val1 = GetDoubleEntry(arr->dtype, ptr1);
-            char *ptr2;
-            if (i_row < n_rows - lag) {
-                ptr2 = arr->data1 + siztype * (i_row + lag);
-            } else {
-                ptr2 = ghost_arr->data1 + siztype * (i_row - n_rows + lag);
-            }
-            double val2 = GetDoubleEntry(arr->dtype, ptr2);
-            sum1 += val1;
-            sum2 += val2;
-            sum11 += val1 * val1;
-            sum12 += val1 * val2;
-            sum22 += val2 * val2;
-        }
-    }
-    std::vector<double> Vtot(5);
-    MPI_Allreduce(V.data(), Vtot.data(), 5, MPI_DOUBLE, MPI_SUM,
-                  MPI_COMM_WORLD);
-    double fac = double(1) / double(n_rows_tot - lag);
-    double avg1 = Vtot[0] * fac;
-    double avg2 = Vtot[1] * fac;
-    double avg11 = Vtot[2] * fac;
-    double avg12 = Vtot[3] * fac;
-    double avg22 = Vtot[4] * fac;
-    double scal = avg12 - avg1 * avg2;
-    double norm1 = sqrt(avg11 - avg1 * avg1);
-    double norm2 = sqrt(avg22 - avg2 * avg2);
-    double autocorr = scal / (norm1 * norm2);
-    *res = autocorr;
-    delete_info_decref_array(ghost_arr);
+        delete_info_decref_array(ghost_arr);
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());
         return;

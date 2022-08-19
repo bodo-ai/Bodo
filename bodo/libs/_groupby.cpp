@@ -58,6 +58,17 @@ struct Bodo_FTypes {
     };
 };
 
+const char* Bodo_FTypes_names[] = {
+    "no_op",  "ngroup",  "head",      "transform", "size",     "shift",
+    "sum",    "count",   "nunique",   "median",    "cumsum",   "cumprod",
+    "cummin", "cummax",  "mean",      "min",       "max",      "prod",
+    "first",  "last",    "idxmin",    "idxmax",    "var",      "std",
+    "udf",    "gen_udf", "num_funcs", "mean_eval", "var_eval", "std_eval"};
+
+const char* get_name_for_Bodo_FTypes(int enumVal) {
+    return Bodo_FTypes_names[enumVal];
+}
+
 static std::vector<Bodo_FTypes::FTypeEnum> combine_funcs(
     Bodo_FTypes::num_funcs);
 
@@ -1005,7 +1016,7 @@ template <typename ARRAY, typename F>
 void var_combine_F(ARRAY* count_col_in, ARRAY* mean_col_in, ARRAY* m2_col_in,
                    ARRAY* count_col_out, ARRAY* mean_col_out, ARRAY* m2_col_out,
                    F f) {
-    for (int64_t i = 0; i < count_col_in->length; i++) {
+    for (size_t i = 0; i < count_col_in->length; i++) {
         int64_t j = f(i);
         uint64_t& count_a = getv<ARRAY, uint64_t>(count_col_out, j);
         uint64_t& count_b = getv<ARRAY, uint64_t>(count_col_in, i);
@@ -1177,7 +1188,7 @@ bool calc_use_robin_map(size_t nunique_hashes, tracing::Event* ev = nullptr) {
     if (nunique_hashes > 1000000) {  // TODO which threshold is best?
         double robin_map_load_factor = -1;
         double hopscotch_map_load_factor = -1;
-        int64_t bucket_size = 1;
+        uint64_t bucket_size = 1;
         while (true) {
             if (bucket_size > nunique_hashes) {
                 // robin_map works best with load_factor <= 0.5, otherwise
@@ -1269,6 +1280,7 @@ static void get_group_info_loop(T& key_to_group,
         }
     }
 }
+#undef MAIN_LOOP_BODY
 
 namespace {
 /**
@@ -1351,7 +1363,7 @@ void get_group_info_impl(Map& key_to_group, tracing::Event& ev,
     get_group_info_loop<Map>(key_to_group, key_cols, grp_info, key_drop_nulls,
                              table->nrows(), is_parallel);
     grp_info.num_groups = grp_info.group_to_first_row.size();
-    ev.add_attribute("num_groups", size_t(grp_info.num_groups));
+    ev.add_attribute("num_groups", static_cast<size_t>(grp_info.num_groups));
     do_map_dealloc<true>(hashes, key_to_group, is_parallel);
 }
 }  // namespace
@@ -1383,7 +1395,7 @@ void get_group_info(std::vector<table_info*>& tables, uint32_t*& hashes,
         throw std::runtime_error("get_group_info: tables is empty");
     }
     table_info* table = tables[0];
-    ev.add_attribute("input_table_nrows", table->nrows());
+    ev.add_attribute("input_table_nrows", static_cast<size_t>(table->nrows()));
     std::vector<array_info*> key_cols = std::vector<array_info*>(
         table->columns.begin(), table->columns.begin() + table->num_keys);
     if (hashes == nullptr) {
@@ -1472,6 +1484,7 @@ static int64_t get_groupby_labels_loop(T& key_to_group,
     }
     return next_group - 1;
 }
+#undef MAIN_LOOP_BODY
 
 namespace {
 template <typename Map>
@@ -1521,7 +1534,7 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
                            int64_t* sort_idx, bool key_dropna,
                            bool is_parallel) {
     tracing::Event ev("get_groupby_labels", is_parallel);
-    ev.add_attribute("input_table_nrows", table->nrows());
+    ev.add_attribute("input_table_nrows", static_cast<size_t>(table->nrows()));
     // TODO(ehsan): refactor to avoid code duplication with get_group_info
     // This function is similar to get_group_info. See that function for
     // more comments
@@ -1599,7 +1612,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
     grp_infos.emplace_back();
     grouping_info& grp_info = grp_infos.back();
 
-    int64_t max_rows = 0;
+    uint64_t max_rows = 0;
     for (table_info* table : tables)
         max_rows = std::max(max_rows, table->nrows());
     grp_info.row_to_group.reserve(max_rows);
@@ -1622,7 +1635,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
     UNORD_MAP_CONTAINER<multi_col_key, int64_t, multi_col_key_hash>
         key_to_group;
     key_to_group.reserve(nunique_hashes);
-    for (int64_t i = 0; i < table->nrows(); i++) {
+    for (uint64_t i = 0; i < table->nrows(); i++) {
         if (key_drop_nulls) {
             if (does_row_has_nulls(key_cols, i)) {
                 grp_info.row_to_group[i] = -1;
@@ -1664,7 +1677,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
         grp_info.group_to_first_row.resize(num_groups, -1);
         active_group_repr.resize(num_groups);
 
-        for (int64_t i = 0; i < table->nrows(); i++) {
+        for (uint64_t i = 0; i < table->nrows(); i++) {
             if (key_drop_nulls) {
                 if (does_row_has_nulls(key_cols, i)) {
                     grp_info.row_to_group[i] = -1;
@@ -1704,7 +1717,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
         grp_info.group_to_first_row.resize(num_groups, -1);
         grp_info.num_groups = num_groups;
     }
-    ev.add_attribute("num_groups", size_t(num_groups));
+    ev.add_attribute("num_groups", static_cast<size_t>(num_groups));
 }
 
 /**
@@ -2253,7 +2266,7 @@ ngroup_computation(array_info* arr, array_info* out_arr,
         MPI_Exscan(&num_group, &start_ngroup, 1, mpi_typ, MPI_SUM,
                    MPI_COMM_WORLD);
     }
-    for (int64_t i = 0; i < arr->length; i++) {
+    for (size_t i = 0; i < arr->length; i++) {
         int64_t i_grp = grp_info.row_to_group[i];
         if (i_grp != -1) {
             int64_t val = i_grp + start_ngroup;
@@ -2717,7 +2730,7 @@ apply_to_column_list_string(ARR_I* in_col, ARR_O* out_col,
     // Computing the strings used in output.
     uint64_t n_bytes = (num_groups + 7) >> 3;
     std::vector<uint8_t> Vmask(n_bytes, 0);
-    for (int64_t i = 0; i < in_col->length; i++) {
+    for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = f(i);
         if ((i_grp != -1) && in_col->get_null_bit(i)) {
             bool out_bit_set = out_col->get_null_bit(i_grp);
@@ -2768,7 +2781,7 @@ apply_to_column_string(ARR_I* in_col, ARR_O* out_col,
     char* data_i = in_col->data1;
     offset_t* offsets_i = (offset_t*)in_col->data2;
     // Computing the strings used in output.
-    for (int64_t i = 0; i < in_col->length; i++) {
+    for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = f(i);
         if ((i_grp != -1) && in_col->get_null_bit(i)) {
             bool out_bit_set = GetBit(V.data(), i_grp);
@@ -2823,7 +2836,7 @@ apply_sum_to_column_string(ARR_I* in_col, ARR_O* out_col,
     char* data_o = out_arr->data1;
     offset_t* offsets_o = (offset_t*)out_arr->data2;
 
-    for (int64_t i = 0; i < in_col->length; i++) {
+    for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = f(i);
         if ((i_grp != -1) && in_col->get_null_bit(i)) {
             offset_t len = offsets_i[i + 1] - offsets_i[i];
@@ -2835,7 +2848,7 @@ apply_sum_to_column_string(ARR_I* in_col, ARR_O* out_col,
     memcpy(offsets_o, str_offsets.data(), (num_groups + 1) * sizeof(offset_t));
 
     // copy characters to output
-    for (int64_t i = 0; i < in_col->length; i++) {
+    for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = f(i);
         if ((i_grp != -1) && in_col->get_null_bit(i)) {
             offset_t len = offsets_i[i + 1] - offsets_i[i];
@@ -2883,7 +2896,7 @@ apply_to_column_dict(ARR_I* in_col, ARR_O* out_col,
     char* data_i = in_col->info1->data1;
     offset_t* offsets_i = (offset_t*)in_col->info1->data2;
     // Populate the new indices array.
-    for (int64_t i = 0; i < in_col->length; i++) {
+    for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = f(i);
         if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
             bool out_bit_set = GetBit(V.data(), i_grp);
@@ -2912,11 +2925,10 @@ apply_to_column_dict(ARR_I* in_col, ARR_O* out_col,
     // Start at 1 since 0 is is returned by the hashmap if data needs to be
     // inserted.
     int32_t k = 1;
-    int64_t n_chars = 0;
     UNORD_MAP_CONTAINER<int32_t, int32_t>
         old_to_new;  // Maps old index to new index
     old_to_new.reserve(num_groups);
-    for (int64_t i = 0; i < num_groups; i++) {
+    for (size_t i = 0; i < num_groups; i++) {
         // check if the value for the group is NaN
         if (!indices_arr->get_null_bit(i)) {
             continue;
@@ -2927,9 +2939,6 @@ apply_to_column_dict(ARR_I* in_col, ARR_O* out_col,
         if (new_ind == 0) {
             new_ind =
                 k++;  // Updates the value in the map without another lookup
-            offset_t start_offset = offsets_i[old_ind];
-            offset_t end_offset = offsets_i[old_ind + 1];
-            n_chars += end_offset - start_offset;
         }
         old_ind =
             old_to_new[old_ind] - 1;  // map back from 1-indexing to 0-indexing
@@ -3000,7 +3009,7 @@ apply_sum_to_column_dict(ARR_I* in_col, ARR_O* out_col,
     std::vector<offset_t> str_offsets(num_groups + 1, 0);
     char* data_i = in_col->info1->data1;
     offset_t* offsets_i = (offset_t*)in_col->info1->data2;
-    for (int64_t i = 0; i < in_col->length; i++) {
+    for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = f(i);
         if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
             int32_t dict_ind = getv<ARR_I, int32_t>(in_col->info2, i);
@@ -3020,7 +3029,7 @@ apply_sum_to_column_dict(ARR_I* in_col, ARR_O* out_col,
     memcpy(offsets_o, str_offsets.data(), (num_groups + 1) * sizeof(offset_t));
 
     // copy characters to output
-    for (int64_t i = 0; i < in_col->length; i++) {
+    for (size_t i = 0; i < in_col->length; i++) {
         int64_t i_grp = f(i);
         if ((i_grp != -1) && in_col->info2->get_null_bit(i)) {
             int32_t dict_ind = getv<ARR_I, int32_t>(in_col->info2, i);
@@ -3088,7 +3097,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
     switch (in_col->arr_type) {
         case bodo_array_type::CATEGORICAL:
             if (ftype == Bodo_FTypes::count) {
-                for (int64_t i = 0; i < in_col->length; i++) {
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     if (i_grp != -1) {
                         T& val = getv<ARR_I, T>(in_col, i);
@@ -3101,9 +3110,9 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                 return;
             } else if (ftype == Bodo_FTypes::min ||
                        ftype == Bodo_FTypes::last) {
-                // NOTE: Bodo_FTypes::max is handled for categorical type since
-                // NA is -1.
-                for (int64_t i = 0; i < in_col->length; i++) {
+                // NOTE: Bodo_FTypes::max is handled for categorical type
+                // since NA is -1.
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     if (i_grp != -1) {
                         T& val = getv<ARR_I, T>(in_col, i);
@@ -3117,7 +3126,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                 // to num_categories if all entries are NA
                 // this needs to be replaced with -1
                 if (ftype == Bodo_FTypes::min) {
-                    for (int64_t i = 0; i < out_col->length; i++) {
+                    for (size_t i = 0; i < out_col->length; i++) {
                         T& val = getv<ARR_O, T>(out_col, i);
                         set_na_if_num_categories<T, dtype>(
                             val, out_col->num_categories);
@@ -3127,7 +3136,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
             } else if (ftype == Bodo_FTypes::first) {
                 int64_t n_bytes = ((out_col->length + 7) >> 3);
                 std::vector<uint8_t> bitmask_vec(n_bytes, 0);
-                for (int64_t i = 0; i < in_col->length; i++) {
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     T val = getv<ARR_I, T>(in_col, i);
                     if ((i_grp != -1) && !GetBit(bitmask_vec.data(), i_grp) &&
@@ -3140,7 +3149,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
         case bodo_array_type::NUMPY:
             if (ftype == Bodo_FTypes::mean) {
                 ARR_O* count_col = aux_cols[0];
-                for (int64_t i = 0; i < in_col->length; i++) {
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     if (i_grp != -1)
                         mean_agg<T, dtype>::apply(
@@ -3149,14 +3158,14 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                             getv<ARR_O, uint64_t>(count_col, i_grp));
                 }
             } else if (ftype == Bodo_FTypes::mean_eval) {
-                for (int64_t i = 0; i < in_col->length; i++)
+                for (size_t i = 0; i < in_col->length; i++)
                     mean_eval(getv<ARR_O, double>(out_col, i),
                               getv<ARR_I, uint64_t>(in_col, i));
             } else if (ftype == Bodo_FTypes::var) {
                 ARR_O* count_col = aux_cols[0];
                 ARR_O* mean_col = aux_cols[1];
                 ARR_O* m2_col = aux_cols[2];
-                for (int64_t i = 0; i < in_col->length; i++) {
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     if (i_grp != -1)
                         var_agg<T, dtype>::apply(
@@ -3168,19 +3177,19 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
             } else if (ftype == Bodo_FTypes::var_eval) {
                 ARR_O* count_col = aux_cols[0];
                 ARR_O* m2_col = aux_cols[2];
-                for (int64_t i = 0; i < in_col->length; i++)
+                for (size_t i = 0; i < in_col->length; i++)
                     var_eval(getv<ARR_O, double>(out_col, i),
                              getv<ARR_O, uint64_t>(count_col, i),
                              getv<ARR_O, double>(m2_col, i));
             } else if (ftype == Bodo_FTypes::std_eval) {
                 ARR_O* count_col = aux_cols[0];
                 ARR_O* m2_col = aux_cols[2];
-                for (int64_t i = 0; i < in_col->length; i++)
+                for (size_t i = 0; i < in_col->length; i++)
                     std_eval(getv<ARR_O, double>(out_col, i),
                              getv<ARR_O, uint64_t>(count_col, i),
                              getv<ARR_O, double>(m2_col, i));
             } else if (ftype == Bodo_FTypes::count) {
-                for (int64_t i = 0; i < in_col->length; i++) {
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     if (i_grp != -1)
                         count_agg<T, dtype>::apply(
@@ -3192,7 +3201,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                 // value for each row/group
                 int64_t n_bytes = ((out_col->length + 7) >> 3);
                 std::vector<uint8_t> bitmask_vec(n_bytes, 0);
-                for (int64_t i = 0; i < in_col->length; i++) {
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     T val = getv<ARR_I, T>(in_col, i);
                     if ((i_grp != -1) && !GetBit(bitmask_vec.data(), i_grp) &&
@@ -3203,7 +3212,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                 }
             } else if (ftype == Bodo_FTypes::idxmax) {
                 ARR_O* index_pos = aux_cols[0];
-                for (int64_t i = 0; i < in_col->length; i++) {
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     if (i_grp != -1) {
                         idxmax_agg<T, dtype>::apply(
@@ -3214,7 +3223,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                 }
             } else if (ftype == Bodo_FTypes::idxmin) {
                 ARR_O* index_pos = aux_cols[0];
-                for (int64_t i = 0; i < in_col->length; i++) {
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     if (i_grp != -1) {
                         idxmin_agg<T, dtype>::apply(
@@ -3224,7 +3233,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                 }
             } else {
-                for (int64_t i = 0; i < in_col->length; i++) {
+                for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
                     if (i_grp != -1 && do_computation<ARR_I>(in_col, i))
                         aggfunc<T, dtype, ftype>::apply(
@@ -3237,7 +3246,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
         case bodo_array_type::DICT:
             switch (ftype) {
                 case Bodo_FTypes::count: {
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if (i_grp != -1 && in_col->info2->get_null_bit(i))
                             count_agg<T, dtype>::apply(
@@ -3267,7 +3276,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
         case bodo_array_type::LIST_STRING:
             switch (ftype) {
                 case Bodo_FTypes::count: {
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if ((i_grp != -1) && in_col->get_null_bit(i))
                             count_agg<T, dtype>::apply(
@@ -3289,7 +3298,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
         case bodo_array_type::STRING:
             switch (ftype) {
                 case Bodo_FTypes::count: {
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if ((i_grp != -1) && in_col->get_null_bit(i))
                             count_agg<T, dtype>::apply(
@@ -3318,7 +3327,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
         case bodo_array_type::NULLABLE_INT_BOOL:
             switch (ftype) {
                 case Bodo_FTypes::count: {
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if ((i_grp != -1) && in_col->get_null_bit(i))
                             count_agg<T, dtype>::apply(
@@ -3328,7 +3337,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     return;
                 }
                 case Bodo_FTypes::mean:
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if ((i_grp != -1) && in_col->get_null_bit(i))
                             mean_agg<T, dtype>::apply(
@@ -3338,7 +3347,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                     return;
                 case Bodo_FTypes::var:
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if ((i_grp != -1) && in_col->get_null_bit(i) &&
                             do_computation<ARR_I>(in_col, i))
@@ -3350,7 +3359,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                     return;
                 case Bodo_FTypes::first:
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if ((i_grp != -1) && !out_col->get_null_bit(i_grp) &&
                             in_col->get_null_bit(i) &&
@@ -3362,7 +3371,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                     return;
                 case Bodo_FTypes::idxmax:
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if (i_grp != -1) {
                             idxmax_agg<T, dtype>::apply(
@@ -3373,7 +3382,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                     return;
                 case Bodo_FTypes::idxmin:
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if (i_grp != -1) {
                             idxmin_agg<T, dtype>::apply(
@@ -3384,7 +3393,7 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                     return;
                 default: {
-                    for (int64_t i = 0; i < in_col->length; i++) {
+                    for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if ((i_grp != -1) && in_col->get_null_bit(i) &&
                             do_computation<ARR_I>(in_col, i)) {
@@ -3489,7 +3498,7 @@ void do_apply_to_column(ARR_I* in_col, ARR_O* out_col,
     // size operation is the same regardless of type of data.
     // Hence, just compute number of rows per group here.
     if (ftype == Bodo_FTypes::size) {
-        for (int64_t i = 0; i < in_col->length; i++) {
+        for (size_t i = 0; i < in_col->length; i++) {
             int64_t i_grp = grp_info.row_to_group[i];
             if (i_grp != -1)
                 size_agg<int64_t, Bodo_CTypes::INT64>::apply(
@@ -4399,6 +4408,13 @@ void do_apply_to_column(ARR_I* in_col, ARR_O* out_col,
  */
 void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                                       bool is_groupby) {
+    // Generate an error message for unsupported paths that includes the name
+    // of the function and the dtype.
+    std::string error_msg =
+        std::string("unsupported/not implemented function: ") +
+        std::string(get_name_for_Bodo_FTypes(ftype)) +
+        std::string(" for column dtype: ") +
+        std::string(get_name_for_Bodo_FTypes(out_col->dtype));
     if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         bool init_val;
         if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
@@ -4450,6 +4466,9 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                     std::fill((int64_t*)out_col->data1,
                               (int64_t*)out_col->data1 + out_col->length,
                               init_val);
+                    return;
+                default:
+                    Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
                     return;
             }
         }
@@ -4504,8 +4523,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                 case Bodo_CTypes::STRING:
                 case Bodo_CTypes::BINARY:
                 default:
-                    Bodo_PyErr_SetString(PyExc_RuntimeError,
-                                         "unsupported/not implemented");
+                    Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
                     return;
             }
         case Bodo_FTypes::min:
@@ -4588,8 +4606,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                     // Nothing to initilize with in the case of list strings.
                     return;
                 default:
-                    Bodo_PyErr_SetString(PyExc_RuntimeError,
-                                         "unsupported/not implemented");
+                    Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
                     return;
             }
         case Bodo_FTypes::max:
@@ -4672,8 +4689,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
                     // nothing to initialize in the case of list strings
                     return;
                 default:
-                    Bodo_PyErr_SetString(PyExc_RuntimeError,
-                                         "unsupported/not implemented");
+                    Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
                     return;
             }
         case Bodo_FTypes::first:
@@ -5440,7 +5456,7 @@ class GeneralUdfColSet : public UdfColSet<ARRAY> {
         }
         // retrieve one column per group from the input column, add it to the
         // general UDF input table
-        for (int64_t i = 0; i < grp_info.num_groups; i++) {
+        for (size_t i = 0; i < grp_info.num_groups; i++) {
             array_info* col = RetrieveArray_SingleColumn(in_col, group_rows[i]);
             general_in_table->columns.push_back(col);
         }
@@ -5471,8 +5487,8 @@ class NUniqueColSet : public BasicColSet<ARRAY> {
                   bool do_combine, bool _is_parallel)
         : BasicColSet<ARRAY>(in_col, Bodo_FTypes::nunique, do_combine),
           dropna(_dropna),
-          is_parallel(_is_parallel),
-          my_nunique_table(nunique_table) {}
+          my_nunique_table(nunique_table),
+          is_parallel(_is_parallel) {}
 
     virtual ~NUniqueColSet() {
         if (my_nunique_table != nullptr)
@@ -5866,6 +5882,14 @@ class TransformColSet : public BasicColSet<ARRAY> {
                         this->update_cols[0], child_out_col, grp_info);
                 }
                 break;
+            default:
+                Bodo_PyErr_SetString(
+                    PyExc_RuntimeError,
+                    (std::string("unsuported data type for eval: ") +
+                     std::string(
+                         get_name_for_Bodo_CTypes(child_out_col->dtype)))
+                        .c_str());
+                return;
         }
         free_array_groupby(child_out_col);
     }
@@ -6099,8 +6123,8 @@ class GroupbyPipeline {
                     int64_t periods, int64_t transform_func, int64_t _head_n,
                     bool _return_key, bool _return_index, bool _key_dropna,
                     int64_t _n_shuffle_keys)
-        : in_table(_in_table),
-          orig_in_table(_in_table),
+        : orig_in_table(_in_table),
+          in_table(_in_table),
           num_keys(_num_keys),
           dispatch_table(_dispatch_table),
           dispatch_info(_dispatch_info),
@@ -6193,7 +6217,7 @@ class GroupbyPipeline {
         // this is relevant only if data is distributed.
         if (head_i) add_head_key_sort_column();
         int k = 0;
-        for (int icol = 0; icol < in_table->ncols() - index_i - head_i;
+        for (uint64_t icol = 0; icol < in_table->ncols() - index_i - head_i;
              icol++) {
             array_info* a = in_table->columns[icol];
             if ((a->arr_type == bodo_array_type::DICT) &&
@@ -6308,7 +6332,7 @@ class GroupbyPipeline {
         // and has one ftype for each (input_column, func) pair
         k = 0;
         n_udf = 0;
-        for (int64_t i = num_keys; i < in_table->ncols() - index_i - head_i;
+        for (uint64_t i = num_keys; i < in_table->ncols() - index_i - head_i;
              i++, k++) {  // for each data column
             array_info* col = in_table->columns[i];
             int start = func_offsets[k];
@@ -6373,8 +6397,8 @@ class GroupbyPipeline {
 
         in_table->id = 0;
         ev.add_attribute("g_shuffle_before_update",
-                         size_t(shuffle_before_update));
-        ev.add_attribute("g_do_combine", size_t(do_combine));
+                         static_cast<size_t>(shuffle_before_update));
+        ev.add_attribute("g_do_combine", static_cast<size_t>(do_combine));
     }
 
     ~GroupbyPipeline() {
@@ -6464,8 +6488,8 @@ class GroupbyPipeline {
         // keep track of how many rows found per group so far.
         std::vector<int64_t> nrows_per_grp(grp_info.num_groups);
         int64_t count = 0;  // how many rows found so far
-        int64_t iRow = 0;   // index looping over all rows
-        for (size_t iRow = 0; iRow < in_table->nrows(); iRow++) {
+        uint64_t iRow = 0;  // index looping over all rows
+        for (iRow = 0; iRow < in_table->nrows(); iRow++) {
             int64_t igrp = grp_info.row_to_group[iRow];
             if (igrp != -1 && nrows_per_grp[igrp] < head_n) {
                 nrows_per_grp[igrp]++;
@@ -6642,7 +6666,7 @@ class GroupbyPipeline {
         // longer reflects final
         // output columns.
         if (head_op && is_parallel) {
-            for (int i = 0; i < cur_table->ncols(); i++)
+            for (uint64_t i = 0; i < cur_table->ncols(); i++)
                 output_list_arrays(out_table->columns, cur_table->columns[i]);
         } else {
             for (BasicColSet<ARRAY>* col_set : col_sets)
@@ -6724,13 +6748,14 @@ class GroupbyPipeline {
         // will be limited by the number of groups.
         int num_ranks;
         MPI_Comm_size(MPI_COMM_WORLD, &num_ranks);
+        size_t num_ranks_unsigned = size_t(num_ranks);
         // When number of groups starts to approximate the number of ranks
         // there will be a high chance that a single rank ends up with 2-3
         // times the load (number of groups) than others after shuffling
         // TODO investigate what is the best threshold:
         // https://bodo.atlassian.net/browse/BE-1308
         const bool shuffle_by_keys_and_value =
-            (nunique_hashes_global <= num_ranks * 3);
+            (nunique_hashes_global <= num_ranks_unsigned * 3);
         ev.add_attribute("g_nunique_shuffle_by_keys_and_values",
                          shuffle_by_keys_and_value);
 
@@ -7342,7 +7367,7 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
     int64_t n_rows = in_table->nrows();
     int return_index_i = return_index;
     int k = 0;
-    for (int64_t i = num_keys; i < in_table->ncols() - return_index_i;
+    for (uint64_t i = num_keys; i < in_table->ncols() - return_index_i;
          i++, k++) {
         array_info* col = in_table->columns[i];
         int start = func_offsets[k];
@@ -7361,7 +7386,7 @@ table_info* mpi_exscan_computation_Tkey(array_info* cat_column,
     // input table. But we can consider the various cumsum / cumprod / cummax /
     // cummin in turn.
     k = 0;
-    for (int64_t i = num_keys; i < in_table->ncols() - return_index_i;
+    for (uint64_t i = num_keys; i < in_table->ncols() - return_index_i;
          i++, k++) {
         array_info* col = in_table->columns[i];
         const Bodo_CTypes::CTypeEnum dtype = col->dtype;
@@ -7637,7 +7662,7 @@ int determine_groupby_strategy(table_info* in_table, int64_t num_keys,
     // of strings but that would be definitely quite complicated and use more
     // than just MPI_Exscan.
     bool has_non_arithmetic_type = false;
-    for (int64_t i = num_keys; i < in_table->ncols() - index_i; i++) {
+    for (uint64_t i = num_keys; i < in_table->ncols() - index_i; i++) {
         array_info* oper_col = in_table->columns[i];
         if (oper_col->arr_type != bodo_array_type::NUMPY &&
             oper_col->arr_type != bodo_array_type::NULLABLE_INT_BOOL)
@@ -7671,7 +7696,7 @@ table_info* groupby_and_aggregate(
         int strategy =
             determine_groupby_strategy(in_table, num_keys, ftypes, func_offsets,
                                        is_parallel, input_has_index);
-        ev.add_attribute("g_strategy", size_t(strategy));
+        ev.add_attribute("g_strategy", strategy);
 
         auto implement_strategy0 = [&]() -> table_info* {
             table_info* dispatch_info = nullptr;

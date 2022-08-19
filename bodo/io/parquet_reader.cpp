@@ -404,8 +404,9 @@ table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
                              num_selected_fields, is_nullable,
                              input_file_name_col);
         // initialize reader
-        reader.init(str_as_dict_cols, num_str_as_dict_cols, part_cols_cat_dtype,
-                    selected_part_cols, num_partition_cols);
+        reader.init_pq_reader(str_as_dict_cols, num_str_as_dict_cols,
+                              part_cols_cat_dtype, selected_part_cols,
+                              num_partition_cols);
         *total_rows_out = reader.get_total_rows();
         table_info* out = reader.read();
         // append the partition columns to the final output table
