@@ -28,6 +28,7 @@ from numba.core.typing import signature
 from numba.core.typing.templates import AbstractTemplate, infer_global
 from numba.extending import intrinsic, overload
 from numba.np.arrayobj import get_itemsize, make_array, populate_array
+from numba.np.numpy_support import as_dtype
 
 import bodo
 from bodo.hiframes.time_ext import TimeArrayType
@@ -694,12 +695,30 @@ def create_categorical_type(categories, data, is_ordered):
     Returns:
         new_cats_arr (pd.CategoricalDtype) : return type of pd.CategoricalDtype
     """
+
+    # For anything with variable bitwidth in Bodo, we need to perfrom explicite
+    # cast to insure that the bitwidth is preserved. Currently, this is only the
+    # following two types:
+    # Int
+    # Float
     if data == bodo.string_array_type or bodo.utils.typing.is_dtype_nullable(data):
         new_cats_arr = pd.CategoricalDtype(
             pd.array(categories), is_ordered
         ).categories.array
+
+        # This path isn't currently taken, as we can't partiton a pq file by a nullable
+        # value. However, we still include it in case this function is ever re-used for
+        # a different purpose.
+        if isinstance(data.dtype, types.Number):  # pragma: no cover
+            # NOTE: When we implement nullable floating array, we will need to support
+            # get_pandas_scalar_type_instance in order for this to work
+            new_cats_arr = new_cats_arr.astype(data.get_pandas_scalar_type_instance)
+
     else:
         new_cats_arr = pd.CategoricalDtype(categories, is_ordered).categories.values
+        if isinstance(data.dtype, types.Number):
+            new_cats_arr = new_cats_arr.astype(as_dtype(data.dtype))
+
     return new_cats_arr
 
 

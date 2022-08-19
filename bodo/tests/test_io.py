@@ -5987,5 +5987,26 @@ def test_tz_to_parquet(memory_leak_check):
     assert n_passed == bodo.get_size(), "Output doesn't match Pandas data"
 
 
+def test_from_parquet_partition_bitsize(datapath):
+    """Tests an issue with the bitsize of a partitioned dataframe"""
+
+    from bodo.hiframes.pd_series_ext import get_series_data
+
+    path = datapath("test_partition_bitwidth")
+
+    # For some reason, when the number of rows was small enough, the output was correct, despite the differing bitwidth.
+    # However, checking the actual categories still exposes the error.
+    def impl2(path):
+        df = pd.read_parquet(path)
+        return (
+            get_series_data(df["parent_wom"]).dtype.categories[0],
+            get_series_data(df["parent_wom"]).dtype.categories[1],
+            get_series_data(df["parent_wom"]).dtype.categories[2],
+            get_series_data(df["parent_wom"]).dtype.categories[3],
+        )
+
+    check_func(impl2, (path,), py_output=(104, 105, 133, 134), check_dtype=False)
+
+
 if __name__ == "__main__":
     unittest.main()
