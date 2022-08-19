@@ -52,13 +52,18 @@ public class AggCodeGen {
    * @param inputColumnNames The names of the columns of the input var.
    * @param aggCallList The list of aggregations to be performed.
    * @param aggCallNames The list of column names to be used for the output of the aggregations
+   * @param distOutput Is the output single row DataFrame distributed or replicated. When no group
+   *     is used as 1 step in an aggregation (e.g. group by cube), then the output is distributed.
+   *     When it is the only aggregation group across the entire output (e.g. select SUM(A) from
+   *     table1), then it is replicated.
    * @return The code generated for the aggregation.
    */
   public static String generateAggCodeNoGroupBy(
       String inVar,
       List<String> inputColumnNames,
       List<AggregateCall> aggCallList,
-      List<String> aggCallNames) {
+      List<String> aggCallNames,
+      boolean distOutput) {
     // Generates code like: pd.DataFrame({"sum(A)": [test_df1["A"].sum()], "mean(B)":
     // [test_df1["A"].mean()]})
     // Generate any filters. This is done on a separate line for simpler
@@ -141,8 +146,14 @@ public class AggCodeGen {
     // Aggregation without groupby should always have one element.
     // To force this value to be replicated (the correct output),
     // we use coerce to array.
-    aggString.append(
-        "}, index=bodo.hiframes.pd_index_ext.init_numeric_index(bodo.utils.conversion.coerce_to_array([0])))");
+    aggString.append("}, index=");
+    if (distOutput) {
+      aggString.append("bodo.hiframes.pd_index_ext.init_range_index(0, 1, 1, None)");
+    } else {
+      aggString.append(
+          "bodo.hiframes.pd_index_ext.init_numeric_index(bodo.utils.conversion.coerce_to_array([0]))");
+    }
+    aggString.append(")");
     return aggString.toString();
   }
 
