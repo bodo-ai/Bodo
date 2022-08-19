@@ -337,8 +337,8 @@ isnan_categorical(T const& val) {
 template <typename T, int dtype>
 inline typename std::enable_if<std::is_integral<T>::value, void>::type
 set_na_if_num_categories(T& val, int64_t num_categories) {
-    if (val == num_categories) {
-        val = -1;
+    if (val == T(num_categories)) {
+        val = T(-1);
     }
 }
 

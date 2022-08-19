@@ -98,7 +98,7 @@ table_info* hash_join_table(
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
     int64_t* vect_need_typechange, bool is_left, bool is_right, bool is_join,
     bool extra_data_col, bool indicator, bool is_na_equal,
-    cond_expr_fn_t cond_func, int64_t* cond_func_left_columns,
-    int64_t cond_func_left_column_len, int64_t* cond_func_right_columns,
-    int64_t cond_func_right_column_len, int64_t* num_rows_ptr);
+    cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
+    uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
+    uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr);
 #endif  // _JOIN_H_INCLUDED

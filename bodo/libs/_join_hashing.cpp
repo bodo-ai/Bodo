@@ -2,7 +2,7 @@
 #include "_array_hash.h"
 
 uint32_t* hash_data_cols_table(const std::vector<array_info*>& in_table,
-                               int64_t* col_nums, size_t n_cols, uint32_t seed,
+                               uint64_t* col_nums, size_t n_cols, uint32_t seed,
                                bool is_parallel) {
     if (n_cols > 0) {
         std::vector<array_info*> key_arrs(n_cols);

@@ -1140,7 +1140,8 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
                                  bool is_parallel) {
     tracing::Event ev("shuffle_table_kernel", is_parallel);
     if (ev.is_tracing()) {
-        ev.add_attribute("table_nrows_before", size_t(in_table->nrows()));
+        ev.add_attribute("table_nrows_before",
+                         static_cast<size_t>(in_table->nrows()));
         ev.add_attribute("filtered", comm_info.filtered);
         size_t global_table_nbytes = table_global_memory_size(in_table);
         ev.add_attribute("g_table_nbytes", global_table_nbytes);
@@ -1248,7 +1249,8 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
         out_arrs.push_back(out_arr);
     }
 
-    ev.add_attribute("table_nrows_after", size_t(out_arrs[0]->length));
+    ev.add_attribute("table_nrows_after",
+                     static_cast<size_t>(out_arrs[0]->length));
     return new table_info(out_arrs);
 }
 
@@ -1387,7 +1389,7 @@ void reverse_shuffle_null_bitmap_array(array_info* in_arr, array_info* out_arr,
                    mask_recv.data(), send_count_null, send_disp_null, mpi_typ,
                    MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset(n_pes, 0);
-    for (int64_t i_row = 0; i_row < out_arr->length; i_row++) {
+    for (size_t i_row = 0; i_row < out_arr->length; i_row++) {
         size_t node = hash_to_rank(hashes[i_row], n_pes);
         uint8_t* out_bitmap = &(mask_recv.data())[send_disp_null[node]];
         bool bit = GetBit(out_bitmap, tmp_offset[node]);
@@ -1544,7 +1546,7 @@ array_info* reverse_shuffle_list_string_array(array_info* in_arr,
                    send_disp_sub_null, mpi_typ8, MPI_COMM_WORLD);
     std::vector<int64_t> tmp_offset(n_pes, 0);
     int64_t pos_si = 0;
-    for (int64_t i_row = 0; i_row < out_arr->length; i_row++) {
+    for (size_t i_row = 0; i_row < out_arr->length; i_row++) {
         size_t node = hash_to_rank(hashes[i_row], n_pes);
         uint8_t* sub_out_bitmap = &(mask_recv.data())[send_disp_sub_null[node]];
         int64_t n_str = out_str_offset[i_row + 1] - out_str_offset[i_row];
@@ -1579,9 +1581,9 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
     DEBUG_PrintSetOfColumn(std::cout, in_table->columns);
     DEBUG_PrintRefct(std::cout, in_table->columns);
 #endif
-    size_t n_cols = in_table->ncols();
+    uint64_t n_cols = in_table->ncols();
     std::vector<array_info*> out_arrs;
-    for (size_t i = 0; i < n_cols; i++) {
+    for (uint64_t i = 0; i < n_cols; i++) {
         array_info* in_arr = in_table->columns[i];
         bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
         array_info* out_arr = nullptr;

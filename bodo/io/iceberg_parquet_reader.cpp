@@ -6,31 +6,6 @@
 
 #include "parquet_reader.h"
 
-// -------- Helper functions --------
-
-// Copied from parquet_reader.cpp. Getting a linking error when
-// adding it to parquet_reader.h and then using it. It compiles,
-// but import bodo fails.
-// TODO Refactor
-/**
- * Get number of columns in a parquet file that correspond to a field
- * in the Arrow schema. For example, a struct with two int64 fields consists
- * of two columns of data in the parquet file.
- * @param : field
- * @return Number of columns
- */
-static int get_num_columns(const std::shared_ptr<arrow::Field> field) {
-    if (field->type()->num_fields() == 0) {
-        // if field has no children then it only consists of 1 column
-        return 1;
-    } else {
-        // get number of leaves recursively. Each leaf is a column.
-        int num_leaves = 0;
-        for (auto f : field->type()->fields()) num_leaves += get_num_columns(f);
-        return num_leaves;
-    }
-}
-
 // -------- IcebergParquetReader --------
 
 class IcebergParquetReader : public ParquetReader {
@@ -57,8 +32,8 @@ class IcebergParquetReader : public ParquetReader {
 
     virtual ~IcebergParquetReader() {}
 
-    virtual void init() {
-        ParquetReader::init(nullptr, 0, nullptr, nullptr, 0);
+    void init_iceberg_reader() {
+        ParquetReader::init_pq_reader(nullptr, 0, nullptr, nullptr, 0);
     }
 
    protected:
@@ -158,7 +133,7 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                                     selected_fields, num_selected_fields,
                                     is_nullable, pyarrow_table_schema);
         // initialize reader
-        reader.init();
+        reader.init_iceberg_reader();
         return reader.read();
     } catch (const std::exception& e) {
         // if the error string is "python" this means the C++ exception is

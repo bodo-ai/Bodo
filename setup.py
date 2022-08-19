@@ -15,7 +15,9 @@ cwd = os.getcwd()
 setup_py_dir_path = os.path.dirname(os.path.realpath(__file__))
 # despite the name, this also works for directories
 if not os.path.samefile(cwd, setup_py_dir_path):
-    raise Exception("setup.py should only be invoked if the current working directory is in the same directory as Setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules.")
+    raise Exception(
+        "setup.py should only be invoked if the current working directory is in the same directory as Setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules."
+    )
 
 # Inject required options for extensions compiled against the Numpy
 # C API (include dirs, library dirs etc.)
@@ -353,10 +355,14 @@ ext_arr = Extension(
 
 ext_dt = Extension(
     name="bodo.libs.hdatetime_ext",
-    sources=["bodo/libs/_datetime_ext.cpp", "bodo/libs/_bodo_common.cpp"],
+    sources=[
+        "bodo/libs/_datetime_ext.cpp",
+        "bodo/libs/_datetime_utils.cpp",
+        "bodo/libs/_bodo_common.cpp",
+    ],
     depends=[
         "bodo/libs/_bodo_common.h",
-        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_datetime_utils.h",
     ],
     libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
     define_macros=np_compile_args["define_macros"],
@@ -465,6 +471,7 @@ ext_parquet = Extension(
         "bodo/io/_hdfs_reader.cpp",
         "bodo/io/_s3_reader.cpp",
         "bodo/libs/_array_operations.cpp",
+        "bodo/libs/_datetime_utils.cpp",
         "bodo/libs/_shuffle.cpp",
     ],
     depends=[
@@ -477,6 +484,7 @@ ext_parquet = Extension(
         "bodo/io/parquet_write.h",
         "bodo/libs/_murmurhash3.h",
         "bodo/libs/_array_operations.h",
+        "bodo/libs/_datetime_utils.h",
         "bodo/libs/_shuffle.h",
     ],
     libraries=pq_libs + np_compile_args["libraries"] + ["arrow_python"],

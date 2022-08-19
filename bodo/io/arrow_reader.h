@@ -14,7 +14,6 @@
 #include <set>
 
 #include "../libs/_bodo_common.h"
-#include "../libs/_datetime_ext.h"
 #include "arrow/array.h"
 #include "arrow/python/pyarrow.h"
 #include "arrow/table.h"
@@ -157,7 +156,7 @@ class ArrowDataframeReader {
     int64_t rows_left;  // only used during ArrowDataframeReader::read()
 
     /// initialize reader
-    virtual void init(const std::vector<int32_t>& str_as_dict_cols = {});
+    void init_arrow_reader(const std::vector<int32_t>& str_as_dict_cols = {});
 
     /**
      * Register a piece for this process to read

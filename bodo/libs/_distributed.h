@@ -117,11 +117,11 @@ static void oneD_reshape_shuffle(char* output, char* input,
                                  int* dest_ranks) __UNUSED__;
 
 static void permutation_int(int64_t* output, int n) __UNUSED__;
-static void permutation_array_index(unsigned char* lhs, int64_t len,
-                                    int64_t elem_size, unsigned char* rhs,
-                                    int64_t n_elems_rhs, int64_t* p,
-                                    int64_t p_len,
-                                    int64_t n_samples) __UNUSED__;
+static void permutation_array_index(unsigned char* lhs, uint64_t len,
+                                    uint64_t elem_size, unsigned char* rhs,
+                                    uint64_t n_elems_rhs, int64_t* p,
+                                    uint64_t p_len,
+                                    uint64_t n_samples) __UNUSED__;
 static int finalize() __UNUSED__;
 static int hpat_dummy_ptr[64] __UNUSED__;
 
@@ -753,10 +753,10 @@ static void apply_permutation(unsigned char* v, int64_t elem_size,
 // Applies the permutation represented by |p| of size |p_len| to the array |rhs|
 // of elements of size |elem_size| and stores the result in |lhs|.
 // Only take the first |n_samples| elements of the output.
-static void permutation_array_index(unsigned char* lhs, int64_t len,
-                                    int64_t elem_size, unsigned char* rhs,
-                                    int64_t n_elems_rhs, int64_t* p,
-                                    int64_t p_len, int64_t n_samples) {
+static void permutation_array_index(unsigned char* lhs, uint64_t len,
+                                    uint64_t elem_size, unsigned char* rhs,
+                                    uint64_t n_elems_rhs, int64_t* p,
+                                    uint64_t p_len, uint64_t n_samples) {
     try {
         if (len != p_len) {
             throw std::runtime_error(

@@ -142,7 +142,7 @@ inline size_t NRT_MemSys_get_stats_mi_alloc() { return TheMSys.stats_mi_alloc; }
 inline size_t NRT_MemSys_get_stats_mi_free() { return TheMSys.stats_mi_free; }
 
 struct MemInfo {
-    size_t refct;
+    int64_t refct;
     NRT_dtor_function dtor;
     void *dtor_info;
     void *data;
@@ -202,7 +202,7 @@ inline void NRT_MemInfo_call_dtor(NRT_MemInfo *mi) {
 inline void *NRT_Allocate(size_t size) {
     void *ptr = TheMSys.allocator.malloc(size);
     if (!ptr) {
-        std::cerr << "bad alloc: possible Out of Memory error\n"; 
+        std::cerr << "bad alloc: possible Out of Memory error\n";
         exit(9);
     }
 #ifdef BODO_DEBUG
@@ -309,7 +309,8 @@ inline NRT_MemInfo *NRT_MemInfo_alloc_safe_aligned(size_t size,
     std::cerr << "NRT_MemInfo_alloc_safe_aligned " << data << " " << size
               << "\n";
 #endif
-    NRT_MemInfo_init(mi, data, size, nrt_internal_dtor_safe, (void *)size, NULL);
+    NRT_MemInfo_init(mi, data, size, nrt_internal_dtor_safe, (void *)size,
+                     NULL);
     return mi;
 }
 

@@ -39,9 +39,9 @@ struct Bodo_CTypes {
         INT32 = 2,
         UINT32 = 3,
         INT64 = 4,
-        UINT64 = 7,
         FLOAT32 = 5,
         FLOAT64 = 6,
+        UINT64 = 7,
         INT16 = 8,
         UINT16 = 9,
         STRING = 10,
@@ -59,6 +59,14 @@ struct Bodo_CTypes {
         _numtypes
     };
 };
+
+static const char* Bodo_CTypes_names[] = {
+    "INT8",        "UINT8",  "INT32",  "UINT32",   "INT64",     "FLOAT32",
+    "FLOAT64",     "UINT64", "INT16",  "UINT16",   "STRING",    "_BOOL",
+    "DECIMAL",     "DATE",   "TIME",   "DATETIME", "TIMEDELTA", "INT128",
+    "LIST_STRING", "LIST",   "STRUCT", "BINARY",   "_numtypes"};
+
+const char* get_name_for_Bodo_CTypes(int enumVal);
 
 typedef int32_t dict_indices_t;
 
@@ -213,12 +221,12 @@ inline void SetBitTo(uint8_t* bits, int64_t i, bool bit_is_set) {
 struct array_info {
     bodo_array_type::arr_type_enum arr_type;
     Bodo_CTypes::CTypeEnum dtype;
-    int64_t length;  // number of elements in the array (not bytes) For DICT
-                     // arrays this is the length of indices array
-    int64_t n_sub_elems;  // number of sub-elements for variable length arrays,
-                          // e.g. characters in string array
-    int64_t n_sub_sub_elems;  // second level of subelements (e.g. for the
-                              // list_string_array_type)
+    uint64_t length;  // number of elements in the array (not bytes) For DICT
+                      // arrays this is the length of indices array
+    uint64_t n_sub_elems;  // number of sub-elements for variable length arrays,
+                           // e.g. characters in string array
+    uint64_t n_sub_sub_elems;  // second level of subelements (e.g. for the
+                               // list_string_array_type)
     // data1 is the main data pointer. some arrays have multiple data pointers
     // e.g. string offsets
     char* data1;
@@ -231,7 +239,7 @@ struct array_info {
     std::shared_ptr<arrow::Array> array;
     int32_t precision;           // for array of decimals and times
     int32_t scale;               // for array of decimals
-    int64_t num_categories;      // for categorical arrays
+    uint64_t num_categories;     // for categorical arrays
     bool has_global_dictionary;  // for dict-encoded arrays
     bool has_sorted_dictionary;  // for dict-encoded arrays
     array_info* info1;           // for dict-encoded arrays
@@ -600,8 +608,8 @@ struct table_info {
     table_info() {}
     explicit table_info(std::vector<array_info*>& _columns)
         : columns(_columns) {}
-    int64_t nrows() const { return columns[0]->length; }
-    int64_t ncols() const { return columns.size(); }
+    uint64_t nrows() const { return columns[0]->length; }
+    uint64_t ncols() const { return columns.size(); }
     array_info* operator[](size_t idx) { return columns[idx]; }
     const array_info* operator[](size_t idx) const { return columns[idx]; }
 };

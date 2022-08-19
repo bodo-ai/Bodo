@@ -41,12 +41,13 @@ class ParquetReader : public ArrowDataframeReader {
      * Initialize the reader
      * See pq_read function below for description of arguments.
      */
-    virtual void init(int32_t* _str_as_dict_cols, int32_t num_str_as_dict_cols,
-                      int32_t* _part_cols_cat_dtype,
-                      int32_t* _selected_part_cols,
-                      int32_t num_partition_cols) {
+    void init_pq_reader(int32_t* _str_as_dict_cols,
+                        int32_t num_str_as_dict_cols,
+                        int32_t* _part_cols_cat_dtype,
+                        int32_t* _selected_part_cols,
+                        int32_t num_partition_cols) {
         // initialize reader
-        ArrowDataframeReader::init(
+        ArrowDataframeReader::init_arrow_reader(
             {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});
         if (parallel) {
             // Get the average number of pieces per rank. This is used to

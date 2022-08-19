@@ -21,7 +21,7 @@ class SnowflakeReader : public ArrowDataframeReader {
           query(_query),
           conn(_conn) {
         // initialize reader
-        init();
+        init_arrow_reader();
     }
 
     virtual ~SnowflakeReader() { Py_XDECREF(sf_conn); }

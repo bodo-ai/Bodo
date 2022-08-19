@@ -1542,7 +1542,7 @@ def get_scanner_batches(
         rows_added = 0
         for frag in dataset.get_fragments():  # each fragment is a parquet file
             # For reference, this is basically the same logic as in
-            # ArrowDataframeReader::init() and just adapted from there.
+            # ArrowDataframeReader::init_arrow_reader() and just adapted from there.
             # Get the file's row groups that this rank will read from
             row_group_ids = []
             for rg in frag.row_groups:

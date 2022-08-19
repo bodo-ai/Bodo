@@ -6,9 +6,30 @@
 
 #include "_bodo_common.h"
 #include "_datetime_ext.h"
+#include "_datetime_utils.h"
 #include "arrow/util/bit_util.h"
 
 extern "C" {
+
+/** Signature definitions for private helper functions. **/
+npy_int64 extract_unit(npy_datetime* d, npy_datetime unit);
+int64_t get_day_of_year(int64_t year, int64_t month, int64_t day);
+int64_t dayofweek(int64_t y, int64_t m, int64_t d);
+void get_isocalendar(int64_t year, int64_t month, int64_t day,
+                     int64_t* year_res, int64_t* week_res, int64_t* dow_res);
+void extract_year_days(npy_datetime* dt, int64_t* year, int64_t* days);
+void get_month_day(npy_int64 year, npy_int64 days, npy_int64* month,
+                   npy_int64* day);
+npy_int64 get_datetimestruct_days(int64_t dt_year, int dt_month, int dt_day);
+npy_datetime npy_datetimestruct_to_datetime(int64_t year, int month, int day,
+                                            int hour, int min, int sec, int us);
+
+/*
+ * Array used to calculate dayofweek
+ * Taken from Pandas:
+ * https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L20
+ */
+const int sakamoto_arr[12] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
 
 /**
  * @brief Computes the python `ret, d = divmod(d, unit)`.
@@ -31,6 +52,83 @@ npy_int64 extract_unit(npy_datetime* d, npy_datetime unit) {
     return div;
 }
 
+/*
+ * Return the ordinal day-of-year for the given day.
+ * Copied from Pandas:
+ * https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L215
+ */
+int64_t get_day_of_year(int64_t year, int64_t month, int64_t day) {
+    int64_t mo_off = month_offset[(13 * is_leapyear(year)) + (month - 1)];
+    return mo_off + day;
+}
+
+/*
+ * Find the day of week for the date described by the Y/M/D triple y, m, d
+ * using Sakamoto's method, from wikipedia.
+ * Copied from Pandas:
+ * https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L83
+ */
+int64_t dayofweek(int64_t y, int64_t m, int64_t d) {
+    y -= (m < 3);
+    int64_t day = (y + y / 4 - y / 100 + y / 400 + sakamoto_arr[m - 1] + d) % 7;
+    // convert to python day
+    return (day + 6) % 7;
+}
+
+/*
+ * Implementation of a general get_isocalendar to be reused
+ * by various pandas types. Places return values inside the allocated
+ * buffers. Iso calendar returns the year, week number, and day of the
+ * week for a given date described by a year month and day.
+ */
+void get_isocalendar(int64_t year, int64_t month, int64_t day,
+                     int64_t* year_res, int64_t* week_res, int64_t* dow_res) {
+    /*
+     * In the Gregorian calendar, week 1 is considered the week of the first
+     * Thursday of the month.
+     * https://en.wikipedia.org/wiki/ISO_week_date#First_week As a result, we
+     * need special handling depending on the first day of the year.
+     */
+
+    /* Implementation taken from Pandas.
+     * https://github.com/pandas-dev/pandas/blob/e088ea31a897929848caa4b5ce3db9d308c604db/pandas/_libs/tslibs/ccalendar.pyx#L161
+     */
+    int64_t doy = get_day_of_year(year, month, day);
+    int64_t dow = dayofweek(year, month, day);
+
+    // estimate
+    int64_t iso_week = (doy - 1) - dow + 3;
+    if (iso_week >= 0) {
+        iso_week = (iso_week / 7) + 1;
+    }
+
+    // verify
+    if (iso_week < 0) {
+        if ((iso_week > -2) || (iso_week == -2 && is_leapyear(year - 1))) {
+            iso_week = 53;
+        } else {
+            iso_week = 52;
+        }
+    } else if (iso_week == 53) {
+        if ((31 - day + dow) < 3) {
+            iso_week = 1;
+        }
+    }
+
+    int64_t iso_year = year;
+    if (iso_week == 1 && month == 12) {
+        iso_year += 1;
+    } else if (iso_week >= 52 && month == 1) {
+        iso_year -= 1;
+    }
+
+    // Assign the calendar values to the pointers
+    *year_res = iso_year;
+    *week_res = iso_week;
+    // Add 1 to day value for 1 indexing
+    *dow_res = dow + 1;
+}
+
 /**
  * @brief extracts year and days from dt64 value, and updates to the remaining
  * dt64 from Pandas:
@@ -39,7 +137,7 @@ npy_int64 extract_unit(npy_datetime* d, npy_datetime unit) {
  * @param year[out] extracted year
  * @param days[out] extracted days
  */
-static void extract_year_days(npy_datetime* dt, int64_t* year, int64_t* days) {
+void extract_year_days(npy_datetime* dt, int64_t* year, int64_t* days) {
     //
     npy_int64 perday = 24LL * 60LL * 60LL * 1000LL * 1000LL * 1000LL;
     *days = extract_unit(dt, perday);  // NOTE: dt is updated here as well
@@ -55,8 +153,8 @@ static void extract_year_days(npy_datetime* dt, int64_t* year, int64_t* days) {
  * @param month[out]
  * @param day[out]
  */
-static void get_month_day(npy_int64 year, npy_int64 days, npy_int64* month,
-                          npy_int64* day) {
+void get_month_day(npy_int64 year, npy_int64 days, npy_int64* month,
+                   npy_int64* day) {
     const int* month_lengths;
     int i;
 

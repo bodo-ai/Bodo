@@ -4,6 +4,8 @@
 // helper code to read Arrow data into Bodo.
 
 #include "arrow_reader.h"
+#include "../libs/_datetime_ext.h"
+#include "../libs/_datetime_utils.h"
 #include "../libs/_distributed.h"
 
 using arrow::Type;
@@ -174,10 +176,10 @@ inline void copy_data_dispatch(uint8_t* out_data, const uint8_t* buff,
         const auto& t_type = static_cast<const arrow::Time32Type&>(*arrow_type);
         if (t_type.unit() == arrow::TimeUnit::MILLI) {
             convertArrowToTime64<int32_t, 1000000>(buff, out_data, rows_to_skip,
-                                             rows_to_read);
+                                                   rows_to_read);
         } else if (t_type.unit() == arrow::TimeUnit::SECOND) {
-            convertArrowToTime64<int32_t, 1000000000>(buff, out_data, rows_to_skip,
-                                                rows_to_read);
+            convertArrowToTime64<int32_t, 1000000000>(
+                buff, out_data, rows_to_skip, rows_to_read);
         } else {
             throw std::runtime_error("arrow read: Invalid time unit " +
                                      arrow_type->ToString());
@@ -186,7 +188,7 @@ inline void copy_data_dispatch(uint8_t* out_data, const uint8_t* buff,
         const auto& t_type = static_cast<const arrow::Time64Type&>(*arrow_type);
         if (t_type.unit() == arrow::TimeUnit::NANO) {
             convertArrowToTime64<int64_t, 1>(buff, out_data, rows_to_skip,
-                                                rows_to_read);
+                                             rows_to_read);
         } else if (t_type.unit() == arrow::TimeUnit::MICRO) {
             convertArrowToTime64<int64_t, 1000>(buff, out_data, rows_to_skip,
                                                 rows_to_read);
@@ -801,7 +803,8 @@ void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
 }
 
 // -------------------- ArrowDataframeReader --------------------
-void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
+void ArrowDataframeReader::init_arrow_reader(
+    const std::vector<int32_t>& str_as_dict_cols) {
     if (initialized)
         throw std::runtime_error("ArrowDataframeReader already initialized");
     tracing::Event ev("reader::init", parallel);
@@ -839,7 +842,8 @@ void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
 
     // all_pieces = ds.pieces
     PyObject* all_pieces = PyObject_GetAttrString(ds, "pieces");
-    ev.add_attribute("g_total_num_pieces", (size_t)PyObject_Length(all_pieces));
+    ev.add_attribute("g_total_num_pieces",
+                     static_cast<size_t>(PyObject_Length(all_pieces)));
     Py_DECREF(ds);
 
     // iterate through pieces next
@@ -849,7 +853,8 @@ void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
 
     if (iterator == NULL)
         throw std::runtime_error(
-            "ArrowDataframeReader::init(): error getting pieces iterator");
+            "ArrowDataframeReader::init_arrow_reader(): error getting pieces "
+            "iterator");
 
     if (!parallel) {
         // The process will read the whole dataset
@@ -964,8 +969,8 @@ void ArrowDataframeReader::init(const std::vector<int32_t>& str_as_dict_cols) {
             selected_fields_str += schema->field(i)->ToString() + "\n";
         }
         ev.add_attribute("g_selected_fields", selected_fields_str);
-        ev.add_attribute("num_pieces", get_num_pieces());
-        ev.add_attribute("num_rows", size_t(count));
+        ev.add_attribute("num_pieces", static_cast<size_t>(get_num_pieces()));
+        ev.add_attribute("num_rows", count);
         ev.add_attribute("g_total_rows", total_rows);
     }
     initialized = true;
