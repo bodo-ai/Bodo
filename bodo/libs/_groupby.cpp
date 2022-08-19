@@ -2917,6 +2917,10 @@ apply_to_column_dict(ARR_I* in_col, ARR_O* out_col,
         old_to_new;  // Maps old index to new index
     old_to_new.reserve(num_groups);
     for (int64_t i = 0; i < num_groups; i++) {
+        // check if the value for the group is NaN
+        if (!indices_arr->get_null_bit(i)) {
+            continue;
+        }
         // Insert 0 into the map if key is not in it.
         int32_t& old_ind = getv<ARR_I, int32_t>(indices_arr, i);
         int32_t& new_ind = old_to_new[old_ind];

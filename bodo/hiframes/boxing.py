@@ -23,7 +23,6 @@ from numba.typed.typeddict import Dict
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.datetime_timedelta_ext import datetime_timedelta_array_type
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype
 from bodo.hiframes.pd_dataframe_ext import (
@@ -44,6 +43,7 @@ from bodo.hiframes.pd_index_ext import (
 )
 from bodo.hiframes.pd_series_ext import HeterogeneousSeriesType, SeriesType
 from bodo.hiframes.split_impl import string_array_split_view_type
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type

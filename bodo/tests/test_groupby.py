@@ -3719,6 +3719,13 @@ def test_first_last(test_df):
         }
     )
 
+    df_dict_nan = pd.DataFrame(
+        {
+            "A": pd.Series(["A", "B", None, "C", "D"] * 5),
+            "B": pd.Series(["AB", "BC", None, "C", "DE"] * 5),
+        }
+    )
+
     df_bool = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
@@ -3739,6 +3746,7 @@ def test_first_last(test_df):
 
     check_func(impl1, (test_df,), sort_output=True)
     check_func(impl1, (df_str,), sort_output=True, check_typing_issues=False)
+    check_func(impl1, (df_dict_nan,), sort_output=True, check_typing_issues=False)
     check_func(impl1, (df_bool,), sort_output=True)
     check_func(impl1, (df_dt,), sort_output=True)
     check_func(impl1, (df_bin,), sort_output=True)
@@ -3746,6 +3754,7 @@ def test_first_last(test_df):
 
     check_func(impl3, (test_df,), sort_output=True)
     check_func(impl3, (df_str,), sort_output=True, check_typing_issues=False)
+    check_func(impl3, (df_dict_nan,), sort_output=True, check_typing_issues=False)
     check_func(impl3, (df_bool,), sort_output=True)
     check_func(impl3, (df_dt,), sort_output=True)
     check_func(impl3, (df_bin,), sort_output=True)
