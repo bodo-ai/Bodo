@@ -1382,6 +1382,64 @@ def test_count_null(spark_info, memory_leak_check):
     "query",
     [
         pytest.param(
+            "SELECT COUNT_IF(A) OVER (PARTITION BY B) FROM table1",
+            id="bool_string",
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(C % 2 = 1) OVER (PARTITION BY B) FROM table1",
+            id="int_string",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(B = 'A' OR B = 'C') OVER (PARTITION BY C % 5) FROM table1",
+            id="string_int",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(C = 0) OVER (PARTITION BY A), COUNT_IF(C < 4) OVER (PARTITION BY A) FROM table1",
+            id="int_bool_multiple",
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) FROM table1",
+            id="bool_string_int_sliding",
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM table1",
+            id="bool_string_int_prefix_suffix",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) FROM table1",
+            id="bool_string_int_cumulative_suffix",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_count_if(query, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series([True, False, None, True] * 25, dtype=pd.BooleanDtype()),
+                "B": pd.Series(
+                    ["A", "B", None, "A", "B", "C", "A", "A", "C", "A"] * 10
+                ),
+                "C": pd.Series(list(range(100)), dtype=pd.Int32Dtype()),
+            }
+        )
+    }
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param(
             "select ANY_VALUE(A) OVER (PARTITION BY B ORDER BY C) from table1",
             id="float_string_int",
         ),

@@ -22,8 +22,12 @@ public class AggCodeGen {
 
   static HashMap<SqlKind, String> equivalentNumpyFuncMap;
 
+  static HashMap<String, String> equivalentPandasNameMethodMap;
+
   static {
     equivalentPandasMethodMap = new HashMap<>();
+    equivalentNumpyFuncMap = new HashMap<>();
+    equivalentPandasNameMethodMap = new HashMap<>();
 
     equivalentPandasMethodMap.put(SqlKind.SUM, "sum");
     equivalentPandasMethodMap.put(SqlKind.SUM0, "sum");
@@ -43,6 +47,8 @@ public class AggCodeGen {
     equivalentNumpyFuncMap.put(SqlKind.BIT_XOR, "np.bitwise_xor.reduce");
     equivalentNumpyFuncMap.put(SqlKind.VAR_POP, "np.var");
     equivalentNumpyFuncMap.put(SqlKind.STDDEV_POP, "np.std");
+
+    equivalentPandasNameMethodMap.put("COUNT_IF", "sum");
   }
 
   /**
@@ -402,13 +408,16 @@ public class AggCodeGen {
    * @return Pair with the name of the call and whether or not it is a method.
    */
   private static Pair<String, Boolean> getAggFuncInfo(AggregateCall a, boolean isGroupbyCall) {
-    if (a.getAggregation().getKind() == SqlKind.COUNT) {
+    SqlKind kind = a.getAggregation().getKind();
+    String name = a.getAggregation().getName();
+    if (kind == SqlKind.COUNT) {
       return getCountCall(a, isGroupbyCall);
-    } else if (equivalentPandasMethodMap.containsKey(a.getAggregation().getKind())) {
-      // handle the case where the agg function can be passed as a string
-      return new Pair<>(equivalentPandasMethodMap.get((a.getAggregation().getKind())), true);
-    } else if (equivalentNumpyFuncMap.containsKey(a.getAggregation().getKind())) {
-      return new Pair<>(equivalentNumpyFuncMap.get((a.getAggregation().getKind())), false);
+    } else if (equivalentPandasMethodMap.containsKey(kind)) {
+      return new Pair<>(equivalentPandasMethodMap.get(kind), true);
+    } else if (equivalentNumpyFuncMap.containsKey(kind)) {
+      return new Pair<>(equivalentNumpyFuncMap.get(kind), false);
+    } else if (equivalentPandasNameMethodMap.containsKey(name)) {
+      return new Pair<>(equivalentPandasNameMethodMap.get(name), true);
     } else {
       throw new BodoSQLCodegenException(
           "Unsupported Aggregate Function, "

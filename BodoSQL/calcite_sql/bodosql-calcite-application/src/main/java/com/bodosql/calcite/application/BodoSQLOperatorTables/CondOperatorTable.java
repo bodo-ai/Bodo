@@ -6,6 +6,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlSingleOperandTypeChecker;
@@ -290,8 +291,13 @@ public class CondOperatorTable implements SqlOperatorTable {
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlBasicAggFunction COUNT_IF =
+      SqlBasicAggFunction.create(
+          "COUNT_IF", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.BOOLEAN);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
+          COUNT_IF,
           REGR_VALX,
           REGR_VALY,
           IF_FUNC,

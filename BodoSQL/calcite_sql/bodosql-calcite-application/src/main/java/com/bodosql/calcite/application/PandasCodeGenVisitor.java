@@ -1200,10 +1200,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
     List<RexWindow> windows = new ArrayList<>();
     List<SqlKind> fnKinds = new ArrayList<>();
+    List<String> fnNames = new ArrayList<>();
 
     for (RexOver agg : aggOperations) {
       windows.add(agg.getWindow());
       fnKinds.add(agg.getAggOperator().getKind());
+      fnNames.add(agg.getAggOperator().getName());
     }
     // For right now, we're only handling the case where all the windows are identical, and all the
     // aggregation functions are FIRST_VALUE.
@@ -1228,7 +1230,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       Pair<String, List<String>> out =
           visitAggOverHelper(
-              aggOperations, colNames, windows.get(0), fnKinds.get(0), id, inputVar, ctx);
+              aggOperations,
+              colNames,
+              windows.get(0),
+              fnKinds.get(0),
+              fnNames.get(0),
+              id,
+              inputVar,
+              ctx);
       String dfExpr = out.getKey();
       String generatedDfName = this.genWindowedAggDfName();
       this.generatedCode
@@ -1260,6 +1269,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 colNames,
                 curAggOp.getWindow(),
                 curAggOp.getAggOperator().getKind(),
+                curAggOp.getAggOperator().getName(),
                 id,
                 inputVar,
                 ctx);
@@ -1320,6 +1330,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param colNames List of colNames used in the relational expression
    * @param window the RexWindow over which the aggregation occurs
    * @param aggFn the SQL kind of the window function.
+   * @param name the name of the window function.
    * @param id The RelNode id used to uniquely identify the table.
    * @param inputVar Name of dataframe from which InputRefs select Columns
    * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
@@ -1335,6 +1346,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       List<String> colNames,
       RexWindow window,
       SqlKind aggFn,
+      String name,
       int id,
       String inputVar,
       BodoCtx ctx) {
@@ -1668,6 +1680,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               NAPositionString.toString(),
               orderKeys,
               aggFn,
+              name,
               typs,
               !upperUnBound,
               upperBound,

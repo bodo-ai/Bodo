@@ -353,6 +353,56 @@ def test_agg_set_error(memory_leak_check):
         bodo.jit(impl)(udf_in_df)
 
 
+@pytest.mark.parametrize(
+    "df",
+    [
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series([True, False, True, False, False] * 20),
+                    "B": ["A"] * 100,
+                }
+            ),
+            id="1_group_no_null",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [True, False, True, None, True, False], dtype=pd.BooleanDtype()
+                    ),
+                    "B": list("AAAABB"),
+                }
+            ),
+            id="2_groups_with_null",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [None if i % 3 > i % 4 else i % 2 == 0 for i in range(100)],
+                        dtype=pd.BooleanDtype(),
+                    ),
+                    "B": (list("ABCDE") + [None] + list("GHIJ")) * 10,
+                }
+            ),
+            id="10_groups_with_null",
+        ),
+    ],
+)
+def test_sum_bool(df, memory_leak_check):
+    """
+    Test groupby with pd.NamedAgg() for sums of booleans
+    """
+
+    def impl(df):
+        return df.groupby(["B"], as_index=False, dropna=False).agg(
+            output=pd.NamedAgg(column="A", aggfunc="sum"),
+        )
+
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+
 @pytest.mark.slow
 def test_sum_string(memory_leak_check):
 
@@ -2401,6 +2451,26 @@ def test_named_agg(memory_leak_check):
     )
     check_func(impl1, (df,), sort_output=True, reset_index=True)
     check_func(impl2, (df,), sort_output=True, reset_index=True)
+
+
+def test_bool_sum_simple(memory_leak_check):
+    """
+    Test groupby with pd.groupby().sum() for sums of booleans
+    """
+
+    def impl(df):
+        return df.groupby(["B"]).sum()
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [True, False, None, True, True, False], dtype=pd.BooleanDtype()
+            ).repeat(10),
+            "B": pd.Series([1, 2, 0, 5, 1, 2]).repeat(10),
+        }
+    )
+
+    check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
 def test_groupby_apply(is_slow_run, memory_leak_check):
@@ -5621,6 +5691,7 @@ def test_groupby_transform_nullable(memory_leak_check):
             "G": pd.Series(
                 np.array([np.nan, 8, 2, np.nan, np.nan, 20, 30, -1]), dtype="Int8"
             ),
+            "Q": [True, False, None, True] * 2,
         }
     )
     check_func(impl_min, (df,))

@@ -1030,14 +1030,6 @@ def test_mean_median_unsupported_types(df, memory_leak_check):
                 ],
             }
         ),
-        # boolean Array
-        pd.DataFrame(
-            {
-                "A": [16, 1, 1, 1, 16, 16, 1, 40],
-                "B": [True, np.nan, False, True, np.nan, False, False, True],
-                "C": [True, True, False, True, True, False, False, True],
-            }
-        ),
     ],
 )
 def test_sum_prod_unsupported_types(df, memory_leak_check):
@@ -1052,17 +1044,12 @@ def test_sum_prod_unsupported_types(df, memory_leak_check):
         return A
 
     err_msg = "not supported in groupby"
-    skip_prod = False  # Skip prod test with boolean array since it's supported
-    if isinstance(df["B"][0], bool):
-        err_msg = "sum does not support boolean column"
-        skip_prod = True
 
     with pytest.raises(BodoError, match=err_msg):
         bodo.jit(impl1)(df)
 
-    if not skip_prod:
-        with pytest.raises(BodoError, match=err_msg):
-            bodo.jit(impl2)(df)
+    with pytest.raises(BodoError, match=err_msg):
+        bodo.jit(impl2)(df)
 
 
 # ------------------------------ df.groupby().min()/max()------------------------------ #
@@ -1977,10 +1964,12 @@ def test_transform_unsupported_type(memory_leak_check):
     df = pd.DataFrame(
         {
             "A": [16, 1, 1, 1, 16, 16, 1, 40],
-            "B": [True, False] * 4,
+            "B": pd.date_range("2018", "2019", periods=8),
         }
     )
-    with pytest.raises(BodoError, match="column type of bool is not supported by"):
+    with pytest.raises(
+        BodoError, match=re.escape("column type of datetime64[ns] is not supported by")
+    ):
         bodo.jit(impl)(df)
 
 

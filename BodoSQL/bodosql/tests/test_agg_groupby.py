@@ -382,6 +382,57 @@ def test_groupby_interval_types(bodosql_interval_types, spark_info, memory_leak_
     )
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param("SELECT COUNT_IF(A) FROM table1 GROUP BY B", id="groupby_string"),
+        pytest.param(
+            "SELECT COUNT_IF(A) FROM table1 GROUP BY C",
+            id="groupby_int",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(A) FROM table1 GROUP BY A",
+            id="groupby_bool",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(A) FROM table1 GROUP BY B, C", id="groupby_stringInt"
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(A) FROM table1 GROUP BY A, B",
+            id="groupby_stringBool",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "SELECT COUNT_IF(C > 3), COUNT_IF(C IS NULL OR C < 2) FROM table1 GROUP BY B",
+            id="groupby_string_with_condition",
+        ),
+    ],
+)
+def test_count_if(query, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [True, False, True, None, True, None, True, False] * 5,
+                    dtype=pd.BooleanDtype(),
+                ),
+                "B": pd.Series(list("AABAABCBAC") * 4),
+                "C": pd.Series((list(range(7)) + [None]) * 5, dtype=pd.Int32Dtype()),
+            }
+        )
+    }
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+    )
+
+
 def test_having_numeric(
     bodosql_numeric_types,
     comparison_ops,

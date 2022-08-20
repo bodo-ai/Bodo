@@ -290,6 +290,37 @@ def test_max_literal(basic_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param("SELECT COUNT_IF(A) FROM table1", id="bool_col"),
+        pytest.param("SELECT COUNT_IF(B = 'B') FROM table1", id="string_match"),
+        pytest.param("SELECT COUNT_IF(C % 2 = 1) FROM table1", id="int_cond"),
+    ],
+)
+def test_count_if(query, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [True, False, None, True, True, None, False, True] * 5,
+                    dtype=pd.BooleanDtype(),
+                ),
+                "B": pd.Series(list("AABAABCBAC") * 4),
+                "C": pd.Series((list(range(7)) + [None]) * 5, dtype=pd.Int32Dtype()),
+            }
+        )
+    }
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+    )
+
+
 def test_having(bodosql_numeric_types, comparison_ops, spark_info, memory_leak_check):
     """
     Tests having with a constant

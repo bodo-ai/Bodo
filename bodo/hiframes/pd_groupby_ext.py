@@ -383,18 +383,20 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
 
     if isinstance(in_dtype, types.Boolean) and func_name in {
         "cumsum",
-        "sum",
         "mean",
+        "sum",
         "std",
         "var",
     }:
+        if func_name in {"sum"}:
+            return to_nullable_type(dtype_to_array_type(types.int64)), "ok"
         return (
             None,
             f"groupby built-in functions {func_name} does not support boolean column",
         )
     if func_name in {"idxmin", "idxmax"}:
         return dtype_to_array_type(get_index_data_arr_types(index_type)[0].dtype), "ok"
-    if func_name in {"count", "nunique"}:
+    elif func_name in {"count", "nunique"}:
         return dtype_to_array_type(types.int64), "ok"
     else:
         # default: return same dtype as input
@@ -474,7 +476,6 @@ def get_agg_typ(
     # applied to different input columns, resolve_agg uses this function
     # as helper and can call it repeatedly by passing a DataFrameGroupByType
     # instance with only one input column
-
     index = RangeIndexType(types.none)  # groupby output index type
     out_data = []  # type of output columns (array type)
     out_columns = []  # name of output columns
