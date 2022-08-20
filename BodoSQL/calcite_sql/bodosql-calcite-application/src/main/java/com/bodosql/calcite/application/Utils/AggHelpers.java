@@ -27,6 +27,7 @@ public class AggHelpers {
     simpleColnameMap.put(SqlKind.STDDEV_SAMP, "std_samp");
     simpleColnameMap.put(SqlKind.STDDEV_POP, "std");
     simpleColnameMap.put(SqlKind.VAR_POP, "var");
+    simpleColnameMap.put(SqlKind.OTHER_FUNCTION, "sum");
   }
 
   /**
@@ -63,9 +64,10 @@ public class AggHelpers {
   /**
    * @param colExpr the string column expression
    * @param kind The SqlKind of the aggregation
+   * @param name The name of the aggregation
    * @return The string expression of the aggregated column
    */
-  public static String getColumnAggCall(String colExpr, SqlKind kind) {
+  public static String getColumnAggCall(String colExpr, SqlKind kind, String name) {
     switch (kind) {
       case MAX:
         return colExpr + ".max()";
@@ -92,6 +94,11 @@ public class AggHelpers {
       case ANY_VALUE:
       case FIRST_VALUE:
         return colExpr + ".iloc[0]";
+      case OTHER_FUNCTION:
+        switch (name) {
+          case "COUNT_IF":
+            return colExpr + ".sum()";
+        }
       default:
         throw new BodoSQLCodegenException(
             "Error, column aggregation function " + kind.toString() + " not supported");

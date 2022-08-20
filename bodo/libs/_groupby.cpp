@@ -216,6 +216,27 @@ struct aggfunc<
     }
 };
 
+template <typename T, int dtype, typename Enable = void>
+struct bool_sum {
+    /**
+     * Aggregation function for sum of booleans. Increases total by 1 if the
+     * value is not null and truthy.
+     *
+     * @param[in,out] current sum
+     * @param second input value.
+     */
+    static void apply(int64_t& v1, T& v2);
+};
+
+template <typename T, int dtype>
+struct bool_sum<
+    T, dtype,
+    typename std::enable_if<!std::is_floating_point<T>::value>::type> {
+    static void apply(int64_t& v1, T& v2) {
+        if (!isnan(v2) && v2) v1 += 1;
+    }
+};
+
 // min
 
 template <typename T, int dtype>
@@ -3393,6 +3414,18 @@ void apply_to_column_F(ARR_I* in_col, ARR_O* out_col,
                     }
                     return;
                 default: {
+                    if (ftype == Bodo_FTypes::sum &&
+                        dtype == Bodo_CTypes::_BOOL) {
+                        for (size_t i = 0; i < in_col->length; i++) {
+                            int64_t i_grp = f(i);
+                            if ((i_grp != -1) && in_col->get_null_bit(i))
+                                bool_sum<bool, dtype>::apply(
+                                    getv<ARR_O, int64_t>(out_col, i_grp),
+                                    getv<ARR_I, bool>(in_col, i));
+                            out_col->set_null_bit(i_grp, true);
+                        }
+                        return;
+                    }
                     for (size_t i = 0; i < in_col->length; i++) {
                         int64_t i_grp = f(i);
                         if ((i_grp != -1) && in_col->get_null_bit(i) &&
@@ -3565,6 +3598,10 @@ void do_apply_to_column(ARR_I* in_col, ARR_O* out_col,
     switch (in_col->dtype) {
         case Bodo_CTypes::_BOOL:
             switch (ftype) {
+                case Bodo_FTypes::sum:
+                    return apply_to_column<ARR_I, ARR_O, bool, Bodo_FTypes::sum,
+                                           Bodo_CTypes::_BOOL>(
+                        in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::min:
                     return apply_to_column<ARR_I, ARR_O, bool, Bodo_FTypes::min,
                                            Bodo_CTypes::_BOOL>(
@@ -3601,7 +3638,7 @@ void do_apply_to_column(ARR_I* in_col, ARR_O* out_col,
                 default:
                     Bodo_PyErr_SetString(
                         PyExc_RuntimeError,
-                        "unsuported aggregation for boolean type column");
+                        "unsupported aggregation for boolean type column");
                     return;
             }
         case Bodo_CTypes::INT8:
@@ -4779,6 +4816,12 @@ get_groupby_output_dtype(int ftype, bodo_array_type::arr_type_enum& array_type,
             return;
         case Bodo_FTypes::cumsum:
         case Bodo_FTypes::sum:
+            // This is safe even for cumsum because a boolean cumsum is not yet
+            // supported on the Python side, so an error will be raised there
+            if (dtype == Bodo_CTypes::_BOOL) {
+                array_type = bodo_array_type::NULLABLE_INT_BOOL;
+                dtype = Bodo_CTypes::INT64;
+            }
             if (dtype == Bodo_CTypes::STRING) {
                 array_type = bodo_array_type::STRING;
             }

@@ -263,7 +263,8 @@ public class WindowAggCodeGen {
    *     ordering for each column being sorted. This is empty if no sorting is necessary.
    * @param sortByList The list of string columns names, to be used when the each column name string
    *     is needed (e.g. generateRankFns uses them to fetch the appropriate columns).
-   * @param agg The string name of the windowed aggregation to perform
+   * @param agg The kind of the windowed aggregation to perform
+   * @param aggName The string name of the windowed aggregation to perform
    * @param typs List of types for the output column, 1 per window function.
    * @param upper_bounded Does this window have an upper bound?
    * @param upper_bound_expr String expression that represents the "shift" amount for the window
@@ -297,6 +298,7 @@ public class WindowAggCodeGen {
       final String NAPositionList,
       final List<String> sortByList,
       final SqlKind agg,
+      final String aggName,
       final List<SqlTypeName> typs,
       final boolean upper_bounded,
       final String upper_bound_expr,
@@ -899,7 +901,7 @@ public class WindowAggCodeGen {
           funcText.append("cur_upper_bound");
         }
         funcText.append("]\n");
-        String columnAggCall = getColumnAggCall("cur_slice", agg);
+        String columnAggCall = getColumnAggCall("cur_slice", agg, aggName);
         // currently, several aggregation functions have errors when called on empty slices,See
         // BE-1124
         // In the event that the other aggregation functions are fixed, we will still need

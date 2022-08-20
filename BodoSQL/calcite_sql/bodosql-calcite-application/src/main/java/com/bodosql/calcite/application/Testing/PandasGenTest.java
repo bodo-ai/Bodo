@@ -13,11 +13,11 @@ public class PandasGenTest {
 
   public static void main(String[] args) throws Exception {
 
-    String sql = "select conditional_change_event(A) over (order by D) from __bodolocal__.table1";
+    String sql = "select a from __bodolocal__.table1 limit @cwsfe_21";
 
     CatalogDatabaseImpl db = new CatalogDatabaseImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
-    CatalogColumnDataType dataType = CatalogColumnDataType.STRING;
+    CatalogColumnDataType dataType = CatalogColumnDataType.DATETIME;
     CatalogColumnDataType paramType = CatalogColumnDataType.INT64;
     CatalogColumnImpl column = new CatalogColumnImpl("A", dataType, 0);
     arr.add(column);
