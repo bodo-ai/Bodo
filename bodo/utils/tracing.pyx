@@ -188,6 +188,63 @@ cdef aggregate_events():
     MPI_Comm_rank(MPI_COMM_WORLD, &rank)
     start_ts = get_timestamp()
     global traceEvents
+
+    # The event aggregation code below hangs if there are a different number
+    # of events with `_bodo_aggr == 1` on each rank.
+    # Detect that error condition beforehand and raise a programming error.
+    from bodo.libs.distributed_api import dist_reduce, Reduce_Type
+
+    err = None  # Forward declaration
+    aggr_events = [e["name"] for e in traceEvents if "_bodo_aggr" in e]
+    num_aggr_events = len(aggr_events)
+    # max(x) is equivalent to -min(-x).
+    # This allows using just one MPI operation to compute both the max and min.
+    min_max_nevents = dist_reduce(
+        np.array([-num_aggr_events, num_aggr_events]),
+        np.int32(Reduce_Type.Min.value),
+    )
+    if (-min_max_nevents[0] != min_max_nevents[1]):
+        from bodo.libs.distributed_api import allgatherv
+
+        all_events = allgatherv(np.array(aggr_events, dtype=object))
+        missing_events = set(all_events).difference(set(aggr_events))
+        missing_events = sorted(list(missing_events))
+        if len(missing_events) == 0:
+            missing_err = f"No events are missing from rank {rank}"
+        else:
+            missing_err = f"Events {missing_events} are missing from rank {rank}"
+        missing_errs = allgatherv(np.array([missing_err], dtype=object))
+
+        err = RuntimeError(
+            "Bodo tracing programming error: "
+            "Cannot perform tracing dump because there are a different "
+            "number of aggregated tracing events on each rank.\n"
+            + "\n".join(missing_errs)
+        )
+
+    # If any rank raises an exception, re-raise that error on all non-failing
+    # ranks to prevent deadlock on future MPI collective ops.
+    # We use allreduce with MPI.MAXLOC to communicate the rank of the lowest
+    # failing process, then broadcast the error backtrace across all ranks.
+    err_on_this_rank = int(err is not None)
+    err_on_any_rank, failing_rank = comm.allreduce(
+        (err_on_this_rank, comm.Get_rank()), op=MPI.MAXLOC
+    )
+    if err_on_any_rank:
+        if comm.Get_rank() == failing_rank:
+            lowest_err = err
+        else:
+            lowest_err = None
+        lowest_err = comm.bcast(lowest_err, root=failing_rank)
+
+        # Each rank that already has an error will re-raise their own error, and
+        # any rank that doesn't have an error will re-raise the lowest rank's error.
+        if err_on_this_rank:
+            raise err
+        else:
+            raise lowest_err
+
+    # End of error-handling code, begin event aggregation
     for i, e in enumerate(traceEvents):
         if not "_bodo_aggr" in e:
             continue
