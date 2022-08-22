@@ -143,15 +143,16 @@ def set_numba_environ_vars():
         if ("NUMBA_CACHE_DIR" in os.environ) and (
             os.environ["NUMBA_CACHE_DIR"] != cache_loc
         ):
+            import warnings
+
             warnings.warn(
                 "Since BODO_PLATFORM_CACHE_LOC is set, the value set for NUMBA_CACHE_DIR will be ignored"
             )
-            numba.config.CACHE_DIR = cache_loc
-
-            # In certain cases, numba reloads its config variables from the
-            # environment. In those cases, the above line would be overridden.
-            # Therefore, we also set it to the env var that numba reloads from.
-            os.environ["NUMBA_CACHE_DIR"] = cache_loc
+        numba.config.CACHE_DIR = cache_loc
+        # In certain cases, numba reloads its config variables from the
+        # environment. In those cases, the above line would be overridden.
+        # Therefore, we also set it to the env var that numba reloads from.
+        os.environ["NUMBA_CACHE_DIR"] = cache_loc
 
     # avoid Numba parallel performance warning when there is no Parfor in the IR
     numba.config.DISABLE_PERFORMANCE_WARNINGS = 1
