@@ -21,3 +21,4 @@ stages:
       vmImage: ubuntu-latest
       useNumbaDev: false
       platformBuild: true
+      weeklyTest: false

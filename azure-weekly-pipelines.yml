@@ -36,12 +36,14 @@ stages:
       vmImage: ubuntu-latest
       useNumbaDev: false
       platformBuild: false
+      weeklyTest: true
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: macOS
       vmImage: macOS-latest
       useNumbaDev: false
       platformBuild: false
+      weeklyTest: true
 #  - template: buildscripts/azure/azure-build-binary-windows.yml
 #    parameters:
 #      name: Windows

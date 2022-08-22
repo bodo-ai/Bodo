@@ -185,8 +185,8 @@ jobs:
       fi
 
       # Nightly tests only run Linux, so build Mac and other packages only
-      # for releases
-      if [[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.name }}" == "Linux" ]]; then
+      # for releases and weekly runs
+      if [[ ! -z $IS_RELEASE ]] || [[ "${{ parameters.name }}" == "Linux" ]] || [[ "${{ parameters.weeklyTest }}" == "true" ]]; then
         conda-build . -c conda-forge --no-test $CONDA_VARIANT_ARG
       fi
     displayName: 'Conda build Bodo'
