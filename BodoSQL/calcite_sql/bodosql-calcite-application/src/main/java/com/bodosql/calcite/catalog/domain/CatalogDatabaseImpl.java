@@ -20,8 +20,7 @@ import org.hibernate.annotations.Cascade;
  * <h1>Representation of a Database</h1>
  *
  * This domain class is a database which stores a map of tables that it contains. It is named but
- * currently we are always defaulting to the same database called "__bodolocal__" as can be seen in
- * {@see com.bodosql.calcite.application.ApplicationContext}.
+ * currently we are always defaulting to the same database called "__bodolocal__".
  *
  * @author bodo
  */
@@ -43,22 +42,6 @@ public class CatalogDatabaseImpl implements CatalogDatabase {
   @Cascade({org.hibernate.annotations.CascadeType.ALL})
   @MapKey(name = "name")
   private Map<String, CatalogTableImpl> databaseTables;
-
-  /*
-  @ManyToOne(fetch = FetchType.EAGER)
-  @JoinColumn(name = "schema_id")
-  private CatalogSchemaImpl schema;
-
-
-  public CatalogSchemaImpl getSchema() {
-  	return schema;
-  }
-
-  public void setSchema(CatalogSchemaImpl schema) {
-  	this.schema = schema;
-  }
-
-  */
 
   /** Empty constructor just sets up an empty HashMap for the tables. */
   public CatalogDatabaseImpl() {
