@@ -5,7 +5,6 @@
 package com.bodosql.calcite.schema;
 
 import com.bodosql.calcite.catalog.domain.CatalogDatabase;
-import com.bodosql.calcite.catalog.domain.CatalogSchema;
 import com.bodosql.calcite.catalog.domain.CatalogTable;
 import java.util.Collection;
 import java.util.HashSet;
@@ -23,16 +22,13 @@ import org.slf4j.LoggerFactory;
 public class BodoSqlSchema implements Schema {
   static final Logger LOGGER = LoggerFactory.getLogger(BodoSqlSchema.class);
 
-  private final CatalogSchema catalogSchema;
   private final CatalogDatabase catalogDatabase;
 
-  public BodoSqlSchema(CatalogSchema catalogSchema) {
-    this.catalogSchema = catalogSchema;
+  public BodoSqlSchema() {
     this.catalogDatabase = null;
   }
 
   public BodoSqlSchema(CatalogDatabase catalogDatabase) {
-    this.catalogSchema = null;
     this.catalogDatabase = catalogDatabase;
   }
 
@@ -112,6 +108,6 @@ public class BodoSqlSchema implements Schema {
   }
 
   private boolean isDatabase() {
-    return (this.catalogSchema == null && this.catalogDatabase != null);
+    return this.catalogDatabase != null;
   }
 }
