@@ -16,7 +16,7 @@ class IcebergParquetReader : public ParquetReader {
      */
     IcebergParquetReader(const char* _conn, const char* _database_schema,
                          const char* _table_name, bool _parallel,
-                         int32_t tot_rows_to_read, PyObject* _dnf_filters,
+                         int64_t tot_rows_to_read, PyObject* _dnf_filters,
                          PyObject* _expr_filters, int32_t* _selected_fields,
                          int32_t num_selected_fields, int32_t* is_nullable,
                          PyObject* _pyarrow_table_schema)
@@ -51,12 +51,14 @@ class IcebergParquetReader : public ParquetReader {
         // ds = bodo.io.iceberg.get_iceberg_pq_dataset(
         //          conn, database_schema, table_name,
         //          pyarrow_table_schema, dnf_filters,
-        //          expr_filters, parallel,
+        //          expr_filters, tot_rows_to_read, parallel,
         //      )
+
         PyObject* ds = PyObject_CallMethod(
-            iceberg_mod, "get_iceberg_pq_dataset", "sssOOOO", this->conn,
+            iceberg_mod, "get_iceberg_pq_dataset", "sssOOOLO", this->conn,
             this->database_schema, this->table_name, this->pyarrow_table_schema,
-            this->dnf_filters, this->expr_filters, PyBool_FromLong(parallel));
+            this->dnf_filters, this->expr_filters, this->tot_rows_to_read,
+            PyBool_FromLong(parallel));
         this->ds_partitioning = Py_None;
         if (ds == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
@@ -123,10 +125,11 @@ class IcebergParquetReader : public ParquetReader {
  */
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             const char* table_name, bool parallel,
-                            int32_t tot_rows_to_read, PyObject* dnf_filters,
+                            int64_t tot_rows_to_read, PyObject* dnf_filters,
                             PyObject* expr_filters, int32_t* selected_fields,
                             int32_t num_selected_fields, int32_t* is_nullable,
-                            PyObject* pyarrow_table_schema) {
+                            PyObject* pyarrow_table_schema,
+                            int64_t* total_rows_out) {
     try {
         IcebergParquetReader reader(conn, database_schema, table_name, parallel,
                                     tot_rows_to_read, dnf_filters, expr_filters,
@@ -134,6 +137,7 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                                     is_nullable, pyarrow_table_schema);
         // initialize reader
         reader.init_iceberg_reader();
+        *total_rows_out = reader.get_total_rows();
         return reader.read();
     } catch (const std::exception& e) {
         // if the error string is "python" this means the C++ exception is

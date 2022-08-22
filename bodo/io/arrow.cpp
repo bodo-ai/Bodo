@@ -19,10 +19,11 @@ table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
 // --------- functions defined in iceberg_parquet_reader.cpp --------
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             const char* table_name, bool parallel,
-                            int32_t tot_rows_to_read, PyObject* dnf_filters,
+                            int64_t tot_rows_to_read, PyObject* dnf_filters,
                             PyObject* expr_filters, int32_t* selected_fields,
                             int32_t num_selected_fields, int32_t* is_nullable,
-                            PyObject* pyarrow_table_schema);
+                            PyObject* pyarrow_table_schema,
+                            int64_t* total_rows_out);
 
 // --------- functions defined in parquet_write.cpp ---------
 int64_t pq_write_py_entry(const char* filename, const table_info* table,

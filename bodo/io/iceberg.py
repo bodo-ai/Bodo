@@ -286,6 +286,7 @@ def get_iceberg_pq_dataset(
     typing_pa_table_schema,
     dnf_filters=None,
     expr_filters=None,
+    tot_rows_to_read=None,
     is_parallel=False,
 ):
     """
@@ -302,7 +303,6 @@ def get_iceberg_pq_dataset(
     'expr_filters' are applied by our Parquet infrastructure.
     'is_parallel' : True if reading in parallel
     """
-
     ev = tracing.Event("get_iceberg_pq_dataset")
 
     comm = MPI.COMM_WORLD
@@ -372,6 +372,8 @@ def get_iceberg_pq_dataset(
                 # partition columns in the parquet files, so we
                 # tell Arrow not to detect partitioning
                 partitioning=None,
+                # Iceberg Limit Pushdown
+                tot_rows_to_read=tot_rows_to_read,
             )
         except BodoError as e:
 

@@ -4554,10 +4554,6 @@ class DistributedPass:
                 # other nodes, array variables shouldn't be used
                 require(not (arr_varnames & {v.name for v in stmt.list_vars()}))
 
-        # Special Handling for Iceberg Nodes that cant handle shape yet
-        if isinstance(io_node, bodo.ir.sql_ext.SqlReader):
-            return read_size, ()
-
         # optimization is possible, replace the total size variable in shape nodes
         require(scope is not None)
         total_len_var = ir.Var(scope, mk_unique_var("total_df_len"), io_node.loc)

@@ -323,7 +323,10 @@ def sql_distributed_run(
     if sql_node.db_type == "iceberg":
         # Pass args to _sql_reader_py with iceberg
         filter_args = extra_args
-    func_text += f"    (table_var, index_var) = _sql_reader_py(sql_request, conn, database_schema, {filter_args})\n"
+
+    # total_rows is used for setting total size variable below
+    func_text += f"    (total_rows, table_var, index_var) = _sql_reader_py(sql_request, conn, database_schema, {filter_args})\n"
+
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     sql_impl = loc_vars["sql_impl"]
@@ -402,6 +405,12 @@ def sql_distributed_run(
         + filter_vars,
     )
     nodes = f_block.body[:-3]
+
+    # Set total size variable if necessary (for limit pushdown, iceberg specific)
+    # value comes from 'total_rows' output of '_sql_reader_py' above
+    if meta_head_only_info:
+        nodes[-3].target = meta_head_only_info[1]
+
     # assign output table
     nodes[-2].target = sql_node.out_vars[0]
     # assign output index array
@@ -832,6 +841,8 @@ def _gen_sql_reader_py(
         func_text += (
             f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
             f'  dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
+            f"  total_rows_np = np.array([0], dtype=np.int64)\n"
+            # Iceberg C++ Parquet Reader
             f"  out_table = iceberg_read(\n"
             f"    unicode_to_utf8(conn),\n"
             f"    unicode_to_utf8(database_schema),\n"
@@ -846,12 +857,20 @@ def _gen_sql_reader_py(
             #     TODO Confirm that we're computing is_nullable correctly
             f"    nullable_cols_arr_{call_id}.ctypes,\n"
             f"    pyarrow_table_schema_{call_id},\n"
+            f"    total_rows_np.ctypes,\n"
             f"  )\n"
             f"  check_and_propagate_cpp_exception()\n"
         )
 
         # Mostly copied over from _gen_pq_reader_py
         # TODO XXX Refactor?
+
+        # Compute number of rows stored on rank for head optimization. See _gen_pq_reader_py
+        func_text += f"  total_rows = total_rows_np[0]\n"
+        if parallel:
+            func_text += f"  local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
+        else:
+            func_text += f"  local_rows = total_rows\n"
 
         # If we aren't loading any column the table is dead
         is_dead_table = not out_used_cols
@@ -860,15 +879,6 @@ def _gen_sql_reader_py(
         py_table_type = TableType(tuple(col_typs))
         if is_dead_table:
             py_table_type = types.none
-
-        # handle index column
-        index_var = "None"
-        if index_column_name is not None:
-            # The index column is defined by the SQLReader to always be placed at the end of the query.
-            # Since we don't support `index_col`` with iceberg yet, we can't test this yet.
-            index_arr_ind = (len(out_used_cols) + 1) if not is_dead_table else 0
-            index_var = f"info_to_array(info_from_table(out_table, {index_arr_ind}), index_col_typ)"
-        func_text += f"  index_var = {index_var}\n"
 
         # Copied from _gen_pq_reader_py and simplified (no partitions or input_file_name)
         # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
@@ -897,12 +907,27 @@ def _gen_sql_reader_py(
                 else:
                     table_idx.append(-1)
             table_idx = np.array(table_idx, dtype=np.int64)
+
         if is_dead_table:
             func_text += "  table_var = None\n"
         else:
             func_text += f"  table_var = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
+            func_text += f"  table_var = set_table_len(table_var, local_rows)\n"
+
+        # Handle index column
+        index_var = "None"
+
+        # Since we don't support `index_col`` with iceberg yet, we can't test this yet.
+        if index_column_name is not None:  # pragma: no cover
+            # The index column is defined by the SQLReader to always be placed at the end of the query.
+            index_arr_ind = (len(out_used_cols) + 1) if not is_dead_table else 0
+            index_var = f"info_to_array(info_from_table(out_table, {index_arr_ind}), index_col_typ)"
+
+        func_text += f"  index_var = {index_var}\n"
+
         func_text += f"  delete_table(out_table)\n"
         func_text += f"  ev.finalize()\n"
+        func_text += "  return (total_rows, table_var, index_var)\n"
 
     elif db_type == "snowflake":
         func_text += f"  ev = bodo.utils.tracing.Event('read_snowflake', {parallel})\n"
@@ -937,6 +962,8 @@ def _gen_sql_reader_py(
             func_text += "  table_var = None\n"
         func_text += "  delete_table(out_table)\n"
         func_text += f"  ev.finalize()\n"
+        func_text += "  return (-1, table_var, index_var)\n"
+
     else:
         if out_used_cols:
             # Indicate which columns to load from the table
@@ -1001,7 +1028,7 @@ def _gen_sql_reader_py(
         else:
             # Dead Table
             func_text += "    table_var = None\n"
-    func_text += "  return (table_var, index_var)\n"
+        func_text += "  return (-1, table_var, index_var)\n"
 
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     glbls.update(
@@ -1035,6 +1062,8 @@ def _gen_sql_reader_py(
                 f"pyarrow_table_schema_{call_id}": pyarrow_table_schema,
                 "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
                 "iceberg_read": _iceberg_read,
+                "get_node_portion": bodo.libs.distributed_api.get_node_portion,
+                "set_table_len": bodo.hiframes.table.set_table_len,
             }
         )
     elif db_type == "snowflake":
@@ -1094,13 +1123,14 @@ _iceberg_read = types.ExternalFunction(
         types.voidptr,
         types.voidptr,
         types.boolean,
-        types.int32,
+        types.int64,
         parquet_predicate_type,  # dnf filters
         parquet_predicate_type,  # expr filters
         types.voidptr,
         types.int32,
         types.voidptr,
         pyarrow_table_schema_type,
+        types.voidptr,
     ),
 )
 
