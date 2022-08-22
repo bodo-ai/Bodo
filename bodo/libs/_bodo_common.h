@@ -32,6 +32,7 @@ size_t get_stats_mi_alloc();
 size_t get_stats_mi_free();
 
 // NOTE: should match CTypeEnum in utils/utils.py
+// NOTE: should match Bodo_CTypes_names in _bodo_common.cpp
 struct Bodo_CTypes {
     enum CTypeEnum {
         INT8 = 0,
@@ -59,12 +60,6 @@ struct Bodo_CTypes {
         _numtypes
     };
 };
-
-static const char* Bodo_CTypes_names[] = {
-    "INT8",        "UINT8",  "INT32",  "UINT32",   "INT64",     "FLOAT32",
-    "FLOAT64",     "UINT64", "INT16",  "UINT16",   "STRING",    "_BOOL",
-    "DECIMAL",     "DATE",   "TIME",   "DATETIME", "TIMEDELTA", "INT128",
-    "LIST_STRING", "LIST",   "STRUCT", "BINARY",   "_numtypes"};
 
 const char* get_name_for_Bodo_CTypes(int enumVal);
 

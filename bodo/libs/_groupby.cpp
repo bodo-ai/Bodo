@@ -6276,7 +6276,7 @@ class GroupbyPipeline {
         // See [BE-3371] for more context.
         hashes = hash_keys_table(in_table, num_keys, SEED_HASH_PARTITION,
                                  is_parallel);
-        size_t nunique_hashes_global;
+        size_t nunique_hashes_global = 0;
         // get estimate of number of unique hashes to guide optimization.
         // if shuffle_before_update=true we are going to shuffle everything
         // first so we don't need statistics of current hashes
@@ -6935,7 +6935,7 @@ class GroupbyPipeline {
      */
     void alloc_init_keys(std::vector<table_info*> from_tables,
                          table_info* out_table) {
-        int64_t key_row;
+        int64_t key_row = 0;
         for (int64_t i = 0; i < num_keys; i++) {
             array_info* key_col = (*from_tables[0])[i];
             array_info* new_key_col;

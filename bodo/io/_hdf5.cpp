@@ -14,21 +14,20 @@ hid_t h5_open(char* file_name, char* mode, int64_t is_parallel);
 hid_t h5_open_dset_or_group_obj(hid_t file_id, char* obj_name);
 int64_t h5_size(hid_t dataset_id, int dim);
 int h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
-                 int64_t is_parallel, void* out, int typ_enum);
+            int64_t is_parallel, void* out, int typ_enum);
 int h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
-                        int64_t* counts, int64_t is_parallel, void* out,
-                        int typ_enum, int64_t* indices, int n_indices);
+                   int64_t* counts, int64_t is_parallel, void* out,
+                   int typ_enum, int64_t* indices, int n_indices);
 int h5_close(hid_t file_id);
-hid_t h5_create_dset(hid_t file_id, char* dset_name, int ndims,
-                          int64_t* counts, int typ_enum);
+hid_t h5_create_dset(hid_t file_id, char* dset_name, int ndims, int64_t* counts,
+                     int typ_enum);
 hid_t h5_create_group(hid_t file_id, char* group_name);
 int h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
-                  int64_t is_parallel, void* out, int typ_enum);
+             int64_t is_parallel, void* out, int typ_enum);
 hid_t get_h5_typ(int typ_enum);
 int64_t h5g_get_num_objs(hid_t file_id);
 void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind);
 void h5g_close(hid_t group_id);
-
 
 PyMODINIT_FUNC PyInit__hdf5(void) {
     PyObject* m;
@@ -38,15 +37,12 @@ PyMODINIT_FUNC PyInit__hdf5(void) {
     m = PyModule_Create(&moduledef);
     if (m == NULL) return NULL;
 
-    PyObject_SetAttrString(m, "h5_open",
-                           PyLong_FromVoidPtr((void*)(&h5_open)));
+    PyObject_SetAttrString(m, "h5_open", PyLong_FromVoidPtr((void*)(&h5_open)));
     PyObject_SetAttrString(
         m, "h5_open_dset_or_group_obj",
         PyLong_FromVoidPtr((void*)(&h5_open_dset_or_group_obj)));
-    PyObject_SetAttrString(m, "h5_size",
-                           PyLong_FromVoidPtr((void*)(&h5_size)));
-    PyObject_SetAttrString(m, "h5_read",
-                           PyLong_FromVoidPtr((void*)(&h5_read)));
+    PyObject_SetAttrString(m, "h5_size", PyLong_FromVoidPtr((void*)(&h5_size)));
+    PyObject_SetAttrString(m, "h5_read", PyLong_FromVoidPtr((void*)(&h5_read)));
     PyObject_SetAttrString(m, "h5_read_filter",
                            PyLong_FromVoidPtr((void*)(&h5_read_filter)));
     PyObject_SetAttrString(m, "h5_close",
@@ -73,10 +69,10 @@ PyMODINIT_FUNC PyInit__hdf5(void) {
     if (!(expr)) {                     \
         std::cerr << msg << std::endl; \
         H5Eprint(H5E_DEFAULT, NULL);   \
+        return -1;                     \
     }
 
 hid_t h5_open(char* file_name, char* mode, int64_t is_parallel) {
-    // printf("h5_open file_name: %s mode:%s\n", file_name, mode);
     hid_t plist_id = H5Pcreate(H5P_FILE_ACCESS);
     CHECK(plist_id != -1, "h5 open property create error");
     herr_t ret = 0;
@@ -85,8 +81,7 @@ hid_t h5_open(char* file_name, char* mode, int64_t is_parallel) {
 
     int num_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
-    if(is_parallel && num_pes>1)
-    {
+    if (is_parallel && num_pes > 1) {
         ret = H5Pset_fapl_mpio(plist_id, MPI_COMM_WORLD, MPI_INFO_NULL);
         CHECK(ret != -1, "h5 open MPI driver set error");
     }
@@ -162,7 +157,7 @@ hid_t get_dset_space_from_range(hid_t dataset_id, int64_t* starts,
 }
 
 int h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
-                 int64_t is_parallel, void* out, int typ_enum) {
+            int64_t is_parallel, void* out, int typ_enum) {
     // printf("h5read ndims:%d size:%d typ:%d\n", ndims, counts[0], typ_enum);
     // fflush(stdout);
     // printf("start %lld end %lld\n", start_ind, end_ind);
@@ -174,8 +169,7 @@ int h5_read(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
     int num_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     hid_t xfer_plist_id = H5P_DEFAULT;
-    if(is_parallel && num_pes>1)
-    {
+    if (is_parallel && num_pes > 1) {
         xfer_plist_id = H5Pcreate(H5P_DATASET_XFER);
         H5Pset_dxpl_mpio(xfer_plist_id, H5FD_MPIO_COLLECTIVE);
     }
@@ -238,8 +232,8 @@ hid_t get_dset_space_from_indices(hid_t dataset_id, int ndims, int64_t* starts,
 }
 
 int h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
-                        int64_t* counts, int64_t is_parallel, void* out,
-                        int typ_enum, int64_t* indices, int n_indices) {
+                   int64_t* counts, int64_t is_parallel, void* out,
+                   int typ_enum, int64_t* indices, int n_indices) {
     //
     // printf("ndim %d starts %d %d %d %d\n", ndims, starts[0], starts[1],
     // starts[2], starts[3]);
@@ -254,8 +248,7 @@ int h5_read_filter(hid_t dataset_id, int ndims, int64_t* starts,
     int num_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     hid_t xfer_plist_id = H5P_DEFAULT;
-    if(is_parallel && num_pes>1)
-    {
+    if (is_parallel && num_pes > 1) {
         xfer_plist_id = H5Pcreate(H5P_DATASET_XFER);
         H5Pset_dxpl_mpio(xfer_plist_id, H5FD_MPIO_COLLECTIVE);
     }
@@ -346,8 +339,8 @@ int h5_close(hid_t file_id) {
     return 0;
 }
 
-hid_t h5_create_dset(hid_t file_id, char* dset_name, int ndims,
-                          int64_t* counts, int typ_enum) {
+hid_t h5_create_dset(hid_t file_id, char* dset_name, int ndims, int64_t* counts,
+                     int typ_enum) {
     // printf("dset_name:%s ndims:%d size:%d typ:%d\n", dset_name, ndims,
     // counts[0], typ_enum);
     // fflush(stdout);
@@ -374,7 +367,7 @@ hid_t h5_create_group(hid_t file_id, char* group_name) {
 }
 
 int h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
-                  int64_t is_parallel, void* out, int typ_enum) {
+             int64_t is_parallel, void* out, int typ_enum) {
     // printf("dset_id:%s ndims:%d size:%d typ:%d\n", dset_id, ndims, counts[0],
     // typ_enum);
     // fflush(stdout);
@@ -389,8 +382,7 @@ int h5_write(hid_t dataset_id, int ndims, int64_t* starts, int64_t* counts,
     int num_pes;
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     hid_t xfer_plist_id = H5P_DEFAULT;
-    if(is_parallel && num_pes>1)
-    {
+    if (is_parallel && num_pes > 1) {
         xfer_plist_id = H5Pcreate(H5P_DATASET_XFER);
         H5Pset_dxpl_mpio(xfer_plist_id, H5FD_MPIO_COLLECTIVE);
     }
@@ -434,7 +426,7 @@ void* h5g_get_objname_by_idx(hid_t file_id, int64_t ind) {
     return outstr;
 }
 
-  void h5g_close(hid_t group_id) { (void)H5Gclose(group_id); }
+void h5g_close(hid_t group_id) { (void)H5Gclose(group_id); }
 
 #undef CHECK
 

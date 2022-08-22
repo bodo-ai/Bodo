@@ -913,6 +913,12 @@ void nested_array_to_c(std::shared_ptr<arrow::Array> array, int64_t* lengths,
     }
 }
 
+// NOTE: This should match Bodo_CTypes in _bodo_common.h
+const char* Bodo_CTypes_names[] = {
+    "INT8",        "UINT8",  "INT32",  "UINT32",   "INT64",     "FLOAT32",
+    "FLOAT64",     "UINT64", "INT16",  "UINT16",   "STRING",    "_BOOL",
+    "DECIMAL",     "DATE",   "TIME",   "DATETIME", "TIMEDELTA", "INT128",
+    "LIST_STRING", "LIST",   "STRUCT", "BINARY",   "_numtypes"};
 /**
  * @brief Get the name for Bodo CTypes object
  *

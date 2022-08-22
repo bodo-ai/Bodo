@@ -123,6 +123,8 @@ else:
     eca_c = ["-g0", "-O3"]
     ela = ["-std=c++17"]
 
+if development_mode:
+    eca.append("-Werror")
 
 MPI_LIBS = ["mpi"]
 H5_CPP_FLAGS = []
@@ -191,7 +193,9 @@ ext_fsspec = Extension(
     include_dirs=ind + np_compile_args["include_dirs"],
     library_dirs=lid,
     define_macros=[],
-    extra_compile_args=eca,
+    # We cannot compile with -Werror yet because _fsspec_reader.cpp
+    # depends on pyfs.cpp which generates a warning.
+    extra_compile_args=[x for x in eca if x != "-Werror"],
     extra_link_args=ela,
     language="c++",
 )
@@ -490,7 +494,9 @@ ext_parquet = Extension(
     libraries=pq_libs + np_compile_args["libraries"] + ["arrow_python"],
     include_dirs=["."] + np_compile_args["include_dirs"] + ind + extra_hash_ind,
     define_macros=[],
-    extra_compile_args=eca,
+    # We cannot compile with -Werror yet because _fsspec_reader.cpp
+    # depends on pyfs.cpp which generates a warning.
+    extra_compile_args=[x for x in eca if x != "-Werror"],
     extra_link_args=ela,
     library_dirs=np_compile_args["library_dirs"] + lid,
 )
@@ -506,7 +512,9 @@ ext_pyfs = Extension(
     ],
     include_dirs=np_compile_args["include_dirs"] + ind,
     define_macros=[],
-    extra_compile_args=eca,
+    # We cannot compile with -Werror yet because pyfs.cpp
+    # generates serveral warnings.
+    extra_compile_args=[x for x in eca if x != "-Werror"],
     extra_link_args=ela,
     library_dirs=lid,
 )
@@ -522,7 +530,9 @@ ext_hdfs_pyarrow = Extension(
     libraries=["arrow", "arrow_python"],
     include_dirs=np_compile_args["include_dirs"] + ind,
     define_macros=[],
-    extra_compile_args=eca,
+    # We cannot compile with -Werror yet because hdfs.cpp
+    # generates serveral warnings.
+    extra_compile_args=[x for x in eca if x != "-Werror"],
     extra_link_args=ela,
     library_dirs=lid,
     language="c++",
