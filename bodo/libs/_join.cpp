@@ -234,8 +234,8 @@ table_info* hash_join_table(
                         (left_table_global_nrows * 10))
                         make_bloom_right = false;
                     static constexpr size_t MAX_BLOOM_SIZE = 100 * 1024 * 1024;
-                    size_t left_cardinality;
-                    size_t right_cardinality;
+                    size_t left_cardinality = 0;
+                    size_t right_cardinality = 0;
                     // We are going to build global bloom filters, and we need
                     // to know how many unique elements we are inserting into
                     // each to set a bloom filter size that has good false
