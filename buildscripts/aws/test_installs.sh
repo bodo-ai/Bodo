@@ -16,6 +16,9 @@ mamba install -y -c conda-forge scikit-learn='1.0.*' gcsfs
 mamba install -y -c conda-forge matplotlib
 mamba install -y -c conda-forge pyspark=3.2 'openjdk=11'
 mamba install -y flake8
+mamba install -y -c conda-forge snowflake-sqlalchemy snowflake-connector-python
+# snowflake connector might upgrade pyarrow, so we revert it back
+mamba install -y -c conda-forge pyarrow=7.0.0
 # cx_oracle: Oracle Database
 # psycopg2: PostgreSQL
 if [ "$RUN_NIGHTLY" != "yes" ]; then
