@@ -252,6 +252,21 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction LEN =
+      new SqlFunction(
+          "LEN",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.BIGINT_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.STRING,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
   public static final SqlFunction LENGTH =
       new SqlFunction(
           "LENGTH",
@@ -406,6 +421,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           INITCAP,
           LTRIM,
           RTRIM,
+          LEN,
           LENGTH);
 
   @Override

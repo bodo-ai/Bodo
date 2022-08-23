@@ -597,6 +597,18 @@ def test_length(bodosql_string_types, spark_info, memory_leak_check):
         sort_output=False,
     )
 
+    query1 = "SELECT LEN(A) as OUT1 FROM table1"
+    spark_query1 = "SELECT LENGTH(A) as OUT1 FROM table1"
+    check_query(
+        query1,
+        bodosql_string_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        equivalent_spark_query=spark_query1,
+    )
+
 
 def test_length_binary(bodosql_binary_types, spark_info, memory_leak_check):
     query = "SELECT LENGTH(A) as OUT1 FROM table1"
@@ -607,6 +619,18 @@ def test_length_binary(bodosql_binary_types, spark_info, memory_leak_check):
         check_names=False,
         check_dtype=False,
         sort_output=False,
+    )
+
+    query1 = "SELECT LEN(A) as OUT1 FROM table1"
+    spark_query1 = "SELECT LENGTH(A) as OUT1 FROM table1"
+    check_query(
+        query1,
+        bodosql_binary_types,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        equivalent_spark_query=spark_query1,
     )
 
 

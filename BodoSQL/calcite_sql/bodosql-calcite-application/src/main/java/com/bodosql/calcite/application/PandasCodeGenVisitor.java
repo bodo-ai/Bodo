@@ -2319,6 +2319,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "CHR":
           case "CHAR_LENGTH":
           case "CHARACTER_LENGTH":
+          case "LEN":
           case "LENGTH":
           case "REVERSE":
           case "LCASE":
