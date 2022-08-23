@@ -10,11 +10,8 @@ fi
 export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
 
-# unit tests
-cd BodoSQL/calcite_sql
-mvn test
-#remain in BodoSQL directory
-cd ..
+# Move to BodoSQL directory
+cd BodoSQL
 
 # needed for AWS tests
 export BODOSQL_PY4J_GATEWAY_PORT="auto"

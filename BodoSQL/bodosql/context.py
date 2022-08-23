@@ -32,9 +32,9 @@ if bodo.get_rank() == 0:
     try:
         ArrayClass = gateway.jvm.java.util.ArrayList
         ColumnTypeClass = (
-            gateway.jvm.com.bodosql.calcite.catalog.domain.CatalogColumnDataType
+            gateway.jvm.com.bodosql.calcite.catalog.domain.BodoSQLColumn.BodoSQLColumnDataType
         )
-        ColumnClass = gateway.jvm.com.bodosql.calcite.catalog.domain.CatalogColumnImpl
+        ColumnClass = gateway.jvm.com.bodosql.calcite.catalog.domain.BodoSQLColumnImpl
         TableClass = gateway.jvm.com.bodosql.calcite.catalog.domain.CatalogTableImpl
         DatabaseClass = (
             gateway.jvm.com.bodosql.calcite.catalog.domain.CatalogDatabaseImpl
@@ -332,7 +332,7 @@ def get_table_type(
                 df_type.data[i], cname, columns_needing_conversion
             )
             dataType = ColumnTypeClass.fromTypeId(type_id)
-            column = ColumnClass(cname, dataType, i)
+            column = ColumnClass(cname, dataType)
             col_arr.add(column)
 
         # To support writing to SQL Databases we register a different output
@@ -364,7 +364,7 @@ def get_param_table_type(table_name, db, param_keys, param_values):
         if is_literal:
             literal_params.append(param_name)
         dataType = ColumnTypeClass.fromTypeId(type_id)
-        paramType = ColumnClass(param_name, dataType, i)
+        paramType = ColumnClass(param_name, dataType)
         param_arr.add(paramType)
 
     if literal_params:

@@ -4,8 +4,8 @@
 
 package com.bodosql.calcite.schema;
 
-import com.bodosql.calcite.catalog.domain.CatalogColumn;
-import com.bodosql.calcite.catalog.domain.CatalogColumnDataType;
+import com.bodosql.calcite.catalog.domain.BodoSQLColumn;
+import com.bodosql.calcite.catalog.domain.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.catalog.domain.CatalogTable;
 import java.util.List;
 import org.apache.calcite.DataContext;
@@ -39,8 +39,8 @@ public class BodoSqlTable implements ProjectableFilterableTable {
   @Override
   public RelDataType getRowType(RelDataTypeFactory rdtf) {
     RelDataTypeFactory.FieldInfoBuilder builder = rdtf.builder();
-    for (CatalogColumn column : catalogTable.getColumns()) {
-      builder.add(column.getColumnName(), convertToSqlType(column.getColumnDataType(), rdtf));
+    for (BodoSQLColumn column : catalogTable.getColumns()) {
+      builder.add(column.getColumnName(), column.convertToSqlType(rdtf));
       builder.nullable(true);
     }
     return builder.build();
@@ -61,7 +61,7 @@ public class BodoSqlTable implements ProjectableFilterableTable {
   }
 
   private RelDataType convertToSqlType(
-      CatalogColumnDataType dataType, RelDataTypeFactory typeFactory) {
+      BodoSQLColumnDataType dataType, RelDataTypeFactory typeFactory) {
     RelDataType temp;
     switch (dataType) {
       case INT8:

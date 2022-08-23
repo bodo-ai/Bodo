@@ -1,8 +1,8 @@
 package com.bodosql.calcite.application.Testing;
 
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
-import com.bodosql.calcite.catalog.domain.CatalogColumnDataType;
-import com.bodosql.calcite.catalog.domain.CatalogColumnImpl;
+import com.bodosql.calcite.catalog.domain.BodoSQLColumn.BodoSQLColumnDataType;
+import com.bodosql.calcite.catalog.domain.BodoSQLColumnImpl;
 import com.bodosql.calcite.catalog.domain.CatalogDatabaseImpl;
 import com.bodosql.calcite.catalog.domain.CatalogTableImpl;
 import com.bodosql.calcite.schema.BodoSqlSchema;
@@ -17,13 +17,13 @@ public class PandasGenTest {
 
     CatalogDatabaseImpl db = new CatalogDatabaseImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
-    CatalogColumnDataType dataType = CatalogColumnDataType.DATETIME;
-    CatalogColumnDataType paramType = CatalogColumnDataType.INT64;
-    CatalogColumnImpl column = new CatalogColumnImpl("A", dataType, 0);
+    BodoSQLColumnDataType dataType = BodoSQLColumnDataType.DATETIME;
+    BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;
+    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataType);
     arr.add(column);
-    CatalogColumnImpl column2 = new CatalogColumnImpl("D", dataType, 0);
+    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataType);
     arr.add(column2);
-    CatalogColumnImpl column3 = new CatalogColumnImpl("C", dataType, 0);
+    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType);
     arr.add(column3);
 
     CatalogTableImpl table = new CatalogTableImpl("table1", db, arr);
@@ -31,9 +31,9 @@ public class PandasGenTest {
 
     arr = new ArrayList();
     arr.add(column);
-    CatalogColumnImpl column4 = new CatalogColumnImpl("B", dataType, 0);
+    BodoSQLColumnImpl column4 = new BodoSQLColumnImpl("B", dataType);
     arr.add(column4);
-    CatalogColumnImpl column5 = new CatalogColumnImpl("C", dataType, 0);
+    BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataType);
     arr.add(column5);
     CatalogTableImpl table2 = new CatalogTableImpl("table2", db, arr);
     db.addTable(table2);
@@ -44,9 +44,9 @@ public class PandasGenTest {
     String paramTableName = "ParamTable";
     arr = new ArrayList();
     arr.add(column);
-    CatalogColumnImpl param1 = new CatalogColumnImpl("B", paramType, 0);
+    BodoSQLColumnImpl param1 = new BodoSQLColumnImpl("B", paramType);
     arr.add(param1);
-    CatalogColumnImpl param2 = new CatalogColumnImpl("cwsfe_21", paramType, 0);
+    BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType);
     arr.add(param2);
     CatalogTableImpl paramTable = new CatalogTableImpl(paramTableName, db, arr);
     db.addTable(paramTable);
