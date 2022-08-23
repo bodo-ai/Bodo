@@ -1,6 +1,7 @@
 package com.bodosql.calcite.catalog.connection;
 
 import com.bodosql.calcite.catalog.domain.*;
+import com.bodosql.calcite.catalog.domain.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.schema.BodoSqlTable;
 import java.sql.*;
 import java.util.*;
@@ -85,17 +86,15 @@ public class SnowflakeCatalogImpl implements SnowflakeCatalog {
     // Passing null for columnNamePattern should match all columns. Although
     // this is not in the public documentation.
     ResultSet tableInfo = metaData.getColumns(catalogName, schemaName, tableName, null);
-    List<CatalogColumnImpl> columns = new ArrayList<>();
-    int columnNum = 0;
+    List<BodoSQLColumnImpl> columns = new ArrayList<>();
     while (tableInfo.next()) {
       // Column name is stored in column 4
       // Data type is stored in column 5
       // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getColumns
       String columnName = tableInfo.getString(4);
-      CatalogColumnDataType type =
-          CatalogColumnDataType.fromJavaSqlType(JDBCType.valueOf(tableInfo.getInt(5)));
-      columns.add(new CatalogColumnImpl(columnName, type, columnNum));
-      columnNum += 1;
+      BodoSQLColumnDataType type =
+          BodoSQLColumnDataType.fromJavaSqlType(JDBCType.valueOf(tableInfo.getInt(5)));
+      columns.add(new BodoSQLColumnImpl(columnName, type));
     }
     // TODO: Cache the same connection if possible
     conn.close();

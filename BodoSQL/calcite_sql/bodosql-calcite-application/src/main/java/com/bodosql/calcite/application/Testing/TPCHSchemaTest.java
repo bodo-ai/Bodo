@@ -1,8 +1,8 @@
 package com.bodosql.calcite.application.Testing;
 
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
-import com.bodosql.calcite.catalog.domain.CatalogColumnDataType;
-import com.bodosql.calcite.catalog.domain.CatalogColumnImpl;
+import com.bodosql.calcite.catalog.domain.BodoSQLColumn.BodoSQLColumnDataType;
+import com.bodosql.calcite.catalog.domain.BodoSQLColumnImpl;
 import com.bodosql.calcite.catalog.domain.CatalogDatabaseImpl;
 import com.bodosql.calcite.catalog.domain.CatalogTableImpl;
 import com.bodosql.calcite.schema.BodoSqlSchema;
@@ -73,115 +73,90 @@ public class TPCHSchemaTest {
     int variable_text = 16;
 
     ArrayList arr = new ArrayList();
-    arr.add(
-        new CatalogColumnImpl("c_custkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(new CatalogColumnImpl("c_name", CatalogColumnDataType.fromTypeId(variable_text), 0));
-    arr.add(new CatalogColumnImpl("c_address", CatalogColumnDataType.fromTypeId(variable_text), 0));
-    arr.add(
-        new CatalogColumnImpl("c_nationkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(new CatalogColumnImpl("c_phone", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("c_acctbal", CatalogColumnDataType.fromTypeId(decimal_type), 0));
-    arr.add(new CatalogColumnImpl("c_mktsegment", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("c_comment", CatalogColumnDataType.fromTypeId(variable_text), 0));
+    arr.add(new BodoSQLColumnImpl("c_custkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("c_name", BodoSQLColumnDataType.fromTypeId(variable_text)));
+    arr.add(new BodoSQLColumnImpl("c_address", BodoSQLColumnDataType.fromTypeId(variable_text)));
+    arr.add(new BodoSQLColumnImpl("c_nationkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("c_phone", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("c_acctbal", BodoSQLColumnDataType.fromTypeId(decimal_type)));
+    arr.add(new BodoSQLColumnImpl("c_mktsegment", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("c_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
     CatalogTableImpl table = new CatalogTableImpl("customer", db, arr);
     db.addTable(table);
     arr = new ArrayList();
+    arr.add(new BodoSQLColumnImpl("o_orderkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("o_custkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("o_orderstatus", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("o_totalprice", BodoSQLColumnDataType.fromTypeId(decimal_type)));
+    arr.add(new BodoSQLColumnImpl("o_orderdate", BodoSQLColumnDataType.fromTypeId(date_type)));
+    arr.add(new BodoSQLColumnImpl("o_orderpriority", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("o_clerk", BodoSQLColumnDataType.fromTypeId(fixed_text)));
     arr.add(
-        new CatalogColumnImpl("o_orderkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(
-        new CatalogColumnImpl("o_custkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(
-        new CatalogColumnImpl("o_orderstatus", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(
-        new CatalogColumnImpl("o_totalprice", CatalogColumnDataType.fromTypeId(decimal_type), 0));
-    arr.add(new CatalogColumnImpl("o_orderdate", CatalogColumnDataType.fromTypeId(date_type), 0));
-    arr.add(
-        new CatalogColumnImpl("o_orderpriority", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("o_clerk", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(
-        new CatalogColumnImpl("o_shippriority", CatalogColumnDataType.fromTypeId(integer_type), 0));
-    arr.add(new CatalogColumnImpl("o_comment", CatalogColumnDataType.fromTypeId(variable_text), 0));
+        new BodoSQLColumnImpl("o_shippriority", BodoSQLColumnDataType.fromTypeId(integer_type)));
+    arr.add(new BodoSQLColumnImpl("o_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
     table = new CatalogTableImpl("orders", db, arr);
     db.addTable(table);
     arr = new ArrayList();
+    arr.add(new BodoSQLColumnImpl("l_orderkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("l_partkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("l_suppkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("l_linenumber", BodoSQLColumnDataType.fromTypeId(integer_type)));
+    arr.add(new BodoSQLColumnImpl("l_quantity", BodoSQLColumnDataType.fromTypeId(decimal_type)));
     arr.add(
-        new CatalogColumnImpl("l_orderkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(
-        new CatalogColumnImpl("l_partkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(
-        new CatalogColumnImpl("l_suppkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(
-        new CatalogColumnImpl("l_linenumber", CatalogColumnDataType.fromTypeId(integer_type), 0));
-    arr.add(new CatalogColumnImpl("l_quantity", CatalogColumnDataType.fromTypeId(decimal_type), 0));
-    arr.add(
-        new CatalogColumnImpl(
-            "l_extendedprice", CatalogColumnDataType.fromTypeId(decimal_type), 0));
-    arr.add(new CatalogColumnImpl("l_discount", CatalogColumnDataType.fromTypeId(decimal_type), 0));
-    arr.add(new CatalogColumnImpl("l_tax", CatalogColumnDataType.fromTypeId(decimal_type), 0));
-    arr.add(new CatalogColumnImpl("l_returnflag", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("l_linestatus", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("l_shipdate", CatalogColumnDataType.fromTypeId(date_type), 0));
-    arr.add(new CatalogColumnImpl("l_commitdate", CatalogColumnDataType.fromTypeId(date_type), 0));
-    arr.add(new CatalogColumnImpl("l_receiptdate", CatalogColumnDataType.fromTypeId(date_type), 0));
-    arr.add(
-        new CatalogColumnImpl("l_shipinstruct", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("l_shipmode", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("l_comment", CatalogColumnDataType.fromTypeId(variable_text), 0));
+        new BodoSQLColumnImpl("l_extendedprice", BodoSQLColumnDataType.fromTypeId(decimal_type)));
+    arr.add(new BodoSQLColumnImpl("l_discount", BodoSQLColumnDataType.fromTypeId(decimal_type)));
+    arr.add(new BodoSQLColumnImpl("l_tax", BodoSQLColumnDataType.fromTypeId(decimal_type)));
+    arr.add(new BodoSQLColumnImpl("l_returnflag", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("l_linestatus", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("l_shipdate", BodoSQLColumnDataType.fromTypeId(date_type)));
+    arr.add(new BodoSQLColumnImpl("l_commitdate", BodoSQLColumnDataType.fromTypeId(date_type)));
+    arr.add(new BodoSQLColumnImpl("l_receiptdate", BodoSQLColumnDataType.fromTypeId(date_type)));
+    arr.add(new BodoSQLColumnImpl("l_shipinstruct", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("l_shipmode", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("l_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
     table = new CatalogTableImpl("lineitem", db, arr);
     db.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new CatalogColumnImpl("n_nationkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(new CatalogColumnImpl("n_name", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(
-        new CatalogColumnImpl("n_regionkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(new CatalogColumnImpl("n_comment", CatalogColumnDataType.fromTypeId(variable_text), 0));
+    arr.add(new BodoSQLColumnImpl("n_nationkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("n_name", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("n_regionkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("n_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
     table = new CatalogTableImpl("nation", db, arr);
     db.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new CatalogColumnImpl("r_regionkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(new CatalogColumnImpl("r_name", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("r_comment", CatalogColumnDataType.fromTypeId(variable_text), 0));
+    arr.add(new BodoSQLColumnImpl("r_regionkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("r_name", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("r_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
     table = new CatalogTableImpl("region", db, arr);
     db.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new CatalogColumnImpl("s_suppkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(new CatalogColumnImpl("s_name", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("s_address", CatalogColumnDataType.fromTypeId(variable_text), 0));
-    arr.add(
-        new CatalogColumnImpl("s_nationkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(new CatalogColumnImpl("s_phone", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("s_acctbal", CatalogColumnDataType.fromTypeId(decimal_type), 0));
-    arr.add(new CatalogColumnImpl("s_comment", CatalogColumnDataType.fromTypeId(variable_text), 0));
+    arr.add(new BodoSQLColumnImpl("s_suppkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("s_name", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("s_address", BodoSQLColumnDataType.fromTypeId(variable_text)));
+    arr.add(new BodoSQLColumnImpl("s_nationkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("s_phone", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("s_acctbal", BodoSQLColumnDataType.fromTypeId(decimal_type)));
+    arr.add(new BodoSQLColumnImpl("s_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
     table = new CatalogTableImpl("supplier", db, arr);
     db.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new CatalogColumnImpl("ps_partkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(
-        new CatalogColumnImpl("ps_suppkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(
-        new CatalogColumnImpl("ps_availqty", CatalogColumnDataType.fromTypeId(integer_type), 0));
-    arr.add(
-        new CatalogColumnImpl("ps_supplycost", CatalogColumnDataType.fromTypeId(decimal_type), 0));
-    arr.add(
-        new CatalogColumnImpl("ps_comment", CatalogColumnDataType.fromTypeId(variable_text), 0));
+    arr.add(new BodoSQLColumnImpl("ps_partkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("ps_suppkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("ps_availqty", BodoSQLColumnDataType.fromTypeId(integer_type)));
+    arr.add(new BodoSQLColumnImpl("ps_supplycost", BodoSQLColumnDataType.fromTypeId(decimal_type)));
+    arr.add(new BodoSQLColumnImpl("ps_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
     table = new CatalogTableImpl("partsupp", db, arr);
     db.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new CatalogColumnImpl("p_partkey", CatalogColumnDataType.fromTypeId(identifer_type), 0));
-    arr.add(new CatalogColumnImpl("p_name", CatalogColumnDataType.fromTypeId(variable_text), 0));
-    arr.add(new CatalogColumnImpl("p_mfgr", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("p_brand", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(new CatalogColumnImpl("p_type", CatalogColumnDataType.fromTypeId(variable_text), 0));
-    arr.add(new CatalogColumnImpl("p_size", CatalogColumnDataType.fromTypeId(integer_type), 0));
-    arr.add(new CatalogColumnImpl("p_container", CatalogColumnDataType.fromTypeId(fixed_text), 0));
-    arr.add(
-        new CatalogColumnImpl("p_retailprice", CatalogColumnDataType.fromTypeId(decimal_type), 0));
-    arr.add(new CatalogColumnImpl("p_comment", CatalogColumnDataType.fromTypeId(variable_text), 0));
+    arr.add(new BodoSQLColumnImpl("p_partkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
+    arr.add(new BodoSQLColumnImpl("p_name", BodoSQLColumnDataType.fromTypeId(variable_text)));
+    arr.add(new BodoSQLColumnImpl("p_mfgr", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("p_brand", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("p_type", BodoSQLColumnDataType.fromTypeId(variable_text)));
+    arr.add(new BodoSQLColumnImpl("p_size", BodoSQLColumnDataType.fromTypeId(integer_type)));
+    arr.add(new BodoSQLColumnImpl("p_container", BodoSQLColumnDataType.fromTypeId(fixed_text)));
+    arr.add(new BodoSQLColumnImpl("p_retailprice", BodoSQLColumnDataType.fromTypeId(decimal_type)));
+    arr.add(new BodoSQLColumnImpl("p_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
     table = new CatalogTableImpl("part", db, arr);
     db.addTable(table);
 
