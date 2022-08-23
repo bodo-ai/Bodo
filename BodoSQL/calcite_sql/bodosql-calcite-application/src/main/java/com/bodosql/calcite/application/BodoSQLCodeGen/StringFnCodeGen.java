@@ -44,6 +44,8 @@ public class StringFnCodeGen {
     equivalentPandasMethodMapColumns.put("CHAR_LENGTH", "str.len");
     equivalentFnMapScalars.put("LENGTH", "bodosql.libs.generated_lib.sql_null_checking_len");
     equivalentPandasMethodMapColumns.put("LENGTH", "str.len");
+    equivalentFnMapScalars.put("LEN", "bodosql.libs.generated_lib.sql_null_checking_len");
+    equivalentPandasMethodMapColumns.put("LEN", "str.len");
     equivalentFnMapScalars.put(
         "CHARACTER_LENGTH", "bodosql.libs.generated_lib.sql_null_checking_len");
     equivalentPandasMethodMapColumns.put("CHARACTER_LENGTH", "str.len");

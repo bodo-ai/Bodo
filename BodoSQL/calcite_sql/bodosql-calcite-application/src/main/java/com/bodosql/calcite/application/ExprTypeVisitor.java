@@ -51,6 +51,7 @@ public class ExprTypeVisitor {
           "CHAR_LENGTH",
           "CHARACTER_LENGTH",
           "LENGTH",
+          "LEN",
           "REVERSE",
           "LCASE",
           "UCASE",
