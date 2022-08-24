@@ -40,7 +40,7 @@ ENV PATH /root/miniconda3/bin/:${PATH}
 #
 RUN conda create -n BODODEV numpy scipy pandas=${BODO_PD_VERSION:-'1.4.*'} boost-cpp=1.74.0 cmake h5py mpich mpi 'gcc_linux-64>=9' 'gxx_linux-64>=9' python=3.9 -c conda-forge
 RUN conda install -n BODODEV python hdf5='1.10.*=*mpich*' -c conda-forge
-RUN conda install -n BODODEV python pyarrow=7.0.0 fsspec>=2021.09 -c conda-forge
+RUN conda install -n BODODEV python pyarrow=8.0.0 fsspec>=2021.09 -c conda-forge
 RUN conda install -n BODODEV python numba=0.55.1 -c conda-forge
 RUN conda install -v -n BODODEV python nomkl numpy -c conda-forge
 RUN conda install -v -n BODODEV scikit-learn='1.0.*' -c conda-forge

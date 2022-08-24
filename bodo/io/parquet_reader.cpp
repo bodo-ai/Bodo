@@ -171,7 +171,7 @@ PyObject* ParquetReader::get_dataset() {
 std::shared_ptr<arrow::Schema> ParquetReader::get_schema(PyObject* dataset) {
     PyObject* schema_py = PyObject_GetAttrString(dataset, "schema");
     // see
-    // https://arrow.apache.org/docs/7.0/python/integration/extending.html?highlight=unwrap_schema
+    // https://arrow.apache.org/docs/8.0/python/integration/extending.html?highlight=unwrap_schema
     auto schema_ = arrow::py::unwrap_schema(schema_py).ValueOrDie();
     // calculate selected columns (not fields)
     int col = 0;

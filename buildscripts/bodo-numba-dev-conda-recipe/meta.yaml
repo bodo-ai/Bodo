@@ -29,7 +29,7 @@ requirements:
     - cython
     - pandas >=1.3.*,<1.5
     - fsspec >=2021.09
-    - pyarrow =7.0.0
+    - pyarrow =8.0.0
     - boost-cpp =1.74.0
     # We suport both 1.10 and 1.12. Since
     # M1 only support 1.12 with Python 3.10.
@@ -47,7 +47,7 @@ requirements:
     - {{ pin_compatible('numpy') }}
     - pandas >=1.3.*,<1.5
     - fsspec >=2021.09
-    - pyarrow =7.0.0
+    - pyarrow =8.0.0
     - numba
     - openjdk >=9.0,<12
     - sqlalchemy
