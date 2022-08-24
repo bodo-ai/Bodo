@@ -189,7 +189,7 @@ static int get_license_platform(int &license_type,
     int instance_id_len;
     if (license_type == PLATFORM_LIC_TYPE_AWS)
         instance_id_len = EC2_INSTANCE_ID_LEN;
-    else if (license_type == PLATFORM_LIC_TYPE_AZURE)
+    else  // AZURE (guaranteed due to the earlier check)
         instance_id_len = AZURE_INSTANCE_ID_LEN;
 
     lic_instance_id.assign(data.begin() + sizeof(int),
@@ -484,7 +484,10 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     if (m == NULL) return NULL;
 
 #if defined(CHECK_LICENSE_PLATFORM)
-    if (!verify_license_platform()) {
+    int num_pes_plat;
+    MPI_Comm_size(MPI_COMM_WORLD, &num_pes_plat);
+
+    if ((num_pes_plat > FREE_MAX_CORES) && !verify_license_platform()) {
         PyErr_SetString(PyExc_RuntimeError, "Invalid license\n");
         return NULL;
     }
