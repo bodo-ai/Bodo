@@ -68,6 +68,7 @@ def test_case_agg(bodosql_string_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 

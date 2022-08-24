@@ -7,8 +7,8 @@ be seen in the TPC-H document,
 http://tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.18.0.pdf. For now we set most
 of these variables according to the reference query.
 """
-import pytest
 
+import pytest
 from bodosql.tests.utils import check_query, shrink_data
 
 
@@ -113,6 +113,7 @@ def test_tpch_q14(tpch_data, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         spark_dataframe_dict=spark_df_dict,
+        is_out_distributed=False,
     )
 
 
@@ -251,6 +252,7 @@ def test_tpch_q17(tpch_data, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         spark_dataframe_dict=spark_df_dict,
+        is_out_distributed=False,
     )
 
 
@@ -355,6 +357,7 @@ def test_tpch_q19(tpch_data, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         spark_dataframe_dict=spark_df_dict,
+        is_out_distributed=False,
     )
 
 

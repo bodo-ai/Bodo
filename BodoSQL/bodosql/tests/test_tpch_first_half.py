@@ -8,7 +8,6 @@ http://tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.18.0.pdf. For now we 
 of these variables according to the reference query.
 """
 import pytest
-
 from bodosql.tests.utils import check_query
 
 
@@ -230,6 +229,7 @@ def test_tpch_q6(tpch_data, spark_info, memory_leak_check):
         bodosql_df_dict,
         spark_info,
         spark_dataframe_dict=spark_df_dict,
+        is_out_distributed=False,
     )
 
 

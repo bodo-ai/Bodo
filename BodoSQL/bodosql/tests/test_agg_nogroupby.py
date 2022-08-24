@@ -36,6 +36,7 @@ def test_agg_numeric(
         spark_info,
         check_dtype=False,
         check_names=False,
+        is_out_distributed=False,
     )
 
 
@@ -58,6 +59,7 @@ def test_aliasing_agg_numeric(
         spark_info,
         check_dtype=False,
         check_names=False,
+        is_out_distributed=False,
     )
 
 
@@ -106,6 +108,7 @@ def test_count_nullable_numeric(
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
@@ -113,6 +116,7 @@ def test_count_nullable_numeric(
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 
@@ -125,6 +129,7 @@ def test_count_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
@@ -132,6 +137,7 @@ def test_count_datetime(bodosql_datetime_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 
@@ -181,6 +187,7 @@ def test_count_string(bodosql_string_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
@@ -188,6 +195,7 @@ def test_count_string(bodosql_string_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 
@@ -199,6 +207,7 @@ def test_count_binary(bodosql_binary_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
@@ -206,6 +215,7 @@ def test_count_binary(bodosql_binary_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 
@@ -218,6 +228,7 @@ def test_count_numeric_alias(bodosql_numeric_types, spark_info, memory_leak_chec
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
     check_query(
         "SELECT COUNT(*) as alias FROM table1",
@@ -225,6 +236,7 @@ def test_count_numeric_alias(bodosql_numeric_types, spark_info, memory_leak_chec
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 
@@ -272,6 +284,7 @@ def test_max_interval_types(bodosql_interval_types, spark_info, memory_leak_chec
         spark_info,
         check_names=False,
         convert_columns_timedelta=["output"],
+        is_out_distributed=False,
     )
 
 
@@ -339,6 +352,7 @@ def test_having(bodosql_numeric_types, comparison_ops, spark_info, memory_leak_c
         spark_info,
         check_dtype=False,
         check_names=False,
+        is_out_distributed=False,
     )
 
 
@@ -379,6 +393,7 @@ def test_having_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
+        is_out_distributed=False,
     )
 
 
@@ -458,4 +473,5 @@ def test_any_value(query, spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
         equivalent_spark_query=equivalent_query,
+        is_out_distributed=False,
     )

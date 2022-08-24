@@ -78,6 +78,7 @@ def test_sum_arith_select(bodosql_numeric_types, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
+        is_out_distributed=False,
     )
 
 

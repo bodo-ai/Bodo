@@ -29,7 +29,9 @@ def test_multicol_pivot(basic_df, spark_info):
         FOR (A, B) IN ((1, 4) as col1, (2, 5) as col2)
     )
     """
-    check_query(query, basic_df, spark_info, check_dtype=False)
+    check_query(
+        query, basic_df, spark_info, check_dtype=False, is_out_distributed=False
+    )
 
 
 # TODO: fix memory leak issues with groupby apply, see [BS-530/BE-947]
@@ -61,4 +63,6 @@ def test_multicol_null_pivot(basic_df, spark_info):
         FOR (A, B) IN ((1, 4) as col1, (2, 15) as col2)
     )
     """
-    check_query(query, basic_df, spark_info, convert_float_nan=True)
+    check_query(
+        query, basic_df, spark_info, convert_float_nan=True, is_out_distributed=False
+    )

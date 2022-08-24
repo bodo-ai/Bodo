@@ -5,7 +5,6 @@
 """
 import pandas as pd
 import pytest
-
 from bodosql.tests.utils import check_plan_length, check_query
 
 
@@ -85,6 +84,7 @@ def test_aliasing_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
         bodosql_numeric_types,
         spark_info,
         check_dtype=False,
+        is_out_distributed=False,
     )
     check_query(
         "select sum(B) as testCol1, sum(C) as testCol2 from table1 group by A",

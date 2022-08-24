@@ -99,6 +99,7 @@ def check_query(
     convert_nullable_bodosql=True,
     use_table_format=None,
     use_dict_encoded_strings=None,
+    is_out_distributed=True,
 ):
     """
     Evaluates the correctness of a BodoSQL query by comparing SparkSQL
@@ -228,6 +229,8 @@ def check_query(
         use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
             format for testing.
             If None, tests both formats if input arguments have string arrays.
+        is_out_distributed: flag to whether gather the output before equality checking.
+            Default True.
     """
     # Determine which bodo versions to run
     if only_python:
@@ -385,6 +388,7 @@ def check_query(
         convert_nullable_bodosql,
         use_table_format,
         use_dict_encoded_strings,
+        is_out_distributed=is_out_distributed,
     )
 
     result = dict()
@@ -426,6 +430,7 @@ def check_query_jit(
     convert_nullable_bodosql,
     use_table_format,
     use_dict_encoded_strings,
+    is_out_distributed,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -503,6 +508,7 @@ def check_query_jit(
                 expected_output,
                 optimize_calcite_plan,
                 convert_nullable_bodosql,
+                is_out_distributed,
             )
         if run_jit_1DVar:
             check_query_jit_1DVar(
@@ -515,6 +521,7 @@ def check_query_jit(
                 expected_output,
                 optimize_calcite_plan,
                 convert_nullable_bodosql,
+                is_out_distributed,
             )
     finally:
         bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = saved_TABLE_FORMAT_THRESHOLD
@@ -537,6 +544,7 @@ def check_query_jit(
             convert_nullable_bodosql,
             use_table_format=False,
             use_dict_encoded_strings=use_dict_encoded_strings,
+            is_out_distributed=is_out_distributed,
         )
 
     # test dict-encoded string type if there is any string array in input
@@ -561,6 +569,7 @@ def check_query_jit(
             # use_table_format=False above so we just test use_table_format=True for it
             use_table_format=True if use_table_format is None else use_table_format,
             use_dict_encoded_strings=True,
+            is_out_distributed=is_out_distributed,
         )
 
 
@@ -655,7 +664,7 @@ def check_query_jit_seq(
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
     """
     bodosql_output = _run_jit_query(
-        query, dataframe_dict, named_params, InputDist.REP, optimize_calcite_plan
+        query, dataframe_dict, named_params, InputDist.REP, optimize_calcite_plan, False
     )
     _check_query_equal(
         bodosql_output,
@@ -679,6 +688,7 @@ def check_query_jit_1D(
     expected_output,
     optimize_calcite_plan,
     convert_nullable_bodosql,
+    is_out_distributed,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -712,15 +722,17 @@ def check_query_jit_1D(
         named_params,
         InputDist.OneD,
         optimize_calcite_plan,
+        is_out_distributed,
     )
-    bodosql_output = bodo.gatherv(bodosql_output)
+    if is_out_distributed:
+        bodosql_output = bodo.gatherv(bodosql_output)
     _check_query_equal(
         bodosql_output,
         expected_output,
         check_names,
         check_dtype,
         sort_output,
-        True,
+        is_out_distributed,
         "1D Parallel JIT Test Failed",
         convert_nullable_bodosql,
     )
@@ -736,6 +748,7 @@ def check_query_jit_1DVar(
     expected_output,
     optimize_calcite_plan,
     convert_nullable_bodosql,
+    is_out_distributed,
 ):
     """
     Evaluates the correctness of a BodoSQL query against expected_output.
@@ -769,22 +782,29 @@ def check_query_jit_1DVar(
         named_params,
         InputDist.OneDVar,
         optimize_calcite_plan,
+        is_out_distributed,
     )
-    bodosql_output = bodo.gatherv(bodosql_output)
+    if is_out_distributed:
+        bodosql_output = bodo.gatherv(bodosql_output)
     _check_query_equal(
         bodosql_output,
         expected_output,
         check_names,
         check_dtype,
         sort_output,
-        True,
+        is_out_distributed,
         "1DVar Parallel JIT Test Failed",
         convert_nullable_bodosql,
     )
 
 
 def _run_jit_query(
-    query, dataframe_dict, named_params, input_dist, optimize_calcite_plan
+    query,
+    dataframe_dict,
+    named_params,
+    input_dist,
+    optimize_calcite_plan,
+    is_out_distributed,
 ):
     """
     Helper function to generate and run a JIT based BodoSQL query with a given
@@ -854,8 +874,8 @@ def _run_jit_query(
         func,
         all_args_distributed_block=all_args_distributed_block,
         all_args_distributed_varlength=all_args_distributed_varlength,
-        all_returns_distributed=can_be_dist,
-        returns_maybe_distributed=can_be_dist,
+        all_returns_distributed=(is_out_distributed and can_be_dist),
+        returns_maybe_distributed=(is_out_distributed and can_be_dist),
         args_maybe_distributed=can_be_dist,
     )(*args)
     return bodosql_output
