@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Class information for DataFrame iterators returned by pd.read_csv. This is used
 to handle situations in which pd.read_csv is used to return chunks with separate

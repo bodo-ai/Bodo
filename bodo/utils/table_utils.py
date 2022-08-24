@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """File containing utility functions for supporting DataFrame operations with Table Format."""
 
 from collections import defaultdict

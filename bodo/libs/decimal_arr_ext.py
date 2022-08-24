@@ -1,4 +1,4 @@
-# Copyright (C) 2020 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Decimal array corresponding to Arrow Decimal128Array type.
 It is similar to Spark's DecimalType. From Spark's docs:
 'The DecimalType must have fixed precision (the maximum total number of digits) and

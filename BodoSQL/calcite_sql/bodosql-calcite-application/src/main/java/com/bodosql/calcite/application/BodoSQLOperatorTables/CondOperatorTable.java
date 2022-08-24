@@ -291,6 +291,13 @@ public class CondOperatorTable implements SqlOperatorTable {
           // TODO: Add a proper category
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlBasicAggFunction CONDITIONAL_CHANGE_EVENT =
+      SqlBasicAggFunction.create(
+          "CONDITIONAL_CHANGE_EVENT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER,
+          OperandTypes.ANY);
+
   public static final SqlBasicAggFunction COUNT_IF =
       SqlBasicAggFunction.create(
           "COUNT_IF", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.BOOLEAN);
@@ -298,6 +305,7 @@ public class CondOperatorTable implements SqlOperatorTable {
   private List<SqlOperator> functionList =
       Arrays.asList(
           COUNT_IF,
+          CONDITIONAL_CHANGE_EVENT,
           REGR_VALX,
           REGR_VALY,
           IF_FUNC,

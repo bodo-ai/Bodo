@@ -1,13 +1,11 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Measure performance of various operations that uses the unordered_map/unordered_set
 """
-import pandas as pd
-import numpy as np
-import bodo
 import random
-import time
-import string
-import pytest
+
+import numpy as np
+import pandas as pd
+
 from bodo.tests.utils import check_timing_func
 
 

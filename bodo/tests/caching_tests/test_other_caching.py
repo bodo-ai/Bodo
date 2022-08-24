@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import logging
 
 import pandas as pd
@@ -243,14 +243,12 @@ def test_caching_version_check(is_cached, memory_leak_check):
         except Exception as e:
             passed = 0
             print(e)
-        
+
         n_passed = reduce_sum(passed)
         assert n_passed == bodo.get_size()
 
         bodo.barrier()
 
-
-        
     # second pass
     else:
         impl(1)

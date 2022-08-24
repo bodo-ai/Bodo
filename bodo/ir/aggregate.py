@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the groupby"""
 import ctypes
 import operator

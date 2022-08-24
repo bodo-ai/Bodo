@@ -1,10 +1,11 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     Library of BodoSQL functions used for performing "AND" and "OR" operations involving potentially null values
 """
 
-import bodo
 from numba import generated_jit
+
+import bodo
 
 
 @generated_jit(nopython=True)

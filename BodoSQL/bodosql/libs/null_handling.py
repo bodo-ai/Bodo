@@ -1,10 +1,11 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     Library of BodoSQL functions used for performing operations on potentially null Values
 """
-import bodo
 from numba import generated_jit
 from numba.extending import register_jitable
+
+import bodo
 
 
 @generated_jit(nopython=True)

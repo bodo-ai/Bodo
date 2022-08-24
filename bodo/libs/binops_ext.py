@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """ Implementation of binary operators for the different types.
     Currently implemented operators:
         arith: add, sub, mul, truediv, floordiv, mod, pow
@@ -20,7 +20,6 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_type,
     datetime_timedelta_type,
 )
-from bodo.hiframes.time_ext import TimeType
 from bodo.hiframes.datetime_timedelta_ext import (
     datetime_datetime_type,
     datetime_timedelta_array_type,
@@ -40,6 +39,7 @@ from bodo.hiframes.pd_offsets_ext import (
 )
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.hiframes.series_impl import SeriesType
+from bodo.hiframes.time_ext import TimeType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type

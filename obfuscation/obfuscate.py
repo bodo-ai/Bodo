@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (C) 2020 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 """The main obfuscation script. It converts a python file to a harder to read version
 by renaming variables.

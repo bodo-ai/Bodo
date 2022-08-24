@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Array implementation for binary (bytes) objects, which are usually immutable.
 It is equivalent to string array, except that it stores a 'bytes' object for each
 element instead of 'str'.

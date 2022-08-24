@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implements array operations for usage by DataFrames and Series
 such as count and max.

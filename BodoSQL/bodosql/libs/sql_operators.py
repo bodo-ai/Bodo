@@ -1,12 +1,13 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     Library of BodoSQL operators that don't have a Python equivalent
 """
 
-import bodo
 import pandas as pd
 from numba import generated_jit
 from numba.extending import overload
+
+import bodo
 
 
 def sql_null_equal_column(arg0, arg1):

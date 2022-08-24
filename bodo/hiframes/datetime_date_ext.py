@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Numba extension support for datetime.date objects and their arrays.
 """
 import datetime
@@ -708,7 +708,9 @@ def box_datetime_date_array(typ, val, c):
 @intrinsic
 def init_datetime_date_array(typingctx, data, nulls=None):
     """Create a DatetimeDateArrayType with provided data values."""
-    assert data == types.Array(types.int64, 1, "C") or data == types.Array(types.NPDatetime("ns"), 1, "C")
+    assert data == types.Array(types.int64, 1, "C") or data == types.Array(
+        types.NPDatetime("ns"), 1, "C"
+    )
     assert nulls == types.Array(types.uint8, 1, "C")
 
     def codegen(context, builder, signature, args):
@@ -915,7 +917,7 @@ def datetime_arr_nbytes_overload(A):
 
 
 def create_cmp_op_overload(op):
-    """ create overload function for comparison operators with datetime_date_type. """
+    """create overload function for comparison operators with datetime_date_type."""
 
     def overload_date_cmp(lhs, rhs):
         if lhs == datetime_date_type and rhs == datetime_date_type:

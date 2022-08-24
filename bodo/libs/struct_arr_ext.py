@@ -1,4 +1,4 @@
-# Copyright (C) 2020 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Array implementation for structs of values.
 Corresponds to Spark's StructType: https://spark.apache.org/docs/latest/sql-reference.html
 Corresponds to Arrow's Struct arrays: https://arrow.apache.org/docs/format/Columnar.html

@@ -1,9 +1,10 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     Library of BodoSQL functions used to emulate MYSQL's ntile function
 """
-import bodo
 import numpy as np
+
+import bodo
 
 
 # pythonization of sparks ntile algorithm found at:

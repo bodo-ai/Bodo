@@ -1,4 +1,4 @@
-# Copyright (C) 2020 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests of series.map and dataframe.apply used for parity
 with pyspark.sql.functions that operation on maps as
@@ -11,7 +11,6 @@ and map array types, as both are represented with dictionaries
 in Python.
 """
 
-import numpy as np
 import pandas as pd
 import pytest
 

@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """CSR Matrix data type implementation for scipy.sparse.csr_matrix
 """
 

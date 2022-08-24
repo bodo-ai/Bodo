@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test Bodo's array kernel utilities for BodoSQL miscellaneous functions
 """
 
@@ -658,6 +658,153 @@ def test_regr_valxy(args, memory_leak_check):
         py_output=regr_valy_answer,
         check_dtype=False,
         reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(
+                    [10, 10, 10, 11, 15, 15, 15, 16, 16, 16, 19, 19],
+                    dtype=pd.UInt8Dtype(),
+                ),
+                pd.Series([0, 0, 0, 1, 2, 2, 2, 3, 3, 3, 4, 4]),
+            ),
+            id="uint8_sorted_no_null_with_duplicates",
+        ),
+        pytest.param(
+            (
+                pd.Series([0, 10, 30, 31, 40, 41, 50, 89], dtype=pd.Int8Dtype()),
+                pd.Series([0, 1, 2, 3, 4, 5, 6, 7]),
+            ),
+            id="int8_sorted_no_null_no_duplicates",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [None, None, None, None, 25, 25, 50, 75, 75, 75, 100],
+                    dtype=pd.UInt16Dtype(),
+                ),
+                pd.Series([0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 3]),
+            ),
+            id="uint16_sorted_with_null_with_duplicates",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([None, 100, 200, 300, 400, 500], dtype=pd.Int16Dtype()),
+                pd.Series([0, 0, 1, 2, 3, 4]),
+            ),
+            id="int16_sorted_with_null_no_duplicates",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [25, 25, 50, 50, 50, 75, 25, 75, 75, 75, 50, 50],
+                    dtype=pd.UInt32Dtype(),
+                ),
+                pd.Series([0, 0, 1, 1, 1, 2, 3, 4, 4, 4, 5, 5]),
+            ),
+            id="uint32_unsorted_no_null_with_duplicates",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([100, 0, 75, 25, 50], dtype=pd.Int32Dtype()),
+                pd.Series([0, 1, 2, 3, 4]),
+            ),
+            id="int32_unsorted_no_null_no_duplicates",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [None, None, None, None, 64, None, 2, 2, 4, None, None, 4, 8],
+                    dtype=pd.UInt64Dtype(),
+                ),
+                pd.Series([0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 2, 2, 3]),
+            ),
+            id="uint64_unsorted_with_null_with_duplicates",
+        ),
+        pytest.param(
+            (
+                pd.Series([13, 2, 7, None, 5, 3], dtype=pd.Int64Dtype()),
+                pd.Series([0, 1, 2, 2, 3, 4]),
+            ),
+            id="int64_unsorted_with_null_no_duplicates",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([None, None, None, None, None, 42], dtype=pd.Int32Dtype()),
+                pd.Series([0] * 6),
+            ),
+            id="int32_almost_all_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series([None] * 6, dtype=pd.Int32Dtype()),
+                pd.Series([0] * 6),
+            ),
+            id="int32_all_null",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [None, "A", None, None, None, "A", None] + list("AAACCCCBAA")
+                ),
+                pd.Series([0] * 10 + [1, 1, 1, 1, 2, 3, 3]),
+            ),
+            id="string_unsorted_with_null_with_duplicates",
+        ),
+        pytest.param(
+            (
+                pd.Series([1.0, None, 2.0, None, 4.0, None, 3.0]),
+                pd.Series([0, 0, 1, 1, 2, 2, 3]),
+            ),
+            id="float_unsorted_with_null_with_duplicates",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        None if y == "n" else pd.Timestamp(f"201{y}")
+                        for y in "nn08n000n08155n"
+                    ]
+                ),
+                pd.Series([0, 0, 0, 1, 1, 2, 2, 2, 2, 2, 3, 4, 5, 5, 5]),
+            ),
+            id="timestamp_unsorted_with_null_with_duplicates",
+        ),
+        pytest.param(
+            (
+                pd.Series([True, False, False, False, True, False, None, False, True]),
+                pd.Series([0, 1, 1, 1, 2, 3, 3, 3, 4]),
+            ),
+            id="bool_unsorted_with_null_with_duplicates",
+        ),
+    ],
+)
+def test_change_event(args):
+    def impl(S):
+        return bodo.libs.bodosql_window_agg_array_kernels.change_event(S)
+
+    S, answer = args
+    check_func(
+        impl,
+        (S,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        # For now, only works sequentially because it can only be used inside
+        # of a Window funciton with a partition
+        dist_test=False,
     )
 
 

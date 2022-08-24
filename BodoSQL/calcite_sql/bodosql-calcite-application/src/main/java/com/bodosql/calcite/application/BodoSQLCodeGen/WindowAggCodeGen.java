@@ -474,6 +474,21 @@ public class WindowAggCodeGen {
               ascendingList,
               NAPositionList),
           returnedDfOutputCols);
+    } else if (aggName == "CONDITIONAL_CHANGE_EVENT") {
+      // Similarly, we have a helper function that we can use for CONDITIONAL_CHANGE_EVENT
+      assert argsListList.size() == 1;
+      WindowedAggregationArgument arg0 = argsListList.get(0).get(0);
+      assert arg0.isDfCol();
+      String arg0ColName = arg0.getExprString();
+      return new Pair<>(
+          generateChangeEventFn(
+              funcText,
+              arg0ColName,
+              returnedDfOutputCols,
+              sortByCols,
+              ascendingList,
+              NAPositionList),
+          returnedDfOutputCols);
     } else if (agg == SqlKind.COUNT && argsListList.get(0).size() == 0) {
       // For COUNT(*), we can manually calculate the length of the window, and
       // avoid actually taking slices of the input dataframe.
@@ -1095,6 +1110,63 @@ public class WindowAggCodeGen {
                   + numBins
                   + ")\n");
     }
+
+    List<String> arraysToSort = new ArrayList<>();
+    arraysToSort.add("arr");
+
+    Pair<String, String> additionalFuncTextAndOutputDfName =
+        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, false);
+
+    funcText.append(additionalFuncTextAndOutputDfName.getKey());
+    String outputDfName = additionalFuncTextAndOutputDfName.getValue();
+
+    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
+
+    return funcText.toString();
+  }
+
+  /**
+   * Helper function that handles the CONDITIONAL_CHANGE_EVENT window aggregation. Should only be
+   * called from generateWindowedAggFn, after performing the column filtering, and the definitions
+   * for argumentDfOriginalIndex, and argumentDfLen.
+   *
+   * <p>Note: if a window frame was provided, this function ignores it because this window function
+   * always operates on the entire partition
+   *
+   * @param funcText The current func text. Must contain only the function declaration.
+   * @param colName the name of the column whose change events are being tracked
+   * @param expectedOutputColumns the list of string column names at which to store the output
+   *     columns
+   * @param sortByCols The string representing the list of string column names by which to sort
+   * @param ascendingList The string representing the list of boolean values, which determining if
+   *     the columns in sortByCols will be sorted ascending or descending
+   * @param NAPositionList The string representing the list of string values, which determine null
+   *     ordering for each column being sorted. This is empty if no sorting is necessary.
+   * @return The completed funcText, which returns an output dataframe with the aggregations stored
+   *     in the column names provided in expectedOutputColumns
+   */
+  private static String generateChangeEventFn(
+      StringBuilder funcText,
+      final String colName,
+      final List<String> expectedOutputColumns,
+      final String sortByCols,
+      final String ascendingList,
+      final String NAPositionList) {
+
+    // Perform the sort on the input dataframe (if needed) and store the resulting dataframe
+    // in a variable named "sorted_df"
+    funcText.append(
+        sortLocalDfIfNeeded(
+            argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
+
+    funcText
+        .append(indent)
+        .append(indent)
+        .append(
+            "arr = bodo.libs.bodosql_array_kernels.change_event("
+                + "sorted_df["
+                + makeQuoted(colName)
+                + "])\n");
 
     List<String> arraysToSort = new ArrayList<>();
     arraysToSort.add("arr");

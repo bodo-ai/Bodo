@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implementation of DataFrame attributes and methods using overload.
 """
@@ -34,7 +34,6 @@ from numba.extending import (
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.datetime_timedelta_ext import (
     _no_input,
     datetime_timedelta_array_type,
@@ -56,6 +55,7 @@ from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.hiframes.split_impl import string_array_split_view_type
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import (
