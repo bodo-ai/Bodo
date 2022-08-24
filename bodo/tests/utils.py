@@ -1,6 +1,6 @@
 """Utility functions for testing such as check_func() that tests a function.
 """
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import io
 import os
 import random

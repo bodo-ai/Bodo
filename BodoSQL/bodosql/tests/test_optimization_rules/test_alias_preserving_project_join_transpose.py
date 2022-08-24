@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of the alias_preserving_project_join_transpose optimization rule used by BodoSQL
 """

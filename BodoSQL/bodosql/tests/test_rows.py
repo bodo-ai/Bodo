@@ -1255,6 +1255,117 @@ def test_rank_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "SELECT conditional_change_event(A) OVER (PARTITION BY B ORDER BY C NULLS FIRST) FROM table1",
+                pd.Series([0, 0, 0, 0, 1, 1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0]),
+            ),
+            id="bool_string_int",
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_change_event(C % 2) OVER (PARTITION BY B ORDER BY C NULLS LAST) FROM table1",
+                pd.Series([0, 1, 1, 2, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0, 0, 0]),
+            ),
+            id="int_string_int",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_change_event(B) OVER (PARTITION BY C % 5 ORDER BY C NULLS FIRST) FROM table1",
+                pd.Series([0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 3]),
+            ),
+            id="string_int_int",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_change_event(C) OVER (PARTITION BY A ORDER BY C NULLS LAST) FROM table1",
+                pd.Series([0, 1, 2, 3, 0, 1, 2, 3, 3, 3, 3, 3, 0, 1, 2, 3]),
+            ),
+            id="int_bool_int",
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_change_event(A) OVER (PARTITION BY B ORDER BY B) FROM table2",
+                pd.Series([0] * 2 + [1] * 4 + [2] * 5 + [3] * 4 + [4] * 5),
+            ),
+            id="single_duplicates",
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_change_event(C) OVER (PARTITION BY B ORDER BY B) FROM table2",
+                pd.Series([0] * 20),
+            ),
+            id="single_partition_all_null",
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_change_event(A) OVER (PARTITION BY B ORDER BY B) FROM table3",
+                pd.Series([max(0, (i - 1) // 2) for i in range(200)]),
+            ),
+            id="longer_single_partition_unique_null_interleaved",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_change_event(A) OVER (PARTITION BY C ORDER BY C) FROM table3",
+                pd.Series([0] * 200),
+            ),
+            id="longer_singleton_partitions",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+def test_conditional_change_event(args, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series([True, False, None, True] * 4, dtype=pd.BooleanDtype()),
+                "B": pd.Series((list("AABABCA") + [None]) * 2),
+                "C": pd.Series(
+                    [None if i % 4 == 0 else i for i in range(16, 0, -1)],
+                    dtype=pd.Int32Dtype(),
+                ),
+            }
+        ),
+        "table2": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [1] * 2 + [4] * 3 + [None] + [9] * 5 + [16, None] * 2 + [4] * 5,
+                    dtype=pd.Int32Dtype(),
+                ),
+                "B": pd.Series(["A"] * 20),
+                "C": pd.Series([None] * 20, dtype=pd.Int32Dtype()),
+            }
+        ),
+        "table3": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [i // 2 if i % 2 == 1 else None for i in range(200)],
+                    dtype=pd.Int32Dtype(),
+                ),
+                "B": pd.Series(["A"] * 200),
+                "C": pd.Series([chr(i) for i in range(32, 232)]),
+            }
+        ),
+    }
+
+    query, answer = args
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        expected_output=pd.DataFrame({0: answer}),
+    )
+
+
 def test_first_value_fusion(basic_df, spark_info, memory_leak_check):
     import copy
 

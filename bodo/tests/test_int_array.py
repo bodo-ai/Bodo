@@ -1,6 +1,5 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import operator
-import re
 
 import numba
 import numpy as np
@@ -8,8 +7,8 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
 from bodo.pandas_compat import pandas_version
+from bodo.tests.utils import check_func
 
 
 def get_random_integerarray(tot_size):

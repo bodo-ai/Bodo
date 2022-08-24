@@ -1,17 +1,10 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Measure performance of sql operations.
 """
-import pandas as pd
-import numpy as np
-from bodo.tests.utils import check_timing_func
-import bodo
-import random
-import time
-import string
-import pytest
 
-from sqlalchemy import create_engine
-import pymysql
+import pandas as pd
+
+from bodo.tests.utils import check_timing_func
 
 
 def test_sql_hardcoded_aws():

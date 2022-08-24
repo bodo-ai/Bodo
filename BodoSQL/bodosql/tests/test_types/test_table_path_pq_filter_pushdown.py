@@ -1,12 +1,15 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests filter pushdown with a parquet TablePath.
 """
 import io
 
-import bodo
+import bodosql
 import pandas as pd
 import pytest
+from bodosql.tests.utils import check_num_parquet_readers
+
+import bodo
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     check_logger_no_msg,
@@ -18,9 +21,6 @@ from bodo.tests.utils import (
     _check_for_io_reader_filters,
     check_func,
 )
-
-import bodosql
-from bodosql.tests.utils import check_num_parquet_readers
 
 
 @pytest.mark.slow

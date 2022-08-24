@@ -1,16 +1,16 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests the correctness of the automatically generated library tests.
 These test cases will most likely be removed later
 """
 import operator
 
-import bodo
+import bodosql
 import numpy as np
 import pytest
 from numba import generated_jit
 
-import bodosql
+import bodo
 import buildscripts.python_library_build.generate_library_tests
 
 

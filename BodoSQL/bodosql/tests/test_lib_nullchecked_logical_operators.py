@@ -1,12 +1,12 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     Checks the Library of BodoSQL functions that are used for performing "AND" and "OR"
     operations involving potentially null values
 """
-import bodo
+import bodosql
 import pytest
 
-import bodosql
+import bodo
 
 
 @pytest.mark.slow

@@ -1,10 +1,9 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL projection queries on BodoSQL
 """
 import pandas as pd
 import pytest
-
 from bodosql.tests.utils import bodo_version_older, check_query
 
 

@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Implement pd.DataFrame typing and data model handling.
 """
@@ -38,7 +38,6 @@ from numba.parfors.array_analysis import ArrayAnalysis
 
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.time_ext import TimeArrayType
 from bodo.hiframes.pd_categorical_ext import CategoricalArrayType
 from bodo.hiframes.pd_index_ext import (
     HeterogeneousIndexType,
@@ -56,6 +55,7 @@ from bodo.hiframes.table import (
     get_table_data,
     set_table_data_codegen,
 )
+from bodo.hiframes.time_ext import TimeArrayType
 from bodo.io import json_cpp
 from bodo.libs.array import (
     arr_info_list_to_table,

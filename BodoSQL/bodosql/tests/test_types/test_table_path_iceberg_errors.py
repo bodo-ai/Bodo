@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests that Bodosql throws reasonable errors when supplied iceberg tables.
 
@@ -6,15 +6,15 @@ Reuses several fixtures from the engine, but using bodosql's TablePath
 """
 import re
 
-import bodo
+import bodosql
 import pytest
+
+import bodo
 from bodo.tests.conftest import (  # pragma: no cover
     iceberg_database,
     iceberg_table_conn,
 )
 from bodo.utils.typing import BodoError
-
-import bodosql
 
 
 def test_iceberg_tablepath_errors(iceberg_database, iceberg_table_conn):

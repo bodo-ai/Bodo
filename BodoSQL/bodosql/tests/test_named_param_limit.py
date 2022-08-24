@@ -2,16 +2,16 @@
 Test that Named Parameters can be used for the limit and offset values in
 a SQL LIMIT expression.
 """
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import re
 
-import bodo
+import bodosql
 import pandas as pd
 import pytest
-
-import bodosql
 from bodosql.tests.named_params_common import int_named_params  # noqa
 from bodosql.tests.utils import check_query
+
+import bodo
 
 
 def test_limit_unsigned(basic_df, spark_info, int_named_params):

@@ -1,9 +1,8 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of SQL queries that are depenent on time since year 0, or the unix epoch
 """
 import pandas as pd
-
 from bodosql.tests.utils import check_query
 
 # the difference in days between the unix epoch and the start of year 0

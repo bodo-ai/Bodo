@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Old tests for DataFrame values which can be useful since they are different and may
 expose corner cases.
 """
@@ -360,7 +360,7 @@ class TestDataFrame(unittest.TestCase):
 
     def test_iat_set1(self):
         def test_impl(df, n):
-            df.iat[n - 1, 1] = n ** 2
+            df.iat[n - 1, 1] = n**2
             return df.A  # return the column to check column aliasing
 
         bodo_func = bodo.jit(test_impl)
@@ -371,7 +371,7 @@ class TestDataFrame(unittest.TestCase):
 
     def test_iat_set2(self):
         def test_impl(df, n):
-            df.iat[n - 1, 1] = n ** 2
+            df.iat[n - 1, 1] = n**2
             return df  # check df aliasing/boxing
 
         bodo_func = bodo.jit(test_impl)

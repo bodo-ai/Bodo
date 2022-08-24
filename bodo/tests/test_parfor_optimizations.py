@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Tests that various optimizations inside of parfors work properly
 with Bodo data types. These tests should be used to check that specific
 compiler optimizations (i.e. dce) are working properly.

@@ -1,10 +1,9 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     Test file for tests related to the "with" operator
 """
 import pandas as pd
 import pytest
-
 from bodosql.tests.utils import check_query
 
 

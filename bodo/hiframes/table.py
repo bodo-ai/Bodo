@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Table data type for storing dataframe column arrays. Supports storing many columns
 (e.g. >10k) efficiently.
 """

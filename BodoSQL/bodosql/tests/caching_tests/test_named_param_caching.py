@@ -2,15 +2,14 @@
 Test that Named Parameters are cached properly in both
 sequential and parallel code.
 """
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 
+import bodosql
 import numpy as np
 import pytest
 from bodosql.tests.caching_utils import check_caching
 from bodosql.tests.utils import InputDist
-
-import bodosql
 
 
 @pytest.mark.slow

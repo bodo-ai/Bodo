@@ -4,7 +4,7 @@ dataframe applies.
 """
 import re
 
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import pandas as pd
 import pytest
 from bodosql.tests.named_params_common import *  # noqa

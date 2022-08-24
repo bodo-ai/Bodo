@@ -37,10 +37,6 @@ public class AggCodeGen {
     equivalentPandasMethodMap.put(SqlKind.STDDEV_SAMP, "std");
     equivalentPandasMethodMap.put(SqlKind.VAR_SAMP, "var");
     equivalentPandasMethodMap.put(SqlKind.ANY_VALUE, "iloc");
-  }
-
-  static {
-    equivalentNumpyFuncMap = new HashMap<>();
 
     equivalentNumpyFuncMap.put(SqlKind.BIT_AND, "np.bitwise_and.reduce");
     equivalentNumpyFuncMap.put(SqlKind.BIT_OR, "np.bitwise_or.reduce");
@@ -120,6 +116,7 @@ public class AggCodeGen {
           && a.getAggregation().getKind() != SqlKind.SUM0) {
         aggString.append("bodosql.libs.null_handling.null_if_not_flag(");
       }
+
       // If the aggregation function is ANY_VALUE, manually alter syntax
       // to use brackets
       if (aggFunc == "iloc") {

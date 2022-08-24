@@ -1,22 +1,22 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests various components of the TablePath type both inside and outside a
 direct BodoSQLContext.
 """
 import os
 
-import bodo
+import bodosql
 import pandas as pd
 import pytest
-from bodo.tests.utils import TypeInferenceTestPipeline, check_func
-
-import bodosql
 from bodosql.tests.utils import (
     _check_query_equal,
     bodo_version_older,
     check_num_parquet_readers,
     get_snowflake_connection_string,
 )
+
+import bodo
+from bodo.tests.utils import TypeInferenceTestPipeline, check_func
 
 
 @pytest.fixture(

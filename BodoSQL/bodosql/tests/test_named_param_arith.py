@@ -1,12 +1,11 @@
 """
 Test that Named Parameters can be used in having expressions.
 """
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 import numpy as np
 import pandas as pd
 import pytest
-
 from bodosql.tests.named_params_common import *  # noqa
 from bodosql.tests.utils import check_query
 

@@ -1,4 +1,4 @@
-# Copyright (C) 2020 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests of series.map/apply and dataframe.apply used for parity
 with pyspark.sql.functions that operation on columns of dates.
@@ -6,7 +6,6 @@ with pyspark.sql.functions that operation on columns of dates.
 Test names refer to the names of the spark function they map to.
 """
 
-import numpy as np
 import pandas as pd
 import pytest
 

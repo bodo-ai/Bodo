@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     Common import file for Series test fixtures
 """
@@ -123,7 +123,15 @@ GLOBAL_VAL = 2
             id="series_val15",
         ),
         pytest.param(
-            pd.Series([["a", "bc", "éè", "日本人"], ["a", ";∞¥₤€"], ["aaa", "b", "cc", "~=[]()%+{}@;’"], None, ["xx", "yy","#!$_&-"]]),
+            pd.Series(
+                [
+                    ["a", "bc", "éè", "日本人"],
+                    ["a", ";∞¥₤€"],
+                    ["aaa", "b", "cc", "~=[]()%+{}@;’"],
+                    None,
+                    ["xx", "yy", "#!$_&-"],
+                ]
+            ),
             id="series_val16",
         ),
         pytest.param(

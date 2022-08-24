@@ -1,11 +1,12 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
-import random
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
+import random
+
 import h5py
 import numpy as np
-import pyarrow.parquet as pq
-import pyarrow as pa
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 
 def gen_lr(file_name, N, D):
@@ -113,16 +114,16 @@ df.to_parquet("pandas_dt.pq")
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    DateType,
-    TimestampType,
-    LongType,
-    FloatType,
     ArrayType,
-    Row,
+    DateType,
+    FloatType,
+    LongType,
     MapType,
+    Row,
     StringType,
+    StructField,
+    StructType,
+    TimestampType,
 )
 
 spark = SparkSession.builder.appName("GenSparkData").getOrCreate()

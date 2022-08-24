@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests that TablePath can work when supplied iceberg tables.
 
@@ -6,8 +6,10 @@ Mostly reuses tests/fixtures from the engine, but using bodosql's TablePath
 """
 import io
 
-import bodo
+import bodosql
 import pytest
+
+import bodo
 from bodo.tests.conftest import (  # pragma: no cover
     iceberg_database,
     iceberg_table_conn,
@@ -19,8 +21,6 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import check_func, sync_dtypes
-
-import bodosql
 
 
 @pytest.mark.parametrize(

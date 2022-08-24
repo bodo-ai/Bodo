@@ -1,13 +1,13 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of bodosql.libs.null_handling functions
 """
 
-import bodo
+import bodosql
 import numpy as np
 import pytest
 
-import bodosql
+import bodo
 
 
 @pytest.mark.slow

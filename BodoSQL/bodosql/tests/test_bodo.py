@@ -1,11 +1,11 @@
 """
 Test using BodoSQL inside Bodo JIT functions
 """
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
-import bodo
+import bodosql
 import pandas as pd
 
-import bodosql
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
+import bodo
 
 
 def test_demo1():

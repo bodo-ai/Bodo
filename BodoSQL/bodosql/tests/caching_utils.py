@@ -1,13 +1,13 @@
 """
 Infrastructure used to test caching.
 """
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+
+import pandas as pd
+from bodosql.tests.utils import InputDist, _check_query_equal, _get_dist_df
 
 import bodo
-import pandas as pd
-
-from bodosql.tests.utils import InputDist, _check_query_equal, _get_dist_df
 
 
 def check_caching(

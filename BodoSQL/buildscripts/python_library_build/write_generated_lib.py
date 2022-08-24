@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     File that handles writing the generated library/test cases to their respective files
 """
@@ -201,7 +201,7 @@ def generate_and_write_library():
         )
 
     header_string = """
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 \"\"\" There are a large number of operators that need a wrapper that returns null if any of the input arguments are null,
 and otherwise return the result of the original function. This file is an automatically generated file, that contains
 these library functions.
@@ -744,7 +744,7 @@ def generate_and_write_library_tests():
         library_tests.append("\n".join(defalt_tests + none_tests + opt_tests))
 
     header_string = """
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 \"\"\" There are a large number of operators that need a wrapper that returns null if any of the input arguments are null,
 and otherwise return the result of the original function. This file is an automatically generated file, that tests
 these library functions.

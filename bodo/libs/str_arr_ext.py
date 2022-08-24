@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Array implementation for string objects, which are usually immutable.
 The characters are stored in a contingous data array, and an offsets array marks the
 the individual strings. For example:

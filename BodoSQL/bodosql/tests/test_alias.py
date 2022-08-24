@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     Test file for tests related to alias operations. Some tests
     looks at the plans that are generated and check correctness.

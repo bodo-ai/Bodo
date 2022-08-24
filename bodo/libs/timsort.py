@@ -1,8 +1,9 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
+import numba
 import numpy as np
 import pandas as pd
-import numba
 from numba.extending import overload
+
 from bodo.utils.utils import alloc_arr_tup
 
 # ported from Spark to Numba-compilable Python

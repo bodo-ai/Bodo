@@ -1,10 +1,11 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """ There are a large number of operators that need a wrapper that returns null if any of the input arguments are null,
 and otherwise return the result of the original function. This file automatically generates these library functions."""
 import operator
 
-import bodo
 from numba import generated_jit
+
+import bodo
 
 
 def generate_library_fn_string(fn_name, fn_expr_lambda, num_args):

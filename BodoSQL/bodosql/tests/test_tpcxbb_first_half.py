@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test correctness of TPCxBB Benchmark on BodoSQL
 
@@ -9,9 +9,8 @@ of these variables according to the reference query.
 """
 
 import pytest
-from pyspark.sql.types import IntegerType, StructField, StructType
-
 from bodosql.tests.utils import check_query
+from pyspark.sql.types import IntegerType, StructField, StructType
 
 
 @pytest.mark.skip("[BS-633] Resolve nightly issues for TPCx-BB")

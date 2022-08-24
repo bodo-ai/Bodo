@@ -2,15 +2,14 @@
 Test that SQL is Null/Not Null and IS_TRUE builtins work with Columns, scalars, and NULL values.
 Also tests that arithmatic and logical operators work with NULL values
 """
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 
 import numpy as np
 import pandas as pd
 import pytest
-from pyspark.sql.functions import lit
-
 from bodosql.tests.utils import check_query
+from pyspark.sql.functions import lit
 
 
 # This is mostly copied from bodosql.tests.utils, just needed to

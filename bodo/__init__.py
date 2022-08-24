@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Top-level init file for bodo package
 
@@ -228,6 +228,8 @@ import bodo.libs.bodosql_string_array_kernels
 import bodo.libs.bodosql_numeric_array_kernels
 import bodo.libs.bodosql_variadic_array_kernels
 import bodo.libs.bodosql_other_array_kernels
+import bodo.libs.bodosql_trig_array_kernels
+import bodo.libs.bodosql_window_agg_array_kernels
 import bodo.libs.bodosql_array_kernels
 from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,

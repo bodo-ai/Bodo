@@ -1,4 +1,4 @@
-# Copyright (C) 2019 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Equivalent of __init__.py for all BodoSQL array kernel files
 """
@@ -10,6 +10,7 @@ from bodo.libs.bodosql_other_array_kernels import *  # noqa
 from bodo.libs.bodosql_string_array_kernels import *  # noqa
 from bodo.libs.bodosql_trig_array_kernels import *  # noqa
 from bodo.libs.bodosql_variadic_array_kernels import *  # noqa
+from bodo.libs.bodosql_window_agg_array_kernels import *  # noqa
 
 broadcasted_fixed_arg_functions = {
     "acos",
@@ -19,12 +20,9 @@ broadcasted_fixed_arg_functions = {
     "atan",
     "atan2",
     "atanh",
+    "change_event",
     "cos",
     "cosh",
-    "sin",
-    "sinh",
-    "tan",
-    "tanh",
     "radians",
     "degrees",
     "bitand",
@@ -70,12 +68,16 @@ broadcasted_fixed_arg_functions = {
     "right",
     "rpad",
     "second_timestamp",
+    "sin",
+    "sinh",
     "space",
     "split_part",
     "strcmp",
     "strtok",
     "substring",
     "substring_index",
+    "tan",
+    "tanh",
     "translate",
     "weekday",
     "width_bucket",

@@ -1,14 +1,14 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
     Test file that checks if a user imports bodosql before bodo
     then queries still execute as expected.
 """
 import bodosql  # noqa
-import bodo  # noqa
 import pandas as pd
 import pytest
-
 from bodosql.tests.utils import check_query
+
+import bodo  # noqa
 
 
 @pytest.mark.slow

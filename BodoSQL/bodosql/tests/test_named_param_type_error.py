@@ -2,15 +2,15 @@
 Test that Named Parameters are either rejected or do an implicit cast
 in situations where types don't match.
 """
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-import bodo
+import bodosql
 import pandas as pd
 import pytest
 from bodosql.tests.named_params_common import *  # noqa
 from bodosql.tests.utils import check_query
 
-import bodosql
+import bodo
 
 
 @pytest.mark.slow

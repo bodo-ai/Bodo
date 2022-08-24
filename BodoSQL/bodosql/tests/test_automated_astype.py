@@ -1,4 +1,4 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests BodoSQL queries with types that cannot be directly
 supported but has implicit conversions that can be automated.
@@ -8,7 +8,6 @@ import datetime
 import numpy as np
 import pandas as pd
 import pytest
-
 from bodosql.tests.utils import check_query
 
 

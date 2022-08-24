@@ -1,4 +1,4 @@
-# Copyright (C) 2020 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Tests for pd.CategoricalDtype/pd.Categorical  functionality
 """
@@ -340,6 +340,7 @@ def test_astype(memory_leak_check):
     check_func(impl2, (A,))
     A = pd.Categorical(gen_nonascii_list(7))
     check_func(impl2, (A,))
+
 
 @pytest.mark.slow
 def test_pd_get_dummies(cat_arr_value, memory_leak_check):

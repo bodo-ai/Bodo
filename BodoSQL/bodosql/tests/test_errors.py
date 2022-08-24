@@ -1,17 +1,17 @@
-# Copyright (C) 2021 Bodo Inc. All rights reserved.
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
 Test SQL operations that should produce understandable errors on BodoSQL
 """
 import re
 from decimal import Decimal
 
-import bodo
+import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodo.utils.typing import BodoError
 
-import bodosql
+import bodo
+from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
