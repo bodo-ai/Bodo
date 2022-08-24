@@ -1320,6 +1320,10 @@ def test_read_write_parquet(memory_leak_check):
 @pytest.mark.slow
 def test_partition_cols(memory_leak_check):
 
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
     TEST_DIR = "test_part_tmp"
 
     @bodo.jit(distributed=["df"])
@@ -1361,39 +1365,48 @@ def test_partition_cols(memory_leak_check):
             bodo.barrier()
             impl(_get_dist_arg(df_in, False), part_cols)
             bodo.barrier()
-            if bodo.get_rank() == 0:
-                # verify partitions are there
-                ds = pq.ParquetDataset(TEST_DIR)
-                assert [
-                    ds.partitions.levels[i].name
-                    for i in range(len(ds.partitions.levels))
-                ] == part_cols
-                # read bodo output with pandas
-                df_test = pd.read_parquet(TEST_DIR)
-                # pandas reads the partition columns as categorical, but they
-                # are not categorical in input dataframe, so we do some dtype
-                # conversions to be able to compare the dataframes
-                for part_col in part_cols:
-                    if part_col == "E":
-                        # convert categorical back to date
-                        df_test[part_col] = (
-                            df_test[part_col].astype("datetime64").dt.date
-                        )
-                    elif part_col == "C":
-                        # convert the bool input column to categorical of strings
-                        df_in[part_col] = (
-                            df_in[part_col].astype(str).astype(df_test[part_col].dtype)
-                        )
-                    else:
-                        # convert the categorical to same input dtype
-                        df_test[part_col] = df_test[part_col].astype(
-                            df_in[part_col].dtype
-                        )
-                # use check_like=True because the order of columns has changed
-                # (partition columns appear at the end after reading)
-                pd.testing.assert_frame_equal(df_test, df_in, check_like=True)
-                shutil.rmtree(TEST_DIR)
-            bodo.barrier()
+
+            err = None
+            try:
+                if bodo.get_rank() == 0:
+                    # verify partitions are there
+                    ds = pq.ParquetDataset(TEST_DIR)
+                    assert [
+                        ds.partitions.levels[i].name
+                        for i in range(len(ds.partitions.levels))
+                    ] == part_cols
+                    # read bodo output with pandas
+                    df_test = pd.read_parquet(TEST_DIR)
+                    # pandas reads the partition columns as categorical, but they
+                    # are not categorical in input dataframe, so we do some dtype
+                    # conversions to be able to compare the dataframes
+                    for part_col in part_cols:
+                        if part_col == "E":
+                            # convert categorical back to date
+                            df_test[part_col] = (
+                                df_test[part_col].astype("datetime64").dt.date
+                            )
+                        elif part_col == "C":
+                            # convert the bool input column to categorical of strings
+                            df_in[part_col] = (
+                                df_in[part_col]
+                                .astype(str)
+                                .astype(df_test[part_col].dtype)
+                            )
+                        else:
+                            # convert the categorical to same input dtype
+                            df_test[part_col] = df_test[part_col].astype(
+                                df_in[part_col].dtype
+                            )
+                    # use check_like=True because the order of columns has changed
+                    # (partition columns appear at the end after reading)
+                    pd.testing.assert_frame_equal(df_test, df_in, check_like=True)
+                    shutil.rmtree(TEST_DIR)
+            except Exception as e:
+                err = e
+            err = comm.bcast(err)
+            if isinstance(err, Exception):
+                raise err
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree(TEST_DIR, ignore_errors=True)

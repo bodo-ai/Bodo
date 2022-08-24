@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 from bodo.tests.utils import _get_dist_arg, check_func
@@ -20,7 +21,9 @@ def test_partition_cols(hdfs_datapath):
     f = lambda df, part_cols: df.to_parquet(bd_fname, partition_cols=part_cols)
     with ensure_clean2(bd_fname), ensure_clean2(pd_fname):
         bodo.jit(f, distributed=["df"])(_get_dist_arg(df, False), part_cols)
-        df.to_parquet(pd_fname, partition_cols=part_cols)
+        if bodo.get_rank() == 0:
+            df.to_parquet(pd_fname, partition_cols=part_cols)
+        bodo.barrier()
         bd_out = pd.read_parquet(bd_fname)
         pd_out = pd.read_parquet(pd_fname)
     pd.testing.assert_frame_equal(bd_out, pd_out)
@@ -266,13 +269,23 @@ def test_hdfs_csv_write_seq(hdfs_datapath, test_df):
     test hdfs to_csv sequentially
     """
 
+    comm = MPI.COMM_WORLD
+
     hdfs_fname = hdfs_datapath("test_df_bodo_seq.csv")
 
     def test_write(test_df, hdfs_fname):
         test_df.to_csv(hdfs_fname, index=False, header=False)
 
     bodo_write = bodo.jit(test_write)
-    bodo_write(test_df, hdfs_fname)
+    err = None
+    if bodo.get_rank() == 0:
+        try:
+            bodo_write(test_df, hdfs_fname)
+        except Exception as e:
+            err = e
+    err = comm.bcast(err)
+    if isinstance(err, Exception):
+        raise err
 
 
 def test_hdfs_csv_write_1D(hdfs_datapath, test_df):
@@ -307,14 +320,22 @@ def test_hdfs_csv_write_header_seq(hdfs_datapath, test_df):
     """
     test hdfs to_csv with header sequentially
     """
-
+    comm = MPI.COMM_WORLD
     hdfs_fname = hdfs_datapath("test_df_bodo_header_seq.csv")
 
     def test_write(test_df):
         test_df.to_csv(hdfs_fname, index=False)
 
     bodo_write = bodo.jit(test_write)
-    bodo_write(test_df)
+    err = None
+    if bodo.get_rank() == 0:
+        try:
+            bodo_write(test_df)
+        except Exception as e:
+            err = e
+    err = comm.bcast(err)
+    if isinstance(err, Exception):
+        raise err
 
 
 def test_hdfs_csv_write_header_1D(hdfs_datapath, test_df):
@@ -349,14 +370,22 @@ def test_hdfs_json_write_records_lines_seq(hdfs_datapath, test_df):
     """
     test hdfs to_json(orient="records", lines=True) sequentially
     """
-
+    comm = MPI.COMM_WORLD
     hdfs_fname = hdfs_datapath("df_records_lines_seq.json")
 
     def test_write(test_df, hdfs_fname):
         test_df.to_json(hdfs_fname, orient="records", lines=True)
 
     bodo_write = bodo.jit(test_write)
-    bodo_write(test_df, hdfs_fname)
+    err = None
+    if bodo.get_rank() == 0:
+        try:
+            bodo_write(test_df, hdfs_fname)
+        except Exception as e:
+            err = e
+    err = comm.bcast(err)
+    if isinstance(err, Exception):
+        raise err
 
 
 def test_hdfs_json_write_records_lines_1D(hdfs_datapath, test_df):
@@ -534,13 +563,23 @@ def test_hdfs_np_tofile_seq(hdfs_datapath, test_np_arr):
     """
     test hdfs to_file
     """
+    comm = MPI.COMM_WORLD
 
     def test_write(test_np_arr, hdfs_fname):
         test_np_arr.tofile(hdfs_fname)
 
     hdfs_fname = hdfs_datapath("test_np_arr_bodo_seq.dat")
     bodo_func = bodo.jit(test_write)
-    bodo_func(test_np_arr, hdfs_fname)
+    err = None
+
+    if bodo.get_rank() == 0:
+        try:
+            bodo_func(test_np_arr, hdfs_fname)
+        except Exception as e:
+            err = e
+    err = comm.bcast(err)
+    if isinstance(err, Exception):
+        raise err
 
 
 def test_hdfs_np_tofile_1D(hdfs_datapath, test_np_arr):
@@ -615,11 +654,13 @@ def test_hdfs_np_fromfile_seq_large_count(hdfs_datapath, test_np_arr):
     check_func(test_read, (hdfs_fname,), py_output=test_np_arr[:count])
 
 
+@pytest.mark.skipif(bodo.get_size() > 1, reason="Observing errors in hadoop fs")
 def test_hdfs_np_fromfile_seq_large_offset(hdfs_datapath, test_np_arr):
     """
     fromfile with offset larger than the length of the data
     this setup raises a ValueError which is expected
     """
+    comm = MPI.COMM_WORLD
 
     offset = len(test_np_arr) + 1
 
@@ -628,8 +669,16 @@ def test_hdfs_np_fromfile_seq_large_offset(hdfs_datapath, test_np_arr):
         return np.fromfile(hdfs_fname, np.int64, offset=offset * bytes_per_int64)
 
     hdfs_fname = hdfs_datapath("test_np_arr_bodo_seq.dat")
-    with pytest.raises(ValueError, match="negative dimensions not allowed"):
-        bodo.jit(test_read)(hdfs_fname)
+    err = None
+    if bodo.get_rank() == 0:
+        try:
+            with pytest.raises(ValueError, match="negative dimensions not allowed"):
+                bodo.jit(test_read)(hdfs_fname)
+        except Exception as e:
+            err = e
+    err = comm.bcast(err)
+    if isinstance(err, Exception):
+        raise err
 
 
 def test_hdfs_np_fromfile_1D(hdfs_datapath, test_np_arr):

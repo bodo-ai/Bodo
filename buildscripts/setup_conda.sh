@@ -63,7 +63,7 @@ if [ "$RUN_NIGHTLY" != "yes" ];
 then
    $MAMBA_INSTALL -c conda-forge boost-cpp=1.74.0 cmake h5py mpich mpi
    $MAMBA_INSTALL 'hdf5=1.12.*=*mpich*' -c conda-forge
-   $MAMBA_INSTALL -c conda-forge pyarrow=7.0.0
+   $MAMBA_INSTALL -c conda-forge pyarrow=8.0.0
    $MAMBA_INSTALL fsspec>=2021.09 -c conda-forge
    $MAMBA_INSTALL pandas=${BODO_PD_VERSION:-'1.4.*'} -c conda-forge
    $MAMBA_INSTALL numba=0.55.2 -c conda-forge
@@ -78,8 +78,8 @@ else
    if [ "$RUNTIME" != "yes" ];
     then
        conda clean -a -y
-       #$MAMBA_INSTALL pytorch=1.9 pyarrow=7.0.0 -c pytorch -c conda-forge -c defaults
-       $MAMBA_INSTALL pyarrow=7.0.0 -c conda-forge
+       #$MAMBA_INSTALL pytorch=1.9 pyarrow=8.0.0 -c pytorch -c conda-forge -c defaults
+       $MAMBA_INSTALL pyarrow=8.0.0 -c conda-forge
        conda clean -a -y
        #$MAMBA_INSTALL bokeh=2.3 -c pytorch -c conda-forge -c defaults
        #conda clean -a -y
