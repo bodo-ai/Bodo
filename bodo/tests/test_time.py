@@ -131,7 +131,7 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
         )
         pq.write_table(table_orig, fname)
 
-        @bodo.jit
+        @bodo.jit(distributed=False)
         def impl():
             df = pd.read_parquet(fname)
             df.to_parquet(fname2, index=False)
