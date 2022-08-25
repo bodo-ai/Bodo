@@ -533,7 +533,7 @@ static table_info* drop_duplicates_keys_inner(table_info* in_table,
  * ---The final case where depending on the case we store the first, last or
  *    none if more than 2 are considered.
  *
- * As for the join, this relies on using hash keys for the partitionning.
+ * As for the join, this relies on using hash keys for the partitioning.
  * The computation is done locally.
  *
  * External function used are "RetrieveTable" and "TestEqual"

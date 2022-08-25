@@ -1,6 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 
+import os
 import re
 
 import numpy as np
@@ -1363,3 +1364,76 @@ def test_str_extractall(memory_leak_check):
     bodo_func(A2, I2)
     f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     assert dist_IR_contains(f_ir, "str_extractall_multi")
+
+
+def test_concat(memory_leak_check):
+    """test pd.concat() for dict arrays"""
+    A1 = pa.array(
+        ["abc", "b", None, "abc", None, "b", "cde"],
+        type=pa.dictionary(pa.int32(), pa.string()),
+    )
+
+    A2 = pa.array(
+        ["  abc", "b ", None, " bbCD ", "\n \tbbCD\t \n", "abc", ""] * 10,
+        type=pa.dictionary(pa.int32(), pa.string()),
+    )
+
+    S1 = pd.Series(["aefw", "ER", None, "Few"] * 15)
+
+    def impl1(A1, A2):
+        return pd.concat((pd.Series(A1), pd.Series(A2)), ignore_index=True)
+
+    def impl2(A1, S1):
+        return pd.concat((S1, pd.Series(A1)), ignore_index=True)
+
+    def impl3(file1, file2):
+        df1 = pd.read_parquet(file1, _bodo_read_as_dict=["A", "B"])
+        df2 = pd.read_parquet(file2, _bodo_read_as_dict=["A", "B"])
+        return pd.concat([df1, df2], ignore_index=True)
+
+    check_func(
+        impl1,
+        (A1, A2),
+        py_output=pd.concat((pd.Series(A1), pd.Series(A2)), ignore_index=True),
+        sort_output=True,
+        reset_index=True,
+    )
+
+    check_func(
+        impl2,
+        (A1, S1),
+        py_output=pd.concat((S1, pd.Series(A1)), ignore_index=True),
+        sort_output=True,
+        reset_index=True,
+    )
+
+    df1 = pd.DataFrame(
+        {"A": ["aefw", "ER", None, "Few"] * 25, "B": ["#$@4", "!1"] * 50}
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": ["  abc", "b ", None, " bbCD ", "\n \tbbCD\t \n", "abc", ""] * 5,
+            "B": ["abc", "b", None, "abc", None, "b", "cde"] * 5,
+        }
+    )
+    temp_file_1 = "temp_file_1.pq"
+    temp_file_2 = "temp_file_2.pq"
+    if bodo.get_rank() == 0:
+        # Send to a file to create table source
+        df1.to_parquet(temp_file_1, index=False)
+        df2.to_parquet(temp_file_2, index=False)
+    bodo.barrier()
+    # use dictionary-encoded arrays for strings
+    try:
+        bodo.hiframes.boxing._use_dict_str_type = True
+        check_func(
+            impl3,
+            (temp_file_1, temp_file_2),
+            py_output=pd.concat([df1, df2], ignore_index=True),
+            sort_output=True,
+            reset_index=True,
+        )
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove(temp_file_1)
+            os.remove(temp_file_2)

@@ -38,6 +38,7 @@ from bodo.libs import quantile_alg
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
+    convert_local_dictionary_to_global,
     delete_info_decref_array,
     delete_table,
     delete_table_decref_arrays,
@@ -53,7 +54,11 @@ from bodo.libs.dict_arr_ext import DictionaryArrayType, init_dict_arr
 from bodo.libs.distributed_api import Reduce_Type
 from bodo.libs.int_arr_ext import IntegerArrayType, alloc_int_array
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
-from bodo.libs.str_arr_ext import str_arr_set_na, string_array_type
+from bodo.libs.str_arr_ext import (
+    pre_alloc_string_array,
+    str_arr_set_na,
+    string_array_type,
+)
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.libs.tuple_arr_ext import TupleArrayType
 from bodo.utils.indexing import add_nested_counts, init_nested_counts
@@ -1586,12 +1591,74 @@ def concat_overload(arr_list):
 
         if isinstance(arr_list, types.BaseTuple):
             _arr_type = arr_list.types[0]
+            for i in range(len(arr_list)):
+                if arr_list.types[i] != bodo.dict_str_arr_type:
+                    _arr_type = arr_list.types[i]
+                    break
         else:
             _arr_type = arr_list.dtype
 
-        _arr_type = to_str_arr_if_dict_array(_arr_type)
+        if _arr_type == bodo.dict_str_arr_type:
+
+            def impl_dict_arr(arr_list):  # pragma: no cover
+                """
+                Combine the dictionaries by stacking the inner dict-array
+                and remap the indices. convert_local_dictionary_to_global is
+                called at the end to remove duplicates and make the dictionary global.
+                """
+                # allocate the inner dict array
+                num_strs = 0
+                num_chars = 0
+                num_elems = 0
+                for A in arr_list:
+                    data_arr = A._data
+                    indices_arr = A._indices
+                    num_elems += len(indices_arr)
+                    num_strs += len(data_arr)
+                    num_chars += bodo.libs.str_arr_ext.num_total_chars(data_arr)
+
+                out_dict_arr = pre_alloc_string_array(num_strs, num_chars)
+                out_ind_arr = bodo.libs.int_arr_ext.alloc_int_array(num_elems, np.int32)
+                bodo.libs.str_arr_ext.set_null_bits_to_value(out_dict_arr, -1)
+
+                # copy data to output
+                curr_str_ind = 0
+                curr_chars_ind = 0
+                curr_elem_ind = 0
+                for A in arr_list:
+                    data_arr = A._data
+                    indices_arr = A._indices
+                    num_elems = len(indices_arr)
+                    bodo.libs.str_arr_ext.set_string_array_range(
+                        out_dict_arr, data_arr, curr_str_ind, curr_chars_ind
+                    )
+                    for i in range(num_elems):
+                        if bodo.libs.array_kernels.isna(
+                            indices_arr, i
+                        ) or bodo.libs.array_kernels.isna(data_arr, indices_arr[i]):
+                            bodo.libs.array_kernels.setna(
+                                out_ind_arr, curr_elem_ind + i
+                            )
+                        else:
+                            out_ind_arr[curr_elem_ind + i] = (
+                                curr_str_ind + indices_arr[i]
+                            )
+                    curr_str_ind += len(data_arr)
+                    curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(data_arr)
+                    curr_elem_ind += num_elems
+
+                out_arr = init_dict_arr(out_dict_arr, out_ind_arr, False)
+                # convert_local_dictionary_to_global will convert the dictionary
+                # to global and deduplicate the inner dictionary array, potentially
+                # remaping the indices.
+                unique_out_arr = convert_local_dictionary_to_global(out_arr, False)
+                return unique_out_arr
+
+            return impl_dict_arr
 
         def impl_str(arr_list):  # pragma: no cover\n
+            # decode_if_dict_array will convert a list or tuple of
+            # heterogenous(dict and non-dict) string arrays to a list of regular string arrays
             arr_list = decode_if_dict_array(arr_list)
             # preallocate the output
             num_strs = 0
