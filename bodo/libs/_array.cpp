@@ -1435,6 +1435,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
                            PyLong_FromVoidPtr((void*)(&drop_duplicates_table)));
     PyObject_SetAttrString(m, "groupby_and_aggregate",
                            PyLong_FromVoidPtr((void*)(&groupby_and_aggregate)));
+    PyObject_SetAttrString(
+        m, "convert_local_dictionary_to_global",
+        PyLong_FromVoidPtr((void*)(&convert_local_dictionary_to_global)));
     PyObject_SetAttrString(m, "get_groupby_labels",
                            PyLong_FromVoidPtr((void*)(&get_groupby_labels)));
     PyObject_SetAttrString(m, "array_isin",

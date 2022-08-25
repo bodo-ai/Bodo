@@ -108,6 +108,9 @@ ll.add_symbol("sample_table", array_ext.sample_table)
 ll.add_symbol("shuffle_renormalization", array_ext.shuffle_renormalization)
 ll.add_symbol("shuffle_renormalization_group", array_ext.shuffle_renormalization_group)
 ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
+ll.add_symbol(
+    "convert_local_dictionary_to_global", array_ext.convert_local_dictionary_to_global
+)
 ll.add_symbol("get_groupby_labels", array_ext.get_groupby_labels)
 ll.add_symbol("array_isin", array_ext.array_isin)
 ll.add_symbol("get_search_regex", array_ext.get_search_regex)
@@ -2661,6 +2664,24 @@ def groupby_and_aggregate(
         ),
         codegen,
     )
+
+
+_convert_local_dictionary_to_global = types.ExternalFunction(
+    "convert_local_dictionary_to_global", types.void(array_info_type, types.bool_)
+)
+
+
+@numba.njit(no_cpython_wrapper=True)
+def convert_local_dictionary_to_global(dict_arr, sort_dictionary):  # pragma: no cover
+    dict_arr_info = array_to_info(dict_arr)
+    # In addition to convert the dictionary to global, the call to
+    # _convert_local_dictionary_to_global will also remove any duplicate
+    # values in the inner dictionary. The operation is done by modifying the
+    # existing pointer, which is why we call info_to_array on the original array info
+    _convert_local_dictionary_to_global(dict_arr_info, sort_dictionary)
+    check_and_propagate_cpp_exception()
+    out_arr = info_to_array(dict_arr_info, bodo.dict_str_arr_type)
+    return out_arr
 
 
 get_groupby_labels = types.ExternalFunction(
