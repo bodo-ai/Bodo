@@ -76,6 +76,7 @@ def test_repeat_columns(basic_df, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
+        is_out_distributed=False,
     )
 
 
@@ -87,6 +88,7 @@ def test_count_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
@@ -94,6 +96,7 @@ def test_count_numeric(bodosql_numeric_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 
@@ -169,6 +172,7 @@ def test_count_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
@@ -176,6 +180,7 @@ def test_count_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 
@@ -264,7 +269,13 @@ def test_max_datetime_types(bodosql_datetime_types, spark_info, memory_leak_chec
         FROM
             table1
         """
-    check_query(query, bodosql_datetime_types, spark_info, check_names=False)
+    check_query(
+        query,
+        bodosql_datetime_types,
+        spark_info,
+        check_names=False,
+        is_out_distributed=False,
+    )
 
 
 @pytest.mark.slow
@@ -331,6 +342,7 @@ def test_count_if(query, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
+        is_out_distributed=False,
     )
 
 
@@ -372,6 +384,7 @@ def test_max_bool(bodosql_boolean_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 
