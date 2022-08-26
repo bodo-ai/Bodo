@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -23,6 +24,29 @@ public final class StringOperatorTable implements SqlOperatorTable {
       StringOperatorTable.instance = instance;
     }
     return instance;
+  }
+
+  /**
+   * Creates an OperandTypeChecker for a function that has several arguments with consistent types,
+   * but some of them are optional. Calling the function with arguments (3, A, B, C, D, E) is the
+   * same as creating an OR of the families (A, B, C), (A, B, C, D), (A, B, C, D, E)
+   *
+   * @param min the minimum number of arguments required for the function call
+   * @param families the types for each argument when they are provided
+   * @return an OperandTypeChecker with the specs mentioned above
+   */
+  public static SqlOperandTypeChecker argumentRange(int min, SqlTypeFamily... families) {
+    assert min <= families.length;
+    List<SqlTypeFamily> familyList = new ArrayList<SqlTypeFamily>();
+    for (int i = 0; i < min; i++) {
+      familyList.add(families[i]);
+    }
+    SqlOperandTypeChecker rule = OperandTypes.family(familyList);
+    for (int i = min; i < families.length; i++) {
+      familyList.add(families[i]);
+      rule = OperandTypes.or(rule, OperandTypes.family(familyList));
+    }
+    return rule;
   }
 
   // TODO: Extend the Library Operator and use the builtin Libraries
@@ -385,6 +409,79 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction REGEXP_LIKE =
+      new SqlFunction(
+          "REGEXP_LIKE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN_NULLABLE,
+          null,
+          argumentRange(
+              2, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction REGEXP_COUNT =
+      new SqlFunction(
+          "REGEXP_COUNT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER_NULLABLE,
+          null,
+          argumentRange(
+              2,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.CHARACTER),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction REGEXP_REPLACE =
+      new SqlFunction(
+          "REGEXP_REPLACE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          null,
+          argumentRange(
+              2,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.CHARACTER),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction REGEXP_SUBSTR =
+      new SqlFunction(
+          "REGEXP_SUBSTR",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          null,
+          argumentRange(
+              2,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction REGEXP_INSTR =
+      new SqlFunction(
+          "REGEXP_INSTR",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER_NULLABLE,
+          null,
+          argumentRange(
+              2,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.CHARACTER,
+              SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.STRING);
+
   public static final SqlFunction INITCAP =
       new SqlFunction(
           "INITCAP",
@@ -404,6 +501,11 @@ public final class StringOperatorTable implements SqlOperatorTable {
           LEFT,
           RIGHT,
           REPEAT,
+          REGEXP_LIKE,
+          REGEXP_COUNT,
+          REGEXP_REPLACE,
+          REGEXP_SUBSTR,
+          REGEXP_INSTR,
           STRCMP,
           EDITDISTANCE,
           FORMAT,

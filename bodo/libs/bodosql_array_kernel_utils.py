@@ -4,6 +4,7 @@ Common utilities for all BodoSQL array kernels
 """
 
 import math
+import re
 
 import numba
 import numpy as np
@@ -32,6 +33,7 @@ def gen_vectorized(
     arg_sources=None,
     array_override=None,
     support_dict_encoding=True,
+    prefix_code=None,
 ):
     """Creates an impl for a column compute function that has several inputs
        that could all be scalars, nulls, or arrays by broadcasting appropriately.
@@ -57,6 +59,8 @@ def gen_vectorized(
         even if all of the arg_types are scalars.
         support_dict_encoding (optional boolean) if true, allows dictionary
         encoded outputs under certain conditions
+        prefix_code (optional string): if provided, embedes the code string
+        right before the loop begins.
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -99,7 +103,7 @@ def gen_vectorized(
 
     NOTE: dictionary encoded outputs operate under the following assumptions:
     - The output will only be dictionary encoded if exactly one of the inputs
-        is dicitonary encoded, and hte rest are all scalars, and support_dict_encoding
+        is dicitonary encoded, and the rest are all scalars, and support_dict_encoding
         is True.
     - The indices do not change, except for some of them becoming null if the
         string they refer to is also transformed into null
@@ -150,6 +154,11 @@ def gen_vectorized(
     )
 
     # Calculate the indentation of the scalar_text so that it can be removed
+    if prefix_code is not None:
+        prefix_line = prefix_code.splitlines()[0]
+        prefix_indentation = len(prefix_line) - len(prefix_line.lstrip())
+
+    # Calculate the indentation of the scalar_text so that it can be removed
     first_line = scalar_text.splitlines()[0]
     base_indentation = len(first_line) - len(first_line.lstrip())
 
@@ -164,6 +173,12 @@ def gen_vectorized(
     if arg_sources is not None:
         for argument, source in arg_sources.items():
             func_text += f"   {argument} = {source}\n"
+
+    # If prefix_text was provided, embed it before the loop (unless the output
+    # is all-null)
+    if prefix_code is not None and not out_null:
+        for line in prefix_code.splitlines():
+            func_text += " " * 3 + line[prefix_indentation:] + "\n"
 
     # If all the inputs are scalar, either output None immediately or
     # compute a single scalar computation without the loop
@@ -329,6 +344,7 @@ def gen_vectorized(
             "bodo": bodo,
             "math": math,
             "numba": numba,
+            "re": re,
             "np": np,
             "out_dtype": out_dtype,
             "pd": pd,
@@ -496,6 +512,20 @@ def verify_string_arg(arg, f_name, a_name):  # pragma: no cover
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a string, string column, or null"
         )
+
+
+def verify_scalar_string_arg(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a scalar string
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+    raises: BodoError if the argument is not a scalar string
+    """
+    if arg not in (types.unicode_type, bodo.none) and not isinstance(
+        arg, types.StringLiteral
+    ):
+        raise_bodo_error(f"{f_name} {a_name} argument must be a scalar string")
 
 
 def verify_binary_arg(arg, f_name, a_name):  # pragma: no cover
