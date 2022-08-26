@@ -14,6 +14,10 @@ from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning
 
+# A configurable variable by which we determine whether to dictionary-encode
+# a string column.
+# Encode if num of unique elem / num of total rows <= DICT_ENCODE_CRITERION
+DICT_ENCODE_CRITERION = 0.5
 # Mapping of the Snowflake field types to the pyarrow types taken
 # from the snowflake connector. These are not fully accurate and don't match
 # the arrow types. However, they can be used when the returned data is empty.

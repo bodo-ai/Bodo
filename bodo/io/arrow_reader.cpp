@@ -4,6 +4,7 @@
 // helper code to read Arrow data into Bodo.
 
 #include "arrow_reader.h"
+#include "../libs/_array_utils.h"
 #include "../libs/_datetime_ext.h"
 #include "../libs/_datetime_utils.h"
 #include "../libs/_distributed.h"
@@ -614,6 +615,131 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
     arrow::ArrayVector all_chunks;
 };
 
+/// Column builder for constructing dictionary-encoded string arrays from string
+/// arrays
+class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
+   public:
+    /**
+     * @param type : Arrow type of input array
+     */
+    DictionaryEncodedFromStringBuilder(std::shared_ptr<arrow::DataType> type,
+                                       int64_t length)
+        : dtype(arrow_to_bodo_type(type)), length(length) {
+        //  This builder is currently only used for Snowflake, where we
+        //  determine whether or not to dictionary-encode ourselves.
+        if (dtype != Bodo_CTypes::CTypeEnum::STRING &&
+            dtype != Bodo_CTypes::CTypeEnum::BINARY) {
+            throw std::runtime_error(
+                "DictionaryEncodedFromStringBuilder only supports STRING and "
+                "BINARY data types");
+        }
+        // initialize the indices array
+        if (length > 0)
+            this->indices_arr =
+                alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
+    }
+
+    virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
+        // unlike in other builders where we store the chunks, we incrementally
+        // build the dictionary encoded array to save memory
+        for (auto arr : chunked_arr->chunks()) {
+            if (arrow::is_binary_like(arr->type_id())) {
+                this->update_dict_and_fill_indices_from_chunk<
+                    arrow::BinaryArray, uint32_t>(arr);
+            } else if (arrow::is_large_binary_like(arr->type_id())) {
+                this->update_dict_and_fill_indices_from_chunk<
+                    arrow::LargeBinaryArray, uint64_t>(arr);
+            } else {
+                throw std::runtime_error(
+                    "Unsupported array type provided to "
+                    "DictionaryEncodedFromStringBuilder.");
+            }
+        }
+        // XXX hopefully keeping the string arrays around doesn't prevent other
+        // intermediate Arow arrays and tables from being deleted when not
+        // needed anymore
+    }
+
+    virtual array_info* get_output() {
+        if (out_array != nullptr) return out_array;
+
+        if (length == 0) {
+            this->out_array = alloc_dict_string_array(
+                0, 0, 0, /*has_global_dictionary=*/false);
+            return this->out_array;
+        }
+        array_info* dict_arr =
+            alloc_array(total_distinct_strings, total_distinct_chars, -1,
+                        bodo_array_type::STRING, dtype, 0, -1);
+        int64_t n_null_bytes = (total_distinct_strings + 7) >> 3;
+        offset_t* out_offsets = (offset_t*)dict_arr->data2;
+        // We know there's no nulls in the dictionary, so memset the
+        // null_bitmask
+        memset(dict_arr->null_bitmask, 0xFF, n_null_bytes);
+        out_offsets[0] = 0;
+        for (auto& it : str_to_ind) {
+            memcpy(dict_arr->data1 + it.second.second, it.first.c_str(),
+                   it.first.size());
+            out_offsets[it.second.first] = it.second.second;
+        }
+        out_offsets[total_distinct_strings] =
+            static_cast<offset_t>(total_distinct_chars);
+        out_array = new array_info(
+            bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
+            -1, NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL,
+            NULL, 0, 0, 0, false, false, dict_arr, indices_arr);
+        return out_array;
+    }
+
+   private:
+    template <typename ARROW_ARRAY_TYPE, typename OFFSET_TYPE>
+    void update_dict_and_fill_indices_from_chunk(
+        const std::shared_ptr<arrow::Array>& arr) {
+        auto str_arr = std::dynamic_pointer_cast<ARROW_ARRAY_TYPE>(arr);
+        const int64_t n_strings = str_arr->length();
+        const int64_t str_start_offset = str_arr->data()->offset;
+        const OFFSET_TYPE* in_offsets =
+            (OFFSET_TYPE*)str_arr->value_offsets()->data();
+        for (int64_t i = 0; i < n_strings; i++) {
+            if (str_arr->IsNull(i)) {
+                indices_arr->set_null_bit(n_strings_copied + i, false);
+                continue;
+            }
+            indices_arr->set_null_bit(n_strings_copied + i, true);
+            const uint64_t length = in_offsets[str_start_offset + i + 1] -
+                                    in_offsets[str_start_offset + i];
+            std::string val = str_arr->GetString(i);
+            if (!str_to_ind.contains(val)) {
+                indices_arr->at<int32_t>(n_strings_copied + i) = count;
+                std::pair<int32_t, uint64_t> ind_offset_len =
+                    std::make_pair(count++, total_distinct_chars);
+                str_to_ind[val] = ind_offset_len;
+                total_distinct_chars += length;
+                total_distinct_strings += 1;
+            } else {
+                indices_arr->at<int32_t>(n_strings_copied + i) =
+                    str_to_ind[val].first;
+            }
+        }
+        n_strings_copied += n_strings;
+    }
+
+    const Bodo_CTypes::CTypeEnum dtype;  // STRING or BINARY
+    const int64_t length;                // number of indices of output array
+    array_info* indices_arr;
+    // str_to_ind maps string to its new index, new offset in the new
+    // dictionary array. the 0th offset maps to 0.
+    UNORD_MAP_CONTAINER<std::string, std::pair<int32_t, uint64_t>> str_to_ind;
+    int64_t count = 0;  // cumulative counter, used for reindexing the unique
+                        // strings in the inner dict array
+    int64_t n_strings_copied =
+        0;  // used for mapping the new index back to the indices array
+    int64_t total_distinct_strings =
+        0;  // number of strings in the inner dict array
+    int64_t total_distinct_chars =
+        0;  // total number of chars in the inner dict array
+};
+
 /// Column builder for list of string arrays
 class ListStringBuilder : public TableBuilder::BuilderColumn {
    public:
@@ -750,7 +876,8 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
                            std::set<int>& selected_fields,
                            const int64_t num_rows,
                            std::vector<bool>& is_nullable,
-                           const std::set<std::string>& str_as_dict_cols) {
+                           const std::set<std::string>& str_as_dict_cols,
+                           const bool create_dict_from_string) {
     int j = 0;
     for (int i : selected_fields) {
         const bool nullable_field = is_nullable[j++];
@@ -758,9 +885,6 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
         // is a single field)
         auto field = schema->field(i);
         auto type = field->type()->id();
-        // 'type' comes from the schema returned from
-        // bodo.io.parquet_pio.get_parquet_dataset() which always has string
-        // columns as STRING (not DICT)
         bool is_categorical = arrow::is_dictionary(type);
         if (arrow::is_primitive(type) || arrow::is_decimal(type) ||
             is_categorical) {
@@ -776,8 +900,13 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
             }
         } else if (arrow::is_binary_like(type) &&
                    (str_as_dict_cols.count(field->name()) > 0)) {
-            columns.push_back(
-                new DictionaryEncodedStringBuilder(field->type(), num_rows));
+            if (create_dict_from_string) {
+                columns.push_back(new DictionaryEncodedFromStringBuilder(
+                    field->type(), num_rows));
+            } else {
+                columns.push_back(new DictionaryEncodedStringBuilder(
+                    field->type(), num_rows));
+            }
         } else if (arrow::is_base_binary_like(type)) {
             columns.push_back(new StringBuilder(field->type()));
         } else if (type == arrow::Type::LIST &&
@@ -804,7 +933,8 @@ void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
 
 // -------------------- ArrowDataframeReader --------------------
 void ArrowDataframeReader::init_arrow_reader(
-    const std::vector<int32_t>& str_as_dict_cols) {
+    const std::vector<int32_t>& str_as_dict_cols,
+    const bool create_dict_from_string) {
     if (initialized)
         throw std::runtime_error("ArrowDataframeReader already initialized");
     tracing::Event ev("reader::init", parallel);
@@ -817,6 +947,7 @@ void ArrowDataframeReader::init_arrow_reader(
     PyObject* ds = get_dataset();
     schema = get_schema(ds);
 
+    create_dict_encoding_from_strings = create_dict_from_string;
     for (auto i : str_as_dict_cols) {
         auto field = schema->field(i);
         str_as_dict_colnames.emplace(field->name());
