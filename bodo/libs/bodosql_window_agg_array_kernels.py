@@ -7,6 +7,7 @@ frames.
 
 import numba
 import numpy as np
+import pandas as pd
 from numba.core import types
 from numba.extending import overload
 
@@ -128,3 +129,70 @@ def change_event(S):
         )
 
     return impl
+
+
+@numba.generated_jit(nopython=True)
+def windowed_sum(S, lower_bound, upper_bound):
+    verify_int_float_arg(S, "windowed_sum", S)
+    if not bodo.utils.utils.is_array_typ(S, True):
+        raise_bodo_error("Input must be an array type")
+
+    calculate_block = "res[i] = total"
+    constant_block = "constant_value = S.sum()"
+    setup_block = "total = 0"
+    enter_block = "total += elem"
+    exit_block = "total -= elem"
+    if isinstance(S.dtype, types.Integer):
+        out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
+    else:
+        out_dtype = types.Array(bodo.float64, 1, "C")
+
+    return gen_windowed(
+        calculate_block,
+        constant_block,
+        out_dtype,
+        setup_block=setup_block,
+        enter_block=enter_block,
+        exit_block=exit_block,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def windowed_count(S, lower_bound, upper_bound):
+    if not bodo.utils.utils.is_array_typ(S, True):
+        raise_bodo_error("Input must be an array type")
+
+    calculate_block = "res[i] = in_window"
+    constant_block = "constant_value = S.count()"
+    empty_block = "res[i] = 0"
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
+
+    return gen_windowed(
+        calculate_block,
+        constant_block,
+        out_dtype,
+        empty_block=empty_block,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def windowed_avg(S, lower_bound, upper_bound):
+    verify_int_float_arg(S, "windowed_avg", S)
+    if not bodo.utils.utils.is_array_typ(S, True):
+        raise_bodo_error("Input must be an array type")
+
+    calculate_block = "res[i] = total / in_window"
+    constant_block = "constant_value = S.mean()"
+    out_dtype = types.Array(bodo.float64, 1, "C")
+    setup_block = "total = 0"
+    enter_block = "total += elem"
+    exit_block = "total -= elem"
+
+    return gen_windowed(
+        calculate_block,
+        constant_block,
+        out_dtype,
+        setup_block=setup_block,
+        enter_block=enter_block,
+        exit_block=exit_block,
+    )

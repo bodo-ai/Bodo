@@ -33,8 +33,8 @@ def gen_vectorized(
     array_override=None,
     support_dict_encoding=True,
 ):
-    """Creates an impl for a function that has several inputs that could all be
-       scalars, nulls, or arrays by broadcasting appropriately.
+    """Creates an impl for a column compute function that has several inputs
+       that could all be scalars, nulls, or arrays by broadcasting appropriately.
 
     Args:
         arg_names (string list): the names of each argument
@@ -680,3 +680,222 @@ def vectorized_sol(args, scalar_fn, dtype, manual_coercion=False):
         return pd.Series([dtype(scalar_fn(*params)) for params in zip(*arglist)])
     else:
         return pd.Series([scalar_fn(*params) for params in zip(*arglist)], dtype=dtype)
+
+
+def gen_windowed(
+    calculate_block,
+    constant_block,
+    out_dtype,
+    setup_block=None,
+    enter_block=None,
+    exit_block=None,
+    empty_block=None,
+):
+    """Creates an impl for a window frame function that accumulates some value
+    as elements enter and exit a window that starts/ends some number of indices
+    before/after each element of the array. Unbounded preceding/following
+    can be implemented by providing lower/upper bounds that are larger than
+    the size of the input.
+
+    Note: the implementations are only designed to work sequentially, BodoSQL
+    window functions currently only work on partitioned data.
+
+    Args:
+        constant_block (string): what should happen if the output value will
+        always be the same due to the window size being so big.
+        calculate_block (string): how should the current array value be
+        calculated in terms of the up-to-date accumulators
+        out_dtype (dtype): what is the dtype of the output data.
+        setup_block (string, optional): what should happen to initialize the
+        accumulators
+        enter_block (string, optional): what should happen when a non-null
+        element enters the window
+        exit_block (string, optional):  what should happen when a non-null
+        element exits the window
+        empty_block (string, optional): what should happen if the entire window
+        frame is null. If None, calls setna. Defaults to None.
+
+    Returns:
+        function: a window function that takes in a Series, lower bound,
+        and upper bound, and outputs an array where each value corresponds
+        to the desired aggregation of the values from the specified bounds
+        starting from each index.
+
+    Usage notes:
+        - When writing enter_block/exit_block, the variable "elem" is used to
+          denote the current value entering/exiting the array. You may assume
+          that this value is not null.
+        - The variable "in_window "is used to denote the length of the window
+          frame that is not out of bounds, excluding nulls.
+        - When writing calculate_block, store the final answer as "res[i] = ..."
+        - When writing constant_block, store the value answer as "constant_value = ..."
+
+    The generated code will look as follows:
+
+    def impl(S, lower_bound, upper_bound):
+        n = len(S)
+        arr = bodo.utils.conversion.coerce_to_array(S)
+        res = bodo.utils.utils.alloc_type(n, out_dtype, -1)
+        # If the slice is empty, output all nulls
+        if upper_bound < lower_bound:
+            for i in range(n):
+                bodo.libs.array_kernels.setna(res, i)
+        elif lower_bound <= -n+1 and n-1 <= upper_bound:
+            # <CONSTANT_BLOCK>
+            for i in range(n):
+                res[i] = constant_value
+        else:
+            # Keep track of the first/last index of the current window,
+            # the number of non-null entries in the window, and the current
+            # values for the crucial variables
+            exiting = lower_bound
+            entering = upper_bound
+            in_window = 0
+            << INSERT SETUP_BLOCK HERE >>
+            # Calculate the starting values
+            for i in range(min(max(0, exiting), n), min(max(0, entering + 1), n)):
+                if not bodo.libs.array_kernels.isna(arr, i):
+                    in_window += 1
+                    elem = arr[i]
+                    << INSERT ENTER_BLOCK HERE >>
+            # Loop over each entry and update the number of elements
+            # in the window & the current sum
+            for i in range(n):
+                # The current element is null if the window has no
+                # non-null elements, otherwise it is the current total
+                if in_window == 0:
+                    << INSERT EMPTY_BLOCK HERE >>
+                else:
+                    << INSERT CALCULATE_BLOCK HERE >>
+                # If the old end of the window is in bounds and non-null,
+                # remove it
+                if 0 <= exiting < n:
+                    if not bodo.libs.array_kernels.isna(arr, exiting):
+                    in_window -= 1
+                    elem = arr[exiting]
+                    << INSERT EXIT_BLOCK HERE >>
+                # Move the start/end of the window forward 1 step
+                exiting += 1
+                entering += 1
+                # If the new start of the window is in bounds and non-null,
+                # add it
+                if 0 <= entering < n:
+                    if not bodo.libs.array_kernels.isna(arr, entering):
+                    in_window += 1
+                    elem = arr[entering]
+                    << INSERT ENTER_BLOCK HERE >>
+        return res
+    """
+    # Calculate the indentation of the calculate_block so that it can be removed
+    calculate_lines = calculate_block.splitlines()
+    calculate_indentation = len(calculate_lines[0]) - len(calculate_lines[0].lstrip())
+
+    # Calculate the indentation of the constant_block so that it can be removed
+    constant_lines = constant_block.splitlines()
+    constant_indentation = len(constant_lines[0]) - len(constant_lines[0].lstrip())
+
+    if setup_block != None:
+        # Calculate the indentation of the setup_block so that it can be removed
+        setup_lines = setup_block.splitlines()
+        setup_indentation = len(setup_lines[0]) - len(setup_lines[0].lstrip())
+
+    if enter_block != None:
+        # Calculate the indentation of the enter_block so that it can be removed
+        enter_lines = enter_block.splitlines()
+        enter_indentation = len(enter_lines[0]) - len(enter_lines[0].lstrip())
+
+    if exit_block != None:
+        # Calculate the indentation of the exit_block so that it can be removed
+        exit_lines = exit_block.splitlines()
+        exit_indentation = len(exit_lines[0]) - len(exit_lines[0].lstrip())
+
+    # Calculate the indentation of the empty_block so that it can be removed
+    if empty_block == None:
+        empty_block = "bodo.libs.array_kernels.setna(res, i)"
+    empty_lines = empty_block.splitlines()
+    empty_indentation = len(empty_lines[0]) - len(empty_lines[0].lstrip())
+
+    func_text = "def impl(S, lower_bound, upper_bound):\n"
+    func_text += "   n = len(S)\n"
+    func_text += "   arr = bodo.utils.conversion.coerce_to_array(S)\n"
+    func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, -1)\n"
+    func_text += "   if upper_bound < lower_bound:\n"
+    func_text += "      for i in range(n):\n"
+    func_text += "         bodo.libs.array_kernels.setna(res, i)\n"
+    func_text += "   elif lower_bound <= -n+1 and n-1 <= upper_bound:\n"
+    func_text += (
+        "\n".join([" " * 6 + line[constant_indentation:] for line in constant_lines])
+        + "\n"
+    )
+    func_text += "      for i in range(n):\n"
+    func_text += "         res[i] = constant_value\n"
+    func_text += "   else:\n"
+    func_text += "      exiting = lower_bound\n"
+    func_text += "      entering = upper_bound\n"
+    func_text += "      in_window = 0\n"
+    if setup_block != None:
+        func_text += (
+            "\n".join([" " * 6 + line[setup_indentation:] for line in setup_lines])
+            + "\n"
+        )
+    func_text += (
+        "      for i in range(min(max(0, exiting), n), min(max(0, entering + 1), n)):\n"
+    )
+    func_text += "         if not bodo.libs.array_kernels.isna(arr, i):\n"
+    func_text += "            in_window += 1\n"
+    if enter_block != None:
+        if "elem" in enter_block:
+            func_text += "            elem = arr[i]\n"
+        func_text += (
+            "\n".join([" " * 12 + line[enter_indentation:] for line in enter_lines])
+            + "\n"
+        )
+    func_text += "      for i in range(n):\n"
+    func_text += "         if in_window == 0:\n"
+    func_text += (
+        "\n".join([" " * 12 + line[empty_indentation:] for line in empty_lines]) + "\n"
+    )
+    func_text += "         else:\n"
+    func_text += (
+        "\n".join([" " * 12 + line[calculate_indentation:] for line in calculate_lines])
+        + "\n"
+    )
+    func_text += "         if 0 <= exiting < n:\n"
+    func_text += "            if not bodo.libs.array_kernels.isna(arr, exiting):\n"
+    func_text += "               in_window -= 1\n"
+    if exit_block != None:
+        if "elem" in exit_block:
+            func_text += "               elem = arr[exiting]\n"
+        func_text += (
+            "\n".join([" " * 15 + line[exit_indentation:] for line in exit_lines])
+            + "\n"
+        )
+    func_text += "         exiting += 1\n"
+    func_text += "         entering += 1\n"
+    func_text += "         if 0 <= entering < n:\n"
+    func_text += "            if not bodo.libs.array_kernels.isna(arr, entering):\n"
+    func_text += "               in_window += 1\n"
+    if enter_block != None:
+        if "elem" in enter_block:
+            func_text += "               elem = arr[entering]\n"
+        func_text += (
+            "\n".join([" " * 15 + line[enter_indentation:] for line in enter_lines])
+            + "\n"
+        )
+    func_text += "   return res"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "numba": numba,
+            "np": np,
+            "out_dtype": out_dtype,
+            "pd": pd,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+
+    return impl
