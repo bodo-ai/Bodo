@@ -176,7 +176,10 @@ if __name__ == "__main__":
     # Create a random table name to write to and broadcast to all ranks
     table_name = None
     if comm.Get_rank() == 0:
-        table_name = f"lineitem_out_{str(uuid4())[:8]}"
+        # We use uppercase due to an issue reading tables
+        # with lowercase letters.
+        # https://bodo.atlassian.net/browse/BE-3534
+        table_name = f"lineitem_out_{str(uuid4())[:8]}".upper()
     table_name = comm.bcast(table_name)
 
     # Get Snowflake connection string
@@ -226,8 +229,8 @@ if __name__ == "__main__":
 
     # Checksum can be off-by-one due to rounding issues (e.g. in disc_price and charge columns)
     assert (
-        1903874716870996 <= sf_df_checksum <= 1903874716870997
-    ), f"Expected checksum (1903874716870996 or 1903874716870997) != Checksum of table in Snowflake ({sf_df_checksum})"
+        1903874716870990 <= sf_df_checksum <= 1903874716871000
+    ), f"Expected checksum (between 1903874716870990 and 1903874716871000) != Checksum of table in Snowflake ({sf_df_checksum})"
 
     # Drop the table, to avoid dangling tables on our account.
     # This is done on a single rank, and any errors are then
