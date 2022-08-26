@@ -7,6 +7,7 @@ from bodo.libs.bodosql_array_kernel_utils import *  # noqa
 from bodo.libs.bodosql_datetime_array_kernels import *  # noqa
 from bodo.libs.bodosql_numeric_array_kernels import *  # noqa
 from bodo.libs.bodosql_other_array_kernels import *  # noqa
+from bodo.libs.bodosql_regexp_array_kernels import *  # noqa
 from bodo.libs.bodosql_string_array_kernels import *  # noqa
 from bodo.libs.bodosql_trig_array_kernels import *  # noqa
 from bodo.libs.bodosql_variadic_array_kernels import *  # noqa
@@ -60,6 +61,11 @@ broadcasted_fixed_arg_functions = {
     "negate",
     "nullif",
     "ord_ascii",
+    "regexp_count",
+    "regexp_instr",
+    "regexp_like",
+    "regexp_replace",
+    "regexp_substr",
     "regr_valx",
     "regr_valy",
     "repeat",

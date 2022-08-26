@@ -34,6 +34,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.ge
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PrefixOpCodeGen.generatePrefixOpCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.PrefixOpCodeGen.generatePrefixOpName;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.generateSortCode;
@@ -2315,6 +2316,66 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateFromUnixTimeCode(
                 operandsInfo.get(0),
                 exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+          case "REGEXP_LIKE":
+            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 3)) {
+              throw new BodoSQLCodegenException(
+                  "Error, invalid number of arguments passed to REGEXP_LIKE");
+            }
+            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
+                || (operandsInfo.size() == 3
+                    && exprTypes.get(2) != BodoSQLExprType.ExprType.SCALAR)) {
+              throw new BodoSQLCodegenException(
+                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+            }
+            return generateRegexpLikeInfo(operandsInfo);
+          case "REGEXP_COUNT":
+            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 4)) {
+              throw new BodoSQLCodegenException(
+                  "Error, invalid number of arguments passed to REGEXP_COUNT");
+            }
+            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
+                || (operandsInfo.size() == 4
+                    && exprTypes.get(3) != BodoSQLExprType.ExprType.SCALAR)) {
+              throw new BodoSQLCodegenException(
+                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+            }
+            return generateRegexpCountInfo(operandsInfo);
+          case "REGEXP_REPLACE":
+            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 6)) {
+              throw new BodoSQLCodegenException(
+                  "Error, invalid number of arguments passed to REGEXP_REPLACE");
+            }
+            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
+                || (operandsInfo.size() == 6
+                    && exprTypes.get(5) != BodoSQLExprType.ExprType.SCALAR)) {
+              throw new BodoSQLCodegenException(
+                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+            }
+            return generateRegexpReplaceInfo(operandsInfo);
+          case "REGEXP_SUBSTR":
+            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 6)) {
+              throw new BodoSQLCodegenException(
+                  "Error, invalid number of arguments passed to REGEXP_SUBSTR");
+            }
+            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
+                || (operandsInfo.size() > 4
+                    && exprTypes.get(4) != BodoSQLExprType.ExprType.SCALAR)) {
+              throw new BodoSQLCodegenException(
+                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+            }
+            return generateRegexpSubstrInfo(operandsInfo);
+          case "REGEXP_INSTR":
+            if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 7)) {
+              throw new BodoSQLCodegenException(
+                  "Error, invalid number of arguments passed to REGEXP_INSTR");
+            }
+            if (exprTypes.get(1) != BodoSQLExprType.ExprType.SCALAR
+                || (operandsInfo.size() > 5
+                    && exprTypes.get(5) != BodoSQLExprType.ExprType.SCALAR)) {
+              throw new BodoSQLCodegenException(
+                  "Error, PATTERN & FLAG argument for REGEXP functions must be a scalar");
+            }
+            return generateRegexpInstrInfo(operandsInfo);
           case "ORD":
           case "ASCII":
           case "CHAR":

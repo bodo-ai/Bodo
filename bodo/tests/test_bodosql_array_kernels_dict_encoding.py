@@ -629,6 +629,253 @@ def test_dict_coalesce(args):
     [
         pytest.param(
             (
+                pa.array(
+                    [
+                        "alpha",
+                        "soup is very very",
+                        None,
+                        "alpha beta gamma",
+                        None,
+                        "alpha beta",
+                    ]
+                    * 2,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                ),
+                r"(\w+)",
+                "",
+                r"\1-\1",
+                1,
+                1,
+                0,
+                1,
+                True,
+                pd.Series(
+                    [True, False, None, False, None, False] * 2, dtype=pd.BooleanDtype()
+                ),
+                pd.Series([1, 4, None, 3, None, 2] * 2, dtype=pd.Int32Dtype()),
+                pd.Series(
+                    [
+                        "Alpha-alpha",
+                        "Soup-soup is-is very-very very-very",
+                        None,
+                        "Alpha-alpha beta-beta gamma-gamma",
+                        None,
+                        "Alpha-alpha beta-beta",
+                    ]
+                    * 2
+                ),
+                pd.Series(["Alpha", "Soup", None, "Alpha", None, "Alpha"] * 2),
+                pd.Series([1, 1, None, 1, None, 1] * 2, dtype=pd.Int32Dtype()),
+            ),
+            id="dict_scalar_A",
+        ),
+        pytest.param(
+            (
+                pa.array(
+                    [
+                        "the quick brown fox jumps over the lazy dog.",
+                        "I will see if the book has arrived.",
+                        "The stranger officiates the meal every Tuesday.",
+                        "this year, the Christmas party coincided with the giant thunderstorm and the citywide blackouts.",
+                        "i told you to clean the bed!",
+                    ]
+                    * 5,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                ),
+                r"the (\w+) (\w+)",
+                "ie",
+                r"the [\2, \1]",
+                1,
+                2,
+                0,
+                2,
+                True,
+                pd.Series(
+                    [False, False, False, False, False] * 5, dtype=pd.BooleanDtype()
+                ),
+                pd.Series([2, 1, 2, 3, 0] * 5, dtype=pd.Int32Dtype()),
+                pd.Series(
+                    [
+                        "The [brown, quick] fox jumps over the lazy dog.",
+                        "I will see if the [has, book] arrived.",
+                        "The [officiates, stranger] the meal every tuesday.",
+                        "This year, the [party, christmas] coincided with the giant thunderstorm and the citywide blackouts.",
+                        "I told you to clean the bed!",
+                    ]
+                    * 5
+                ),
+                pd.Series(["Dog", None, "Every", "Thunderstorm", None] * 5),
+                pd.Series([41, 0, 34, 57, 0] * 5, dtype=pd.Int32Dtype()),
+            ),
+            id="dict_scalar_B",
+        ),
+        pytest.param(
+            (
+                pa.array(
+                    [
+                        "Be careful with the butter knife.",
+                        "the fence",
+                        "He was willing to slide all the way to the deepest depths.",
+                        "the snow-covered path was no way out of the back-country.",
+                        None,
+                    ]
+                    * 2,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                ),
+                r"the (\w+)",
+                "ie",
+                r"the ****",
+                pd.Series([1, 2]).repeat(5),
+                pd.Series([1, 2] * 5),
+                1,
+                1,
+                False,
+                pd.Series(
+                    [False, True, False, False, None] * 2, dtype=pd.BooleanDtype()
+                ),
+                pd.Series([1, 1, 2, 2, None, 1, 0, 2, 1, None], dtype=pd.Int32Dtype()),
+                pd.Series(
+                    [
+                        "Be careful with the **** knife.",
+                        "The ****",
+                        "He was willing to slide all the **** to the **** depths.",
+                        "The ****-covered path was no way out of the back-country.",
+                        None,
+                        "Be careful with the **** knife.",
+                        "The fence",
+                        "He was willing to slide all the **** to the deepest depths.",
+                        "The snow-covered path was no way out of the ****-country.",
+                        None,
+                    ]
+                ),
+                pd.Series(
+                    [
+                        "Butter",
+                        None,
+                        "Way",
+                        "Back",
+                        None,
+                        None,
+                        None,
+                        "Deepest",
+                        "Back",
+                        None,
+                    ]
+                ),
+                pd.Series(
+                    [27, 0, 36, 49, None, 0, 0, 51, 49, None], dtype=pd.Int32Dtype()
+                ),
+            ),
+            id="dict_vector",
+        ),
+    ],
+)
+@pytest.mark.parametrize("test", ["like", "count", "replace", "substr", "instr"])
+def test_dict_regexp(args, test):
+    def impl1(source, pattern, flags):
+        return bodo.libs.bodosql_array_kernels.regexp_like(source, pattern, flags)
+
+    def impl2(source, pattern, position, flags):
+        return bodo.libs.bodosql_array_kernels.regexp_count(
+            source, pattern, position, flags
+        )
+
+    def impl3(source, pattern, replacement, position, occurrence, flags):
+        return bodo.libs.bodosql_array_kernels.regexp_replace(
+            source, pattern, replacement, position, occurrence, flags
+        ).str.capitalize()
+
+    def impl4(source, pattern, position, occurrence, flags, group):
+        return bodo.libs.bodosql_array_kernels.regexp_substr(
+            source, pattern, position, occurrence, flags, group
+        ).str.capitalize()
+
+    def impl5(source, pattern, position, occurrence, option, flags, group):
+        return bodo.libs.bodosql_array_kernels.regexp_instr(
+            source, pattern, position, occurrence, option, flags, group
+        )
+
+    (
+        source,
+        pattern,
+        flags,
+        replacement,
+        position,
+        occurrence,
+        option,
+        group,
+        output_encoded,
+        A1,
+        A2,
+        A3,
+        A4,
+        A5,
+    ) = args
+
+    if test == "like":
+        check_func(
+            impl1,
+            (source, pattern, flags),
+            py_output=A1,
+            check_dtype=False,
+            reset_index=True,
+            additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+        )
+    if test == "count":
+        check_func(
+            impl2,
+            (source, pattern, position, flags),
+            py_output=A2,
+            check_dtype=False,
+            reset_index=True,
+            additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+        )
+    if test == "replace":
+        check_func(
+            impl3,
+            (source, pattern, replacement, position, occurrence - 1, flags),
+            py_output=A3,
+            check_dtype=False,
+            reset_index=True,
+            additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+        )
+        verify_dictionary_optimization(
+            impl3,
+            (source, pattern, replacement, position, occurrence - 1, flags),
+            "str_capitalize",
+            output_encoded,
+        )
+    if test == "substr":
+        check_func(
+            impl4,
+            (source, pattern, position, occurrence, flags, group),
+            py_output=A4,
+            check_dtype=False,
+            reset_index=True,
+            additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+        )
+        verify_dictionary_optimization(
+            impl4,
+            (source, pattern, position, occurrence, flags, group),
+            "str_capitalize",
+            output_encoded,
+        )
+    if test == "instr":
+        check_func(
+            impl5,
+            (source, pattern, position, occurrence, option, flags, group),
+            py_output=A5,
+            check_dtype=False,
+            reset_index=True,
+            additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+        )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
                 (
                     pa.array(
                         [

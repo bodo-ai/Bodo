@@ -225,6 +225,7 @@ from bodo.hiframes.pd_dataframe_ext import DataFrameType
 import bodo.libs.bodosql_array_kernel_utils
 import bodo.libs.bodosql_datetime_array_kernels
 import bodo.libs.bodosql_string_array_kernels
+import bodo.libs.bodosql_regexp_array_kernels
 import bodo.libs.bodosql_numeric_array_kernels
 import bodo.libs.bodosql_variadic_array_kernels
 import bodo.libs.bodosql_other_array_kernels
