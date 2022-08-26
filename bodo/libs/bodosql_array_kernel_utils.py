@@ -93,7 +93,7 @@ def gen_vectorized(
             arg0 = left[i]
             arg1 = right[i]
             res[i] = arg0 + arg1
-        return return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)
+        return res
 
     (Where out_dtype is mapped to types.int64)
 
@@ -234,15 +234,20 @@ def gen_vectorized(
         # arguments extracted by getitem.
         func_text += f"   n = {size_text}\n"
         if use_dict_encoding:
+            # add a null value at the end of the dictionary and compute the scalar
+            # kernel output for null values if we are not just propagating input nulls
+            # to output array.
+            # See test_bool.py::test_equal_null[vector_scalar_string]
+            dict_len = "n" if propagate_null[dict_encoded_arg] else "(n + 1)"
+            if not propagate_null[dict_encoded_arg]:
+                arr_name = arg_names[dict_encoded_arg]
+                func_text += f"   {arr_name} = bodo.libs.array_kernels.concat([{arr_name}, bodo.libs.array_kernels.gen_na_array(1, {arr_name})])\n"
+            # adding one extra element in dictionary for null output if necessary
             if out_dtype == bodo.string_array_type:
-                func_text += (
-                    "   res = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)\n"
-                )
+                func_text += f"   res = bodo.libs.str_arr_ext.pre_alloc_string_array({dict_len}, -1)\n"
             else:
-                func_text += (
-                    "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
-                )
-            func_text += "   for i in range(n):\n"
+                func_text += f"   res = bodo.utils.utils.alloc_type({dict_len}, out_dtype, (-1,))\n"
+            func_text += f"   for i in range({dict_len}):\n"
         else:
             func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
             func_text += "   numba.parfors.parfor.init_prange()\n"
@@ -300,20 +305,23 @@ def gen_vectorized(
                     "   for i in numba.parfors.parfor.internal_prange(len(indices)):\n"
                 )
                 # Copy nulls from the old index array to the output array
-                func_text += "      if bodo.libs.array_kernels.isna(indices, i):\n"
-                func_text += "         bodo.libs.array_kernels.setna(res2, i)\n"
-                func_text += "      else:\n"
-                func_text += "         loc = indices[i]\n"
+                if propagate_null[dict_encoded_arg]:
+                    func_text += "      if bodo.libs.array_kernels.isna(indices, i):\n"
+                    func_text += "         bodo.libs.array_kernels.setna(res2, i)\n"
+                    func_text += "         continue\n"
+                    func_text += "      loc = indices[i]\n"
+                else:
+                    # last dictionary value in res is null's output for the kernel
+                    func_text += "      loc = n if bodo.libs.array_kernels.isna(indices, i) else indices[i]\n"
                 # Copy nulls from the smaller array to the output array
-                func_text += "         if bodo.libs.array_kernels.isna(res, loc):\n"
-                func_text += "            bodo.libs.array_kernels.setna(res2, i)\n"
+                func_text += "      if bodo.libs.array_kernels.isna(res, loc):\n"
+                func_text += "         bodo.libs.array_kernels.setna(res2, i)\n"
                 # Copy values from the smaller array to the larger array
-                func_text += "         else:\n"
-                func_text += "            res2[i] = res[loc]\n"
+                func_text += "      else:\n"
+                func_text += "         res2[i] = res[loc]\n"
                 func_text += "   res = res2\n"
-            func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, len(indices), 1), None)"
-        else:
-            func_text += "   return bodo.hiframes.pd_series_ext.init_series(res, bodo.hiframes.pd_index_ext.init_range_index(0, n, 1), None)"
+
+        func_text += "   return res"
     loc_vars = {}
     exec(
         func_text,

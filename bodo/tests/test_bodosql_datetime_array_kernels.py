@@ -33,7 +33,11 @@ def dates_scalar_vector(request):
 
 def test_dayname(dates_scalar_vector):
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.dayname(arr)
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayname(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayname(arr)
 
     # Simulates DAYNAME on a single row
     def dayname_scalar_fn(elem):
@@ -67,7 +71,11 @@ def test_dayname(dates_scalar_vector):
 )
 def test_day_timestamp(days):
     def impl(days):
-        return bodo.libs.bodosql_array_kernels.day_timestamp(days)
+        return pd.Series(bodo.libs.bodosql_array_kernels.day_timestamp(days))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(days, int):
+        impl = lambda days: bodo.libs.bodosql_array_kernels.day_timestamp(days)
 
     # Simulates day_timestamp on a single row
     def days_scalar_fn(days):
@@ -103,7 +111,11 @@ def test_day_timestamp(days):
 )
 def test_int_to_days(days):
     def impl(days):
-        return bodo.libs.bodosql_array_kernels.int_to_days(days)
+        return pd.Series(bodo.libs.bodosql_array_kernels.int_to_days(days))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(days, int):
+        impl = lambda days: bodo.libs.bodosql_array_kernels.int_to_days(days)
 
     # Simulates int_to_days on a single row
     def itd_scalar_fn(days):
@@ -126,7 +138,11 @@ def test_int_to_days(days):
 
 def test_last_day(dates_scalar_vector):
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.last_day(arr)
+        return pd.Series(bodo.libs.bodosql_array_kernels.last_day(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.last_day(arr)
 
     # Simulates LAST_DAY on a single row
     def last_day_scalar_fn(elem):
@@ -170,7 +186,11 @@ def test_last_day(dates_scalar_vector):
 )
 def test_makedate(args):
     def impl(year, day):
-        return bodo.libs.bodosql_array_kernels.makedate(year, day)
+        return pd.Series(bodo.libs.bodosql_array_kernels.makedate(year, day))
+
+    # Avoid pd.Series() conversion for scalar output
+    if isinstance(args[0], int) and isinstance(args[1], int):
+        impl = lambda year, day: bodo.libs.bodosql_array_kernels.makedate(year, day)
 
     # Simulates MAKEDATE on a single row
     def makedate_scalar_fn(year, day):
@@ -207,7 +227,11 @@ def test_makedate(args):
 )
 def test_second_timestamp(seconds):
     def impl(seconds):
-        return bodo.libs.bodosql_array_kernels.second_timestamp(seconds)
+        return pd.Series(bodo.libs.bodosql_array_kernels.second_timestamp(seconds))
+
+    # Avoid pd.Series() conversion for scalar output
+    if isinstance(seconds, int):
+        impl = lambda seconds: bodo.libs.bodosql_array_kernels.second_timestamp(seconds)
 
     # Simulates second_timestamp on a single row
     def second_scalar_fn(seconds):
@@ -230,7 +254,11 @@ def test_second_timestamp(seconds):
 
 def test_monthname(dates_scalar_vector):
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.monthname(arr)
+        return pd.Series(bodo.libs.bodosql_array_kernels.monthname(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.monthname(arr)
 
     # Simulates MONTHNAME on a single row
     def monthname_scalar_fn(elem):
@@ -281,7 +309,11 @@ def test_monthname(dates_scalar_vector):
 )
 def test_month_diff(args):
     def impl(arr0, arr1):
-        return bodo.libs.bodosql_array_kernels.month_diff(arr0, arr1)
+        return pd.Series(bodo.libs.bodosql_array_kernels.month_diff(arr0, arr1))
+
+    # avoid pd.Series() conversion for scalar output
+    if not isinstance(args[0], pd.Series) and not isinstance(args[1], pd.Series):
+        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.month_diff(arr0, arr1)
 
     # Simulates month diff on a single row
     def md_scalar_fn(ts1, ts2):
@@ -311,7 +343,11 @@ def test_month_diff(args):
 
 def test_weekday(dates_scalar_vector):
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.weekday(arr)
+        return pd.Series(bodo.libs.bodosql_array_kernels.weekday(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.weekday(arr)
 
     # Simulates WEEKDAY on a single row
     def weekday_scalar_fn(elem):
@@ -332,7 +368,11 @@ def test_weekday(dates_scalar_vector):
 
 def test_yearofweekiso(dates_scalar_vector):
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.yearofweekiso(arr)
+        return pd.Series(bodo.libs.bodosql_array_kernels.yearofweekiso(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.yearofweekiso(arr)
 
     # Simulates YEAROFWEEKISO on a single row
     def yearofweekiso_scalar_fn(elem):

@@ -108,7 +108,8 @@ public class StringFnCodeGen {
       }
     } else if (equivalentPandasMethodMapColumns.containsKey(fnName)) {
       String pandas_method = equivalentPandasMethodMapColumns.get(fnName);
-      return new RexNodeVisitorInfo(new_fn_name, arg1Expr + "." + pandas_method + "()");
+      return new RexNodeVisitorInfo(
+          new_fn_name, "pd.Series(" + arg1Expr + ")." + pandas_method + "().values");
     }
 
     // If we made it here, something has gone very wrong
@@ -244,7 +245,7 @@ public class StringFnCodeGen {
       RexNodeVisitorInfo curOpInfo = operandsInfo.get(i);
       concatWsName.append(curOpInfo.getName()).append(", ");
       concatWsArgs.add(curOpInfo.getExprCode());
-      concatWsExprTypes.add(exprTypes.get(0));
+      concatWsExprTypes.add(exprTypes.get(i));
       // Add the separator in between each argument
       if (!separatorInfo.getExprCode().equals("")) {
         concatWsName.append(separatorInfo.getName()).append(", ");
@@ -438,7 +439,8 @@ public class StringFnCodeGen {
               + ", "
               + "\" \")";
     } else {
-      outputExpr = stringToBeTrimmed.getExprCode() + ".str." + trimFn + "(\" \")";
+      outputExpr =
+          "pd.Series(" + stringToBeTrimmed.getExprCode() + ").str." + trimFn + "(\" \").values";
     }
     return new RexNodeVisitorInfo(outputName, outputExpr);
   }

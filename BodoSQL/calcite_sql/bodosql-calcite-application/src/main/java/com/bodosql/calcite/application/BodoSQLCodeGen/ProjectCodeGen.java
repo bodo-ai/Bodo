@@ -121,12 +121,9 @@ public class ProjectCodeGen {
     // This avoids MultiIndex issues and allows Bodo to optimize more.
     outString.append(indent).append(String.format("index = pd.RangeIndex(0, len(%s), 1)\n", inVar));
 
-    // Generate Series for Scalar Columns
+    // Generate array for scalar columns
     for (int i = 0; i < scalarSeriesNames.size(); i++) {
-      outString
-          .append(indent)
-          .append(scalarSeriesNames.get(i))
-          .append(" = bodo.hiframes.pd_series_ext.init_series(");
+      outString.append(indent).append(scalarSeriesNames.get(i)).append(" = ");
       int idx = scalarSeriesIdxs.get(i);
       if (exprTypes.get(idx) == BodoSQLExprType.ExprType.SCALAR) {
         // Scalars require separate code path to handle null.
@@ -143,7 +140,7 @@ public class ProjectCodeGen {
             .append(childExprs.get(idx).getExprCode())
             .append(", True)");
       }
-      outString.append(", index, None)\n");
+      outString.append("\n");
     }
 
     // generate output table, e.g. logical_table_to_table((in_table, S0, S1), col_indices)
@@ -165,8 +162,7 @@ public class ProjectCodeGen {
         .append(inVar)
         .append("), (");
     for (String seriesName : seriesNames) {
-      outString.append(
-          String.format("bodo.hiframes.pd_series_ext.get_series_data(%s), ", seriesName));
+      outString.append(String.format("%s, ", seriesName));
     }
     outString.append("), ");
     // generate tuple of column indices, e.g. (4, 2, 1)

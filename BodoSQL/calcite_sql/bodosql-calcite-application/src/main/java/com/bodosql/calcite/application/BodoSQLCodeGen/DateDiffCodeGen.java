@@ -49,7 +49,7 @@ public class DateDiffCodeGen {
           .append(arg)
           .append(")");
     } else {
-      floorBuilder.append(arg).append(".dt.floor(freq=\"D\")");
+      floorBuilder.append(String.format("pd.Series(%s)", arg)).append(".dt.floor(freq=\"D\")");
     }
     return floorBuilder.toString();
   }
@@ -65,7 +65,8 @@ public class DateDiffCodeGen {
     if (isScalar) {
       return "bodosql.libs.generated_lib.sql_null_checking_pd_timedelta_days(" + expr + ")";
     } else {
-      return expr + ".dt.days";
+      // TODO: use a direct array kernel
+      return String.format("pd.Series(%s).dt.days.values", expr);
     }
   }
 

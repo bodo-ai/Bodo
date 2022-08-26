@@ -195,7 +195,13 @@ def test_bitwise_number_bits(request):
 
 def test_bitand(test_bitwise_number_number):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.bitand(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.bitand(A, B))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(test_bitwise_number_number[0], pd.Series) and not isinstance(
+        test_bitwise_number_number[1], pd.Series
+    ):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.bitand(A, B)
 
     # Simulates BITAND on a single row
     def bitand_scalar_fn(A, B):
@@ -219,7 +225,11 @@ def test_bitand(test_bitwise_number_number):
 
 def test_bitleftshift(test_bitwise_number_bits):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.bitleftshift(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.bitleftshift(A, B))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(test_bitwise_number_bits[0], pd.Series):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.bitleftshift(A, B)
 
     # Simulates BITLEFTSHIFT on a single row
     def bitleftshift_scalar_fn(A, B):
@@ -246,7 +256,10 @@ def test_bitleftshift(test_bitwise_number_bits):
 
 def test_bitnot(test_bitwise_number_number):
     def impl(A):
-        return bodo.libs.bodosql_array_kernels.bitnot(A)
+        return pd.Series(bodo.libs.bodosql_array_kernels.bitnot(A))
+
+    # avoid Series conversion for scalar values
+    impl_scalar = lambda A: bodo.libs.bodosql_array_kernels.bitnot(A)
 
     # Simulates BITNOT on a single row
     def bitnot_scalar_fn(A):
@@ -263,7 +276,7 @@ def test_bitnot(test_bitwise_number_number):
     )
 
     check_func(
-        impl,
+        impl if isinstance(test_bitwise_number_number[0], pd.Series) else impl_scalar,
         (test_bitwise_number_number[0],),
         py_output=bitnot_answer_0,
         check_dtype=False,
@@ -271,7 +284,7 @@ def test_bitnot(test_bitwise_number_number):
         sort_output=False,
     )
     check_func(
-        impl,
+        impl if isinstance(test_bitwise_number_number[1], pd.Series) else impl_scalar,
         (test_bitwise_number_number[1],),
         py_output=bitnot_answer_1,
         check_dtype=False,
@@ -282,7 +295,13 @@ def test_bitnot(test_bitwise_number_number):
 
 def test_bitor(test_bitwise_number_number):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.bitor(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.bitor(A, B))
+
+    # avoid Series conversion for scalar values
+    if not isinstance(test_bitwise_number_number[0], pd.Series) and not isinstance(
+        test_bitwise_number_number[1], pd.Series
+    ):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.bitor(A, B)
 
     # Simulates BITOR on a single row
     def bitor_scalar_fn(A, B):
@@ -306,7 +325,11 @@ def test_bitor(test_bitwise_number_number):
 
 def test_bitrightshift(test_bitwise_number_bits):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.bitrightshift(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.bitrightshift(A, B))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(test_bitwise_number_bits[0], pd.Series):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.bitrightshift(A, B)
 
     # Simulates BITRIGHTSHIFT on a single row
     def bitrightshift_scalar_fn(A, B):
@@ -330,7 +353,13 @@ def test_bitrightshift(test_bitwise_number_bits):
 
 def test_bitxor(test_bitwise_number_number):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.bitxor(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.bitxor(A, B))
+
+    # avoid Series conversion for scalar values
+    if not isinstance(test_bitwise_number_number[0], pd.Series) and not isinstance(
+        test_bitwise_number_number[1], pd.Series
+    ):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.bitxor(A, B)
 
     # Simulates BITAND on a single row
     def bitxor_scalar_fn(A, B):
@@ -406,7 +435,13 @@ def test_bitxor(test_bitwise_number_number):
 )
 def test_conv(args):
     def impl(arr, old_base, new_base):
-        return bodo.libs.bodosql_array_kernels.conv(arr, old_base, new_base)
+        return pd.Series(bodo.libs.bodosql_array_kernels.conv(arr, old_base, new_base))
+
+    # avoid Series conversion for scalar values
+    if not isinstance(args[0], pd.Series):
+        impl = lambda arr, old_base, new_base: bodo.libs.bodosql_array_kernels.conv(
+            arr, old_base, new_base
+        )
 
     # Simulates CONV on a single row
     def conv_scalar_fn(elem, old_base, new_base):
@@ -442,7 +477,11 @@ def test_conv(args):
 
 def test_getbit(test_bitwise_number_bits):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.getbit(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.getbit(A, B))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(test_bitwise_number_bits[0], pd.Series):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.getbit(A, B)
 
     # Simulates BITOR on a single row
     def getbit_scalar_fn(A, B):
@@ -577,7 +616,15 @@ def test_getbit(test_bitwise_number_bits):
 )
 def test_haversine(args):
     def impl(lat1, lon1, lat2, lon2):
-        return bodo.libs.bodosql_array_kernels.haversine(lat1, lon1, lat2, lon2)
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.haversine(lat1, lon1, lat2, lon2)
+        )
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda lat1, lon1, lat2, lon2: bodo.libs.bodosql_array_kernels.haversine(
+            lat1, lon1, lat2, lon2
+        )
 
     def haversine_scalar_fn(lat1, lon1, lat2, lon2):
         if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
@@ -627,7 +674,11 @@ def test_haversine(args):
 )
 def test_div0(args):
     def impl(a, b):
-        return bodo.libs.bodosql_array_kernels.div0(a, b)
+        return pd.Series(bodo.libs.bodosql_array_kernels.div0(a, b))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda a, b: bodo.libs.bodosql_array_kernels.div0(a, b)
 
     def div0_scalar_fn(a, b):
         if pd.isna(a) or pd.isna(b):
@@ -677,7 +728,11 @@ def test_div0(args):
 )
 def test_log(args):
     def impl(arr, base):
-        return bodo.libs.bodosql_array_kernels.log(arr, base)
+        return pd.Series(bodo.libs.bodosql_array_kernels.log(arr, base))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr, base: bodo.libs.bodosql_array_kernels.log(arr, base)
 
     # Simulates LOG on a single row
     def log_scalar_fn(elem, base):
@@ -763,7 +818,11 @@ def test_log(args):
 )
 def test_negate(numbers):
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.negate(arr)
+        return pd.Series(bodo.libs.bodosql_array_kernels.negate(arr))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(numbers, pd.Series):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.negate(arr)
 
     # Simulates -X on a single row
     def negate_scalar_fn(elem):
@@ -826,7 +885,15 @@ def test_negate(numbers):
 )
 def test_width_bucket(args):
     def impl(arr, min_val, max_val, num_buckets):
-        return bodo.libs.bodosql_array_kernels.width_bucket(
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.width_bucket(
+                arr, min_val, max_val, num_buckets
+            )
+        )
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr, min_val, max_val, num_buckets: bodo.libs.bodosql_array_kernels.width_bucket(
             arr, min_val, max_val, num_buckets
         )
 

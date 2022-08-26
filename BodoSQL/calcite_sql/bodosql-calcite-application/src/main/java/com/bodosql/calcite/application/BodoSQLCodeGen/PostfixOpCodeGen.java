@@ -43,7 +43,7 @@ public class PostfixOpCodeGen {
             codeBuilder.append("pd.isna(").append(arg).append(")");
           }
         } else {
-          codeBuilder.append("(").append(arg).append(".isna())");
+          codeBuilder.append("pd.isna(").append(arg).append(")");
         }
         break;
       case IS_NOT_NULL:
@@ -54,7 +54,7 @@ public class PostfixOpCodeGen {
             codeBuilder.append("pd.notna(").append(arg).append(")");
           }
         } else {
-          codeBuilder.append("(").append(arg).append(".notna())");
+          codeBuilder.append("pd.notna(").append(arg).append(")");
         }
         break;
         // IS_NOT FALSE != IS_TRUE and visa vera for null case.
@@ -65,28 +65,36 @@ public class PostfixOpCodeGen {
         if (outputScalar) {
           codeBuilder.append("(not (").append(arg).append("is False))");
         } else {
-          codeBuilder.append(arg).append(".fillna(True)");
+          codeBuilder.append("pd.Series(").append(arg).append(").fillna(True).values");
         }
         break;
       case IS_NOT_TRUE:
         if (outputScalar) {
           codeBuilder.append("(not (").append(arg).append("is True))");
         } else {
-          codeBuilder.append("(~").append(arg).append(".fillna(False))");
+          codeBuilder
+              .append("(~")
+              .append("pd.Series(")
+              .append(arg)
+              .append(").fillna(False)).values");
         }
         break;
       case IS_TRUE:
         if (outputScalar) {
           codeBuilder.append("(").append(arg).append("is True)");
         } else {
-          codeBuilder.append(arg).append(".fillna(False)");
+          codeBuilder.append("pd.Series(").append(arg).append(").fillna(False).values");
         }
         break;
       case IS_FALSE:
         if (outputScalar) {
           codeBuilder.append("(").append(arg).append("is False)");
         } else {
-          codeBuilder.append("(~").append(arg).append(".fillna(True))");
+          codeBuilder
+              .append("(~")
+              .append("pd.Series(")
+              .append(arg)
+              .append(").fillna(True)).values");
         }
         break;
       default:

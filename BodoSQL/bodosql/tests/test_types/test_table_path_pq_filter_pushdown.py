@@ -54,6 +54,14 @@ def test_table_path_filter_pushdown():
         )
         return bc.sql("Select A + 1 from table1 where part = 'b'")
 
+    def impl4(filename):
+        bc = bodosql.BodoSQLContext(
+            {
+                "table1": bodosql.TablePath(filename, "parquet"),
+            }
+        )
+        return bc.sql("Select A + 1 from table1 where part = 'b' and part is not null")
+
     filename = "bodosql/tests/data/sample-parquet-data/partitioned"
 
     # Compare entirely to Pandas output to simplify the process.
@@ -85,6 +93,16 @@ def test_table_path_filter_pushdown():
     # make sure the ParquetReader node has filters parameter set and we have trimmed
     # any unused columns.
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl3)
+    bodo_func(filename)
+    _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+    # TODO: Check which columns were actually loaded.
+
+    # TODO: Update Name when the name changes
+    py_output4 = pd.DataFrame({"EXPR$0": py_output["A"] + 1})
+    check_func(impl4, (filename,), py_output=py_output4, reset_index=True)
+    # make sure the ParquetReader node has filters parameter set and we have trimmed
+    # any unused columns.
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl4)
     bodo_func(filename)
     _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
     # TODO: Check which columns were actually loaded.

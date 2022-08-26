@@ -49,10 +49,11 @@ public class LikeCodeGen {
                   .append(")");
             } else {
               likeParts
+                  .append("pd.Series(")
                   .append(expr)
-                  .append(".str.contains(")
+                  .append(").str.contains(")
                   .append(trimmedRegex)
-                  .append(", regex=False)");
+                  .append(", regex=False).values");
             }
           } else if (startPercent) {
             // If only start, use endswith
@@ -65,7 +66,12 @@ public class LikeCodeGen {
                   .append(expr)
                   .append(")");
             } else {
-              likeParts.append(expr).append(".str.endswith(").append(trimmedRegex).append(")");
+              likeParts
+                  .append("pd.Series(")
+                  .append(expr)
+                  .append(").str.endswith(")
+                  .append(trimmedRegex)
+                  .append(").values");
             }
           } else {
             if (outputScalar) {
@@ -77,7 +83,12 @@ public class LikeCodeGen {
                   .append(expr)
                   .append(")");
             } else {
-              likeParts.append(expr).append(".str.startswith(").append(trimmedRegex).append(")");
+              likeParts
+                  .append("pd.Series(")
+                  .append(expr)
+                  .append(").str.startswith(")
+                  .append(trimmedRegex)
+                  .append(").values");
             }
           }
         } else {
@@ -90,10 +101,11 @@ public class LikeCodeGen {
                 .append(")");
           } else {
             likeParts
+                .append("pd.Series(")
                 .append(expr)
-                .append(".str.contains(")
+                .append(").str.contains(")
                 .append(convertSQLRegexToPython(trimmedRegex, startPercent, endPercent))
-                .append(")");
+                .append(").values");
           }
         }
       }
@@ -108,10 +120,11 @@ public class LikeCodeGen {
             .append(")");
       } else {
         likeParts
+            .append("pd.Series(")
             .append(expr)
-            .append(".str.contains(bodosql.libs.generated_lib.sql_null_checking_sql_to_python(")
+            .append(").str.contains(bodosql.libs.generated_lib.sql_null_checking_sql_to_python(")
             .append(SQLRegex)
-            .append("))");
+            .append(")).values");
       }
     }
     likeParts.append(")");

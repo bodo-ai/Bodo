@@ -157,19 +157,19 @@ public class DatetimeFnCodeGen {
           // Month rounds down to the start of the Month.
           // We add 1 Day to avoid boundaries
           outputExpression =
-              "(("
+              "((pd.Series("
                   + arg2Info.getExprCode()
-                  + " + pd.Timedelta(days=1)) - pd.tseries.offsets.MonthBegin(n=1,"
-                  + " normalize=True))";
+                  + ") + pd.Timedelta(days=1)) - pd.tseries.offsets.MonthBegin(n=1,"
+                  + " normalize=True)).values";
           break;
         case "WEEK":
           // Week rounds down to the Monday of that week.
           // We add 1 Day to avoid boundaries
           outputExpression =
-              "(("
+              "((pd.Series("
                   + arg2Info.getExprCode()
-                  + " + pd.Timedelta(days=1)) - pd.tseries.offsets.Week(n=1, weekday=0,"
-                  + " normalize=True))";
+                  + ") + pd.Timedelta(days=1)) - pd.tseries.offsets.Week(n=1, weekday=0,"
+                  + " normalize=True)).values";
           break;
         case "QUARTER":
           // TODO [BE-2305]: Support QuarterBegin in the Engine
@@ -177,22 +177,22 @@ public class DatetimeFnCodeGen {
               "DATE_TRUNC(): Specifying 'Quarter' for <date_or_time_part> not supported.");
         case "DAY":
           // For all timedelta valid values we can use .dt.floor
-          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"D\")";
+          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"D\").values";
           break;
         case "HOUR":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"H\")";
+          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"H\").values";
           break;
         case "MINUTE":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"min\")";
+          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"min\").values";
           break;
         case "SECOND":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"S\")";
+          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"S\").values";
           break;
         case "MILLISECOND":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"ms\")";
+          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"ms\").values";
           break;
         case "MICROSECOND":
-          outputExpression = arg2Info.getExprCode() + ".dt.floor(\"us\")";
+          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"us\").values";
           break;
         case "NANOSECOND":
           // Timestamps have nanosecond precision so we don't need to round.
@@ -237,7 +237,12 @@ public class DatetimeFnCodeGen {
               + pythonFormatString
               + ")";
     } else {
-      outputExpression = arg1Info.getExprCode() + ".dt.strftime(" + pythonFormatString + ")";
+      outputExpression =
+          "pd.Series("
+              + arg1Info.getExprCode()
+              + ").dt.strftime("
+              + pythonFormatString
+              + ").values";
     }
 
     return new RexNodeVisitorInfo(name, outputExpression);
@@ -271,7 +276,12 @@ public class DatetimeFnCodeGen {
               + arg0Expr
               + "))";
     } else {
-      outputExpr = "(" + arg0Expr + ".dt.year * 100 + " + arg0Expr + ".dt.isocalendar().week)";
+      outputExpr =
+          "(pd.Series("
+              + arg0Expr
+              + ").dt.year * 100 + pd.Series("
+              + arg0Expr
+              + ").dt.isocalendar().week).values";
     }
 
     String name = "YEARWEEK(" + arg0Info.getName() + ")";

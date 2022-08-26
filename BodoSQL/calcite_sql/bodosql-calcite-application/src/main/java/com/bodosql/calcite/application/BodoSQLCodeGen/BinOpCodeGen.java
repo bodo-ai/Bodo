@@ -5,6 +5,7 @@ import static com.bodosql.calcite.application.Utils.Utils.generateNullCheck;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import org.apache.calcite.sql.SqlKind;
@@ -30,7 +31,18 @@ public class BinOpCodeGen {
       List<BodoSQLExprType.ExprType> exprTypes,
       SqlOperator binOp,
       boolean isScalar) {
-    return generateBinOpCodeHelper(args, exprTypes, binOp.getKind(), binOp.getName(), isScalar);
+    // add pd.Series() around column arguments since binary operators assume Series input
+    // (arrays don't have full support)
+    List<String> update_args = new ArrayList<>();
+    for (int i = 0; i < args.size(); i++) {
+      String new_arg = args.get(i);
+      if (!isScalar && exprTypes.get(i) == BodoSQLExprType.ExprType.COLUMN) {
+        new_arg = String.format("pd.Series(%s)", new_arg);
+      }
+      update_args.add(new_arg);
+    }
+    return generateBinOpCodeHelper(
+        update_args, exprTypes, binOp.getKind(), binOp.getName(), isScalar);
   }
   /**
    * Helper function that returns the necessary generated code for a BinOp Call. This function may
@@ -127,7 +139,7 @@ public class BinOpCodeGen {
             break;
           default:
             throw new BodoSQLCodegenException(
-                "Unsupported Operator, " + binOpName.toString() + " specified in query.");
+                "Unsupported Operator, " + binOpName + " specified in query.");
         }
         break;
       case OTHER:
@@ -139,12 +151,12 @@ public class BinOpCodeGen {
             break;
           default:
             throw new BodoSQLCodegenException(
-                "Unsupported Operator, " + binOpName.toString() + " specified in query.");
+                "Unsupported Operator, " + binOpName + " specified in query.");
         }
         break;
       default:
         throw new BodoSQLCodegenException(
-            "Unsupported Operator, " + binOpKind.toString() + " specified in query.");
+            "Unsupported Operator, " + binOpKind + " specified in query.");
     }
     StringBuilder newOp = new StringBuilder();
     StringBuilder functionStack = new StringBuilder();
@@ -193,6 +205,11 @@ public class BinOpCodeGen {
     newOp.append(args.get(args.size() - 1)).append(")");
     if (isFunction) {
       newOp.append(")");
+    }
+    // make sure the output is array type for column cases
+    // (output is Series here since input is converted to Series in generateBinOpCode)
+    if (!isScalar && exprType == BodoSQLExprType.ExprType.COLUMN) {
+      newOp.append(".values");
     }
     return newOp.toString();
   }

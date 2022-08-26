@@ -31,6 +31,8 @@ from numba.extending import (
 from numba.np.arrayobj import _getitem_array_single_int
 from numba.parfors.array_analysis import ArrayAnalysis
 
+import bodo
+from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.utils.cg_helpers import is_ll_eq
 from bodo.utils.templates import OverloadedKeyAttributeTemplate
 from bodo.utils.typing import (
@@ -1671,6 +1673,11 @@ def init_runtime_table_from_lists(typingctx, arr_list_tup_typ, nrows_typ=None):
     return sig, codegen
 
 
+def _to_arr_if_series(t):
+    """returns underlying array data type if 't' is a SeriesType, otherwise returns 't'"""
+    return t.data if isinstance(t, SeriesType) else t
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def logical_table_to_table(
     in_table_t,
@@ -1723,6 +1730,17 @@ def logical_table_to_table(
         kept_cols = set(np.arange(len(in_col_inds)))
         skip_cols = False
 
+    # BodoSQL may pass Series data by mistake so need conversion to arrays
+    extra_arrs_no_series = ", ".join(
+        f"get_series_data(extra_arrs_t[{i}])"
+        if isinstance(extra_arrs_t[i], SeriesType)
+        else f"extra_arrs_t[{i}]"
+        for i in range(len(extra_arrs_t))
+    )
+    extra_arrs_no_series = (
+        f"({extra_arrs_no_series}{',' if len(extra_arrs_t) == 1 else ''})"
+    )
+
     # handle array-only input data
     if isinstance(in_table_t, (types.BaseTuple, types.NoneType)):
         return _logical_tuple_table_to_table_codegen(
@@ -1732,6 +1750,7 @@ def logical_table_to_table(
             kept_cols,
             n_table_cols_t,
             out_table_type_t,
+            extra_arrs_no_series,
         )
 
     # at this point in_table is provided as a TableType but extra arrays may be None
@@ -1742,7 +1761,7 @@ def logical_table_to_table(
             tuple(
                 in_table_t.arr_types[i]
                 if i < n_in_table_arrs
-                else extra_arrs_t.types[i - n_in_table_arrs]
+                else _to_arr_if_series(extra_arrs_t.types[i - n_in_table_arrs])
                 for i in in_col_inds
             )
         )
@@ -1751,6 +1770,8 @@ def logical_table_to_table(
     )
 
     func_text = "def impl(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
+    if any(isinstance(t, SeriesType) for t in extra_arrs_t.types):
+        func_text += f"  extra_arrs_t = {extra_arrs_no_series}\n"
     func_text += f"  T1 = in_table_t\n"
     func_text += f"  T2 = init_table(out_table_type, False)\n"
     func_text += f"  T2 = set_table_len(T2, len(T1))\n"
@@ -1826,6 +1847,7 @@ def logical_table_to_table(
             "get_table_block": get_table_block,
             "ensure_column_unboxed": ensure_column_unboxed,
             "out_table_type": out_table_type,
+            "get_series_data": bodo.hiframes.pd_series_ext.get_series_data,
         }
     )
 
@@ -1835,7 +1857,13 @@ def logical_table_to_table(
 
 
 def _logical_tuple_table_to_table_codegen(
-    in_table_t, extra_arrs_t, in_col_inds, kept_cols, n_table_cols_t, out_table_type_t
+    in_table_t,
+    extra_arrs_t,
+    in_col_inds,
+    kept_cols,
+    n_table_cols_t,
+    out_table_type_t,
+    extra_arrs_no_series,
 ):
     """generate a function for logical table to table conversion when input "table" is
     a tuple of arrays. See logical_table_to_table() for details.
@@ -1867,7 +1895,7 @@ def _logical_tuple_table_to_table_codegen(
             tuple(
                 in_table_t.types[i]
                 if i < n_in_table_arrs
-                else extra_arrs_t.types[i - n_in_table_arrs]
+                else _to_arr_if_series(extra_arrs_t.types[i - n_in_table_arrs])
                 for i in in_col_inds
             )
         )
@@ -1894,6 +1922,8 @@ def _logical_tuple_table_to_table_codegen(
     assert len_arr is not None, "no array found in input data"
 
     func_text = "def impl(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
+    if any(isinstance(t, SeriesType) for t in extra_arrs_t.types):
+        func_text += f"  extra_arrs_t = {extra_arrs_no_series}\n"
     func_text += f"  T1 = in_table_t\n"
     func_text += f"  T2 = init_table(out_table_type, False)\n"
     func_text += f"  T2 = set_table_len(T2, len({len_arr}))\n"
@@ -1925,6 +1955,7 @@ def _logical_tuple_table_to_table_codegen(
             "set_table_block": set_table_block,
             "set_table_len": set_table_len,
             "out_table_type": out_table_type,
+            "get_series_data": bodo.hiframes.pd_series_ext.get_series_data,
         }
     )
 

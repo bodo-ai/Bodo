@@ -55,9 +55,9 @@ double_arg_np_list = list(double_arg_np_map.keys())
 @pytest.mark.parametrize("func", single_arg_np_list)
 def test_trig_single_arg_funcs(arr, func):
     test_impl = "def impl(arr):\n"
-    test_impl += f"  return bodo.libs.bodosql_array_kernels.{func}(arr)"
+    test_impl += f"  return pd.Series(bodo.libs.bodosql_array_kernels.{func}(arr))"
     impl_vars = {}
-    exec(test_impl, {"bodo": bodo}, impl_vars)
+    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
 
     # Simulates CONV on a single row
     scalar_impl = "def impl(elem):\n"
@@ -104,9 +104,11 @@ def test_trig_double_arg_funcs(arr0, arr1, func):
     if len(arr0) != len(arr1):
         return
     test_impl = "def impl(arr0, arr1):\n"
-    test_impl += f"  return bodo.libs.bodosql_array_kernels.{func}(arr0, arr1)"
+    test_impl += (
+        f"  return pd.Series(bodo.libs.bodosql_array_kernels.{func}(arr0, arr1))"
+    )
     impl_vars = {}
-    exec(test_impl, {"bodo": bodo}, impl_vars)
+    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
 
     # Simulates trig func on a single row
     scalar_impl = "def impl(elem0, elem1):\n"

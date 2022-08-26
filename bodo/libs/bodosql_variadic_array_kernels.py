@@ -57,7 +57,7 @@ def overload_coalesce_util(A):
         BodoError: if there are 0 columns, or the types don't match
 
     Returns:
-        pd.Series: a Series containing the coalesce values of the input array
+        an array containing the coalesce values of the input array
     """
     if len(A) == 0:
         raise_bodo_error("Cannot coalesce 0 columns")
