@@ -272,6 +272,13 @@ public class CondOperatorTable implements SqlOperatorTable {
     return outputTypes;
   }
 
+  public static final SqlBasicAggFunction CONDITIONAL_TRUE_EVENT =
+      SqlBasicAggFunction.create(
+          "CONDITIONAL_TRUE_EVENT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER,
+          OperandTypes.BOOLEAN);
+
   public static final SqlFunction DECODE =
       new SqlFunction(
           "DECODE",
@@ -304,6 +311,7 @@ public class CondOperatorTable implements SqlOperatorTable {
 
   private List<SqlOperator> functionList =
       Arrays.asList(
+          CONDITIONAL_TRUE_EVENT,
           COUNT_IF,
           CONDITIONAL_CHANGE_EVENT,
           REGR_VALX,

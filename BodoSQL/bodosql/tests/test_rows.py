@@ -1460,6 +1460,102 @@ def test_no_sort_permitted(spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "SELECT conditional_true_event(A) OVER (PARTITION BY B ORDER BY C) FROM table1",
+                pd.Series([1, 2, 2, 3, 3, 0, 1, 1, 2, 3, 0, 1, 2, 2, 3]),
+            ),
+            id="bool_string",
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_true_event(A) OVER (PARTITION BY 0 ORDER BY C) FROM table1",
+                pd.Series([1, 1, 1, 2, 3, 4, 4, 4, 5, 6, 7, 7, 7, 8, 9]),
+            ),
+            id="bool_singleton",
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_true_event(A = B) OVER (PARTITION BY A ORDER BY C) FROM table2",
+                pd.Series([1] * 6 + [2] * 3 + [0] * 14 + [1, 0]),
+            ),
+            id="strings_equal_string_int_larger",
+        ),
+        pytest.param(
+            (
+                "SELECT conditional_true_event(B <> LAG(B, 1)) OVER (PARTITION BY A ORDER BY B) FROM table2",
+                pd.Series(
+                    [
+                        0,
+                        0,
+                        1,
+                        1,
+                        2,
+                        2,
+                        3,
+                        3,
+                        3,
+                        0,
+                        0,
+                        1,
+                        1,
+                        1,
+                        1,
+                        2,
+                        0,
+                        0,
+                        0,
+                        1,
+                        1,
+                        0,
+                        1,
+                        2,
+                        0,
+                    ]
+                ),
+            ),
+            id="equals_lag",
+            marks=pytest.mark.skip(
+                "[BE-3459] Nested window functions not supported yet"
+            ),
+        ),
+    ],
+)
+def test_conditional_true_event(args, spark_info, memory_leak_check):
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [True, False, None, True, True] * 3, dtype=pd.BooleanDtype()
+                ),
+                "B": pd.Series((list("AB") + [None]) * 5),
+                "C": pd.Series(list(range(15))),
+            }
+        ),
+        "table2": pd.DataFrame(
+            {
+                "A": pd.Series(list("AABAABCBAABCDCBAABCDECBDA")),
+                "B": pd.Series(list("ABCDE") * 5),
+                "C": pd.Series(list(range(25))),
+            }
+        ),
+    }
+
+    query, answer = args
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        expected_output=pd.DataFrame({0: answer}),
+    )
+
+
 def test_count_null(spark_info, memory_leak_check):
     """
     tests the null behavior of COUNT vs COUNT(*).
