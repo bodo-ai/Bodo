@@ -39,6 +39,7 @@ from bodo.utils.utils import is_assign, is_call, is_expr
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.hiframes.pd_index_ext import RangeIndexType
 import bodo.ir
 import bodo.ir.aggregate
@@ -857,7 +858,7 @@ class UntypedPass:
         """transform pd.read_sql calls"""
         # schema: pd.read_sql(sql, con, index_col=None,
         # coerce_float=True, params=None, parse_dates=None,
-        # columns=None, chunksize=None
+        # columns=None, chunksize=None, _bodo_read_as_dict)
         kws = dict(rhs.kws)
         sql_var = get_call_expr_arg("read_sql", rhs.args, kws, 0, "sql")
         # The sql request has to be constant
@@ -876,6 +877,21 @@ class UntypedPass:
         con_const = get_const_value(con_var, self.func_ir, msg, arg_types=self.args)
         index_col = self._get_const_arg(
             "read_sql", rhs.args, kws, 2, "index_col", rhs.loc, default=-1
+        )
+        # Users can use this to specify what columns should be read in as
+        # dictionary-encoded string arrays. This is in addition
+        # to whatever columns bodo determines should be read in
+        # with dictionary encoding. This is only supported when
+        # reading from Snowflake.
+        _bodo_read_as_dict = self._get_const_arg(
+            "read_sql",
+            rhs.args,
+            kws,
+            10e4,
+            "_bodo_read_as_dict",
+            rhs.loc,
+            use_default=True,
+            default=None,
         )
         # coerce_float = self._get_const_arg(
         #     "read_sql", rhs.args, kws, 3, "coerce_float", default=True
@@ -900,7 +916,7 @@ class UntypedPass:
         #        and needs to be implemented with snowflake.
         # coerce_float is currently unsupported but it could be useful to support it.
         # params is currently unsupported because not needed for mysql but surely will be needed later.
-        supported_args = ("sql", "con", "index_col")
+        supported_args = ("sql", "con", "index_col", "_bodo_read_as_dict")
 
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
@@ -918,7 +934,7 @@ class UntypedPass:
             unsupported_columns,
             unsupported_arrow_types,
             is_select_query,
-        ) = _get_sql_types_arr_colnames(sql_const, con_const, lhs)
+        ) = _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs)
 
         index_ind = None
         index_col_name = None
@@ -2998,7 +3014,7 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
     return columns, data_arrs, out_types
 
 
-def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
+def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs):
     """
     Wrapper function to determine the db_type, column names,
     array variables, array types, any column names
@@ -3044,7 +3060,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
         unsupported_columns,
         unsupported_arrow_types,
     ) = _get_sql_df_type_from_db(
-        sql_const, con_const, db_type, is_select_query, sql_word
+        sql_const, con_const, db_type, is_select_query, sql_word, _bodo_read_as_dict
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
@@ -3072,13 +3088,23 @@ def _get_sql_types_arr_colnames(sql_const, con_const, lhs):
     )
 
 
-def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql_word):
+def _get_sql_df_type_from_db(
+    sql_const, con_const, db_type, is_select_query, sql_word, _bodo_read_as_dict=None
+):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
     """
     from mpi4py import MPI
 
     comm = MPI.COMM_WORLD
+
+    if _bodo_read_as_dict and db_type != "snowflake":
+        if bodo.get_rank() == 0:
+            warnings.warn(
+                BodoWarning(
+                    f"_bodo_read_as_dict is only supported when reading from Snowflake."
+                )
+            )
 
     # No need to try `import snowflake.connector` here, since the import
     # is handled by bodo.io.snowflake.snowflake_connect()
@@ -3156,6 +3182,54 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
                         # Store the unsupported arrow type for future
                         # error messages.
                         unsupported_arrow_types.append(field.type)
+
+                str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
+                str_as_dict_cols = set(map(lambda x: x.upper(), str_as_dict_cols))
+                str_col_name_to_ind = {}
+                for i, t in enumerate(col_types):
+                    if t == string_array_type:
+                        str_col_name_to_ind[col_names[i].upper()] = i
+                # If user-provided list has any columns that are not string
+                # type, show a warning.
+                non_str_columns_in_read_as_dict_cols = (
+                    str_as_dict_cols - str_col_name_to_ind.keys()
+                )
+                if len(non_str_columns_in_read_as_dict_cols) > 0:
+                    if bodo.get_rank() == 0:
+                        warnings.warn(
+                            BodoWarning(
+                                f"The following columns are not of datatype string and hence cannot be read with dictionary encoding: {non_str_columns_in_read_as_dict_cols}"
+                            )
+                        )
+                convert_dict_col_names = str_col_name_to_ind.keys() & str_as_dict_cols
+                for name in convert_dict_col_names:
+                    col_types[str_col_name_to_ind[name]] = dict_str_arr_type
+
+                query_args, string_col_ind = [], []
+                undetermined_str_cols = str_col_name_to_ind.keys() - str_as_dict_cols
+                for name in undetermined_str_cols:
+                    query_args.append(f"count (distinct {name})")
+                    string_col_ind.append(str_col_name_to_ind[name])
+                if len(query_args) != 0:
+                    # the criterion with which we determine whether to convert or not
+                    criterion = bodo.io.snowflake.DICT_ENCODE_CRITERION
+                    # construct the prediction query script for the string columns
+                    # in which we sample 1 percent of the data
+                    predict_cardinality_call = f"select count(*),{', '.join(query_args)} from ({sql_const}) SAMPLE (1)"
+                    prediction_query = cursor.execute(predict_cardinality_call)
+                    cardinality_data = prediction_query.fetch_arrow_all()
+                    # calculate the level of uniqueness for each string column
+                    total_rows = cardinality_data[0][0].as_py()
+                    uniqueness = [
+                        cardinality_data[i][0].as_py() / max(total_rows, 1)
+                        for i in range(1, len(query_args) + 1)
+                    ]
+                    # filter the string col indices based on the criterion
+                    col_inds_to_convert = filter(
+                        lambda x: x[0] <= criterion, zip(uniqueness, string_col_ind)
+                    )
+                    for _, ind in col_inds_to_convert:
+                        col_types[ind] = dict_str_arr_type
 
                 # Ensure column name case matches Pandas/sqlalchemy. See:
                 # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
@@ -3241,9 +3315,7 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
         unsupported_columns,
         unsupported_arrow_types,
     ) = comm.bcast(df_info)
-    df_type = df_type.copy(
-        data=tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
-    )
+    df_type = df_type.copy(data=tuple(t for t in df_type.data))
     return df_type, converted_colnames, unsupported_columns, unsupported_arrow_types
 
 

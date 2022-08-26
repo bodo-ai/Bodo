@@ -31,6 +31,7 @@ from bodo.libs.array import (
     info_to_array,
     table_type,
 )
+from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.distributed_api import bcast, bcast_scalar
 from bodo.libs.str_ext import string_type, unicode_to_utf8
 from bodo.transforms import distributed_analysis, distributed_pass
@@ -930,13 +931,23 @@ def _gen_sql_reader_py(
         func_text += "  return (total_rows, table_var, index_var)\n"
 
     elif db_type == "snowflake":
+        col_indices_map = {c: i for i, c in enumerate(out_used_cols)}
+        snowflake_dict_cols = [
+            col_indices_map[i]
+            for i in out_used_cols
+            if col_typs[i] == dict_str_arr_type
+        ]
         func_text += f"  ev = bodo.utils.tracing.Event('read_snowflake', {parallel})\n"
 
         nullable_cols = [int(is_nullable(col_typs[i])) for i in out_used_cols]
         # Handle if we need to append an index
         if index_column_name:
             nullable_cols.append(int(is_nullable(index_column_type)))
-        func_text += f"  out_table = snowflake_read(unicode_to_utf8(sql_request), unicode_to_utf8(conn), {parallel}, {len(nullable_cols)}, np.array({nullable_cols}, dtype=np.int32).ctypes)\n"
+        func_text += f"  out_table = snowflake_read(unicode_to_utf8(sql_request), unicode_to_utf8(conn), {parallel}, {len(nullable_cols)}, np.array({nullable_cols}, dtype=np.int32).ctypes,\n"
+        if len(snowflake_dict_cols) > 0:
+            func_text += f"        np.array({snowflake_dict_cols}, dtype=np.int32).ctypes, {len(snowflake_dict_cols)})\n"
+        else:
+            func_text += f"        0, 0)\n"
         func_text += "  check_and_propagate_cpp_exception()\n"
         if index_column_name:
             # The index is always placed in the last slot of the query if it exists.
@@ -1111,6 +1122,8 @@ _snowflake_read = types.ExternalFunction(
         types.boolean,
         types.int64,
         types.voidptr,
+        types.voidptr,
+        types.int32,
     ),
 )
 

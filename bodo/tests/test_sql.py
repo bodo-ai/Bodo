@@ -31,6 +31,7 @@ from bodo.tests.utils import (
     reduce_sum,
     sql_user_pass_and_hostname,
 )
+from bodo.utils.typing import BodoWarning
 
 
 @pytest.mark.parametrize(
@@ -351,6 +352,180 @@ def test_sql_snowflake(memory_leak_check):
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
+    """
+    Test reading string columns as dictionary-encoded from Snowflake
+    """
+
+    @bodo.jit
+    def test_impl0(query, conn):
+        return pd.read_sql(query, conn)
+
+    @bodo.jit
+    def test_impl1(query, conn):
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_shipmode"])
+
+    @bodo.jit
+    def test_impl2(query, conn):
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_shipinstruct"])
+
+    @bodo.jit
+    def test_impl3(query, conn):
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_comment"])
+
+    @bodo.jit
+    def test_impl4(query, conn):
+        return pd.read_sql(
+            query, conn, _bodo_read_as_dict=["l_shipmode", "l_shipinstruct"]
+        )
+
+    @bodo.jit
+    def test_impl5(query, conn):
+        return pd.read_sql(
+            query, conn, _bodo_read_as_dict=["l_comment", "l_shipinstruct"]
+        )
+
+    @bodo.jit
+    def test_impl6(query, conn):
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_comment", "l_shipmode"])
+
+    @bodo.jit
+    def test_impl7(query, conn):
+        return pd.read_sql(
+            query,
+            conn,
+            _bodo_read_as_dict=["l_shipmode", "l_comment", "l_shipinstruct"],
+        )
+
+    # 'l_suppkey' shouldn't be read as dictionary encoded since it's not a string column
+
+    @bodo.jit
+    def test_impl8(query, conn):
+        return pd.read_sql(
+            query,
+            conn,
+            _bodo_read_as_dict=[
+                "l_shipmode",
+                "l_comment",
+                "l_shipinstruct",
+                "l_suppkey",
+            ],
+        )
+
+    @bodo.jit
+    def test_impl9(query, conn):
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_suppkey"])
+
+    @bodo.jit
+    def test_impl10(query, conn):
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_suppkey", "l_comment"])
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    # l_shipmode, l_shipinstruct should be dictionary encoded by default
+    # l_comment could be specified by the user to be dictionary encoded
+    # l_suppkey is not of type string and could not be dictionary encoded
+    query = "SELECT l_shipmode, l_shipinstruct, l_comment, l_suppkey FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 3000"
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 1):
+        test_impl0(query, conn)
+        check_logger_msg(
+            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
+        )
+    with set_logging_stream(logger, 1):
+        test_impl1(query, conn)
+        check_logger_msg(
+            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
+        )
+
+    with set_logging_stream(logger, 1):
+        test_impl2(query, conn)
+        check_logger_msg(
+            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
+        )
+
+    with set_logging_stream(logger, 1):
+        test_impl3(query, conn)
+        check_logger_msg(
+            stream,
+            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+        )
+
+    with set_logging_stream(logger, 1):
+        test_impl4(query, conn)
+        check_logger_msg(
+            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
+        )
+
+    with set_logging_stream(logger, 1):
+        test_impl5(query, conn)
+        check_logger_msg(
+            stream,
+            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+        )
+
+    with set_logging_stream(logger, 1):
+        test_impl6(query, conn)
+        check_logger_msg(
+            stream,
+            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+        )
+
+    with set_logging_stream(logger, 1):
+        test_impl7(query, conn)
+        check_logger_msg(
+            stream,
+            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+        )
+
+    with set_logging_stream(logger, 1):
+        if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+            with pytest.warns(
+                BodoWarning,
+                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'L_SUPPKEY'}",
+            ):
+                test_impl8(query, conn)
+        else:
+            test_impl8(query, conn)
+        # we combine the two tests because otherwise caching would cause problems for logger.stream.
+        check_logger_msg(
+            stream,
+            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+        )
+
+    with set_logging_stream(logger, 1):
+        if bodo.get_rank() == 0:
+            with pytest.warns(
+                BodoWarning,
+                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'L_SUPPKEY'}",
+            ):
+                test_impl9(query, conn)
+        else:
+            test_impl9(query, conn)
+        check_logger_msg(
+            stream, "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding"
+        )
+
+    with set_logging_stream(logger, 1):
+        if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+            with pytest.warns(
+                BodoWarning,
+                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'L_SUPPKEY'}",
+            ):
+                test_impl10(query, conn)
+        else:
+            test_impl10(query, conn)
+        check_logger_msg(
+            stream,
+            "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+        )
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_sql_snowflake_nonascii(memory_leak_check):
     def impl(query, conn):
         df = pd.read_sql(query, conn)
@@ -577,6 +752,10 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
     check_func(
         impl_integer, (query, conn, int_val), check_dtype=False, reset_index=True
     )
+    # temporarily disable dict-encode read from snowflake to test filter pushdown
+    # TODO: BE-3526: support dict-encode read with filter pushdown
+    prev_criterion = bodo.io.snowflake.DICT_ENCODE_CRITERION
+    bodo.io.snowflake.DICT_ENCODE_CRITERION = -1
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -635,6 +814,8 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
+
+    bodo.io.snowflake.DICT_ENCODE_CRITERION = prev_criterion
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
@@ -753,7 +934,16 @@ def test_sql_snowflake_isin_pushdown(memory_leak_check):
     # need to sort the output to make sure pandas and Bodo get the same rows
     query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
 
-    check_func(impl_isin, (query, conn, isin_list), check_dtype=False, reset_index=True)
+    check_func(
+        impl_isin,
+        (query, conn, isin_list),
+        check_dtype=False,
+        reset_index=True,
+        use_dict_encoded_strings=False,
+    )
+    # TODO: BE-3404: Support `pandas.Series.isin` for dictionary-encoded arrays
+    prev_criterion = bodo.io.snowflake.DICT_ENCODE_CRITERION
+    bodo.io.snowflake.DICT_ENCODE_CRITERION = -1
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -786,6 +976,7 @@ def test_sql_snowflake_isin_pushdown(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
+    bodo.io.snowflake.DICT_ENCODE_CRITERION = prev_criterion
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")

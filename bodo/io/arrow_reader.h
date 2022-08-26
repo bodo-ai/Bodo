@@ -34,11 +34,14 @@ class TableBuilder {
      * @param selected_fields : ordered set of fields to select from input data
      * @param num_rows : total number of rows that the output table will have
      * @param is_nullable : indicates which of the selected fields is nullable
+     * @param str_as_dict_cols: indices of string cols to be dictionary-encoded
+     * @param create_dict_from_string: whether the data source is Snowflake
      */
     TableBuilder(std::shared_ptr<arrow::Schema> schema,
                  std::set<int>& selected_fields, const int64_t num_rows,
                  std::vector<bool>& is_nullable,
-                 const std::set<std::string>& str_as_dict_cols);
+                 const std::set<std::string>& str_as_dict_cols,
+                 const bool create_dict_from_string);
 
     ~TableBuilder() {
         for (auto col : columns) delete col;
@@ -127,7 +130,8 @@ class ArrowDataframeReader {
                 "ArrowDataframeReader::read(): not initialized");
         }
         TableBuilder builder(schema, selected_fields, count, is_nullable,
-                             str_as_dict_colnames);
+                             str_as_dict_colnames,
+                             create_dict_encoding_from_strings);
         rows_left = count;
         read_all(builder);
         if (rows_left != 0)
@@ -143,6 +147,11 @@ class ArrowDataframeReader {
     std::shared_ptr<arrow::Schema> schema;
     std::vector<bool> is_nullable;
     std::set<int> selected_fields;
+    // For dictionary encoded columns, load them directly as
+    // dictionaries (as in the case of parquet), or convert them
+    // to dictionaries from regular string arrays (as in the case
+    // of Snowflake)
+    bool create_dict_encoding_from_strings = false;
     std::set<std::string> str_as_dict_colnames;
 
     /// Total number of rows in the dataset (all pieces)
@@ -156,7 +165,8 @@ class ArrowDataframeReader {
     int64_t rows_left;  // only used during ArrowDataframeReader::read()
 
     /// initialize reader
-    void init_arrow_reader(const std::vector<int32_t>& str_as_dict_cols = {});
+    void init_arrow_reader(const std::vector<int32_t>& str_as_dict_cols = {},
+                           bool create_dict_from_string = false);
 
     /**
      * Register a piece for this process to read

@@ -48,7 +48,8 @@ class ParquetReader : public ArrowDataframeReader {
                         int32_t num_partition_cols) {
         // initialize reader
         ArrowDataframeReader::init_arrow_reader(
-            {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});
+            {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols},
+            false);
         if (parallel) {
             // Get the average number of pieces per rank. This is used to
             // increase the number of threads of the Arrow batch reader
