@@ -45,14 +45,14 @@ public class ExtractCodeGen {
                   + column
                   + ")";
         } else {
-          extractCode = column + ".dt." + dateVal.toLowerCase();
+          extractCode = "pd.Series(" + column + ").dt." + dateVal.toLowerCase() + ".values";
         }
         break;
       case "DAYOFMONTH":
         if (outputScalar) {
           extractCode = "bodosql.libs.generated_lib.sql_null_checking_day" + "(" + column + ")";
         } else {
-          extractCode = column + ".dt.day";
+          extractCode = "pd.Series(" + column + ").dt.day.values";
         }
         break;
       case "DOW":
@@ -63,7 +63,7 @@ public class ExtractCodeGen {
           // The scalar library fn handles the addition/modulo
           extractCode = "bodosql.libs.generated_lib.sql_null_checking_dayofweek(" + column + ")";
         } else {
-          extractCode = "((" + column + ".dt.dayofweek + 1) % 7 + 1)";
+          extractCode = "((pd.Series(" + column + ").dt.dayofweek + 1) % 7 + 1).values";
         }
         break;
       case "DOY":
@@ -71,7 +71,7 @@ public class ExtractCodeGen {
         if (outputScalar) {
           extractCode = "bodosql.libs.generated_lib.sql_null_checking_dayofyear(" + column + ")";
         } else {
-          extractCode = column + ".dt.dayofyear";
+          extractCode = "pd.Series(" + column + ").dt.dayofyear.values";
         }
         break;
       case "WEEK":
@@ -80,7 +80,7 @@ public class ExtractCodeGen {
         if (outputScalar) {
           extractCode = "bodosql.libs.generated_lib.sql_null_checking_weekofyear(" + column + ")";
         } else {
-          extractCode = column + ".dt.isocalendar().week";
+          extractCode = "pd.Series(" + column + ").dt.isocalendar().week.values";
         }
         break;
       default:

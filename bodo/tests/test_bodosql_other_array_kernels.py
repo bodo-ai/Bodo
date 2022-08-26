@@ -92,7 +92,11 @@ def boolean_numerical_scalar_vector(request):
 
 def test_booland(boolean_numerical_scalar_vector, memory_leak_check):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.booland(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.booland(A, B))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in boolean_numerical_scalar_vector):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.booland(A, B)
 
     def booland_scalar_fn(A, B):
         if pd.notna(A) and pd.notna(B) and A != 0 and B != 0:
@@ -117,7 +121,11 @@ def test_booland(boolean_numerical_scalar_vector, memory_leak_check):
 
 def test_boolor(boolean_numerical_scalar_vector, memory_leak_check):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.boolor(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.boolor(A, B))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in boolean_numerical_scalar_vector):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.boolor(A, B)
 
     def boolor_scalar_fn(A, B):
         if (pd.notna(A) and A != 0) or (pd.notna(B) and B != 0):
@@ -143,7 +151,11 @@ def test_boolor(boolean_numerical_scalar_vector, memory_leak_check):
 
 def test_boolxor(boolean_numerical_scalar_vector, memory_leak_check):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.boolxor(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.boolxor(A, B))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in boolean_numerical_scalar_vector):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.boolxor(A, B)
 
     def boolxor_scalar_fn(A, B):
         if pd.isna(A) or pd.isna(B):
@@ -166,7 +178,9 @@ def test_boolxor(boolean_numerical_scalar_vector, memory_leak_check):
 
 def test_boolnot(boolean_numerical_scalar_vector, memory_leak_check):
     def impl(A):
-        return bodo.libs.bodosql_array_kernels.boolnot(A)
+        return pd.Series(bodo.libs.bodosql_array_kernels.boolnot(A))
+
+    impl_scalar = lambda A: bodo.libs.bodosql_array_kernels.boolnot(A)
 
     def boolnot_scalar_fn(A):
         if pd.isna(A):
@@ -184,14 +198,18 @@ def test_boolnot(boolean_numerical_scalar_vector, memory_leak_check):
     )
 
     check_func(
-        impl,
+        impl
+        if isinstance(boolean_numerical_scalar_vector[0], pd.Series)
+        else impl_scalar,
         (boolean_numerical_scalar_vector[0],),
         py_output=boolxor_answer_0,
         check_dtype=False,
         reset_index=True,
     )
     check_func(
-        impl,
+        impl
+        if isinstance(boolean_numerical_scalar_vector[1], pd.Series)
+        else impl_scalar,
         (boolean_numerical_scalar_vector[1],),
         py_output=boolxor_answer_1,
         check_dtype=False,
@@ -266,7 +284,15 @@ def test_boolnot(boolean_numerical_scalar_vector, memory_leak_check):
 )
 def test_cond(args, memory_leak_check):
     def impl(arr, ifbranch, elsebranch):
-        return bodo.libs.bodosql_array_kernels.cond(arr, ifbranch, elsebranch)
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.cond(arr, ifbranch, elsebranch)
+        )
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr, ifbranch, elsebranch: bodo.libs.bodosql_array_kernels.cond(
+            arr, ifbranch, elsebranch
+        )
 
     # Simulates COND on a single row
     def cond_scalar_fn(arr, ifbranch, elsebranch):
@@ -364,7 +390,11 @@ def test_cond(args, memory_leak_check):
 )
 def test_bool_equal_null(args, memory_leak_check):
     def impl(A, B):
-        return bodo.libs.bodosql_array_kernels.equal_null(A, B)
+        return pd.Series(bodo.libs.bodosql_array_kernels.equal_null(A, B))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.equal_null(A, B)
 
     def equal_null_scalar_fn(A, B):
         if (pd.isna(A) and pd.isna(B)) or (pd.notna(A) and pd.notna(B) and A == B):
@@ -530,7 +560,11 @@ def test_bool_equal_null(args, memory_leak_check):
 )
 def test_nullif(args, memory_leak_check):
     def impl(arg0, arg1):
-        return bodo.libs.bodosql_array_kernels.nullif(arg0, arg1)
+        return pd.Series(bodo.libs.bodosql_array_kernels.nullif(arg0, arg1))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arg0, arg1: bodo.libs.bodosql_array_kernels.nullif(arg0, arg1)
 
     # Simulates NULLIF on a single row
     def nullif_scalar_fn(arg0, arg1):
@@ -624,10 +658,15 @@ def test_nullif(args, memory_leak_check):
 )
 def test_regr_valxy(args, memory_leak_check):
     def impl1(y, x):
-        return bodo.libs.bodosql_array_kernels.regr_valx(y, x)
+        return pd.Series(bodo.libs.bodosql_array_kernels.regr_valx(y, x))
 
     def impl2(y, x):
-        return bodo.libs.bodosql_array_kernels.regr_valy(y, x)
+        return pd.Series(bodo.libs.bodosql_array_kernels.regr_valy(y, x))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl1 = lambda y, x: bodo.libs.bodosql_array_kernels.regr_valx(y, x)
+        impl2 = lambda y, x: bodo.libs.bodosql_array_kernels.regr_valy(y, x)
 
     # Simulates REGR_VALX on a single row
     def regr_valx_scalar_fn(y, x):

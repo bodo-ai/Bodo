@@ -123,14 +123,21 @@ from bodo.tests.utils import check_func
     ],
 )
 def test_coalesce(args):
-    def impl1(A, B):
-        return bodo.libs.bodosql_array_kernels.coalesce((A, B))
-
-    def impl2(A, B, C, D, E, F):
-        return bodo.libs.bodosql_array_kernels.coalesce((A, B, C, D, E, F))
-
-    def impl3(A):
-        return bodo.libs.bodosql_array_kernels.coalesce((A,))
+    """Test BodoSQL COALESCE kernel"""
+    n_args = len(args)
+    args_str = ", ".join(f"A{i}" for i in range(n_args))
+    test_impl = f"def impl({args_str}):\n"
+    series_str = (
+        "pd.Series"
+        if any(
+            isinstance(a, (pd.Series, pd.core.arrays.base.ExtensionArray)) for a in args
+        )
+        else ""
+    )
+    test_impl += f"  return {series_str}(bodo.libs.bodosql_array_kernels.coalesce(({args_str},)))"
+    impl_vars = {}
+    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
+    impl = impl_vars["impl"]
 
     def coalesce_scalar_fn(*args):
         for arg in args:
@@ -139,18 +146,9 @@ def test_coalesce(args):
 
     coalesce_answer = vectorized_sol(args, coalesce_scalar_fn, None)
 
-    if len(args) == 2:
-        check_func(
-            impl1, args, py_output=coalesce_answer, check_dtype=False, reset_index=True
-        )
-    elif len(args) == 6:
-        check_func(
-            impl2, args, py_output=coalesce_answer, check_dtype=False, reset_index=True
-        )
-    elif len(args) == 1:
-        check_func(
-            impl3, args, py_output=coalesce_answer, check_dtype=False, reset_index=True
-        )
+    check_func(
+        impl, args, py_output=coalesce_answer, check_dtype=False, reset_index=True
+    )
 
 
 @pytest.mark.parametrize(
@@ -487,35 +485,18 @@ def test_coalesce(args):
     ],
 )
 def test_decode(args):
-    def impl3(A, B, C):
-        return bodo.libs.bodosql_array_kernels.decode((A, B, C))
-
-    def impl4(A, B, C, D):
-        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D))
-
-    def impl5(A, B, C, D, E):
-        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E))
-
-    def impl6(A, B, C, D, E, F):
-        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E, F))
-
-    def impl8(A, B, C, D, E, F, G, H):
-        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E, F, G, H))
-
-    def impl16(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P):
-        return bodo.libs.bodosql_array_kernels.decode(
-            (A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P)
-        )
-
-    def impl19(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S):
-        return bodo.libs.bodosql_array_kernels.decode(
-            (A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S)
-        )
-
-    def impl20(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T):
-        return bodo.libs.bodosql_array_kernels.decode(
-            (A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T)
-        )
+    """Test BodoSQL DECODE kernel"""
+    # generate test function for the number of args
+    n_args = len(args)
+    args_str = ", ".join(f"A{i}" for i in range(n_args))
+    test_impl = f"def impl({args_str}):\n"
+    series_str = "pd.Series" if any(isinstance(a, pd.Series) for a in args) else ""
+    test_impl += (
+        f"  return {series_str}(bodo.libs.bodosql_array_kernels.decode(({args_str})))"
+    )
+    impl_vars = {}
+    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
+    impl = impl_vars["impl"]
 
     def decode_scalar_fn(*args):
         for i in range(1, len(args) - 1, 2):
@@ -527,23 +508,6 @@ def test_decode(args):
             return args[-1]
 
     decode_answer = vectorized_sol(args, decode_scalar_fn, None)
-
-    if len(args) == 3:
-        impl = impl3
-    elif len(args) == 4:
-        impl = impl4
-    elif len(args) == 5:
-        impl = impl5
-    elif len(args) == 6:
-        impl = impl6
-    elif len(args) == 8:
-        impl = impl8
-    elif len(args) == 16:
-        impl = impl16
-    elif len(args) == 19:
-        impl = impl19
-    elif len(args) == 20:
-        impl = impl20
     check_func(impl, args, py_output=decode_answer, check_dtype=False, reset_index=True)
 
 
@@ -554,7 +518,7 @@ def test_option_with_arr_coalesce():
     def impl1(arr, scale1, scale2, flag1, flag2):
         A = scale1 if flag1 else None
         B = scale2 if flag2 else None
-        return bodo.libs.bodosql_array_kernels.coalesce((A, arr, B))
+        return pd.Series(bodo.libs.bodosql_array_kernels.coalesce((A, arr, B)))
 
     arr, scale1, scale2 = pd.array(["A", None, "C", None, "E"]), "", " "
     for flag1 in [True, False]:
@@ -628,14 +592,18 @@ def test_option_decode(flags):
         arg2 = D if flag2 else None
         arg3 = E if flag3 else None
         arg4 = F if flag4 else None
-        return bodo.libs.bodosql_array_kernels.decode((A, arg0, arg1, arg2, arg3, arg4))
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.decode((A, arg0, arg1, arg2, arg3, arg4))
+        )
 
     def impl2(A, B, C, D, E, flag0, flag1, flag2, flag3):
         arg0 = B if flag0 else None
         arg1 = C if flag1 else None
         arg2 = D if flag2 else None
         arg3 = E if flag3 else None
-        return bodo.libs.bodosql_array_kernels.decode((A, arg0, arg1, arg2, arg3))
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.decode((A, arg0, arg1, arg2, arg3))
+        )
 
     def decode_scalar_fn(*args):
         for i in range(1, len(args) - 1, 2):

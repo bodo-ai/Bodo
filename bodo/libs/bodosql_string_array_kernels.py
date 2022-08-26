@@ -409,7 +409,7 @@ def char_util(arr):
         string(s) are being calculated
 
     Returns:
-        string series/scalar: the character(s) corresponding to the integer(s)
+        string array/scalar: the character(s) corresponding to the integer(s)
     """
 
     verify_int_arg(arr, "CHAR", "arr")
@@ -440,7 +440,7 @@ def initcap_util(arr, delim):
         after
 
     Returns:
-        string series/scalar: the capitalized string(s)
+        string array/scalar: the capitalized string(s)
     """
 
     verify_string_arg(arr, "INITCAP", "arr")
@@ -640,7 +640,7 @@ def editdistance_no_max_util(s, t):
 @numba.generated_jit(nopython=True)
 def editdistance_with_max_util(s, t, maxDistance):
     """Same as editdistance_no_max_util, except it supports the version with
-    the third argument for hte maximum distance to search before giving up.
+    the third argument for the maximum distance to search before giving up.
 
 
     Args:
@@ -680,7 +680,7 @@ def format_util(arr, places):
         places (integer array/series/scalar): the precision of the decimal place(s)
 
     Returns:
-        string series/scalar: the string/column of formatted numbers
+        string array/scalar: the string/column of formatted numbers
     """
 
     verify_int_float_arg(arr, "FORMAT", "arr")
@@ -873,7 +873,7 @@ def repeat_util(arr, repeats):
         repeats (integer array/series/scalar): the number(s) of repeats
 
     Returns:
-        string series/scalar: the repeated string(s)
+        string array/scalar: the repeated string(s)
     """
     verify_string_arg(arr, "REPEAT", "arr")
     verify_int_arg(repeats, "REPEAT", "repeats")
@@ -904,7 +904,7 @@ def replace_util(arr, to_replace, replace_with):
         replace_with (string array/series/scalar): the string(s) that replace to_replace
 
     Returns:
-        string series/scalar: the string/column where each ocurrence of
+        string array/scalar: the string/column where each ocurrence of
         to_replace has been replaced by replace_with
     """
 
@@ -935,7 +935,7 @@ def reverse_util(arr):
         arr (string array/series/scalar): the strings(s) to be reversed
 
     Returns:
-        string series/scalar: the string/column that has been reversed
+        string array/scalar: the string/column that has been reversed
     """
 
     arr_is_string = verify_string_binary_arg(arr, "REVERSE", "arr")
@@ -961,7 +961,7 @@ def space_util(n_chars):
         n_chars (integer array/series/scalar): the number(s) of spaces
 
     Returns:
-        string series/scalar: the string/column of spaces
+        string array/scalar: the string/column of spaces
     """
 
     verify_int_arg(n_chars, "SPACE", "n_chars")
@@ -999,7 +999,7 @@ def split_part_util(source, delim, part):
         part (integer array/series/scalar): the occurrence to return
 
     Returns:
-        string series/scalar: the extracted part of the string
+        string array/scalar: the extracted part of the string
     """
 
     verify_string_arg(source, "SPLIT_PART", "source")
@@ -1071,7 +1071,7 @@ def strtok_util(source, delim, part):
         part (integer array/series/scalar): the occurrence to return
 
     Returns:
-        string series/scalar: the extracted part of the string
+        string array/scalar: the extracted part of the string
     """
 
     verify_string_arg(source, "STRTOK", "source")
@@ -1119,7 +1119,7 @@ def substring_util(arr, start, length):
         length (integer array/series/scalar): the length(s) of the substring(s)
 
     Returns:
-        string series/scalar: the string/column of extracted substrings
+        string array/scalar: the string/column of extracted substrings
     """
 
     arr_is_string = verify_string_binary_arg(arr, "SUBSTRING", "arr")
@@ -1156,7 +1156,7 @@ def substring_index_util(arr, delimiter, occurrences):
         occurences (integer array/series/scalar): how many of the delimiter to look for
 
     Returns:
-        string series/scalar: the string/column of prefixes before ocurrences
+        string array/scalar: the string/column of prefixes before ocurrences
         many of the delimiter string occur
     """
 
@@ -1195,7 +1195,7 @@ def translate_util(arr, source, target):
         alphabet
 
     Returns:
-        string series/scalar: the translated string(s)
+        string array/scalar: the translated string(s)
     """
 
     verify_string_arg(arr, "translate", "arr")

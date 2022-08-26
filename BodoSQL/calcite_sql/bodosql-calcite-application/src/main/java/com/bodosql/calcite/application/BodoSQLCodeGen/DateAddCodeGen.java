@@ -34,7 +34,7 @@ public class DateAddCodeGen {
           .append(arg1)
           .append(")");
     } else {
-      addBuilder.append("(").append(arg0).append(" + ").append(arg1).append(")");
+      addBuilder.append("(pd.Series(").append(arg0).append(") + ").append(arg1).append(").values");
     }
 
     return addBuilder.toString();

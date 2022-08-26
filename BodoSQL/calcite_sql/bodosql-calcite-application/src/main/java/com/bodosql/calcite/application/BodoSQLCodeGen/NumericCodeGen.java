@@ -96,7 +96,8 @@ public class NumericCodeGen {
         return new RexNodeVisitorInfo(new_fn_name, fn_expr + "(" + arg1Expr + ")");
       } else if (equivalentPandasMethodMapColumns.containsKey(fnName)) {
         String pandas_method = equivalentPandasMethodMapColumns.get(fnName);
-        return new RexNodeVisitorInfo(new_fn_name, arg1Expr + "." + pandas_method + "()");
+        return new RexNodeVisitorInfo(
+            new_fn_name, "pd.Series(" + arg1Expr + ")." + pandas_method + "().values");
       } else {
         throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
       }
@@ -136,7 +137,8 @@ public class NumericCodeGen {
       } else if (equivalentPandasMethodMapColumns.containsKey(fnName)) {
         String pandas_method = equivalentPandasMethodMapColumns.get(fnName);
         return new RexNodeVisitorInfo(
-            new_fn_name, arg1Expr + "." + pandas_method + "(" + arg2Expr + ")");
+            new_fn_name,
+            "pd.Series(" + arg1Expr + ")." + pandas_method + "(" + arg2Expr + ").values");
       } else {
         throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
       }

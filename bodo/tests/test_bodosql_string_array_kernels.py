@@ -27,7 +27,11 @@ from bodo.tests.utils import check_func, gen_nonascii_list
 )
 def test_char(n):
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.char(arr)
+        return pd.Series(bodo.libs.bodosql_array_kernels.char(arr))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(n, pd.Series):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.char(arr)
 
     # Simulates CHAR on a single row
     def char_scalar_fn(elem):
@@ -288,12 +292,23 @@ def test_editdistance(args):
     """Answers calculated with https://planetcalc.com/1721/"""
 
     def impl1(s, t):
-        return bodo.libs.bodosql_array_kernels.editdistance_no_max(s, t)
+        return pd.Series(bodo.libs.bodosql_array_kernels.editdistance_no_max(s, t))
 
     def impl2(s, t, maxDist):
-        return bodo.libs.bodosql_array_kernels.editdistance_with_max(s, t, maxDist)
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.editdistance_with_max(s, t, maxDist)
+        )
 
     args, answer = args
+
+    # avoid Series conversion for scalar output
+    if not isinstance(answer, pd.Series):
+        impl1 = lambda s, t: bodo.libs.bodosql_array_kernels.editdistance_no_max(s, t)
+        impl2 = (
+            lambda s, t, maxDist: bodo.libs.bodosql_array_kernels.editdistance_with_max(
+                s, t, maxDist
+            )
+        )
 
     if len(args) == 2:
         check_func(impl1, args, py_output=answer, check_dtype=False, reset_index=True)
@@ -335,7 +350,7 @@ def test_editdistance(args):
 )
 def test_format(args):
     def impl(arr, places):
-        return bodo.libs.bodosql_array_kernels.format(arr, places)
+        return pd.Series(bodo.libs.bodosql_array_kernels.format(arr, places))
 
     # Simulates FORMAT on a single row
     def format_scalar_fn(elem, places):
@@ -345,6 +360,10 @@ def test_format(args):
             return "{:,}".format(round(elem))
         else:
             return (f"{{:,.{places}f}}").format(elem)
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr, places: bodo.libs.bodosql_array_kernels.format(arr, places)
 
     arr, places = args
     format_answer = vectorized_sol((arr, places), format_scalar_fn, pd.StringDtype())
@@ -425,7 +444,11 @@ def test_format(args):
 )
 def test_initcap(args):
     def impl(arr, delim):
-        return bodo.libs.bodosql_array_kernels.initcap(arr, delim)
+        return pd.Series(bodo.libs.bodosql_array_kernels.initcap(arr, delim))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr, delim: bodo.libs.bodosql_array_kernels.initcap(arr, delim)
 
     args, answer = args
     check_func(
@@ -462,7 +485,11 @@ def test_initcap(args):
 )
 def test_instr(args):
     def impl(arr0, arr1):
-        return bodo.libs.bodosql_array_kernels.instr(arr0, arr1)
+        return pd.Series(bodo.libs.bodosql_array_kernels.instr(arr0, arr1))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.instr(arr0, arr1)
 
     # Simulates INSTR on a single row
     def instr_scalar_fn(elem, target):
@@ -573,10 +600,15 @@ def test_instr(args):
 )
 def test_left_right(args):
     def impl1(arr, n_chars):
-        return bodo.libs.bodosql_array_kernels.left(arr, n_chars)
+        return pd.Series(bodo.libs.bodosql_array_kernels.left(arr, n_chars))
 
     def impl2(arr, n_chars):
-        return bodo.libs.bodosql_array_kernels.right(arr, n_chars)
+        return pd.Series(bodo.libs.bodosql_array_kernels.right(arr, n_chars))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl1 = lambda arr, n_chars: bodo.libs.bodosql_array_kernels.left(arr, n_chars)
+        impl2 = lambda arr, n_chars: bodo.libs.bodosql_array_kernels.right(arr, n_chars)
 
     # Simulates LEFT on a single row
     def left_scalar_fn(elem, n_chars):
@@ -729,10 +761,22 @@ def test_left_right(args):
 )
 def test_lpad_rpad(args):
     def impl1(arr, length, lpad_string):
-        return bodo.libs.bodosql_array_kernels.lpad(arr, length, lpad_string)
+        return pd.Series(bodo.libs.bodosql_array_kernels.lpad(arr, length, lpad_string))
 
     def impl2(arr, length, rpad_string):
-        return bodo.libs.bodosql_array_kernels.rpad(arr, length, rpad_string)
+        return pd.Series(bodo.libs.bodosql_array_kernels.rpad(arr, length, rpad_string))
+
+    # avoid Series conversion for scalar output
+    if all(
+        not isinstance(arg, (pd.Series, pd.core.arrays.ExtensionArray, np.ndarray))
+        for arg in args
+    ):
+        impl1 = lambda arr, length, lpad_string: bodo.libs.bodosql_array_kernels.lpad(
+            arr, length, lpad_string
+        )
+        impl2 = lambda arr, length, rpad_string: bodo.libs.bodosql_array_kernels.rpad(
+            arr, length, rpad_string
+        )
 
     # Simulates LPAD on a single element
     def lpad_scalar_fn(elem, length, pad):
@@ -794,7 +838,11 @@ def test_lpad_rpad(args):
 )
 def test_ord_ascii(s):
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.ord_ascii(arr)
+        return pd.Series(bodo.libs.bodosql_array_kernels.ord_ascii(arr))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(s, pd.Series):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.ord_ascii(arr)
 
     # Simulates ORD/ASCII on a single row
     def ord_ascii_scalar_fn(elem):
@@ -837,7 +885,11 @@ def test_ord_ascii(s):
 )
 def test_repeat(args):
     def impl(arr, repeats):
-        return bodo.libs.bodosql_array_kernels.repeat(arr, repeats)
+        return pd.Series(bodo.libs.bodosql_array_kernels.repeat(arr, repeats))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr, repeats: bodo.libs.bodosql_array_kernels.repeat(arr, repeats)
 
     # Simulates REPEAT on a single row
     def repeat_scalar_fn(elem, repeats):
@@ -914,7 +966,15 @@ def test_repeat(args):
 )
 def test_replace(args):
     def impl(arr, to_replace, replace_with):
-        return bodo.libs.bodosql_array_kernels.replace(arr, to_replace, replace_with)
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.replace(arr, to_replace, replace_with)
+        )
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr, to_replace, replace_with: bodo.libs.bodosql_array_kernels.replace(
+            arr, to_replace, replace_with
+        )
 
     # Simulates REPLACE on a single row
     def replace_scalar_fn(elem, to_replace, replace_with):
@@ -960,7 +1020,11 @@ def test_replace(args):
 )
 def test_reverse(strings_binary, memory_leak_check):
     def impl(arr):
-        return bodo.libs.bodosql_array_kernels.reverse(arr)
+        return pd.Series(bodo.libs.bodosql_array_kernels.reverse(arr))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(strings_binary, (pd.Series, np.ndarray)):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.reverse(arr)
 
     # Simulates REVERSE on a single row
     def reverse_scalar_fn(elem):
@@ -994,7 +1058,11 @@ def test_reverse(strings_binary, memory_leak_check):
 )
 def test_space(numbers):
     def impl(n_chars):
-        return bodo.libs.bodosql_array_kernels.space(n_chars)
+        return pd.Series(bodo.libs.bodosql_array_kernels.space(n_chars))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(numbers, pd.Series):
+        impl = lambda n_chars: bodo.libs.bodosql_array_kernels.space(n_chars)
 
     # Simulates SPACE on a single row
     def space_scalar_fn(n_chars):
@@ -1116,7 +1184,15 @@ def test_space(numbers):
 )
 def test_split_part(args):
     def impl(source, delim, target):
-        return bodo.libs.bodosql_array_kernels.split_part(source, delim, target)
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.split_part(source, delim, target)
+        )
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda source, delim, target: bodo.libs.bodosql_array_kernels.split_part(
+            source, delim, target
+        )
 
     args, answer = args
     check_func(
@@ -1148,7 +1224,11 @@ def test_split_part(args):
 )
 def test_strcmp(args):
     def impl(arr0, arr1):
-        return bodo.libs.bodosql_array_kernels.strcmp(arr0, arr1)
+        return pd.Series(bodo.libs.bodosql_array_kernels.strcmp(arr0, arr1))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.strcmp(arr0, arr1)
 
     # Simulates STRCMP on a single row
     def strcmp_scalar_fn(arr0, arr1):
@@ -1266,7 +1346,13 @@ def test_strcmp(args):
 )
 def test_strtok(args):
     def impl(source, delim, target):
-        return bodo.libs.bodosql_array_kernels.strtok(source, delim, target)
+        return pd.Series(bodo.libs.bodosql_array_kernels.strtok(source, delim, target))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda source, delim, target: bodo.libs.bodosql_array_kernels.strtok(
+            source, delim, target
+        )
 
     args, answer = args
     check_func(
@@ -1347,7 +1433,13 @@ def test_strtok(args):
 )
 def test_substring(args):
     def impl(arr, start, length):
-        return bodo.libs.bodosql_array_kernels.substring(arr, start, length)
+        return pd.Series(bodo.libs.bodosql_array_kernels.substring(arr, start, length))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, (pd.Series, np.ndarray)) for arg in args):
+        impl = lambda arr, start, length: bodo.libs.bodosql_array_kernels.substring(
+            arr, start, length
+        )
 
     # Simulates SUBSTRING on a single row
     def substring_scalar_fn(elem, start, length):
@@ -1430,7 +1522,13 @@ def test_substring(args):
 )
 def test_substring_index(args):
     def impl(arr, delimiter, occurrences):
-        return bodo.libs.bodosql_array_kernels.substring_index(
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.substring_index(arr, delimiter, occurrences)
+        )
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda arr, delimiter, occurrences: bodo.libs.bodosql_array_kernels.substring_index(
             arr, delimiter, occurrences
         )
 
@@ -1473,7 +1571,11 @@ def test_substring_index(args):
 )
 def test_space(numbers):
     def impl(n_chars):
-        return bodo.libs.bodosql_array_kernels.space(n_chars)
+        return pd.Series(bodo.libs.bodosql_array_kernels.space(n_chars))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(numbers, pd.Series):
+        impl = lambda n_chars: bodo.libs.bodosql_array_kernels.space(n_chars)
 
     # Simulates SPACE on a single row
     def space_scalar_fn(n_chars):
@@ -1574,9 +1676,16 @@ def test_space(numbers):
 )
 def test_translate(args):
     def impl(arr, source, target):
-        return bodo.libs.bodosql_array_kernels.translate(arr, source, target)
+        return pd.Series(bodo.libs.bodosql_array_kernels.translate(arr, source, target))
 
     args, answer = args
+
+    # avoid Series conversion for scalar output
+    if not isinstance(answer, pd.Series):
+        impl = lambda arr, source, target: bodo.libs.bodosql_array_kernels.translate(
+            arr, source, target
+        )
+
     check_func(
         impl,
         args,

@@ -1253,7 +1253,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         String outputDfColName = outputDfColnameList.get(i);
         outputColExprs.add(
             new StringBuilder(generatedDfName)
-                .append("[" + makeQuoted(outputDfColName) + "]")
+                .append("[" + makeQuoted(outputDfColName) + "].values")
                 .toString());
       }
     } else {
@@ -1278,7 +1278,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // Since we only do one function at a time, we always have exactly one output.
         String outputDfColName = outputDfColnameList.get(0);
         outputColExprs.add(
-            new StringBuilder(dfExpr).append("[" + makeQuoted(outputDfColName) + "]").toString());
+            new StringBuilder(dfExpr)
+                .append("[" + makeQuoted(outputDfColName) + "].values")
+                .toString());
       }
     }
     assert outputColExprs.size() == aggOperations.size();
@@ -1979,7 +1981,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             if (isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR) {
               exprUppercase = expr + ".upper()";
             } else if (exprType == BodoSQLExprType.ExprType.COLUMN) {
-              exprUppercase = expr + ".str.upper()";
+              exprUppercase = "pd.Series(" + expr + ").str.upper().values";
             } else {
               throw new BodoSQLCodegenException(
                   "Internal Error: Function: upper only supported for column and scalar types");
@@ -1994,7 +1996,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             if (isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR) {
               exprLowercase = expr + ".lower()";
             } else if (exprType == BodoSQLExprType.ExprType.COLUMN) {
-              exprLowercase = expr + ".str.lower()";
+              exprLowercase = "pd.Series(" + expr + ").str.lower().values";
             } else {
               throw new BodoSQLCodegenException(
                   "Internal Error: Function: lower only supported for column and scalar types");
@@ -2816,7 +2818,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public RexNodeVisitorInfo visitInputRef(
       RexInputRef node, List<String> colNames, String inputVar, boolean isSingleRow, BodoCtx ctx) {
     String colName = colNames.get(node.getIndex());
-    String refValue = inputVar + "[" + makeQuoted(colName) + "]";
+    String refValue =
+        String.format(
+            "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(%s, %d)", inputVar, node.getIndex());
     if (isSingleRow) {
       // If we are processing inside CASE we need to track nulls and used columns
       ctx.getNeedNullCheckColumns().add(colName);

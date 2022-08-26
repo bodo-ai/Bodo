@@ -51,7 +51,7 @@ public class SinceEpochFnCodeGen {
               + TimeDeltaFromUnixEpoch
               + ")";
     } else {
-      daysSinceUnixEpoch = TimeDeltaFromUnixEpoch + ".dt.days";
+      daysSinceUnixEpoch = "pd.Series(" + TimeDeltaFromUnixEpoch + ").dt.days.values";
     }
 
     List<String> args2 = Arrays.asList(daysSinceUnixEpoch, dayDeltaUnixY0);
@@ -94,7 +94,7 @@ public class SinceEpochFnCodeGen {
               + TimeDeltaFromUnixEpoch
               + "))";
     } else {
-      secondsSinceUnixEpoch = TimeDeltaFromUnixEpoch + ".dt.total_seconds()";
+      secondsSinceUnixEpoch = "pd.Series(" + TimeDeltaFromUnixEpoch + ").dt.total_seconds().values";
     }
 
     List<String> args2 = Arrays.asList(secondsSinceUnixEpoch, secondDeltaUnixY0);
@@ -127,7 +127,7 @@ public class SinceEpochFnCodeGen {
     if (useScalarCode) {
       outputExpression =
           "bodo.utils.conversion.box_if_dt64(bodo.libs.bodosql_array_kernels.day_timestamp("
-              + generateBinOpCode(args, exprTypes, subBinop, false)
+              + generateBinOpCode(args, exprTypes, subBinop, true)
               + "))";
     } else {
       outputExpression =

@@ -47,31 +47,41 @@ def verify_dictionary_optimization(func, args, dict_func, output_encoded):
 )
 def test_dict_other_string_kernels(args):
     def impl1(arg0, arg1, arg2):
-        return bodo.libs.bodosql_array_kernels.lpad(arg0, arg1, arg2).str.capitalize()
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.lpad(arg0, arg1, arg2)
+        ).str.capitalize()
 
     def impl2(arg0, arg1, arg2):
-        return bodo.libs.bodosql_array_kernels.rpad(arg0, arg1, arg2).str.capitalize()
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.rpad(arg0, arg1, arg2)
+        ).str.capitalize()
 
     def impl3(arg0, arg1):
-        return bodo.libs.bodosql_array_kernels.left(arg0, arg1).str.capitalize()
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.left(arg0, arg1)
+        ).str.capitalize()
 
     def impl4(arg0, arg1):
-        return bodo.libs.bodosql_array_kernels.right(arg0, arg1).str.capitalize()
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.right(arg0, arg1)
+        ).str.capitalize()
 
     def impl5(arg0, arg1):
-        return bodo.libs.bodosql_array_kernels.repeat(arg0, arg1).str.capitalize()
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.repeat(arg0, arg1)
+        ).str.capitalize()
 
     def impl6(arg0):
-        return bodo.libs.bodosql_array_kernels.reverse(arg0).str.capitalize()
+        return pd.Series(bodo.libs.bodosql_array_kernels.reverse(arg0)).str.capitalize()
 
     def impl7(arg0, arg1, arg2):
-        return bodo.libs.bodosql_array_kernels.substring(
-            arg0, arg1, arg2
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.substring(arg0, arg1, arg2)
         ).str.capitalize()
 
     def impl8(arg0, arg1, arg2):
-        return bodo.libs.bodosql_array_kernels.substring_index(
-            arg0, arg1, arg2
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.substring_index(arg0, arg1, arg2)
         ).str.capitalize()
 
     # Simulates the relevent function on a single row (these are not quite
@@ -158,7 +168,7 @@ def test_dict_other_string_kernels(args):
                     ),
                     "wonderful",
                 ),
-                pd.Series([3, 3, None, 8, None, 6] * 2, dtype=pd.Int32Dtype()),
+                pd.array([3, 3, None, 8, None, 6] * 2, dtype="Int32"),
             ),
             id="editdistance_no_max",
         ),
@@ -181,7 +191,7 @@ def test_dict_other_string_kernels(args):
                     "wonderful",
                     5,
                 ),
-                pd.Series([3, 3, None, 5, None, 5] * 2, dtype=pd.Int32Dtype()),
+                pd.array([3, 3, None, 5, None, 5] * 2, dtype="Int32"),
             ),
             id="editdistance_with_max",
         ),
@@ -203,7 +213,7 @@ def test_dict_other_string_kernels(args):
                     ),
                     " ",
                 ),
-                pd.Series([9, 0, None, 1, None, 9] * 2, dtype=pd.Int32Dtype()),
+                pd.array([9, 0, None, 1, None, 9] * 2, dtype="Int32"),
             ),
             id="instr",
         ),
@@ -225,7 +235,7 @@ def test_dict_other_string_kernels(args):
                     ),
                     "alphabet",
                 ),
-                pd.Series([-1, 1, None, 0, None, 1] * 2, dtype=pd.Int32Dtype()),
+                pd.array([-1, 1, None, 0, None, 1] * 2, dtype="Int32"),
             ),
             id="strcmp",
         ),
@@ -246,7 +256,7 @@ def test_dict_other_string_kernels(args):
                         type=pa.dictionary(pa.int32(), pa.string()),
                     ),
                 ),
-                pd.Series([97, 68, None, 97, None, 33] * 2, dtype=pd.Int32Dtype()),
+                pd.array([97, 68, None, 97, None, 33] * 2, dtype="Int32"),
             ),
             id="ord_ascii",
         ),
@@ -362,8 +372,8 @@ def test_dict_replace(args):
     arr, to_replace, replace_with, output_encoded = args
 
     def impl(arr, to_replace, replace_with):
-        return bodo.libs.bodosql_array_kernels.replace(
-            arr, to_replace, replace_with
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.replace(arr, to_replace, replace_with)
         ).str.capitalize()
 
     # Simulates REPLACE on a single row
@@ -464,8 +474,8 @@ def test_dict_replace(args):
 )
 def test_dict_split_part(args):
     def impl(source, delim, part):
-        return bodo.libs.bodosql_array_kernels.split_part(
-            source, delim, part
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.split_part(source, delim, part)
         ).str.capitalize()
 
     args, answer, output_encoded = args
@@ -533,8 +543,8 @@ def test_dict_split_part(args):
 )
 def test_dict_strtok(args):
     def impl(source, delim, part):
-        return bodo.libs.bodosql_array_kernels.strtok(
-            source, delim, part
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.strtok(source, delim, part)
         ).str.capitalize()
 
     args, answer, output_encoded = args
@@ -590,7 +600,9 @@ def test_dict_strtok(args):
 )
 def test_dict_coalesce(args):
     def impl(x, y):
-        return bodo.libs.bodosql_array_kernels.coalesce((x, y)).str.capitalize()
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.coalesce((x, y))
+        ).str.capitalize()
 
     # Simulates COALESCE on a single row
     def coalesce_scalar_fn(*args):
@@ -653,7 +665,7 @@ def test_dict_coalesce(args):
 )
 def test_dict_nullif(args):
     def impl(x, y):
-        return bodo.libs.bodosql_array_kernels.nullif(x, y).str.capitalize()
+        return pd.Series(bodo.libs.bodosql_array_kernels.nullif(x, y)).str.capitalize()
 
     # Simulates NULLIF on a single row
     def nullif_scalar_fn(x, y):
@@ -764,11 +776,13 @@ def test_dict_nullif(args):
 )
 def test_dict_decode(args):
     def impl5(A, B, C, D, E):
-        return bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E)).str.capitalize()
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E))
+        ).str.capitalize()
 
     def impl6(A, B, C, D, E, F):
-        return bodo.libs.bodosql_array_kernels.decode(
-            (A, B, C, D, E, F)
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.decode((A, B, C, D, E, F))
         ).str.capitalize()
 
     # Simulates DECODE on a single row
@@ -872,8 +886,8 @@ def test_dict_decode(args):
 )
 def test_dict_translate(args):
     def impl(arr, source, target):
-        return bodo.libs.bodosql_array_kernels.translate(
-            arr, source, target
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.translate(arr, source, target)
         ).str.capitalize()
 
     args, answer, output_encoded = args
@@ -957,7 +971,9 @@ def test_dict_translate(args):
 )
 def test_dict_initcap(args):
     def impl(arr, delim):
-        return bodo.libs.bodosql_array_kernels.initcap(arr, delim).str.strip()
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.initcap(arr, delim)
+        ).str.strip()
 
     args, answer, output_encoded = args
 
@@ -971,3 +987,86 @@ def test_dict_initcap(args):
     )
 
     verify_dictionary_optimization(impl, args, "str_strip", output_encoded)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "wonderlust",
+                            "wonder",
+                            None,
+                            "terrible",
+                            None,
+                            "wendigo",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    "wonder",
+                ),
+                np.array([False, True, False, False, False, False] * 2),
+            ),
+            id="equal_null_scalar_string",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "wonderlust",
+                            "wonder",
+                            None,
+                            "terrible",
+                            None,
+                            "wendigo",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    None,
+                ),
+                np.array([False, False, True, False, True, False] * 2),
+            ),
+            id="equal_null_scalar_null",
+        ),
+        pytest.param(
+            (
+                (
+                    pa.array(
+                        [
+                            "wonderlust",
+                            "wonder",
+                            None,
+                            "terrible",
+                            None,
+                            "wendigo",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    pd.Series(["wonderlust", "wonder"] * 3 + [None] * 6),
+                ),
+                np.array([True, True] + [False] * 6 + [True, False] * 2),
+            ),
+            id="equal_null_vector",
+        ),
+    ],
+)
+def test_dict_str2bool(args):
+    def impl(s, t):
+        return bodo.libs.bodosql_array_kernels.equal_null(s, t)
+
+    args, answer = args
+
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        only_seq=True,
+    )

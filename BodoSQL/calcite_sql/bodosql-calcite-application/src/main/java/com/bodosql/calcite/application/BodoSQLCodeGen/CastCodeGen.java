@@ -20,7 +20,13 @@ public class CastCodeGen {
     if (outputScalar) {
       codeBuilder.append(dtype).append("(").append(arg).append(")");
     } else {
-      codeBuilder.append(arg).append(".astype(").append(dtype).append(", _bodo_nan_to_str=False)");
+      // TODO: replace Series.astype/dt with array operation
+      codeBuilder
+          .append("pd.Series(")
+          .append(arg)
+          .append(").astype(")
+          .append(dtype)
+          .append(", _bodo_nan_to_str=False)");
     }
     // Date needs special handling to truncate timestamp. We always round down.
     // TODO: Remove once we support Date type natively
@@ -30,6 +36,10 @@ public class CastCodeGen {
       } else {
         codeBuilder.append(".dt.floor(freq=\"D\")");
       }
+    }
+    // make the output array as expected elsewhere
+    if (!outputScalar) {
+      codeBuilder.append(".values");
     }
     return codeBuilder.toString();
   }
