@@ -21,25 +21,32 @@ testing_locally = os.environ.get("BODOSQL_TESTING_LOCALLY", False)
     params=[
         pytest.param(
             ("CURRENT ROW", "UNBOUNDED FOLLOWING"),
+            id="suffix",
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
         ),
-        ("UNBOUNDED PRECEDING", "1 PRECEDING"),
+        pytest.param(
+            ("UNBOUNDED PRECEDING", "1 PRECEDING"),
+            id="exclusive_prefix",
+        ),
         pytest.param(
             ("1 PRECEDING", "1 FOLLOWING"),
+            id="rolling_3",
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
         ),
         pytest.param(
             ("CURRENT ROW", "1 FOLLOWING"),
+            id="rolling2",
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
         ),
         pytest.param(
             ("CURRENT ROW", "CURRENT ROW"),
+            id="current_row",
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
@@ -49,18 +56,21 @@ testing_locally = os.environ.get("BODOSQL_TESTING_LOCALLY", False)
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
+            id="2_after",
         ),
         pytest.param(
             ("UNBOUNDED PRECEDING", "2 FOLLOWING"),
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
+            id="prefix_plus_2_after",
         ),
         pytest.param(
             ("3 PRECEDING", "UNBOUNDED FOLLOWING"),
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
+            id="suffix_plus_2_before",
         ),
     ]
 )

@@ -8,6 +8,7 @@ import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -33,6 +34,16 @@ public class WindowAggCodeGen {
   private static final String argumentDfLen = "argument_df_len";
 
   private static final String indent = getBodoIndent();
+
+  static HashMap<SqlKind, String> windowOptimizedKernels;
+
+  static {
+    windowOptimizedKernels = new HashMap<SqlKind, String>();
+    windowOptimizedKernels.put(SqlKind.SUM, "bodo.libs.bodosql_array_kernels.windowed_sum");
+    windowOptimizedKernels.put(SqlKind.SUM0, "bodo.libs.bodosql_array_kernels.windowed_sum");
+    windowOptimizedKernels.put(SqlKind.COUNT, "bodo.libs.bodosql_array_kernels.windowed_count");
+    windowOptimizedKernels.put(SqlKind.AVG, "bodo.libs.bodosql_array_kernels.windowed_avg");
+  }
 
   /**
    * Generates a function definition to be used in a groupby apply to perform a SQL Lead/Lag
@@ -521,6 +532,32 @@ public class WindowAggCodeGen {
               upper_bound_expr,
               lower_bounded,
               lower_bound_expr),
+          returnedDfOutputCols);
+    } else if (windowOptimizedKernels.containsKey(agg)) {
+      // These functions have special window-optimized kernels
+      assert argsListList.size() == 1;
+      WindowedAggregationArgument arg0 = argsListList.get(0).get(0);
+      assert arg0.isDfCol();
+      String arg0ColName = arg0.getExprString();
+      String lower = lower_bound_expr;
+      String upper = upper_bound_expr;
+      if (lower == "UNUSABLE_LOWER_BOUND") {
+        lower = "-" + argumentDfLen;
+      }
+      if (upper == "UNUSABLE_UPPER_BOUND") {
+        upper = argumentDfLen;
+      }
+      return new Pair<>(
+          generateWindowOptimizedFn(
+              funcText,
+              arg0ColName,
+              windowOptimizedKernels.get(agg),
+              returnedDfOutputCols,
+              sortByCols,
+              ascendingList,
+              NAPositionList,
+              upper,
+              lower),
           returnedDfOutputCols);
     } else if (agg == SqlKind.LAG || agg == SqlKind.LEAD) {
       // LAG/LEAD require special handling
@@ -1246,7 +1283,71 @@ public class WindowAggCodeGen {
     arraysToSort.add("arr");
 
     Pair<String, String> additionalFuncTextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, false);
+        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, true);
+
+    funcText.append(additionalFuncTextAndOutputDfName.getKey());
+    String outputDfName = additionalFuncTextAndOutputDfName.getValue();
+
+    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
+
+    return funcText.toString();
+  }
+
+  /**
+   * Helper function that handles window frmae-optimized window aggregation. Should only be called
+   * from generateWindowedAggFn, after performing the column filtering, and the definitions for
+   * argumentDfOriginalIndex, and argumentDfLen.
+   *
+   * @param funcText The current func text. Must contain only the function declaration.
+   * @param colName the name of the column whose change events are being tracked
+   * @param expectedOutputColumns the list of string column names at which to store the output
+   *     columns
+   * @param sortByCols The string representing the list of string column names by which to sort
+   * @param ascendingList The string representing the list of boolean values, which determining if
+   *     the columns in sortByCols will be sorted ascending or descending
+   * @param NAPositionList The string representing the list of string values, which determine null
+   *     ordering for each column being sorted. This is empty if no sorting is necessary.
+   * @return The completed funcText, which returns an output dataframe with the aggregations stored
+   *     in the column names provided in expectedOutputColumns
+   */
+  private static String generateWindowOptimizedFn(
+      StringBuilder funcText,
+      final String colName,
+      final String kernelName,
+      final List<String> expectedOutputColumns,
+      final String sortByCols,
+      final String ascendingList,
+      final String NAPositionList,
+      final String upper_bound,
+      final String lower_bound) {
+
+    // Perform the sort on the input dataframe (if needed) and store the resulting dataframe
+    // in a variable named "sorted_df"
+    funcText.append(
+        sortLocalDfIfNeeded(
+            argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
+
+    funcText
+        .append(indent)
+        .append(indent)
+        .append(
+            "arr = "
+                + kernelName
+                + "("
+                + "sorted_df["
+                + makeQuoted(colName)
+                + "], "
+                + lower_bound
+                + ", "
+                + upper_bound
+                + ")\n");
+
+    List<String> arraysToSort = new ArrayList<>();
+    arraysToSort.add("arr");
+
+    Pair<String, String> additionalFuncTextAndOutputDfName =
+        reverseSortLocalDfIfNeeded(
+            arraysToSort, "sorted_df", expectedOutputColumns, !sortByCols.equals(""));
 
     funcText.append(additionalFuncTextAndOutputDfName.getKey());
     String outputDfName = additionalFuncTextAndOutputDfName.getValue();
