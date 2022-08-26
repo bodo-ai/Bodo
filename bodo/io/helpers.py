@@ -3,6 +3,11 @@
 File that contains some IO related helpers.
 """
 
+import os
+import threading
+import uuid
+
+import numba
 import pyarrow as pa
 from mpi4py import MPI
 from numba.core import types
@@ -21,14 +26,11 @@ from bodo.hiframes.datetime_date_ext import (
     datetime_date_array_type,
     datetime_date_type,
 )
-from bodo.hiframes.time_ext import (
-    TimeType,
-    TimeArrayType,
-)
 from bodo.hiframes.pd_categorical_ext import (
     CategoricalArrayType,
     PDCategoricalDtype,
 )
+from bodo.hiframes.time_ext import TimeArrayType, TimeType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
@@ -38,6 +40,7 @@ from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType
+from bodo.utils import tracing
 from bodo.utils.typing import BodoError
 
 
@@ -268,3 +271,144 @@ def _get_numba_typ_from_pa_typ(
         arr_typ = IntegerArrayType(dtype)
 
     return arr_typ, supported
+
+
+# ========================== Snowflake Write Helpers ===========================
+
+
+def update_env_vars(env_vars):
+    """Update the current environment variables with key-value pairs provided
+    in a dictionary. Used in bodo.io.snowflake. "__none__" is used as a dummy
+    value since Numba hates dictionaries with strings and NoneType's as values.
+
+    Args
+        env_vars (Dict(str, str or None)): A dictionary of environment variables to set.
+            A value of "__none__" indicates a variable should be removed.
+
+    Returns
+        old_env_vars (Dict(str, str or None)): Previous value of any overwritten
+            environment variables. A value of "__none__" indicates an environment
+            variable was previously unset.
+    """
+    old_env_vars = {}
+    for k, v in env_vars.items():
+        if k in os.environ:
+            old_env_vars[k] = os.environ[k]
+        else:
+            old_env_vars[k] = "__none__"
+
+        if v == "__none__":
+            del os.environ[k]
+        else:
+            os.environ[k] = v
+
+    return old_env_vars
+
+
+@numba.njit
+def uuid4_helper():
+    """Helper function that enters objmode and calls uuid4 from JIT
+
+    Returns
+        out (str): String output of `uuid4()`
+    """
+    with bodo.objmode(out="unicode_type"):
+        out = str(uuid.uuid4())
+    return out
+
+
+class ExceptionPropagatingThread(threading.Thread):
+    """A threading.Thread that propagates exceptions to the main thread.
+    Derived from https://stackoverflow.com/questions/2829329/catch-a-threads-exception-in-the-caller-thread
+    """
+
+    def run(self):
+        self.exc = None
+        try:
+            self.ret = self._target(*self._args, **self._kwargs)
+        except BaseException as e:
+            self.exc = e
+
+    def join(self, timeout=None):
+        super().join(timeout)
+        if self.exc:
+            raise self.exc
+        return self.ret
+
+
+# Register opaque type for bodo.io.helpers.ExceptionPropagatingThread so it
+# can be shared between different sections of jitted code
+class ExceptionPropagatingThreadType(types.Opaque):
+    """Type for ExceptionPropagatingThread"""
+
+    def __init__(self):
+        super(ExceptionPropagatingThreadType, self).__init__(
+            name="ExceptionPropagatingThreadType"
+        )
+
+
+exception_propagating_thread_type = ExceptionPropagatingThreadType()
+types.exception_propagating_thread_type = exception_propagating_thread_type
+register_model(ExceptionPropagatingThreadType)(models.OpaqueModel)
+
+
+@unbox(ExceptionPropagatingThreadType)
+def unbox_exception_propagating_thread_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(ExceptionPropagatingThreadType)
+def box_exception_propagating_thread_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
+
+
+@typeof_impl.register(ExceptionPropagatingThread)
+def typeof_exception_propagating_thread(val, c):
+    return exception_propagating_thread_type
+
+
+def join_all_threads(thread_list):
+    """Given a list of threads, call `th.join()` on all threads in the list.
+
+    Args
+        thread_list (List(threading.Thread)): A list of threads to join
+    """
+    ev = tracing.Event("join_all_threads", is_parallel=True)
+
+    comm = MPI.COMM_WORLD
+
+    err = None
+    try:
+        for th in thread_list:
+            if isinstance(th, threading.Thread):
+                th.join()
+    except Exception as e:
+        err = e
+
+    # If any rank raises an exception, re-raise that error on all non-failing
+    # ranks to prevent deadlock on future MPI collective ops.
+    # We use allreduce with MPI.MAXLOC to communicate the rank of the lowest
+    # failing process, then broadcast the error backtrace across all ranks.
+    err_on_this_rank = int(err is not None)
+    err_on_any_rank, failing_rank = comm.allreduce(
+        (err_on_this_rank, comm.Get_rank()), op=MPI.MAXLOC
+    )
+    if err_on_any_rank:
+        if comm.Get_rank() == failing_rank:
+            lowest_err = err
+        else:
+            lowest_err = None
+        lowest_err = comm.bcast(lowest_err, root=failing_rank)
+
+        # Each rank that already has an error will re-raise their own error, and
+        # any rank that doesn't have an error will re-raise the lowest rank's error.
+        if err_on_this_rank:
+            raise err
+        else:
+            raise lowest_err
+
+    ev.finalize()

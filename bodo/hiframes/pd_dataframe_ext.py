@@ -4,8 +4,8 @@ Implement pd.DataFrame typing and data model handling.
 """
 import json
 import operator
+import time
 from functools import cached_property
-from urllib.parse import quote
 
 import llvmlite.binding as ll
 import numba
@@ -4027,6 +4027,9 @@ def to_parquet_overload(
     return df_to_parquet
 
 
+# -------------------------------------- to_sql ------------------------------------------
+
+
 def to_sql_exception_guard(
     df,
     name,
@@ -4045,6 +4048,7 @@ def to_sql_exception_guard(
     err_msg = "all_ok"
     # Find the db_type to determine if we are using Snowflake
     db_type, con_paswd = bodo.ir.sql_ext.parse_dbtype(con)
+
     if _is_parallel and bodo.get_rank() == 0:
         # Default number of rows to write to create the table. This is done in case
         # rank 0 has a large number of rows because that delays writing on other ranks.
@@ -4072,42 +4076,6 @@ def to_sql_exception_guard(
 
     df_columns_original = df.columns
     try:
-        if db_type == "snowflake":
-            # replacing password only if special characters in password and password is not the same as username
-            if con_paswd and con.count(con_paswd) == 1:
-                con = con.replace(con_paswd, quote(con_paswd))
-            try:
-                # Using the Pandas APIs of the snowflake connector to write the data in batches
-                # https://docs.snowflake.com/en/user-guide/python-connector-api.html#pd_writer
-                from snowflake.connector.pandas_tools import pd_writer
-
-                from bodo import snowflake_sqlalchemy_compat  # noqa
-
-                if method is not None and _is_table_create and bodo.get_rank() == 0:
-                    import warnings
-
-                    from bodo.utils.typing import BodoWarning
-
-                    warnings.warn(
-                        BodoWarning(
-                            "DataFrame.to_sql(): method argument is not supported with Snowflake. Bodo always uses snowflake.connector.pandas_tools.pd_writer to write data."
-                        )
-                    )
-                method = pd_writer
-                # Snowflake connector assumes the columns names have already had their cases converted.
-                # Convert all fully lower case names to upper case.
-                # See the snowflake section of read_sql for more information.
-                df.columns = [c.upper() if c.islower() else c for c in df.columns]
-            except ImportError:
-                err_msg = (
-                    "Snowflake Python connector packages not found."
-                    " Using 'to_sql' with Snowflake requires both snowflake-sqlalchemy"
-                    " and snowflake-connector-python."
-                    " These can be installed by calling"
-                    " 'conda install -c conda-forge snowflake-sqlalchemy snowflake-connector-python' or"
-                    " 'pip install snowflake-sqlalchemy snowflake-connector-python'."
-                )
-                return err_msg
         # Pandas + SQLAlchemy per default save all object (string) columns as CLOB in Oracle DB,
         # which makes insertion extremely slow.
         # Stack overflow suggestion:
@@ -4137,6 +4105,7 @@ def to_sql_exception_guard(
                     ) and (not disable_varchar2 or disable_varchar2 == "0"):
                         dtyp[c] = VARCHAR2(4000)
             dtype = dtyp
+
         try:
             df.to_sql(
                 name,
@@ -4159,6 +4128,7 @@ def to_sql_exception_guard(
                 NOTE: Oracle `to_sql` with CLOB datatypes is known to be really slow.
                 """
         return err_msg
+
     finally:
         df.columns = df_columns_original
 
@@ -4231,9 +4201,38 @@ def to_sql_overload(
             "DataFrame.to_sql(): 'chunksize' argument must be an integer if provided."
         )
 
-    func_text = f"def df_to_sql(df, name, con, schema=None, if_exists='fail', index=True, index_label=None, chunksize=None, dtype=None, method=None, _is_parallel=False):\n"
+    # Snowflake write imports
+    # We need to import so that the types are in numba's type registry
+    # when executing the code.
+    from bodo.io.helpers import exception_propagating_thread_type  # noqa
+    from bodo.io.parquet_pio import parquet_write_table_cpp
+    from bodo.io.snowflake import snowflake_connector_cursor_python_type  # noqa
 
-    # Iceberg case:
+    if df.has_runtime_cols:
+        # TODO: We can also check the type of runtime column names with
+        # df.runtime_colname_typ, to make sure they aren't strings.
+        # Not critical since this code path is unlikely
+        col_names_arr = None
+    else:
+        # Pandas raises a ValueError if columns aren't strings.
+        # Similarly if columns aren't strings we have a segfault in C++.
+        for col in df.columns:
+            if not isinstance(col, str):
+                # This is the Pandas error message
+                raise BodoError(
+                    "DataFrame.to_sql(): input dataframe must have string column names. "
+                    "Please return the DataFrame with runtime column names to regular "
+                    "Python to modify column names."
+                )
+        col_names_arr = pd.array(df.columns)
+
+    func_text = "def df_to_sql(\n"
+    func_text += "    df, name, con,\n"
+    func_text += "    schema=None, if_exists='fail', index=True, index_label=None,\n"
+    func_text += "    chunksize=None, dtype=None, method=None, _is_parallel=False,\n"
+    func_text += "):\n"
+
+    # ------------------------------ Iceberg Write -----------------------------
     func_text += f"    if con.startswith('iceberg'):\n"
     func_text += f"        con_str = bodo.io.iceberg.format_iceberg_conn_njit(con)\n"
     func_text += f"        if schema is None:\n"
@@ -4241,9 +4240,7 @@ def to_sql_overload(
     func_text += f"        if chunksize is not None:\n"
     func_text += f"            raise ValueError('DataFrame.to_sql(): chunksize not supported for Iceberg tables.')\n"
     func_text += f"        if index and bodo.get_rank() == 0:\n"
-    func_text += (
-        f"            warnings.warn('index is not supported for Iceberg tables.')\n"
-    )
+    func_text += f"            warnings.warn('index is not supported for Iceberg tables.')      \n"
     func_text += f"        if index_label is not None and bodo.get_rank() == 0:\n"
     func_text += f"            warnings.warn('index_label is not supported for Iceberg tables.')\n"
 
@@ -4255,7 +4252,7 @@ def to_sql_overload(
     else:
         # convert dataframe columns to array_info
         data_args = ", ".join(
-            f"array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}))"
+            f"array_to_info(get_dataframe_data(df, {i}))"
             for i in range(len(df.columns))
         )
         func_text += f"        info_list = [{data_args}]\n"
@@ -4275,92 +4272,262 @@ def to_sql_overload(
 
     func_text += (
         "        bodo.io.iceberg.iceberg_write(\n"
-        "            name,\n"
-        "            con_str,\n"
-        "            schema,\n"
-        "            table,\n"
-        "            col_names,\n"
-        "            if_exists,\n"
-        "            _is_parallel,\n"
-        "            pyarrow_table_schema,\n"
+        "            name, con_str, schema, table, col_names, if_exists,\n"
+        "            _is_parallel, pyarrow_table_schema,\n"
         "        )\n"
     )
     func_text += f"        delete_table_decref_arrays(table)\n"
     func_text += f"        delete_info_decref_array(col_names)\n"
 
-    if df.has_runtime_cols:
-        col_names_arr = None
-    else:
-        # Pandas raises a ValueError if columns aren't strings.
-        # Similarly if columns aren't strings we have a segfault
-        # in C++.
-        for col in df.columns:
-            if not isinstance(col, str):
-                raise BodoError(
-                    "DataFrame.to_sql(): must have string column names for Iceberg tables"
-                )
-        col_names_arr = pd.array(df.columns)
+    # ----------------------------- Snowflake Write ----------------------------
+    # Design doc link: https://bodo.atlassian.net/wiki/spaces/B/pages/1077280785/Snowflake+Distributed+Write
+    func_text += "    elif con.startswith('snowflake'):\n"
+    func_text += (
+        "        if index and bodo.get_rank() == 0:\n"
+        "            warnings.warn('index is not supported for Snowflake tables.')      \n"
+        "        if index_label is not None and bodo.get_rank() == 0:\n"
+        "            warnings.warn('index_label is not supported for Snowflake tables.')\n"
+        "        ev = tracing.Event('snowflake_write_impl')\n"
+    )
 
-    # Non-Iceberg case
-    func_text += f"    else:\n"
+    # Process incoming args
+    func_text += "        location = ''\n"
+    if not is_overload_none(schema):
+        func_text += "        location += '\"' + schema + '\".'\n"
+    func_text += "        location += '\"' + name + '\"'\n"
+
+    func_text += "        my_rank = bodo.get_rank()\n"
+
+    # In object mode: Connect to snowflake, create internal stage, and
+    # get internal stage credentials on each rank
+    func_text += (
+        "        with bodo.objmode(\n"
+        "            cursor='snowflake_connector_cursor_type',\n"
+        "            tmp_folder='temporary_directory_type',\n"
+        "            stage_name='unicode_type',\n"
+        "            parquet_path='unicode_type',\n"
+        "            upload_using_snowflake_put='boolean',\n"
+        "            old_creds='DictType(unicode_type, unicode_type)',\n"
+        "        ):\n"
+        "            (\n"
+        "                cursor, tmp_folder, stage_name, parquet_path, upload_using_snowflake_put, old_creds\n"
+        "            ) = bodo.io.snowflake.connect_and_get_upload_info(con)\n"
+    )
+
+    # Barrier ensures that internal stage exists before we upload files to it
+    func_text += "        bodo.barrier()\n"
+
+    # Estimate chunk size by repeating internal implementation of `df.memory_usage()`.
+    # Calling `df.memory_usage()` provides much poorer performance as the call
+    # does not seem to get inlined, causing lazy boxing overheads to get incurred
+    # within `df.memory_usage()`.
+    func_text += "        if chunksize is None:\n"
+    func_text += "            ev_estimate_chunksize = tracing.Event('estimate_chunksize')          \n"
+    if df.is_table_format and len(df.columns) > 0:
+        # Don't use table format if the table is unused
+        func_text += (
+            f"            nbytes_arr = np.empty({len(df.columns)}, np.int64)\n"
+            f"            table = bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)\n"
+            f"            bodo.utils.table_utils.generate_table_nbytes(table, nbytes_arr, 0)\n"
+            f"            memory_usage = np.sum(nbytes_arr)\n"
+        )
+    else:
+        data = ", ".join(
+            f"bodo.libs.array_ops.array_op_nbytes(get_dataframe_data(df, {i}))"
+            for i in range(len(df.columns))
+        )
+        comma = "," if len(df.columns) == 1 else ""
+        func_text += (
+            f"            memory_usage = np.array(({data}{comma}), np.int64).sum()\n"
+        )
+    func_text += (
+        "            nsplits = int(max(1, memory_usage / bodo.io.snowflake.SF_WRITE_PARQUET_CHUNK_SIZE))\n"
+        "            chunksize = max(1, (len(df) + nsplits - 1) // nsplits)\n"
+        "            ev_estimate_chunksize.finalize()\n"
+    )
+
+    # In C++: Upload dataframe chunks on each rank to internal stage.
+    # Compute column names and other required info for parquet_write_table_cpp
+    if df.has_runtime_cols:
+        func_text += "        columns_index = get_dataframe_column_names(df)\n"
+        func_text += "        names_arr = index_to_array(columns_index)\n"
+        func_text += "        col_names = array_to_info(names_arr)\n"
+    else:
+        func_text += "        col_names = array_to_info(col_names_arr)\n"
+    func_text += "        index_col = array_to_info(np.empty(0))\n"
+
+    func_text += "        bucket_region = bodo.io.fs_io.get_s3_bucket_region_njit(parquet_path, parallel=_is_parallel)\n"
+
+    # On all ranks, write local dataframe chunk to S3/ADLS, or a local file
+    # upon fallback to snowflake PUT. In the fallback case, we execute the
+    # PUT command later to perform the actual upload
+    func_text += "        ev_upload_df = tracing.Event('upload_df', is_parallel=False)           \n"
+    func_text += "        upload_threads_in_progress = []\n"
+    func_text += "        for chunk_idx, i in enumerate(range(0, len(df), chunksize)):           \n"
+
+    # Create a unique filename for uploaded chunk with quotes/backslashes escaped
+    # We ensure that `parquet_path` always has a trailing slash in `connect_and_get_upload_info`
+    func_text += "            chunk_name = f'file{chunk_idx}_rank{my_rank}_{bodo.io.helpers.uuid4_helper()}.parquet'\n"
+    func_text += "            chunk_path = parquet_path + chunk_name\n"
+    # To escape backslashes, we want to replace ( \ ) with ( \\ ), so the func_text
+    # should contain the string literals ( \\ ) and ( \\\\ ). To add these to func_text,
+    # we need to write ( \\\\ ) and ( \\\\\\\\ ) here.
+    # To escape quotes, we want to replace ( ' ) with ( \' ), so the func_text
+    # should contain the string literals ( ' ) and ( \\' ). To add these to func_text,
+    # we need to write ( ' ) and ( \\\\' ) here.
+    func_text += """            chunk_path = chunk_path.replace("\\\\", "\\\\\\\\")\n"""
+    func_text += """            chunk_path = chunk_path.replace("'", "\\\\'")\n"""
+
+    # Convert dataframe chunk to cpp table
+    # TODO Using df.iloc below incurs significant boxing/unboxing overhead.
+    # Perhaps we can avoid iloc by creating a single C++ table up front
+    # and directly indexing into it.
+    func_text += "            ev_to_df_table = tracing.Event(f'to_df_table_{chunk_idx}', is_parallel=False)\n"
+    func_text += "            chunk = df.iloc[i : i + chunksize]\n"
+    if df.is_table_format:
+        func_text += "            py_table_chunk = get_dataframe_table(chunk)\n"
+        func_text += "            table_chunk = py_table_to_cpp_table(py_table_chunk, py_table_typ)\n"
+    else:
+        data_args_chunk = ", ".join(
+            f"array_to_info(get_dataframe_data(chunk, {i}))"
+            for i in range(len(df.columns))
+        )
+        func_text += f"            table_chunk = arr_info_list_to_table([{data_args_chunk}])     \n"
+    func_text += "            ev_to_df_table.finalize()\n"
+
+    # Dump chunks to parquet file
+    # Below, we always pass `is_parallel=False`. Passing `is_parallel=True` would cause
+    # `pq_write` to write a directory of partitioned files, rather than a single file,
+    # which is what we want as `pq_write` is being called separately and independently
+    # from each rank and we're already accounting for the partitioning ourselves..
+    func_text += (
+        "            ev_pq_write_cpp = tracing.Event(f'pq_write_cpp_{chunk_idx}', is_parallel=False)\n"
+        "            ev_pq_write_cpp.add_attribute('chunk_start', i)\n"
+        "            ev_pq_write_cpp.add_attribute('chunk_end', i + len(chunk))\n"
+        "            ev_pq_write_cpp.add_attribute('chunk_size', len(chunk))\n"
+        "            ev_pq_write_cpp.add_attribute('chunk_path', chunk_path)\n"
+        "            parquet_write_table_cpp(\n"
+        "                unicode_to_utf8(chunk_path),\n"
+        "                table_chunk, col_names, index_col,\n"
+        "                False,\n"  # write_index
+        "                unicode_to_utf8('null'),\n"  # metadata
+        "                unicode_to_utf8(bodo.io.snowflake.SF_WRITE_PARQUET_COMPRESSION),\n"
+        "                False,\n"  # is_parallel
+        "                0,\n"  # write_rangeindex_to_metadata
+        "                0, 0, 0,\n"  # range index start, stop, step
+        "                unicode_to_utf8('null'),\n"  # idx_name
+        "                unicode_to_utf8(bucket_region),\n"
+        # We set the row group size equal to chunksize to force this parquet to
+        # be written as one row group. Due to prior chunking, the whole parquet
+        # file is already a reasonable size for one row group.
+        "                chunksize,\n"  # row_group_size
+        "                unicode_to_utf8('null'),\n"  # prefix
+        "            )\n"
+        "            ev_pq_write_cpp.finalize()\n"
+        "            delete_table_decref_arrays(table_chunk)\n"
+        # If needed, upload local parquet to internal stage using objmode PUT
+        "            if upload_using_snowflake_put:\n"
+        "                with bodo.objmode(upload_thread='types.optional(exception_propagating_thread_type)'):\n"
+        "                    upload_thread = bodo.io.snowflake.do_upload_and_cleanup(\n"
+        "                        cursor, chunk_idx, chunk_path, stage_name,\n"
+        "                    )\n"
+        "                if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
+        "                    upload_threads_in_progress.append(upload_thread)\n"
+        "        delete_info_decref_array(index_col)\n"
+        "        delete_info_decref_array(col_names)\n"
+        # Wait for all upload threads to finish
+        "        if bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD:\n"
+        "            with bodo.objmode():\n"
+        "                bodo.io.helpers.join_all_threads(upload_threads_in_progress)\n"
+        "        ev_upload_df.finalize()\n"
+    )
+
+    # Barrier ensures that files are copied into internal stage before COPY_INTO
+    func_text += "        bodo.barrier()\n"
+
+    # In object mode on rank 0: Create a new table if needed, execute COPY_INTO,
+    # and clean up created internal stage.
+    func_text += (
+        # We define df_columns outside of objmode to ensure that only the columns
+        # array is boxed rather than the entire dataframe, for performance
+        "        df_columns = df.columns\n"
+        "        with bodo.objmode():\n"
+        "            bodo.io.snowflake.create_table_copy_into(\n"
+        "                cursor, stage_name, location, df_columns, if_exists, old_creds, tmp_folder,\n"
+        "            )\n"
+    )
+    func_text += "        ev.finalize(sync=False)\n"
+
+    # -------------------------- Default to_sql Impl --------------------------
+    func_text += "    else:\n"
+
     # Nodes number 0 does the first initial insertion into the database.
     # Following nodes do the insertion of the rest if no error happened.
     # The bcast_scalar is used to synchronize the process between 0 and the rest.
-    func_text += f"        rank = bodo.libs.distributed_api.get_rank()\n"
-    func_text += f"        err_msg = 'unset'\n"
+    func_text += "        rank = bodo.libs.distributed_api.get_rank()\n"
+    func_text += "        err_msg = 'unset'\n"
+
     # Rank 0 writes first and we wait for a response. If this is done in parallel,
     # rank 0 may need to create the table, otherwise if this is replicated only
     # rank 0 writes and the other ranks wait to propagate any error message.
-    func_text += f"        if rank != 0:\n"
-    func_text += (
-        f"            err_msg = bodo.libs.distributed_api.bcast_scalar(err_msg)\n"
-    )
+    func_text += "        if rank != 0:\n"
+    func_text += "            err_msg = bodo.libs.distributed_api.bcast_scalar(err_msg)          \n"
+
     # Rank 0 creates the table. This only writes a chunk of the data
-    # to enable futher parallelism if data isn't replicated.
-    func_text += f"        elif rank == 0:\n"
-    func_text += f"            err_msg = to_sql_exception_guard_encaps(\n"
-    func_text += f"                          df, name, con, schema, if_exists, index, index_label,\n"
-    func_text += f"                          chunksize, dtype, method,\n"
-    func_text += f"                          True, _is_parallel,\n"
-    func_text += f"                      )\n"
-    func_text += (
-        f"            err_msg = bodo.libs.distributed_api.bcast_scalar(err_msg)\n"
-    )
+    # to enable further parallelism if data isn't replicated.
+    func_text += "        elif rank == 0:\n"
+    func_text += "            err_msg = to_sql_exception_guard_encaps(\n"
+    func_text += "                          df, name, con, schema, if_exists, index, index_label,\n"
+    func_text += "                          chunksize, dtype, method,\n"
+    func_text += "                          True, _is_parallel,\n"
+    func_text += "                      )\n"
+    func_text += "            err_msg = bodo.libs.distributed_api.bcast_scalar(err_msg)          \n"
+
     # For all nodes we append to existing table after rank 0 creates the table.
-    func_text += f"        if_exists = 'append'\n"
+    func_text += "        if_exists = 'append'\n"
+
     # The writing of the rest of the data. If data isn't parallel, then
     # rank 0 has already written all of the data in the previous call.
-    func_text += f"        if _is_parallel and err_msg == 'all_ok':\n"
-    func_text += f"            err_msg = to_sql_exception_guard_encaps(\n"
-    func_text += f"                          df, name, con, schema, if_exists, index, index_label,\n"
-    func_text += f"                          chunksize, dtype, method,\n"
-    func_text += f"                          False, _is_parallel,\n"
-    func_text += f"                      )\n"
-    func_text += f"        if err_msg != 'all_ok':\n"
     # TODO: We cannot do a simple raise ValueError(err_msg).
-    func_text += f"            print('err_msg=', err_msg)\n"
-    func_text += f"            raise ValueError('error in to_sql() operation')\n"
+    func_text += "        if _is_parallel and err_msg == 'all_ok':\n"
+    func_text += "            err_msg = to_sql_exception_guard_encaps(\n"
+    func_text += "                          df, name, con, schema, if_exists, index, index_label,\n"
+    func_text += "                          chunksize, dtype, method,\n"
+    func_text += "                          False, _is_parallel,\n"
+    func_text += "                      )\n"
+    func_text += "        if err_msg != 'all_ok':\n"
+    func_text += "            print('err_msg=', err_msg)\n"
+    func_text += "            raise ValueError('error in to_sql() operation')\n"
 
     loc_vars = {}
-    exec(
-        func_text,
+    glbls = globals().copy()
+    glbls.update(
         {
-            "np": np,
-            "bodo": bodo,
-            "unicode_to_utf8": unicode_to_utf8,
+            "arr_info_list_to_table": arr_info_list_to_table,
             "array_to_info": array_to_info,
+            "bodo": bodo,
+            "col_names_arr": col_names_arr,
+            "delete_info_decref_array": delete_info_decref_array,
+            "delete_table_decref_arrays": delete_table_decref_arrays,
+            "get_dataframe_column_names": get_dataframe_column_names,
+            "get_dataframe_data": get_dataframe_data,
             "get_dataframe_table": get_dataframe_table,
+            "index_to_array": index_to_array,
+            "np": np,
+            "parquet_write_table_cpp": parquet_write_table_cpp,
             "py_table_to_cpp_table": py_table_to_cpp_table,
             "py_table_typ": df.table_type,
-            "col_names_arr": col_names_arr,
-            "delete_table_decref_arrays": delete_table_decref_arrays,
-            "delete_info_decref_array": delete_info_decref_array,
-            "arr_info_list_to_table": arr_info_list_to_table,
-            "index_to_array": index_to_array,
             "pyarrow_table_schema": bodo.io.iceberg.pyarrow_schema(df),
+            "time": time,
             "to_sql_exception_guard_encaps": to_sql_exception_guard_encaps,
+            "tracing": tracing,
+            "unicode_to_utf8": unicode_to_utf8,
             "warnings": warnings,
-        },
+        }
+    )
+    exec(
+        func_text,
+        glbls,
         loc_vars,
     )
     _impl = loc_vars["df_to_sql"]

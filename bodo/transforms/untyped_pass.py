@@ -3080,18 +3080,9 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
 
     comm = MPI.COMM_WORLD
 
-    if db_type == "snowflake":
-        try:
-            import snowflake.connector
-        except ImportError:
-            message = (
-                "Snowflake Python connector not found."
-                " It can be installed by calling"
-                " 'conda install -c conda-forge snowflake-connector-python' or"
-                " 'pip install snowflake-connector-python'."
-            )
-            raise BodoError(message)
-    else:
+    # No need to try `import snowflake.connector` here, since the import
+    # is handled by bodo.io.snowflake.snowflake_connect()
+    if db_type != "snowflake":
         try:
             import sqlalchemy  # noqa
         except ImportError:  # pragma: no cover
@@ -3120,10 +3111,9 @@ def _get_sql_df_type_from_db(sql_const, con_const, db_type, is_select_query, sql
                 sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
 
             if db_type == "snowflake":  # pragma: no cover
-                from bodo.io.snowflake import get_connection_params
+                from bodo.io.snowflake import snowflake_connect
 
-                conn_params = get_connection_params(con_const)
-                conn = snowflake.connector.connect(**conn_params)
+                conn = snowflake_connect(con_const)
                 cursor = conn.cursor()
                 described_query = cursor.describe(sql_call)
                 col_names = []
