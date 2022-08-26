@@ -1425,13 +1425,13 @@ def test_concat(memory_leak_check):
     bodo.barrier()
     # use dictionary-encoded arrays for strings
     try:
-        bodo.hiframes.boxing._use_dict_str_type = True
         check_func(
             impl3,
             (temp_file_1, temp_file_2),
             py_output=pd.concat([df1, df2], ignore_index=True),
             sort_output=True,
             reset_index=True,
+            use_dict_encoded_strings=True,
         )
     finally:
         if bodo.get_rank() == 0:
