@@ -339,8 +339,8 @@ def test_pattern_flag_conversions(args):
 
 def test_regexp_count(regexp_strings, regexp_like_count_args):
     def impl(arr, pattern, position, flags):
-        return bodo.libs.bodosql_array_kernels.regexp_count(
-            arr, pattern, position, flags
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_count(arr, pattern, position, flags)
         )
 
     # Simulates REGEXP_COUNT on a single row
@@ -365,8 +365,10 @@ def test_regexp_count(regexp_strings, regexp_like_count_args):
 
 def test_regexp_instr(regexp_strings, regexp_substr_instr_args):
     def impl(arr, pattern, position, occurrence, option, flags, group):
-        return bodo.libs.bodosql_array_kernels.regexp_instr(
-            arr, pattern, position, occurrence, option, flags, group
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_instr(
+                arr, pattern, position, occurrence, option, flags, group
+            )
         )
 
     # Simulates REGEXP_INSTR on a single row
@@ -417,7 +419,9 @@ def test_regexp_instr(regexp_strings, regexp_substr_instr_args):
 
 def test_regexp_like(regexp_strings, regexp_like_count_args):
     def impl(arr, pattern, flags):
-        return bodo.libs.bodosql_array_kernels.regexp_like(arr, pattern, flags)
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_like(arr, pattern, flags)
+        )
 
     # Simulates REGEXP_LIKE on a single row
     def regexp_like_scalar_fn(elem, pattern, flags):
@@ -441,8 +445,10 @@ def test_regexp_like(regexp_strings, regexp_like_count_args):
 
 def test_regexp_replace(regexp_strings, regexp_replace_args):
     def impl(arr, pattern, replacement, position, occurrence, flags):
-        return bodo.libs.bodosql_array_kernels.regexp_replace(
-            arr, pattern, replacement, position, occurrence, flags
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_replace(
+                arr, pattern, replacement, position, occurrence, flags
+            )
         )
 
     # Simulates REGEXP_REPLACE on a single row
@@ -491,8 +497,10 @@ def test_regexp_replace(regexp_strings, regexp_replace_args):
 
 def test_regexp_substr(regexp_strings, regexp_substr_instr_args):
     def impl(arr, pattern, position, occurrence, flags, group):
-        return bodo.libs.bodosql_array_kernels.regexp_substr(
-            arr, pattern, position, occurrence, flags, group
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_substr(
+                arr, pattern, position, occurrence, flags, group
+            )
         )
 
     # Simulates REGEXP_SUBSTR on a single row
@@ -650,8 +658,10 @@ def test_regexp_replace_backreferences(args):
     """Tests REGEXP_REPLACE with backreferences"""
 
     def impl(arr, pattern, replacement, position, occurrence, flags):
-        return bodo.libs.bodosql_array_kernels.regexp_replace(
-            arr, pattern, replacement, position, occurrence, flags
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_replace(
+                arr, pattern, replacement, position, occurrence, flags
+            )
         )
 
     arr = pd.Series(
