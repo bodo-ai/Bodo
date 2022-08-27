@@ -773,26 +773,36 @@ def test_dict_coalesce(args):
 @pytest.mark.parametrize("test", ["like", "count", "replace", "substr", "instr"])
 def test_dict_regexp(args, test):
     def impl1(source, pattern, flags):
-        return bodo.libs.bodosql_array_kernels.regexp_like(source, pattern, flags)
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_like(source, pattern, flags)
+        )
 
     def impl2(source, pattern, position, flags):
-        return bodo.libs.bodosql_array_kernels.regexp_count(
-            source, pattern, position, flags
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_count(
+                source, pattern, position, flags
+            )
         )
 
     def impl3(source, pattern, replacement, position, occurrence, flags):
-        return bodo.libs.bodosql_array_kernels.regexp_replace(
-            source, pattern, replacement, position, occurrence, flags
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_replace(
+                source, pattern, replacement, position, occurrence, flags
+            )
         ).str.capitalize()
 
     def impl4(source, pattern, position, occurrence, flags, group):
-        return bodo.libs.bodosql_array_kernels.regexp_substr(
-            source, pattern, position, occurrence, flags, group
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_substr(
+                source, pattern, position, occurrence, flags, group
+            )
         ).str.capitalize()
 
     def impl5(source, pattern, position, occurrence, option, flags, group):
-        return bodo.libs.bodosql_array_kernels.regexp_instr(
-            source, pattern, position, occurrence, option, flags, group
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.regexp_instr(
+                source, pattern, position, occurrence, option, flags, group
+            )
         )
 
     (
