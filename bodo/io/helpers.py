@@ -312,7 +312,7 @@ def uuid4_helper():
     Returns
         out (str): String output of `uuid4()`
     """
-    with bodo.objmode(out="unicode_type"):
+    with numba.objmode(out="unicode_type"):
         out = str(uuid.uuid4())
     return out
 

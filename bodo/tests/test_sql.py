@@ -2075,12 +2075,9 @@ def test_to_sql_snowflake(
     Tests that df.to_sql works as expected. Since Snowflake has a limit of ~16k
     per insert, we insert 17k rows per rank to emulate a "large" insert.
     """
-    import bodo
-
-    # Only test this in parallel to save time/simplify the snowflake tables.
-    if bodo.get_size() != 3:
-        return
     import platform
+
+    import bodo
 
     # This test runs on both Mac and Linux, so give each table a different
     # name for the highly unlikely but possible case the tests run concurrently.
