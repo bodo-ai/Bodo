@@ -4208,6 +4208,11 @@ def to_sql_overload(
     from bodo.io.parquet_pio import parquet_write_table_cpp
     from bodo.io.snowflake import snowflake_connector_cursor_python_type  # noqa
 
+    try:
+        from bodo import snowflake_sqlalchemy_compat  # noqa
+    except ImportError:
+        pass
+
     if df.has_runtime_cols:
         # TODO: We can also check the type of runtime column names with
         # df.runtime_colname_typ, to make sure they aren't strings.
@@ -4290,12 +4295,11 @@ def to_sql_overload(
         "        ev = tracing.Event('snowflake_write_impl')\n"
     )
 
-    # Process incoming args
+    # Compute table location, qualified and quoted
     func_text += "        location = ''\n"
     if not is_overload_none(schema):
         func_text += "        location += '\"' + schema + '\".'\n"
     func_text += "        location += '\"' + name + '\"'\n"
-
     func_text += "        my_rank = bodo.get_rank()\n"
 
     # In object mode: Connect to snowflake, create internal stage, and
@@ -4374,9 +4378,9 @@ def to_sql_overload(
     # we need to write ( \\\\ ) and ( \\\\\\\\ ) here.
     # To escape quotes, we want to replace ( ' ) with ( \' ), so the func_text
     # should contain the string literals ( ' ) and ( \\' ). To add these to func_text,
-    # we need to write ( ' ) and ( \\\\' ) here.
-    func_text += """            chunk_path = chunk_path.replace("\\\\", "\\\\\\\\")\n"""
-    func_text += """            chunk_path = chunk_path.replace("'", "\\\\'")\n"""
+    # we need to write ( \' ) and ( \\\\\' ) here.
+    func_text += '            chunk_path = chunk_path.replace("\\\\", "\\\\\\\\")\n'
+    func_text += '            chunk_path = chunk_path.replace("\'", "\\\\\'")\n'
 
     # Convert dataframe chunk to cpp table
     # TODO Using df.iloc below incurs significant boxing/unboxing overhead.

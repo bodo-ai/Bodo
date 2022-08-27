@@ -88,10 +88,11 @@ SF_WRITE_PARQUET_CHUNK_SIZE = int(256e6)
 
 # SF_WRITE_PARQUET_COMPRESSION (str):
 # The compression algorithm to use for Parquet files uploaded to Snowflake
-# internal stage. Can be any compression algorithm supported by Pyarrow:
+# internal stage. Can be any compression algorithm supported by Pyarrow, but
+# "snappy" and "gzip " should work best as they are specifically suited for parquet:
 # "NONE", "SNAPPY", "GZIP", "BROTLI", "LZ4", "ZSTD". See this link for
 # supported codecs: https://github.com/apache/parquet-format/blob/master/Compression.md
-SF_WRITE_PARQUET_COMPRESSION = "zstd"
+SF_WRITE_PARQUET_COMPRESSION = "snappy"
 
 # SF_WRITE_UPLOAD_USING_PUT (bool):
 # If True, `to_sql` saves the dataframe to Parquet files in a local
@@ -289,8 +290,13 @@ def create_internal_stage(cursor, is_temporary=False):
     while True:
         try:
             stage_name = f"bodo_io_snowflake_{uuid4()}"
+            if is_temporary:
+                create_stage_cmd = "CREATE TEMPORARY STAGE"
+            else:
+                create_stage_cmd = "CREATE STAGE"
+
             create_stage_sql = (
-                f'CREATE {"TEMPORARY " if is_temporary else ""}STAGE "{stage_name}" '
+                f'{create_stage_cmd} "{stage_name}" '
                 f"/* Python:bodo.io.snowflake.create_internal_stage() */ "
             )
             cursor.execute(create_stage_sql, _is_internal=True).fetchall()
