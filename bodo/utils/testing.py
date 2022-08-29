@@ -74,3 +74,48 @@ def ensure_clean2(pathname):  # pragma: no cover
                     shutil.rmtree(pathname)
             except Exception as e:
                 print("Exception on removing directory: {error}".format(error=e))
+
+
+@contextmanager
+def ensure_clean_mysql_psql_table(conn, table_name_prefix="test_small_table"):
+    """
+    Context Manager that creates a unique table name,
+    and then drops the table with that name (if one exists)
+    after the test is done.
+
+    Args:
+        conn (str): connection string
+        table_name_prefix (str; optional): Prefix for the
+            table name to generate. Default: "test_small_table"
+    """
+    import uuid
+
+    from mpi4py import MPI
+    from sqlalchemy import create_engine
+
+    comm = MPI.COMM_WORLD
+
+    try:
+        table_name = None
+        if bodo.get_rank() == 0:
+            # Add a uuid to avoid potential conflict as this may be running in
+            # several different CI sessions at once. This may be the source of
+            # sporadic failures (although this is uncertain).
+            table_name = f"{table_name_prefix}_{uuid.uuid4()}"
+        table_name = comm.bcast(table_name)
+        yield table_name
+    finally:
+        # Drop the temporary table (if one was created) to avoid accumulating
+        # too many tables in the database
+        bodo.barrier()
+        drop_err = None
+        if bodo.get_rank() == 0:
+            try:
+                engine = create_engine(conn)
+                connection = engine.connect()
+                connection.execute(f"drop table if exists `{table_name}`")
+            except Exception as e:
+                drop_err = e
+        drop_err = comm.bcast(drop_err)
+        if isinstance(drop_err, Exception):
+            raise drop_err

@@ -31,6 +31,7 @@ from bodo.tests.utils import (
     reduce_sum,
     sql_user_pass_and_hostname,
 )
+from bodo.utils.testing import ensure_clean_mysql_psql_table
 from bodo.utils.typing import BodoWarning
 
 
@@ -180,27 +181,32 @@ def test_limit_inferrence_small_table(memory_leak_check):
     of the table succeeds. We create a very small table and then set
     the limit to be much greater than the table size.
     """
+    comm = MPI.COMM_WORLD
 
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-    table_name = "test_small_table"
+    with ensure_clean_mysql_psql_table(conn) as table_name:
+        df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+        # Create the table once.
+        write_err = None
+        if bodo.get_rank() == 0:
+            try:
+                df.to_sql(table_name, conn, if_exists="replace")
+            except Exception as e:
+                write_err = e
+        write_err = comm.bcast(write_err)
+        if isinstance(write_err, Exception):
+            raise write_err
 
-    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
-    # Create the table once.
-    if bodo.get_rank() == 0:
-        df.to_sql(table_name, conn, if_exists="replace")
-    bodo.barrier()
+        def test_impl_limit(conn):
+            """
+            Test receiving the table with limit 1000 while there are only
+            10 rows.
+            """
+            sql_request = f"select A from `{table_name}` limit 1000"
+            frame = pd.read_sql(sql_request, conn)
+            return frame
 
-    def test_impl_limit():
-        """
-        Test receiving the table with limit 1000 while there are only
-        10 rows.
-        """
-        sql_request = "select A from test_small_table limit 1000"
-        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-        frame = pd.read_sql(sql_request, conn)
-        return frame
-
-    check_func(test_impl_limit, ())
+        check_func(test_impl_limit, (conn,))
 
 
 def test_sql_single_column(memory_leak_check):
@@ -208,42 +214,43 @@ def test_sql_single_column(memory_leak_check):
     Test that loading using a single column has a correct result.
     This can break if dead column elimination is applied incorrectly.
     """
+    comm = MPI.COMM_WORLD
 
     def write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, if_exists="replace")
 
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-    if bodo.get_size() == 1:
-        # Add a uuid to avoid potential conflict as this may be running in
-        # several different CI sessions at once. This may be the source of
-        # sporadic failures (although this is uncertain).
-        table_name = f"test_small_table_{uuid.uuid4()}"
-    else:
-        table_name = "test_small_table"
+    with ensure_clean_mysql_psql_table(conn) as table_name:
 
-    query1 = f"select A, B, C from `{table_name}`"
-    query2 = f"select * from `{table_name}`"
+        query1 = f"select A, B, C from `{table_name}`"
+        query2 = f"select * from `{table_name}`"
 
-    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5, "C": [31, 247] * 5})
-    # Create the table once.
-    if bodo.get_rank() == 0:
-        write_sql(df, table_name, conn)
-    bodo.barrier()
+        df = pd.DataFrame(
+            {"A": [1.12, 1.1] * 5, "B": [213, -7] * 5, "C": [31, 247] * 5}
+        )
+        # Create the table once.
+        write_err = None
+        if bodo.get_rank() == 0:
+            try:
+                write_sql(df, table_name, conn)
+            except Exception as e:
+                write_err = e
+        write_err = comm.bcast(write_err)
+        if isinstance(write_err, Exception):
+            raise write_err
 
-    def test_impl1():
-        sql_request = query1
-        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-        frame = pd.read_sql(sql_request, conn)
-        return frame["B"]
+        def test_impl1(conn):
+            sql_request = query1
+            frame = pd.read_sql(sql_request, conn)
+            return frame["B"]
 
-    def test_impl2():
-        sql_request = query2
-        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-        frame = pd.read_sql(sql_request, conn)
-        return frame["B"]
+        def test_impl2(conn):
+            sql_request = query2
+            frame = pd.read_sql(sql_request, conn)
+            return frame["B"]
 
-    check_func(test_impl1, (), check_dtype=False)
-    check_func(test_impl2, (), check_dtype=False)
+        check_func(test_impl1, (conn,), check_dtype=False)
+        check_func(test_impl2, (conn,), check_dtype=False)
 
 
 def test_sql_use_index_column(memory_leak_check):
@@ -251,40 +258,42 @@ def test_sql_use_index_column(memory_leak_check):
     Test that loading a single and index using index_col has a correct result.
     This can break if dead column elimination is applied incorrectly.
     """
+    comm = MPI.COMM_WORLD
 
     def write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, if_exists="replace")
 
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-    if bodo.get_size() == 1:
-        # Add a uuid to avoid potential conflict as this may be running in
-        # several different CI sessions at once. This may be the source of
-        # sporadic failures (although this is uncertain).
-        table_name = f"test_small_table_{uuid.uuid4()}"
-    else:
-        table_name = "test_small_table"
 
-    query = f"select A, B, C from `{table_name}`"
+    with ensure_clean_mysql_psql_table(conn) as table_name:
+        query = f"select A, B, C from `{table_name}`"
 
-    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5, "C": [31, 247] * 5})
-    # Create the table once.
-    if bodo.get_rank() == 0:
-        write_sql(df, table_name, conn)
-    bodo.barrier()
+        df = pd.DataFrame(
+            {"A": [1.12, 1.1] * 5, "B": [213, -7] * 5, "C": [31, 247] * 5}
+        )
+        # Create the table once.
+        write_err = None
+        if bodo.get_rank() == 0:
+            try:
+                write_sql(df, table_name, conn)
+            except Exception as e:
+                write_err = e
+        write_err = comm.bcast(write_err)
+        if isinstance(write_err, Exception):
+            raise write_err
 
-    def test_impl():
-        sql_request = query
-        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-        frame = pd.read_sql(sql_request, conn, index_col="A")
-        return frame["B"]
+        def test_impl(conn):
+            sql_request = query
+            frame = pd.read_sql(sql_request, conn, index_col="A")
+            return frame["B"]
 
-    check_func(test_impl, (), check_dtype=False)
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        bodo.jit(test_impl)()
-        # Check the columns were pruned
-        check_logger_msg(stream, "Columns loaded ['B', 'A']")
+        check_func(test_impl, (conn,), check_dtype=False)
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(test_impl)(conn)
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['B', 'A']")
 
 
 def test_read_sql_hardcoded_twocol_aws(memory_leak_check):
@@ -315,26 +324,31 @@ def test_read_sql_column_function(memory_leak_check):
     """
     Test a SQL query that uses an unaliased function.
     """
+    comm = MPI.COMM_WORLD
 
     def write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, if_exists="replace")
 
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-    table_name = "test_small_table"
+    with ensure_clean_mysql_psql_table(conn) as table_name:
+        df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+        # Create the table once.
+        write_err = None
+        if bodo.get_rank() == 0:
+            try:
+                write_sql(df, table_name, conn)
+            except Exception as e:
+                write_err = e
+        write_err = comm.bcast(write_err)
+        if isinstance(write_err, Exception):
+            raise write_err
 
-    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
-    # Create the table once.
-    if bodo.get_rank() == 0:
-        write_sql(df, table_name, conn)
-    bodo.barrier()
+        def test_impl(conn):
+            sql_request = f"select B, count(*) from `{table_name}` group by B"
+            frame = pd.read_sql(sql_request, conn)
+            return frame
 
-    def test_impl():
-        sql_request = "select B, count(*) from test_small_table group by B"
-        conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-        frame = pd.read_sql(sql_request, conn)
-        return frame
-
-    check_func(test_impl, (), check_dtype=False)
+        check_func(test_impl, (conn,), check_dtype=False)
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
