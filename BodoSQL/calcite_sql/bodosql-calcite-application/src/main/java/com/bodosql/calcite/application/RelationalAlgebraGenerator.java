@@ -3,6 +3,8 @@ package com.bodosql.calcite.application;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
 import com.bodosql.calcite.application.BodoSQLRules.*;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import com.bodosql.calcite.catalog.connection.SnowflakeCatalog;
+import com.bodosql.calcite.schema.BodoSQLSnowflakeSchema;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -10,6 +12,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
+import javax.annotation.Nullable;
 import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.avatica.util.Quoting;
 import org.apache.calcite.config.CalciteConnectionConfigImpl;
@@ -79,42 +83,65 @@ public class RelationalAlgebraGenerator {
   private HashMap<String, String> loweredGlobalVariables;
 
   /**
-   * Constructor for the relational algebra generator class. It will take the schema store it in the
-   * {@link #config} and then set up the {@link #program} for optimizing and the {@link #planner}
-   * for parsing.
-   *
-   * @param newSchema This is the schema which we will be using to validate our query against. This
-   *     gets stored in the {@link #config}
+   * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
+   * SQL queries can be executed within its context.
    */
-  public RelationalAlgebraGenerator(BodoSqlSchema newSchema, String namedParamTableName) {
-    System.setProperty("calcite.default.charset", "UTF-8");
+  public @Nullable CalciteConnection setupCalciteConnection() {
+    CalciteConnection calciteConnection = null;
     try {
       Class.forName("org.apache.calcite.jdbc.Driver");
 
       Properties info = new Properties();
       info.setProperty("lex", "JAVA");
       Connection connection = DriverManager.getConnection("jdbc:calcite:", info);
-      CalciteConnection calciteConnection = connection.unwrap(CalciteConnection.class);
-      calciteConnection.setSchema(newSchema.getName());
+      calciteConnection = connection.unwrap(CalciteConnection.class);
 
-      SchemaPlus schema = calciteConnection.getRootSchema();
+    } catch (Exception e) {
+      throw new RuntimeException(
+          String.format(
+              "Internal Error: JDBC Driver unable to obtain database connection. Error message: %s",
+              e));
+    }
+    return calciteConnection;
+  }
 
-      schema.add(newSchema.getName(), newSchema);
+  /**
+   * Helper method for RelationalAlgebraGenerator constructors to create a SchemaPlus object from a
+   * list of BodoSqlSchemas.
+   */
+  public SchemaPlus setupSchema(
+      CalciteConnection calciteConnection, List<BodoSqlSchema> newSchemas) {
+    SchemaPlus schema = null;
+    try {
+      schema = calciteConnection.getRootSchema();
+      for (BodoSqlSchema newSchema : newSchemas) {
+        schema.add(newSchema.getName(), newSchema);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException(
+          String.format("Internal Error: Unable to add schemas to database. Error message: %s", e));
+    }
+    return schema;
+  }
 
-      // schema.add("EMP", table);
-      List<String> defaultSchema = new ArrayList<String>();
-      defaultSchema.add(newSchema.getName());
-
+  /**
+   * Helper method for both RelationalAlgebraGenerator constructors to build and set the Config and
+   * the Planner member variables.
+   */
+  public void setupPlanner(
+      List<String> defaultSchema, SchemaPlus schema, String namedParamTableName) {
+    try {
+      String firstSchemaName = defaultSchema.iterator().next();
       RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
 
       Properties props = new Properties();
-      props.setProperty("defaultSchema", newSchema.getName());
+      props.setProperty("defaultSchema", firstSchemaName);
       List<SqlOperatorTable> sqlOperatorTables = new ArrayList<>();
       // TODO: Replace this code. Deprecated?
       sqlOperatorTables.add(SqlStdOperatorTable.instance());
       sqlOperatorTables.add(
           new CalciteCatalogReader(
-              CalciteSchema.from(schema.getSubSchema(newSchema.getName())),
+              CalciteSchema.from(schema.getSubSchema(firstSchemaName)),
               defaultSchema,
               new JavaTypeFactoryImpl(typeSystem),
               new CalciteConnectionConfigImpl(props)));
@@ -126,7 +153,7 @@ public class RelationalAlgebraGenerator {
       sqlOperatorTables.add(ThreeOperatorStringTable.instance());
       config =
           Frameworks.newConfigBuilder()
-              .defaultSchema(schema.getSubSchema(newSchema.getName()))
+              .defaultSchema(schema.getSubSchema(firstSchemaName))
               .operatorTable(new ChainedSqlOperatorTable(sqlOperatorTables))
               .typeSystem(typeSystem)
               // Currently, Calcite only supports SOME/ANY if isExpand = false.
@@ -173,11 +200,71 @@ public class RelationalAlgebraGenerator {
               .build();
       planner = Frameworks.getPlanner(config);
     } catch (Exception e) {
-      e.printStackTrace();
+      throw new RuntimeException(
+          String.format(
+              "Internal Error: Unable to store schema in config and/or setup planner for parsing."
+                  + " Error message: %s",
+              e));
+    }
+  }
 
-      config = null;
-      planner = null;
-      program = null;
+  /**
+   * Constructor for the relational algebra generator class. It will take the schema store it in the
+   * {@link #config} and then set up the {@link #program} for optimizing and the {@link #planner}
+   * for parsing.
+   *
+   * @param newSchema This is the schema which we will be using to validate our query against. This
+   *     gets stored in the {@link #config}
+   */
+  public RelationalAlgebraGenerator(BodoSqlSchema newSchema, String namedParamTableName) {
+    System.setProperty("calcite.default.charset", "UTF-8");
+    try {
+      CalciteConnection calciteConnection = setupCalciteConnection();
+      List<BodoSqlSchema> newSchemas = new ArrayList<BodoSqlSchema>();
+      newSchemas.add(newSchema);
+      SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
+
+      List<String> defaultSchema = new ArrayList<String>();
+      defaultSchema.add(newSchema.getName());
+      setupPlanner(defaultSchema, schema, namedParamTableName);
+    } catch (Exception e) {
+      throw new RuntimeException(
+          String.format(
+              "Internal Error: Unable to create Relational Algebra Generator. Error message: %s",
+              e));
+    }
+  }
+
+  /**
+   * Constructor for the relational algebra generator class that accepts a Catalog and Schema
+   * objects. It will take the schema objects in the Catalog as well as the Schema object store it
+   * in the {@link #config} and then set up the {@link #program} for optimizing and the {@link
+   * #planner} for parsing.
+   */
+  public RelationalAlgebraGenerator(
+      SnowflakeCatalog catalog, BodoSqlSchema newSchema, String namedParamTableName) {
+    System.setProperty("calcite.default.charset", "UTF-8");
+
+    try {
+      CalciteConnection calciteConnection = setupCalciteConnection();
+      Set<String> schemaNames = catalog.getSchemaNames();
+      List<BodoSqlSchema> newSchemas = new ArrayList<BodoSqlSchema>();
+
+      newSchemas.add(new BodoSQLSnowflakeSchema(newSchema.getName(), catalog));
+      for (String schemaName : schemaNames) {
+        newSchemas.add(new BodoSQLSnowflakeSchema(schemaName, catalog));
+      }
+      SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
+
+      List<String> defaultSchema = new ArrayList<String>();
+      // TODO (allai5): implement hierarchy of default schemas
+      defaultSchema.add(schema.getParentSchema().getName());
+      setupPlanner(defaultSchema, schema, namedParamTableName);
+    } catch (Exception e) {
+      throw new RuntimeException(
+          String.format(
+              "Internal Error: Unable to create Relational Algebra Generator. Error message: %s",
+              e));
     }
   }
 

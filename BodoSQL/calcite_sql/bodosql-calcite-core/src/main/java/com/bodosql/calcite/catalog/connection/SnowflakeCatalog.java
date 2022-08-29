@@ -9,6 +9,8 @@ public interface SnowflakeCatalog {
 
   public CatalogDatabase getDb();
 
+  public Set<String> getSchemaNames() throws SQLException;
+
   public Set<String> getTableNames(String schemaName) throws SQLException;
 
   public Table getTable(String schemaName, String tableName) throws SQLException;
