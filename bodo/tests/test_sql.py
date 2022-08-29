@@ -752,10 +752,6 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
     check_func(
         impl_integer, (query, conn, int_val), check_dtype=False, reset_index=True
     )
-    # temporarily disable dict-encode read from snowflake to test filter pushdown
-    # TODO: BE-3526: support dict-encode read with filter pushdown
-    prev_criterion = bodo.io.snowflake.DICT_ENCODE_CRITERION
-    bodo.io.snowflake.DICT_ENCODE_CRITERION = -1
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -814,8 +810,6 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
-
-    bodo.io.snowflake.DICT_ENCODE_CRITERION = prev_criterion
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
