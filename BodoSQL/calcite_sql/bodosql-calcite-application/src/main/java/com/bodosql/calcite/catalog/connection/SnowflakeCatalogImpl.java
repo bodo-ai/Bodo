@@ -60,6 +60,21 @@ public class SnowflakeCatalogImpl implements SnowflakeCatalog {
     return conn.getMetaData();
   }
 
+  public Set<String> getSchemaNames() throws SQLException {
+    Connection conn = getConnection();
+    DatabaseMetaData metaData = getDataBaseMetaData(conn);
+    ResultSet schemaInfo = metaData.getSchemas(catalogName, null);
+    HashSet<String> schemaNames = new HashSet<>();
+    while (schemaInfo.next()) {
+      // Schema name is stored in column 1
+      // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getSchemas
+      schemaNames.add(schemaInfo.getString(1));
+    }
+    // TODO: Cache the same connection if possible
+    conn.close();
+    return schemaNames;
+  }
+
   @Override
   public Set<String> getTableNames(String schemaName) throws SQLException {
     Connection conn = getConnection();

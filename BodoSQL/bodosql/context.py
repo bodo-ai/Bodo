@@ -692,6 +692,11 @@ class BodoSQLContext:
         Creates a generator from the given schema
         """
         schema = BodoSqlSchemaClass(self.db)
+
+        if self.catalog is not None:
+            return RelationalAlgebraGeneratorClass(
+                self.catalog.get_java_object(), schema, NAMED_PARAM_TABLE_NAME
+            )
         generator = RelationalAlgebraGeneratorClass(schema, NAMED_PARAM_TABLE_NAME)
         return generator
 
