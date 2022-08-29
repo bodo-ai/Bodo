@@ -28,6 +28,7 @@ def timestamp_date_string_cols(request):
 
 @pytest.fixture(
     params=[
+        "DATEADD",
         "DATE_ADD",
         pytest.param("ADDDATE", marks=pytest.mark.slow),
     ]

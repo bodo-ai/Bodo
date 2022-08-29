@@ -27,6 +27,18 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
     return instance;
   }
 
+  public static final SqlFunction DATEADD =
+      new SqlFunction(
+          "DATEADD",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.TIMESTAMP_NULLABLE,
+          null,
+          OperandTypes.sequence(
+              "DATEADD(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
+              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+              OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER)),
+          SqlFunctionCategory.TIMEDATE);
+
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction DATE_ADD =
       new SqlFunction(
@@ -405,6 +417,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   private List<SqlOperator> functionList =
       Arrays.asList(
+          DATEADD,
           DATE_ADD,
           DATE_SUB,
           DATEDIFF,

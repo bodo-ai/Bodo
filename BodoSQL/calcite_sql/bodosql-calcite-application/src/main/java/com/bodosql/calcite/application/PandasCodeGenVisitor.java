@@ -2003,7 +2003,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                   "Internal Error: Function: lower only supported for column and scalar types");
             }
             return new RexNodeVisitorInfo(outputName, exprLowercase);
-
+          case "DATEADD":
           case "DATE_ADD":
           case "ADDDATE":
             assert operandsInfo.size() == 2;

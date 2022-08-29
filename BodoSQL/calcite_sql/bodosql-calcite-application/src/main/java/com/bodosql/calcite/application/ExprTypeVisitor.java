@@ -83,6 +83,7 @@ public class ExprTypeVisitor {
   // Set of functions that meet their exprType
   private static Set<String> meetFunctions =
       Set.of(
+          "DATEADD",
           "DATE_ADD",
           "DATE_SUB",
           "DATEDIFF",
