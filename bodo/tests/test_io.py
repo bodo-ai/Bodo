@@ -6020,5 +6020,26 @@ def test_from_parquet_partition_bitsize(datapath):
     check_func(impl2, (path,), py_output=(104, 105, 133, 134), check_dtype=False)
 
 
+def test_series_str_upper_lower_dce(datapath):
+    """Tests Series.str.upper and Series.str.lower can be safely removed as dead code"""
+
+    filename = datapath("example.parquet")
+
+    def impl(filename):
+        df = pd.read_parquet(filename)
+        df["two"] = df["two"].str.upper()
+        df["five"] = df["five"].str.upper()
+        return df.three
+
+    check_func(impl, (filename,))
+
+    # Check that columns were pruned using verbose logging
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(filename)
+        check_logger_msg(stream, "Columns loaded ['three']")
+
+
 if __name__ == "__main__":
     unittest.main()
