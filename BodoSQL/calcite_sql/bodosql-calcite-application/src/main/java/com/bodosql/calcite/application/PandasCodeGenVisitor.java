@@ -2300,6 +2300,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateFromUnixTimeCode(
                 operandsInfo.get(0),
                 exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+          case "RLIKE":
           case "REGEXP_LIKE":
             if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 3)) {
               throw new BodoSQLCodegenException(
@@ -2496,11 +2497,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String name = generateLikeName(argName, sqlPattern);
     /* Assumption: Typing in LIKE requires this to be a string type. */
     boolean isLiteral = (patternNode instanceof RexLiteral);
+    boolean patternIsRegex = (node.op.getName() == "RLIKE" || node.op.getName() == "REGEXP");
     String likeCode =
         generateLikeCode(
             argCode,
             sqlPattern,
             isLiteral,
+            patternIsRegex,
             isSingleRow
                 || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id))
                     == BodoSQLExprType.ExprType.SCALAR));

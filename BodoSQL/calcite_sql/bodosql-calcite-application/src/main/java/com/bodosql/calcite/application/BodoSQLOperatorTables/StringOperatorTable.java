@@ -419,6 +419,20 @@ public final class StringOperatorTable implements SqlOperatorTable {
               2, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
           SqlFunctionCategory.STRING);
 
+  /* This RLIKE SqlFunction is to support SQL queries of the form:
+   * RLIKE(<subject>, <pattern>, [<parameters>]) as opposed to the RLIKE SqlLikeOperator
+   * which supports SQL queries of the form: <subject> RLIKE <pattern>
+   * */
+  public static final SqlFunction RLIKE =
+      new SqlFunction(
+          "RLIKE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN_NULLABLE,
+          null,
+          argumentRange(
+              2, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER, SqlTypeFamily.CHARACTER),
+          SqlFunctionCategory.STRING);
+
   public static final SqlFunction REGEXP_COUNT =
       new SqlFunction(
           "REGEXP_COUNT",
@@ -490,8 +504,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           null,
           OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_STRING),
           SqlFunctionCategory.STRING);
-
-  private List<SqlOperator> functionList =
+  private List<SqlOperator> stringOperatorList =
       Arrays.asList(
           CONCAT,
           CONCAT_WS,
@@ -524,7 +537,10 @@ public final class StringOperatorTable implements SqlOperatorTable {
           LTRIM,
           RTRIM,
           LEN,
-          LENGTH);
+          LENGTH,
+          SqlLibraryOperators.RLIKE,
+          SqlLibraryOperators.REGEXP,
+          RLIKE);
 
   @Override
   public void lookupOperatorOverloads(
@@ -535,24 +551,24 @@ public final class StringOperatorTable implements SqlOperatorTable {
       SqlNameMatcher nameMatcher) {
     // Heavily copied from Calcite:
     // https://github.com/apache/calcite/blob/4bc916619fd286b2c0cc4d5c653c96a68801d74e/core/src/main/java/org/apache/calcite/sql/util/ListSqlOperatorTable.java#L57
-    for (SqlOperator operator : functionList) {
+    for (SqlOperator operator : stringOperatorList) {
       // All String Operators added are functions so far.
-      SqlFunction func = (SqlFunction) operator;
-      if (syntax != func.getSyntax()) {
+
+      if (syntax != operator.getSyntax()) {
         continue;
       }
       // Check that the name matches the desired names.
-      if (!opName.isSimple() || !nameMatcher.matches(func.getName(), opName.getSimple())) {
+      if (!opName.isSimple() || !nameMatcher.matches(operator.getName(), opName.getSimple())) {
         continue;
       }
       // TODO: Check the category. The Lexing currently thinks
       //  all of these functions are user defined functions.
-      operatorList.add(func);
+      operatorList.add(operator);
     }
   }
 
   @Override
   public List<SqlOperator> getOperatorList() {
-    return functionList;
+    return stringOperatorList;
   }
 }
