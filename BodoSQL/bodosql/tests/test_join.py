@@ -398,8 +398,6 @@ def test_nested_and_join(join_dataframes, spark_info, memory_leak_check):
         check_names=False,
         return_codegen=True,
         check_dtype=False,
-        # TODO[BE-3479]: enable when bug is fixed
-        use_table_format=False,
     )
     pandas_code = result["pandas_code"]
     check_efficient_join(pandas_code)

@@ -1459,9 +1459,12 @@ def join_distributed_run(
             matched_key_types,
             left_key_types,
             None,
-            None,
+            # Map the key number to its column number
+            {
+                i: join_node.left_var_map[key]
+                for i, key in enumerate(join_node.left_keys)
+            },
             True,
-            loc,
         )
         # We need to generate a cast of the table or index.
         if cast_map:
@@ -1515,13 +1518,16 @@ def join_distributed_run(
 
     # Extract the right data
     if join_node.is_right_table:
+        # Map the key number to its column number
         cast_map = determine_table_cast_map(
             matched_key_types,
             right_key_types,
             None,
-            None,
+            {
+                i: join_node.right_var_map[key]
+                for i, key in enumerate(join_node.right_keys)
+            },
             True,
-            loc,
         )
         # We need to generate a cast of the table or index.
         if cast_map:
@@ -2133,7 +2139,6 @@ def _gen_local_hash_join(
             left_used_key_nums,
             join_node.left_to_output_map,
             False,
-            join_node.loc,
         )
         cast_map.update(
             determine_table_cast_map(
@@ -2142,7 +2147,6 @@ def _gen_local_hash_join(
                 right_used_key_nums,
                 join_node.right_to_output_map,
                 False,
-                join_node.loc,
             )
         )
         table_changed = False
@@ -2184,9 +2188,8 @@ def determine_table_cast_map(
     matched_key_types: List[types.Type],
     key_types: List[types.Type],
     used_key_nums: Optional[Set[int]],
-    output_map: Optional[Dict[int, int]],
+    output_map: Dict[int, int],
     convert_dict_col: bool,
-    loc: ir.Loc,
 ):
     """Determine any columns in the output table keys that were
     cast on the input of the to enable consistent hashing. These
@@ -2204,16 +2207,12 @@ def determine_table_cast_map(
     Args:
         left_key_types (List[types.Type]): Type of the keys in the left table.
         right_key_types (List[types.Type]): Type of the keys in the right table.
-        left_used_key_nums (Set[int]): Set of logical column indices in the left table
+        used_key_nums (Set[int]): Set of logical column indices in the table
             that are also live in the output.
-        right_used_key_nums (Set[int]): Set of logical column indices in the right table
-            that are also live in the output.
-        left_to_output_map (Dict[int, int]): Dictionary mapping the logical index
-            in the left input to the logical index in the output.
-        right_to_output_map (Dict[int, int]): Dictionary mapping the logical index
-            in the right input to the logical index in the output.
-        loc (ir.Loc): Location in the source code. Used for generating
-            error messages.
+        output_map (Dict[int, int]): Dictionary mapping the key number
+            to the logical index of the column.
+        convert_dict_col (bool): Convert dictionary outputs if column
+            types don't match.
 
     Returns:
         Dict[int, types.Type]: Dictionary mapping the logical column number
@@ -2232,13 +2231,9 @@ def determine_table_cast_map(
             if matched_key_types[i] != key_types[i] and (
                 convert_dict_col or key_types[i] != bodo.dict_str_arr_type
             ):
-                # Need to generate an astype for the table.
-                # The CPP Table's return type contains key_types[j]
-                # and we need to convert to key_type.
-                if output_map:
-                    idx = output_map[i]
-                else:
-                    idx = i
+                # This maps the key number to the actual column number
+                # TODO [BE-3552]: Ensure the cast are compatable.
+                idx = output_map[i]
                 cast_map[idx] = matched_key_types[i]
 
     return cast_map
