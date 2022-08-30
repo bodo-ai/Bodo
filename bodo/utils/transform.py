@@ -210,6 +210,8 @@ no_side_effect_call_tuples = {
     ("integer_to_timedelta64", "pd_timestamp_ext", "hiframes", bodo),
     ("npy_datetimestruct_to_datetime", "pd_timestamp_ext", "hiframes", bodo),
     ("isna", "array_kernels", "libs", bodo),
+    (bodo.libs.str_arr_ext.num_total_chars,),
+    ("num_total_chars", "str_arr_ext", "libs", bodo),
     # TODO: handle copy properly, copy of some types can have side effects?
     ("copy",),
     ("from_iterable_impl", "typing", "utils", bodo),
@@ -324,6 +326,8 @@ no_side_effect_call_tuples = {
     # Series.str/string
     ("startswith",),
     ("endswith",),
+    ("upper",),
+    ("lower",),
 }
 
 
