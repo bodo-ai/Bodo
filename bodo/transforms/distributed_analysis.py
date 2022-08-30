@@ -666,7 +666,7 @@ class DistributedAnalysis:
                         rhs.loc,
                     )
         elif (
-            "pyspark" in sys.modules
+            "bodo.libs.pyspark_ext" in sys.modules
             and isinstance(rhs_typ, bodo.libs.pyspark_ext.SparkDataFrameType)
             and attr == "_df"
         ):
