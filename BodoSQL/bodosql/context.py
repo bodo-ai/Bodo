@@ -277,12 +277,12 @@ def compute_df_types(df_list, is_bodo_type):
                         iceberg_table_name, pruned_conn_str, db_schema
                     )
                 else:
-                    type_info = (
-                        bodo.transforms.untyped_pass._get_sql_types_arr_colnames(
-                            f"select * from {file_path}",
-                            const_conn_str,
-                            ir.Var(None, "dummy_var", ir.Loc("dummy_loc", -1)),
-                        )
+                    type_info = bodo.transforms.untyped_pass._get_sql_types_arr_colnames(
+                        f"select * from {file_path}",
+                        const_conn_str,
+                        # _bodo_read_as_dict
+                        None,
+                        ir.Var(None, "dummy_var", ir.Loc("dummy_loc", -1)),
                     )
                     # Future proof against additional return values that are unused
                     # by BodoSQL by returning a tuple.
