@@ -982,7 +982,7 @@ class SeriesPass:
 
         # optimize out spark_df._df if possible
         if (
-            "pyspark" in sys.modules
+            "bodo.libs.pyspark_ext" in sys.modules
             and isinstance(rhs_type, bodo.libs.pyspark_ext.SparkDataFrameType)
             and rhs.attr == "_df"
         ):
@@ -2602,7 +2602,7 @@ class SeriesPass:
         # inline SparkDataFrame.select() here since inline_closurecall() cannot handle
         # stararg yet. TODO: support
         if (
-            "pyspark" in sys.modules
+            "bodo.libs.pyspark_ext" in sys.modules
             and isinstance(func_mod, ir.Var)
             and isinstance(
                 self.typemap[func_mod.name], bodo.libs.pyspark_ext.SparkDataFrameType
