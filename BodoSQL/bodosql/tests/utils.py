@@ -1222,23 +1222,6 @@ def check_num_parquet_readers(bodo_func, n):
     ), "Number of ParquetReaders in the IR doesn't match the expectation"
 
 
-# TODO: Move into bodo.testing.utils in Bodo so it can be imported by BodoSQL.
-# We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
-# are stored there (to avoid failing on AWS or our local machines)
-def get_snowflake_connection_string(db, schema):
-    """
-    Generates a common snowflake connection string. Some details (how to determine
-    username and password) seem unlikely to change, whereas as some tests could require
-    other details (db and schema) to change.
-    """
-    username = os.environ["SF_USER"]
-    password = os.environ["SF_PASSWORD"]
-    account = "bodopartner.us-east-1"
-    warehouse = "DEMO_WH"
-    conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
-    return conn
-
-
 def create_pyspark_schema_from_dataframe(df):
     """Constructs a Pyspark schema for an appropriately typed
     DataFrame. This is used for tests whose output depends on

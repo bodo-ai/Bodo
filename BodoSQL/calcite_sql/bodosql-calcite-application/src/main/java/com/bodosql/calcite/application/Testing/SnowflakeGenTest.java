@@ -1,10 +1,10 @@
 package com.bodosql.calcite.application.Testing;
 
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
-import com.bodosql.calcite.catalog.connection.SnowflakeCatalog;
-import com.bodosql.calcite.catalog.connection.SnowflakeCatalogImpl;
-import com.bodosql.calcite.schema.BodoSQLSnowflakeSchema;
+import com.bodosql.calcite.catalog.BodoSQLCatalog;
+import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
 import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import java.util.Map;
 import java.util.Properties;
 
@@ -16,10 +16,10 @@ public class SnowflakeGenTest {
     Properties prop = new Properties();
     prop.put("user", envVars.get("SF_USER"));
     prop.put("password", envVars.get("SF_PASSWORD"));
-    SnowflakeCatalog catalog =
+    BodoSQLCatalog catalog =
         new SnowflakeCatalogImpl(
             (String) envVars.get("SF_ACCOUNT"), (String) envVars.get("SF_CATALOG"), prop);
-    BodoSqlSchema schema = new BodoSQLSnowflakeSchema("PUBLIC", catalog);
+    BodoSqlSchema schema = new CatalogSchemaImpl("PUBLIC", catalog);
 
     RelationalAlgebraGenerator generator =
         new RelationalAlgebraGenerator(schema, "dummy_param_table_name");

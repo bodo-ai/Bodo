@@ -32,20 +32,17 @@ if bodo.get_rank() == 0:
     try:
         ArrayClass = gateway.jvm.java.util.ArrayList
         ColumnTypeClass = (
-            gateway.jvm.com.bodosql.calcite.catalog.domain.BodoSQLColumn.BodoSQLColumnDataType
+            gateway.jvm.com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType
         )
-        ColumnClass = gateway.jvm.com.bodosql.calcite.catalog.domain.BodoSQLColumnImpl
-        TableClass = gateway.jvm.com.bodosql.calcite.catalog.domain.CatalogTableImpl
-        DatabaseClass = (
-            gateway.jvm.com.bodosql.calcite.catalog.domain.CatalogDatabaseImpl
-        )
-        BodoSqlSchemaClass = gateway.jvm.com.bodosql.calcite.schema.BodoSqlSchema
+        ColumnClass = gateway.jvm.com.bodosql.calcite.table.BodoSQLColumnImpl
+        LocalTableClass = gateway.jvm.com.bodosql.calcite.table.LocalTableImpl
+        LocalSchemaClass = gateway.jvm.com.bodosql.calcite.schema.LocalSchemaImpl
         RelationalAlgebraGeneratorClass = (
             gateway.jvm.com.bodosql.calcite.application.RelationalAlgebraGenerator
         )
         PropertiesClass = gateway.jvm.java.util.Properties
         SnowflakeCatalogImplClass = (
-            gateway.jvm.com.bodosql.calcite.catalog.connection.SnowflakeCatalogImpl
+            gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalogImpl
         )
     except Exception as e:
         saw_error = True
@@ -54,9 +51,8 @@ else:
     ArrayClass = None
     ColumnTypeClass = None
     ColumnClass = None
-    TableClass = None
-    DatabaseClass = None
-    BodoSqlSchemaClass = None
+    LocalTableClass = None
+    LocalSchemaClass = None
     RelationalAlgebraGeneratorClass = None
     PropertiesClass = None
     SnowflakeCatalogImplClass = None
@@ -314,13 +310,13 @@ def compute_df_types(df_list, is_bodo_type):
 
 
 def get_table_type(
-    table_name, db, df_type, columns_needing_conversion, table_types, bodo_type
+    table_name, schema, df_type, columns_needing_conversion, table_types, bodo_type
 ):
     """get SQL Table type in Java for Numba dataframe type
     columns_needing_conversion is a dictionary that should be populated
     with any column names and a string that should be used for an astype conversion.
 
-    Only returns the TableClass on rank 0. On all other ranks, only serves to update table_types.
+    Only returns the LocalTableClass on rank 0. On all other ranks, only serves to update table_types.
     """
     # Store the typing information for conversion
     table_types[table_name] = df_type
@@ -335,24 +331,33 @@ def get_table_type(
             column = ColumnClass(cname, dataType)
             col_arr.add(column)
 
-        # To support writing to SQL Databases we register a different output
-        # for TablePath APIs.
-        # TODO: Revamp BodoSQL table representation with a more consistent
-        # format.
-        if isinstance(bodo_type, TablePathType) and bodo_type._file_type == "sql":
-            return TableClass(
-                table_name,
-                db,
-                col_arr,
-                bodo_type._file_path,
-                bodo_type._db_schema,
-                bodo_type._conn_str,
+        # To support writing to SQL Databases we register is_writeable
+        # for SQL databases.
+        is_writeable = (
+            isinstance(bodo_type, TablePathType) and bodo_type._file_type == "sql"
+        )
+        if is_writeable:
+            schema_code = (
+                f"schema='{bodo_type._db_schema}'"
+                if bodo_type._db_schema is not None
+                else ""
             )
+            writeFormatCode = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code})"
         else:
-            return TableClass(table_name, db, col_arr)
+            writeFormatCode = ""
+        # TODO: Update read code in a followup PR.
+        readCode = ""
+        return LocalTableClass(
+            table_name,
+            schema,
+            col_arr,
+            is_writeable,
+            readCode,
+            writeFormatCode,
+        )
 
 
-def get_param_table_type(table_name, db, param_keys, param_values):
+def get_param_table_type(table_name, schema, param_keys, param_values):
     """get SQL Table type in Java for Numba dataframe type"""
     assert bodo.get_rank() == 0, "get_table_type should only be called on rank 0."
     param_arr = ArrayClass()
@@ -378,7 +383,9 @@ def get_param_table_type(table_name, db, param_keys, param_values):
         )
         warnings.warn(BodoSQLWarning(warning_msg))
 
-    return TableClass(table_name, db, param_arr)
+    # TODO: Determine the read code for the parameter table, which are a mapping for
+    # local Python variables.
+    return LocalTableClass(table_name, schema, param_arr, False, "", "")
 
 
 class BodoSQLContext:
@@ -426,10 +433,10 @@ class BodoSQLContext:
             orig_bodo_types_map = {
                 names[i]: orig_bodo_types[i] for i in range(len(dfs))
             }
-            db, table_conversions = intialize_database(
+            schema, table_conversions = intialize_schema(
                 table_map, orig_bodo_types_map, param_key_values=None
             )
-            self.db = db
+            self.schema = schema
             self.table_conversions = table_conversions
             self.orig_bodo_types = orig_bodo_types
             self.df_types = df_types
@@ -469,14 +476,14 @@ class BodoSQLContext:
         # Create the named params table
         param_values = [bodo.typeof(x) for x in params_dict.values()]
         paramsJava = get_param_table_type(
-            NAMED_PARAM_TABLE_NAME, self.db, tuple(params_dict.keys()), param_values
+            NAMED_PARAM_TABLE_NAME, self.schema, tuple(params_dict.keys()), param_values
         )
 
         # Add named params to the schema
-        self.db.addTable(paramsJava)
+        self.schema.addTable(paramsJava)
 
     def _remove_named_params(self):
-        self.db.removeTable(NAMED_PARAM_TABLE_NAME)
+        self.schema.removeTable(NAMED_PARAM_TABLE_NAME)
 
     def _convert_to_pandas(self, sql, optimizePlan, params_dict):
         """convert SQL code to Pandas functext. Generates the func_text on rank 0, the
@@ -691,13 +698,11 @@ class BodoSQLContext:
         """
         Creates a generator from the given schema
         """
-        schema = BodoSqlSchemaClass(self.db)
-
         if self.catalog is not None:
             return RelationalAlgebraGeneratorClass(
-                self.catalog.get_java_object(), schema, NAMED_PARAM_TABLE_NAME
+                self.catalog.get_java_object(), self.schema, NAMED_PARAM_TABLE_NAME
             )
-        generator = RelationalAlgebraGeneratorClass(schema, NAMED_PARAM_TABLE_NAME)
+        generator = RelationalAlgebraGeneratorClass(self.schema, NAMED_PARAM_TABLE_NAME)
         return generator
 
     def _get_jit_table_name_type_format(self):
@@ -811,9 +816,9 @@ class BodoSQLContext:
         return False  # pragma: no cover
 
 
-def intialize_database(name_to_df_type, name_to_bodo_type, param_key_values=None):
+def intialize_schema(name_to_df_type, name_to_bodo_type, param_key_values=None):
     """Helper function used by both BodoSQLContext, and BodoSQLContextType.
-    Initializes the java database, and returns two dictionaries containing needed conversions,
+    Initializes the java local schema, and returns two dictionaries containing needed conversions,
     and the dataframe types
     Args:
         name_to_df_dict: dict of table names to dataframe types,
@@ -827,29 +832,29 @@ def intialize_database(name_to_df_type, name_to_bodo_type, param_key_values=None
 
     # TODO(ehsan): create and store generator during bodo_sql_context initialization
     if bodo.get_rank() == 0:
-        db = DatabaseClass("__bodolocal__")
+        schema = LocalSchemaClass("__bodolocal__")
         table_conversions = {}
     else:
-        db = None
+        schema = None
         table_conversions = None
     df_types = {}
     for table_name, df_type in name_to_df_type.items():
         columns_needing_conversion = {}
         bodo_type = name_to_bodo_type[table_name]
         tableJava = get_table_type(
-            table_name, db, df_type, columns_needing_conversion, df_types, bodo_type
+            table_name, schema, df_type, columns_needing_conversion, df_types, bodo_type
         )
         if bodo.get_rank() == 0:
             table_conversions[table_name] = columns_needing_conversion
-            db.addTable(tableJava)
+            schema.addTable(tableJava)
 
     if bodo.get_rank() == 0 and param_key_values is not None:
         (param_keys, param_values) = param_key_values
         paramsJava = get_param_table_type(
-            NAMED_PARAM_TABLE_NAME, db, param_keys, param_values
+            NAMED_PARAM_TABLE_NAME, schema, param_keys, param_values
         )
-        db.addTable(paramsJava)
-    return db, table_conversions
+        schema.addTable(paramsJava)
+    return schema, table_conversions
 
 
 def get_used_tables_from_generator(generator):

@@ -12,12 +12,11 @@ from bodosql.bodosql_types.table_path import TablePathType
 from bodosql.context import (
     NAMED_PARAM_TABLE_NAME,
     BodoSQLContext,
-    BodoSqlSchemaClass,
     RelationalAlgebraGeneratorClass,
     compute_df_types,
     generate_used_table_func_text,
     get_used_tables_from_generator,
-    intialize_database,
+    intialize_schema,
 )
 from bodosql.utils import java_error_to_msg
 from numba.core import cgutils, types
@@ -365,10 +364,9 @@ def _gen_pd_func_text_and_lowered_globals(
 
             name_to_df_type_dict = dict(zip(table_names, df_types))
             name_to_bodo_type_dict = dict(zip(table_names, orig_bodo_types))
-            db, table_conversions = intialize_database(
+            schema, table_conversions = intialize_schema(
                 name_to_df_type_dict, name_to_bodo_type_dict, (param_keys, param_values)
             )
-            schema = BodoSqlSchemaClass(db)
             generator = RelationalAlgebraGeneratorClass(schema, NAMED_PARAM_TABLE_NAME)
             try:
                 if is_optimized:

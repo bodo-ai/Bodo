@@ -56,8 +56,7 @@ import static com.bodosql.calcite.application.Utils.Utils.renameExprsList;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
-import com.bodosql.calcite.catalog.domain.CatalogTableImpl;
-import com.bodosql.calcite.schema.BodoSqlTable;
+import com.bodosql.calcite.table.BodoSqlTable;
 import java.util.*;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -691,28 +690,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String outVar = this.varGenStack.pop();
     RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
     BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
-    CatalogTableImpl destTable = (CatalogTableImpl) bodoSqlTable.getCatalogTable();
-    String writeName = destTable.getWriteName();
-    String connStr = destTable.getConnStr();
-    String schema = destTable.getSchema();
-    if (writeName == null || connStr == null) {
+    if (!bodoSqlTable.isWriteable()) {
       throw new BodoSQLCodegenException(
-          "Insert Into is only supported with table destinations provided via the SQL TablePath"
-              + " API");
+          "Insert Into is only supported with table destinations provided via the Snowflake"
+              + "catalog or the SQL TablePath API");
     }
-    outputCode
-        .append(getBodoIndent())
-        .append(outVar)
-        .append(".to_sql(")
-        .append(makeQuoted(writeName))
-        .append(", ")
-        .append(makeQuoted(connStr))
-        .append(", if_exists='append', index=False");
-    if (schema != null) {
-      // Append a schema if provided
-      outputCode.append(", schema=").append(makeQuoted(schema));
-    }
-    outputCode.append(")\n");
+
+    outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar));
     this.generatedCode.append(outputCode);
   }
 

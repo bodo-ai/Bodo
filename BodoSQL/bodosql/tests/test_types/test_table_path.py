@@ -12,11 +12,14 @@ from bodosql.tests.utils import (
     _check_query_equal,
     bodo_version_older,
     check_num_parquet_readers,
-    get_snowflake_connection_string,
 )
 
 import bodo
-from bodo.tests.utils import TypeInferenceTestPipeline, check_func
+from bodo.tests.utils import (
+    TypeInferenceTestPipeline,
+    check_func,
+    get_snowflake_connection_string,
+)
 
 
 @pytest.fixture(

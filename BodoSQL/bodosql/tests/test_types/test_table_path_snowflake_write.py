@@ -5,15 +5,14 @@ Tests write with a Snowflake SQL TablePath.
 import os
 import platform
 
-import bodo
+import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodo.tests.utils import check_func
 from numba.core.utils import PYVERSION
 
-import bodosql
-from bodosql.tests.utils import get_snowflake_connection_string
+import bodo
+from bodo.tests.utils import check_func, get_snowflake_connection_string
 
 
 @pytest.mark.skipif(

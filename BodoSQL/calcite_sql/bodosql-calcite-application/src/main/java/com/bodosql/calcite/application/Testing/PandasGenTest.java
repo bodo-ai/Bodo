@@ -1,11 +1,11 @@
 package com.bodosql.calcite.application.Testing;
 
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
-import com.bodosql.calcite.catalog.domain.BodoSQLColumn.BodoSQLColumnDataType;
-import com.bodosql.calcite.catalog.domain.BodoSQLColumnImpl;
-import com.bodosql.calcite.catalog.domain.CatalogDatabaseImpl;
-import com.bodosql.calcite.catalog.domain.CatalogTableImpl;
-import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.schema.LocalSchemaImpl;
+import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
+import com.bodosql.calcite.table.BodoSQLColumnImpl;
+import com.bodosql.calcite.table.BodoSqlTable;
+import com.bodosql.calcite.table.LocalTableImpl;
 import java.util.ArrayList;
 
 /** Class for locally testing codegen. */
@@ -15,7 +15,7 @@ public class PandasGenTest {
 
     String sql = "select a from __bodolocal__.table1 limit @cwsfe_21";
 
-    CatalogDatabaseImpl db = new CatalogDatabaseImpl("__bodolocal__");
+    LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
     BodoSQLColumnDataType dataType = BodoSQLColumnDataType.DATETIME;
     BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;
@@ -26,8 +26,8 @@ public class PandasGenTest {
     BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType);
     arr.add(column3);
 
-    CatalogTableImpl table = new CatalogTableImpl("table1", db, arr);
-    db.addTable(table);
+    BodoSqlTable table = new LocalTableImpl("table1", schema, arr, false, "table1", "");
+    schema.addTable(table);
 
     arr = new ArrayList();
     arr.add(column);
@@ -35,10 +35,10 @@ public class PandasGenTest {
     arr.add(column4);
     BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataType);
     arr.add(column5);
-    CatalogTableImpl table2 = new CatalogTableImpl("table2", db, arr);
-    db.addTable(table2);
-    CatalogTableImpl table3 = new CatalogTableImpl("table3", db, arr);
-    db.addTable(table3);
+    BodoSqlTable table2 = new LocalTableImpl("table2", schema, arr, false, "table2", "");
+    schema.addTable(table2);
+    BodoSqlTable table3 = new LocalTableImpl("table3", schema, arr, false, "table3", "");
+    schema.addTable(table3);
 
     // Define the Parameter table
     String paramTableName = "ParamTable";
@@ -48,10 +48,10 @@ public class PandasGenTest {
     arr.add(param1);
     BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType);
     arr.add(param2);
-    CatalogTableImpl paramTable = new CatalogTableImpl(paramTableName, db, arr);
-    db.addTable(paramTable);
+    BodoSqlTable paramTable =
+        new LocalTableImpl(paramTableName, schema, arr, false, paramTableName, "");
+    schema.addTable(paramTable);
 
-    BodoSqlSchema schema = new BodoSqlSchema(db);
     RelationalAlgebraGenerator generator = new RelationalAlgebraGenerator(schema, paramTableName);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");

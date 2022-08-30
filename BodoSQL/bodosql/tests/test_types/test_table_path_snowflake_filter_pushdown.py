@@ -5,21 +5,18 @@ Tests filter pushdown with a Snowflake SQL TablePath.
 import io
 import os
 
-import bodo
+import bodosql
 import pandas as pd
 import pytest
+from bodosql.tests.utils import bodo_version_older
+
+import bodo
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func
-
-import bodosql
-from bodosql.tests.utils import (
-    bodo_version_older,
-    get_snowflake_connection_string,
-)
+from bodo.tests.utils import check_func, get_snowflake_connection_string
 
 
 @pytest.mark.skipif(
