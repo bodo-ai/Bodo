@@ -46,6 +46,76 @@ def regexp_strings_df():
         ),
         pytest.param(
             (
+                "SELECT A RLIKE '.*The.*' FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [False, True, False, False, True, None],
+                            dtype=pd.BooleanDtype(),
+                        )
+                    }
+                ),
+            ),
+            id="simple_pattern-no_flags-alias-1",
+        ),
+        pytest.param(
+            (
+                "SELECT A REGEXP '.*The.*' FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [False, True, False, False, True, None],
+                            dtype=pd.BooleanDtype(),
+                        )
+                    }
+                ),
+            ),
+            id="simple_pattern-no_flags-alias-2",
+        ),
+        pytest.param(
+            (
+                "SELECT A RLIKE '.*\W+o\w*.*' FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [False, True, True, True, True, None],
+                            dtype=pd.BooleanDtype(),
+                        )
+                    }
+                ),
+            ),
+            id="medium_pattern-no_flags-alias-1",
+        ),
+        pytest.param(
+            (
+                "SELECT A REGEXP '.*\W+o\w*.*' FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [False, True, True, True, True, None],
+                            dtype=pd.BooleanDtype(),
+                        )
+                    }
+                ),
+            ),
+            id="medium_pattern-no_flags-alias-2",
+        ),
+        pytest.param(
+            (
+                "SELECT RLIKE(A, '.*The.*') FROM table1",
+                pd.DataFrame(
+                    {
+                        0: pd.Series(
+                            [False, True, False, False, True, None],
+                            dtype=pd.BooleanDtype(),
+                        )
+                    }
+                ),
+            ),
+            id="simple_pattern-no_flags-alias3",
+        ),
+        pytest.param(
+            (
                 "SELECT REGEXP_LIKE(A, '.*The.*', 'i') FROM table1",
                 pd.DataFrame(
                     {

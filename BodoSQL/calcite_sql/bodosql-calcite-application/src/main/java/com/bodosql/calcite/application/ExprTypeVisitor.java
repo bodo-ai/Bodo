@@ -125,6 +125,8 @@ public class ExprTypeVisitor {
           "RIGHT",
           "REPEAT",
           "REGEXP_LIKE",
+          "REGEXP",
+          "RLIKE",
           "REGEXP_COUNT",
           "REGEXP_REPLACE",
           "REGEXP_SUBSTR",

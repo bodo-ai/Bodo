@@ -1,6 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.SQLToPython.RegexHelpers.*;
+import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 /**
  * Class that returns the generated code for a like expression after all inputs have been visited.
@@ -20,16 +21,26 @@ public class LikeCodeGen {
    * @return The code generated that matches the Like expression.
    */
   public static String generateLikeCode(
-      String expr, String SQLRegex, boolean isLiteral, boolean outputScalar) {
+      String expr,
+      String SQLRegex,
+      boolean isLiteral,
+      boolean patternIsRegex,
+      boolean outputScalar) {
     StringBuilder likeParts = new StringBuilder();
-    likeParts.append("(");
     // TODO: can the SQL Regex be null? I assume if it is, we can say it's not allowed
     if (isLiteral) {
       /* If the SQL Regex doesn't contain a SQL wildcard we can convert the
       value to an equality check. */
       int numWildcards = getNumSQLWildcards(SQLRegex);
       if (numWildcards == 0) {
-        likeParts.append(expr).append(" == ").append(SQLRegex);
+        // Handles RLIKE and REGEXP here
+        if (patternIsRegex) {
+          likeParts.append("bodo.libs.bodosql_array_kernels.regexp_like(").append(expr);
+          likeParts.append(", ").append(SQLRegex);
+          likeParts.append(", ").append(makeQuoted("")).append(")");
+        } else {
+          likeParts.append(expr).append(" == ").append(SQLRegex);
+        }
       } else {
         int prevLen = SQLRegex.length();
         String trimmedRegex = trimPercentWildcard(SQLRegex);
@@ -127,7 +138,6 @@ public class LikeCodeGen {
             .append(")).values");
       }
     }
-    likeParts.append(")");
     return likeParts.toString();
   }
 
