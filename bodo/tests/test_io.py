@@ -6004,7 +6004,7 @@ def test_from_parquet_partition_bitsize(datapath):
 
     from bodo.hiframes.pd_series_ext import get_series_data
 
-    path = datapath("test_partition_bitwidth")
+    path = datapath("test_partition_bitwidth.pq/")
 
     # For some reason, when the number of rows was small enough, the output was correct, despite the differing bitwidth.
     # However, checking the actual categories still exposes the error.
