@@ -1,11 +1,11 @@
 package com.bodosql.calcite.application.Testing;
 
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
-import com.bodosql.calcite.catalog.domain.BodoSQLColumn.BodoSQLColumnDataType;
-import com.bodosql.calcite.catalog.domain.BodoSQLColumnImpl;
-import com.bodosql.calcite.catalog.domain.CatalogDatabaseImpl;
-import com.bodosql.calcite.catalog.domain.CatalogTableImpl;
-import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.schema.LocalSchemaImpl;
+import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
+import com.bodosql.calcite.table.BodoSQLColumnImpl;
+import com.bodosql.calcite.table.BodoSqlTable;
+import com.bodosql.calcite.table.LocalTableImpl;
 import java.util.ArrayList;
 
 public class TPCHSchemaTest {
@@ -51,7 +51,7 @@ public class TPCHSchemaTest {
 
     System.out.println(sql);
 
-    CatalogDatabaseImpl db = new CatalogDatabaseImpl("__bodolocal__");
+    LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
     /*
      * Schema derived from: http://www.tpc.org/tpc_documents_current_versions/pdf
      */
@@ -81,8 +81,8 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("c_acctbal", BodoSQLColumnDataType.fromTypeId(decimal_type)));
     arr.add(new BodoSQLColumnImpl("c_mktsegment", BodoSQLColumnDataType.fromTypeId(fixed_text)));
     arr.add(new BodoSQLColumnImpl("c_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
-    CatalogTableImpl table = new CatalogTableImpl("customer", db, arr);
-    db.addTable(table);
+    BodoSqlTable table = new LocalTableImpl("customer", schema, arr, false, "customer", "");
+    schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("o_orderkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
     arr.add(new BodoSQLColumnImpl("o_custkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
@@ -94,8 +94,8 @@ public class TPCHSchemaTest {
     arr.add(
         new BodoSQLColumnImpl("o_shippriority", BodoSQLColumnDataType.fromTypeId(integer_type)));
     arr.add(new BodoSQLColumnImpl("o_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
-    table = new CatalogTableImpl("orders", db, arr);
-    db.addTable(table);
+    table = new LocalTableImpl("orders", schema, arr, false, "orders", "");
+    schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("l_orderkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
     arr.add(new BodoSQLColumnImpl("l_partkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
@@ -114,21 +114,21 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("l_shipinstruct", BodoSQLColumnDataType.fromTypeId(fixed_text)));
     arr.add(new BodoSQLColumnImpl("l_shipmode", BodoSQLColumnDataType.fromTypeId(fixed_text)));
     arr.add(new BodoSQLColumnImpl("l_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
-    table = new CatalogTableImpl("lineitem", db, arr);
-    db.addTable(table);
+    table = new LocalTableImpl("lineitem", schema, arr, false, "lineitem", "");
+    schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("n_nationkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
     arr.add(new BodoSQLColumnImpl("n_name", BodoSQLColumnDataType.fromTypeId(fixed_text)));
     arr.add(new BodoSQLColumnImpl("n_regionkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
     arr.add(new BodoSQLColumnImpl("n_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
-    table = new CatalogTableImpl("nation", db, arr);
-    db.addTable(table);
+    table = new LocalTableImpl("nation", schema, arr, false, "nation", "");
+    schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("r_regionkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
     arr.add(new BodoSQLColumnImpl("r_name", BodoSQLColumnDataType.fromTypeId(fixed_text)));
     arr.add(new BodoSQLColumnImpl("r_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
-    table = new CatalogTableImpl("region", db, arr);
-    db.addTable(table);
+    table = new LocalTableImpl("region", schema, arr, false, "region", "");
+    schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("s_suppkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
     arr.add(new BodoSQLColumnImpl("s_name", BodoSQLColumnDataType.fromTypeId(fixed_text)));
@@ -137,16 +137,16 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("s_phone", BodoSQLColumnDataType.fromTypeId(fixed_text)));
     arr.add(new BodoSQLColumnImpl("s_acctbal", BodoSQLColumnDataType.fromTypeId(decimal_type)));
     arr.add(new BodoSQLColumnImpl("s_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
-    table = new CatalogTableImpl("supplier", db, arr);
-    db.addTable(table);
+    table = new LocalTableImpl("supplier", schema, arr, false, "supplier", "");
+    schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("ps_partkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
     arr.add(new BodoSQLColumnImpl("ps_suppkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
     arr.add(new BodoSQLColumnImpl("ps_availqty", BodoSQLColumnDataType.fromTypeId(integer_type)));
     arr.add(new BodoSQLColumnImpl("ps_supplycost", BodoSQLColumnDataType.fromTypeId(decimal_type)));
     arr.add(new BodoSQLColumnImpl("ps_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
-    table = new CatalogTableImpl("partsupp", db, arr);
-    db.addTable(table);
+    table = new LocalTableImpl("partsupp", schema, arr, false, "partsupp", "");
+    schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("p_partkey", BodoSQLColumnDataType.fromTypeId(identifer_type)));
     arr.add(new BodoSQLColumnImpl("p_name", BodoSQLColumnDataType.fromTypeId(variable_text)));
@@ -157,10 +157,9 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("p_container", BodoSQLColumnDataType.fromTypeId(fixed_text)));
     arr.add(new BodoSQLColumnImpl("p_retailprice", BodoSQLColumnDataType.fromTypeId(decimal_type)));
     arr.add(new BodoSQLColumnImpl("p_comment", BodoSQLColumnDataType.fromTypeId(variable_text)));
-    table = new CatalogTableImpl("part", db, arr);
-    db.addTable(table);
+    table = new LocalTableImpl("part", schema, arr, false, "part", "");
+    schema.addTable(table);
 
-    BodoSqlSchema schema = new BodoSqlSchema(db);
     RelationalAlgebraGenerator generator = new RelationalAlgebraGenerator(schema, "");
     System.out.println("SQL query:");
     System.out.println(sql + "\n");

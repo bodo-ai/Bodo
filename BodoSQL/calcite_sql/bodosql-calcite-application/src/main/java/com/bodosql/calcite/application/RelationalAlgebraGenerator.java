@@ -3,9 +3,9 @@ package com.bodosql.calcite.application;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
 import com.bodosql.calcite.application.BodoSQLRules.*;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-import com.bodosql.calcite.catalog.connection.SnowflakeCatalog;
-import com.bodosql.calcite.schema.BodoSQLSnowflakeSchema;
+import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.ArrayList;
@@ -242,7 +242,7 @@ public class RelationalAlgebraGenerator {
    * #planner} for parsing.
    */
   public RelationalAlgebraGenerator(
-      SnowflakeCatalog catalog, BodoSqlSchema newSchema, String namedParamTableName) {
+      BodoSQLCatalog catalog, BodoSqlSchema newSchema, String namedParamTableName) {
     System.setProperty("calcite.default.charset", "UTF-8");
 
     try {
@@ -250,9 +250,9 @@ public class RelationalAlgebraGenerator {
       Set<String> schemaNames = catalog.getSchemaNames();
       List<BodoSqlSchema> newSchemas = new ArrayList<BodoSqlSchema>();
 
-      newSchemas.add(new BodoSQLSnowflakeSchema(newSchema.getName(), catalog));
+      newSchemas.add(new CatalogSchemaImpl(newSchema.getName(), catalog));
       for (String schemaName : schemaNames) {
-        newSchemas.add(new BodoSQLSnowflakeSchema(schemaName, catalog));
+        newSchemas.add(new CatalogSchemaImpl(schemaName, catalog));
       }
       SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
 
