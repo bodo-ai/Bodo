@@ -369,7 +369,7 @@ def _generate_table_read(
         elif file_type == "sql":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
-            conn_str = file_type._conn_str
+            conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(conn_str)
             if db_type == "iceberg":
                 read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}')\n"
