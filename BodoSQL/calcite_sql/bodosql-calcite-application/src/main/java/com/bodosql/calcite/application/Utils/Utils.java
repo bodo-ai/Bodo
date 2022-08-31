@@ -420,7 +420,8 @@ public class Utils {
     return m.matches();
   }
 
-  public static String getInputColumn(List<String> inputColumnNames, AggregateCall a) {
+  public static String getInputColumn(
+      List<String> inputColumnNames, AggregateCall a, List<Integer> keyCols) {
     if (a.getArgList().isEmpty()) {
       // count(*) case
       // count(*) is turned into to count() by Calcite
@@ -429,6 +430,10 @@ public class Utils {
       // aggregation, and manually set the fieldname to *. However, count(*) includes
       // NULL values (whereas count does not).
       assert !inputColumnNames.isEmpty();
+      if (keyCols.size() > 0) {
+        // Use the key the list is not empty.
+        return inputColumnNames.get(keyCols.get(0));
+      }
       return inputColumnNames.get(0);
     } else {
       return inputColumnNames.get(a.getArgList().get(0));

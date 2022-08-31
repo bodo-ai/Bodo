@@ -87,13 +87,18 @@ public class AggCodeGen {
         filterCol = inputColumnNames.get(a.filterArg);
       }
 
-      // Get the input column
-      String aggCol = getInputColumn(inputColumnNames, a);
-
-      // First, construct the filtered series
-      // TODO: Refactor the series to only produce unique column + filter pairs
       StringBuilder seriesBuilder = new StringBuilder();
-      seriesBuilder.append(inVar).append("[").append(makeQuoted(aggCol)).append("]");
+      seriesBuilder.append(inVar);
+      if (!(a.getAggregation().getKind() == SqlKind.COUNT && a.getArgList().isEmpty())) {
+        // If we are performing a COUNT(*) then we avoid selecting a single series since
+        // we may be able to compute a length without a particular column.
+        // Get the input column.
+        String aggCol = getInputColumn(inputColumnNames, a, new ArrayList());
+
+        // First, construct the filtered series
+        // TODO: Refactor the series to only produce unique column + filter pairs
+        seriesBuilder.append("[").append(makeQuoted(aggCol)).append("]");
+      }
       if (filterCol.length() > 0) {
         seriesBuilder
             .append("[")
@@ -239,7 +244,7 @@ public class AggCodeGen {
     HashMap<String, String> renamedAggColumns = new HashMap<>();
     for (int i = 0; i < aggCallList.size(); i++) {
       AggregateCall a = aggCallList.get(i);
-      String aggCol = getInputColumn(inputColumnNames, a);
+      String aggCol = getInputColumn(inputColumnNames, a, group);
       String outputCol = aggCallNames.get(i);
       // Generate a dummy column to prevent syntax issues with names that aren't
       // supported by Pandas NamedAgg. If the name is a valid Python identifier
@@ -314,7 +319,7 @@ public class AggCodeGen {
     for (int i = 0; i < aggCallList.size(); i++) {
       AggregateCall a = aggCallList.get(i);
       // Get the input column
-      String aggCol = getInputColumn(inputColumnNames, a);
+      String aggCol = getInputColumn(inputColumnNames, a, group);
 
       // Determine the filter column if necessary
       String filterCol = "";
