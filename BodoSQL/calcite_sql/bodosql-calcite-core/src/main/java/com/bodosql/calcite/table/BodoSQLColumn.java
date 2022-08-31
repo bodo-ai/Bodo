@@ -24,8 +24,15 @@ public interface BodoSQLColumn {
    */
   boolean requiresCast();
 
+  /**
+   * @param varName Name of the table to use.
+   * @return The string passed to __bodosql_replace_columns_dummy to cast this column to its BodoSQL
+   *     supported type.
+   */
+  String getCastString(String varName);
+
   enum BodoSQLColumnDataType {
-    // See _numba_to_sql_param_type_map in context.py
+    // See SqlTypeEnum in context.py
     EMPTY(0, "EMPTY"), // / < Always null with no underlying data
     INT8(1, "INT8"), // / < 1 byte signed integer
     INT16(2, "INT16"), // / < 2 byte signed integer
@@ -44,8 +51,9 @@ public interface BodoSQLColumn {
     DATEOFFSET(15, "DATEOFFSET"), // /< equivalent to pd.DateOffset value
     STRING(16, "STRING"), // /< String elements
     BINARY(17, "BINARY"), // /< Binary (byte) array
+    CATEGORICAL(18, "CATEGORICAL"),
     // `NUM_TYPE_IDS` must be last!
-    NUM_TYPE_IDS(18, "NUM_TYPE_IDS"); // /< Total number of type ids
+    NUM_TYPE_IDS(19, "NUM_TYPE_IDS"); // /< Total number of type ids
 
     private final int type_id;
     private final String type_id_name;
@@ -174,10 +182,54 @@ public interface BodoSQLColumn {
 
     public boolean requiresCast() {
       switch (this) {
+        case CATEGORICAL:
         case DATE:
           return true;
         default:
           return false;
+      }
+    }
+
+    /** @return The type used to cast an individual type to the supported BodoSQL type. */
+    public BodoSQLColumnDataType getCastType() {
+      if (this == DATE) {
+        return DATETIME;
+      }
+      return this;
+    }
+
+    /** @return A string that represents a nullable version of this type. */
+    public String getTypeString() {
+      switch (this) {
+        case INT8:
+          return "Int8";
+        case INT16:
+          return "Int16";
+        case INT32:
+          return "Int32";
+        case INT64:
+          return "Int64";
+        case UINT8:
+          return "UInt8";
+        case UINT16:
+          return "Uint16";
+        case UINT32:
+          return "UInt32";
+        case UINT64:
+          return "UInt64";
+        case FLOAT32:
+          return "Float32";
+        case FLOAT64:
+          return "Float64";
+        case BOOL8:
+          return "Boolean";
+        case STRING:
+          return "str";
+        case DATETIME:
+          return "datetime64[ns]";
+        default:
+          throw new RuntimeException(
+              String.format("Cast to type %s not supported.", this.getTypeIdName()));
       }
     }
   }

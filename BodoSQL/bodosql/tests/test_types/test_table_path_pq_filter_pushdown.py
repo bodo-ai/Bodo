@@ -205,12 +205,12 @@ def test_table_path_no_filter_pushdown():
 def test_table_path_col_pruning_and_filter_pushdown_implicite_casting():
     """
     Tests that filter pushdown is correctly applied in the case that we perform implicit casting of the
-    input dataframe types (done in generate_used_table_func_text)
+    input dataframe types (done in visitTableScan)
     """
 
     # This dataframe has 3 columns, A -> categorical datetime64,
     # B -> categorial strings, C -> Datetype, D -> int E -> partition column of string
-    # A, B, and C will be implictly by bodosql in generate_used_table_func_text
+    # A, B, and C will be implictly by bodosql in visitTableScan
     # Note, that
     filename = "bodosql/tests/data/sample-parquet-data/needs_implicit_typ_conversion.pq"
 
@@ -379,12 +379,12 @@ def test_table_path_col_pruning_and_filter_pushdown_implicite_casting():
 def test_table_path_col_pruning_simple():
     """
     Tests that column pruning is correctly applied in the case that we perform implicit casting of the
-    input dataframe types (done in generate_used_table_func_text)
+    input dataframe types (done in visitTableScan)
     """
 
     # This dataframe has 3 columns, A -> categorical datetime64,
     # B -> categorial strings, C -> Datetype, D -> int E -> partition column of string
-    # A, B, and C will be implictly cast by bodosql in generate_used_table_func_text
+    # A, B, and C will be implictly cast by bodosql in visitTableScan
     filename = "bodosql/tests/data/sample-parquet-data/needs_implicit_typ_conversion.pq"
 
     def impl_simple_only_A(f1):

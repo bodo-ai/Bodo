@@ -1,7 +1,7 @@
 import re
 import warnings
 from enum import Enum
-from typing import Union
+from typing import List, Union
 
 import numba
 import numpy as np
@@ -63,8 +63,9 @@ if saw_error:
     raise BodoError(msg)
 
 
-# NOTE: These are defined in CatalogColumnDataType and must match here
+# NOTE: These are defined in BodoSQLColumnDataType and must match here
 class SqlTypeEnum(Enum):
+    Empty = 0
     Int8 = 1
     Int16 = 2
     Int32 = 3
@@ -82,6 +83,7 @@ class SqlTypeEnum(Enum):
     DateOffset = 15
     String = 16
     Binary = 17
+    Categorical = 18
 
 
 # Scalar dtypes for supported Bodo Arrays
@@ -105,6 +107,9 @@ _numba_to_sql_column_type_map = {
     # Binary should be disabled, but it is needed for an
     # Apple use case.
     bodo.bytes_type: SqlTypeEnum.Binary.value,
+    # Note date doesn't have native support yet, but the code to
+    # cast to datetime64 is handled in the Java code.
+    bodo.datetime_date_type: SqlTypeEnum.Date.value,
 }
 
 # Scalar dtypes for supported parameters
@@ -132,54 +137,44 @@ _numba_to_sql_param_type_map = {
 }
 
 
-def get_sql_column_type_id(arr_type, col_name, columns_needing_conversion):
-    """get SQL type id from Numba array type
-    columns_needing_conversion is a dictionary that should map column_names to
-    valid strings used to convert the types.
-    """
+def get_sql_column_type(arr_type, col_name):
+    """get SQL type for a given array type."""
+    err_msg = f"Pandas column '{col_name}' with type {arr_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
     if arr_type.dtype in _numba_to_sql_column_type_map:
-        return _numba_to_sql_column_type_map[arr_type.dtype]
-    elif arr_type.dtype == bodo.datetime_date_type:
-        columns_needing_conversion[col_name] = "datetime64[ns]"
-        return _numba_to_sql_column_type_map[bodo.datetime64ns]
+        col_dtype = ColumnTypeClass.fromTypeId(
+            _numba_to_sql_column_type_map[arr_type.dtype]
+        )
+        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
     elif isinstance(arr_type.dtype, bodo.PDCategoricalDtype):
-        elem_type = arr_type.dtype.elem_type
-        if elem_type == bodo.datetime64ns:
-            conv_str = "datetime64[ns]"
-        elif elem_type == bodo.timedelta64ns:
-            conv_str = "timedelta64[ns]"
-        elif elem_type == types.unicode_type:
-            conv_str = "str"
-        elif isinstance(elem_type, types.Integer):
-            if elem_type.signed:
-                conv_str = "Int" + str(elem_type.bitwidth)
-            else:
-                conv_str = "UInt" + str(elem_type.bitwidth)
-        elif isinstance(elem_type, types.Float):
-            conv_str = elem_type.name
-        elif elem_type == types.bool_:
-            conv_str = "boolean"
+        col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Categorical.value)
+        elem = arr_type.dtype.elem_type
+        if elem in _numba_to_sql_column_type_map:
+            elem_dtype = ColumnTypeClass.fromTypeId(_numba_to_sql_column_type_map[elem])
         else:
-            conv_str = None
-        if conv_str is not None:
-            columns_needing_conversion[col_name] = conv_str
-            return _numba_to_sql_column_type_map[elem_type]
+            raise BodoError(err_msg)
     elif isinstance(arr_type, bodo.DatetimeArrayType):
         # TODO [BS-641]: Treat TZ-Aware as its own internal type.
-        return SqlTypeEnum.Timedelta.value
-    raise BodoError(
-        f"Pandas column '{col_name}' with type {arr_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
-    )
+        col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Datetime.value)
+        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
+    else:
+        raise BodoError(err_msg)
+    return ColumnClass(col_name, col_dtype, elem_dtype)
 
 
-def get_sql_param_type_id(param_type, param_name):
-    """get SQL type id from a Bodo scalar type. Also returns
-    if there was a literal type used for outputting a warning.x"""
+def get_sql_param_type(param_type, param_name):
+    """get SQL type from a Bodo scalar type. Also returns
+    if there was a literal type used for outputting a warning."""
     unliteral_type = types.unliteral(param_type)
+    is_literal = unliteral_type != param_type
     if unliteral_type in _numba_to_sql_param_type_map:
         return (
-            _numba_to_sql_param_type_map[unliteral_type],
-            unliteral_type != param_type,
+            ColumnClass(
+                param_name,
+                ColumnTypeClass.fromTypeId(
+                    _numba_to_sql_param_type_map[unliteral_type]
+                ),
+            ),
+            is_literal,
         )
     raise TypeError(
         f"Scalar value: '{param_name}' with type {param_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
@@ -309,68 +304,100 @@ def compute_df_types(df_list, is_bodo_type):
     return orig_bodo_types, df_types
 
 
-def get_table_type(
-    table_name, schema, df_type, columns_needing_conversion, table_types, bodo_type
-):
-    """get SQL Table type in Java for Numba dataframe type
-    columns_needing_conversion is a dictionary that should be populated
-    with any column names and a string that should be used for an astype conversion.
+def add_table_type(table_name, schema, df_type, bodo_type, table_num, from_jit):
+    """Add a SQL Table type in Java to the schema."""
+    assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
+    col_arr = ArrayClass()
+    for i, cname in enumerate(df_type.columns):
+        column = get_sql_column_type(df_type.data[i], cname)
+        col_arr.add(column)
 
-    Only returns the LocalTableClass on rank 0. On all other ranks, only serves to update table_types.
+    # To support writing to SQL Databases we register is_writeable
+    # for SQL databases.
+    is_writeable = (
+        isinstance(bodo_type, TablePathType) and bodo_type._file_type == "sql"
+    )
+    if is_writeable:
+        schema_code = (
+            f"schema='{bodo_type._db_schema}'"
+            if bodo_type._db_schema is not None
+            else ""
+        )
+        write_format_code = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code})"
+    else:
+        write_format_code = ""
+    read_code = _generate_table_read(table_name, bodo_type, table_num, from_jit)
+    table = LocalTableClass(
+        table_name,
+        schema,
+        col_arr,
+        is_writeable,
+        read_code,
+        write_format_code,
+    )
+    schema.addTable(table)
+
+
+def _generate_table_read(
+    table_name: str,
+    bodo_type: types.Type,
+    table_num: int,
+    from_jit: bool,
+) -> str:
+    """Generates the read code for a table to pass to Java.
+
+    Args:
+        table_name (str): Name of the table
+        bodo_type (types.Type): Bodo Type of the table. If this is
+            a TablePath different code is generated.
+        table_num (int): What number table is being processed.
+        from_jit (bool): Is the code being generated from JIT?
+
+    Raises:
+        BodoError: If code generation is not supported for the given type.
+
+    Returns:
+        str: A string that is the generated code for a read expression.
     """
-    # Store the typing information for conversion
-    table_types[table_name] = df_type
-
-    if bodo.get_rank() == 0:
-        col_arr = ArrayClass()
-        for i, cname in enumerate(df_type.columns):
-            type_id = get_sql_column_type_id(
-                df_type.data[i], cname, columns_needing_conversion
-            )
-            dataType = ColumnTypeClass.fromTypeId(type_id)
-            column = ColumnClass(cname, dataType)
-            col_arr.add(column)
-
-        # To support writing to SQL Databases we register is_writeable
-        # for SQL databases.
-        is_writeable = (
-            isinstance(bodo_type, TablePathType) and bodo_type._file_type == "sql"
-        )
-        if is_writeable:
-            schema_code = (
-                f"schema='{bodo_type._db_schema}'"
-                if bodo_type._db_schema is not None
-                else ""
-            )
-            writeFormatCode = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code})"
+    if isinstance(bodo_type, TablePathType):
+        file_type = bodo_type._file_type
+        file_path = bodo_type._file_path
+        if file_type == "pq":
+            # TODO: Replace with runtime variable once we support specifying
+            # the schema
+            read_line = f"pd.read_parquet('{file_path}')"
+        elif file_type == "sql":
+            # TODO: Replace with runtime variable once we support specifying
+            # the schema
+            conn_str = file_type._conn_str
+            db_type, _ = parse_dbtype(conn_str)
+            if db_type == "iceberg":
+                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}')\n"
+            else:
+                read_line = f"pd.read_sql('select * from {file_path}', '{conn_str}')\n"
         else:
-            writeFormatCode = ""
-        # TODO: Update read code in a followup PR.
-        readCode = ""
-        return LocalTableClass(
-            table_name,
-            schema,
-            col_arr,
-            is_writeable,
-            readCode,
-            writeFormatCode,
-        )
+            raise BodoError(
+                f"Internal Error: Unsupported TablePathType for type: '{file_type}'"
+            )
+    elif from_jit:
+        read_line = f"bodo_sql_context.dataframes[{table_num}]"
+    else:
+        read_line = table_name
+    return read_line
 
 
-def get_param_table_type(table_name, schema, param_keys, param_values):
+def add_param_table(table_name, schema, param_keys, param_values):
     """get SQL Table type in Java for Numba dataframe type"""
-    assert bodo.get_rank() == 0, "get_table_type should only be called on rank 0."
+    assert bodo.get_rank() == 0, "add_param_table should only be called on rank 0."
     param_arr = ArrayClass()
     literal_params = []
     for i in range(len(param_keys)):
         param_name = param_keys[i]
         param_type = param_values[i]
-        type_id, is_literal = get_sql_param_type_id(param_type, param_name)
+        param_java_type, is_literal = get_sql_param_type(param_type, param_name)
         if is_literal:
             literal_params.append(param_name)
-        dataType = ColumnTypeClass.fromTypeId(type_id)
-        paramType = ColumnClass(param_name, dataType)
-        param_arr.add(paramType)
+        param_arr.add(param_java_type)
 
     if literal_params:
         warning_msg = (
@@ -383,9 +410,10 @@ def get_param_table_type(table_name, schema, param_keys, param_values):
         )
         warnings.warn(BodoSQLWarning(warning_msg))
 
-    # TODO: Determine the read code for the parameter table, which are a mapping for
-    # local Python variables.
-    return LocalTableClass(table_name, schema, param_arr, False, "", "")
+    # The readCode is unused for named Parameters as they will never reach
+    # a table scan. Instead the original Python variable names will always
+    # be used.
+    schema.addTable(LocalTableClass(table_name, schema, param_arr, False, "", ""))
 
 
 class BodoSQLContext:
@@ -429,15 +457,10 @@ class BodoSQLContext:
                 names.append(k)
                 dfs.append(v)
             orig_bodo_types, df_types = compute_df_types(dfs, False)
-            table_map = {names[i]: df_types[i] for i in range(len(dfs))}
-            orig_bodo_types_map = {
-                names[i]: orig_bodo_types[i] for i in range(len(dfs))
-            }
-            schema, table_conversions = intialize_schema(
-                table_map, orig_bodo_types_map, param_key_values=None
+            schema = intialize_schema(
+                names, df_types, orig_bodo_types, False, param_key_values=None
             )
             self.schema = schema
-            self.table_conversions = table_conversions
             self.orig_bodo_types = orig_bodo_types
             self.df_types = df_types
         except Exception as e:
@@ -475,12 +498,9 @@ class BodoSQLContext:
 
         # Create the named params table
         param_values = [bodo.typeof(x) for x in params_dict.values()]
-        paramsJava = get_param_table_type(
+        add_param_table(
             NAMED_PARAM_TABLE_NAME, self.schema, tuple(params_dict.keys()), param_values
         )
-
-        # Add named params to the schema
-        self.schema.addTable(paramsJava)
 
     def _remove_named_params(self):
         self.schema.removeTable(NAMED_PARAM_TABLE_NAME)
@@ -507,9 +527,7 @@ class BodoSQLContext:
                 self._setup_named_params(params_dict)
 
                 # Generate the code
-                pd_code, used_tables, globalsToLower = self._get_pandas_code(
-                    sql, optimizePlan
-                )
+                pd_code, globalsToLower = self._get_pandas_code(sql, optimizePlan)
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [(str(k), str(v)) for k, v in globalsToLower.items()]
@@ -520,21 +538,7 @@ class BodoSQLContext:
 
                 args = ", ".join(list(self.tables.keys()) + list(params_dict.keys()))
                 func_text_or_err_msg += f"def impl({args}):\n"
-
-                # Determine which tables require an astype conversion.
-                table_conversions = self.table_conversions
-
-                # Convert to the same form as JIT to reuse code.
-                table_names, table_types = self._get_jit_table_name_type_format()
-                pd_func_text = f"{pd_code}\n"
-                func_text_or_err_msg += generate_used_table_func_text(
-                    table_names,
-                    used_tables,
-                    table_types,
-                    table_conversions,
-                    pd_func_text,
-                    False,
-                )
+                func_text_or_err_msg += f"{pd_code}\n"
             except Exception as e:
                 failed = True
                 func_text_or_err_msg = str(e)
@@ -682,17 +686,12 @@ class BodoSQLContext:
                 raise bodo.utils.typing.BodoError(
                     f"Unable to parse SQL Query. Error message:\n{message}"
                 )
-        try:
-            used_tables = get_used_tables_from_generator(generator)
-        except Exception as e:
-            message = java_error_to_msg(e)
-            failed = True
         if failed:
             # Raise BodoError outside except to avoid stack trace
             raise bodo.utils.typing.BodoError(
                 f"Unable to parse SQL Query. Error message:\n{message}"
             )
-        return pd_code, used_tables, generator.getLoweredGlobalVariables()
+        return pd_code, generator.getLoweredGlobalVariables()
 
     def _create_generator(self):
         """
@@ -704,17 +703,6 @@ class BodoSQLContext:
             )
         generator = RelationalAlgebraGeneratorClass(self.schema, NAMED_PARAM_TABLE_NAME)
         return generator
-
-    def _get_jit_table_name_type_format(self):
-        """
-        Outputs 3 lists table_names, table_types, and df_types
-        that conform to how JIT organizes tables. This is done
-        to enable reusing code.
-        """
-        table_names = []
-        for key in self.tables.keys():
-            table_names.append(key)
-        return table_names, self.orig_bodo_types
 
     def add_or_replace_view(self, name: str, table: Union[pd.DataFrame, TablePath]):
         """Create a new BodoSQLContext that contains all of the old DataFrames and the
@@ -816,16 +804,28 @@ class BodoSQLContext:
         return False  # pragma: no cover
 
 
-def intialize_schema(name_to_df_type, name_to_bodo_type, param_key_values=None):
-    """Helper function used by both BodoSQLContext, and BodoSQLContextType.
-    Initializes the java local schema, and returns two dictionaries containing needed conversions,
-    and the dataframe types
+def intialize_schema(
+    table_names: List[str],
+    df_types: List[bodo.DataFrameType],
+    bodo_types: List[types.Type],
+    from_jit: bool,
+    param_key_values=None,
+):
+    """Create the BodoSQL Schema used to store all local DataFrames
+    and fill it with the necessary tables.
+
     Args:
-        name_to_df_dict: dict of table names to dataframe types,
-        param_key_values: An optional tuple of (parameter keys, parameter values).
-        database: the database object
-        table_conversions: a dict of df names -> tuple of columns that need to be converted.
-            None on all ranks but 0.
+        table_names (List[str]): List of tables to add to the schema.
+        df_types (List[bodo.DataFrameType]): List of Bodo DataFrame types for each table.
+        bodo_types (List[types.Type]): List of Bodo types for each table. This stores
+            the original type, so a TablePath isn't converted to its
+            DataFrameType, which it is for df_types.
+        from_jit (bool): _description_
+        param_key_values (Tuple[List[Str], List[Str]], optional): Tuple of
+            lists of named_parameter key value pairs. Defaults to None.
+
+    Returns:
+        LocalSchemaClass: Java type for the BodoSQL schema.
     """
 
     assert param_key_values is None or isinstance(param_key_values, tuple)
@@ -833,141 +833,13 @@ def intialize_schema(name_to_df_type, name_to_bodo_type, param_key_values=None):
     # TODO(ehsan): create and store generator during bodo_sql_context initialization
     if bodo.get_rank() == 0:
         schema = LocalSchemaClass("__bodolocal__")
-        table_conversions = {}
+        for i in range(len(table_names)):
+            add_table_type(
+                table_names[i], schema, df_types[i], bodo_types[i], i, from_jit
+            )
+        if param_key_values is not None:
+            (param_keys, param_values) = param_key_values
+            add_param_table(NAMED_PARAM_TABLE_NAME, schema, param_keys, param_values)
     else:
         schema = None
-        table_conversions = None
-    df_types = {}
-    for table_name, df_type in name_to_df_type.items():
-        columns_needing_conversion = {}
-        bodo_type = name_to_bodo_type[table_name]
-        tableJava = get_table_type(
-            table_name, schema, df_type, columns_needing_conversion, df_types, bodo_type
-        )
-        if bodo.get_rank() == 0:
-            table_conversions[table_name] = columns_needing_conversion
-            schema.addTable(tableJava)
-
-    if bodo.get_rank() == 0 and param_key_values is not None:
-        (param_keys, param_values) = param_key_values
-        paramsJava = get_param_table_type(
-            NAMED_PARAM_TABLE_NAME, schema, param_keys, param_values
-        )
-        schema.addTable(paramsJava)
-    return schema, table_conversions
-
-
-def get_used_tables_from_generator(generator):
-    """
-    Given a generator, extract the used tables and convert to a
-    Python data structure. This assumes a sql query has already been
-    processed.
-    """
-    used_tables = generator.getUsedTables()
-    # Convert the Java structures to Python
-    used_tables = {
-        tuple([x for x in val]): used_tables[val] for val in used_tables.keySet()
-    }
-    return used_tables
-
-
-def generate_used_table_func_text(
-    table_names,
-    used_tables,
-    table_types,
-    table_conversions,
-    func_text,
-    from_jit,
-):
-    """
-    Given an iterable of table names, a set of used tables, an iterable of table_types,
-    where each member is either a DataFrameType or TablePathType, an iterable of df_types
-    which are the DataFrameType for each table and table_conversions which is a dictionary mapping
-    each table name to a dictionary of columns to new types, generates the func text to load the
-    DataFrame.
-
-    func_text contains all the code generated from Java and excludes any extra code
-    inserted to make a proper Python function. As a result, the line numbers for
-    where to insert tables from used_tables are accurate for this func_text.
-
-    from_jit handles code differences between jit and python
-    """
-    # List of (line_number, code) for code to insert into the generated
-    # code. This is done to delay IO loads until first use.
-    total_code = []
-    inserted_code = []
-    for i, df_name in enumerate(table_names):
-        # used_tables contains a set of tuples with (schema, table_name)
-        # By default, tables are part of the __bodolocal__ schema
-        key = ("__bodolocal__", df_name)
-        column_conversions = table_conversions[df_name]
-        if key in used_tables:
-            table_typ = table_types[i]
-            generated_line = ""
-            if isinstance(table_typ, TablePathType):
-                file_type = table_typ._file_type
-                file_path = table_typ._file_path
-                if file_type == "pq":
-                    # TODO: Replace with runtime variable once we support specifying
-                    # the schema
-                    generated_line += f"  {df_name} = pd.read_parquet('{file_path}')\n"
-                elif file_type == "sql":
-                    # TODO: Replace with runtime variable once we support specifying
-                    # the schema
-                    conn_str = table_typ._conn_str
-                    db_type, _ = parse_dbtype(conn_str)
-                    if db_type == "iceberg":
-                        generated_line += f"  {df_name} = pd.read_sql_table('{file_path}', '{conn_str}', '{table_typ._db_schema}')\n"
-                    else:
-                        generated_line += f"  {df_name} = pd.read_sql('select * from {file_path}', '{conn_str}')\n"
-                else:
-                    raise BodoError(
-                        f"Internal Error: Unsupported TablePathType for type: '{file_type}'"
-                    )
-            # In the case we have a non-table path, we need to do a copy, so that the dataframe setitems
-            # Don't have unintended side effects due to aliasing
-            elif from_jit:
-                if column_conversions:
-                    generated_line += f"  {df_name} = bodo_sql_context.dataframes[{i}].copy(deep=False)\n"
-                else:
-                    generated_line += (
-                        f"  {df_name} = bodo_sql_context.dataframes[{i}]\n"
-                    )
-            elif column_conversions:
-                generated_line += f"  {df_name} = {df_name}.copy(deep=False)\n"
-
-            # Do the conversions if needed, using bodosql_replace_columns
-            # using bodosql_replace_columns is needed, because it will allow us to know that these assignments are safe
-            # for filter pushdown in typing pass.
-            if column_conversions:
-                col_names = ", ".join(map(repr, column_conversions.keys()))
-                astypes = ", ".join(
-                    map(
-                        lambda col_name_typ_tuple: f"{df_name}[{col_name_typ_tuple[0]!r}].astype('{col_name_typ_tuple[1]}', _bodo_nan_to_str=False)",
-                        column_conversions.items(),
-                    )
-                )
-                generated_line += f"  {df_name} = bodo.hiframes.dataframe_impl.__bodosql_replace_columns_dummy({df_name}, ({col_names},), ({astypes},))\n"
-
-            if generated_line:
-                if isinstance(table_typ, TablePathType) and table_typ._reorder_io:
-                    # If we reorder io then we place it just before the first use
-                    inserted_code.append((used_tables[key], generated_line))
-                else:
-                    # Otherwise we load all data at the start.
-                    total_code.append(generated_line)
-    if total_code or inserted_code:
-        # If we are inserting any code, we want to insert each line at the correct
-        # spot. As a result, we split the generated code by newlines and insert our code.
-        inserted_code = sorted(inserted_code, key=lambda x: x[0])
-        slice_start = 0
-        generated_code = func_text.split("\n")
-        for line_num, new_line in inserted_code:
-            total_code.extend(generated_code[slice_start:line_num])
-            total_code.append(new_line)
-            slice_start = line_num
-        # Insert any remaining code at the end
-        total_code.extend(generated_code[slice_start:])
-        # Recompute the func_text by combining with newlines.
-        func_text = "\n".join(total_code)
-    return func_text
+    return schema

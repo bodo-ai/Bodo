@@ -5,6 +5,7 @@
 package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.schema.BodoSqlSchema;
+import java.util.ArrayList;
 import java.util.List;
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.rel.type.RelDataType;
@@ -120,8 +121,34 @@ public abstract class BodoSqlTable implements Table {
    * @return Generated code used to cast the Table.
    */
   public String generateCastCode(String varName) {
-    // TODO: Implement in a followup PR
-    return "";
+    // Name of the columns to cast
+    List<String> castColNames = new ArrayList<>();
+    // List of string to use to perform the cast
+    List<String> castStrings = new ArrayList<>();
+    for (BodoSQLColumn col : this.columns) {
+      if (col.requiresCast()) {
+        castColNames.add(col.getColumnName());
+        castStrings.add(col.getCastString(varName));
+      }
+    }
+    if (castColNames.isEmpty()) {
+      // No cast is need, return ""
+      return "";
+    }
+    // Construct tuples to pass to __bodosql_replace_columns_dummy
+    StringBuilder namesBuilder = new StringBuilder();
+    StringBuilder typesBuilder = new StringBuilder();
+    namesBuilder.append("(");
+    typesBuilder.append("(");
+    for (int i = 0; i < castColNames.size(); i++) {
+      namesBuilder.append("'").append(castColNames.get(i)).append("'").append(", ");
+      typesBuilder.append(castStrings.get(i)).append(", ");
+    }
+    namesBuilder.append(")");
+    typesBuilder.append(")");
+    return String.format(
+        "bodo.hiframes.dataframe_impl.__bodosql_replace_columns_dummy(%s, %s, %s)",
+        varName, namesBuilder, typesBuilder);
   }
 
   // BodoSQL Table abstract classes

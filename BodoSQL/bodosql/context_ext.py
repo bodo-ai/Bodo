@@ -14,8 +14,6 @@ from bodosql.context import (
     BodoSQLContext,
     RelationalAlgebraGeneratorClass,
     compute_df_types,
-    generate_used_table_func_text,
-    get_used_tables_from_generator,
     intialize_schema,
 )
 from bodosql.utils import java_error_to_msg
@@ -361,11 +359,8 @@ def _gen_pd_func_text_and_lowered_globals(
         # So the other ranks don't hang forever if we encounter an unexpected runtime error
         try:
             table_names = bodo_sql_context_type.names
-
-            name_to_df_type_dict = dict(zip(table_names, df_types))
-            name_to_bodo_type_dict = dict(zip(table_names, orig_bodo_types))
-            schema, table_conversions = intialize_schema(
-                name_to_df_type_dict, name_to_bodo_type_dict, (param_keys, param_values)
+            schema = intialize_schema(
+                table_names, df_types, orig_bodo_types, True, (param_keys, param_values)
             )
             generator = RelationalAlgebraGeneratorClass(schema, NAMED_PARAM_TABLE_NAME)
             try:
@@ -373,7 +368,6 @@ def _gen_pd_func_text_and_lowered_globals(
                     pd_code = str(generator.getPandasString(sql_str))
                 else:
                     pd_code = str(generator.getPandasStringUnoptimized(sql_str))
-                used_tables = get_used_tables_from_generator(generator)
                 # Convert to tuple of string tuples, to allow bcast to work
                 globalsToLower = tuple(
                     [
@@ -390,15 +384,7 @@ def _gen_pd_func_text_and_lowered_globals(
             if not failed:
                 args = ",".join(("bodo_sql_context",) + param_keys)
                 func_text_or_error_msg = f"def impl({args}):\n"
-                pd_func_text = f"{pd_code}\n"
-                func_text_or_error_msg += generate_used_table_func_text(
-                    table_names,
-                    used_tables,
-                    orig_bodo_types,
-                    table_conversions,
-                    pd_func_text,
-                    True,
-                )
+                func_text_or_error_msg += f"{pd_code}\n"
         except Exception as e:
             func_text_or_error_msg = (
                 f"Unable to parse SQL Query due to unexpected runtime error: \n{str(e)}"
