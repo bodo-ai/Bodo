@@ -55,11 +55,23 @@ public class TimestampDiffCodeGen {
       diffExpr.append(arg0Expr);
       diffExpr.append(")");
     } else {
-      diffExpr.append("(pd.Series(");
-      diffExpr.append(arg1Expr);
-      diffExpr.append(") - pd.Series(");
-      diffExpr.append(arg0Expr);
-      diffExpr.append("))");
+      diffExpr.append("(");
+      if (arg1Scalar) {
+        diffExpr.append(arg1Expr);
+      } else {
+        diffExpr.append("pd.Series(");
+        diffExpr.append(arg1Expr);
+        diffExpr.append(")");
+      }
+      diffExpr.append(" - ");
+      if (arg0Scalar) {
+        diffExpr.append(arg0Expr);
+      } else {
+        diffExpr.append("pd.Series(");
+        diffExpr.append(arg0Expr);
+        diffExpr.append(")");
+      }
+      diffExpr.append(")");
     }
 
     String output;
