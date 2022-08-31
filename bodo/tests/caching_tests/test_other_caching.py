@@ -226,13 +226,8 @@ def test_caching_version_check(is_cached, memory_leak_check):
             # Since these are filesystem operations, we only perform them on rank 0
             # to avoid race conditions (e.g. during the rename).
             if bodo.get_rank() == 0:
-                cache_file = None
-                for f in os.listdir(impl._cache.cache_path):
-                    if bodo.__version__ in f:
-                        cache_file = f
-                        break
-
-                assert cache_file is not None
+                cache_file = impl._cache._cache_file._index_path
+                assert bodo.__version__ in cache_file
 
                 # change the version of the cached filename
                 fake_cache_file = cache_file.replace(bodo.__version__, "0.0.0")
