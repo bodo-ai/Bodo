@@ -153,6 +153,7 @@ def test_count_interval(bodosql_interval_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
     check_query(
         "SELECT COUNT(*) FROM table1",
@@ -160,6 +161,7 @@ def test_count_interval(bodosql_interval_types, spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
+        is_out_distributed=False,
     )
 
 
