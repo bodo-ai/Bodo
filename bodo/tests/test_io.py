@@ -2296,6 +2296,30 @@ def test_read_partitions_large(memory_leak_check):
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+@pytest.mark.slow
+def test_bodosql_pushdown_codegen(datapath, memory_leak_check):
+    """
+    Make sure possible generated codes by BodoSQL work with filter pushdown.
+    See [BE-3557]
+    """
+
+    def impl1(filename):
+        df = pd.read_parquet(filename)
+        df = df[
+            pd.Series(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, 0)).values
+            > 1
+        ]
+        return df["two"]
+
+    filename = datapath("example.parquet")
+
+    py_output = pd.Series(["baz", "foo", "bar", "baz", "foo"], name="two")
+    check_func(impl1, (filename,), py_output=py_output, reset_index=True)
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl1)
+    bodo_func(filename)
+    _check_for_io_reader_filters(bodo_func, bodo.ir.parquet_ext.ParquetReader)
+
+
 @pytest.mark.skip(
     reason="""This test is waiting on support for pushing filters past column filters.
 See https://bodo.atlassian.net/browse/BE-1522"""

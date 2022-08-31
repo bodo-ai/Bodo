@@ -10,7 +10,7 @@ import pandas as pd
 from bodo.tests.utils import check_func
 
 
-def test_count_head(datapath, memory_leak_check):
+def test_count_head(memory_leak_check):
     """
     Check that computing an aggregation is compatible with
     a function like head that modify the index.

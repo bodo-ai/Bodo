@@ -576,9 +576,8 @@ class TypingTransforms:
         # detect if filter pushdown is possible and transform
         # e.g. df = pd.read_parquet(...); df = df[df.A > 3]
         index_def = guard(get_definition, self.func_ir, rhs.index)
-        # BodoSQL generates Series.values to convert expression outputs to arrays
-        if is_expr(index_def, "getattr") and index_def.attr == "values":
-            index_def = guard(get_definition, self.func_ir, index_def.value)
+        # BodoSQL generates wrappers around exprs like Series.values that need removed
+        index_def = self._remove_series_wrappers_from_def(index_def)
         value_def = guard(get_definition, self.func_ir, rhs.value)
         index_call_name = None
         # Check call expresions for isna, isnull, notna, notnull, and isin.
@@ -695,7 +694,6 @@ class TypingTransforms:
 
         Throws GuardException if not possible.
         """
-        rhs = assign.value
 
         # avoid empty dataframe
         require(len(value_def.args) > 0)
@@ -723,7 +721,9 @@ class TypingTransforms:
             rhs_def = None
         else:
             lhs_def = get_definition(func_ir, index_def.lhs)
+            lhs_def = self._remove_series_wrappers_from_def(lhs_def)
             rhs_def = get_definition(func_ir, index_def.rhs)
+            rhs_def = self._remove_series_wrappers_from_def(rhs_def)
         df_var = assign.value.value
         filters = self._get_partition_filters(
             index_def,
@@ -801,6 +801,13 @@ class TypingTransforms:
 
         df_names is a set of variables that need to be tracked to perform the filter pushdown.
 
+        Categorizes all statements after the read node as either filter variable nodes
+        or not. For example, given df["B"] == a, any node that is used for
+        computing 'a' is filter variable node. The node df["B"] == a itself is not in
+        this set.
+        Moves the filter variable nodes before
+        the read node to enable filter pushdown.
+
         Throws GuardException if not possible.
         """
         # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
@@ -811,7 +818,8 @@ class TypingTransforms:
                 # a compile time constant (i.e. NULL) then don't add it.
                 if isinstance(v[2], ir.Var):
                     filter_vars.add(v[2].name)
-        # data array variables should not be used in filter expressions directly
+
+        # data array/table variables should not be used in filter expressions directly
         non_filter_vars = {v.name for v in read_node.list_vars()}
 
         # find all variables that are potentially used in filter expressions after the
@@ -855,7 +863,7 @@ class TypingTransforms:
             stmt_vars = {v.name for v in stmt.list_vars()}
 
             # make sure df is not used before filtering
-            if not stmt_vars & related_vars:
+            if not (stmt_vars & related_vars):
                 # df_names is a non-empty set, so if the intersection
                 # is non empty then a df_name is in stmt_vars
                 require(not (df_names & stmt_vars))
@@ -898,10 +906,16 @@ class TypingTransforms:
             operator.and_,
         ):
             left_nodes = self._get_filter_nodes(
-                get_definition(func_ir, index_def.lhs), func_ir
+                self._remove_series_wrappers_from_def(
+                    get_definition(func_ir, index_def.lhs)
+                ),
+                func_ir,
             )
             right_nodes = self._get_filter_nodes(
-                get_definition(func_ir, index_def.rhs), func_ir
+                self._remove_series_wrappers_from_def(
+                    get_definition(func_ir, index_def.rhs)
+                ),
+                func_ir,
             )
             return {index_def} | left_nodes | right_nodes
         return {index_def}
@@ -1010,7 +1024,9 @@ class TypingTransforms:
             if index_def.fn == operator.or_:
                 if is_expr(lhs_def, "binop"):
                     l_def = get_definition(func_ir, lhs_def.lhs)
+                    l_def = self._remove_series_wrappers_from_def(l_def)
                     r_def = get_definition(func_ir, lhs_def.rhs)
+                    r_def = self._remove_series_wrappers_from_def(r_def)
                     left_or = self._get_partition_filters(
                         lhs_def, df_var, l_def, r_def, func_ir, read_node
                     )
@@ -1024,7 +1040,9 @@ class TypingTransforms:
                     ]
                 if is_expr(rhs_def, "binop"):
                     l_def = get_definition(func_ir, rhs_def.lhs)
+                    l_def = self._remove_series_wrappers_from_def(l_def)
                     r_def = get_definition(func_ir, rhs_def.rhs)
+                    r_def = self._remove_series_wrappers_from_def(r_def)
                     right_or = self._get_partition_filters(
                         rhs_def, df_var, l_def, r_def, func_ir, read_node
                     )
@@ -1049,6 +1067,7 @@ class TypingTransforms:
                         operator.and_, index_def.lhs, rhs_def.lhs, index_def.loc
                     )
                     new_lhs_rdef = get_definition(func_ir, rhs_def.lhs)
+                    new_lhs_rdef = self._remove_series_wrappers_from_def(new_lhs_rdef)
                     left_or = self._get_partition_filters(
                         new_lhs,
                         df_var,
@@ -1062,6 +1081,7 @@ class TypingTransforms:
                         operator.and_, index_def.lhs, rhs_def.rhs, index_def.loc
                     )
                     new_rhs_rdef = get_definition(func_ir, rhs_def.rhs)
+                    new_rhs_rdef = self._remove_series_wrappers_from_def(new_rhs_rdef)
                     right_or = self._get_partition_filters(
                         new_rhs,
                         df_var,
@@ -1080,6 +1100,7 @@ class TypingTransforms:
                         operator.and_, lhs_def.lhs, index_def.rhs, index_def.loc
                     )
                     new_lhs_ldef = get_definition(func_ir, lhs_def.lhs)
+                    new_lhs_ldef = self._remove_series_wrappers_from_def(new_lhs_ldef)
                     left_or = self._get_partition_filters(
                         new_lhs,
                         df_var,
@@ -1093,6 +1114,7 @@ class TypingTransforms:
                         operator.and_, lhs_def.rhs, index_def.rhs, index_def.loc
                     )
                     new_rhs_ldef = get_definition(func_ir, lhs_def.rhs)
+                    new_rhs_ldef = self._remove_series_wrappers_from_def(new_rhs_ldef)
                     right_or = self._get_partition_filters(
                         new_rhs,
                         df_var,
@@ -1106,7 +1128,9 @@ class TypingTransforms:
                 # both lhs and rhs are And/literal expressions.
                 if is_expr(lhs_def, "binop"):
                     l_def = get_definition(func_ir, lhs_def.lhs)
+                    l_def = self._remove_series_wrappers_from_def(l_def)
                     r_def = get_definition(func_ir, lhs_def.rhs)
+                    r_def = self._remove_series_wrappers_from_def(r_def)
                     left_or = self._get_partition_filters(
                         lhs_def, df_var, l_def, r_def, func_ir, read_node
                     )
@@ -1120,7 +1144,9 @@ class TypingTransforms:
                     ]
                 if is_expr(rhs_def, "binop"):
                     l_def = get_definition(func_ir, rhs_def.lhs)
+                    l_def = self._remove_series_wrappers_from_def(l_def)
                     r_def = get_definition(func_ir, rhs_def.rhs)
+                    r_def = self._remove_series_wrappers_from_def(r_def)
                     right_or = self._get_partition_filters(
                         rhs_def, df_var, l_def, r_def, func_ir, read_node
                     )
@@ -1222,13 +1248,14 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
         var_def = get_definition(func_ir, var)
-        if is_expr(var_def, "getattr") and var_def.attr == "str":
-            # Convert Series.str back to the original series.
-            var_def = get_definition(func_ir, var_def.value)
+        var_def = self._remove_series_wrappers_from_def(var_def)
+
         if is_expr(var_def, "getattr") and var_def.value.name == df_var.name:
             return var_def.attr
+
         if is_expr(var_def, "static_getitem") and var_def.value.name == df_var.name:
             return var_def.index
+
         # handle case with calls like df["A"].astype(int) > 2
         if is_call(var_def):
             fdef = find_callname(func_ir, var_def)
@@ -1263,6 +1290,36 @@ class TypingTransforms:
         require(is_expr(var_def, "getitem"))
         require(var_def.value.name == df_var.name)
         return get_const_value_inner(func_ir, var_def.index, arg_types=self.arg_types)
+
+    def _remove_series_wrappers_from_def(self, var_def):
+        """Returns the definition node of the Series variable in
+        pd.Series()/Series.values/Series.str nodes.
+        This effectively removes the Series wrappers that BodoSQL currently generates to
+        convert to/from arrays.
+
+        Args:
+            var_def (ir.Expr): expression node that may be a Series wrapper
+
+        Returns:
+            ir.Expr: expression node without Series wrapper
+        """
+
+        # Get Series value from Series.str/Series.values
+        if is_expr(var_def, "getattr") and var_def.attr in ("str", "values"):
+            var_def = guard(get_definition, self.func_ir, var_def.value)
+            return self._remove_series_wrappers_from_def(var_def)
+
+        # remove pd.Series() calls
+        if (
+            is_call(var_def)
+            and guard(find_callname, self.func_ir, var_def) == ("Series", "pandas")
+            and (len(var_def.args) == 1)
+            and not var_def.kws
+        ):
+            var_def = guard(get_definition, self.func_ir, var_def.args[0])
+            return self._remove_series_wrappers_from_def(var_def)
+
+        return var_def
 
     def _run_setitem(self, inst, label):
         target_typ = self.typemap.get(inst.target.name, None)
