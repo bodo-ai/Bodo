@@ -218,15 +218,17 @@ public interface BodoSQLColumn {
         case UINT64:
           return "UInt64";
         case FLOAT32:
-          return "Float32";
+          return "float32";
         case FLOAT64:
-          return "Float64";
+          return "float64";
         case BOOL8:
-          return "Boolean";
+          return "boolean";
         case STRING:
           return "str";
         case DATETIME:
           return "datetime64[ns]";
+        case TIMEDELTA:
+          return "timedelta64[ns]";
         default:
           throw new RuntimeException(
               String.format("Cast to type %s not supported.", this.getTypeIdName()));
