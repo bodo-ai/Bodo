@@ -771,7 +771,10 @@ def _test_equal(
     atol=1e-08,
     rtol=1e-05,
 ):
-    import scipy.sparse
+    try:
+        from scipy.sparse import csr_matrix
+    except ImportError:
+        csr_matrix = None
 
     # Bodo converts lists to array in array(item) array cases
     if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):
@@ -895,7 +898,7 @@ def _test_equal(
         pd.testing.assert_extension_array_equal(
             bodo_out, py_out, check_dtype=check_dtype
         )
-    elif isinstance(py_out, scipy.sparse.csr_matrix):
+    elif isinstance(py_out, csr_matrix):
         # https://stackoverflow.com/questions/30685024/check-if-two-scipy-sparse-csr-matrix-are-equal
         #
         # Similar to np.assert_array_equal we compare nan's like numbers,
@@ -911,7 +914,7 @@ def _test_equal(
         # know that both values are nan. Here, `.multiply()` performs logical-and
         # between nan instances of `py_out` and nan instances of `bodo_out`.
         assert (
-            isinstance(bodo_out, scipy.sparse.csr_matrix)
+            isinstance(bodo_out, csr_matrix)
             and py_out.shape == bodo_out.shape
             and (py_out != bodo_out).nnz
             == ((py_out != py_out).multiply(bodo_out != bodo_out)).nnz
