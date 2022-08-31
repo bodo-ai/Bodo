@@ -18,11 +18,11 @@ requirements:
         - openjdk >=9.0, <12
         - maven
         - ninja
-        - bodo =2022.7.*
+        - bodo =2022.8.*
 
     run:
         - openjdk >=9.0
-        - bodo =2022.7.*
+        - bodo =2022.8.*
         - py4j
         - python >=3.8,<3.11
 

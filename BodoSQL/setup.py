@@ -14,7 +14,9 @@ cwd = os.getcwd()
 setup_py_dir_path = os.path.dirname(os.path.realpath(__file__))
 # despite the name, this also works for directories
 if not os.path.samefile(cwd, setup_py_dir_path):
-    raise Exception("setup.py should only be invoked if the current working directory is in the same directory as Setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules.")
+    raise Exception(
+        "setup.py should only be invoked if the current working directory is in the same directory as Setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules."
+    )
 
 try:
     # wheel is an optional import that may
@@ -72,7 +74,12 @@ def build_libs(obj, create_tests):
         )
         obj.spawn(cmd_list)
 
-        executable_jar_path = os.path.join("calcite_sql", "bodosql-calcite-application", "target", "bodosql-calcite-application-jar-with-dependencies.jar")
+        executable_jar_path = os.path.join(
+            "calcite_sql",
+            "bodosql-calcite-application",
+            "target",
+            "bodosql-calcite-application-jar-with-dependencies.jar",
+        )
         to_jar_path = os.path.join("bodosql", "jars")
         os.makedirs(to_jar_path, exist_ok=True)
         os.rename(
@@ -80,8 +87,6 @@ def build_libs(obj, create_tests):
         )
     except DistutilsExecError as e:
         obj.error("maven build failed with error:", e)
-
-
 
 
 def readme():
@@ -151,7 +156,7 @@ setup(
     # When doing `python setup.py develop`, setuptools will try to install whatever is
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install bodo in development mode, and it will also break CI)
-    install_requires=[] if development_mode else ["bodo==2022.7.*", "py4j"],
+    install_requires=[] if development_mode else ["bodo==2022.8.*", "py4j"],
     python_requires=">=3.8,<3.11",
     # Update the build and develop commands
     cmdclass=cmdclass,
