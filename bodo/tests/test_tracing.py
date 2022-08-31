@@ -1,4 +1,6 @@
 # Copyright (C) 2019 Bodo Inc.
+# Turn on tracing for all tests in this file.
+import os
 from tempfile import TemporaryDirectory
 
 import pytest
@@ -6,9 +8,18 @@ import pytest
 import bodo
 from bodo.utils import tracing
 
+# Enable tracing for all test in this file. This should be fine because
+# runtest.py ensure our tests run 1 file at a time so we will avoid any
+# unnecessary tracing for other tests.
+#
+# Regardless this should be the only place in the test suite that calls
+# tracing.start(), so we shouldn't have any issues with other tests.
+os.environ["BODO_TRACE_DEV"] = "1"
+
 
 def test_tracing():
     """Test tracing utility"""
+
     rank = bodo.get_rank()
 
     # Test normal operation of tracing with synced and non-synced events
