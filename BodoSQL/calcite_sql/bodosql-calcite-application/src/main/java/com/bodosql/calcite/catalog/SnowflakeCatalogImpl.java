@@ -17,23 +17,49 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   private String connectionString;
 
-  private String catalogName;
+  private final String username;
+
+  private final String password;
+
+  private final String accountName;
+
+  private final String catalogName;
   // Account info contains the username and password information
-  private Properties accountInfo;
+  private final Properties accountInfo;
+
+  // Combination of accountInfo and username + password.
+  // These are separate because the Java and Python connection
+  // strings pass different properties.
+  private final Properties totalProperties;
 
   /**
    * Create the catalog and store the relevant account information.
    *
+   * @param username Snowflake username
+   * @param password Snowflake password
    * @param accountName User's snowflake account name.
    * @param catalogName Name of the catalog (or database in Snowflake terminology). In the future
    *     this may be removed/modified
-   * @param accountInfo Properties object that contains the username and password information
+   * @param accountInfo Any extra properties to pass to Snowflake.
    */
-  public SnowflakeCatalogImpl(String accountName, String catalogName, Properties accountInfo) {
+  public SnowflakeCatalogImpl(
+      String username,
+      String password,
+      String accountName,
+      String catalogName,
+      Properties accountInfo) {
+    this.username = username;
+    this.password = password;
+    this.accountName = accountName;
     this.connectionString =
         String.format("jdbc:snowflake://%s.snowflakecomputing.com/", accountName);
     this.catalogName = catalogName;
     this.accountInfo = accountInfo;
+    this.totalProperties = new Properties();
+    // Add the user and password to the properties for JDBC
+    this.totalProperties.put("user", username);
+    this.totalProperties.put("password", password);
+    this.totalProperties.putAll(this.accountInfo);
   }
 
   /**
@@ -44,7 +70,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   private Connection getConnection() throws SQLException {
     // TODO: Cache the same connection if possible
-    return DriverManager.getConnection(connectionString, accountInfo);
+    return DriverManager.getConnection(connectionString, totalProperties);
   }
 
   /**
@@ -171,6 +197,40 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   }
 
   /**
+   * Generate a Python connection string used to read from or write to Snowflake in Bodo's SQL
+   * Python code.
+   *
+   * @param schemaName The of the schema which must be inserted into the connection string.
+   * @return The connection string
+   */
+  private String generatePythonConnStr(String schemaName) {
+    // First create the basic connection string that must
+    // always be included.
+    StringBuilder connString = new StringBuilder();
+    // Append the base url
+    connString.append(
+        String.format(
+            "snowflake://%s:%s@%s/%s/%s",
+            this.username, this.password, this.accountName, this.catalogName, schemaName));
+    // Add support for any additional optional properties
+    if (!this.accountInfo.isEmpty()) {
+      connString.append("?");
+      for (Map.Entry<Object, Object> entry : this.accountInfo.entrySet()) {
+        Object key = entry.getKey();
+        Object value = entry.getValue();
+        // TODO: Do we need to json encode any properties?
+        connString.append(key);
+        connString.append("=");
+        connString.append(value);
+        connString.append("&");
+      }
+      // Remove the last &
+      connString.deleteCharAt(connString.length() - 1);
+    }
+    return connString.toString();
+  }
+
+  /**
    * Generates the code necessary to produce a write expression from Snowflake.
    *
    * @param varName Name of the variable to write.
@@ -180,8 +240,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   @Override
   public String generateWriteCode(String varName, String schemaName, String tableName) {
-    // TODO: Implement in a followup PR
-    return "";
+    return String.format(
+        "%s.to_sql('%s', '%s', schema='%s', if_exists='append', index=False)",
+        varName, tableName, generatePythonConnStr(schemaName), schemaName);
   }
 
   /**
@@ -193,7 +254,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   @Override
   public String generateReadCode(String schemaName, String tableName) {
-    // TODO: Implement in a followup PR
-    return "";
+    return String.format(
+        "pd.read_sql('select * from %s', '%s')", tableName, generatePythonConnStr(schemaName));
   }
 }
