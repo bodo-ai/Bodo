@@ -72,10 +72,6 @@ public class RelationalAlgebraGenerator {
 
   private List<RelOptRule> rules;
 
-  // Map of used tables to line number first used in the codegen.
-  // This should be replaced with a new set before each new query.
-  private HashMap<List<String>, Long> usedTable;
-
   /*
   Hashmap containing globals that need to be lowered into the resulting func_text. Used for lowering
   metadata types to improve compilation speed. Populated by the pandas visitor class.
@@ -570,10 +566,9 @@ public class RelationalAlgebraGenerator {
     // Map from search unique id to the expanded code generated
     HashMap<String, RexNode> searchMap = new HashMap<>();
     ExprTypeVisitor.determineRelNodeExprType(plan, exprTypes, searchMap);
-    this.usedTable = new HashMap<>();
     this.loweredGlobalVariables = new HashMap<>();
     PandasCodeGenVisitor codegen =
-        new PandasCodeGenVisitor(exprTypes, searchMap, this.usedTable, this.loweredGlobalVariables);
+        new PandasCodeGenVisitor(exprTypes, searchMap, this.loweredGlobalVariables);
     codegen.go(plan);
     String pandas_code = codegen.getGeneratedCode();
     return pandas_code;
@@ -585,10 +580,6 @@ public class RelationalAlgebraGenerator {
 
   public String getUnoptimizedPlanString(String sql) throws Exception {
     return RelOptUtil.toString(getRelationalAlgebra(sql, false));
-  }
-
-  public HashMap<List<String>, Long> getUsedTables() {
-    return this.usedTable;
   }
 
   public HashMap<String, String> getLoweredGlobalVariables() {

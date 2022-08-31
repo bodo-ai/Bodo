@@ -99,11 +99,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // https://issues.apache.org/jira/browse/CALCITE-4559
   private HashMap<String, RexNode> searchMap;
 
-  // HashMap of all tables that were visited with the line in which they are first
-  // needed in the generated code. This information is passed back to Bodo
-  // to optimize ahd reduce limit the generated IR.
-  private HashMap<List<String>, Long> visitedTables;
-
   // Map of RelNode ID -> <DataFrame variable name, Column Names>
   // Because the logical plan is a tree, Nodes that are at the bottom of
   // the tree must be repeated, even if they are identical. However, when
@@ -134,12 +129,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
       HashMap<String, RexNode> searchMap,
-      HashMap<List<String>, Long> visitedTables,
       HashMap<String, String> loweredGlobalVariablesMap) {
     super();
     this.exprTypesMap = exprTypesMap;
     this.searchMap = searchMap;
-    this.visitedTables = visitedTables;
     this.varCache = new HashMap<Integer, Pair<String, List<String>>>();
     this.loweredGlobals = loweredGlobalVariablesMap;
   }
@@ -2914,17 +2907,27 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitTableScan(TableScan node) {
     // Determine how many \n characters have appears. This indicates the line
     // in which to insert the IO for table scans.
-    long nextLine = this.generatedCode.chars().filter(ch -> ch == '\n').count();
-    List<String> tableKey = node.getTable().getQualifiedName();
-    if (!this.visitedTables.containsKey(tableKey)) {
-      this.visitedTables.put(node.getTable().getQualifiedName(), nextLine);
-    }
-    String tableName = node.getTable().getQualifiedName().get(1);
-    varGenStack.push(tableName);
+    String outVar = this.genDfVar();
     List<String> columnNames = node.getRowType().getFieldNames();
-    // Add the table to cached values
-    this.varCache.put(node.getId(), new Pair<>(tableName, columnNames));
+    int nodeId = node.getId();
+    if (this.isNodeCached(node)) {
+      Pair<String, List<String>> cacheInfo = this.varCache.get(nodeId);
+      columnNames = cacheInfo.getValue();
+      this.generatedCode.append(String.format("  %s = %s\n", outVar, cacheInfo.getKey()));
+    } else {
+      RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
+      BodoSqlTable table = (BodoSqlTable) relTable.table();
+      String readCode = table.generateReadCode();
+      // Add the table to cached values
+      this.generatedCode.append(String.format("  %s = %s\n", outVar, readCode));
+      String castExpr = table.generateCastCode(outVar);
+      if (castExpr != "") {
+        this.generatedCode.append(String.format("  %s = %s\n", outVar, castExpr));
+      }
+      this.varCache.put(node.getId(), new Pair<>(outVar, columnNames));
+    }
     columnNamesStack.push(columnNames);
+    varGenStack.push(outVar);
   }
 
   /**
