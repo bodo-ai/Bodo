@@ -104,13 +104,11 @@ def _create_java_snowflake_catalog(
     # and database are not included because they are needed
     # directly in the Java Snowflake Catalog constructor.
     properties = PropertiesClass()
-    properties.put("user", username)
-    properties.put("password", password)
     properties.put("warehouse", warehouse)
     for key, value in connection_params.items():
         properties.put(key, value)
     # Create the Snowflake catalog
-    return SnowflakeCatalogImplClass(account, database, properties)
+    return SnowflakeCatalogImplClass(username, password, account, database, properties)
 
 
 class SnowflakeCatalog(DatabaseCatalog):

@@ -14,11 +14,14 @@ public class SnowflakeGenTest {
     String sql = " select * from PUBLIC.LINEITEM1";
     Map envVars = System.getenv();
     Properties prop = new Properties();
-    prop.put("user", envVars.get("SF_USER"));
-    prop.put("password", envVars.get("SF_PASSWORD"));
+    prop.put("warehouse", "DEMO_WH");
     BodoSQLCatalog catalog =
         new SnowflakeCatalogImpl(
-            (String) envVars.get("SF_ACCOUNT"), (String) envVars.get("SF_CATALOG"), prop);
+            (String) envVars.get("SF_USER"),
+            (String) envVars.get("SF_PASSWORD"),
+            (String) envVars.get("SF_ACCOUNT"),
+            (String) envVars.get("SF_CATALOG"),
+            prop);
     BodoSqlSchema schema = new CatalogSchemaImpl("PUBLIC", catalog);
 
     RelationalAlgebraGenerator generator =
