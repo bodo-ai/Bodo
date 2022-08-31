@@ -914,7 +914,9 @@ def _gen_sql_reader_py(
             func_text += "  table_var = None\n"
         else:
             func_text += f"  table_var = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
-            func_text += f"  table_var = set_table_len(table_var, local_rows)\n"
+            if len(out_used_cols) == 0:
+                # Set the table length using the total rows if don't load any columns
+                func_text += f"  table_var = set_table_len(table_var, local_rows)\n"
 
         # Handle index column
         index_var = "None"
