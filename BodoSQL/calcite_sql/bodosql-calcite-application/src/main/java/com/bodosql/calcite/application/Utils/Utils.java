@@ -236,12 +236,24 @@ public class Utils {
         break;
       case FLOAT:
         if (outputArrayType) return "bodo.float32[::1]";
-        dtype = "np.float32";
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float32";
+        } else if (outputArrayType) {
+          return "bodo.float32[::1]";
+        } else {
+          dtype = "np.float32";
+        }
         break;
       case DOUBLE:
       case DECIMAL:
         if (outputArrayType) return "bodo.float64[::1]";
-        dtype = "np.float64";
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float64";
+        } else if (outputArrayType) {
+          return "bodo.float64[::1]";
+        } else {
+          dtype = "np.float64";
+        }
         break;
       case DATE:
       case TIMESTAMP:
