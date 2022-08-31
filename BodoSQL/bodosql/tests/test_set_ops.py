@@ -69,8 +69,6 @@ def test_intersect_string_cols(bodosql_string_types, spark_info, memory_leak_che
         bodosql_string_types,
         spark_info,
         convert_float_nan=True,
-        # TODO[BE-3480]: enable dict-encoded string test when it is fixed
-        use_dict_encoded_strings=False,
     )
 
 

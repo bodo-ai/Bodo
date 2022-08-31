@@ -55,8 +55,6 @@ def test_join(join_dataframes, spark_info, comparison_ops, memory_leak_check):
         return_codegen=True,
         convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
-        # TODO[BE-3478]: enable dict-encoded string test when fixed
-        use_dict_encoded_strings=False,
     )
     pandas_code = result["pandas_code"]
     if comparison_ops == "=":

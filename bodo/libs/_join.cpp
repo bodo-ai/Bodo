@@ -376,6 +376,25 @@ table_info* hash_join_table(
 
         // Unify dictionaries of DICT key columns (required for key comparison)
         // IMPORTANT: need to do this before computing the hashes
+        //
+        // This implementation of hashing dictionary encoded data is based on
+        // the values in the indices array. To do this, we make and enforce
+        // a few assumptions
+        //
+        // 1. Both arrays are dictionary encoded. This is enforced in join.py
+        // where determine_table_cast_map requires either both inputs to be
+        // dictionary encoded or neither.
+        //
+        // 2. Both arrays share the exact same dictionary. This occurs in
+        // unify_dictionaries and is checked above.
+        //
+        // 3. The dictionary does not contain any duplicate values. This is
+        // enforced by the has_global_dictionary check in unify_dictionaries
+        // and is updated by convert_local_dictionary_to_global. In particular,
+        // convert_local_dictionary_to_global contains a drop duplicates step
+        // that ensures all values are unique. If the dictionary is made global
+        // by some other means (e.g. Python), then we assume that is also
+        // unique.
         for (size_t i = 0; i < n_key; i++) {
             array_info* arr1 = work_left_table->columns[i];
             array_info* arr2 = work_right_table->columns[i];

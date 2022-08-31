@@ -1,6 +1,6 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
-#include <Python.h>
 #include "_array_hash.h"
+#include <Python.h>
 #include <arrow/api.h>
 #include "_array_utils.h"
 #include "_bodo_common.h"
@@ -53,9 +53,8 @@ hash_array_inner(uint32_t* out_hashes, T* data, size_t n_rows,
 #if PY_VERSION_HEX > 0x030a00a6
 #define Npy_HashDouble _Py_HashDouble
 #else
-static inline Py_hash_t
-Npy_HashDouble(PyObject *__UNUSED__(identity), double val)
-{
+static inline Py_hash_t Npy_HashDouble(PyObject* __UNUSED__(identity),
+                                       double val) {
     return _Py_HashDouble(val);
 }
 #endif
@@ -329,7 +328,8 @@ void apply_arrow_numeric_hash(
     uint32_t* out_hashes, std::vector<offset_t> const& list_offsets,
     size_t const& n_rows,
     std::shared_ptr<arrow::PrimitiveArray> const& primitive_array) {
-    Bodo_CTypes::CTypeEnum bodo_typ = arrow_to_bodo_type(primitive_array->type());
+    Bodo_CTypes::CTypeEnum bodo_typ =
+        arrow_to_bodo_type(primitive_array->type());
     uint64_t siztype = numpy_item_size[bodo_typ];
     char* value_ptr = (char*)primitive_array->values()->data();
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
@@ -448,10 +448,12 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
         } else {
             // 3 options:
             // - Convert to global dictionary now
-            // - Require the conversion to have happened before calling this function
-            // - Access the strings to get globally consistent hashes (this is not efficient
-            //   if we are going to end up converting to global dictionary as part of the
-            //   operation that called hash_array())
+            // - Require the conversion to have happened before calling this
+            // function
+            // - Access the strings to get globally consistent hashes (this is
+            // not efficient
+            //   if we are going to end up converting to global dictionary as
+            //   part of the operation that called hash_array())
             throw std::runtime_error(
                 "hashing dictionary array requires global dictionary in this "
                 "context");
@@ -612,10 +614,12 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
         } else {
             // 3 options:
             // - Convert to global dictionary now
-            // - Require the conversion to have happened before calling this function
-            // - Access the strings to get globally consistent hashes (this is not efficient
-            //   if we are going to end up converting to global dictionary as part of the
-            //   operation that called hash_array())
+            // - Require the conversion to have happened before calling this
+            // function
+            // - Access the strings to get globally consistent hashes (this is
+            // not efficient
+            //   if we are going to end up converting to global dictionary as
+            //   part of the operation that called hash_array())
             throw std::runtime_error(
                 "hashing dictionary array requires global dictionary in this "
                 "context");
@@ -772,6 +776,24 @@ void coherent_hash_array(uint32_t* out_hashes, array_info* array,
                          const uint32_t seed, bool is_parallel = true) {
     if ((array->arr_type == bodo_array_type::DICT) &&
         (array->info1 != ref_array->info1)) {
+        // This implementation of coherent_hash_array hashes data based on
+        // the values in the indices array. To do this, we make and enforce
+        // a few assumptions
+        //
+        // 1. Both arrays are dictionary encoded. This is enforced in join.py
+        // where determine_table_cast_map requires either both inputs to be
+        // dictionary encoded or neither.
+        //
+        // 2. Both arrays share the exact same dictionary. This occurs in
+        // unify_dictionaries and is checked above.
+        //
+        // 3. The dictionary does not contain any duplicate values. This is
+        // enforced by the has_global_dictionary check in unify_dictionaries
+        // and is updated by convert_local_dictionary_to_global. In particular,
+        // convert_local_dictionary_to_global contains a drop duplicates step
+        // that ensures all values are unique. If the dictionary is made global
+        // by some other means (e.g. Python), then we assume that is also
+        // unique.
         throw std::runtime_error(
             "coherent_hash_array: don't know if arrays have unified "
             "dictionary");
@@ -1211,9 +1233,10 @@ void unify_dictionaries(array_info* arr1, array_info* arr2) {
         array_info* indices = copy_array(arr1->info2);
         delete_info_decref_array(arr1->info2);
         arr1->info2 = indices;
+        arr1->null_bitmask = indices->null_bitmask;
     }
 
-    uint8_t* null_bitmask1 = (uint8_t *) arr1->null_bitmask;
+    uint8_t* null_bitmask1 = (uint8_t*)arr1->null_bitmask;
 
     for (size_t i = 0; i < arr1->info2->length; i++) {
         if (GetBit(null_bitmask1, i)) {
@@ -1227,9 +1250,10 @@ void unify_dictionaries(array_info* arr1, array_info* arr2) {
         array_info* indices = copy_array(arr2->info2);
         delete_info_decref_array(arr2->info2);
         arr2->info2 = indices;
+        arr2->null_bitmask = indices->null_bitmask;
     }
 
-    uint8_t* null_bitmask2 = (uint8_t *) arr2->null_bitmask;
+    uint8_t* null_bitmask2 = (uint8_t*)arr2->null_bitmask;
 
     for (size_t i = 0; i < arr2->info2->length; i++) {
         if (GetBit(null_bitmask2, i)) {
