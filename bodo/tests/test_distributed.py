@@ -299,6 +299,21 @@ def test_print3(memory_leak_check):
     bodo_func(np.ones(3), (3, np.ones(3)))
 
 
+def test_print_empty_groupby(memory_leak_check, capsys):
+    """make sure empty groups are not printed except possibly
+    on rank 0."""
+
+    def impl(df):
+        df2 = df.groupby(["site_name"], as_index=False, dropna=False).size()
+        print(df2)
+
+    df = pd.DataFrame({"site_name": "only_group", "B": np.arange(1000)})
+    bodo.jit(distributed=["A"])(impl)(df)
+    captured = capsys.readouterr()
+    if bodo.get_rank() != 0:
+        assert "Empty" not in captured.out
+
+
 def test_print_dist_slice(memory_leak_check, capsys):
     """make sure empty distributed slices are not printed"""
 

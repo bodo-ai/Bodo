@@ -3753,9 +3753,11 @@ class DistributedPass:
         2) avoid printing empty slices of distributed arrays.
         """
 
-        # avoid printing empty slices of distributed arrays/series/dataframes
+        # avoid printing empty chunks of distributed arrays/series/dataframes
         if not print_node.vararg and all(
-            guard(self._is_dist_slice, arg, equiv_set)
+            # If the data is distributed we may have an empty chunk and only want
+            # to print the non-empty ranks, except rank 0.
+            self._is_1D_or_1D_Var_arr(arg.name)
             or isinstance(guard(get_definition, self.func_ir, arg), ir.Const)
             for arg in print_node.args
         ):
