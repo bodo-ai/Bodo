@@ -435,13 +435,7 @@ def test_bitxor(test_bitwise_number_number):
 )
 def test_conv(args):
     def impl(arr, old_base, new_base):
-        return pd.Series(bodo.libs.bodosql_array_kernels.conv(arr, old_base, new_base))
-
-    # avoid Series conversion for scalar values
-    if not isinstance(args[0], pd.Series):
-        impl = lambda arr, old_base, new_base: bodo.libs.bodosql_array_kernels.conv(
-            arr, old_base, new_base
-        )
+        return bodo.libs.bodosql_array_kernels.conv(arr, old_base, new_base)
 
     # Simulates CONV on a single row
     def conv_scalar_fn(elem, old_base, new_base):
@@ -466,12 +460,14 @@ def test_conv(args):
             return None
 
     conv_answer = vectorized_sol(args, conv_scalar_fn, pd.StringDtype())
+    if any([isinstance(args[i], pd.Series) for i in range(len(args))]):
+        conv_answer = conv_answer.values
+
     check_func(
         impl,
         args,
         py_output=conv_answer,
         check_dtype=False,
-        reset_index=True,
     )
 
 
