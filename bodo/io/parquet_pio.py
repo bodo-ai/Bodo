@@ -743,8 +743,9 @@ def _gen_pq_reader_py(
         func_text += "    T = None\n"
     else:
         func_text += f"    T = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
-        # Set the table length
-        func_text += f"    T = set_table_len(T, local_rows)\n"
+        if len(out_used_cols) == 0:
+            # Set the table length using the total rows if don't load any columns
+            func_text += f"    T = set_table_len(T, local_rows)\n"
     if index_column_index is None:
         func_text += "    index_arr = None\n"
     else:
