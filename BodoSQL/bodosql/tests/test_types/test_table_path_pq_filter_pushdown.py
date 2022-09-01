@@ -18,6 +18,7 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     SeriesOptTestPipeline,
+    DistTestPipeline,
     _check_for_io_reader_filters,
     check_func,
 )
@@ -443,3 +444,53 @@ def test_table_path_col_pruning_simple():
             sort_output=True,
         )
         check_logger_msg(stream, "Columns loaded ['D']")
+
+
+
+@pytest.mark.slow
+def test_table_path_limit_pushdown():
+    """
+    Test basic limit pushdown support.
+    """
+
+    # select columns
+    def impl1(f1):
+        bc = bodosql.BodoSQLContext(
+            {
+                "table1": bodosql.TablePath(f1, "parquet"),
+            }
+        )
+        return bc.sql("Select A, B from table1 limit 5")
+
+    # all columns
+    def impl2(f1):
+        bc = bodosql.BodoSQLContext(
+            {
+                "table1": bodosql.TablePath(f1, "parquet"),
+            }
+        )
+        return bc.sql("Select * from table1 limit 5")
+
+    # TODO[BE-3581]: support and test limit pushdown for partitioned Parquet datasets
+    # filename = "bodosql/tests/data/sample-parquet-data/partitioned"
+    filename = "bodosql/tests/data/sample-parquet-data/no_index.pq"
+
+    py_output = pd.read_parquet(filename)[["A", "B"]].head(5)
+    check_func(impl1, (filename,), py_output=py_output, reset_index=True, check_dtype=False)
+
+    # make sure limit pushdown worked
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl1)
+    bodo_func(filename)
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert hasattr(fir, "meta_head_only_info")
+    assert fir.meta_head_only_info[0] is not None
+
+    py_output = pd.read_parquet(filename).head(5)
+    check_func(impl2, (filename,), py_output=py_output, reset_index=True, check_dtype=False)
+
+    # make sure limit pushdown worked
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl2)
+    bodo_func(filename)
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert hasattr(fir, "meta_head_only_info")
+    assert fir.meta_head_only_info[0] is not None
