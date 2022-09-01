@@ -99,7 +99,7 @@ jobs:
         export CONDA_BUILD_SYSROOT="/opt/MacOSX${MACOSX_DEPLOYMENT_TARGET}.sdk"
         source activate bodo_build
         conda install -n bodo_build --quiet --yes "conda-forge-ci-setup=3" -c conda-forge
-        setup_conda_rc ./ ./buildscripts/bodo-m1-conda-recipe ./buildscripts/bodo-m1-conda-recipe/conda_build_config.yaml
+        setup_conda_rc ./ ./buildscripts/bodo-m1-conda-recipe ./buildscripts/bodo-m1-conda-recipe/release_conda_build_config.yaml
         /usr/bin/sudo mangle_homebrew
         /usr/bin/sudo -k
         source run_conda_forge_build_setup
