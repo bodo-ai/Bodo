@@ -163,22 +163,6 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.NUMERIC);
 
-  public static final SqlFunction LOG10 =
-      new SqlFunction(
-          "LOG10",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.DOUBLE_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept. This function accepts one numeric argument
-          OperandTypes.NUMERIC,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.NUMERIC);
-
   public static final SqlFunction LOG2 =
       new SqlFunction(
           "LOG2",
@@ -202,6 +186,15 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           ReturnTypes.DOUBLE_NULLABLE,
           (SqlOperandTypeInference) null,
           OperandTypes.NUMERIC_NUMERIC,
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction TRUNC =
+      new SqlFunction(
+          "TRUNC",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.DOUBLE_NULLABLE,
+          (SqlOperandTypeInference) null,
+          OperandTypes.NUMERIC_INTEGER,
           SqlFunctionCategory.NUMERIC);
 
   public static final SqlFunction CONV =
@@ -269,6 +262,24 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           OperandTypes.NUMERIC,
           SqlFunctionCategory.NUMERIC);
 
+  public static final SqlFunction FACTORIAL =
+      new SqlFunction(
+          "FACTORIAL",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BIGINT_NULLABLE,
+          null,
+          OperandTypes.INTEGER,
+          SqlFunctionCategory.NUMERIC);
+
+  public static final SqlFunction SQUARE =
+      new SqlFunction(
+          "SQUARE",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.DOUBLE_NULLABLE,
+          null,
+          OperandTypes.NUMERIC,
+          SqlFunctionCategory.NUMERIC);
+
   public static final SqlFunction COSH = SqlLibraryOperators.COSH;
   public static final SqlFunction SINH = SqlLibraryOperators.SINH;
   public static final SqlFunction TANH = SqlLibraryOperators.TANH;
@@ -298,6 +309,9 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           LOG2,
           POW,
           CONV,
+          FACTORIAL,
+          SQUARE,
+          TRUNC,
           WIDTH_BUCKET,
           GREATEST,
           LEAST);

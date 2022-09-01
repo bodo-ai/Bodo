@@ -6,9 +6,414 @@ Implements numerical array kernels that are specific to BodoSQL
 
 import numba
 from numba.core import types
+from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.utils.utils import is_array_typ
+
+
+def cbrt(arr):  # pragma: no cover
+    return
+
+
+def ceil(arr):  # pragma: no cover
+    return
+
+
+def factorial(arr):  # pragma: no cover
+    return
+
+
+def floor(arr):  # pragma: no cover
+    return
+
+
+def mod(arr0, arr1):  # pragma: no cover
+    return
+
+
+def sign(arr):  # pragma: no cover
+    return
+
+
+def sqrt(arr):  # pragma: no cover
+    return
+
+
+def round(arr0, arr1):  # pragma: no cover
+    return
+
+
+def trunc(arr0, arr1):  # pragma: no cover
+    return
+
+
+def abs(arr):  # pragma: no cover
+    return
+
+
+def ln(arr):  # pragma: no cover
+    return
+
+
+def log2(arr):  # pragma: no cover
+    return
+
+
+def log10(arr):  # pragma: no cover
+    return
+
+
+def exp(arr):  # pragma: no cover
+    return
+
+
+def power(arr0, arr1):  # pragma: no cover
+    return
+
+
+def sqrt_util(arr):  # pragma: no cover
+    return
+
+
+def square(arr):  # pragma: no cover
+    return
+
+
+def cbrt_util(arr):  # pragma: no cover
+    return
+
+
+def ceil_util(arr):  # pragma: no cover
+    return
+
+
+def factorial_util(arr):  # pragma: no cover
+    return
+
+
+def floor_util(arr):  # pragma: no cover
+    return
+
+
+def mod_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def sign_util(arr):  # pragma: no cover
+    return
+
+
+def round_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def trunc_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def abs_util(arr):  # pragma: no cover
+    return
+
+
+def ln_util(arr):  # pragma: no cover
+    return
+
+
+def log2_util(arr):  # pragma: no cover
+    return
+
+
+def log10_util(arr):  # pragma: no cover
+    return
+
+
+def exp_util(arr):  # pragma: no cover
+    return
+
+
+def power_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def square_util(arr):  # pragma: no cover
+    return
+
+
+funcs_utils_names = (
+    (abs, abs_util, "ABS"),
+    (cbrt, cbrt_util, "CBRT"),
+    (ceil, ceil_util, "CEIL"),
+    (factorial, factorial_util, "FACTORIAL"),
+    (floor, floor_util, "FLOOR"),
+    (ln, ln_util, "LN"),
+    (log2, log2_util, "LOG2"),
+    (log10, log10_util, "LOG10"),
+    (mod, mod_util, "MOD"),
+    (sign, sign_util, "SIGN"),
+    (round, round_util, "ROUND"),
+    (trunc, trunc_util, "TRUNC"),
+    (exp, exp_util, "EXP"),
+    (power, power_util, "POWER"),
+    (sqrt, sqrt_util, "SQRT"),
+    (square, square_util, "SQUARE"),
+)
+double_arg_funcs = (
+    "MOD",
+    "TRUNC",
+    "POWER",
+    "ROUND",
+)
+
+single_arg_funcs = set(a[2] for a in funcs_utils_names if a[2] not in double_arg_funcs)
+
+_float = {
+    16: types.float16,
+    32: types.float32,
+    64: types.float64,
+}
+_int = {
+    8: types.int8,
+    16: types.int16,
+    32: types.int32,
+    64: types.int64,
+}
+_uint = {
+    8: types.uint8,
+    16: types.uint16,
+    32: types.uint32,
+    64: types.uint64,
+}
+
+
+def _get_numeric_output_dtype(func_name, arr0, arr1=None):
+    """
+    Helper function that returns the expected output_dtype for given input
+    dtype(s) func_name.
+    """
+    arr0_dtype = arr0.dtype if is_array_typ(arr0) else arr0
+    arr1_dtype = arr1.dtype if is_array_typ(arr1) else arr1
+    # default to float64 without further information
+    out_dtype = bodo.float64
+    if (arr0 is None or arr0_dtype == bodo.none) or (
+        func_name in double_arg_funcs and (arr1 is None or arr1_dtype == bodo.none)
+    ):
+        return types.Array(out_dtype, 1, "C")
+    # if input is float32 rather than float64, switch the default output dtype to float32
+    if isinstance(arr0_dtype, types.Float):
+        if isinstance(arr1_dtype, types.Float):
+            out_dtype = _float[max(arr0_dtype.bitwidth, arr1_dtype.bitwidth)]
+        else:
+            out_dtype = arr0_dtype
+    if func_name == "SIGN":
+        # we match the bitwidth of the input if we are using an integer
+        # (matching float bitwidth is handled above)
+        if isinstance(arr0_dtype, types.Integer):
+            out_dtype = arr0_dtype
+    elif func_name == "MOD":
+        if isinstance(arr0_dtype, types.Integer) and isinstance(
+            arr1_dtype, types.Integer
+        ):
+            if arr0_dtype.signed:
+                if arr1_dtype.signed:
+                    out_dtype = arr1_dtype
+                else:
+                    # If arr0 is signed and arr1 is unsigned, our output may be signed
+                    # and may must support a bitwidth of double arr1.
+                    # e.g. say arr0_dtype = bodo.int64, arr1_dtype = bodo.uint16,
+                    # we know 0 <= arr1 <= 2^(15) - 1, however the output is based off
+                    # the  sign of arr0 and thus we need to support signed ints
+                    # of _double_ the bitwidth, -2^(15) <= arr <= 2^(15) - 1, so
+                    # we use out_dtype = bodo.int32.
+                    out_dtype = _int[min(64, arr1_dtype.bitwidth * 2)]
+            else:
+                # if arr0 is unsigned, we will use the dtype of arr1
+                out_dtype = arr1_dtype
+    elif func_name == "ABS":
+        # if arr0 is a signed integer, we will use and unsigned integer of double the bitwidth,
+        # following the same reasoning as noted in the above comment for MOD.
+        if isinstance(arr0_dtype, types.Integer):
+            if arr0_dtype.signed:
+                out_dtype = _uint[min(64, arr0_dtype.bitwidth * 2)]
+            else:
+                out_dtype = arr0_dtype
+    elif func_name == "ROUND":
+        #
+        # can use types.Number, but this would include types.Complex
+        if isinstance(arr0_dtype, (types.Float, types.Integer)):
+            out_dtype = arr0_dtype
+    elif func_name == "FACTORIAL":
+        # the output of factorial is always a 64-bit integer
+        # TODO: support 128-bit to match Snowflake
+        out_dtype = bodo.int64
+
+    if isinstance(out_dtype, types.Integer):
+        return bodo.libs.int_arr_ext.IntegerArrayType(out_dtype)
+    else:
+        return types.Array(out_dtype, 1, "C")
+
+
+def create_numeric_func_overload(func_name):
+    """
+    Returns the appropriate numeric function that will overload the given function name.
+    """
+
+    if func_name not in double_arg_funcs:
+        func_name = func_name.lower()
+
+        def overload_func(arr):
+            """Handles cases where func_name recieves an optional argument and forwards
+            to the appropriate version of the real implementation"""
+            if isinstance(arr, types.optional):
+                return unopt_argument(
+                    f"bodo.libs.bodosql_array_kernels.{func_name}", ["arr"], 0
+                )
+
+            func_text = "def impl(arr):\n"
+            func_text += (
+                f"  return bodo.libs.bodosql_array_kernels.{func_name}_util(arr)"
+            )
+            loc_vars = {}
+            exec(func_text, {"bodo": bodo}, loc_vars)
+
+            return loc_vars["impl"]
+
+    else:
+        func_name = func_name.lower()
+
+        def overload_func(arr0, arr1):
+            """Handles cases where func_name recieves an optional argument and forwards
+            to the appropriate version of the real implementation"""
+            args = [arr0, arr1]
+            for i in range(2):
+                if isinstance(args[i], types.optional):
+                    return unopt_argument(
+                        f"bodo.libs.bodosql_array_kernels.{func_name}",
+                        ["arr0", "arr1"],
+                        i,
+                    )
+
+            func_text = "def impl(arr0, arr1):\n"
+            func_text += (
+                f"  return bodo.libs.bodosql_array_kernels.{func_name}_util(arr0, arr1)"
+            )
+            loc_vars = {}
+            exec(func_text, {"bodo": bodo}, loc_vars)
+
+            return loc_vars["impl"]
+
+    return overload_func
+
+
+def create_numeric_util_overload(func_name):  # pragma: no cover
+    """Creates an overload function to support trig functions on
+       a string array representing a column of a SQL table
+
+    Args:
+        func_name: which trig function is being called (e.g. "ACOS")
+
+    Returns:
+        (function): a utility that takes in one argument and returns
+        the appropriate trig function applied to the argument, where the
+        argument could be an array/scalar/null.
+    """
+
+    if func_name not in double_arg_funcs:
+
+        def overload_numeric_util(arr):
+            verify_int_float_arg(arr, func_name, "arr")
+
+            arg_names = [
+                "arr",
+            ]
+            arg_types = [arr]
+            propagate_null = [True]
+            scalar_text = ""
+            if func_name in single_arg_funcs:
+                if func_name == "FACTORIAL":
+                    scalar_text += "if arg0 > 20 or np.abs(np.int64(arg0)) != arg0:\n"
+                    scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+                    scalar_text += "else:\n"
+                    scalar_text += f"  res[i] = np.math.factorial(np.int64(arg0))"
+                elif func_name == "LN":
+                    scalar_text += f"res[i] = np.log(arg0)"
+                else:
+                    scalar_text += f"res[i] = np.{func_name.lower()}(arg0)"
+            else:
+                ValueError(f"Unknown function name: {func_name}")
+
+            out_dtype = _get_numeric_output_dtype(func_name, arr)
+
+            return gen_vectorized(
+                arg_names, arg_types, propagate_null, scalar_text, out_dtype
+            )
+
+    else:
+
+        def overload_numeric_util(arr0, arr1):
+            verify_int_float_arg(arr0, func_name, "arr0")
+            verify_int_float_arg(arr0, func_name, "arr1")
+
+            arg_names = [
+                "arr0",
+                "arr1",
+            ]
+            arg_types = [arr0, arr1]
+            propagate_null = [True, True]
+            scalar_text = ""
+            # we select the appropriate scalar text based on the function name
+            if func_name == "MOD":
+                # There is a discrepancy between numpy and SQL mod, whereby SQL mod returns the sign
+                # of the divisor, whereas numpy mod returns the sign of the dividend.
+                scalar_text += "if arg1 == 0:\n"
+                scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
+                scalar_text += "val = np.mod(arg0, arg1)\n"
+                # if the dividend is negative and the divisor is positive, we need to add the divisor
+                # so that the result is positive (within {0, 1, 2, ..., arg1 - 1}).
+                scalar_text += "if val < 0 and arg0 > 0:\n"
+                scalar_text += "  res[i] = val + arg1\n"
+                # if the dividend is positive and the divisor is negative, we need to subtract the divisor
+                # so that the result is negative (within {0, -1, -2, ..., - (arg1 - 1)}).
+                scalar_text += "elif val > 0 and arg0 < 0:\n"
+                scalar_text += "  res[i] = val - arg1\n"
+                scalar_text += "else:\n"
+                scalar_text += "  res[i] = val"
+            elif func_name == "POWER":
+                scalar_text += "res[i] = np.power(np.float64(arg0), arg1)"
+            elif func_name == "ROUND":
+                scalar_text += "res[i] = np.round(arg0, arg1)"
+            elif func_name == "TRUNC":
+                scalar_text += "if int(arg1) == arg1:\n"
+                # numpy truncates to the integer nearest to zero, so we shift by the number of decimals as appropriate
+                # to get the desired result. (multilpication is used to maintain precision)
+                scalar_text += (
+                    "  res[i] = np.trunc(arg0 * (10.0 ** arg1)) * (10.0 ** -arg1)\n"
+                )
+                scalar_text += "else:\n"
+                scalar_text += "  bodo.libs.array_kernels.setna(res, i)"
+            else:
+                raise ValueError(f"Unknown function name: {func_name}")
+
+            out_dtype = _get_numeric_output_dtype(func_name, arr0, arr1)
+
+            return gen_vectorized(
+                arg_names, arg_types, propagate_null, scalar_text, out_dtype
+            )
+
+    return overload_numeric_util
+
+
+def _install_numeric_overload(funcs_utils_names):
+    """Creates and installs the overloads for trig functions"""
+    for func, util, func_name in funcs_utils_names:
+        func_overload_impl = create_numeric_func_overload(func_name)
+        overload(func)(func_overload_impl)
+        util_overload_impl = create_numeric_util_overload(func_name)
+        overload(util)(util_overload_impl)
+
+
+_install_numeric_overload(funcs_utils_names)
 
 
 @numba.generated_jit(nopython=True)
@@ -31,20 +436,20 @@ def bitand(A, B):
 
 
 @numba.generated_jit(nopython=True)
-def bitleftshift(A, B):
-    """Handles cases where BITLEFTSHIFT receives optional arguments and forwards
+def bitshiftleft(A, B):
+    """Handles cases where BITSHIFTLEFT receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [A, B]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.bitleftshift",
+                "bodo.libs.bodosql_array_kernels.bitshiftleft",
                 ["A", "B"],
                 i,
             )
 
     def impl(A, B):  # pragma: no cover
-        return bitleftshift_util(A, B)
+        return bitshiftleft_util(A, B)
 
     return impl
 
@@ -86,20 +491,20 @@ def bitor(A, B):
 
 
 @numba.generated_jit(nopython=True)
-def bitrightshift(A, B):
-    """Handles cases where BITRIGHTSHIFT receives optional arguments and forwards
+def bitshiftright(A, B):
+    """Handles cases where BITSHIFTRIGHT receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     args = [A, B]
     for i in range(2):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.bitrightshift",
+                "bodo.libs.bodosql_array_kernels.bitshiftright",
                 ["A", "B"],
                 i,
             )
 
     def impl(A, B):  # pragma: no cover
-        return bitrightshift_util(A, B)
+        return bitshiftright_util(A, B)
 
     return impl
 
@@ -286,8 +691,8 @@ def bitand_util(A, B):
 
 
 @numba.generated_jit(nopython=True)
-def bitleftshift_util(A, B):
-    """A dedicated kernel for the SQL function BITLEFTSHIFT which takes in two numbers
+def bitshiftleft_util(A, B):
+    """A dedicated kernel for the SQL function BITSHIFTLEFT which takes in two numbers
     (or columns) and takes the bitwise-leftshift of them.
 
 
@@ -299,8 +704,8 @@ def bitleftshift_util(A, B):
         integer series/scalar: the output of the bitwise-leftshift
     """
 
-    verify_int_arg(A, "bitleftshift", "A")
-    verify_int_arg(B, "bitleftshift", "B")
+    verify_int_arg(A, "bitshiftleft", "A")
+    verify_int_arg(B, "bitshiftleft", "B")
 
     arg_names = ["A", "B"]
     arg_types = [A, B]
@@ -372,8 +777,8 @@ def bitor_util(A, B):
 
 
 @numba.generated_jit(nopython=True)
-def bitrightshift_util(A, B):
-    """A dedicated kernel for the SQL function BITRIGHTSHIFT which takes in two numbers
+def bitshiftright_util(A, B):
+    """A dedicated kernel for the SQL function BITSHIFTRIGHT which takes in two numbers
     (or columns) and takes the bitwise-rightshift of them.
 
 
@@ -385,8 +790,8 @@ def bitrightshift_util(A, B):
         integer series/scalar: the output of the bitwise-rightshift
     """
 
-    verify_int_arg(A, "bitrightshift", "A")
-    verify_int_arg(B, "bitrightshift", "B")
+    verify_int_arg(A, "bitshiftright", "A")
+    verify_int_arg(B, "bitshiftright", "B")
 
     arg_names = ["A", "B"]
     arg_types = [A, B]
@@ -491,8 +896,8 @@ def getbit_util(A, B):
         boolean series/scalar: B'th bit of A
     """
 
-    verify_int_arg(A, "bitrightshift", "A")
-    verify_int_arg(B, "bitrightshift", "B")
+    verify_int_arg(A, "bitshiftright", "A")
+    verify_int_arg(B, "bitshiftright", "B")
 
     arg_names = ["A", "B"]
     arg_types = [A, B]

@@ -1846,20 +1846,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
         return getSingleArgNumericFnInfo(
             fnOperation.getOperator().toString(),
             operandsInfo.get(0).getExprCode(),
-            operandsInfo.get(0).getName(),
-            isSingleRow
-                || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                    == BodoSQLExprType.ExprType.SCALAR));
+            operandsInfo.get(0).getName());
       case MOD:
         return getDoubleArgNumericFnInfo(
             fnOperation.getOperator().toString(),
             operandsInfo.get(0).getExprCode(),
             operandsInfo.get(0).getName(),
             operandsInfo.get(1).getExprCode(),
-            operandsInfo.get(1).getName(),
-            isSingleRow
-                || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                    == BodoSQLExprType.ExprType.SCALAR));
+            operandsInfo.get(1).getName());
       case TRIM:
       case LTRIM:
       case RTRIM:
@@ -2128,7 +2122,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "RADIANS":
             return getSingleArgTrigFnInfo(
                 fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(0).getName());
-
           case "ATAN2":
             return getDoubleArgTrigFnInfo(
                 fnName,
@@ -2137,20 +2130,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 operandsInfo.get(1).getExprCode(),
                 operandsInfo.get(1).getName());
           case "ABS":
+          case "CBRT":
+          case "EXP":
+          case "FACTORIAL":
           case "LOG2":
           case "LOG10":
           case "LN":
-          case "EXP":
           case "SIGN":
+          case "SQUARE":
+          case "SQRT":
           case "BITNOT":
             return getSingleArgNumericFnInfo(
-                fnName,
-                operandsInfo.get(0).getExprCode(),
-                operandsInfo.get(0).getName(),
-                isSingleRow
-                    || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                        == BodoSQLExprType.ExprType.SCALAR));
-          case "TRUNCATE":
+                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(0).getName());
           case "POWER":
           case "POW":
           case "BITAND":
@@ -2164,31 +2155,27 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 operandsInfo.get(0).getExprCode(),
                 operandsInfo.get(0).getName(),
                 operandsInfo.get(1).getExprCode(),
-                operandsInfo.get(1).getName(),
-                isSingleRow
-                    || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                        == BodoSQLExprType.ExprType.SCALAR));
+                operandsInfo.get(1).getName());
+          case "TRUNC":
+          case "TRUNCATE":
           case "ROUND":
-            String round_arg1_expr_code;
-            String round_arg1_name;
+            String arg1_expr_code;
+            String arg1_name;
             if (operandsInfo.size() == 1) {
               // If no value is specified by, default to 0
-              round_arg1_expr_code = "0";
-              round_arg1_name = "0";
+              arg1_expr_code = "0";
+              arg1_name = "0";
             } else {
               assert operandsInfo.size() == 2;
-              round_arg1_expr_code = operandsInfo.get(1).getExprCode();
-              round_arg1_name = operandsInfo.get(1).getName();
+              arg1_expr_code = operandsInfo.get(1).getExprCode();
+              arg1_name = operandsInfo.get(1).getName();
             }
             return getDoubleArgNumericFnInfo(
                 fnName,
                 operandsInfo.get(0).getExprCode(),
                 operandsInfo.get(0).getName(),
-                round_arg1_expr_code,
-                round_arg1_name,
-                isSingleRow
-                    || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                        == BodoSQLExprType.ExprType.SCALAR));
+                arg1_expr_code,
+                arg1_name);
 
           case "LOG":
             return generateLogFnInfo(operandsInfo, exprTypes, isSingleRow);
