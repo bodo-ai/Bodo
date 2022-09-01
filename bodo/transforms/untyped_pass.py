@@ -3184,11 +3184,10 @@ def _get_sql_df_type_from_db(
                         unsupported_arrow_types.append(field.type)
 
                 str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
-                str_as_dict_cols = set(map(lambda x: x.upper(), str_as_dict_cols))
                 str_col_name_to_ind = {}
                 for i, t in enumerate(col_types):
                     if t == string_array_type:
-                        str_col_name_to_ind[col_names[i].upper()] = i
+                        str_col_name_to_ind[col_names[i]] = i
                 # If user-provided list has any columns that are not string
                 # type, show a warning.
                 non_str_columns_in_read_as_dict_cols = (
@@ -3208,7 +3207,8 @@ def _get_sql_df_type_from_db(
                 query_args, string_col_ind = [], []
                 undetermined_str_cols = str_col_name_to_ind.keys() - str_as_dict_cols
                 for name in undetermined_str_cols:
-                    query_args.append(f"count (distinct {name})")
+                    # Always quote column names for correctness
+                    query_args.append(f'count (distinct "{name}")')
                     string_col_ind.append(str_col_name_to_ind[name])
                 if len(query_args) != 0:
                     # the criterion with which we determine whether to convert or not
