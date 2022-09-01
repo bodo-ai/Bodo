@@ -4540,7 +4540,10 @@ class DistributedPass:
                         require(
                             find_const(self.func_ir, index_def.args[0]) in (None, 0)
                         )
-                        slice_size = find_const(self.func_ir, index_def.args[1])
+                        # corner case: if there are multiple filters on the same table,
+                        # make sure they all read the same amount of data
+                        # TODO[BE-3580]: support non-constant sizes
+                        slice_size = get_const_value_inner(self.func_ir, index_def.args[1], typemap=self.typemap)
                         if read_size is None:
                             read_size = slice_size
                         else:
