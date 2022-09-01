@@ -3,74 +3,71 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
+// List definining all numeric functions which will be mapped to their corresponding array kernel in
+// Python.
 public class NumericCodeGen {
-  // Hashmap of functions for which there is a one to one mapping between the SQL function call,
-  // and a function call for the scalar case in the form of FN(scalar_expr)
-  // IE ABS(x) => np.abs(x)
-  static HashMap<String, String> equivalentFnMapScalars;
+  static List<String> fnList =
+      Arrays.asList(
+          "ABS",
+          "BITAND",
+          "BITOR",
+          "BITXOR",
+          "BITSHIFTLEFT",
+          "BITSHIFTRIGHT",
+          "BITNOT",
+          "CBRT",
+          "CEIL",
+          "EXP",
+          "FACTORIAL",
+          "FLOOR",
+          "GETBIT",
+          "LN",
+          "LOG2",
+          "LOG10",
+          "MOD",
+          "POW",
+          "POWER",
+          "ROUND",
+          "SIGN",
+          "SQRT",
+          "SQUARE",
+          "TRUNC",
+          "TRUNCATE");
 
-  // Hashmap of functions for which there is a one to one mapping between the SQL function call,
-  // and a function call in the form of FN(Col_expr) for the column case
-  // IE LN(C) => np.log(C)
-  static HashMap<String, String> equivalentFnMapColumns;
+  // List defining all numeric functions to be mapped (from fnList) which will have two arguments.
+  static List<String> doubleArgFns =
+      Arrays.asList(
+          "BITAND",
+          "BITOR",
+          "BITXOR",
+          "BITSHIFTLEFT",
+          "BITSHIFTRIGHT",
+          "GETBIT",
+          "MOD",
+          "POW",
+          "POWER",
+          "ROUND",
+          "TRUNC",
+          "TRUNCATE");
 
-  // Hashmap of functions for which there is a one to one mapping between the SQL function call,
-  // and a pandas method for the column case
-  // IE LN(C) => C.FNNAME()
-  static HashMap<String, String> equivalentPandasMethodMapColumns;
+  // HashMap of all numeric functions which maps to array kernels
+  // which handle all combinations of scalars/arrays/nulls.
+  static HashMap<String, String> equivalentFnMap = new HashMap<>();
 
   static {
-    equivalentFnMapScalars = new HashMap<>();
-    equivalentFnMapColumns = new HashMap<>();
-    equivalentPandasMethodMapColumns = new HashMap<>();
-    equivalentFnMapColumns.put("CEIL", "np.ceil");
-    equivalentFnMapScalars.put("CEIL", "bodosql.libs.generated_lib.sql_null_checking_ceil");
-    equivalentFnMapColumns.put("FLOOR", "np.floor");
-    equivalentFnMapScalars.put("FLOOR", "bodosql.libs.generated_lib.sql_null_checking_floor");
-    equivalentFnMapColumns.put("MOD", "np.mod");
-    equivalentFnMapScalars.put("MOD", "bodosql.libs.generated_lib.sql_null_checking_mod");
-    equivalentFnMapColumns.put("SIGN", "np.sign");
-    equivalentFnMapScalars.put("SIGN", "bodosql.libs.generated_lib.sql_null_checking_sign");
-
-    equivalentPandasMethodMapColumns.put("ROUND", "round");
-    equivalentFnMapScalars.put("ROUND", "bodosql.libs.generated_lib.sql_null_checking_round");
-    equivalentPandasMethodMapColumns.put("TRUNCATE", "round");
-    equivalentFnMapScalars.put("TRUNCATE", "bodosql.libs.generated_lib.sql_null_checking_round");
-
-    equivalentPandasMethodMapColumns.put("ABS", "abs");
-    equivalentFnMapScalars.put("ABS", "bodosql.libs.generated_lib.sql_null_checking_abs");
-
-    equivalentFnMapColumns.put("LOG2", "np.log2");
-    equivalentFnMapScalars.put("LOG2", "bodosql.libs.generated_lib.sql_null_checking_log2");
-    equivalentFnMapColumns.put("LOG10", "np.log10");
-    equivalentFnMapScalars.put("LOG10", "bodosql.libs.generated_lib.sql_null_checking_log10");
-    equivalentFnMapColumns.put("LN", "np.log");
-    equivalentFnMapScalars.put("LN", "bodosql.libs.generated_lib.sql_null_checking_ln");
-    equivalentFnMapColumns.put("EXP", "np.exp");
-    equivalentFnMapScalars.put("EXP", "bodosql.libs.generated_lib.sql_null_checking_exp");
-
-    equivalentPandasMethodMapColumns.put("POW", "pow");
-    equivalentFnMapScalars.put("POW", "bodosql.libs.generated_lib.sql_null_checking_power");
-    equivalentPandasMethodMapColumns.put("POWER", "pow");
-    equivalentFnMapScalars.put("POWER", "bodosql.libs.generated_lib.sql_null_checking_power");
-
-    equivalentFnMapColumns.put("BITAND", "bodo.libs.bodosql_array_kernels.bitand");
-    equivalentFnMapScalars.put("BITAND", "bodo.libs.bodosql_array_kernels.bitand");
-    equivalentFnMapColumns.put("BITOR", "bodo.libs.bodosql_array_kernels.bitor");
-    equivalentFnMapScalars.put("BITOR", "bodo.libs.bodosql_array_kernels.bitor");
-    equivalentFnMapColumns.put("BITXOR", "bodo.libs.bodosql_array_kernels.bitxor");
-    equivalentFnMapScalars.put("BITXOR", "bodo.libs.bodosql_array_kernels.bitxor");
-    equivalentFnMapColumns.put("BITNOT", "bodo.libs.bodosql_array_kernels.bitnot");
-    equivalentFnMapScalars.put("BITNOT", "bodo.libs.bodosql_array_kernels.bitnot");
-    equivalentFnMapColumns.put("BITSHIFTLEFT", "bodo.libs.bodosql_array_kernels.bitleftshift");
-    equivalentFnMapScalars.put("BITSHIFTLEFT", "bodo.libs.bodosql_array_kernels.bitleftshift");
-    equivalentFnMapColumns.put("BITSHIFTRIGHT", "bodo.libs.bodosql_array_kernels.bitrightshift");
-    equivalentFnMapScalars.put("BITSHIFTRIGHT", "bodo.libs.bodosql_array_kernels.bitrightshift");
-    equivalentFnMapColumns.put("GETBIT", "bodo.libs.bodosql_array_kernels.getbit");
-    equivalentFnMapScalars.put("GETBIT", "bodo.libs.bodosql_array_kernels.getbit");
+    for (String fn : fnList) {
+      if (fn.equals("POW")) {
+        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.power");
+      } else if (fn.equals("TRUNCATE")) {
+        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.trunc");
+      } else {
+        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels." + fn.toLowerCase());
+      }
+    }
   }
 
   /**
@@ -83,24 +80,14 @@ public class NumericCodeGen {
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo getSingleArgNumericFnInfo(
-      String fnName, String arg1Expr, String arg1Name, boolean outputScalar) {
+      String fnName, String arg1Expr, String arg1Name) {
 
     String new_fn_name = fnName + "(" + arg1Name + ")";
-    if (outputScalar && equivalentFnMapScalars.containsKey(fnName)) {
-      String scalar_fn_str = equivalentFnMapScalars.get(fnName);
-      return new RexNodeVisitorInfo(new_fn_name, scalar_fn_str + "(" + arg1Expr + ")");
+    if (equivalentFnMap.containsKey(fnName)) {
+      return new RexNodeVisitorInfo(
+          new_fn_name, equivalentFnMap.get(fnName) + "(" + arg1Expr + ")");
     } else {
-      assert !outputScalar;
-      if (equivalentFnMapColumns.containsKey(fnName)) {
-        String fn_expr = equivalentFnMapColumns.get(fnName);
-        return new RexNodeVisitorInfo(new_fn_name, fn_expr + "(" + arg1Expr + ")");
-      } else if (equivalentPandasMethodMapColumns.containsKey(fnName)) {
-        String pandas_method = equivalentPandasMethodMapColumns.get(fnName);
-        return new RexNodeVisitorInfo(
-            new_fn_name, "pd.Series(" + arg1Expr + ")." + pandas_method + "().values");
-      } else {
-        throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
-      }
+      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + " not supported");
     }
   }
 
@@ -116,33 +103,14 @@ public class NumericCodeGen {
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo getDoubleArgNumericFnInfo(
-      String fnName,
-      String arg1Expr,
-      String arg1Name,
-      String arg2Expr,
-      String arg2Name,
-      boolean outputScalar) {
+      String fnName, String arg1Expr, String arg1Name, String arg2Expr, String arg2Name) {
 
-    String new_fn_name = fnName + "(" + arg1Name + "," + arg2Name + ")";
-    if (outputScalar && equivalentFnMapScalars.containsKey(fnName)) {
-      String scalar_fn_str = equivalentFnMapScalars.get(fnName);
-      return new RexNodeVisitorInfo(
-          new_fn_name, scalar_fn_str + "(" + arg1Expr + ", " + arg2Expr + ")");
-    } else {
-      assert !outputScalar;
-      if (equivalentFnMapColumns.containsKey(fnName)) {
-        String fn_expr = equivalentFnMapColumns.get(fnName);
-        return new RexNodeVisitorInfo(
-            new_fn_name, fn_expr + "(" + arg1Expr + ", " + arg2Expr + ")");
-      } else if (equivalentPandasMethodMapColumns.containsKey(fnName)) {
-        String pandas_method = equivalentPandasMethodMapColumns.get(fnName);
-        return new RexNodeVisitorInfo(
-            new_fn_name,
-            "pd.Series(" + arg1Expr + ")." + pandas_method + "(" + arg2Expr + ").values");
-      } else {
-        throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
-      }
+    if (!doubleArgFns.contains(fnName)) {
+      throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + " not supported");
     }
+    String new_fn_name = fnName + "(" + arg1Name + ", " + arg2Name + ")";
+    return new RexNodeVisitorInfo(
+        new_fn_name, equivalentFnMap.get(fnName) + "(" + arg1Expr + ", " + arg2Expr + ")");
   }
 
   /**
@@ -203,13 +171,9 @@ public class NumericCodeGen {
     StringBuilder exprStrBuilder = new StringBuilder();
     StringBuilder nameStrBuilder = new StringBuilder();
     if (operandsInfo.size() == 1) {
-      // One operand, we default to log10 as that is the dfault behavior in mySQL
-      if (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isScalar) {
-        exprStrBuilder.append("bodosql.libs.generated_lib.sql_null_checking_log10(");
-      } else {
-        exprStrBuilder.append("np.log10(");
-      }
-      exprStrBuilder.append(operandsInfo.get(0).getExprCode()).append(")");
+      // One operand, we default to log10 as that is the default behavior in mySQL
+      exprStrBuilder.append(
+          "bodo.libs.bodosql_array_kernels.log10(" + operandsInfo.get(0).getExprCode() + ")");
       nameStrBuilder.append("LOG(").append(operandsInfo.get(0).getName()).append(")");
     } else {
       assert operandsInfo.size() == 2;

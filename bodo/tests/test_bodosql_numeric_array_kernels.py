@@ -223,16 +223,16 @@ def test_bitand(test_bitwise_number_number):
     )
 
 
-def test_bitleftshift(test_bitwise_number_bits):
+def test_bitshiftleft(test_bitwise_number_bits):
     def impl(A, B):
-        return pd.Series(bodo.libs.bodosql_array_kernels.bitleftshift(A, B))
+        return pd.Series(bodo.libs.bodosql_array_kernels.bitshiftleft(A, B))
 
     # avoid Series conversion for scalar output
     if not isinstance(test_bitwise_number_bits[0], pd.Series):
-        impl = lambda A, B: bodo.libs.bodosql_array_kernels.bitleftshift(A, B)
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.bitshiftleft(A, B)
 
-    # Simulates BITLEFTSHIFT on a single row
-    def bitleftshift_scalar_fn(A, B):
+    # Simulates BITSHIFTLEFT on a single row
+    def bitshiftleft_scalar_fn(A, B):
         if pd.isna(A) or pd.isna(B):
             return None
         else:
@@ -241,13 +241,13 @@ def test_bitleftshift(test_bitwise_number_bits):
             else:
                 return np.uint64(A) << np.uint8(B)
 
-    bitleftshift_answer = vectorized_sol(
-        test_bitwise_number_bits, bitleftshift_scalar_fn, pd.Int64Dtype()
+    bitshiftleft_answer = vectorized_sol(
+        test_bitwise_number_bits, bitshiftleft_scalar_fn, pd.Int64Dtype()
     )
     check_func(
         impl,
         test_bitwise_number_bits,
-        py_output=bitleftshift_answer,
+        py_output=bitshiftleft_answer,
         check_dtype=False,
         reset_index=True,
         sort_output=False,
@@ -323,28 +323,28 @@ def test_bitor(test_bitwise_number_number):
     )
 
 
-def test_bitrightshift(test_bitwise_number_bits):
+def test_bitshiftright(test_bitwise_number_bits):
     def impl(A, B):
-        return pd.Series(bodo.libs.bodosql_array_kernels.bitrightshift(A, B))
+        return pd.Series(bodo.libs.bodosql_array_kernels.bitshiftright(A, B))
 
     # avoid Series conversion for scalar output
     if not isinstance(test_bitwise_number_bits[0], pd.Series):
-        impl = lambda A, B: bodo.libs.bodosql_array_kernels.bitrightshift(A, B)
+        impl = lambda A, B: bodo.libs.bodosql_array_kernels.bitshiftright(A, B)
 
-    # Simulates BITRIGHTSHIFT on a single row
-    def bitrightshift_scalar_fn(A, B):
+    # Simulates BITSHIFTRIGHT on a single row
+    def bitshiftright_scalar_fn(A, B):
         if pd.isna(A) or pd.isna(B):
             return None
         else:
             return A >> B
 
-    bitrightshift_answer = vectorized_sol(
-        test_bitwise_number_bits, bitrightshift_scalar_fn, pd.Int64Dtype()
+    bitshiftright_answer = vectorized_sol(
+        test_bitwise_number_bits, bitshiftright_scalar_fn, pd.Int64Dtype()
     )
     check_func(
         impl,
         test_bitwise_number_bits,
-        py_output=bitrightshift_answer,
+        py_output=bitshiftright_answer,
         check_dtype=False,
         reset_index=True,
         sort_output=False,
@@ -942,8 +942,8 @@ def test_bitwise_option():
             bodo.libs.bodosql_array_kernels.bitxor(arg0, arg1),
             bodo.libs.bodosql_array_kernels.bitnot(arg0),
             bodo.libs.bodosql_array_kernels.bitnot(arg1),
-            bodo.libs.bodosql_array_kernels.bitleftshift(arg0, arg1),
-            bodo.libs.bodosql_array_kernels.bitrightshift(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.bitshiftleft(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.bitshiftright(arg0, arg1),
             bodo.libs.bodosql_array_kernels.getbit(arg0, arg1),
         )
 
@@ -1044,6 +1044,179 @@ def test_negate_option():
     for flag0 in [True, False]:
         answer = -42 if flag0 else None
         check_func(impl, (42, flag0), py_output=answer)
+
+
+test_arrs = [
+    pd.Series([0, 0.5, 1, -1, -0.5, 0.3212, -0.78]),
+    pd.Series(
+        [
+            0,
+            1,
+            -1,
+            10000,
+            -100000,
+            20,
+            -139,
+        ]
+    ),
+    pd.Series([0, 1, 2, 3, 4, 5, 20]),
+    pd.Series([1, -1, 0.1, -0.1, 1234, np.nan, -4321, 3], dtype=np.float32),
+    pd.Series([-1, 0, 1, None, 2], dtype=pd.Int32Dtype()),
+    pd.Series([0, 2, 3, 5, 3], dtype=np.uint32),
+]
+
+single_arg_np_map = {
+    "abs": "np.abs",
+    "cbrt": "np.cbrt",
+    "ceil": "np.ceil",
+    "exp": "np.exp",
+    "factorial": "(lambda x: np.math.factorial(np.int64(x)) if np.abs(np.int64(x)) == x else None)",
+    "floor": "np.floor",
+    "ln": "np.log",
+    "log2": "np.log2",
+    "log10": "np.log10",
+    "sign": "np.sign",
+    "sqrt": "np.sqrt",
+    "square": "np.square",
+}
+single_arg_np_list = list(single_arg_np_map.keys())
+double_arg_np_map = {
+    "mod": "(lambda a, b: np.mod(a, b) + (np.sign(a) * b) if np.mod(a, b) != 0 and np.sign(np.mod(a, b)) != np.sign(a) else np.mod(a, b))",
+    "power": "(lambda a, b: np.power(np.float64(a), b))",
+    "round": "np.round",
+    "trunc": "(lambda a, b: np.trunc(a * (10 ** b)) * (10 ** -b) if int(b) == b else np.nan)",
+}
+double_arg_np_list = list(double_arg_np_map.keys())
+
+
+@pytest.mark.parametrize("arr", test_arrs)
+@pytest.mark.parametrize("func", single_arg_np_list)
+def test_numeric_single_arg_funcs(arr, func):
+    if func == "factorial":
+        if np.any(np.abs(arr) > 20):
+            return  # skip factorial for large values
+    test_impl = "def impl(arr):\n"
+    test_impl += f"  return pd.Series(bodo.libs.bodosql_array_kernels.{func}(arr))"
+    impl_vars = {}
+    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
+
+    # Simulates numeric on a single row
+    scalar_impl = "def impl(elem):\n"
+    scalar_impl += (
+        f"  return {single_arg_np_map[func]}(elem) if not pd.isna(elem) else None"
+    )
+    scalar_vars = {}
+    exec(scalar_impl, {"np": np, "pd": pd}, scalar_vars)
+    numeric_answer = vectorized_sol((arr,), scalar_vars["impl"], np.float64)
+    check_func(
+        impl_vars["impl"],
+        (arr,),
+        py_output=numeric_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize("func", single_arg_np_list)
+def test_numeric_single_arg_option(func):
+
+    test_impl = "def impl(a, flag0):\n"
+    test_impl += "  arg0 = a if flag0 else None\n"
+    test_impl += f"  return bodo.libs.bodosql_array_kernels.{func}(arg0)"
+    impl_vars = {}
+    exec(test_impl, {"bodo": bodo}, impl_vars)
+
+    for flag0 in [True, False]:
+        answer = eval(f"{single_arg_np_map[func]}(0.75)") if flag0 else None
+        check_func(impl_vars["impl"], (0.75, flag0), py_output=answer)
+
+
+@pytest.mark.parametrize(
+    "arr1",
+    [
+        pd.Series([0, 1, 2, 3, 4, 5, 6] * 2),
+        pd.Series([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5] * 2),
+        pd.Series([0, -1.5, -2, -3.5, -4.5, -5, -6.5] * 2),
+        pd.Series([0, -1, -2, -3, -4, -5, -6] * 2, dtype=np.int32),
+    ],
+)
+@pytest.mark.parametrize(
+    "arr0",
+    [
+        pd.Series(
+            [0, 1, 2, 3, 4, 5, 6, None, -1, -2, -3, -4, -5, -6], dtype=pd.Int32Dtype()
+        ),
+        pd.Series(
+            [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 0, -1.5, -2, -3.5, -4.5, -5, -6.5],
+            dtype=np.float32,
+        ),
+        pd.Series(
+            [
+                0.52343,
+                1.3434325,
+                2.3435,
+                None,
+                3.345,
+                4,
+                5.5764,
+                6.982334235,
+                120.5233,
+                None,
+                134.325,
+                69.82334235,
+                None,
+                None,
+            ]
+        ),
+    ],
+)
+@pytest.mark.parametrize("func", double_arg_np_list)
+def test_numeric_double_arg_funcs(arr0, arr1, func):
+    if len(arr0) != len(arr1):
+        return
+    if func == "round":
+        if any(np.int64(arr1) != arr1):
+            return
+    test_impl = "def impl(arr0, arr1):\n"
+    test_impl += (
+        f"  return pd.Series(bodo.libs.bodosql_array_kernels.{func}(arr0, arr1))"
+    )
+    impl_vars = {}
+    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
+
+    # Simulates numeric func on a single row
+    scalar_impl = "def impl(elem0, elem1):\n"
+    scalar_impl += f"    return {double_arg_np_map[func]}(elem0, elem1) if not pd.isna(elem0) and not pd.isna(elem1) else None"
+    scalar_vars = {}
+    exec(scalar_impl, {"np": np, "pd": pd}, scalar_vars)
+
+    numeric_func_answer = vectorized_sol((arr0, arr1), scalar_vars["impl"], np.float64)
+    check_func(
+        impl_vars["impl"],
+        (arr0, arr1),
+        py_output=numeric_func_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize("func", double_arg_np_list)
+def test_numeric_double_arg_option(func):
+    test_impl = "def impl(a, b, flag0, flag1):\n"
+    test_impl += "  arg0 = a if flag0 else None\n"
+    test_impl += "  arg1 = b if flag1 else None\n"
+    test_impl += f"  return bodo.libs.bodosql_array_kernels.{func}(arg0, arg1)"
+    impl_vars = {}
+    exec(test_impl, {"bodo": bodo}, impl_vars)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (
+                eval(f"{double_arg_np_map[func]}(4.555, 2)")
+                if flag0 and flag1
+                else None
+            )
+            check_func(impl_vars["impl"], (4.555, 2, flag0, flag1), py_output=answer)
 
 
 @pytest.mark.slow

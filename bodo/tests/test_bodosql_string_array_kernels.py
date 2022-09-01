@@ -3,6 +3,8 @@
 """
 
 
+from builtins import round as py_round
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -357,7 +359,7 @@ def test_format(args):
         if pd.isna(elem) or pd.isna(places):
             return None
         elif places <= 0:
-            return "{:,}".format(round(elem))
+            return "{:,}".format(py_round(elem))
         else:
             return (f"{{:,.{places}f}}").format(elem)
 

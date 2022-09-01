@@ -58,7 +58,7 @@ public class TrigCodeGen {
   public static RexNodeVisitorInfo getDoubleArgTrigFnInfo(
       String fnName, String arg1Expr, String arg1Name, String arg2Expr, String arg2Name) {
     // Only ATAN2 is a double argument function
-    assert doubleArgFns.contains(fnName);
+    assert doubleArgFns.contains(fnName.toLowerCase());
     String new_fn_name = fnName + "(" + arg1Name + "," + arg2Name + ")";
     return new RexNodeVisitorInfo(
         new_fn_name, equivalentFnMap.get(fnName) + "(" + arg1Expr + ", " + arg2Expr + ")");
