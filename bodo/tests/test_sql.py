@@ -24,6 +24,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    _get_dist_arg,
     check_func,
     get_snowflake_connection_string,
     get_start_end,
@@ -2212,6 +2213,82 @@ def test_to_sql_snowflake_user2(memory_leak_check):
     # Can't read with pandas because it will throw an error if the username has
     # special characters
     check_func(read, (conn,), py_output=df, dist_test=False, check_dtype=False)
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_to_sql_colname_case(memory_leak_check):
+    """
+    Tests that df.to_sql works with different upper/lower case of column name
+    """
+    import platform
+
+    # This test runs on both Mac and Linux, so give each table a different
+    # name for the highly unlikely but possible case the tests run concurrently.
+    # We use uppercase table names as Snowflake by default quotes identifiers.
+    if platform.system() == "Darwin":
+        name = "TEST_CASE_MAC"
+    else:
+        name = "TEST_CASE_LINUX"
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    # Setting all data to be int as we don't care about values in this test.
+    # We're just ensuring that column names match with different cases.
+    np.random.seed(5)
+    random.seed(5)
+    # NOTE: We're testing the to_sql is writing columns correctly.
+    # For read: all uppercase column names will fail if compared
+    # to actual dataframe. This is because we match Pandas Behavior where
+    # all uppercase names are returned as lowercase. See _get_sql_df_type_from_db
+    df = pd.DataFrame(
+        {
+            # all lower
+            "aaa": np.random.randint(0, 500, 10),
+            # all upper
+            "BBB": np.random.randint(0, 500, 10),
+            # mix
+            "CdEd": np.random.randint(0, 500, 10),
+            # lower with special char.
+            "d_e_$": np.random.randint(0, 500, 10),
+            # upper with special char.
+            "F_G_$": np.random.randint(0, 500, 10),
+            # no letters
+            "_123$": np.random.randint(0, 500, 10),
+            # special character only
+            "_$": np.random.randint(0, 500, 10),
+            # lower with number
+            "a12": np.random.randint(0, 500, 10),
+            # upper with number
+            "B12C": np.random.randint(0, 500, 10),
+        }
+    )
+
+    @bodo.jit(distributed=["df"])
+    def test_write(df, name, conn, schema):
+        df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
+
+    test_write(_get_dist_arg(df), name, conn, schema)
+
+    def sf_read(conn):
+        return pd.read_sql(f"select * from {name}", conn)
+
+    bodo_result = bodo_result = bodo.jit(sf_read)(conn)
+    bodo_result = bodo.gatherv(bodo_result)
+
+    passed = 1
+    if bodo.get_rank() == 0:
+        try:
+            py_output = sf_read(conn)
+            # disable dtype check. Int16 vs. int64
+            pd.testing.assert_frame_equal(bodo_result, py_output, check_dtype=False)
+        except Exception as e:
+            print("".join(traceback.format_exception(None, e, e.__traceback__)))
+            passed = 0
+
+    n_passed = reduce_sum(passed)
+    n_pes = bodo.get_size()
+    assert n_passed == n_pes, "test_to_sql_colname_case failed"
 
 
 @pytest.mark.slow
