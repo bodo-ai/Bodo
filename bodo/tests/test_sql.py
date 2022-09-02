@@ -501,7 +501,7 @@ def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
         if bodo.get_rank() == 0:  # warning is thrown only on rank 0
             with pytest.warns(
                 BodoWarning,
-                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'L_SUPPKEY'}",
+                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'l_suppkey'}",
             ):
                 test_impl8(query, conn)
         else:
@@ -516,7 +516,7 @@ def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
         if bodo.get_rank() == 0:
             with pytest.warns(
                 BodoWarning,
-                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'L_SUPPKEY'}",
+                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'l_suppkey'}",
             ):
                 test_impl9(query, conn)
         else:
@@ -529,7 +529,7 @@ def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
         if bodo.get_rank() == 0:  # warning is thrown only on rank 0
             with pytest.warns(
                 BodoWarning,
-                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'L_SUPPKEY'}",
+                match="The following columns are not of datatype string and hence cannot be read with dictionary encoding: {'l_suppkey'}",
             ):
                 test_impl10(query, conn)
         else:
