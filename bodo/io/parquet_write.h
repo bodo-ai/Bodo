@@ -57,10 +57,10 @@ int64_t pq_write(
     const char *metadata, const char *compression, bool is_parallel,
     bool write_rangeindex_to_metadata, const int ri_start, const int ri_stop,
     const int ri_step, const char *idx_name, const char *bucket_region,
-    int64_t row_group_size, const char *prefix,
+    int64_t row_group_size, const char *prefix, std::string tz = "",
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
     std::unordered_map<std::string, std::string> schema_metadata_pairs = {},
-    std::string filename = "", std::string tz = "",
-    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO);
+    std::string filename = "");
 
 int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
                           const array_info *col_names_arr,
@@ -69,7 +69,8 @@ int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
                           bool is_parallel, bool write_rangeindex_to_metadata,
                           const int ri_start, const int ri_stop,
                           const int ri_step, const char *idx_name,
-                          const char *bucket_region, int64_t row_group_size);
+                          const char *bucket_region, int64_t row_group_size,
+                          const char *tz);
 
 /**
  * Write the Bodo table (this process' chunk) to a partitioned directory of
