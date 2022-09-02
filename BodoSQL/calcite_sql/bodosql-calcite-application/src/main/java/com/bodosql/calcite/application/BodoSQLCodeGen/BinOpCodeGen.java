@@ -259,7 +259,9 @@ public class BinOpCodeGen {
     StringBuilder newArg = new StringBuilder();
     // This generates code as (False if (pd.isna(col0) or ... pd.isna(coln)) else argCode)
     // There may be ways to refactor this to generate more efficient code.
+    newArg.append("(");
     newArg.append(generateNullCheck(inputVar, colNames, nullSet, "False", argCode, isSingleRow));
+    newArg.append(")");
     if (appendOperator) {
       if (isScalar) {
         newArg.append(" or ");
