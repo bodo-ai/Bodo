@@ -1,7 +1,7 @@
 #! /bin/bash
 set -e -u -x
 
-cd /BodoSQL/bodosql
+cd bodosql/BodoSQL
 
 export PYBIN=/opt/python/cp39-cp39/bin
 
@@ -14,4 +14,4 @@ ${PYBIN}/python -m pip install twine
 
 # upload with twine to PyPI
 cp .pypirc ~/.pypirc
-$PYBIN/python -m twine upload -r pypi /bodosql/dist/*.whl
+$PYBIN/python -m twine upload -r pypi /bodosql/BodoSQL/dist/*.whl
