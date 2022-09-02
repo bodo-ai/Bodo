@@ -53,12 +53,12 @@ jobs:
         AWS_SAK=`cat $HOME/ecr_secret_file | grep ASAK | cut -f 2 -d' '`
 
         # save the PyPI username and password to ~/.pypirc for twine to pick it up
-        echo -e "[pypi]\nusername = __token__ \npassword = ${PYPI_TOKEN}" > .pypirc
+        echo -e "[pypi]\nusername = __token__ \npassword = ${PYPI_TOKEN}" > BodoSQL/.pypirc
 
         # login to ECR and run the docker
         aws_token=`AWS_ACCESS_KEY_ID=$AWS_AKI AWS_SECRET_ACCESS_KEY=$AWS_SAK AWS_DEFAULT_REGION=us-east-2 aws ecr get-login-password`
         docker login -u AWS -p $aws_token https://427443013497.dkr.ecr.us-east-2.amazonaws.com/bodosql-pip-ubuntu
         #TODO: figure this out
-        docker run -v `pwd`:/bodosql -e IS_RELEASE=$IS_RELEASE -e CHECK_LICENSE_EXPIRED=$CHECK_LICENSE_EXPIRED -e CHECK_LICENSE_CORE_COUNT=$CHECK_LICENSE_CORE_COUNT 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodosql-pip-ubuntu:1.0 /bodosql/buildscripts/pip/centos7/generate_manylinux_wheels.sh
+        docker run -v `pwd`:/bodosql -e IS_RELEASE=$IS_RELEASE -e CHECK_LICENSE_EXPIRED=$CHECK_LICENSE_EXPIRED -e CHECK_LICENSE_CORE_COUNT=$CHECK_LICENSE_CORE_COUNT 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodosql-pip-ubuntu:1.0 /bodosql/buildscripts/bodosql/pip/centos7/generate_manylinux_wheels.sh
       fi
     displayName: 'Build and publish pip wheel'
