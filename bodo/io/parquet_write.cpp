@@ -582,9 +582,10 @@ int64_t pq_write(
     const char *metadata, const char *compression, bool is_parallel,
     bool write_rangeindex_to_metadata, const int ri_start, const int ri_stop,
     const int ri_step, const char *idx_name, const char *bucket_region,
-    int64_t row_group_size, const char *prefix,
+    int64_t row_group_size, const char *prefix, std::string tz,
+    arrow::TimeUnit::type time_unit,
     std::unordered_map<std::string, std::string> schema_metadata_pairs,
-    std::string filename, std::string tz, arrow::TimeUnit::type time_unit) {
+    std::string filename) {
     tracing::Event ev("pq_write", is_parallel);
     ev.add_attribute("g_path", _path_name);
     ev.add_attribute("g_write_index", write_index);
@@ -818,12 +819,13 @@ int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
                           const int ri_start, const int ri_stop,
                           const int ri_step, const char *idx_name,
                           const char *bucket_region, int64_t row_group_size,
-                          const char *prefix) {
+                          const char *prefix, const char *tz) {
     try {
-        int64_t file_size = pq_write(
-            _path_name, table, col_names_arr, index, write_index, metadata,
-            compression, is_parallel, write_rangeindex_to_metadata, ri_start,
-            ri_stop, ri_step, idx_name, bucket_region, row_group_size, prefix);
+        int64_t file_size =
+            pq_write(_path_name, table, col_names_arr, index, write_index,
+                     metadata, compression, is_parallel,
+                     write_rangeindex_to_metadata, ri_start, ri_stop, ri_step,
+                     idx_name, bucket_region, row_group_size, prefix, tz);
         return file_size;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

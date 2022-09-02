@@ -1714,9 +1714,6 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
         ]
         list_datetime = pd.date_range("2001-01-01", periods=len_list)
         list_date = pd.date_range("2001-01-01", periods=len_list).date
-        # [BE-3530] TODO This test fails because Snowflake write silently fails on timestamps.
-        # Use the commented-out code once this bug is fixed.
-        """
         df_in = pd.DataFrame(
             {
                 "A": list_int,
@@ -1729,21 +1726,14 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
         df_schema_str = (
             '"A" NUMBER(38, 0), "B" REAL, "C" TEXT, "D" TIMESTAMP_NTZ(9), "E" DATE'
         )
-        """
-        df_in = pd.DataFrame(
-            {
-                "A": list_int,
-                "B": list_double,
-                "C": list_string,
-                "E": list_date,
-            }
-        )
-        df_schema_str = '"A" NUMBER(38, 0), "B" REAL, "C" TEXT, "E" DATE'
-        # End of portion relevant to [BE-3530]
 
         start, end = get_start_end(len(df_in))
         df_input = df_in.iloc[start:end]
-        df_input.to_parquet(df_path)
+        # Write parquet file with Bodo to be able to handle timestamp tz type.
+        def test_write(df_input):
+            df_input.to_parquet(df_path, _bodo_timestamp_tz="UTC")
+
+        bodo.jit(distributed=False)(test_write)(df_input)
 
         upload_put_sql = (
             f"PUT 'file://{df_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
@@ -2120,9 +2110,7 @@ def test_to_sql_snowflake(
                 )
                 for _ in range(df_size)
             ],
-            # [BE-3530] TODO Snowflake write fails to handle datetime's properly.
-            # Uncomment the line below once this issue is resolved.
-            # "d": pd.date_range("2001-01-01", periods=df_size),
+            "d": pd.date_range("2001-01-01", periods=df_size),
             "e": pd.date_range("2001-01-01", periods=df_size).date,
         }
     )
@@ -2194,9 +2182,7 @@ def test_to_sql_snowflake_user2(memory_leak_check):
                 )
                 for _ in range(1000)
             ],
-            # [BE-3530] TODO Snowflake write fails to handle datetime's properly.
-            # Uncomment the line below once this issue is resolved.
-            # "d": pd.date_range("2002-01-01", periods=1000),
+            "d": pd.date_range("2002-01-01", periods=1000),
             "e": pd.date_range("2002-01-01", periods=1000).date,
         }
     )

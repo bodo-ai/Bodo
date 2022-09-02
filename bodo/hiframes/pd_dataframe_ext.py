@@ -3694,6 +3694,7 @@ def to_parquet_overload(
     storage_options=None,
     row_group_size=-1,
     _bodo_file_prefix="part-",
+    _bodo_timestamp_tz=None,
     # TODO handle possible **kwargs options?
     _is_parallel=False,  # IMPORTANT: this is a Bodo parameter and must be in the last position
 ):
@@ -3747,6 +3748,14 @@ def to_parquet_overload(
 
     if not is_overload_int(row_group_size):
         raise BodoError("to_parquet(): row_group_size must be integer")
+    # Users can use this to specify timestamp tz string name
+    if not is_overload_none(_bodo_timestamp_tz) and (
+        not is_overload_constant_str(_bodo_timestamp_tz)
+        or not get_overload_const_str(_bodo_timestamp_tz)
+    ):
+        raise BodoError(
+            "to_parquet(): _bodo_timestamp_tz must be None or a constant string"
+        )
 
     from bodo.io.parquet_pio import (
         parquet_write_table_cpp,
@@ -3860,7 +3869,7 @@ def to_parquet_overload(
             for i in range(len(df.columns))
         )
 
-    func_text = "def df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _bodo_file_prefix='part-', _is_parallel=False):\n"
+    func_text = "def df_to_parquet(df, path, engine='auto', compression='snappy', index=None, partition_cols=None, storage_options=None, row_group_size=-1, _bodo_file_prefix='part-', _bodo_timestamp_tz=None, _is_parallel=False):\n"
     # put arrays in table_info
     if df.is_table_format:
         func_text += "    py_table = get_dataframe_table(df)\n"
@@ -3909,6 +3918,8 @@ def to_parquet_overload(
         func_text += '    metadata = """' + pandas_metadata_str + '"""\n'
     func_text += "    if compression is None:\n"
     func_text += "        compression = 'none'\n"
+    func_text += "    if _bodo_timestamp_tz is None:\n"
+    func_text += "        _bodo_timestamp_tz = ''\n"
     func_text += "    if df.index.name is not None:\n"
     func_text += "        name_ptr = df.index.name\n"
     func_text += "    else:\n"
@@ -3964,7 +3975,10 @@ def to_parquet_overload(
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region),\n"
         func_text += "                            row_group_size,\n"
-        func_text += "                            unicode_to_utf8(_bodo_file_prefix))\n"
+        func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
+        func_text += (
+            "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
+        )
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names)\n"
@@ -3978,7 +3992,10 @@ def to_parquet_overload(
         func_text += "                            unicode_to_utf8(name_ptr),\n"
         func_text += "                            unicode_to_utf8(bucket_region),\n"
         func_text += "                            row_group_size,\n"
-        func_text += "                            unicode_to_utf8(_bodo_file_prefix))\n"
+        func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
+        func_text += (
+            "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
+        )
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names)\n"
@@ -4426,6 +4443,7 @@ def to_sql_overload(
         # file is already a reasonable size for one row group.
         "                chunksize,\n"  # row_group_size
         "                unicode_to_utf8('null'),\n"  # prefix
+        "                unicode_to_utf8('UTC'),\n"  # Explicitly set tz='UTC' for snowflake write. see [BE-3530]
         "            )\n"
         "            ev_pq_write_cpp.finalize()\n"
         "            delete_table_decref_arrays(table_chunk)\n"

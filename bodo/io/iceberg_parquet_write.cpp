@@ -52,8 +52,8 @@ void iceberg_pq_write(const char *fname, const char *table_data_loc,
     // naive, it won't matter.
     *file_size_in_bytes = pq_write(
         table_data_loc, table, col_names_arr, nullptr, false, "", compression,
-        is_parallel, false, 0, 0, 0, "", bucket_region, row_group_size, "", md,
-        std::string(fname), "UTC", arrow::TimeUnit::MICRO);
+        is_parallel, false, 0, 0, 0, "", bucket_region, row_group_size, "",
+        "UTC", arrow::TimeUnit::MICRO, md, std::string(fname));
     *record_count = table->nrows();
 }
 
