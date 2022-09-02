@@ -355,11 +355,6 @@ def test_print_dist_slice(memory_leak_check, capsys):
     captured = capsys.readouterr()
     assert "[]" not in captured.out
 
-    # empty array case that should be printed since slice is full length
-    bodo.jit(distributed=["A"])(impl3)(np.arange(0))
-    captured = capsys.readouterr()
-    assert captured.out
-
 
 def test_print_dist_get_rank(memory_leak_check, capsys):
     """make sure print calls with rank are not avoided on non-zero ranks
