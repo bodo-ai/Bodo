@@ -3188,10 +3188,19 @@ def _get_sql_df_type_from_db(
                 for i, t in enumerate(col_types):
                     if t == string_array_type:
                         str_col_name_to_ind[col_names[i]] = i
+
+                # Map the snowflake original column name to the name that
+                # is used from Python. This is used for comparing with
+                # _bodo_read_as_dict which will use Python's convention.
+                snowflake_case_map = {
+                    name.lower() if name.isupper() else name: name
+                    for name in str_col_name_to_ind.keys()
+                }
+
                 # If user-provided list has any columns that are not string
                 # type, show a warning.
                 non_str_columns_in_read_as_dict_cols = (
-                    str_as_dict_cols - str_col_name_to_ind.keys()
+                    str_as_dict_cols - snowflake_case_map.keys()
                 )
                 if len(non_str_columns_in_read_as_dict_cols) > 0:
                     if bodo.get_rank() == 0:
@@ -3200,16 +3209,18 @@ def _get_sql_df_type_from_db(
                                 f"The following columns are not of datatype string and hence cannot be read with dictionary encoding: {non_str_columns_in_read_as_dict_cols}"
                             )
                         )
-                convert_dict_col_names = str_col_name_to_ind.keys() & str_as_dict_cols
+                convert_dict_col_names = snowflake_case_map.keys() & str_as_dict_cols
                 for name in convert_dict_col_names:
-                    col_types[str_col_name_to_ind[name]] = dict_str_arr_type
+                    col_types[
+                        str_col_name_to_ind[snowflake_case_map[name]]
+                    ] = dict_str_arr_type
 
                 query_args, string_col_ind = [], []
-                undetermined_str_cols = str_col_name_to_ind.keys() - str_as_dict_cols
+                undetermined_str_cols = snowflake_case_map.keys() - str_as_dict_cols
                 for name in undetermined_str_cols:
                     # Always quote column names for correctness
-                    query_args.append(f'count (distinct "{name}")')
-                    string_col_ind.append(str_col_name_to_ind[name])
+                    query_args.append(f'count (distinct "{snowflake_case_map[name]}")')
+                    string_col_ind.append(str_col_name_to_ind[snowflake_case_map[name]])
                 if len(query_args) != 0:
                     # the criterion with which we determine whether to convert or not
                     criterion = bodo.io.snowflake.DICT_ENCODE_CRITERION
