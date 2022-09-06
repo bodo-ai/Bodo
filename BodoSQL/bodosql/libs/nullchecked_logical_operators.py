@@ -10,13 +10,16 @@ import bodo
 
 @generated_jit(nopython=True)
 def mysql_nullchecking_scalar_or(arg0, arg1):
-    "Function that replicates the behavior of MYSQL's or function on scalar values"
+    """
+    Function that replicates the behavior of MYSQL's or function on scalar values, properly
+    handling the null/optional cases.
 
-    # in the null case,
-    # TRUE OR NULL = TRUE
-    # FALSE OR NULL = NULL
-    # NULL OR TRUE = TRUE
-    # see https://spark.apache.org/docs/3.0.0-preview/sql-ref-null-semantics.html#logical-operators
+    In the null case,
+    TRUE OR NULL = TRUE
+    FALSE OR NULL = NULL
+    NULL OR TRUE = TRUE
+    see https://spark.apache.org/docs/3.0.0-preview/sql-ref-null-semantics.html#logical-operators
+    """
 
     if isinstance(arg0, bodo.optional) or isinstance(arg1, bodo.optional):
 
@@ -51,13 +54,17 @@ def mysql_nullchecking_scalar_or(arg0, arg1):
 
 @generated_jit(nopython=True)
 def mysql_nullchecking_scalar_and(arg0, arg1):
-    "Function that replicates the behavior of MYSQL's and function on scalar values"
+    """
+    Function that replicates the behavior of MYSQL's and function on scalar
+    values, properly handling the null/optional cases.
 
-    # in the null case,
-    # FALSE AND NULL = FALSE
-    # TRUE AND NULL = NULL
-    # NULL AND FALSE = NULL
-    # see https://spark.apache.org/docs/3.0.0-preview/sql-ref-null-semantics.html#logical-operators
+    in the null case,
+    FALSE AND NULL = FALSE
+    TRUE AND NULL = NULL
+    NULL AND FALSE = NULL
+    see https://spark.apache.org/docs/3.0.0-preview/sql-ref-null-semantics.html#logical-operators
+    """
+
     if arg0 == bodo.none:
         return lambda arg0, arg1: None
     elif isinstance(arg0, bodo.optional) or isinstance(arg1, bodo.optional):

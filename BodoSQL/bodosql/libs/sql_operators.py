@@ -5,7 +5,7 @@
 
 import pandas as pd
 from numba import generated_jit
-from numba.extending import overload
+from numba.extending import overload, register_jitable
 
 import bodo
 
@@ -55,9 +55,13 @@ def overload_sql_null_equal_column(arg0, arg1):
 
 @generated_jit(nopython=True)
 def sql_null_equal_scalar(arg0, arg1):
-    "Function that replicates the behavior of MYSQL's <=> operator on scalars"
-    # If any input is none the other input must also be an NA value.
-    # To support values like np.nan, we also check NA at runtime.
+    """
+    Function that replicates the behavior of MYSQL's <=> operator on scalars,
+    properly handling the null/optional cases. Equivalent to =, but returns
+    true if both inputs are None/NA. To support values like np.nan, we also
+    check NA at runtime.
+    """
+
     if arg0 == bodo.none and arg1 == bodo.none:
         return lambda arg0, arg1: True
     elif isinstance(arg0, bodo.optional) or isinstance(arg1, bodo.optional):
@@ -74,7 +78,7 @@ def sql_null_equal_scalar(arg0, arg1):
         return lambda arg0, arg1: null_equal_runtime(arg0, arg1)
 
 
-@bodo.jit
+@register_jitable
 def null_equal_runtime(arg0, arg1):
     if pd.isna(arg0) and pd.isna(arg1):
         return True
@@ -84,11 +88,11 @@ def null_equal_runtime(arg0, arg1):
         return arg0 == arg1
 
 
-@bodo.jit
+@register_jitable
 def pd_to_datetime_with_format(s, my_format):
     return pd.to_datetime(s, format=my_format)
 
 
-@bodo.jit
+@register_jitable
 def sql_dow(x):
     return (x.dayofweek + 1) % 7 + 1
