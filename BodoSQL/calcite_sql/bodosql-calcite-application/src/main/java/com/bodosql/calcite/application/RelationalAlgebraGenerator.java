@@ -152,14 +152,14 @@ public class RelationalAlgebraGenerator {
               .defaultSchema(schema.getSubSchema(firstSchemaName))
               .operatorTable(new ChainedSqlOperatorTable(sqlOperatorTables))
               .typeSystem(typeSystem)
-              // Currently, Calcite only supports SOME/ANY if isExpand = false.
-              // The threshold value is used to determine, when handling a SOME/ANY clause,
+              // Currently, Calcite only supports SOME/ANY/ALL if isExpand = false.
+              // The threshold value is used to determine, when handling a SOME/ANY/ALL clause,
               // at what point the converter switches from simply creating a sequence of and's and
               // or's,
               // and instead do an inner join/filter on the values. See BS-553.
               .sqlToRelConverterConfig(
                   SqlToRelConverter.config().withInSubQueryThreshold(Integer.MAX_VALUE))
-              .parserConfig(
+              .parserConfig( 
                   SqlParser.Config.DEFAULT
                       .withCaseSensitive(false)
                       .withQuoting(Quoting.BACK_TICK)

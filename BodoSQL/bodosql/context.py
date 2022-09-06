@@ -660,6 +660,7 @@ class BodoSQLContext:
             bodo.utils.typing.raise_bodo_error(
                 "BodoSQLContext passed empty query string"
             )
+
         generator = self._create_generator()
 
         if optimized:

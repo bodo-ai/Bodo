@@ -539,6 +539,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           LEN,
           LENGTH,
           SqlLibraryOperators.RLIKE,
+          SqlLibraryOperators.ILIKE,
           SqlLibraryOperators.REGEXP,
           RLIKE);
 

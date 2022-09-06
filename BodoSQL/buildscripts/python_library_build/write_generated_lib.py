@@ -128,6 +128,21 @@ def generate_and_write_library():
                 (lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}))"),
                 2,
             ),
+            # stuff for case insensitive like
+            (
+                "in_nocase",
+                (
+                    lambda args_list: f"({args_list[0]}.lower() in {args_list[1]}.lower())"
+                ),
+                2,
+            ),
+            (
+                "re_match_nocase",
+                (
+                    lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}), flags=re.I)"
+                ),
+                2,
+            ),
             # DATETIME fns
             ("timestamp_dayfloor", lambda x: f"{x[0]}.floor(freq='D')", 1),
             ("strftime", generate_standard_method_call("strftime"), 2),
