@@ -688,8 +688,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
           "Insert Into is only supported with table destinations provided via the Snowflake"
               + "catalog or the SQL TablePath API");
     }
-
-    outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar));
+    String castExpr = bodoSqlTable.generateWriteCastCode(outVar);
+    if (castExpr != "") {
+      outputCode.append(getBodoIndent()).append(outVar).append(" = ").append(castExpr).append("\n");
+    }
+    outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
     this.generatedCode.append(outputCode);
   }
 
@@ -2907,7 +2910,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String readCode = table.generateReadCode();
       // Add the table to cached values
       this.generatedCode.append(String.format("  %s = %s\n", outVar, readCode));
-      String castExpr = table.generateCastCode(outVar);
+      String castExpr = table.generateReadCastCode(outVar);
       if (castExpr != "") {
         this.generatedCode.append(String.format("  %s = %s\n", outVar, castExpr));
       }
