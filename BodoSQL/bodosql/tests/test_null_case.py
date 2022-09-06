@@ -23,7 +23,6 @@ def test_null_then(bodosql_nullable_numeric_types, spark_info, memory_leak_check
     )
 
 
-@pytest.mark.skip("[BS-157] Boolean output optimized to AND expr with incorrect result")
 def test_null_then_handled(
     bodosql_nullable_numeric_types, spark_info, memory_leak_check
 ):
@@ -71,7 +70,6 @@ def test_null_else(bodosql_nullable_numeric_types, spark_info, memory_leak_check
     )
 
 
-@pytest.mark.skip("[BS-157] Boolean output optimized to AND expr with incorrect result")
 def test_null_else_handled(
     bodosql_nullable_numeric_types, spark_info, memory_leak_check
 ):

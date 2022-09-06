@@ -1143,11 +1143,8 @@ def remove_dead_columns(
                     )
                     n_in_table_arrs = get_overload_const_int(typemap[rhs.args[3].name])
 
-                    in_table = (
-                        "table"
-                        if any(i < n_in_table_arrs for i in in_used_cols)
-                        else "None"
-                    )
+                    # Always use the table because we can prune all of the columns.
+                    in_table = "table"
                     n_extra_arrs = len(typemap[rhs.args[1].name].types)
                     if all(
                         i in in_used_cols

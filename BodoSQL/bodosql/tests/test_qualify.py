@@ -568,9 +568,6 @@ def test_QUALIFY_eval_order_LIMIT(spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip(
-    "Generates a plan not currently handled in BODOSQL: AND's between scalar boolean NULL and series: see https://bodo.atlassian.net/browse/BE-3205"
-)
 def test_QUALIFY_nested_queries(spark_info, memory_leak_check):
     """stress test to ensure that qualify works with nested subqueries"""
 
@@ -582,22 +579,14 @@ def test_QUALIFY_nested_queries(spark_info, memory_leak_check):
         }
     )
 
-    table2 = pd.DataFrame(
-        {
-            "A": [1, 2, 3, 4, 5, 6, 7] * 3,
-            "B": [1, 1, 2, 2, 3, 3, 4] * 3,
-            "C": [1, 1, 1, 2, 2, 3, 3] * 3,
-        }
-    )
+    ctx = {"table1": table1}
 
-    ctx = {"table1": table1, "table2": table2}
-
-    bodosql_query1 = f"SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C) as w FROM table1 QUALIFY w < 10"
-    bodosql_query2 = f"SELECT MAX(A) over (PARTITION BY C ORDER BY B) as x FROM table1 QUALIFY x in ({bodosql_query1})"
+    bodosql_query1 = f"SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C, B, A) as w FROM table1 QUALIFY w < 10"
+    bodosql_query2 = f"SELECT MAX(A) over (PARTITION BY C ORDER BY B, C, A) as x FROM table1 QUALIFY x in ({bodosql_query1})"
     bodosql_query = bodosql_query2
 
-    spark_query_1 = f"SELECT * FROM (SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C) as w FROM table1) WHERE w < 10"
-    spark_query_2 = f"SELECT * FROM (SELECT MAX(A) over (PARTITION BY C ORDER BY B) as x FROM table1 ) WHERE x in ({spark_query_1})"
+    spark_query_1 = f"SELECT * FROM (SELECT ROW_NUMBER() OVER (PARTITION BY B ORDER BY C, B, A) as w FROM table1) WHERE w < 10"
+    spark_query_2 = f"SELECT * FROM (SELECT MAX(A) over (PARTITION BY C ORDER BY B, C, A) as x FROM table1 ) WHERE x in ({spark_query_1})"
     spark_query = spark_query_2
 
     check_query(

@@ -165,9 +165,6 @@ def test_case_no_else_clause_literals(
     """
     Test a case statement that doesn't have an else clause whoose values are scalars
     """
-    # See [BS-157], currently an issue with null valued boolean in case
-    if isinstance(case_literals[0], bool):
-        return
     query = f"Select Case WHEN A >= 2 THEN {case_literals[0]} WHEN A = 1 THEN {case_literals[1]} END FROM table1"
     check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
 
