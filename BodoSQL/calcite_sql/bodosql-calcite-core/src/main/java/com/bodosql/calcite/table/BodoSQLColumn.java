@@ -20,16 +20,31 @@ public interface BodoSQLColumn {
   RelDataType convertToSqlType(RelDataTypeFactory typeFactory);
 
   /**
-   * Does this column type need to be cast to another Bodo type to match the generated Java type.
+   * Does reading this column type need to be cast to another Bodo type to match the generated Java
+   * type.
    */
-  boolean requiresCast();
+  boolean requiresReadCast();
+
+  /** Does write this column type need to be cast back to the original table type. */
+  boolean requiresWriteCast();
 
   /**
+   * Generate the expression to cast this column to its BodoSQL type with a read.
+   *
    * @param varName Name of the table to use.
    * @return The string passed to __bodosql_replace_columns_dummy to cast this column to its BodoSQL
-   *     supported type.
+   *     supported type with a read.
    */
-  String getCastString(String varName);
+  String getReadCastExpr(String varName);
+
+  /**
+   * Generate the expression to cast this column to its BodoSQL type with a write.
+   *
+   * @param varName Name of the table to use.
+   * @return The string passed to __bodosql_replace_columns_dummy to cast this column to its
+   *     original data type with a write.
+   */
+  String getWriteCastExpr(String varName);
 
   enum BodoSQLColumnDataType {
     // See SqlTypeEnum in context.py
@@ -182,9 +197,18 @@ public interface BodoSQLColumn {
       return temp;
     }
 
-    public boolean requiresCast() {
+    public boolean requiresReadCast() {
       switch (this) {
         case CATEGORICAL:
+        case DATE:
+          return true;
+        default:
+          return false;
+      }
+    }
+
+    public boolean requiresWriteCast() {
+      switch (this) {
         case DATE:
           return true;
         default:

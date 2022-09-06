@@ -67,16 +67,24 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   }
 
   @Override
-  public boolean requiresCast() {
-    return this.dataType.requiresCast();
+  public boolean requiresReadCast() {
+    return this.dataType.requiresReadCast();
+  }
+
+  @Override
+  public boolean requiresWriteCast() {
+    return this.dataType.requiresWriteCast();
   }
 
   /**
-   * @return The string passed to __bodosql_replace_columns_dummy to cast this column to its BodoSQL
-   *     supported type.
+   * Generate the expression to cast this column to its BodoSQL type with a read.
+   *
+   * @param varName Name of the table to use.
+   * @return The string passed to __bodosql_replace_columns_dummy to cast this column to its
+   *     original data type with a read.
    */
   @Override
-  public String getCastString(String varName) {
+  public String getReadCastExpr(String varName) {
     String dtype;
     if (this.dataType == BodoSQLColumnDataType.CATEGORICAL) {
       // Categorical data should be cast to the elem type. This cannot
@@ -85,6 +93,28 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     } else {
       dtype = this.dataType.getCastType().getTypeString();
     }
-    return String.format("%s['%s'].astype('%s', copy=False)", varName, this.name, dtype);
+    return getCommonCastExpr(varName, String.format("'%s'", dtype));
+  }
+
+  /**
+   * Generate the expression to cast this column to its BodoSQL type with a write.
+   *
+   * @param varName Name of the table to use.
+   * @return The string passed to __bodosql_replace_columns_dummy to cast this column to its
+   *     original data type with a write.
+   */
+  @Override
+  public String getWriteCastExpr(String varName) {
+    String dtype;
+    if (this.dataType == BodoSQLColumnDataType.DATE) {
+      dtype = "bodo.datetime_date_type";
+    } else {
+      dtype = String.format("'%s'", this.elemType.getTypeString());
+    }
+    return getCommonCastExpr(varName, dtype);
+  }
+
+  private String getCommonCastExpr(String varName, String castValue) {
+    return String.format("%s['%s'].astype(%s, copy=False)", varName, this.name, castValue);
   }
 }
