@@ -17,16 +17,15 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    SeriesOptTestPipeline,
     DistTestPipeline,
+    SeriesOptTestPipeline,
     _check_for_io_reader_filters,
     check_func,
 )
 
 
 @pytest.mark.slow
-def test_table_path_filter_pushdown():
-    # TODO: Add memory leak check
+def test_table_path_filter_pushdown(memory_leak_check):
     """
     Tests basic filter pushdown support.
     """
@@ -110,8 +109,7 @@ def test_table_path_filter_pushdown():
 
 
 @pytest.mark.slow
-def test_table_path_filter_pushdown_multitable():
-    # TODO: Add memory leak check
+def test_table_path_filter_pushdown_multitable(memory_leak_check):
     """
     Tests basic filter with multiple tables.
     """
@@ -158,7 +156,7 @@ def test_table_path_filter_pushdown_multitable():
 
 
 @pytest.mark.slow
-def test_table_path_no_filter_pushdown():
+def test_table_path_no_filter_pushdown(memory_leak_check):
     """
     Tests when filter pushdown should be rejected because a table is reused.
     """
@@ -203,7 +201,9 @@ def test_table_path_no_filter_pushdown():
 
 
 @pytest.mark.slow
-def test_table_path_col_pruning_and_filter_pushdown_implicite_casting():
+def test_table_path_col_pruning_and_filter_pushdown_implicite_casting(
+    memory_leak_check,
+):
     """
     Tests that filter pushdown is correctly applied in the case that we perform implicit casting of the
     input dataframe types (done in visitTableScan)
@@ -272,7 +272,7 @@ def test_table_path_col_pruning_and_filter_pushdown_implicite_casting():
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
     read_df = pd.read_parquet(filename)
-    read_df["A"] = read_df["A"].astype("datetime64[ns]")
+    # Cast the categorical and date dtypes to the bodosql dtypes
     read_df["B"] = read_df["B"].astype(str)
     read_df["C"] = read_df["C"].astype("datetime64[ns]")
     read_df["E"] = read_df["E"].astype(str)
@@ -377,7 +377,7 @@ def test_table_path_col_pruning_and_filter_pushdown_implicite_casting():
 
 
 @pytest.mark.slow
-def test_table_path_col_pruning_simple():
+def test_table_path_col_pruning_simple(memory_leak_check):
     """
     Tests that column pruning is correctly applied in the case that we perform implicit casting of the
     input dataframe types (done in visitTableScan)
@@ -407,7 +407,7 @@ def test_table_path_col_pruning_simple():
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
     read_df = pd.read_parquet(filename)
-    read_df["A"] = read_df["A"].astype("datetime64[ns]")
+    # Cast the categorical and date dtypes to the bodosql dtypes
     read_df["B"] = read_df["B"].astype(str)
     read_df["C"] = read_df["C"].astype("datetime64[ns]")
     read_df["E"] = read_df["E"].astype(str)
@@ -446,9 +446,8 @@ def test_table_path_col_pruning_simple():
         check_logger_msg(stream, "Columns loaded ['D']")
 
 
-
 @pytest.mark.slow
-def test_table_path_limit_pushdown():
+def test_table_path_limit_pushdown(memory_leak_check):
     """
     Test basic limit pushdown support.
     """
@@ -476,7 +475,9 @@ def test_table_path_limit_pushdown():
     filename = "bodosql/tests/data/sample-parquet-data/no_index.pq"
 
     py_output = pd.read_parquet(filename)[["A", "B"]].head(5)
-    check_func(impl1, (filename,), py_output=py_output, reset_index=True, check_dtype=False)
+    check_func(
+        impl1, (filename,), py_output=py_output, reset_index=True, check_dtype=False
+    )
 
     # make sure limit pushdown worked
     bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl1)
@@ -486,7 +487,9 @@ def test_table_path_limit_pushdown():
     assert fir.meta_head_only_info[0] is not None
 
     py_output = pd.read_parquet(filename).head(5)
-    check_func(impl2, (filename,), py_output=py_output, reset_index=True, check_dtype=False)
+    check_func(
+        impl2, (filename,), py_output=py_output, reset_index=True, check_dtype=False
+    )
 
     # make sure limit pushdown worked
     bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl2)
@@ -494,3 +497,48 @@ def test_table_path_limit_pushdown():
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     assert hasattr(fir, "meta_head_only_info")
     assert fir.meta_head_only_info[0] is not None
+
+
+def test_named_param_filter_pushdown(memory_leak_check):
+    """
+    Test that using a Python variable as a filter variable via the named
+    parameter supports filter pushdown.
+    """
+    filename = "bodosql/tests/data/sample-parquet-data/needs_implicit_typ_conversion.pq"
+
+    def impl(f1, val):
+        bc = bodosql.BodoSQLContext(
+            {
+                "table1": bodosql.TablePath(f1, "parquet"),
+            }
+        )
+        return bc.sql(
+            "Select table1.A, table1.B, table1.C, table1.D from table1 where table1.E=@pyval",
+            {"pyval": val},
+        )
+
+    # Compare entirely to Pandas output to simplify the process.
+    read_df = pd.read_parquet(filename)
+    # Cast the categorical and date dtypes to the bodosql dtypes
+    read_df["B"] = read_df["B"].astype(str)
+    read_df["C"] = read_df["C"].astype("datetime64[ns]")
+    read_df["E"] = read_df["E"].astype(str)
+    py_output = read_df.loc[read_df["E"] == "e", ["A", "B", "C", "D"]]
+
+    check_func(
+        impl,
+        (filename, "e"),
+        py_output=py_output,
+        reset_index=True,
+        sort_output=True,
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(impl)
+        bodo_func(filename, "e")
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['B', 'A', 'C', 'D']")
