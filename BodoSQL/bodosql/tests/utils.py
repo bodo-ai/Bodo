@@ -4,7 +4,6 @@ Infrastructure used to test correctness.
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import os
 import re
-import warnings
 from decimal import Decimal
 from enum import Enum
 
@@ -26,6 +25,7 @@ from pyspark.sql.types import (
 )
 
 import bodo
+from bodo.tests.utils import _get_dist_arg, reduce_sum
 
 
 class InputDist(Enum):
@@ -1070,35 +1070,16 @@ def check_plan_length(query, dataframe_dict, expected_length):
     assert plan.count("\n") == expected_length
 
 
-@bodo.jit
-def reduce_sum(val):
-    """
-    Reduce on an integer with Bodo.
-    """
-    # Copied exactly from Bodo repo (because it can't be imported).
-    sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)
-    return bodo.libs.distributed_api.dist_reduce(val, np.int32(sum_op))
-
-
 def _get_dist_df(df, var_length=False, check_typing_issues=True):
-    """get distributed chunk for a dataframe df on current rank (for input to test functions)"""
-    # Copied from Bodo repo (because it can't be imported).
-    # This code has been modified to only support the DataFrame case (because BodoSQL)
-    # always works with Tables.
+    """
+    get distributed chunk for a dataframe df on current rank (for input to test functions).
+    Wrapper around bodo's _get_dist_arg that requires a dataframe input
+    """
+    assert isinstance(
+        df, pd.DataFrame
+    ), "Error: _get_dist_df was passed a non dataframe object"
 
-    start, end = get_start_end(df.shape[0])
-    # for var length case to be different than regular 1D in chunk sizes, add
-    # one extra element to last processor
-    if var_length and bodo.get_size() >= 2:
-        if bodo.get_rank() == bodo.get_size() - 2:
-            end -= 1
-        if bodo.get_rank() == bodo.get_size() - 1:
-            start -= 1
-
-    out_val = df.iloc[start:end]
-    if check_typing_issues:
-        _check_typing_issues(out_val)
-    return out_val
+    return _get_dist_arg(df, var_length, check_typing_issues)
 
 
 @bodo.jit(cache=True)
@@ -1112,28 +1093,6 @@ def get_start_end(n):
     start = bodo.libs.distributed_api.get_start(n, n_pes, rank)
     end = bodo.libs.distributed_api.get_end(n, n_pes, rank)
     return start, end
-
-
-def _check_typing_issues(val):
-    """Raises an error if there is a typing issue for value 'val'.
-    Runs bodo typing on value and converts warnings to errors.
-    """
-    # Copied exactly from Bodo repo (because it can't be imported).
-    comm = MPI.COMM_WORLD
-    try:
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("error")
-            bodo.typeof(val)
-        errors = comm.allgather(None)
-    except Exception as e:
-        # The typing issue typically occurs on only a subset of processes,
-        # because the process got a chunk of data from Python that is empty
-        # or that we cannot currently type correctly.
-        # To avoid a hang, we need to notify every rank of the error.
-        errors = comm.allgather(e)
-    for e in errors:
-        if isinstance(e, Exception):
-            raise e
 
 
 def replace_spark_named_params(query, named_params, use_interval):

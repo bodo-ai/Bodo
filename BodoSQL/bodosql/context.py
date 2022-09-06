@@ -102,10 +102,6 @@ _numba_to_sql_column_type_map = {
     types.NPTimedelta("ns"): SqlTypeEnum.Timedelta.value,
     types.bool_: SqlTypeEnum.Bool.value,
     bodo.string_type: SqlTypeEnum.String.value,
-    # TODO: Enable these types when more coverage exists
-    # bodo.datetime_date_type: SqlTypeEnum.Date.value,
-    # Binary should be disabled, but it is needed for an
-    # Apple use case.
     bodo.bytes_type: SqlTypeEnum.Binary.value,
     # Note date doesn't have native support yet, but the code to
     # cast to datetime64 is handled in the Java code.
@@ -133,7 +129,7 @@ _numba_to_sql_param_type_map = {
     # date_offset_type represents Timedelta year/month
     # and is support only for scalars
     bodo.date_offset_type: SqlTypeEnum.DateOffset.value,
-    # TODO: Support Date and Binary
+    # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
 }
 
 

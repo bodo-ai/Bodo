@@ -55,10 +55,7 @@ pytest_cmd_yes_cached_flag = [
     "y",
 ]
 # run tests with pytest
-if num_processes == 1:
-    cmd = pytest_cmd_yes_cached_flag
-else:
-    cmd = ["mpiexec", "-n", str(num_processes)] + pytest_cmd_yes_cached_flag
+cmd = ["mpiexec", "-n", str(num_processes)] + pytest_cmd_yes_cached_flag
 
 print("Running", " ".join(cmd))
 p = subprocess.Popen(cmd, shell=False)

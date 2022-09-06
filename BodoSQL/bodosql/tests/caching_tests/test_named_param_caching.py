@@ -8,8 +8,9 @@ sequential and parallel code.
 import bodosql
 import numpy as np
 import pytest
-from bodosql.tests.caching_utils import check_caching
 from bodosql.tests.utils import InputDist
+
+from bodo.tests.utils import check_caching
 
 
 @pytest.mark.slow

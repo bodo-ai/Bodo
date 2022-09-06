@@ -11,7 +11,7 @@ from bodo.tests.utils import gen_nonascii_list
 @pytest.fixture(
     params=[
         # TODO: Float literals (Spark outputs decimal type, not float)
-        # (1.3, -3124.2, 0.0, 314.1),
+        pytest.param((1.3, -3124.2, 0.0, 314.1), id="float_literals"),
         # Integer literals
         (341, -3, 0, 3443),
         # Boolean literals
@@ -19,12 +19,15 @@ from bodo.tests.utils import gen_nonascii_list
         # String literals
         ("'hello'", "'world'", "'goodbye'", "'spark'"),
         # TODO: Timestamp Literals (Cannot properly compare with Spark)
-        # (
-        #     "TIMESTAMP '1997-01-31 09:26:50.124'",
-        #     "TIMESTAMP '2021-05-31 00:00:00.00'",
-        #     "TIMESTAMP '2021-04-28 00:40:00.00'",
-        #     "TIMESTAMP '2021-04-29'",
-        # ),
+        pytest.param(
+            (
+                "TIMESTAMP '1997-01-31 09:26:50.124'",
+                "TIMESTAMP '2021-05-31 00:00:00.00'",
+                "TIMESTAMP '2021-04-28 00:40:00.00'",
+                "TIMESTAMP '2021-04-29'",
+            ),
+            id="timestamp_literals",
+        ),
         # TODO: Interval Literals (Cannot convert to Pandas in Spark)
         # (
         #     "INTERVAL '1' year",
@@ -40,7 +43,8 @@ from bodo.tests.utils import gen_nonascii_list
                 f"X'{b'goodbye'.hex()}'",
                 f"X'{b'spark'.hex()}'",
             ),
-            marks=pytest.mark.skip("[BE-957] Support Bytes.fromhex"),
+            marks=pytest.mark.skip("[BE-3304] Support Bytes literals"),
+            id="binary_literals",
         ),
     ]
 )
@@ -98,7 +102,13 @@ def test_case_literals(basic_df, case_literals, spark_info, memory_leak_check):
     Test a case statement with each possible literal return type.
     """
     query = f"Select B, Case WHEN A >= 2 THEN {case_literals[0]} ELSE {case_literals[1]} END as CaseRes FROM table1"
-    check_query(query, basic_df, spark_info, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        spark_info,
+        check_dtype=False,
+        convert_columns_decimal=["CaseRes"],
+    )
 
 
 @pytest.mark.slow
@@ -110,7 +120,13 @@ def test_case_literals_multiple_when(
     """
 
     query = f"Select B, Case WHEN A = 1 THEN {case_literals[0]} WHEN A = 2 THEN {case_literals[1]} WHEN B > 6 THEN {case_literals[2]} ELSE {case_literals[3]} END as CaseRes FROM table1"
-    check_query(query, basic_df, spark_info, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        spark_info,
+        check_dtype=False,
+        convert_columns_decimal=["CaseRes"],
+    )
 
 
 @pytest.mark.slow
@@ -119,7 +135,13 @@ def test_case_literals_groupby(basic_df, case_literals, spark_info, memory_leak_
     Test a case statement with each possible literal return type in a groupby.
     """
     query = f"Select B, Case WHEN A >= 2 THEN {case_literals[0]} ELSE {case_literals[1]} END as CaseRes FROM table1 Group By A, B"
-    check_query(query, basic_df, spark_info, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        spark_info,
+        check_dtype=False,
+        convert_columns_decimal=["CaseRes"],
+    )
 
 
 @pytest.mark.slow
@@ -132,7 +154,13 @@ def test_case_literals_multiple_when_groupby(
 
     query = f"Select B, Case WHEN A = 1 THEN {case_literals[0]} WHEN A = 2 THEN {case_literals[1]} WHEN B > 6 THEN {case_literals[2]} ELSE {case_literals[3]} END as CaseRes FROM table1 Group By A, B"
 
-    check_query(query, basic_df, spark_info, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        spark_info,
+        check_dtype=False,
+        convert_columns_decimal=["CaseRes"],
+    )
 
 
 @pytest.mark.skip
@@ -144,7 +172,13 @@ def test_case_literals_nonascii(basic_df, spark_info, memory_leak_check):
 
     query = f"Select B, Case WHEN A = 1 THEN {case_literals[0]} WHEN A = 2 THEN {case_literals[1]} WHEN B > 6 THEN {case_literals[2]} ELSE {case_literals[3]} END as CaseRes FROM table1 Group By A, B"
 
-    check_query(query, basic_df, spark_info, check_dtype=False)
+    check_query(
+        query,
+        basic_df,
+        spark_info,
+        check_dtype=False,
+        convert_columns_decimal=["CaseRes"],
+    )
 
 
 @pytest.mark.slow
@@ -165,8 +199,8 @@ def test_case_no_else_clause_literals(
     """
     Test a case statement that doesn't have an else clause whoose values are scalars
     """
-    query = f"Select Case WHEN A >= 2 THEN {case_literals[0]} WHEN A = 1 THEN {case_literals[1]} END FROM table1"
-    check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
+    query = f"Select Case WHEN A >= 2 THEN {case_literals[0]} WHEN A = 1 THEN {case_literals[1]} END as CaseRes FROM table1"
+    check_query(query, basic_df, spark_info, check_dtype=False, check_names=False, convert_columns_decimal=["CaseRes"])
 
 
 def test_case_no_else_clause_columns(basic_df, spark_info, memory_leak_check):

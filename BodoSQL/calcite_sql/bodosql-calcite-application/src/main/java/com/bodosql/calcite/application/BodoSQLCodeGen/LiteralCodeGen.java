@@ -100,7 +100,17 @@ public class LiteralCodeGen {
           break;
         case TIMESTAMP:
           // TODO: Parse string into fields to avoid objmode in Bodo
-          codeBuilder.append("pd.Timestamp(" + makeQuoted(node.toString()) + ")");
+          // Note this can possibly be done via node.getValue()
+
+          // Currently, node.toString will contain the precision of the TIMESTAMP type.
+          // We workaround this by simply splitting the string when needed.
+          // TODO: have some more robust code here using getValue
+          String tsString = node.toString();
+          int precision_string_length = 13;
+          if (tsString.contains("TIMESTAMP")) {
+            tsString = tsString.substring(0, tsString.length() - precision_string_length);
+          }
+          codeBuilder.append("pd.Timestamp(" + makeQuoted(tsString) + ")");
           break;
         case BOOLEAN:
           String boolName = node.toString();
