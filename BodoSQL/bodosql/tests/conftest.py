@@ -464,6 +464,34 @@ def timestamp_literal_strings(request):
 def bodosql_string_types(request):
     return request.param
 
+@pytest.fixture(
+    params=[
+        {
+            "table1": pd.DataFrame(
+                {
+                    "A": ["hElLo GoOdByE", "GoOdByE SpEaK", "SpEaK", "hElLo WeIrD"] * 3,
+                    "B": ["hello world how", "how how how how world", "how"] * 4,
+                    "C": ["ARE YOU TODAY", "YOU", "TODAY"] * 4,
+                }
+            )
+        },
+        pytest.param(
+            {
+                "table1": pd.DataFrame(
+                    {
+                        "A": ["John Ddoe", "Joe Doe", "John_down", "Joe down"] * 3,
+                        "B": ["Tome Doe", "Tim down"] * 6,
+                        "C": ["Joe Doe", "John_down", "Tome Doe"] * 4,
+                    }
+                )
+            },
+            marks=pytest.mark.slow,
+        ),
+    ]
+)
+def bodosql_multiple_string_types(request):
+    return request.param
+
 
 @pytest.fixture(
     params=[

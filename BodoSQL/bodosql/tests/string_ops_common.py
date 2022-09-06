@@ -173,9 +173,38 @@ def regex_string(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        pytest.param("('h%o %olo')", marks=pytest.mark.slow),
+        pytest.param("('%Jo%oe%','T%e')", marks=pytest.mark.slow),
+        pytest.param("('%Jo%oe%','J%e')", marks=pytest.mark.slow),
+        pytest.param("('%Jo%oe%','J%n')", marks=pytest.mark.slow),
+        pytest.param("('%J%h%^_do%', 'J%^%wn')", marks=pytest.mark.slow),
+        pytest.param("('%Jo%oe%','T%')", marks=pytest.mark.slow),
+        pytest.param("('%jo%oe%','j%E')", marks=pytest.mark.slow),
+        pytest.param("('%JO%oE%','J%N')", marks=pytest.mark.slow),
+        pytest.param("('%J%h%^_dO%', 'J%^%Wn')", marks=pytest.mark.slow),
+    ]
+)
+def regex_strings(request):
+    """fixture that returns tuples of regex strings to be used for like any/all testing"""
+    return request.param
+
+
 @pytest.fixture(params=[pytest.param("like", marks=pytest.mark.slow), "not like"])
 def like_expression(request):
     """returns 'like' or 'not like'"""
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param("like any", marks=pytest.mark.slow),
+        pytest.param("like all", marks=pytest.mark.slow),
+    ]
+)
+def like_any_all_expression(request):
+    """returns 'like any' or 'like all'"""
     return request.param
 
 

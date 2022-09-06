@@ -21,6 +21,39 @@ def test_like(
     )
 
 
+def test_ilike(bodosql_string_types, regex_string, spark_info, memory_leak_check):
+    """
+    tests that ilike works for a variety of different possible regex strings
+    """
+    # Note that Spark's like SQL function is case sensititve by default, so we use
+    # the lower function to simulate case insensitivity
+    check_query(
+        f"select A from table1 where A ilike {regex_string}",
+        bodosql_string_types,
+        spark_info,
+        equivalent_spark_query=f"select A from table1 where LOWER(A) like LOWER({regex_string})",
+    )
+
+
+@pytest.mark.skip("[BS-552] Support ANY/ALL over subqueries")
+def test_like_any_all(
+    bodosql_multiple_string_types,
+    regex_strings,
+    spark_info,
+    like_any_all_expression,
+    memory_leak_check,
+):
+    """
+    tests that like any and like all works for a variety of different possible regex strings
+    """
+    check_query(
+        f"select A from table1 where A {like_any_all_expression} {regex_strings}",
+        bodosql_multiple_string_types,
+        spark_info,
+    )
+    # TODO (allai5): test queries with escape keyword (see [BS-552] Support ANY/ALL over subqueries)
+
+
 @pytest.mark.slow
 def test_like_scalar(
     bodosql_string_types, regex_string, spark_info, like_expression, memory_leak_check

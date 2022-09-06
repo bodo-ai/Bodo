@@ -2474,16 +2474,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
     RexNodeVisitorInfo pattern =
         visitRexNode(patternNode, colNames, id, inputVar, isSingleRow, ctx);
     String sqlPattern = pattern.getExprCode();
-    String name = generateLikeName(argName, sqlPattern);
+    String opName = node.op.getName();
+    String name = generateLikeName(opName, argName, sqlPattern);
     /* Assumption: Typing in LIKE requires this to be a string type. */
     boolean isLiteral = (patternNode instanceof RexLiteral);
-    boolean patternIsRegex = (node.op.getName() == "RLIKE" || node.op.getName() == "REGEXP");
     String likeCode =
         generateLikeCode(
+            opName,
             argCode,
             sqlPattern,
             isLiteral,
-            patternIsRegex,
             isSingleRow
                 || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id))
                     == BodoSQLExprType.ExprType.SCALAR));
