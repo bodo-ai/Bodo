@@ -121,8 +121,10 @@ public class BinOpCodeGen {
         scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_greater_than_or_equal";
         break;
       case AND:
-        columnOperator = "&";
-        scalarOperator = "and";
+        columnIsFunction = true;
+        columnOperator = "bodo.libs.bodosql_array_kernels.booland";
+        scalarIsFunction = true;
+        scalarOperator = "bodo.libs.bodosql_array_kernels.booland";
         break;
       case DIVIDE:
         columnOperator = "/";
@@ -208,7 +210,8 @@ public class BinOpCodeGen {
     }
     // make sure the output is array type for column cases
     // (output is Series here since input is converted to Series in generateBinOpCode)
-    if (!isScalar && exprType == BodoSQLExprType.ExprType.COLUMN) {
+    // The exception is AND that always outputs an array
+    if (!isScalar && exprType == BodoSQLExprType.ExprType.COLUMN && binOpKind != SqlKind.AND) {
       newOp.append(".values");
     }
     return newOp.toString();

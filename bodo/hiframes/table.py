@@ -1769,6 +1769,15 @@ def logical_table_to_table(
         else unwrap_typeref(out_table_type_t)
     )
 
+    # Add the globals needed for the 0 column path.
+    glbls.update(
+        {
+            "init_table": init_table,
+            "set_table_len": set_table_len,
+            "out_table_type": out_table_type,
+        }
+    )
+
     func_text = "def impl(in_table_t, extra_arrs_t, in_col_inds_t, n_table_cols_t, out_table_type_t=None, used_cols=None):\n"
     if any(isinstance(t, SeriesType) for t in extra_arrs_t.types):
         func_text += f"  extra_arrs_t = {extra_arrs_no_series}\n"
@@ -1840,13 +1849,10 @@ def logical_table_to_table(
 
     glbls.update(
         {
-            "init_table": init_table,
             "alloc_list_like": alloc_list_like,
             "set_table_block": set_table_block,
-            "set_table_len": set_table_len,
             "get_table_block": get_table_block,
             "ensure_column_unboxed": ensure_column_unboxed,
-            "out_table_type": out_table_type,
             "get_series_data": bodo.hiframes.pd_series_ext.get_series_data,
         }
     )

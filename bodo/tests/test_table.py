@@ -151,22 +151,6 @@ def test_logical_table(memory_leak_check):
     _check_no_logical_table_to_table(impl2, A2)
     _check_no_logical_table_to_table(impl3, A4)
 
-    # make sure input table argument is set to None if dead
-    bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl4)
-    np.testing.assert_array_equal(bodo_func(df, A4).ravel(), A4)
-    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-    table_call_found = False
-    for stmt in f_ir.blocks[0].body:
-        if is_call_assign(stmt) and guard(find_callname, f_ir, stmt.value) == (
-            "logical_table_to_table",
-            "bodo.hiframes.table",
-        ):
-            assert find_const(f_ir, stmt.value.args[0]) is None
-            table_call_found = True
-            break
-
-    assert table_call_found
-
     # make sure extra arr argument is set to None if dead
     bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl5)
     np.testing.assert_array_equal(bodo_func(df, A4, A0).ravel(), A2)
