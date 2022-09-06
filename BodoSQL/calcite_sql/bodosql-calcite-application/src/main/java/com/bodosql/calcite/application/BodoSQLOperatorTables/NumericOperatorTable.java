@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.fun.SqlBasicAggFunction;
 import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
@@ -287,6 +288,20 @@ public final class NumericOperatorTable implements SqlOperatorTable {
   public static final SqlFunction GREATEST = SqlLibraryOperators.GREATEST;
   public static final SqlFunction LEAST = SqlLibraryOperators.LEAST;
 
+  public static final SqlBasicAggFunction VARIANCE_POP =
+      SqlBasicAggFunction.create(
+          "VARIANCE_POP",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER,
+          OperandTypes.NUMERIC);
+
+  public static final SqlBasicAggFunction VARIANCE_SAMP =
+      SqlBasicAggFunction.create(
+          "VARIANCE_SAMP",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER,
+          OperandTypes.NUMERIC);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           ACOSH,
@@ -314,7 +329,9 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           TRUNC,
           WIDTH_BUCKET,
           GREATEST,
-          LEAST);
+          LEAST, 
+          VARIANCE_POP, 
+          VARIANCE_SAMP);
 
   @Override
   public void lookupOperatorOverloads(

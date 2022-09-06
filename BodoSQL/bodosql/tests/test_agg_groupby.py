@@ -31,10 +31,11 @@ def test_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aggregation calls in queries"""
-    # Skipping VAR_POP and STDDEV_POP with groupby due to [BE-910]
+    # Skipping VAR_POP, VARIANCE_POP, and STDDEV_POP with groupby due to [BE-910]
     if (
         numeric_agg_builtin_funcs == "STDDEV_POP"
         or numeric_agg_builtin_funcs == "VAR_POP"
+        or numeric_agg_builtin_funcs == "VARIANCE_POP"
     ):
         return
 
@@ -45,8 +46,20 @@ def test_agg_numeric(
 
     query = f"select {numeric_agg_builtin_funcs}(B), {numeric_agg_builtin_funcs}(C) from table1 group by A"
 
+    spark_query = query
+    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
+        var_typ = numeric_agg_builtin_funcs[9:]
+        spark_query = (
+            f"select VAR_{var_typ}(B), VAR_{var_typ}(C) from table1 group by A"
+        )
+
     check_query(
-        query, bodosql_numeric_types, spark_info, check_dtype=False, check_names=False
+        query,
+        bodosql_numeric_types,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        check_dtype=False,
+        check_names=False,
     )
 
 
@@ -54,10 +67,11 @@ def test_agg_numeric_larger_group(
     grouped_dfs, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aggregation calls in queries on DataFrames with a larger data in each group."""
-    # Skipping VAR_POP and STDDEV_POP with groupby due to [BE-910]
+    # Skipping VAR_POP, VARIANCE_POP, and STDDEV_POP with groupby due to [BE-910]
     if (
         numeric_agg_builtin_funcs == "STDDEV_POP"
         or numeric_agg_builtin_funcs == "VAR_POP"
+        or numeric_agg_builtin_funcs == "VARIANCE_POP"
     ):
         return
 
@@ -68,7 +82,21 @@ def test_agg_numeric_larger_group(
 
     query = f"select {numeric_agg_builtin_funcs}(B), {numeric_agg_builtin_funcs}(C) from table1 group by A"
 
-    check_query(query, grouped_dfs, spark_info, check_dtype=False, check_names=False)
+    spark_query = query
+    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
+        var_typ = numeric_agg_builtin_funcs[9:]
+        spark_query = (
+            f"select VAR_{var_typ}(B), VAR_{var_typ}(C) from table1 group by A"
+        )
+
+    check_query(
+        query,
+        grouped_dfs,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        check_dtype=False,
+        check_names=False,
+    )
 
 
 @pytest.mark.slow
@@ -76,10 +104,11 @@ def test_aliasing_agg_numeric(
     bodosql_numeric_types, numeric_agg_builtin_funcs, spark_info, memory_leak_check
 ):
     """test aliasing of aggregations in queries"""
-    # Skipping VAR_POP and STDDEV_POP with groupby due to [BE-910]
+    # Skipping VAR_POP, VARIANCE_POP, and STDDEV_POP with groupby due to [BE-910]
     if (
         numeric_agg_builtin_funcs == "STDDEV_POP"
         or numeric_agg_builtin_funcs == "VAR_POP"
+        or numeric_agg_builtin_funcs == "VARIANCE_POP"
     ):
         return
 
@@ -90,8 +119,18 @@ def test_aliasing_agg_numeric(
 
     query = f"select {numeric_agg_builtin_funcs}(B) as testCol from table1 group by A"
 
+    spark_query = query
+    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
+        var_typ = numeric_agg_builtin_funcs[9:]
+        spark_query = f"select VAR_{var_typ}(B) as testCol from table1 group by A"
+
     check_query(
-        query, bodosql_numeric_types, spark_info, check_dtype=False, check_names=False
+        query,
+        bodosql_numeric_types,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        check_dtype=False,
+        check_names=False,
     )
 
 

@@ -30,10 +30,16 @@ def test_agg_numeric(
 
     query = f"select {numeric_agg_builtin_funcs}(B), {numeric_agg_builtin_funcs}(C) from table1"
 
+    spark_query = query
+    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
+        var_typ = numeric_agg_builtin_funcs[9:]
+        spark_query = f"select VAR_{var_typ}(B), VAR_{var_typ}(C) from table1"
+
     check_query(
         query,
         bodosql_numeric_types,
         spark_info,
+        equivalent_spark_query=spark_query,
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
@@ -53,10 +59,16 @@ def test_aliasing_agg_numeric(
 
     query = f"select {numeric_agg_builtin_funcs}(B) as testCol from table1"
 
+    spark_query = query
+    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
+        var_typ = numeric_agg_builtin_funcs[9:]
+        spark_query = f"select VAR_{var_typ}(B) as testCol from table1"
+
     check_query(
         query,
         bodosql_numeric_types,
         spark_info,
+        equivalent_spark_query=spark_query,
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,

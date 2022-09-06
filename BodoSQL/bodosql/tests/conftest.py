@@ -1,13 +1,11 @@
 import gc
+import hashlib
 import os
 import sys
 
-import bodo
-import bodo.utils.allocation_tracking
 import numpy as np
 import pandas as pd
 import pytest
-from bodo.tests.utils import gen_nonascii_list
 from numba.core.runtime import rtsys
 from pyspark.sql.types import (
     DoubleType,
@@ -16,7 +14,10 @@ from pyspark.sql.types import (
     StructField,
     StructType,
 )
-import json, hashlib
+
+import bodo
+import bodo.utils.allocation_tracking
+from bodo.tests.utils import gen_nonascii_list
 
 # Fix Issue on Azure CI where the driver defaults to a different Python version
 # See: https://stackoverflow.com/a/65010346/14810655
@@ -634,8 +635,10 @@ def comparison_ops(request):
         "SUM",
         "VARIANCE",
         pytest.param("VAR_SAMP", marks=pytest.mark.slow),
+        pytest.param("VARIANCE_SAMP", marks=pytest.mark.slow),
         "STDDEV_POP",
         "VAR_POP",
+        pytest.param("VARIANCE_POP", marks=pytest.mark.slow),
     ]
 )
 def numeric_agg_builtin_funcs(request):

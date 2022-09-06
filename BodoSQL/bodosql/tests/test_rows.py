@@ -107,12 +107,22 @@ def lead_or_lag(request):
             id="STDEV_POP",
         ),
         pytest.param("VARIANCE", marks=pytest.mark.slow, id="VARIANCE"),
+        pytest.param("VAR_SAMP", marks=pytest.mark.slow, id="VAR_SAMP"),
+        pytest.param("VARIANCE_SAMP", marks=pytest.mark.slow, id="VARIANCE_SAMP"),
         pytest.param(
             "VAR_POP",
             marks=pytest.mark.skipif(
                 not testing_locally, reason="Fix Memory Leak error"
             ),
             id="VAR_POP",
+        ),
+        pytest.param(
+            "VARIANCE_POP",
+            marks=[
+                pytest.mark.skipif(not testing_locally, reason="Fix Memory Leak error"),
+                pytest.mark.slow,
+            ],
+            id="VARIANCE_POP",
         ),
         pytest.param("FIRST_VALUE", id="FIRST_VALUE"),
         pytest.param("LAST_VALUE", id="LAST_VALUE"),
@@ -166,6 +176,12 @@ def test_windowed_upper_lower_bound_numeric(
 
     if numeric_agg_funcs_subset == "COUNT(*)":
         agg_fn_call = "COUNT(*)"
+    elif (
+        numeric_agg_funcs_subset == "VARIANCE_POP"
+        or numeric_agg_funcs_subset == "VARIANCE_SAMP"
+    ):
+        # spark doesn't support variance_pop/variance_samp
+        agg_fn_call = f"VAR_{numeric_agg_funcs_subset[9:]}(A)"
     else:
         agg_fn_call = f"{numeric_agg_funcs_subset}(A)"
 
@@ -208,6 +224,12 @@ def test_windowed_upper_lower_bound_numeric_inside_case(
 
     if numeric_agg_funcs_subset == "COUNT(*)":
         agg_fn_call = "COUNT(*)"
+    elif (
+        numeric_agg_funcs_subset == "VARIANCE_POP"
+        or numeric_agg_funcs_subset == "VARIANCE_SAMP"
+    ):
+        # spark doesn't support variance_pop/variance_samp
+        agg_fn_call = f"VAR_{numeric_agg_funcs_subset[9:]}(A)"
     else:
         agg_fn_call = f"{numeric_agg_funcs_subset}(A)"
 
@@ -407,6 +429,16 @@ def test_windowed_only_upper_bound(
     # should an error occur
     query = f"select A, B, C, {numeric_agg_funcs_subset}(A) OVER (PARTITION BY B ORDER BY C ASC ROWS {over_clause_bounds[0]}) as WINDOW_AGG_ASC, {numeric_agg_funcs_subset}(A) OVER (PARTITION BY B ORDER BY C DESC ROWS {over_clause_bounds[0]} ) as WINDOW_AGG_DESC FROM table1 ORDER BY B, C"
 
+    spark_query = query
+    if (
+        numeric_agg_funcs_subset == "VARIANCE_POP"
+        or numeric_agg_funcs_subset == "VARIANCE_SAMP"
+    ):
+        # spark doesn't support variance_pop/variance_samp
+        spark_query = query.replace(
+            numeric_agg_funcs_subset, f"VAR_{numeric_agg_funcs_subset[9:]}"
+        )
+
     # spark windowed min/max on integers returns an integer col.
     # pandas rolling min/max on integer series returns a float col
     # (and the method that we currently use returns a float col)
@@ -420,7 +452,7 @@ def test_windowed_only_upper_bound(
         check_names=False,
         spark_output_cols_to_cast=cols_to_cast,
         only_jit_1DVar=True,
-        equivalent_spark_query=query.replace("ANY_VALUE", "FIRST"),
+        equivalent_spark_query=spark_query.replace("ANY_VALUE", "FIRST"),
     )
 
 
@@ -435,6 +467,16 @@ def test_empty_window(
     """Tests windowed aggregations works when no bounds are specified"""
     query = f"select A, B, C, {numeric_agg_funcs_subset}(A) OVER () as WINDOW_AGG FROM table1"
 
+    spark_query = query
+    if (
+        numeric_agg_funcs_subset == "VARIANCE_POP"
+        or numeric_agg_funcs_subset == "VARIANCE_SAMP"
+    ):
+        # spark doesn't support variance_pop/variance_samp
+        spark_query = query.replace(
+            numeric_agg_funcs_subset, f"VAR_{numeric_agg_funcs_subset[9:]}"
+        )
+
     # spark windowed min/max on integers returns an integer col.
     # pandas rolling min/max on integer series returns a float col
     # (and the method that we currently use returns a float col)
@@ -448,7 +490,7 @@ def test_empty_window(
         check_names=False,
         spark_output_cols_to_cast=cols_to_cast,
         only_jit_1DVar=True,
-        equivalent_spark_query=query.replace("ANY_VALUE", "FIRST"),
+        equivalent_spark_query=spark_query.replace("ANY_VALUE", "FIRST"),
     )
 
 
@@ -465,6 +507,16 @@ def test_nested_windowed_agg(
     # doing an orderby and calculating extra rows in the query so it's easier to tell what the error is by visual comparison
     query = f"SELECT A, B, C, {numeric_agg_funcs_subset}(B) OVER (PARTITION BY A ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) as WINDOW_AGG, CASE WHEN A > 1 THEN A * {numeric_agg_funcs_subset}(B) OVER (PARTITION BY A ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]}) ELSE -1 END AS NESTED_WINDOW_AGG from table1 ORDER BY A, C"
 
+    spark_query = query
+    if (
+        numeric_agg_funcs_subset == "VARIANCE_POP"
+        or numeric_agg_funcs_subset == "VARIANCE_SAMP"
+    ):
+        # spark doesn't support variance_pop/variance_samp
+        spark_query = query.replace(
+            numeric_agg_funcs_subset, f"VAR_{numeric_agg_funcs_subset[9:]}"
+        )
+
     # spark windowed min/max on integers returns an integer col.
     # pandas rolling min/max on integer series returns a float col
     # (and the method that we currently use returns a float col)
@@ -478,7 +530,7 @@ def test_nested_windowed_agg(
         check_names=False,
         spark_output_cols_to_cast=cols_to_cast,
         only_jit_1DVar=True,
-        equivalent_spark_query=query.replace("ANY_VALUE", "FIRST"),
+        equivalent_spark_query=spark_query.replace("ANY_VALUE", "FIRST"),
     )
 
 
