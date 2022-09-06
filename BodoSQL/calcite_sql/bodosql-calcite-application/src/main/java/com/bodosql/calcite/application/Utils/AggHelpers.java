@@ -27,7 +27,6 @@ public class AggHelpers {
     simpleColnameMap.put(SqlKind.STDDEV_SAMP, "std_samp");
     simpleColnameMap.put(SqlKind.STDDEV_POP, "std");
     simpleColnameMap.put(SqlKind.VAR_POP, "var");
-    simpleColnameMap.put(SqlKind.OTHER_FUNCTION, "sum");
   }
 
   /**
@@ -98,6 +97,10 @@ public class AggHelpers {
         switch (name) {
           case "COUNT_IF":
             return colExpr + ".sum()";
+          case "VARIANCE_SAMP":
+            return colExpr + ".var()";
+          case "VARIANCE_POP":
+            return colExpr + ".var(ddof=0)";
         }
       default:
         throw new BodoSQLCodegenException(

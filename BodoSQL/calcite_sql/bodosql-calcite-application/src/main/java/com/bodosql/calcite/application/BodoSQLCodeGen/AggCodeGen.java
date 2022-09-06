@@ -45,6 +45,8 @@ public class AggCodeGen {
     equivalentNumpyFuncMap.put(SqlKind.STDDEV_POP, "np.std");
 
     equivalentPandasNameMethodMap.put("COUNT_IF", "sum");
+    equivalentPandasNameMethodMap.put("VARIANCE_POP", "var_pop");
+    equivalentPandasNameMethodMap.put("VARIANCE_SAMP", "var");
   }
 
   /**
@@ -127,6 +129,9 @@ public class AggCodeGen {
       if (aggFunc == "iloc") {
         aggString.append(seriesBuilder);
         aggString.append(".iloc[0]");
+      } else if (aggFunc == "var_pop") {
+        aggString.append(seriesBuilder);
+        aggString.append(".var(ddof=0)");
       } else {
         if (!isMethod) {
           // If we have a function surround the column
