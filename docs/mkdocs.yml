@@ -1,0 +1,218 @@
+# Project information
+site_name: Bodo Developer Documentation
+site_url: https://docs.bodo.ai/
+site_author: Bodo Team
+site_description: >-
+  Bodo offers a new type of just-in-time compiler with Supercomputing-style performance and the simplicity of using native Python.
+
+# Copyright
+copyright: Copyright &copy; 2019 - 2022 Bodo, Inc.
+
+# Configuration
+theme:
+  name: material
+  custom_dir: overrides
+  include_search_page: false
+  search_index_only: true
+  language: en
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.expand
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: bodo-light
+      accent: bodo-green
+      toggle:
+        icon: material/toggle-switch
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: bodo-dark
+      accent: bodo-green
+      toggle:
+        icon: material/toggle-switch-off-outline
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  favicon: assets/favicon.png
+  logo: assets/bodo-logo.png
+
+# Plugins
+plugins:
+  - search
+  - autorefs
+  - awesome-pages
+  - meta-descriptions
+  - tags
+#      tags_file: tags.md
+
+
+extra_css:
+  - stylesheets/bodo.css
+
+# Customization
+extra:
+  generator: false
+  analytics:
+      provider: google
+      property: G-W019JWTQ1N
+      feedback:
+        title: Was this page helpful?
+        ratings:
+          - icon: material/emoticon-happy-outline
+            name: This page was helpful
+            data: 1
+            note: >-
+              Thanks for your feedback!
+          - icon: material/emoticon-sad-outline
+            name: This page could be improved
+            data: 0
+            note: >-
+              Thanks for your feedback! Help us improve this page by
+              filing an <a href="https://github.com/Bodo-inc/Feedback/issues/new" target=_blank>issue</a>.
+
+  version:
+    provider: mike
+  social:
+    - icon: fontawesome/brands/slack
+      link: https://join.slack.com/t/bodocommunity/shared_invite/zt-qwdc8fad-6rZ8a1RmkkJ6eOX1X__knA
+    - icon: fontawesome/brands/discourse
+      link: https://discourse.bodo.ai 
+    - icon: fontawesome/brands/github
+      link: https://github.com/Bodo-Inc/Feedback
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/bodo_ai
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/company/19205698
+
+# Extensions
+markdown_extensions:
+  - admonition
+  - abbr
+  - attr_list
+  - def_list
+  - footnotes
+  - meta
+  - md_in_html
+  - grid_tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+
+nav:
+  - About Bodo: index.md
+  - Quick Start: quick_start_platform.md
+  - Installation and Setup:
+      - installation_and_setup/index.md
+      - Bodo Platform:
+        - Bodo Platform Basics: installation_and_setup/bodo_platform.md
+        - Bodo Platform on AWS: installation_and_setup/bodo_platform_aws.md
+        - Bodo Platform on Azure: installation_and_setup/bodo_platform_azure.md
+      - Bodo On-Prem:
+        - Installing Bodo Community Edition: installation_and_setup/install.md
+        - Configuring Bodo Enterprise Edition: installation_and_setup/enterprise.md
+        - Interactive Bodo Cluster Setup using IPyParallel: installation_and_setup/ipyparallel.md
+        - Recommended MPI Settings: installation_and_setup/recommended_mpi_settings.md
+        - Recommended Cluster Configuration: installation_and_setup/recommended_cluster_config.md
+  - Programming with Bodo:
+      - Developer's Quick Start Guide: dev_guide.md
+      - Understanding Parallelism with Bodo:
+          - Basics of Bodo Parallelism: bodo_parallelism/bodo_parallelism_basics.md
+          - Advanced Parallelism Topics: bodo_parallelism/advanced.md
+          - Typing Considerations: bodo_parallelism/typing_considerations.md
+          - Unsupported Programs: bodo_parallelism/not_supported.md
+      - Scalable Data I/O: file_io.md
+      - Using Regular Python inside Bodo (Object Mode): objmode.md
+  - Bodo in your Pipeline:
+      - Migration from Spark:
+          - Spark Examples: integrating_bodo/spark.md
+          - Bodo Spark Cheatsheet: integrating_bodo/sparkcheatsheet.md
+      - Deep Learning: integrating_bodo/dl.md
+      - Data Visualization: integrating_bodo/data_visualization.md
+      - Deploying Bodo with Kubernetes: integrating_bodo/kubernetes.md
+      - Front End Tools: integrating_bodo/front_end.md
+  - API Docs:
+      - api_docs/index.md
+      - Bodo Parallel APIs: api_docs/bodo_parallel_apis.md
+      - Pandas:
+          - api_docs/pandas/index.md
+          - General Functions: api_docs/pandas/general.md
+          - DataFrame: api_docs/pandas/dataframe.md
+          - Groupby : api_docs/pandas/groupby.md
+          - Series : api_docs/pandas/series.md
+          - Window : api_docs/pandas/window.md
+          - DateOffsets: api_docs/pandas/dateoffsets.md
+          - Input/Output: api_docs/pandas/io.md
+          - Index Objects: api_docs/pandas/indexapi.md
+          - TimeDelta : api_docs/pandas/timedelta.md
+          - Timestamp : api_docs/pandas/timestamp.md
+
+      - Numpy: api_docs/numpy.md
+      - User Defined Functions (UDFs): api_docs/udfs.md
+      - Machine Learning:
+          - api_docs/ml/index.md
+          - Scikit Learn:
+              - api_docs/ml/sklearn/index.md
+              - sklearn.cluster : api_docs/ml/sklearn/cluster.md
+              - sklearn.ensemble: api_docs/ml/sklearn/ensemble.md
+              - sklearn.feature_extraction : api_docs/ml/sklearn/feature_extraction.md
+              - sklearn.linear_model: api_docs/ml/sklearn/linear_model.md
+              - sklearn.metrics: api_docs/ml/sklearn/metrics.md
+              - sklearn.model_selection: api_docs/ml/sklearn/model_selection.md
+              - sklearn.naive_bayes: api_docs/ml/sklearn/naive_bayes.md
+              - sklearn.preprocessing: api_docs/ml/sklearn/preprocessing.md
+              - sklearn.svm: api_docs/ml/sklearn/svm.md
+          - XGBoost: api_docs/ml/xgboost.md
+      - Miscellaneous Supported Python API: api_docs/miscellaneous.md
+      - BodoSQL(Beta):
+        - API: api_docs/BodoSQL.md
+        - Errors: api_docs/bodosqlerrors.md
+  - Performance and Diagnostics:
+      - Measuring Performance: performance/performance.md
+      - Caching: performance/caching.md
+      - Inlining: performance/inlining.md
+      - Bodo Errors: diagnostics_and_troubleshooting/Bodoerrors.md
+      - Compilation Tips: diagnostics_and_troubleshooting/compilation.md
+      - Verbose Mode: diagnostics_and_troubleshooting/verbose_mode.md
+      - Troubleshooting on AWS: diagnostics_and_troubleshooting/troubleaws.md
+      - Troubleshooting on Azure: diagnostics_and_troubleshooting/troubleazure.md
+  - Help and Reference:
+      - End User License Agreement: help_and_reference/eula.md
+      - Release Notes: help_and_reference/releases.md
