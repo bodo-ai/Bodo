@@ -107,6 +107,9 @@ class SqlReader(ir.Stmt):
         # Only relevant for Iceberg at the moment,
         # but potentially for Snowflake in the future
         self.pyarrow_table_schema = pyarrow_table_schema
+        # Is the variable currently alive. This should be replaced with more
+        # robust handling in connectors.
+        self.is_live_table = True
 
     def __repr__(self):  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
@@ -191,6 +194,7 @@ def remove_dead_sql(
         sql_node.out_types = []
         sql_node.df_colnames = []
         sql_node.out_used_cols = []
+        sql_node.is_live_table = False
     elif index_var not in lives:
         # If the index_var not in lives we don't load the index.
         # To do this we mark the index_column_name as None
@@ -354,6 +358,7 @@ def sql_distributed_run(
         typemap,
         sql_node.filters,
         sql_node.pyarrow_table_schema,
+        not sql_node.is_live_table,
     )
 
     schema_type = types.none if sql_node.database_schema is None else string_type
@@ -421,12 +426,12 @@ def sql_distributed_run(
     # can be dead because otherwise the whole
     # node should have already been removed.
     assert not (
-        sql_node.index_column_name is None and not sql_node.out_used_cols
+        sql_node.index_column_name is None and not sql_node.is_live_table
     ), "At most one of table and index should be dead if the SQL IR node is live"
     if sql_node.index_column_name is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
-    elif not sql_node.out_used_cols:
+    elif not sql_node.is_live_table:
         # If the table is dead, remove the node
         nodes.pop(-2)
 
@@ -580,6 +585,8 @@ def sql_remove_dead_column(sql_node, column_live_map, equiv_vars, typemap):
         # df_colnames is set to an empty list if the table is dead
         # see 'remove_dead_sql'
         sql_node.df_colnames,
+        # Iceberg doesn't require reading any columns
+        require_one_column=sql_node.db_type != "iceberg",
     )
 
 
@@ -731,6 +738,7 @@ def _gen_sql_reader_py(
     typemap,
     filters,
     pyarrow_table_schema: "Optional[pyarrow.Schema]",
+    is_dead_table,
 ):
     """
     Function that generates the main SQL implementation. There are
@@ -873,9 +881,6 @@ def _gen_sql_reader_py(
             func_text += f"  local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
         else:
             func_text += f"  local_rows = total_rows\n"
-
-        # If we aren't loading any column the table is dead
-        is_dead_table = not out_used_cols
 
         # Table type
         py_table_type = TableType(tuple(col_typs))

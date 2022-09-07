@@ -114,6 +114,46 @@ def test_simple_table_read(iceberg_database, iceberg_table_conn, table_name):
     )
 
 
+@pytest.mark.parametrize(
+    "table_name",
+    [
+        # TODO: BE-2831 Reading maps from parquet not supported yet
+        pytest.param(
+            "simple_map_table",
+            marks=pytest.mark.skip(reason="Need to support reading maps from parquet."),
+        ),
+        "simple_string_table",
+        "partitions_dt_table",
+        "simple_dt_tsz_table",
+        "simple_decimals_table",
+    ],
+)
+def test_read_zero_cols(iceberg_database, iceberg_table_conn, table_name):
+    """
+    Test that computing just a length in Iceberg loads 0 columns.
+    """
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        return len(df)
+
+    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=len(py_out),
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(impl)
+        bodo_func(table_name, conn, db_schema)
+
+        check_logger_msg(stream, "Columns loaded []")
+
+
 def test_simple_tz_aware_table_read(iceberg_database, iceberg_table_conn):
     """
     Test simple read operation on simple_tz_aware_table.

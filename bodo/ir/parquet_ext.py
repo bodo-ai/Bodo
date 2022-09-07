@@ -71,7 +71,7 @@ class ParquetReader(ir.Stmt):
         # get eliminated.
         self.unsupported_columns = unsupported_columns
         self.unsupported_arrow_types = unsupported_arrow_types
-        # Is the variable currently alive. This should be replaced with most
+        # Is the variable currently alive. This should be replaced with more
         # robust handling in connectors.
         self.is_live_table = True
 

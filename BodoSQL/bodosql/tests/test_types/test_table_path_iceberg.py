@@ -7,6 +7,7 @@ Mostly reuses tests/fixtures from the engine, but using bodosql's TablePath
 import io
 
 import bodosql
+import pandas as pd
 import pytest
 
 import bodo
@@ -131,3 +132,37 @@ def test_column_pruning(iceberg_database, iceberg_table_conn):
 
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
     check_func(impl, (table_name, conn, db_schema), py_output=py_out)
+
+
+def test_zero_columns_pruning(iceberg_database, iceberg_table_conn):
+    """
+    Test loading just a length from iceberg tables.
+    """
+
+    table_name = "simple_string_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        bc = bodosql.BodoSQLContext(
+            {
+                "iceberg_tbl": bodosql.TablePath(
+                    table_name, "sql", conn_str=conn, db_schema=db_schema
+                )
+            }
+        )
+        df = bc.sql("SELECT COUNT(*) as cnt FROM iceberg_tbl")
+        return df
+
+    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = pd.DataFrame({"cnt": len(py_out)}, index=pd.RangeIndex(0, 1, 1))
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit()(impl)(table_name, conn, db_schema)
+        check_logger_msg(stream, "Columns loaded []")
+
+    check_func(
+        impl, (table_name, conn, db_schema), py_output=py_out, is_out_distributed=False
+    )
