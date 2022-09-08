@@ -2475,19 +2475,22 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String argName = arg.getName();
     String argCode = arg.getExprCode();
     RexNode patternNode = node.operands.get(1);
+
+    if (!(patternNode instanceof RexLiteral)) {
+      throw new BodoSQLCodegenException(
+          "Error: Pattern must be a string literal");
+    }
     RexNodeVisitorInfo pattern =
         visitRexNode(patternNode, colNames, id, inputVar, isSingleRow, ctx);
     String sqlPattern = pattern.getExprCode();
     String opName = node.op.getName();
     String name = generateLikeName(opName, argName, sqlPattern);
     /* Assumption: Typing in LIKE requires this to be a string type. */
-    boolean isLiteral = (patternNode instanceof RexLiteral);
     String likeCode =
         generateLikeCode(
             opName,
             argCode,
             sqlPattern,
-            isLiteral,
             isSingleRow
                 || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id))
                     == BodoSQLExprType.ExprType.SCALAR));
