@@ -64,4 +64,10 @@ public interface BodoSQLCatalog {
    * @return The generated code to produce a read.
    */
   String generateReadCode(String schemaName, String tableName);
+
+  /**
+   * Close any connections to the remote DataBase. If there are no connections this should be a
+   * no-op.
+   */
+  void closeConnections();
 }
