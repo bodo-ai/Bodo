@@ -9,6 +9,8 @@ import java.sql.*;
 import java.util.*;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   /**
@@ -31,6 +33,15 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   // These are separate because the Java and Python connection
   // strings pass different properties.
   private final Properties totalProperties;
+
+  // Cached valued for the connection
+  private Connection conn;
+
+  // Cached value for the database metadata.
+  private DatabaseMetaData dbMeta;
+
+  // Logger for logging warnings.
+  private static final Logger LOGGER = LoggerFactory.getLogger(SnowflakeCatalogImpl.class);
 
   /**
    * Create the catalog and store the relevant account information.
@@ -60,6 +71,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     this.totalProperties.put("user", username);
     this.totalProperties.put("password", password);
     this.totalProperties.putAll(this.accountInfo);
+    this.conn = null;
+    this.dbMeta = null;
   }
 
   /**
@@ -69,20 +82,23 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    * @throws SQLException
    */
   private Connection getConnection() throws SQLException {
-    // TODO: Cache the same connection if possible
-    return DriverManager.getConnection(connectionString, totalProperties);
+    if (conn == null) {
+      conn = DriverManager.getConnection(connectionString, totalProperties);
+    }
+    return conn;
   }
 
   /**
-   * Get the DataBase metadata for a Snowflake connection
+   * Get the DataBase metadata for the Snowflake connection
    *
-   * @param conn Connection to Snowflake
    * @return DatabaseMetaData for Snowflake
    * @throws SQLException
    */
-  private DatabaseMetaData getDataBaseMetaData(Connection conn) throws SQLException {
-    // TODO: Cache the same metadata if possible
-    return conn.getMetaData();
+  private DatabaseMetaData getDataBaseMetaData() throws SQLException {
+    if (dbMeta == null) {
+      dbMeta = getConnection().getMetaData();
+    }
+    return dbMeta;
   }
 
   /**
@@ -95,8 +111,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   @Override
   public Set<String> getTableNames(String schemaName) {
     try {
-      Connection conn = getConnection();
-      DatabaseMetaData metaData = getDataBaseMetaData(conn);
+      DatabaseMetaData metaData = getDataBaseMetaData();
       // Passing null for tableNamePattern should match all table names. Although
       // this is not in the public documentation. TABLE refers to the JDBC table
       // type.
@@ -108,8 +123,6 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getTables
         tableNames.add(tableInfo.getString(3));
       }
-      // TODO: Cache the same connection if possible
-      conn.close();
       return tableNames;
     } catch (SQLException e) {
       throw new RuntimeException(
@@ -130,8 +143,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   @Override
   public Table getTable(BodoSqlSchema schema, String tableName) {
     try {
-      Connection conn = getConnection();
-      DatabaseMetaData metaData = getDataBaseMetaData(conn);
+      DatabaseMetaData metaData = getDataBaseMetaData();
       // Passing null for columnNamePattern should match all columns. Although
       // this is not in the public documentation.
       ResultSet tableInfo = metaData.getColumns(catalogName, schema.getName(), tableName, null);
@@ -146,8 +158,6 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
             BodoSQLColumnDataType.fromJavaSqlType(JDBCType.valueOf(dataType));
         columns.add(new BodoSQLColumnImpl(columnName, type));
       }
-      // TODO: Cache the same connection if possible
-      conn.close();
       return new CatalogTableImpl(tableName, schema, columns);
     } catch (SQLException e) {
       throw new RuntimeException(
@@ -167,16 +177,13 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   public Set<String> getSchemaNames() {
     HashSet<String> schemaNames = new HashSet<>();
     try {
-      Connection conn = getConnection();
-      DatabaseMetaData metaData = getDataBaseMetaData(conn);
+      DatabaseMetaData metaData = getDataBaseMetaData();
       ResultSet schemaInfo = metaData.getSchemas(catalogName, null);
       while (schemaInfo.next()) {
         // Schema name is stored in column 1
         // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getSchemas
         schemaNames.add(schemaInfo.getString(1));
       }
-      // TODO: Cache the same connection if possible
-      conn.close();
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
@@ -256,5 +263,26 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   public String generateReadCode(String schemaName, String tableName) {
     return String.format(
         "pd.read_sql('select * from %s', '%s')", tableName, generatePythonConnStr(schemaName));
+  }
+
+  /**
+   * Close the connection to Snowflake and clear any internal variables. If there is no active
+   * connection this is a no-op.
+   */
+  public void closeConnections() {
+    if (conn != null) {
+      try {
+        conn.close();
+      } catch (SQLException e) {
+        // We ignore any exception from closing the connection string as
+        // we should no longer need to connect to Snowflake. This could happen
+        // for example if the connection already timed out.
+        LOGGER.warn(
+            String.format(
+                "Exception encountered when trying to close the Snowflake connection: %s", e));
+      }
+    }
+    dbMeta = null;
+    conn = null;
   }
 }

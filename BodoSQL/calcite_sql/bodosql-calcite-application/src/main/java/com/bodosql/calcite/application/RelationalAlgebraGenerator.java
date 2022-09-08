@@ -78,6 +78,9 @@ public class RelationalAlgebraGenerator {
   */
   private HashMap<String, String> loweredGlobalVariables;
 
+  /** Store the catalog being used to close any connections after processing a query. */
+  private BodoSQLCatalog catalog;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
    * SQL queries can be executed within its context.
@@ -159,7 +162,7 @@ public class RelationalAlgebraGenerator {
               // and instead do an inner join/filter on the values. See BS-553.
               .sqlToRelConverterConfig(
                   SqlToRelConverter.config().withInSubQueryThreshold(Integer.MAX_VALUE))
-              .parserConfig( 
+              .parserConfig(
                   SqlParser.Config.DEFAULT
                       .withCaseSensitive(false)
                       .withQuoting(Quoting.BACK_TICK)
@@ -213,6 +216,7 @@ public class RelationalAlgebraGenerator {
    *     gets stored in the {@link #config}
    */
   public RelationalAlgebraGenerator(BodoSqlSchema newSchema, String namedParamTableName) {
+    this.catalog = null;
     System.setProperty("calcite.default.charset", "UTF-8");
     try {
       CalciteConnection calciteConnection = setupCalciteConnection();
@@ -239,8 +243,8 @@ public class RelationalAlgebraGenerator {
    */
   public RelationalAlgebraGenerator(
       BodoSQLCatalog catalog, BodoSqlSchema newSchema, String namedParamTableName) {
+    this.catalog = catalog;
     System.setProperty("calcite.default.charset", "UTF-8");
-
     try {
       CalciteConnection calciteConnection = setupCalciteConnection();
       Set<String> schemaNames = catalog.getSchemaNames();
@@ -262,13 +266,6 @@ public class RelationalAlgebraGenerator {
               "Internal Error: Unable to create Relational Algebra Generator. Error message: %s",
               e));
     }
-  }
-
-  /** Direct constructor for testing purposes */
-  public RelationalAlgebraGenerator(FrameworkConfig frameworkConfig, HepProgram hepProgram) {
-    this.config = frameworkConfig;
-    this.planner = Frameworks.getPlanner(frameworkConfig);
-    this.program = hepProgram;
   }
 
   public void setRules(List<RelOptRule> rules) {
@@ -300,6 +297,10 @@ public class RelationalAlgebraGenerator {
     RelNode result = planner.rel(validatedSqlNode).project();
     if (closePlanner) {
       planner.close();
+    }
+    // Close any open connections from catalogs
+    if (catalog != null) {
+      catalog.closeConnections();
     }
     return result;
   }
