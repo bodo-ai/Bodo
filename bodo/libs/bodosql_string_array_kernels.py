@@ -27,6 +27,50 @@ def char(arr):
 
 
 @numba.generated_jit(nopython=True)
+def contains(arr, pattern):
+    """Handles cases where CONTAINS recieves optional arguments and forwards
+    to args appropriate version of the real implementation"""
+    args = [arr, pattern]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.contains",
+                ["arr", "contains"],
+                i,
+            )
+
+    def impl(arr, pattern):  # pragma: no cover
+        return contains_util(arr, pattern)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def contains_util(arr, pattern):
+    """A dedicated kernel for the SQL function CONTAINS which takes in two strings/string columns
+    and returns a Boolean in regards to whether or not the second string exists in the first
+
+    Args:
+        arr (string array/series/scalar): the strings(s) to be modified
+        pattern (string array): string(s) to be matched
+
+    Returns:
+        Boolean array/scalar: the scalar/column of Boolean results
+    """
+
+    verify_string_binary_arg(arr, "CONTAINS", "arr")
+    verify_string_binary_arg(pattern, "CONTAINS", "pattern")
+
+    out_dtype = bodo.boolean_array
+    arg_names = ["arr", "pattern"]
+    arg_types = [arr, pattern]
+    propagate_null = [True] * 2
+    scalar_text = "res[i] = arg1 in arg0\n"
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
 def editdistance_no_max(s, t):
     """Handles cases where EDITDISTANCE receives optional arguments and forwards
     to the appropriate version of the real implementation"""

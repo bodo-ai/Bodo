@@ -504,10 +504,21 @@ public final class StringOperatorTable implements SqlOperatorTable {
           null,
           OperandTypes.or(OperandTypes.STRING, OperandTypes.STRING_STRING),
           SqlFunctionCategory.STRING);
+
+  public static final SqlFunction CONTAINS =
+      new SqlFunction(
+          "CONTAINS",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN,
+          null,
+          OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.STRING),
+          SqlFunctionCategory.STRING);
+
   private List<SqlOperator> stringOperatorList =
       Arrays.asList(
           CONCAT,
           CONCAT_WS,
+          CONTAINS,
           MID,
           SUBSTR,
           INSTR,

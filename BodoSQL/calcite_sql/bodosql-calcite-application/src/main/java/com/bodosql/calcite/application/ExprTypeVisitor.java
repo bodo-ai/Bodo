@@ -101,6 +101,7 @@ public class ExprTypeVisitor {
           "COALESCE",
           "CONCAT",
           "CONCAT_WS",
+          "CONTAINS",
           "DATE_ADD",
           "DATE_SUB",
           "DATEADD",

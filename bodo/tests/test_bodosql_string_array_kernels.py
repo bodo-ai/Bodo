@@ -15,6 +15,57 @@ from bodo.tests.utils import check_func, gen_nonascii_list
 
 
 @pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                (pd.Series(["alpha", "beta", "zeta", "pi", "epsilon"])),
+                "e",
+            ),
+        ),
+        pytest.param(
+            (
+                (pd.Series(["", "zenith", "zebra", "PI", "fooze"])),
+                "ze",
+            ),
+        ),
+        pytest.param(
+            (
+                (pd.Series([b"00000", b"", b"**", b"918B*a", b""])),
+                b"",
+            ),
+        ),
+    ],
+)
+def test_contains(args):
+    def impl(arr, pattern):
+        return pd.Series(bodo.libs.bodosql_array_kernels.contains(arr, pattern))
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, (pd.Series, np.ndarray)) for arg in args):
+        impl = lambda arr, pattern: bodo.libs.bodosql_array_kernels.contains(
+            arr, pattern
+        )
+
+    # Simulates CONTAINS on a single row
+    def contains_scalar_fn(elem, pattern):
+        if pd.isna(elem) or pd.isna(pattern):
+            return False
+        else:
+            return pattern in elem
+
+    arr, pattern = args
+    contains_answer = vectorized_sol((arr, pattern), contains_scalar_fn, object)
+    check_func(
+        impl,
+        (arr, pattern),
+        py_output=contains_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
     "n",
     [
         pytest.param(

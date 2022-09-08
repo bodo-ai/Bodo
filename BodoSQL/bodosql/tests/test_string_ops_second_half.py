@@ -3,6 +3,64 @@ import pytest
 from bodosql.tests.string_ops_common import *  # noqa
 from bodosql.tests.utils import check_query
 
+from bodo.tests.utils import gen_nonascii_list
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "select A from table1 where contains(A, 'a')",
+                pd.DataFrame({"A": ["alpha", "beta", "zeta"]}),
+            ),
+        ),
+        pytest.param(
+            (
+                "select B from table1 where contains(B, 'bet')",
+                pd.DataFrame({"B": ["beta"]}),
+            ),
+        ),
+        pytest.param(
+            (
+                "select C from table1 where contains(C, 'Â Ê Î')",
+                pd.DataFrame({"C": ["Â Ê Î"]}),
+            ),
+        ),
+        pytest.param(
+            (
+                "select A, B, C from table1 where contains(C, 'aaaaaaaaa')",
+                pd.DataFrame({"A": [], "B": [], "C": []}).astype(object),
+            ),
+        ),
+        pytest.param(
+            ("select C, D from table1 where contains(D, X'616263')", pd.DataFrame()),
+            marks=pytest.mark.skip(
+                "[BE-3304]: Add support for binary literals in BodoSQL"
+            ),
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_contains(args, spark_info, memory_leak_check):
+    df = pd.DataFrame(
+        {
+            "A": ["alpha", "beta", "zeta", "pi", "epsilon"],
+            "B": ["", "beta", "zebra", "PI", "foo"],
+            "C": gen_nonascii_list(5),
+            "D": [b"abc", b"def", b"", b"000000", b"123"],
+        }
+    )
+
+    query, expected_output = args
+    check_query(
+        query,
+        {"table1": df},
+        spark_info,
+        check_names=False,
+        expected_output=expected_output,
+    )
+
 
 def test_concat_operator_cols(bodosql_string_types, spark_info, memory_leak_check):
     """Checks that the concat operator is working for columns"""

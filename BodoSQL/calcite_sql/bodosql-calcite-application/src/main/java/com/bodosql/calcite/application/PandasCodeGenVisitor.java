@@ -2371,6 +2371,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "STRCMP":
           case "RIGHT":
           case "LEFT":
+          case "CONTAINS":
           case "INSTR":
             assert operandsInfo.size() == 2;
             return getTwoArgStringFnInfo(
