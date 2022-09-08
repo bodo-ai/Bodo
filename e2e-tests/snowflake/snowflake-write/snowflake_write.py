@@ -1,5 +1,4 @@
 import argparse
-import os
 import time
 from datetime import datetime
 from uuid import uuid4
@@ -8,29 +7,16 @@ import numba
 import numpy as np
 import pandas as pd
 from mpi4py import MPI
+from utils.utils import (
+    checksum_str_df,
+    drop_sf_table,
+    get_sf_table,
+    get_sf_write_conn,
+)
 
 import bodo
 
 comm = MPI.COMM_WORLD
-
-
-def checksum_str_df(df):
-    """
-    Compute checksum of the a dataframe with all string columns.
-    We sum up the ascii encoding and compute modulo 256 for
-    each element and then add it up across all processes.
-
-    Args:
-        df (pd.DataFrame): DataFrame with all string columns
-
-    Returns:
-        int64: Checksum
-    """
-    comm = MPI.COMM_WORLD
-    df_hash = df.applymap(lambda x: sum(x.encode("ascii")) % 256)
-    str_sum = np.int64(df_hash.sum().sum())
-    str_sum = comm.allreduce(str_sum, op=MPI.SUM)
-    return np.int64(str_sum)
 
 
 @bodo.jit
@@ -58,66 +44,6 @@ def checksum(df):
         df_str_sum = checksum_str_df(df_str)
 
     return df_no_str_sum + df_str_sum
-
-
-def get_sf_conn():
-    """
-    Get Snowflake connection string of the form:
-    "snowflake://{username}:{password}@{account}/{database}/{schema}?warehouse={warehouse}"
-
-    username is derived from the SF_USERNAME environment variable
-    password is derived from the SF_PASSWORD environment variable
-    account is derived from the SF_ACCOUNT environment variable
-    database is derived from the SF_DATABASE environment variable, else it defaults to E2E_TESTS_DB
-    schema is derived from the SF_SCHEMA environment variable, else it defaults to public
-    warehouse is derived from the SF_WAREHOUSE environment variable, else it defaults to DEMO_WH
-
-    Returns:
-        str: snowflake connection string
-    """
-    username = os.environ["SF_USERNAME"]
-    password = os.environ["SF_PASSWORD"]
-    account = os.environ["SF_ACCOUNT"]
-    database = os.environ.get("SF_DATABASE", "E2E_TESTS_DB")
-    schema = os.environ.get("SF_SCHEMA", "public")
-    warehouse = os.environ.get("SF_WAREHOUSE", "DEMO_WH")
-    return f"snowflake://{username}:{password}@{account}/{database}/{schema}?warehouse={warehouse}"
-
-
-@bodo.jit
-def get_sf_table(table_name, sf_conn):
-    """
-    Get length of Snowflake table.
-
-    Args:
-        table_name (str): name of table
-        sf_conn (str): snowflake connection string
-
-    Returns:
-        pd.DataFrame: Snowflake Table
-    """
-    df = pd.read_sql(f"select * from {table_name}", sf_conn)
-    return df
-
-
-def drop_sf_table(table_name, sf_conn):
-    """
-    Drop a Snowflake Table.
-
-    Args:
-        table_name (str): name of table
-        sf_conn (str): snowflake connection string
-
-    Returns:
-        list: list of results from the drop command
-    """
-    from sqlalchemy import create_engine
-
-    engine = create_engine(sf_conn)
-    connection = engine.connect()
-    result = connection.execute(f"drop table {table_name}")
-    result = result.fetchall()
-    return result
 
 
 @bodo.jit(cache=True)
@@ -183,7 +109,7 @@ if __name__ == "__main__":
     table_name = comm.bcast(table_name)
 
     # Get Snowflake connection string
-    sf_conn = get_sf_conn()
+    sf_conn = get_sf_write_conn()
 
     # Perform the e2e test
     t0 = time.time()
