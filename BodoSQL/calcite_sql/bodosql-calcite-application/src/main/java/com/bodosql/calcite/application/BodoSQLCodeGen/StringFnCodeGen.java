@@ -57,6 +57,7 @@ public class StringFnCodeGen {
     equivalentFnMapScalars.put("UPPER", "bodosql.libs.generated_lib.sql_null_checking_upper");
     equivalentPandasMethodMapColumns.put("UCASE", "str.upper");
     equivalentPandasMethodMapColumns.put("UPPER", "str.upper");
+    equivalentFnMapBroadcast.put("CONTAINS", "bodo.libs.bodosql_array_kernels.contains");
     equivalentFnMapBroadcast.put("LPAD", "bodo.libs.bodosql_array_kernels.lpad");
     equivalentFnMapBroadcast.put("RPAD", "bodo.libs.bodosql_array_kernels.rpad");
     equivalentFnMapBroadcast.put("LEFT", "bodo.libs.bodosql_array_kernels.left");

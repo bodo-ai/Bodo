@@ -37,6 +37,7 @@ broadcasted_fixed_arg_functions = {
     "change_event",
     "char",
     "cond",
+    "contains",
     "conv",
     "cos",
     "cosh",
