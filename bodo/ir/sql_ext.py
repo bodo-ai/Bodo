@@ -384,12 +384,17 @@ def sql_distributed_run(
         used_col_names = [sql_node.df_colnames[i] for i in sql_node.out_used_cols]
         if sql_node.index_column_name:
             used_col_names.append(sql_node.index_column_name)
-        # Update the SQL request to remove any unused columns. This is both
-        # an optimization (the SQL engine loads less data) and is needed for
-        # correctness. See test_sql_snowflake_single_column
-        col_str = escape_column_names(
-            used_col_names, sql_node.db_type, sql_node.converted_colnames
-        )
+        if len(used_col_names) == 0:
+            # If we are loading 0 columns then replace the query with a COUNT(*)
+            # as we just need the length of the table.
+            col_str = "COUNT(*)"
+        else:
+            # Update the SQL request to remove any unused columns. This is both
+            # an optimization (the SQL engine loads less data) and is needed for
+            # correctness. See test_sql_snowflake_single_column
+            col_str = escape_column_names(
+                used_col_names, sql_node.db_type, sql_node.converted_colnames
+            )
 
         # https://stackoverflow.com/questions/33643163/in-oracle-as-alias-not-working
         if sql_node.db_type == "oracle":
@@ -585,8 +590,8 @@ def sql_remove_dead_column(sql_node, column_live_map, equiv_vars, typemap):
         # df_colnames is set to an empty list if the table is dead
         # see 'remove_dead_sql'
         sql_node.df_colnames,
-        # Iceberg doesn't require reading any columns
-        require_one_column=sql_node.db_type != "iceberg",
+        # Iceberg and Snowflake don't require reading any columns
+        require_one_column=sql_node.db_type not in ("iceberg", "snowflake"),
     )
 
 
@@ -807,7 +812,7 @@ def _gen_sql_reader_py(
 
     table_idx = None
     type_usecols_offsets_arr = None
-    py_table_type = TableType(tuple(col_typs)) if out_used_cols else types.none
+    py_table_type = types.none if is_dead_table else TableType(tuple(col_typs))
 
     # Handle filter information because we may need to update the function header
     filter_args = ""
@@ -882,11 +887,6 @@ def _gen_sql_reader_py(
         else:
             func_text += f"  local_rows = total_rows\n"
 
-        # Table type
-        py_table_type = TableType(tuple(col_typs))
-        if is_dead_table:
-            py_table_type = types.none
-
         # Copied from _gen_pq_reader_py and simplified (no partitions or input_file_name)
         # table_idx is a list of index values for each array in the bodo.TableType being loaded from C++.
         # For a list column, the value is an integer which is the location of the column in the C++ Table.
@@ -951,19 +951,26 @@ def _gen_sql_reader_py(
         # Handle if we need to append an index
         if index_column_name:
             nullable_cols.append(int(is_nullable(index_column_type)))
-        func_text += f"  out_table = snowflake_read(unicode_to_utf8(sql_request), unicode_to_utf8(conn), {parallel}, {len(nullable_cols)}, np.array({nullable_cols}, dtype=np.int32).ctypes,\n"
-        if len(snowflake_dict_cols) > 0:
-            func_text += f"        np.array({snowflake_dict_cols}, dtype=np.int32).ctypes, {len(snowflake_dict_cols)})\n"
-        else:
-            func_text += f"        0, 0)\n"
+        snowflake_dict_cols_array = np.array(snowflake_dict_cols, dtype=np.int32)
+        nullable_cols_array = np.array(nullable_cols, dtype=np.int32)
+        # Track the total number of rows for loading 0 columns. If we load any
+        # data this is garbage.
+        func_text += "  total_rows_np = np.array([0], dtype=np.int64)\n"
+        func_text += f"  out_table = snowflake_read(unicode_to_utf8(sql_request), unicode_to_utf8(conn), {parallel}, {len(nullable_cols_array)}, nullable_cols_array.ctypes,\n"
+        func_text += f"       snowflake_dict_cols_array.ctypes, {len(snowflake_dict_cols_array)}, total_rows_np.ctypes)\n"
         func_text += "  check_and_propagate_cpp_exception()\n"
+        func_text += f"  total_rows = total_rows_np[0]\n"
+        if parallel:
+            func_text += f"  local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
+        else:
+            func_text += f"  local_rows = total_rows\n"
         if index_column_name:
             # The index is always placed in the last slot of the query if it exists.
             func_text += f"  index_var = info_to_array(info_from_table(out_table, {len(out_used_cols)}), index_col_typ)\n"
         else:
             # There is no index to load
             func_text += "  index_var = None\n"
-        if out_used_cols:
+        if not is_dead_table:
             # Map each logical column in the table to its location
             # in the input SQL table
             idx = []
@@ -976,15 +983,25 @@ def _gen_sql_reader_py(
                     idx.append(-1)
             table_idx = np.array(idx, dtype=np.int64)
             func_text += f"  table_var = cpp_table_to_py_table(out_table, table_idx_{call_id}, py_table_type_{call_id})\n"
+            if len(out_used_cols) == 0:
+                if index_column_name:
+                    # Set the table length using the index var if we load that column.
+                    func_text += (
+                        f"  table_var = set_table_len(table_var, len(index_var))\n"
+                    )
+                else:
+                    # Set the table length using the total rows if don't load any columns
+                    func_text += f"  table_var = set_table_len(table_var, local_rows)\n"
+
         else:
             # We only load the index as the table is dead.
             func_text += "  table_var = None\n"
         func_text += "  delete_table(out_table)\n"
         func_text += f"  ev.finalize()\n"
-        func_text += "  return (-1, table_var, index_var)\n"
+        func_text += "  return (total_rows, table_var, index_var)\n"
 
     else:
-        if out_used_cols:
+        if not is_dead_table:
             # Indicate which columns to load from the table
             func_text += f"  type_usecols_offsets_arr_{call_id}_2 = type_usecols_offsets_arr_{call_id}\n"
             type_usecols_offsets_arr = np.array(out_used_cols, dtype=np.int64)
@@ -1038,7 +1055,7 @@ def _gen_sql_reader_py(
         else:
             # Dead Index
             func_text += "    index_var = None\n"
-        if out_used_cols:
+        if not is_dead_table:
             func_text += f"    arrs = []\n"
             func_text += f"    for i in range(df_ret.shape[1]):\n"
             func_text += f"      arrs.append(df_ret.iloc[:, i].values)\n"
@@ -1067,6 +1084,8 @@ def _gen_sql_reader_py(
                 "delete_table": delete_table,
                 "cpp_table_to_py_table": cpp_table_to_py_table,
                 f"table_idx_{call_id}": table_idx,
+                "set_table_len": bodo.hiframes.table.set_table_len,
+                "get_node_portion": bodo.libs.distributed_api.get_node_portion,
             }
         )
 
@@ -1081,8 +1100,6 @@ def _gen_sql_reader_py(
                 f"pyarrow_table_schema_{call_id}": pyarrow_table_schema,
                 "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
                 "iceberg_read": _iceberg_read,
-                "get_node_portion": bodo.libs.distributed_api.get_node_portion,
-                "set_table_len": bodo.hiframes.table.set_table_len,
             }
         )
     elif db_type == "snowflake":
@@ -1090,6 +1107,8 @@ def _gen_sql_reader_py(
             {
                 "np": np,
                 "snowflake_read": _snowflake_read,
+                "nullable_cols_array": nullable_cols_array,
+                "snowflake_dict_cols_array": snowflake_dict_cols_array,
             }
         )
     else:
@@ -1132,6 +1151,7 @@ _snowflake_read = types.ExternalFunction(
         types.voidptr,
         types.voidptr,
         types.int32,
+        types.voidptr,
     ),
 )
 

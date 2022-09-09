@@ -37,15 +37,19 @@ def connector_array_analysis(node, equiv_set, typemap, array_analysis):
     # which should also the same length in the first dimension
     all_shapes = []
 
-    for col_var in node.out_vars:
+    for i, col_var in enumerate(node.out_vars):
         typ = typemap[col_var.name]
         # parquet node's index variable may be None if there is no index array
         if typ == types.none:
             continue
-        shape = array_analysis._gen_shape_call(equiv_set, col_var, typ.ndim, None, post)
-        equiv_set.insert_equiv(col_var, shape)
-        all_shapes.append(shape[0])
-        equiv_set.define(col_var, set())
+        # If the table variable is dead don't generate the shape call.
+        if i != 0 or node.connector_typ not in ("parquet", "sql") or node.is_live_table:
+            shape = array_analysis._gen_shape_call(
+                equiv_set, col_var, typ.ndim, None, post
+            )
+            equiv_set.insert_equiv(col_var, shape)
+            all_shapes.append(shape[0])
+            equiv_set.define(col_var, set())
 
     if len(all_shapes) > 1:
         equiv_set.insert_equiv(*all_shapes)

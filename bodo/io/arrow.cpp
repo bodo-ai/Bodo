@@ -54,7 +54,7 @@ void iceberg_pq_write_py_entry(
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,
                            int64_t n_fields, int32_t* is_nullable,
                            int32_t* str_as_dict_cols,
-                           int32_t num_str_as_dict_cols);
+                           int32_t num_str_as_dict_cols, int64_t* total_nrows);
 
 PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject* m;
