@@ -234,6 +234,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         // Data type is stored in column 5
         // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getColumns
         String columnName = tableInfo.getString(4);
+        if (columnName.equals(columnName.toUpperCase())) {
+          columnName = columnName.toLowerCase();
+        }
         int dataType = tableInfo.getInt(5);
         BodoSQLColumnDataType type =
             BodoSQLColumnDataType.fromJavaSqlType(JDBCType.valueOf(dataType));

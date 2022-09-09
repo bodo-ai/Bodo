@@ -258,7 +258,7 @@ public class RelationalAlgebraGenerator {
 
       List<String> defaultSchema = new ArrayList<String>();
       // TODO (allai5): implement hierarchy of default schemas
-      defaultSchema.add(schema.getParentSchema().getName());
+      defaultSchema.add(newSchema.getName());
       setupPlanner(defaultSchema, schema, namedParamTableName);
     } catch (Exception e) {
       throw new RuntimeException(
