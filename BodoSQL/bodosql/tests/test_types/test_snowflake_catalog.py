@@ -137,3 +137,53 @@ def test_snowflake_catalog_read(memory_leak_check):
         get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"),
     )
     check_func(impl, (bc,), py_output=py_output)
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_catalog_read_tpch(memory_leak_check):
+    tpch_query = """select
+                      n_name,
+                      sum(l_extendedprice * (1 - l_discount)) as revenue
+                    from
+                      tpch_sf1.customer,
+                      tpch_sf1.orders,
+                      tpch_sf1.lineitem,
+                      tpch_sf1.supplier,
+                      tpch_sf1.nation,
+                      tpch_sf1.region
+                    where
+                      c_custkey = o_custkey
+                      and l_orderkey = o_orderkey
+                      and l_suppkey = s_suppkey
+                      and c_nationkey = s_nationkey
+                      and s_nationkey = n_nationkey
+                      and n_regionkey = r_regionkey
+                      and r_name = 'ASIA'
+                      and o_orderdate >= '1994-01-01'
+                      and o_orderdate < '1995-01-01'
+                    group by
+                      n_name
+                    order by
+                      revenue desc
+    """
+
+    def impl(bc):
+        return bc.sql(tpch_query)
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ["SF_USER"],
+        os.environ["SF_PASSWORD"],
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "SNOWFLAKE_SAMPLE_DATA",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    py_output = pd.read_sql(
+        tpch_query,
+        get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"),
+    )
+
+    check_func(impl, (bc,), py_output=py_output, reset_index=True)
