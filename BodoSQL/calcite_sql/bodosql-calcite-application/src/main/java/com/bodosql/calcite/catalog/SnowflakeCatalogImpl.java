@@ -1,5 +1,7 @@
 package com.bodosql.calcite.catalog;
 
+import static java.lang.Math.min;
+
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
@@ -43,6 +45,16 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   // Logger for logging warnings.
   private static final Logger LOGGER = LoggerFactory.getLogger(SnowflakeCatalogImpl.class);
 
+  // The maximum number of retries for connecting to snowflake before succeeding.
+  private static final int maxRetries = 5;
+
+  // The initial time to wait when retrying connections. This will be done with
+  // an exponential backoff so this is just the base wait time.
+  private static final int backoffMilliseconds = 100;
+
+  // Maximum amount of time we are going to wait between retries
+  private static final int maxBackoffMilliseconds = 2000;
+
   /**
    * Create the catalog and store the relevant account information.
    *
@@ -83,20 +95,59 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   private Connection getConnection() throws SQLException {
     if (conn == null) {
-      conn = DriverManager.getConnection(connectionString, totalProperties);
+      // DriverManager need manual retries
+      // https://stackoverflow.com/questions/6110975/connection-retry-using-jdbc
+      int numRetries = 0;
+      do {
+        conn = DriverManager.getConnection(connectionString, totalProperties);
+        if (conn == null) {
+          int sleepMultiplier = 2 << numRetries;
+          int sleepTime = min(sleepMultiplier * backoffMilliseconds, maxBackoffMilliseconds);
+          LOGGER.warn(
+              String.format(
+                  "Failed to connect to Snowflake, retrying after %d milleseconds...", sleepTime));
+          try {
+            Thread.sleep(sleepTime);
+          } catch (InterruptedException e) {
+            throw new RuntimeException(
+                "Backoff between Snowflake connection attempt interupted...", e);
+          }
+        }
+        numRetries += 1;
+      } while (conn == null && numRetries < maxRetries);
     }
     return conn;
   }
 
   /**
+   * Is the current connection going to be loaded from cache. This determines if we need to try any
+   * operation that uses the connection.
+   *
+   * @return If the connection is not null.
+   */
+  private boolean isConnectionCached() {
+    return conn != null;
+  }
+
+  /**
    * Get the DataBase metadata for the Snowflake connection
    *
+   * @param shouldRetry If failing to load the Metadata should we retry with a fresh connection?
    * @return DatabaseMetaData for Snowflake
    * @throws SQLException
    */
-  private DatabaseMetaData getDataBaseMetaData() throws SQLException {
-    if (dbMeta == null) {
-      dbMeta = getConnection().getMetaData();
+  private DatabaseMetaData getDataBaseMetaData(boolean shouldRetry) throws SQLException {
+    try {
+      if (dbMeta == null) {
+        dbMeta = getConnection().getMetaData();
+      }
+    } catch (SQLException e) {
+      if (shouldRetry) {
+        closeConnections();
+        return getDataBaseMetaData(false);
+      } else {
+        throw e;
+      }
     }
     return dbMeta;
   }
@@ -110,8 +161,19 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   @Override
   public Set<String> getTableNames(String schemaName) {
+    return getTableNamesImpl(schemaName, isConnectionCached());
+  }
+
+  /**
+   * Implementation of getTableNames that enables retrying if a cached connection fails
+   *
+   * @param schemaName Name of the schema in the catalog.
+   * @param shouldRetry Should we retry the connection if we see an exception?
+   * @return
+   */
+  private Set<String> getTableNamesImpl(String schemaName, boolean shouldRetry) {
     try {
-      DatabaseMetaData metaData = getDataBaseMetaData();
+      DatabaseMetaData metaData = getDataBaseMetaData(shouldRetry);
       // Passing null for tableNamePattern should match all table names. Although
       // this is not in the public documentation. TABLE refers to the JDBC table
       // type.
@@ -125,10 +187,17 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       }
       return tableNames;
     } catch (SQLException e) {
-      throw new RuntimeException(
+      String errorMsg =
           String.format(
               "Unable to get table names for Schema '%s' from Snowflake account. Error message: %s",
-              schemaName, e));
+              schemaName, e);
+      if (shouldRetry) {
+        LOGGER.warn(errorMsg);
+        closeConnections();
+        return getTableNamesImpl(schemaName, false);
+      } else {
+        throw new RuntimeException(errorMsg);
+      }
     }
   }
 
@@ -142,8 +211,20 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   @Override
   public Table getTable(BodoSqlSchema schema, String tableName) {
+    return getTableImpl(schema, tableName, isConnectionCached());
+  }
+
+  /**
+   * Implement of getTable that enables retrying if a cached connection fails
+   *
+   * @param schema BodoSQL schema containing the table.
+   * @param tableName Name of the table.
+   * @param shouldRetry Should we retry the connection if we see an exception?
+   * @return The table object.
+   */
+  private Table getTableImpl(BodoSqlSchema schema, String tableName, boolean shouldRetry) {
     try {
-      DatabaseMetaData metaData = getDataBaseMetaData();
+      DatabaseMetaData metaData = getDataBaseMetaData(shouldRetry);
       // Passing null for columnNamePattern should match all columns. Although
       // this is not in the public documentation.
       ResultSet tableInfo = metaData.getColumns(catalogName, schema.getName(), tableName, null);
@@ -160,10 +241,17 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       }
       return new CatalogTableImpl(tableName, schema, columns);
     } catch (SQLException e) {
-      throw new RuntimeException(
+      String errorMsg =
           String.format(
               "Unable to get table '%s' for Schema '%s' from Snowflake account. Error message: %s",
-              tableName, schema.getName(), e));
+              tableName, schema.getName(), e);
+      if (shouldRetry) {
+        LOGGER.warn(errorMsg);
+        closeConnections();
+        return getTableImpl(schema, tableName, false);
+      } else {
+        throw new RuntimeException(errorMsg);
+      }
     }
   }
 
@@ -175,9 +263,13 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   @Override
   public Set<String> getSchemaNames() {
+    return getSchemaNamesImpl(isConnectionCached());
+  }
+
+  private Set<String> getSchemaNamesImpl(boolean shouldRetry) {
     HashSet<String> schemaNames = new HashSet<>();
     try {
-      DatabaseMetaData metaData = getDataBaseMetaData();
+      DatabaseMetaData metaData = getDataBaseMetaData(shouldRetry);
       ResultSet schemaInfo = metaData.getSchemas(catalogName, null);
       while (schemaInfo.next()) {
         // Schema name is stored in column 1
@@ -185,7 +277,17 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         schemaNames.add(schemaInfo.getString(1));
       }
     } catch (SQLException e) {
-      throw new RuntimeException(e);
+      String errorMsg =
+          String.format(
+              "Unable to get a list of schema names from the Snowflake account. Error message: %s",
+              e);
+      if (shouldRetry) {
+        LOGGER.warn(errorMsg);
+        closeConnections();
+        return getSchemaNamesImpl(false);
+      } else {
+        throw new RuntimeException(errorMsg);
+      }
     }
     return schemaNames;
   }
