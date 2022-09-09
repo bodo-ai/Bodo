@@ -8,11 +8,7 @@ import os
 import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.utils import (
-    _check_query_equal,
-    bodo_version_older,
-    check_num_parquet_readers,
-)
+from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 
 import bodo
 from bodo.tests.utils import (
@@ -151,7 +147,7 @@ def test_table_path_pq_bodosqlContext_jit(
 
 
 @pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ or bodo_version_older(2022, 2, 1),
+    "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
 def test_table_path_sql_bodosqlContext_python(memory_leak_check):
@@ -187,7 +183,7 @@ def test_table_path_sql_bodosqlContext_python(memory_leak_check):
 
 
 @pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ or bodo_version_older(2022, 2, 1),
+    "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
 def test_table_path_sql_bodosqlContext_jit(memory_leak_check):

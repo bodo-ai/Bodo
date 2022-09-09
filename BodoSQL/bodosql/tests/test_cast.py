@@ -3,7 +3,7 @@
 Test correctness of SQL cast queries on BodoSQL
 """
 import pytest
-from bodosql.tests.utils import bodo_version_older, check_query
+from bodosql.tests.utils import check_query
 
 
 @pytest.fixture(
@@ -200,10 +200,6 @@ def test_numeric_nullable_scalar_to_numeric(
 
 
 @pytest.mark.slow
-@pytest.mark.skipif(
-    bodo_version_older(2021, 7, 3),
-    reason="Requires next mini-release for engine changes to support casting strings to integers",
-)
 def test_string_scalar_to_numeric(
     bodosql_integers_string_types, spark_info, numeric_type_names
 ):
@@ -313,10 +309,6 @@ def test_datetime_scalar_to_datetime(
     )
 
 
-@pytest.mark.skipif(
-    bodo_version_older(2021, 9, 2),
-    reason="requires next mini release for support for columnwise str(np.dt64)",
-)
 def test_timestamp_col_to_str(bodosql_datetime_types, spark_info):
     """Tests casting datetime columns to string types"""
     query = "SELECT CAST(A AS VARCHAR) FROM TABLE1"

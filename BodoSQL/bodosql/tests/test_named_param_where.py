@@ -5,7 +5,7 @@ Test that Named Parameters can be used for where expressions.
 
 import pytest
 from bodosql.tests.named_params_common import *  # noqa
-from bodosql.tests.utils import bodo_version_older, check_query
+from bodosql.tests.utils import check_query
 
 
 def test_int_compare(
@@ -78,10 +78,6 @@ def test_string_compare(
     )
 
 
-@pytest.mark.skipif(
-    bodo_version_older(2021, 7, 3),
-    reason="[BE-1174] Requires next mini-release for Timestamp bug fix",
-)
 def test_datetime_compare(
     bodosql_datetime_types, spark_info, comparison_ops, timestamp_named_params
 ):

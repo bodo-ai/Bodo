@@ -5,7 +5,7 @@ Test that Named Parameters can be used in having expressions.
 
 import pytest
 from bodosql.tests.named_params_common import *  # noqa
-from bodosql.tests.utils import bodo_version_older, check_query
+from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
@@ -83,10 +83,6 @@ def test_string_having(bodosql_string_types, spark_info, string_named_params):
     )
 
 
-@pytest.mark.skipif(
-    bodo_version_older(2021, 7, 3),
-    reason="[BE-1174] Requires next mini-release for Timestamp bug fix",
-)
 def test_datetime_having(bodosql_datetime_types, spark_info, timestamp_named_params):
     """
     Tests that having works with datetime data and timestamp named parameters

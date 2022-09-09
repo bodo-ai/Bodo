@@ -4,10 +4,13 @@ Tests various components of the SnowflakeCatalog type both inside and outside a
 direct BodoSQLContext.
 """
 
+import os
+
 import bodosql
+import pandas as pd
 import pytest
 
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, get_snowflake_connection_string
 
 
 @pytest.fixture(
@@ -111,3 +114,26 @@ def test_snowflake_catalog_constructor(memory_leak_check):
     # Note: Empty dictionary passed via args or literal map not supported yet.
     # [BE-3455]
     # check_func(impl4, ())
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_catalog_read(memory_leak_check):
+    def impl(bc):
+        return bc.sql("SELECT r_name FROM TPCH_SF1.REGION ORDER BY r_name")
+
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ["SF_USER"],
+        os.environ["SF_PASSWORD"],
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "SNOWFLAKE_SAMPLE_DATA",
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    py_output = pd.read_sql(
+        "Select r_name from REGION ORDER BY r_name",
+        get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"),
+    )
+    check_func(impl, (bc,), py_output=py_output)

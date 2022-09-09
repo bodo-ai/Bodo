@@ -8,7 +8,6 @@ import os
 import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.utils import bodo_version_older
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -20,7 +19,7 @@ from bodo.tests.utils import check_func, get_snowflake_connection_string
 
 
 @pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ or bodo_version_older(2022, 2, 1),
+    "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
 def test_simple_filter_pushdown(memory_leak_check):

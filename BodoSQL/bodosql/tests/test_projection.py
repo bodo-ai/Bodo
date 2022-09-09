@@ -4,7 +4,7 @@ Test correctness of SQL projection queries on BodoSQL
 """
 import pandas as pd
 import pytest
-from bodosql.tests.utils import bodo_version_older, check_query
+from bodosql.tests.utils import check_query
 
 
 @pytest.mark.slow
@@ -173,10 +173,6 @@ def test_select_all_string(bodosql_string_types, spark_info, memory_leak_check):
     check_query(query, bodosql_string_types, spark_info)
 
 
-@pytest.mark.skipif(
-    bodo_version_older(2022, 6, 3),
-    reason="Requires next mini-release to maintain non-nullable scalars",
-)
 def test_select_expand_literal(basic_df, spark_info, memory_leak_check):
     """
     Tests select with all literals is expanded to

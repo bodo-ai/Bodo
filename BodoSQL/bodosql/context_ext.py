@@ -362,7 +362,16 @@ def _gen_pd_func_text_and_lowered_globals(
             schema = intialize_schema(
                 table_names, df_types, orig_bodo_types, True, (param_keys, param_values)
             )
-            generator = RelationalAlgebraGeneratorClass(schema, NAMED_PARAM_TABLE_NAME)
+            if bodo_sql_context_type.catalog_type != types.none:
+                generator = RelationalAlgebraGeneratorClass(
+                    bodo_sql_context_type.catalog_type.get_java_object(),
+                    schema,
+                    NAMED_PARAM_TABLE_NAME,
+                )
+            else:
+                generator = RelationalAlgebraGeneratorClass(
+                    schema, NAMED_PARAM_TABLE_NAME
+                )
             try:
                 if is_optimized:
                     pd_code = str(generator.getPandasString(sql_str))

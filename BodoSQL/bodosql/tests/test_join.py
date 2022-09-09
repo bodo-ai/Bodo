@@ -7,13 +7,7 @@ import copy
 
 import pandas as pd
 import pytest
-from bodosql.tests.utils import (
-    bodo_version_older,
-    check_efficient_join,
-    check_query,
-)
-
-import bodo
+from bodosql.tests.utils import check_efficient_join, check_query
 
 
 @pytest.fixture(params=["INNER", "LEFT", "RIGHT", "FULL OUTER"])
@@ -226,14 +220,6 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
         ]
     ):
         convert_columns_bytearray = ["B", "C", "D"]
-        if (
-            join_type == "FULL OUTER"
-            and bodo.get_size() >= 3
-            and bodo_version_older(2022, 6, 2)
-        ):
-            pytest.skip(
-                reason="Requires next mini-release for engine changes to support metadata fixes",
-            )
     else:
         convert_columns_bytearray = None
     query = f"select table2.B, C, D from table1 {join_type} join table2 on table1.A = table2.A"
@@ -269,14 +255,6 @@ def test_join_differentsize_tables(
             for colname in join_dataframes["table1"].columns
         ]
     ):
-        if (
-            join_type == "FULL OUTER"
-            and bodo.get_size() >= 3
-            and bodo_version_older(2022, 6, 2)
-        ):
-            pytest.skip(
-                reason="Requires next mini-release for engine changes to support metadata fixes",
-            )
         convert_columns_bytearray = ["B", "C", "D"]
     else:
         convert_columns_bytearray = None
@@ -435,14 +413,6 @@ def test_multikey_join_types(join_dataframes, spark_info, join_type, memory_leak
             for colname in join_dataframes["table1"].columns
         ]
     ):
-        if (
-            join_type in ("FULL OUTER", "LEFT")
-            and bodo.get_size() >= 3
-            and bodo_version_older(2022, 6, 2)
-        ):
-            pytest.skip(
-                reason="Requires next mini-release for engine changes to support metadata fixes",
-            )
         convert_columns_bytearray = ["C", "D"]
     else:
         convert_columns_bytearray = None
@@ -467,10 +437,6 @@ def test_trimmed_multikey_cond_innerjoin(
             for colname in join_dataframes["table1"].columns
         ]
     ):
-        if bodo_version_older(2022, 6, 3):
-            pytest.skip(
-                reason="Requires next mini-release for engine changes to support general merge conditions",
-            )
         convert_columns_bytearray = ["C", "D"]
     else:
         convert_columns_bytearray = None

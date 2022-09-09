@@ -4,7 +4,7 @@ Test correctness of SQL casting
 """
 import pandas as pd
 import pytest
-from bodosql.tests.utils import bodo_version_older, check_query
+from bodosql.tests.utils import check_query
 
 
 def test_simple_cast(basic_df, spark_info, memory_leak_check):
@@ -83,10 +83,6 @@ def test_interval_numeric_column_casting(
     check_query(query, bodosql_interval_types, spark_info, check_dtype=False)
 
 
-@pytest.mark.skipif(
-    bodo_version_older(2021, 7, 1),
-    reason="Requires next mini-release for engine changes to support casting",
-)
 def test_varchar_to_numeric_cast(
     sql_numeric_typestrings, spark_info, memory_leak_check
 ):
@@ -106,10 +102,6 @@ def test_varchar_to_numeric_cast(
     check_query(query, ctx, spark_info, check_dtype=False, check_names=False)
 
 
-@pytest.mark.skipif(
-    bodo_version_older(2021, 9, 2),
-    reason="Requires next mini-release for engine changes to support Bodo argument to astype",
-)
 def test_numeric_to_varchar_nullable(
     bodosql_nullable_numeric_types, spark_info, memory_leak_check
 ):

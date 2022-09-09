@@ -3,7 +3,6 @@ Infrastructure used to test correctness.
 """
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import os
-import re
 from decimal import Decimal
 from enum import Enum
 
@@ -38,33 +37,6 @@ class InputDist(Enum):
     REP = 0
     OneD = 1
     OneDVar = 2
-
-
-def bodo_version_older(year, month, release_number):
-    """
-    Helper function to check if the current Bodo version's last (mini)release
-    is older than the Bodo (mini)release specified by
-    (year, month, release_number). The release_number is 0 for the monthly release.
-
-    All + values are ignored for local testing (and treated as equal to the last
-    (mini)-release), so tests will be skipped locally and on CI.
-
-    This should be used for tests that require changes on Bodo because BodoSQL CI won't
-    be able to check the results until a new Bodo Minirelease.
-    """
-    version_string = bodo.__version__
-    # Version string is always the leading digits and .
-    match = re.search(r"[^(\d|\.)]", version_string)
-    if match is not None:
-        version_string = version_string[: match.start()]
-    # Bodo version parts are split by .
-    parts = version_string.split(".")
-    if len(parts) == 2:
-        version_tuple = (int(parts[0]), int(parts[1]), 0)
-    else:
-        version_tuple = (int(parts[0]), int(parts[1]), int(parts[2]))
-
-    return version_tuple < (year, month, release_number)
 
 
 def check_query(
