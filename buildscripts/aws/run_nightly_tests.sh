@@ -17,6 +17,9 @@ export SF_USERNAME=`credstash -r us-east-2 get snowflake.bodopartner.ue1.usernam
 export SF_PASSWORD=`credstash -r us-east-2 get snowflake.bodopartner.ue1.password`
 export SF_ACCOUNT=`credstash -r us-east-2 get snowflake.bodopartner.ue1.account`
 
-# ------ Run Tests -----------
+# ------ Environment Variables for iceberg Tests ------
+export NESSIE_AUTH_TOKEN=`credstash -r us-east-2 get nessie_auth_token`
+
+# --------- Run Tests -----------
 cd e2e-tests
 pytest -s -v --durations=0 --ignore=deep_learning
