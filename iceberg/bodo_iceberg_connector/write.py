@@ -71,6 +71,7 @@ def commit_write(
                 False,
             )
         except Py4JJavaError as e:
+            print("Error during table creation:\n", e)
             return False
 
     elif mode == "replace":
@@ -82,7 +83,8 @@ def commit_write(
                 arrow_to_iceberg_schema(pa_schema),
                 True,
             )
-        except Py4JJavaError:
+        except Py4JJavaError as e:
+            print("Error during table replace:\n", e)
             return False
 
     else:
@@ -95,7 +97,8 @@ def commit_write(
             handler.appendTable(
                 fnames_java, size_metric, count_metric, iceberg_schema_id
             )
-        except Py4JJavaError:
+        except Py4JJavaError as e:
+            print("Error during table append:\n", e)
             return False
 
     return True
