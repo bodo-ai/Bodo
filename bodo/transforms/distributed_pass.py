@@ -226,7 +226,7 @@ class DistributedPass:
             self.func_ir.loc,
         )
 
-        # Run column pruning nd dead column elimination until there are no changes.
+        # Run column pruning and dead column elimination until there are no changes.
         # This updates table source nodes. Iterative convergence between Dead Col Elimination and Dead Code Elimination
         # is needed to enable pushing column pruning into IO nodes in some situations.
         # See: https://bodo.atlassian.net/wiki/spaces/B/pages/1064927240/Removing+dead+setitem+s+and+iterative+convergence+between+Dead+code+elimination+and+dead+column+elimination+WIP
@@ -4543,15 +4543,22 @@ class DistributedPass:
                         # corner case: if there are multiple filters on the same table,
                         # make sure they all read the same amount of data
                         # TODO[BE-3580]: support non-constant sizes
-                        slice_size = get_const_value_inner(self.func_ir, index_def.args[1], typemap=self.typemap)
+                        slice_size = get_const_value_inner(
+                            self.func_ir, index_def.args[1], typemap=self.typemap
+                        )
                         if read_size is None:
                             read_size = slice_size
                         else:
                             require(slice_size == read_size)
                         continue
-                    if is_call(rhs) and guard(find_callname, self.func_ir, rhs) == (
-                        "get_table_data",
-                        "bodo.hiframes.table",
+                    if (
+                        is_call(rhs)
+                        and guard(find_callname, self.func_ir, rhs)
+                        == (
+                            "get_table_data",
+                            "bodo.hiframes.table",
+                        )
+                        and stmt.value.args[0].name in arr_varnames
                     ):
                         arr_varnames.add(stmt.target.name)
                         continue
@@ -4565,6 +4572,20 @@ class DistributedPass:
         self.typemap[total_len_var.name] = types.int64
         for stmt in shape_nodes:
             stmt.value = ir.Expr.build_tuple([total_len_var], stmt.loc)
+
+        if bodo.user_logging.get_verbose_level() >= 1:
+            if io_node.connector_typ == "sql":
+                node_name = f"{io_node.db_type} sql node"
+            else:
+                node_name = f"{io_node.connector_typ} node"
+            msg = f"Successfully performed limit pushdown on {node_name}: %s\n %s\n"
+            io_source = io_node.loc.strformat()
+            constant_limit_message = (
+                f"Constant limit detected, reading at most {read_size} rows"
+            )
+            bodo.user_logging.log_message(
+                "Limit Pushdown", msg, io_source, constant_limit_message
+            )
 
         return read_size, total_len_var
 
