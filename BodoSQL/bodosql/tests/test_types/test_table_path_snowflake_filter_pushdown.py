@@ -86,3 +86,36 @@ def test_simple_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
+
+
+def test_zero_columns_pruning(memory_leak_check):
+    """
+    Test loading just a length from a Snowflake table.
+    """
+
+    def impl(table_name, conn_str):
+        bc = bodosql.BodoSQLContext(
+            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
+        )
+        return bc.sql(
+            "SELECT COUNT(*) as cnt from sql_table",
+        )
+
+    table_name = "lineitem"
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn_str = get_snowflake_connection_string(db, schema)
+    py_output = pd.read_sql(
+        f"select COUNT(*) as cnt from {table_name} ORDER BY L_SUPPKEY LIMIT 70",
+        conn_str,
+    )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit()(impl)(table_name, conn_str)
+        check_logger_msg(stream, "Columns loaded []")
+
+    check_func(
+        impl, (table_name, conn_str), py_output=py_output, is_out_distributed=False
+    )

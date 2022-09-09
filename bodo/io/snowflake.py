@@ -200,8 +200,11 @@ class SnowflakeDataset(object):
         self.conn = conn  # SnowflakeConnection instance
 
 
-def get_dataset(query, conn_str):
-    """Get snowflake dataset info required by Arrow reader in C++."""
+def get_dataset(query, conn_str, only_fetch_length=False):
+    """Get snowflake dataset info required by Arrow reader in C++.
+    only_fetch_length is used when loading 0 columns to indicate
+    we should create an 'empty' dataset and we are just computing
+    a count(*)"""
     ev = tracing.Event("get_snowflake_dataset")
 
     comm = MPI.COMM_WORLD
@@ -211,45 +214,68 @@ def get_dataset(query, conn_str):
     # We only trace on rank 0 (is_parallel=False) because we want 0 to start
     # executing the queries as soon as possible (don't sync event)
     conn = snowflake_connect(conn_str)
+    # Number of rows loaded. This is only used if we are loading
+    # 0 columns
+    num_rows = -1
+    batches = []
+    schema = pa.schema([])
 
-    if bodo.get_rank() == 0:
-        cur = conn.cursor()
-
-        # do a cheap query to get the Arrow schema (other ranks need the schema
-        # before they can start reading, so we want to get the schema asap)
-        # TODO is there a way to get Arrow schema without loading data?
-        ev_get_schema = tracing.Event("get_schema", is_parallel=False)
-        query_probe = f"select * from ({query}) x LIMIT {100}"
-        arrow_data = cur.execute(query_probe).fetch_arrow_all()
-        if arrow_data is None:
-            # If we don't load any data we construct a schema from describe.
-            described_query = cur.describe(query)
-            # Construct the arrow schema from the describe info
-            pa_fields = [
-                pa.field(x.name, FIELD_TYPE_TO_PA_TYPE[x.type_code])
-                for x in described_query
-            ]
-            schema = pa.schema(pa_fields)
+    if only_fetch_length:
+        # If we are loading 0 columns, the query will just be a COUNT(*).
+        # In this case we can skip computing the query
+        if bodo.get_rank() == 0:
+            cur = conn.cursor()
+            ev_query = tracing.Event("execute_length_query", is_parallel=False)
+            cur.execute(query)
+            # We are just loading a single row of data so we can just load
+            # all of the data.
+            arrow_data = cur.fetch_arrow_all()
+            num_rows = arrow_data[0][0].as_py()
+            num_rows = comm.bcast(num_rows)
+            ev_query.finalize()
         else:
-            schema = arrow_data.schema
-
-        ev_get_schema.finalize()
-
-        # execute query
-        ev_query = tracing.Event("execute_query", is_parallel=False)
-        cur.execute(query)
-        ev_query.finalize()
-
-        # get the list of result batches (this doesn't load data).
-        # Batch type is snowflake.connector.result_batch.ArrowResultBatch
-        batches = cur.get_result_batches()
-        comm.bcast((batches, schema))
+            num_rows = comm.bcast(None)
     else:
-        batches, schema = comm.bcast(None)
+        # We need to actually submit a Snowflake query
+        if bodo.get_rank() == 0:
+            cur = conn.cursor()
+            # do a cheap query to get the Arrow schema (other ranks need the schema
+            # before they can start reading, so we want to get the schema asap)
+            # TODO is there a way to get Arrow schema without loading data?
+            ev_get_schema = tracing.Event("get_schema", is_parallel=False)
+            query_probe = f"select * from ({query}) x LIMIT {100}"
+            arrow_data = cur.execute(query_probe).fetch_arrow_all()
+            if arrow_data is None:
+                # If we don't load any data we construct a schema from describe.
+                described_query = cur.describe(query)
+                # Construct the arrow schema from the describe info
+                pa_fields = [
+                    pa.field(x.name, FIELD_TYPE_TO_PA_TYPE[x.type_code])
+                    for x in described_query
+                ]
+                schema = pa.schema(pa_fields)
+            else:
+                schema = arrow_data.schema
+
+            ev_get_schema.finalize()
+
+            # execute query
+            ev_query = tracing.Event("execute_query", is_parallel=False)
+            cur.execute(query)
+            ev_query.finalize()
+            # Fetch the total number of rows that will be loaded globally
+            num_rows = cur.rowcount
+            # get the list of result batches (this doesn't load data).
+            # Batch type is snowflake.connector.result_batch.ArrowResultBatch
+            batches = cur.get_result_batches()
+            # Broadcast the number of rows, batches, and schema
+            comm.bcast((num_rows, batches, schema))
+        else:
+            num_rows, batches, schema = comm.bcast(None)
 
     ds = SnowflakeDataset(batches, schema, conn)
     ev.finalize()
-    return ds
+    return ds, num_rows
 
 
 # --------------------------- snowflake_write helper functions ----------------------------

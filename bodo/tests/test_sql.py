@@ -1188,6 +1188,50 @@ def test_snowflake_dead_node(memory_leak_check):
         check_logger_no_msg(stream, "Columns loaded")
 
 
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_snowflake_zero_cols(memory_leak_check):
+    """
+    Tests when read_sql's table should load 0 columns.
+    """
+
+    def test_impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return len(df)
+
+    def test_impl_index(query, conn):
+        # Test only loading an index
+        df = pd.read_sql(query, conn, index_col="l_orderkey")
+        return len(df), df.index.min()
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+    # We only load 1 column because Pandas is loading all of the data.
+    query = "SELECT L_ORDERKEY FROM LINEITEM"
+    check_func(
+        test_impl,
+        (
+            query,
+            conn,
+        ),
+        only_seq=True,
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(test_impl)(query, conn)
+        # Check that no columns were loaded.
+        check_logger_msg(stream, "Columns loaded []")
+
+    check_func(test_impl_index, (query, conn))
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(test_impl_index)(query, conn)
+        # Check that we only load the index.
+        check_logger_msg(stream, "Columns loaded ['l_orderkey']")
+
+
 # ---------------Distributed Snowflake Write Unit Tests ------------------
 
 

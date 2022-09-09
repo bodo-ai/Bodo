@@ -52,7 +52,9 @@ from bodo.tests.utils import check_func, sync_dtypes
         ),
     ],
 )
-def test_simple_table_read(iceberg_database, iceberg_table_conn, table_name):
+def test_simple_table_read(
+    memory_leak_check, iceberg_database, iceberg_table_conn, table_name
+):
     """
     Test simple read operation on test tables
     """
@@ -99,7 +101,7 @@ def test_simple_table_read(iceberg_database, iceberg_table_conn, table_name):
     )
 
 
-def test_column_pruning(iceberg_database, iceberg_table_conn):
+def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn):
     """
     Test simple read operation on test table simple_string_table
     with column pruning.
@@ -134,7 +136,7 @@ def test_column_pruning(iceberg_database, iceberg_table_conn):
     check_func(impl, (table_name, conn, db_schema), py_output=py_out)
 
 
-def test_zero_columns_pruning(iceberg_database, iceberg_table_conn):
+def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table_conn):
     """
     Test loading just a length from iceberg tables.
     """
