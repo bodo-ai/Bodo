@@ -1051,7 +1051,9 @@ def _get_dist_df(df, var_length=False, check_typing_issues=True):
         df, pd.DataFrame
     ), "Error: _get_dist_df was passed a non dataframe object"
 
-    return _get_dist_arg(df, var_length, check_typing_issues)
+    return _get_dist_arg(
+        df, var_length=var_length, check_typing_issues=check_typing_issues
+    )
 
 
 @bodo.jit(cache=True)
