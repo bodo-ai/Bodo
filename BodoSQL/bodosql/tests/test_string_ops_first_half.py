@@ -172,6 +172,7 @@ def test_upper_lower_scalars_nested(
     )
 
 
+@pytest.mark.skip("[BE-3613] Support non-constant patterns in like")
 @pytest.mark.slow
 def test_upper_lower_like_constants(
     basic_df,

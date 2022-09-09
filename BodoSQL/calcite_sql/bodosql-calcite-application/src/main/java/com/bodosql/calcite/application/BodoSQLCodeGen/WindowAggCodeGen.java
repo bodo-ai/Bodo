@@ -754,12 +754,14 @@ public class WindowAggCodeGen {
       needsSort = false;
 
     } else {
-      switch (agg) {
-        case AVG:
-        case STDDEV_POP:
-        case STDDEV_SAMP:
-        case VAR_POP:
-        case VAR_SAMP:
+      switch (aggName) {
+        case "AVG":
+        case "STDDEV_POP":
+        case "STDDEV_SAMP":
+        case "VAR_POP":
+        case "VAR_SAMP":
+        case "VARIANCE_SAMP":
+        case "VARIANCE_POP":
           // TODO: These are the windowed aggregation functions that were previously decomposed
           // It seems that they currently just type check to the type of the input rows.
           // Ideally, I want to fix this, but for right now, I can do this as a workaround.
@@ -774,8 +776,8 @@ public class WindowAggCodeGen {
           }
           break;
 
-        case MAX:
-        case MIN:
+        case "MAX":
+        case "MIN":
           for (SqlTypeName typ : typs) {
             if (SqlTypeName.STRING_TYPES.contains(typ)) {
               throw new BodoSQLCodegenException(

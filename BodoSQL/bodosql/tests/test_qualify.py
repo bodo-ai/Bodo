@@ -78,7 +78,7 @@ def test_QUALIFY_upper_lower_bound_numeric(
     Largely a copy of test_windowed_upper_lower_bound_numeric, but using qualify
     """
 
-    if numeric_agg_funcs_subset in ("STDDEV", "VARIANCE"):
+    if numeric_agg_funcs_subset in ("STDDEV", "VARIANCE", "VAR_SAMP", "VARIANCE_SAMP"):
         scalar_filter_val = "0"
     else:
         scalar_filter_val = "1"
@@ -111,7 +111,9 @@ def test_QUALIFY_upper_lower_bound_numeric(
         query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=spark_query.replace("ANY_VALUE", "FIRST"),
+        equivalent_spark_query=spark_query.replace("ANY_VALUE", "FIRST").replace(
+            "VARIANCE_SAMP", "VAR_SAMP"
+        ),
         sort_output=False,
         check_dtype=False,
         check_names=False,
