@@ -1605,6 +1605,21 @@ def overload_to_datetime(
     """implementation for pd.to_datetime"""
     # TODO: change 'arg_a' to 'arg' when inliner can handle it
 
+    args_dict = {
+        "errors": errors,
+    }
+    args_default_dict = {
+        "errors": "raise",
+    }
+
+    # We don't support errors, as 'ignore' and 'coerce' both can cause type instability
+    check_unsupported_args(
+        "pd.to_datetime",
+        args_dict,
+        args_default_dict,
+        package_name="pandas",
+    )
+
     # This covers string as a literal or not
     # and integer as a literal or not
     if (

@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -67,3 +69,22 @@ def test_np_sort_unsupported(memory_leak_check):
     arr = pd.array(np.arange(100), dtype="Int64")
     with pytest.raises(BodoError, match=message):
         bodo.jit(test_impl)(arr)
+
+
+def test_pd_datetime_unsupported(memory_leak_check):
+    """
+    Tests an unsupported argument for pd.to_datetime()
+    """
+
+    def test_impl():
+        return pd.to_datetime("2022-09-02", errors="ignore")
+
+    message = (
+        ".*"
+        + re.escape(
+            "pd.to_datetime(): errors parameter only supports default value raise"
+        )
+        + ".*"
+    )
+    with pytest.raises(BodoError, match=message):
+        bodo.jit(test_impl)()
