@@ -281,6 +281,23 @@ def sql_distributed_run(
             total_msg = "\n".join(msg_list)
             raise BodoError(total_msg, loc=sql_node.loc)
 
+    # Generate the limit
+    if sql_node.limit is None and (
+        not meta_head_only_info or meta_head_only_info[0] is None
+    ):
+        # There is no limit
+        limit = None
+    elif sql_node.limit is None:
+        # There is only limit pushdown
+        limit = meta_head_only_info[0]
+    elif not meta_head_only_info or meta_head_only_info[0] is None:
+        # There is only a limit already in the query
+        limit = sql_node.limit
+    else:
+        # There is limit pushdown and a limit already in the query.
+        # Compute the min to minimize compute.
+        limit = min(limit, meta_head_only_info[0])
+
     filter_map, filter_vars = bodo.ir.connector.generate_filter_map(sql_node.filters)
     extra_args = ", ".join(filter_map.values())
     func_text = f"def sql_impl(sql_request, conn, database_schema, {extra_args}):\n"
@@ -324,6 +341,13 @@ def sql_distributed_run(
         # Append filters via a format string. This format string is created and populated
         # at runtime because filter variables aren't necessarily constants (but they are scalars).
         func_text += f'    sql_request = f"{{sql_request}} {where_cond}"\n'
+        # sql_node.limit is the limit value already found in the original sql_request
+        # if sql_node.limit == limit then 1 of two things must be True:
+        # 1. The limit pushdown value is None. We do not add a limit to the query.
+        # 2. meta_head_only_info[0] >= sql_node.limit. If so the limit in the query
+        #    is smaller than the limit being pushdown so we can ignore it.
+        if sql_node.limit != limit:
+            func_text += f'    sql_request = f"{{sql_request}} LIMIT {limit}"\n'
 
     filter_args = ""
     if sql_node.db_type == "iceberg":
@@ -336,13 +360,6 @@ def sql_distributed_run(
     loc_vars = {}
     exec(func_text, {}, loc_vars)
     sql_impl = loc_vars["sql_impl"]
-
-    if sql_node.limit is not None:
-        limit = sql_node.limit
-    elif meta_head_only_info and meta_head_only_info[0] is not None:
-        limit = meta_head_only_info[0]
-    else:
-        limit = None
 
     sql_reader_py = _gen_sql_reader_py(
         sql_node.df_colnames,

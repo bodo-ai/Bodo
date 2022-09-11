@@ -299,7 +299,7 @@ class DistributedPass:
                     f = distributed_run_extensions[type(inst)]
                     if isinstance(inst, bodo.ir.parquet_ext.ParquetReader) or (
                         isinstance(inst, bodo.ir.sql_ext.SqlReader)
-                        and inst.db_type == "iceberg"
+                        and inst.db_type in ("iceberg", "snowflake")
                     ):
                         # check if getting shape and/or head of parquet dataset is
                         # enough for the program

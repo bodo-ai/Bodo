@@ -15,7 +15,11 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, get_snowflake_connection_string
+from bodo.tests.utils import (
+    DistTestPipeline,
+    check_func,
+    get_snowflake_connection_string,
+)
 
 
 @pytest.mark.skipif(
@@ -119,3 +123,40 @@ def test_zero_columns_pruning(memory_leak_check):
     check_func(
         impl, (table_name, conn_str), py_output=py_output, is_out_distributed=False
     )
+
+
+def test_snowflake_limit_pushdown(memory_leak_check):
+    """
+    Test limit pushdown with loading from a Snowflake table.
+    """
+
+    def impl(table_name, conn_str):
+        bc = bodosql.BodoSQLContext(
+            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
+        )
+        return bc.sql(
+            "select mycol from sql_table WHERE mycol = 'A' LIMIT 5",
+        )
+
+    # Note: We don't yet support casting with limit pushdown.
+    table_name = "BODOSQL_ALL_SUPPORTED"
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn_str = get_snowflake_connection_string(db, schema)
+    py_output = pd.read_sql(
+        f"select mycol from {table_name} WHERE mycol = 'A' LIMIT 5",
+        conn_str,
+    )
+    check_func(impl, (table_name, conn_str), py_output=py_output)
+
+    # make sure filter + limit pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+        bodo_func(table_name, conn_str)
+        fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+        assert hasattr(fir, "meta_head_only_info")
+        assert fir.meta_head_only_info[0] is not None
+        check_logger_msg(stream, "Columns loaded ['mycol']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")
