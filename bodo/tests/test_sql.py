@@ -640,8 +640,8 @@ def test_sql_snowflake_use_index_dead_table(memory_leak_check):
 def test_sql_snowflake_no_index_dead_table(memory_leak_check):
     """
     Tests loading with pd.read_sql from snowflake
-    where all columns are dead. This should still load
-    a single column to get the length for the index.
+    where all columns are dead. This should load
+    0 columns.
     """
 
     def impl(query, conn):
@@ -662,7 +662,7 @@ def test_sql_snowflake_no_index_dead_table(memory_leak_check):
         bodo.jit(impl)(query, conn)
         # Check the columns were pruned. l_orderkey is determined
         # by testing and we just need to confirm it loads a single column.
-        check_logger_msg(stream, "Columns loaded ['l_orderkey']")
+        check_logger_msg(stream, "Columns loaded []")
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
