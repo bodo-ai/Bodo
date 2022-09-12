@@ -1175,7 +1175,10 @@ def test_sum_max_min_list_string_random(memory_leak_check):
             drop=True
         )
         pd.testing.assert_frame_equal(
-            df2_merge_A_sort, df2_merge_B_sort, check_dtype=False
+            df2_merge_A_sort,
+            df2_merge_B_sort,
+            check_dtype=False,
+            check_column_type=False,
         )
         # Now doing the parallel check
         check_parallel_coherency(the_fct, (df1,), sort_output=True, reset_index=True)
@@ -1369,7 +1372,7 @@ def test_agg_as_index(memory_leak_check):
     pandas_df = pandas_df.sort_values(by="A").reset_index(drop=True)
     bodo_df = bodo.jit(impl4)(df)
     bodo_df = bodo_df.sort_values(by="A").reset_index(drop=True)
-    pd.testing.assert_frame_equal(pandas_df, bodo_df)
+    pd.testing.assert_frame_equal(pandas_df, bodo_df, check_column_type=False)
 
 
 @pytest.mark.skip
@@ -2379,8 +2382,8 @@ def test_filtered_count(memory_leak_check):
     cond = df.A > 1
     res = test_impl(df, cond)
     h_res = bodo_func(df, cond)
-    pd.testing.assert_frame_equal(res[0], h_res[0])
-    pd.testing.assert_frame_equal(res[1], h_res[1])
+    pd.testing.assert_frame_equal(res[0], h_res[0], check_column_type=False)
+    pd.testing.assert_frame_equal(res[1], h_res[1], check_column_type=False)
 
 
 def test_as_index_count(memory_leak_check):
@@ -2712,7 +2715,7 @@ def test_groupby_apply_objmode():
     # test for BE-290
     df = pd.DataFrame({"A": [1.0, 2, 3, 1.0, 5], "B": [4.0, 5, 6, 2, 1]})
     j_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(main_func)
-    pd.testing.assert_frame_equal(j_func(df), main_func(df))
+    pd.testing.assert_frame_equal(j_func(df), main_func(df), check_column_type=False)
     fir = j_func.overloads[j_func.signatures[0]].metadata["preserved_ir"]
     assert not has_udf_call(fir)
 

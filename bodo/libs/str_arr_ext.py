@@ -13,6 +13,7 @@ import numba
 import numba.core.typing.typeof
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from numba.core import cgutils, types
 from numba.core.imputils import impl_ret_borrowed, lower_constant
 from numba.core.unsafe.bytes import memcpy_region
@@ -64,6 +65,7 @@ from bodo.utils.typing import (
 # Off currently since Pandas still has issues with this new type (e.g. low performance,
 # parquet write issues)
 use_pd_string_array = False
+use_pd_pyarrow_string_array = True
 
 
 char_type = types.uint8
@@ -101,6 +103,15 @@ string_array_type = StringArrayType()
 
 @typeof_impl.register(pd.arrays.StringArray)
 def typeof_string_array(val, c):
+    return string_array_type
+
+
+@typeof_impl.register(pd.arrays.ArrowStringArray)
+def typeof_pyarrow_string_array(val, c):
+    # use dict-encoded type if input is dict-encoded (boxed from Bodo dict-encoded
+    # array since pandas doesn't use dict-encoded yet)
+    if pa.types.is_dictionary(val._data.combine_chunks().type):
+        return bodo.dict_str_arr_type
     return string_array_type
 
 
@@ -1089,6 +1100,9 @@ ll.add_symbol("is_na", hstr_ext.is_na)
 ll.add_symbol("string_array_from_sequence", array_ext.string_array_from_sequence)
 ll.add_symbol("pd_array_from_string_array", hstr_ext.pd_array_from_string_array)
 ll.add_symbol("np_array_from_string_array", hstr_ext.np_array_from_string_array)
+ll.add_symbol(
+    "pd_pyarrow_array_from_string_array", hstr_ext.pd_pyarrow_array_from_string_array
+)
 ll.add_symbol("convert_len_arr_to_offset32", hstr_ext.convert_len_arr_to_offset32)
 ll.add_symbol("convert_len_arr_to_offset", hstr_ext.convert_len_arr_to_offset)
 ll.add_symbol("set_string_array_range", hstr_ext.set_string_array_range)
@@ -1432,6 +1446,30 @@ def box_str_arr(typ, val, c):
     box_fname = "np_array_from_string_array"
     if use_pd_string_array and typ != binary_array_type:
         box_fname = "pd_array_from_string_array"
+
+    # box to Pandas ArrowStringArray to minimize boxing overhead
+    if use_pd_pyarrow_string_array and typ != binary_array_type:
+        from bodo.libs.array import array_info_type, array_to_info_codegen
+
+        arr_info = array_to_info_codegen(
+            c.context, c.builder, array_info_type(typ), (val,), incref=False
+        )
+        fnty = lir.FunctionType(
+            c.pyapi.pyobj,
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        box_fname = "pd_pyarrow_array_from_string_array"
+        fn_get = cgutils.get_or_insert_function(c.builder.module, fnty, name=box_fname)
+        arr = c.builder.call(
+            fn_get,
+            [
+                arr_info,
+            ],
+        )
+        c.context.nrt.decref(c.builder, typ, val)
+        return arr
 
     fnty = lir.FunctionType(
         c.context.get_argument_type(types.pyobject),

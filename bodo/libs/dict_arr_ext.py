@@ -167,12 +167,17 @@ def to_pa_dict_arr(A):
     if isinstance(A, pa.DictionaryArray):
         return A
 
-    # convert np.nan, pd.NA to None to avoid PyArrow error
-    for i in range(len(A)):
-        if pd.isna(A[i]):
-            A[i] = None
+    # avoid calling pd.array() for dict-encoded data since the all-null case fails in
+    # Arrow, see test_basic.py::test_dict_scalar_to_array
+    if (
+        isinstance(A, pd.arrays.ArrowStringArray)
+        and pa.types.is_dictionary(A._data.type)
+        and pa.types.is_large_string(A._data.type.value_type)
+        and pa.types.is_int32(A._data.type.index_type)
+    ):
+        return A._data.combine_chunks()
 
-    return pa.array(A).dictionary_encode()
+    return pd.array(A, "string[pyarrow]")._data.combine_chunks().dictionary_encode()
 
 
 @unbox(DictionaryArrayType)
@@ -183,13 +188,14 @@ def unbox_dict_arr(typ, val, c):
     TODO(ehsan): improve performance by copying buffers directly in C++
     """
 
-    # if regular arrays of strings can be unboxed as dictionary encoded arrays
-    if bodo.hiframes.boxing._use_dict_str_type:
-        to_pa_dict_arr_obj = c.pyapi.unserialize(
-            c.pyapi.serialize_object(to_pa_dict_arr)
-        )
-        val = c.pyapi.call_function_objargs(to_pa_dict_arr_obj, [val])
-        c.pyapi.decref(to_pa_dict_arr_obj)
+    # make sure input is a PyArrow dictionary array
+    # bodo.hiframes.boxing._use_dict_str_type=True types regular string arrays as
+    # dict-encoded arrays.
+    # Also, Bodo boxes dict-encoded arrays as Pandas ArrowStringArray which can be
+    # passed back into JIT.
+    to_pa_dict_arr_obj = c.pyapi.unserialize(c.pyapi.serialize_object(to_pa_dict_arr))
+    val = c.pyapi.call_function_objargs(to_pa_dict_arr_obj, [val])
+    c.pyapi.decref(to_pa_dict_arr_obj)
 
     dict_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder)
 
@@ -221,9 +227,8 @@ def unbox_dict_arr(typ, val, c):
     c.pyapi.decref(int32_str_obj)
     c.pyapi.decref(pd_int_arr_obj)
 
-    # if we created a new PyArrow array, decref it since not coming from user context
-    if bodo.hiframes.boxing._use_dict_str_type:
-        c.pyapi.decref(val)
+    # decref since val is output of to_pa_dict_arr() and not coming from user context
+    c.pyapi.decref(val)
 
     is_error = cgutils.is_not_null(c.builder, c.pyapi.err_occurred())
     return NativeValue(dict_arr._getvalue(), is_error=is_error)
@@ -235,6 +240,33 @@ def box_dict_arr(typ, val, c):
     dict_arr = cgutils.create_struct_proxy(typ)(c.context, c.builder, val)
 
     if typ == dict_str_arr_type:
+
+        # box to Pandas ArrowStringArray to minimize boxing overhead
+        if bodo.libs.str_arr_ext.use_pd_pyarrow_string_array:
+            from bodo.libs.array import array_info_type, array_to_info_codegen
+
+            arr_info = array_to_info_codegen(
+                c.context, c.builder, array_info_type(typ), (val,), incref=False
+            )
+            fnty = lir.FunctionType(
+                c.pyapi.pyobj,
+                [
+                    lir.IntType(8).as_pointer(),
+                ],
+            )
+            box_fname = "pd_pyarrow_array_from_string_array"
+            fn_get = cgutils.get_or_insert_function(
+                c.builder.module, fnty, name=box_fname
+            )
+            arr = c.builder.call(
+                fn_get,
+                [
+                    arr_info,
+                ],
+            )
+            c.context.nrt.decref(c.builder, typ, val)
+            return arr
+
         # Box the dictionary array for string interning
         c.context.nrt.incref(c.builder, typ.data, dict_arr.data)
         data_arr_obj = c.box(typ.data, dict_arr.data)
@@ -730,7 +762,9 @@ def str_series_contains_regex(arr, pat, case, flags, na, regex):  # pragma: no c
     dict_arr_S = pd.Series(dict_arr)
     # Compute the operation on the dictionary and save the output
     with numba.objmode(dict_arr_out=bodo.boolean_array):
-        dict_arr_out = dict_arr_S.array._str_contains(pat, case, flags, na, regex)
+        dict_arr_out = pd.array(dict_arr_S.array, "string")._str_contains(
+            pat, case, flags, na, regex
+        )
 
     ## Create output by indexing into dict_arr_out
 

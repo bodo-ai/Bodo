@@ -81,7 +81,10 @@ def test_series_constructor(data, index, name, memory_leak_check):
 
     bodo_func = bodo.jit(impl)
     pd.testing.assert_series_equal(
-        bodo_func(data, index, name), impl(data, index, name), check_dtype=False
+        bodo_func(data, index, name),
+        impl(data, index, name),
+        check_dtype=False,
+        check_index_type=False,
     )
 
 
@@ -1897,7 +1900,11 @@ def test_series_getitem_slice(series_val, memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val), check_dtype=False
+        bodo_func(series_val),
+        test_impl(series_val),
+        check_dtype=False,
+        check_categorical=False,
+        check_index_type=False,
     )
 
 
@@ -1913,7 +1920,11 @@ def test_series_getitem_list_int(series_val, idx, memory_leak_check):
             bodo_func(series_val, idx)
     else:
         pd.testing.assert_series_equal(
-            bodo_func(series_val, idx), test_impl(series_val, idx), check_dtype=False
+            bodo_func(series_val, idx),
+            test_impl(series_val, idx),
+            check_dtype=False,
+            check_categorical=False,
+            check_index_type=False,
         )
 
 
@@ -1931,12 +1942,20 @@ def test_series_getitem_array_bool(series_val, memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val), check_dtype=False
+        bodo_func(series_val),
+        test_impl(series_val),
+        check_dtype=False,
+        check_categorical=False,
+        check_index_type=False,
     )
     cond = pd.Series([True, True, False, True, False])
     bodo_func = bodo.jit(test_impl2)
     pd.testing.assert_series_equal(
-        bodo_func(series_val, cond), test_impl2(series_val, cond), check_dtype=False
+        bodo_func(series_val, cond),
+        test_impl2(series_val, cond),
+        check_dtype=False,
+        check_categorical=False,
+        check_index_type=False,
     )
 
 

@@ -16,9 +16,11 @@ from bodo.tests.utils import SeriesOptTestPipeline, check_func, dist_IR_contains
 @pytest.fixture(
     params=[
         pytest.param(
-            pa.array(
-                ["abc", "b", None, "abc", None, "b", "cde"],
-                type=pa.dictionary(pa.int32(), pa.string()),
+            pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["abc", "b", None, "abc", None, "b", "cde"],
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                ).cast(pa.dictionary(pa.int32(), pa.large_string()))
             )
         ),
     ]
@@ -142,6 +144,7 @@ def test_unbox(dict_arr_value, memory_leak_check):
     def impl(arr_arg):
         return True
 
+    assert bodo.typeof(dict_arr_value) == bodo.dict_str_arr_type
     check_func(impl, (dict_arr_value,))
 
     # unbox and box
@@ -191,8 +194,9 @@ def test_copy(dict_arr_value, memory_leak_check):
     def test_impl(A):
         return A.copy()
 
-    # PyArrow doesn't support copy
-    np.testing.assert_array_equal(bodo.jit(test_impl)(dict_arr_value), dict_arr_value)
+    pd.testing.assert_extension_array_equal(
+        bodo.jit(test_impl)(dict_arr_value), dict_arr_value
+    )
 
 
 @pytest.mark.slow
@@ -221,7 +225,7 @@ def test_cmp_opt(dict_arr_value, memory_leak_check):
         return val != A
 
     # convert to Pandas array since PyArrow doesn't support cmp operators
-    pd_arr = pd.array(dict_arr_value.to_numpy(False), "string")
+    pd_arr = pd.array(dict_arr_value, "string")
 
     for val in ("abc", "defg"):
         check_func(impl1, (dict_arr_value, val), py_output=(pd_arr == val))
@@ -1107,10 +1111,7 @@ def test_dict_array_unify(dict_arr_value):
         return A
 
     bodo_out = impl(dict_arr_value)
-    # Map NaN to None to match arrow
-    bodo_out[pd.isna(bodo_out)] = None
-    py_output = dict_arr_value.to_numpy(False)
-    np.testing.assert_array_equal(py_output, bodo_out)
+    pd.testing.assert_extension_array_equal(bodo_out, dict_arr_value)
 
 
 def test_str_len(test_unicode_dict_str_arr, memory_leak_check):

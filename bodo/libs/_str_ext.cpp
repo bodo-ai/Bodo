@@ -7,7 +7,9 @@
 #include <string>
 #include <vector>
 
+#include <arrow/python/pyarrow.h>
 #include "_bodo_common.h"
+#include "_bodo_to_arrow.h"
 
 #include "_str_decode.cpp"
 
@@ -57,6 +59,7 @@ void* pd_array_from_string_array(int64_t no_strings,
                                  const offset_t* offset_table,
                                  const char* buffer,
                                  const uint8_t* null_bitmap);
+void* pd_pyarrow_array_from_string_array(const array_info* str_arr);
 
 void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
@@ -150,6 +153,9 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject_SetAttrString(
         m, "pd_array_from_string_array",
         PyLong_FromVoidPtr((void*)(&pd_array_from_string_array)));
+    PyObject_SetAttrString(
+        m, "pd_pyarrow_array_from_string_array",
+        PyLong_FromVoidPtr((void*)(&pd_pyarrow_array_from_string_array)));
     PyObject_SetAttrString(
         m, "np_array_from_string_array",
         PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
@@ -601,7 +607,8 @@ void* pd_array_from_string_array(int64_t no_strings,
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, na_obj);
         } else {
             PyObject* s = PyUnicode_FromStringAndSize(
-            buffer + offset_table[i], offset_table[i + 1] - offset_table[i]);
+                buffer + offset_table[i],
+                offset_table[i + 1] - offset_table[i]);
             CHECK(s, "creating Python string/unicode object failed");
             err = PyArray_SETITEM((PyArrayObject*)ret, (char*)p, s);
             Py_DECREF(s);
@@ -616,6 +623,50 @@ void* pd_array_from_string_array(int64_t no_strings,
     Py_DECREF(na_obj);
     Py_DECREF(ret);
     PyGILState_Release(gilstate);
+    return str_arr_obj;
+#undef CHECK
+}
+
+/// @brief  Create Pandas ArrowStringArray from Bodo's packed StringArray or
+/// dict-encoded string array
+/// @return Pandas ArrowStringArray
+/// @param[in] str_arr input string array or dict-encoded string array
+void* pd_pyarrow_array_from_string_array(const array_info* str_arr) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+
+    // convert to Arrow array with copy (since passing to Pandas)
+    // only str_arr and true arguments are relevant here
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+    std::shared_ptr<arrow::ChunkedArray> arrow_arr;
+    arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+    bodo_array_to_arrow(::arrow::default_memory_pool(), str_arr, "_bodo_array",
+                        schema_vector, &arrow_arr, "", time_unit, true);
+
+    // Bodo arrays are single chunk currently
+    CHECK(arrow_arr->num_chunks() == 1, "single chunk Arrow array expected");
+
+    // https://arrow.apache.org/docs/python/integration/extending.html
+    CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
+
+    // convert Arrow C++ to PyArrow
+    PyObject* pyarrow_arr = arrow::py::wrap_array(arrow_arr->chunk(0));
+
+    // call pd.arrays.ArrowStringArray(pyarrow_arr) which avoids copy
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* pd_arrays_mod = PyObject_GetAttrString(pd_mod, "arrays");
+    CHECK(pd_arrays_mod, "importing pandas.arrays module failed");
+
+    PyObject* str_arr_obj = PyObject_CallMethod(
+        pd_arrays_mod, "ArrowStringArray", "O", pyarrow_arr);
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(pd_arrays_mod);
+    Py_DECREF(pyarrow_arr);
     return str_arr_obj;
 #undef CHECK
 }

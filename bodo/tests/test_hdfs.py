@@ -26,7 +26,7 @@ def test_partition_cols(hdfs_datapath):
         bodo.barrier()
         bd_out = pd.read_parquet(bd_fname)
         pd_out = pd.read_parquet(pd_fname)
-    pd.testing.assert_frame_equal(bd_out, pd_out)
+    pd.testing.assert_frame_equal(bd_out, pd_out, check_column_type=False)
 
 
 def test_hdfs_write_parquet_no_empty_files(hdfs_datapath, memory_leak_check):

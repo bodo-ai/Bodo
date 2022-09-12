@@ -114,7 +114,9 @@ class TestSeries(unittest.TestCase):
 
         S = pd.Series([3, 5, 6], ["a", "b", "c"], name="A")
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(
+            bodo_func(S), test_impl(S), check_index_type=False
+        )
 
     def test_series_attr1(self):
         def test_impl(A):
@@ -541,7 +543,9 @@ class TestSeries(unittest.TestCase):
             return df
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(test_impl(), bodo_func(), check_dtype=False)
+        pd.testing.assert_frame_equal(
+            test_impl(), bodo_func(), check_dtype=False, check_column_type=False
+        )
 
     @unittest.skip("needs empty_like typing fix in npydecl.py")
     def test_series_empty_like(self):
@@ -710,7 +714,9 @@ class TestSeries(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         S = pd.Series(["AA", "BB", "C", "AA", "C", "AA"])
-        pd.testing.assert_series_equal(bodo_func(S), test_impl(S))
+        pd.testing.assert_series_equal(
+            bodo_func(S), test_impl(S), check_index_type=False
+        )
 
     def test_series_dist_input1(self):
         def test_impl(S):
@@ -1046,7 +1052,7 @@ class TestSeries(unittest.TestCase):
             return S.head(3)
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_series_equal(bodo_func(), test_impl())
+        pd.testing.assert_series_equal(bodo_func(), test_impl(), check_index_type=False)
 
     def test_series_median1(self):
         def test_impl(S):

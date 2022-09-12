@@ -1440,7 +1440,9 @@ def series_str_dt64_astype(data):  # pragma: no cover
     with numba.objmode(res="NPDatetime('ns')[::1]"):
         # Convert to series to enable Pandas str parsing.
         # This enables conversions not supported in just Numba.
-        res = pd.Series(data).astype("datetime64[ns]").values
+        # call ArrowStringArray.to_numpy() since PyArrow can't convert all datetime
+        # formats, see test_dt64_str_astype
+        res = pd.Series(data.to_numpy()).astype("datetime64[ns]").values
     return res
 
 

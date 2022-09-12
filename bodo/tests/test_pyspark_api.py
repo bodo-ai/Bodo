@@ -152,10 +152,14 @@ def test_create_dataframe(memory_leak_check):
     # NOTE: using custom testing code since output is gathered on rank 0
     df_out = bodo.jit(impl)(df)
     if bodo.get_rank() == 0:
-        pd.testing.assert_frame_equal(df_out, df)
+        pd.testing.assert_frame_equal(
+            df_out, df, check_column_type=False, check_dtype=False
+        )
     df_out = bodo.jit(impl2)()
     if bodo.get_rank() == 0:
-        pd.testing.assert_frame_equal(df_out, impl2())
+        pd.testing.assert_frame_equal(
+            df_out, impl2(), check_column_type=False, check_dtype=False
+        )
     with pytest.raises(
         BodoError,
         match="createDataFrame\(\): 'data' should be a Pandas dataframe or list of Rows",

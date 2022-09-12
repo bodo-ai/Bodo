@@ -250,7 +250,7 @@ def test_shuffle_pd(data, memory_leak_check):
     bodo_shuffle_2 = bodo.allgatherv(bodo_shuffle_2)
 
     # Check that we didn't lose or duplicate any data
-    assert_frame_equal(bodo_shuffle_1_sorted, data)
+    assert_frame_equal(bodo_shuffle_1_sorted, data, check_column_type=False)
     # Check that shuffled output is different from original data
     assert_raises(AssertionError, assert_frame_equal, bodo_shuffle_1, data)
     # Check that different shuffles give different results
@@ -262,7 +262,7 @@ def test_shuffle_pd(data, memory_leak_check):
     bodo_shuffle_2 = rep_impl(data)
 
     # Check that we didn't lose or duplicate any data
-    assert_frame_equal(bodo_shuffle_1_sorted, data)
+    assert_frame_equal(bodo_shuffle_1_sorted, data, check_column_type=False)
     # Check that shuffled output is different from original data
     assert_raises(AssertionError, assert_frame_equal, bodo_shuffle_1, data)
     # Check that different shuffles give different results

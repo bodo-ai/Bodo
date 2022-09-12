@@ -38,8 +38,8 @@ def test_partition_cols(minio_server, s3_bucket):
             )()
         A0_expected = pd.DataFrame({"B": pd.Series([0, 1, 2], dtype="Int64")})
         A1_expected = pd.DataFrame({"B": pd.Series([3, 4, 5], dtype="Int64")})
-        pd.testing.assert_frame_equal(A0_actual, A0_expected)
-        pd.testing.assert_frame_equal(A1_actual, A1_expected)
+        pd.testing.assert_frame_equal(A0_actual, A0_expected, check_column_type=False)
+        pd.testing.assert_frame_equal(A1_actual, A1_expected, check_column_type=False)
 
 
 @pytest.mark.parametrize(

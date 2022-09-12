@@ -228,6 +228,7 @@ def test_pq_write_metadata(df, index_name, memory_leak_check):
                 pd.testing.assert_frame_equal(
                     pd.read_parquet("bodo_metadatatest.pq"),
                     pd.read_parquet("pandas_metadatatest.pq"),
+                    check_column_type=False,
                 )
 
         elif bodo.libs.distributed_api.get_size() > 1:
@@ -354,7 +355,9 @@ def test_pq_schema(datapath, memory_leak_check):
             }
         },
     )(impl)
-    pd.testing.assert_frame_equal(bodo_func(fname), impl(fname), check_dtype=False)
+    pd.testing.assert_frame_equal(
+        bodo_func(fname), impl(fname), check_dtype=False, check_column_type=False
+    )
 
 
 def test_pq_list_str(datapath, memory_leak_check):
@@ -1399,7 +1402,9 @@ def test_partition_cols(memory_leak_check):
                             )
                     # use check_like=True because the order of columns has changed
                     # (partition columns appear at the end after reading)
-                    pd.testing.assert_frame_equal(df_test, df_in, check_like=True)
+                    pd.testing.assert_frame_equal(
+                        df_test, df_in, check_like=True, check_column_type=False
+                    )
                     shutil.rmtree(TEST_DIR)
             except Exception as e:
                 err = e
@@ -2516,7 +2521,7 @@ def test_write_parquet_decimal(datapath, memory_leak_check):
         if bodo.get_rank() == 0:
             df1 = pd.read_parquet(datapath("decimal1.pq"))
             df2 = pd.read_parquet(write_filename)
-            pd.testing.assert_frame_equal(df1, df2)
+            pd.testing.assert_frame_equal(df1, df2, check_column_type=False)
     finally:
         if bodo.get_rank() == 0:
             shutil.rmtree(write_filename)
@@ -2564,7 +2569,7 @@ def test_write_parquet_params(memory_leak_check):
                 bodo.barrier()
                 df_a = pd.read_parquet(pd_fname)
                 df_b = pd.read_parquet(bodo_fname)
-                pd.testing.assert_frame_equal(df_a, df_b)
+                pd.testing.assert_frame_equal(df_a, df_b, check_column_type=False)
                 bodo.barrier()
             finally:
                 # cleanup
@@ -2894,7 +2899,9 @@ def test_write_csv_parallel_unicode(memory_leak_check):
         bodo.barrier()
         if get_rank() == 0:
             test_impl(df, pd_fname)
-            pd.testing.assert_frame_equal(pd.read_csv(hp_fname), pd.read_csv(pd_fname))
+            pd.testing.assert_frame_equal(
+                pd.read_csv(hp_fname), pd.read_csv(pd_fname), check_column_type=False
+            )
 
 
 @pytest.mark.smoke
@@ -3301,7 +3308,9 @@ def test_csv_header_none(datapath, memory_leak_check):
     p_df = test_impl()
     # convert column names from integer to string since Bodo only supports string names
     p_df.columns = [str(c) for c in p_df.columns]
-    pd.testing.assert_frame_equal(b_df, p_df, check_dtype=False)
+    pd.testing.assert_frame_equal(
+        b_df, p_df, check_dtype=False, check_column_type=False
+    )
 
 
 def test_csv_sep_arg(datapath, memory_leak_check):
@@ -5488,7 +5497,9 @@ class TestIO(unittest.TestCase):
         with ensure_clean(pd_fname), ensure_clean(hp_fname):
             bodo_func(data_structure, hp_fname)
             test_impl(data_structure, pd_fname)
-            pd.testing.assert_frame_equal(pd.read_csv(hp_fname), pd.read_csv(pd_fname))
+            pd.testing.assert_frame_equal(
+                pd.read_csv(hp_fname), pd.read_csv(pd_fname), check_column_type=False
+            )
 
     def test_write_dataframe_csv1(self):
         n = 111
@@ -5526,7 +5537,9 @@ class TestIO(unittest.TestCase):
             if get_rank() == 0:
                 test_impl(n, pd_fname)
                 pd.testing.assert_frame_equal(
-                    pd.read_csv(hp_fname), pd.read_csv(pd_fname)
+                    pd.read_csv(hp_fname),
+                    pd.read_csv(pd_fname),
+                    check_column_type=False,
                 )
 
     def test_write_dataframe_csv_parallel1(self):
@@ -5561,7 +5574,9 @@ class TestIO(unittest.TestCase):
             if get_rank() == 0:
                 test_impl(n, pd_fname)
                 pd.testing.assert_frame_equal(
-                    pd.read_csv(hp_fname), pd.read_csv(pd_fname)
+                    pd.read_csv(hp_fname),
+                    pd.read_csv(pd_fname),
+                    check_column_type=False,
                 )
 
 

@@ -792,7 +792,7 @@ def test_df_merge_col_key_bodo_only(key):
 
     df_exp = pd.DataFrame({"key": key, "value_x": val_x, "value_y": val_y})
     df_act = bodo.jit(impl)(df1, df2)
-    assert df_act.equals(df_exp)
+    pd.testing.assert_frame_equal(df_act, df_exp, check_column_type=False)
 
 
 @pytest.mark.parametrize(
@@ -1600,10 +1600,7 @@ def test_df_table_memory_usage(use_index, datapath, memory_leak_check):
         col_names = ["Index"] + col_names
     py_output = pd.Series(nbytes_list, index=pd.Index(col_names))
     bodo_out = memory_usage_table(use_index)
-    pd.testing.assert_series_equal(
-        bodo_out,
-        py_output,
-    )
+    pd.testing.assert_series_equal(bodo_out, py_output, check_index_type=False)
 
 
 @pytest.mark.parametrize("use_deep", [True, False])

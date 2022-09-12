@@ -140,7 +140,7 @@ def check_func(
     only_seq=False,
     only_1D=False,
     only_1DVar=False,
-    check_categorical=True,
+    check_categorical=False,
     atol=1e-08,
     rtol=1e-05,
     use_table_format=None,
@@ -700,7 +700,7 @@ def _test_equal_guard(
     check_names=True,
     check_dtype=True,
     reset_index=False,
-    check_categorical=True,
+    check_categorical=False,
     atol=1e-08,
     rtol=1e-05,
 ):
@@ -767,7 +767,7 @@ def _test_equal(
     check_names=True,
     check_dtype=True,
     reset_index=False,
-    check_categorical=True,
+    check_categorical=False,
     atol=1e-08,
     rtol=1e-05,
 ):
@@ -798,7 +798,7 @@ def _test_equal(
             check_names=check_names,
             check_categorical=check_categorical,
             check_dtype=check_dtype,
-            check_index_type="equiv" if check_dtype else False,
+            check_index_type=False,
             check_freq=False,
             atol=atol,
             rtol=rtol,
@@ -807,11 +807,27 @@ def _test_equal(
         if sort_output:
             py_out = py_out.sort_values()
             bodo_out = bodo_out.sort_values()
+        # avoid assert_index_equal() issues for ArrowStringArray comparison (exact=False
+        # still fails for some reason)
+        if bodo_out.dtype == pd.StringDtype("pyarrow"):
+            bodo_out = bodo_out.astype(object)
+        if isinstance(bodo_out, pd.MultiIndex):
+            bodo_out = pd.MultiIndex(
+                levels=[
+                    v.values.to_numpy()
+                    if isinstance(v.values, pd.arrays.ArrowStringArray)
+                    else v
+                    for v in bodo_out.levels
+                ],
+                codes=bodo_out.codes,
+                names=bodo_out.names,
+            )
         pd.testing.assert_index_equal(
             bodo_out,
             py_out,
             check_names=check_names,
             exact="equiv" if check_dtype else False,
+            check_categorical=False,
         )
     elif isinstance(py_out, pd.DataFrame):
         if sort_output:
@@ -833,7 +849,7 @@ def _test_equal(
             py_out,
             check_names=check_names,
             check_dtype=check_dtype,
-            check_index_type="equiv" if check_dtype else False,
+            check_index_type=False,
             check_column_type=False,
             check_freq=False,
             check_categorical=check_categorical,
@@ -878,6 +894,10 @@ def _test_equal(
             # parallel reduction can result in floating point differences
             if py_out.dtype in (np.float32, np.float64):
                 np.testing.assert_allclose(bodo_out, py_out, atol=atol, rtol=rtol)
+            elif isinstance(bodo_out, pd.arrays.ArrowStringArray):
+                pd.testing.assert_extension_array_equal(
+                    bodo_out, pd.array(py_out, "string[pyarrow]")
+                )
             else:
                 np.testing.assert_array_equal(bodo_out, py_out)
     # check for array since is_extension_array_dtype() matches dtypes also
@@ -895,9 +915,7 @@ def _test_equal(
             py_out.categories = py_out.categories.sort_values()
         if isinstance(bodo_out, pd.Categorical):
             bodo_out.categories = bodo_out.categories.sort_values()
-        pd.testing.assert_extension_array_equal(
-            bodo_out, py_out, check_dtype=check_dtype
-        )
+        pd.testing.assert_extension_array_equal(bodo_out, py_out, check_dtype=False)
     elif isinstance(py_out, csr_matrix):
         # https://stackoverflow.com/questions/30685024/check-if-two-scipy-sparse-csr-matrix-are-equal
         #
@@ -1322,7 +1340,9 @@ def string_list_ent(x):
             estr = '"' + str(k) + '": ' + string_list_ent(x[k])
             l_str.append(estr)
         return "{" + ", ".join(l_str) + "}"
-    if isinstance(x, (list, np.ndarray, pd.arrays.IntegerArray)):
+    if isinstance(
+        x, (list, np.ndarray, pd.arrays.IntegerArray, pd.arrays.ArrowStringArray)
+    ):
         l_str = []
         for e_val in x:
             l_str.append(string_list_ent(e_val))
@@ -1389,6 +1409,7 @@ def convert_non_pandas_columns(df):
                     pd.arrays.BooleanArray,
                     pd.arrays.IntegerArray,
                     pd.arrays.StringArray,
+                    pd.arrays.ArrowStringArray,
                 ),
             ):
                 if len(e_ent) > 0:
@@ -1420,17 +1441,13 @@ def convert_non_pandas_columns(df):
         e_list_str = []
         e_col = df[e_col_name]
 
-        def is_ok(val):
-            if isinstance(val, float):
-                return not np.isnan(val)
-            if val == None:
-                return False
-            return True
-
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
-            if isinstance(e_ent, (list, np.ndarray)):
-                f_ent = [x if is_ok(x) else "None" for x in e_ent]
+            if isinstance(
+                e_ent,
+                (list, np.ndarray, pd.arrays.StringArray, pd.arrays.ArrowStringArray),
+            ):
+                f_ent = [x if not pd.isna(x) else "None" for x in e_ent]
                 e_str = ",".join(f_ent) + ","
                 e_list_str.append(e_str)
             else:
@@ -1449,6 +1466,7 @@ def convert_non_pandas_columns(df):
                     pd.arrays.BooleanArray,
                     pd.arrays.IntegerArray,
                     pd.arrays.StringArray,
+                    pd.arrays.ArrowStringArray,
                 ),
             ):
                 e_str = ",".join([str(x) for x in e_ent]) + ","
@@ -1580,7 +1598,10 @@ def check_parallel_coherency(
     if bodo.get_rank() == 0:
         try:
             pd.testing.assert_frame_equal(
-                serial_output_final, parall_output_final, check_dtype=False
+                serial_output_final,
+                parall_output_final,
+                check_dtype=False,
+                check_column_type=False,
             )
         except Exception as e:
             print(e)
@@ -1894,7 +1915,7 @@ def check_caching(
     rtol=1e-05,
     reset_index=False,
     convert_columns_to_pandas=False,
-    check_categorical=True,
+    check_categorical=False,
     set_columns_name_to_none=False,
     reorder_columns=False,
     py_output=None,

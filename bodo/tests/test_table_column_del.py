@@ -1499,7 +1499,9 @@ def test_many_cols_to_parquet(datapath, memory_leak_check):
             pandas_df = pd.read_parquet(pandas_filename)
             bodo_df = pd.read_parquet(bodo_filename)
             try:
-                pd.testing.assert_frame_equal(pandas_df, bodo_df)
+                pd.testing.assert_frame_equal(
+                    pandas_df, bodo_df, check_column_type=False
+                )
                 return 1
             except Exception:
                 return 0
@@ -1820,7 +1822,7 @@ def test_table_set_data_reflection(memory_leak_check):
     n = bodo_func(df)
     # Verify the output + reflection
     assert n == 120, "Incorrect sum computed"
-    pd.testing.assert_frame_equal(df, df2)
+    pd.testing.assert_frame_equal(df, df2, check_column_type=False)
     # Since the source is a DF, no columns should be deleted.
     _check_column_dels(bodo_func, [])
 

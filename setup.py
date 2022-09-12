@@ -288,12 +288,19 @@ ext_hdist = Extension(
 
 ext_str = Extension(
     name="bodo.libs.hstr_ext",
-    sources=["bodo/libs/_str_ext.cpp", "bodo/libs/_bodo_common.cpp"],
+    sources=[
+        "bodo/libs/_str_ext.cpp",
+        "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_bodo_to_arrow.cpp",
+        "bodo/libs/_datetime_utils.cpp",
+    ],
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_bodo_to_arrow.h",
+        "bodo/libs/_datetime_utils.h",
     ],
-    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
+    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow", "arrow_python"],
     define_macros=np_compile_args["define_macros"],
     extra_compile_args=eca,
     extra_link_args=ela,
@@ -346,7 +353,7 @@ ext_arr = Extension(
         "bodo/libs/hyperloglog.hpp",
         "bodo/libs/simd-block-fixed.h",
     ],
-    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow"],
+    libraries=MPI_LIBS + np_compile_args["libraries"] + ["arrow", "arrow_python"],
     # -fno-strict-aliasing required by bloom filter implementation (see comment
     # in simd-block-fixed-fpp.h about violating strict aliasing rules)
     extra_compile_args=eca + ["-fno-strict-aliasing"],
@@ -467,6 +474,7 @@ ext_parquet = Extension(
         "bodo/io/parquet_write.cpp",
         "bodo/io/iceberg_parquet_write.cpp",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_bodo_to_arrow.cpp",
         "bodo/libs/_decimal_ext.cpp",
         "bodo/libs/_array_utils.cpp",
         "bodo/libs/_array_hash.cpp",
@@ -481,6 +489,8 @@ ext_parquet = Extension(
     depends=[
         "bodo/libs/_bodo_common.h",
         "bodo/libs/_bodo_common.cpp",
+        "bodo/libs/_bodo_to_arrow.h",
+        "bodo/libs/_bodo_to_arrow.cpp",
         "bodo/libs/_decimal_ext.h",
         "bodo/io/_fs_io.h",
         "bodo/io/arrow_reader.h",
@@ -491,7 +501,7 @@ ext_parquet = Extension(
         "bodo/libs/_datetime_utils.h",
         "bodo/libs/_shuffle.h",
     ],
-    libraries=pq_libs + np_compile_args["libraries"] + ["arrow_python"],
+    libraries=pq_libs + np_compile_args["libraries"] + ["arrow", "arrow_python"],
     include_dirs=["."] + np_compile_args["include_dirs"] + ind + extra_hash_ind,
     define_macros=[],
     # We cannot compile with -Werror yet because _fsspec_reader.cpp

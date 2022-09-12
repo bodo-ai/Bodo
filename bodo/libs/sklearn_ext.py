@@ -1334,17 +1334,21 @@ def overload_log_loss(
     if not is_overload_none(labels):
         func_text += "    labels = bodo.utils.conversion.coerce_to_array(labels)\n"
 
+    # For distributed data, pre-compute labels globally, then call our implementation
+    if is_overload_true(_is_data_distributed) and is_overload_none(labels):
+        # No need to sort the labels here since LabelBinarizer sorts them anyways
+        # when we call sklearn.metrics.log_loss within log_loss_dist_helper
+        func_text += (
+            "    labels = bodo.libs.array_kernels.unique(y_true, parallel=True)\n"
+        )
+        func_text += "    labels = bodo.allgatherv(labels, False)\n"
+
     func_text += "    with numba.objmode(loss='float64'):\n"
     if is_overload_false(_is_data_distributed):
         # For replicated data, directly call sklearn
         func_text += "        loss = sklearn.metrics.log_loss(\n"
     else:
         # For distributed data, pre-compute labels globally, then call our implementation
-        if is_overload_none(labels):
-            # No need to sort the labels here since LabelBinarizer sorts them anyways
-            # when we call sklearn.metrics.log_loss within log_loss_dist_helper
-            func_text += "        labels = bodo.libs.array_kernels.unique(y_true, parallel=True)\n"
-            func_text += "        labels = bodo.allgatherv(labels, False)\n"
         func_text += "        loss = log_loss_dist_helper(\n"
     func_text += "            y_true, y_pred, eps=eps, normalize=normalize,\n"
     func_text += "            sample_weight=sample_weight, labels=labels\n"
@@ -4039,7 +4043,7 @@ def overload_preprocessing_one_hot_encoder_fit(
     # sklearn.fit() expects a 2D array as input, but Bodo does not support
     # 2D string arrays - these are instead typed as 1D arrays of object
     # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
-    func_text += "        if X.ndim == 1 and isinstance(X[0], np.ndarray):\n"
+    func_text += "        if X.ndim == 1 and isinstance(X[0], (np.ndarray, pd.arrays.ArrowStringArray)):\n"
     func_text += "            X = np.vstack(X)\n"
 
     if is_overload_true(_is_data_distributed):
@@ -4087,7 +4091,9 @@ def overload_preprocessing_one_hot_encoder_transform(
             # sklearn.fit() expects a 2D array as input, but Bodo does not support
             # 2D string arrays - these are instead typed as 1D arrays of object
             # arrays. If X is provided like so, we coerce 1D array of arrays to 2D.
-            if X.ndim == 1 and isinstance(X[0], np.ndarray):
+            if X.ndim == 1 and isinstance(
+                X[0], (np.ndarray, pd.arrays.ArrowStringArray)
+            ):
                 X = np.vstack(X)
 
             transformed_X = m.transform(X)

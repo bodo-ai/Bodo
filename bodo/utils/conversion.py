@@ -689,7 +689,7 @@ def _is_str_dtype(dtype):
 def fix_arr_dtype(
     data, new_dtype, copy=None, nan_to_str=True, from_series=False
 ):  # pragma: no cover
-    return data
+    pass
 
 
 @overload(fix_arr_dtype, no_unliteral=True)

@@ -318,10 +318,14 @@ def test_merge_key_change(memory_leak_check):
     df3 = pd.DataFrame({"B": 2 * np.arange(n) + 1, "BB": n + np.arange(n) + 1.0})
     df4 = pd.DataFrame({"B": 2 * np.arange(n) + 1, "BBB": n + np.arange(n) + 1.0})
     pd.testing.assert_frame_equal(
-        bodo_func(df1, df2, df3, df4)[0], test_impl(df1, df2, df3, df4)[0]
+        bodo_func(df1, df2, df3, df4)[0],
+        test_impl(df1, df2, df3, df4)[0],
+        check_column_type=False,
     )
     pd.testing.assert_frame_equal(
-        bodo_func(df1, df2, df3, df4)[1], test_impl(df1, df2, df3, df4)[1]
+        bodo_func(df1, df2, df3, df4)[1],
+        test_impl(df1, df2, df3, df4)[1],
+        check_column_type=False,
     )
 
 
@@ -762,6 +766,7 @@ def test_list_string_array_type_specific(memory_leak_check):
         df3_bodo.reset_index(drop=True),
         df3_target.reset_index(drop=True),
         check_dtype=False,
+        check_column_type=False,
     )
 
 
@@ -865,6 +870,7 @@ def test_merge_common_cols(df1, df2, memory_leak_check):
     pd.testing.assert_frame_equal(
         bodo_func(df1, df2).sort_values("A").reset_index(drop=True),
         impl(df1, df2).sort_values("A").reset_index(drop=True),
+        check_column_type=False,
     )
 
 
@@ -3386,7 +3392,9 @@ def test_merge_partial_distributed(memory_leak_check):
     )
     df3_pd = test_impl(df1, df2).sort_values(by=["A", "C", "D"]).reset_index(drop=True)
     if bodo.get_rank() == 0:
-        pd.testing.assert_frame_equal(df3_bodo2, df3_pd, check_dtype=False)
+        pd.testing.assert_frame_equal(
+            df3_bodo2, df3_pd, check_dtype=False, check_column_type=False
+        )
 
 
 def _gen_df_rand_col_names():
@@ -3474,7 +3482,9 @@ def test_merge_asof_seq(memory_leak_check):
             "A": [2, 3, 7, 8, 9],
         }
     )
-    pd.testing.assert_frame_equal(bodo_func(df1, df2), test_impl(df1, df2))
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, df2), test_impl(df1, df2), check_column_type=False
+    )
 
 
 @pytest.mark.skip("[BE-3083] asof needs to be supported with table format")

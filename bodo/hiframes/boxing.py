@@ -915,6 +915,17 @@ def _get_df_columns_obj(c, builder, context, pyapi, df_typ, dataframe_payload):
     columns_typ = numba.typeof(columns_vals)
     columns = context.get_constant_generic(builder, columns_typ, columns_vals)
     columns_obj = pyapi.from_native_value(columns_typ, columns, c.env_manager)
+
+    # avoid ArrowStringArray for column names due to Pandas bug for df column getattr
+    # see test_jit_inside_prange
+    if (
+        columns_typ == bodo.string_array_type
+        and bodo.libs.str_arr_ext.use_pd_pyarrow_string_array
+    ):
+        prev_columns_obj = columns_obj
+        columns_obj = pyapi.call_method(columns_obj, "to_numpy", ())
+        pyapi.decref(prev_columns_obj)
+
     return columns_obj
 
 
@@ -1608,6 +1619,7 @@ def _infer_ndarray_obj_dtype(val):
             pd.arrays.BooleanArray,
             pd.arrays.IntegerArray,
             pd.arrays.StringArray,
+            pd.arrays.ArrowStringArray,
         ),
     ):
         # normalize list to array, 'np.object_' dtype to consider potential nulls

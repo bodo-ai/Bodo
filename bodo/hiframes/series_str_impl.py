@@ -7,6 +7,7 @@ import re
 
 import numba
 import numpy as np
+import pandas as pd
 from numba.core import cgutils, types
 from numba.extending import (
     intrinsic,
@@ -452,7 +453,7 @@ def overload_str_method_replace(S_str, pat, repl, n=-1, case=None, flags=0, rege
 @numba.njit
 def series_contains_regex(S, pat, case, flags, na, regex):  # pragma: no cover
     with numba.objmode(out_arr=bodo.boolean_array):
-        out_arr = S.array._str_contains(pat, case, flags, na, regex)
+        out_arr = pd.array(S.array, "string")._str_contains(pat, case, flags, na, regex)
     return out_arr
 
 
