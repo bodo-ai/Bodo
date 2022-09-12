@@ -83,4 +83,4 @@ def test_limit_named_param_constant(basic_df, spark_info):
     else:
         sql_output = f(df)
 
-    pd.testing.assert_frame_equal(sql_output, py_output)
+    pd.testing.assert_frame_equal(sql_output, py_output, check_column_type=False)

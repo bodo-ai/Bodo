@@ -48,5 +48,9 @@ def test_search(tmp_path):
 def validate_results(bodo_result, oracle):
 
     df2 = bodo.jit(lambda: pd.read_csv(bodo_result))()
+    # convert pyarrow string data to regular object arrays to avoid dtype errors
+    for i in range(len(df2.columns)):
+        if df2.dtypes.iloc[i] == pd.StringDtype("pyarrow"):
+            df2.iloc[:, i] = df2.iloc[:, i].values.to_numpy()
     df22 = df2.sort_values(list(df2.columns)).reset_index(drop=True)
-    pd.testing.assert_frame_equal(oracle, df22)
+    pd.testing.assert_frame_equal(oracle, df22, check_column_type=False)

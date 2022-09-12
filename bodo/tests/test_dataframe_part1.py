@@ -441,6 +441,9 @@ def test_assign_lambda(memory_leak_check):
     check_func(test_impl, (df,))
     check_func(test_impl2, (df,))
     check_func(test_impl3, (df,))
+    # test_impl3 unbox/boxing of df changes the data type to ArrowStringArray which
+    # needs reversed to avoid failures in regular Pandas
+    df["B"] = np.array(df["B"].values, object)
     check_func(test_impl4, (df,))
 
 
@@ -777,7 +780,7 @@ def test_rebalance_simple(data, memory_leak_check):
         res = bodo.gatherv(res)
         if bodo.get_rank() == 0:
             if isinstance(data, pd.DataFrame):
-                pd.testing.assert_frame_equal(data, res)
+                pd.testing.assert_frame_equal(data, res, check_column_type=False)
             else:
                 np.testing.assert_array_equal(data, res)
 
@@ -883,7 +886,7 @@ def test_rebalance_group(data, memory_leak_check):
         res = bodo.gatherv(res)
         if bodo.get_rank() == 0:
             if isinstance(data, pd.DataFrame):
-                pd.testing.assert_frame_equal(data, res)
+                pd.testing.assert_frame_equal(data, res, check_column_type=False)
             else:
                 np.testing.assert_array_equal(data, res)
 
@@ -906,7 +909,7 @@ def test_rebalance():
     # Direct calling the function
     df_out = bodo.libs.distributed_api.rebalance(df_in)
     df_out_merge = bodo.gatherv(df_out)
-    pd.testing.assert_frame_equal(df_in_merge, df_out_merge)
+    pd.testing.assert_frame_equal(df_in_merge, df_out_merge, check_column_type=False)
     # The distributed case
     def f(df):
         return bodo.rebalance(df)
@@ -921,7 +924,9 @@ def test_rebalance():
     if bodo.get_rank() == 0:
         delta_size = df_len_dist_merge["A"].max() - df_len_dist_merge["A"].min()
         assert delta_size <= 1
-    pd.testing.assert_frame_equal(df_in_merge, df_out_dist_merge)
+    pd.testing.assert_frame_equal(
+        df_in_merge, df_out_dist_merge, check_column_type=False
+    )
     # The replicated case
     bodo_rep = bodo.jit(
         all_args_distributed_block=False,
@@ -930,7 +935,7 @@ def test_rebalance():
         args_maybe_distributed=False,
     )(f)
     df_out_rep = bodo_rep(df_in_merge)
-    pd.testing.assert_frame_equal(df_in_merge, df_out_rep)
+    pd.testing.assert_frame_equal(df_in_merge, df_out_rep, check_column_type=False)
 
 
 @pytest.mark.slow
@@ -957,7 +962,9 @@ def test_box_df(memory_leak_check):
         return df
 
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_frame_equal(bodo_func(), impl(), check_dtype=False)
+    pd.testing.assert_frame_equal(
+        bodo_func(), impl(), check_dtype=False, check_column_type=False
+    )
 
 
 @pytest.mark.slow
@@ -1109,6 +1116,14 @@ def test_df_dtypes(df_value):
         # Bodo reads all bool arrays as nullable
         if py_output.iloc[i] == np.bool_:
             py_output.iloc[i] = pd.BooleanDtype()
+        # Bodo boxes string arrays of categories as ArrowStringArray
+        if (
+            isinstance(df_type.data[i], bodo.CategoricalArrayType)
+            and df_type.data[i].dtype.elem_type == bodo.string_type
+        ):
+            py_output.iloc[i] = pd.CategoricalDtype(
+                py_output.iloc[i].categories.astype("string[pyarrow]")
+            )
 
     check_func(impl, (df_value,), is_out_distributed=False, py_output=py_output)
 
@@ -1464,7 +1479,9 @@ def test_df_corr_parallel(memory_leak_check):
 
     bodo_func = bodo.jit(impl)
     n = 11
-    pd.testing.assert_frame_equal(bodo_func(n), impl(n))
+    pd.testing.assert_frame_equal(
+        bodo_func(n), impl(n), check_column_type=False, check_index_type=False
+    )
     assert count_array_OneDs() >= 3
     assert count_parfor_OneDs() >= 1
 
@@ -2157,7 +2174,12 @@ def test_df_take(df_value, memory_leak_check):
 
     bodo_func = bodo.jit(impl)
     pd.testing.assert_frame_equal(
-        bodo_func(df_value), impl(df_value), check_dtype=False
+        bodo_func(df_value),
+        impl(df_value),
+        check_dtype=False,
+        check_column_type=False,
+        check_categorical=False,
+        check_index_type=False,
     )
 
 

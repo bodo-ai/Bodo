@@ -417,7 +417,9 @@ class TestHiFrames(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["AB,CC", "C,ABB,D", "G", "", np.nan, "g,f"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df), check_column_type=False
+        )
 
     def test_str_split_box_df(self):
         def test_impl(df):

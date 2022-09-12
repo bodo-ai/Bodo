@@ -1114,7 +1114,11 @@ def test_series_take(series_val, memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     pd.testing.assert_series_equal(
-        bodo_func(series_val), test_impl(series_val), check_dtype=False
+        bodo_func(series_val),
+        test_impl(series_val),
+        check_dtype=False,
+        check_index_type=False,
+        check_categorical=False,
     )
     # TODO: dist support for selection with index list
 
@@ -1149,7 +1153,9 @@ def test_series_argsort(series_val, memory_leak_check):
         return A.argsort()
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(series_val), test_impl(series_val))
+    pd.testing.assert_series_equal(
+        bodo_func(series_val), test_impl(series_val), check_index_type=False
+    )
     # TODO: support distributed argsort()
     # check_func(test_impl, (series_val,))
 
@@ -1240,6 +1246,8 @@ def test_series_append_single(series_val, ignore_index, memory_leak_check):
         test_impl(series_val, series_val),
         check_dtype=False,
         check_names=False,
+        check_index_type=False,
+        check_categorical=False,
     )  # XXX append can't set name yet
 
 
@@ -1269,6 +1277,8 @@ def test_series_append_multi(series_val, ignore_index, memory_leak_check):
         test_impl(series_val, series_val, series_val),
         check_dtype=False,
         check_names=False,
+        check_index_type=False,
+        check_categorical=False,
     )  # XXX append can't set name yet
 
 
@@ -2798,7 +2808,7 @@ def test_create_series_index1(memory_leak_check):
         return A
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(), test_impl())
+    pd.testing.assert_series_equal(bodo_func(), test_impl(), check_index_type=False)
 
 
 @pytest.mark.slow
@@ -2808,7 +2818,7 @@ def test_create_series_index2(memory_leak_check):
         return A
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(), test_impl())
+    pd.testing.assert_series_equal(bodo_func(), test_impl(), check_index_type=False)
 
 
 @pytest.mark.slow
@@ -2818,7 +2828,7 @@ def test_create_series_index3(memory_leak_check):
         return A
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func(), test_impl())
+    pd.testing.assert_series_equal(bodo_func(), test_impl(), check_index_type=False)
 
 
 @pytest.mark.slow
@@ -2828,7 +2838,9 @@ def test_create_series_index4(memory_leak_check):
         return A
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_series_equal(bodo_func("A"), test_impl("A"))
+    pd.testing.assert_series_equal(
+        bodo_func("A"), test_impl("A"), check_index_type=False
+    )
 
 
 def test_series_var(memory_leak_check):

@@ -15,12 +15,17 @@ from bodo.utils.typing import BodoError
 @pytest.mark.parametrize(
     "dtype",
     [
-        pd.CategoricalDtype(["AA", "B", "CC"]),
+        # using "string[pyarrow]" type to match Bodo output type for string arrays
+        pd.CategoricalDtype(pd.array(["AA", "B", "CC"], "string[pyarrow]")),
         pytest.param(
-            pd.CategoricalDtype(["CC", "AA", "B"], True), marks=pytest.mark.slow
+            pd.CategoricalDtype(pd.array(["CC", "AA", "B"], "string[pyarrow]"), True),
+            marks=pytest.mark.slow,
         ),
         pytest.param(pd.CategoricalDtype([3, 2, 1, 4]), marks=pytest.mark.slow),
-        pytest.param(pd.CategoricalDtype(gen_nonascii_list(4)), marks=pytest.mark.slow),
+        pytest.param(
+            pd.CategoricalDtype(pd.array(gen_nonascii_list(4), "string[pyarrow]")),
+            marks=pytest.mark.slow,
+        ),
     ],
 )
 def test_unbox_dtype(dtype, memory_leak_check):

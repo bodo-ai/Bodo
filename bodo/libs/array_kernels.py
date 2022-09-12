@@ -605,11 +605,11 @@ def get_valid_entries_from_date_offset(
 
 
 def quantile(A, q):  # pragma: no cover
-    return 0
+    pass
 
 
 def quantile_parallel(A, q):  # pragma: no cover
-    return 0
+    pass
 
 
 @infer_global(quantile)
@@ -755,7 +755,7 @@ def _rank_detect_ties(arr):
 
 
 def rank(arr, method="average", na_option="keep", ascending=True, pct=False):
-    return arr
+    pass
 
 
 @overload(rank, no_unliteral=True, inline="always")
@@ -1122,7 +1122,7 @@ def duplicated(data, parallel=False):
 
 
 def sample_table_operation(data, ind_arr, n, frac, replace, parallel=False):
-    return data, ind_arr
+    pass
 
 
 @overload(sample_table_operation, no_unliteral=True)
@@ -1177,7 +1177,7 @@ def overload_sample_table_operation(data, ind_arr, n, frac, replace, parallel=Fa
 
 
 def drop_duplicates(data, ind_arr, ncols, parallel=False):  # pragma: no cover
-    return data, ind_arr
+    pass
 
 
 @overload(drop_duplicates, no_unliteral=True)
@@ -1235,7 +1235,7 @@ def overload_drop_duplicates(data, ind_arr, ncols, parallel=False):
 
 
 def drop_duplicates_array(data_arr, parallel=False):
-    return data_arr
+    pass
 
 
 @overload(drop_duplicates_array, no_unliteral=True)
@@ -1258,7 +1258,7 @@ def overload_drop_duplicates_array(data_arr, parallel=False):
 
 
 def dropna(data, how, thresh, subset, parallel=False):  # pragma: no cover
-    return data
+    pass
 
 
 @overload(dropna, no_unliteral=True)
@@ -1331,7 +1331,7 @@ def overload_dropna(data, how, thresh, subset):
 
 
 def get(arr, ind):  # pragma: no cover
-    return pd.Series(arr).str.get(ind)
+    pass
 
 
 @overload(get, no_unliteral=True)
@@ -1389,7 +1389,7 @@ def _is_same_categorical_array_type(arr_types):
 
 
 def concat(arr_list):  # pragma: no cover
-    return pd.concat(arr_list)
+    pass
 
 
 @overload(concat, no_unliteral=True)
@@ -1867,7 +1867,7 @@ def overload_astype_float_tup(arr_tup):
 
 
 def convert_to_nullable_tup(arr_tup):
-    return arr_tup
+    pass
 
 
 @overload(convert_to_nullable_tup, no_unliteral=True)
@@ -1908,11 +1908,11 @@ def overload_convert_to_nullable_tup(arr_tup):
 
 
 def nunique(A, dropna):  # pragma: no cover
-    return len(set(A))
+    pass
 
 
 def nunique_parallel(A, dropna):  # pragma: no cover
-    return len(set(A))
+    pass
 
 
 @overload(nunique, no_unliteral=True)
@@ -1938,11 +1938,11 @@ def nunique_overload_parallel(A, dropna):
 
 
 def unique(A, dropna=False, parallel=False):  # pragma: no cover
-    return np.array([a for a in set(A)]).astype(A.dtype)
+    pass
 
 
 def cummin(A):  # pragma: no cover
-    return A
+    pass
 
 
 @overload(cummin, no_unliteral=True)
@@ -1967,7 +1967,7 @@ def cummin_overload(A):
 
 
 def cummax(A):  # pragma: no cover
-    return A
+    pass
 
 
 @overload(cummax, no_unliteral=True)
@@ -2074,7 +2074,7 @@ def overload_explode(arr, index_arr):
 
 
 def explode_no_index(arr):  # pragma: no cover
-    return pd.Series(arr).explode()
+    pass
 
 
 @overload(explode_no_index, no_unliteral=True)
@@ -2133,7 +2133,7 @@ def overload_explode_no_index(arr, counts):
 
 
 def get_arr_lens(arr, na_empty_as_one=True):  # pragma: no cover
-    return [len(e) for e in arr]
+    pass
 
 
 @overload(get_arr_lens, inline="always", no_unliteral=True)
@@ -2179,7 +2179,7 @@ def overload_get_arr_lens(arr, na_empty_as_one=True):
 
 
 def explode_str_split(arr, pat, n, index_arr):  # pragma: no cover
-    return pd.Series(arr, index_arr).str.split(pat, n).explode()
+    pass
 
 
 @overload(explode_str_split, no_unliteral=True)
@@ -2249,7 +2249,7 @@ def overload_explode_str_split(arr, pat, n, index_arr):
 
 
 def gen_na_array(n, arr):  # pragma: no cover
-    return np.full(n, np.nan)
+    pass
 
 
 @overload(gen_na_array, no_unliteral=True)
@@ -2320,7 +2320,7 @@ ArrayAnalysis._analyze_op_call_bodo_libs_array_kernels_gen_na_array = gen_na_arr
 
 
 def resize_and_copy(A, new_len):  # pragma: no cover
-    return A
+    pass
 
 
 @overload(resize_and_copy, no_unliteral=True)
@@ -2439,7 +2439,7 @@ numba.parfors.parfor.swap_functions_map[("arange", "numpy")] = arange_parallel_i
 
 
 def sort(arr, ascending, inplace):  # pragma: no cover
-    return np.sort(arr)
+    pass
 
 
 # Our sort implementation for series and dataframe relies on the inclusion
@@ -2520,8 +2520,8 @@ def overload_array_prod(A):
     return impl
 
 
-def nonzero(arr):
-    return (arr,)
+def nonzero(arr):  # pragma: no cover
+    pass
 
 
 @overload(nonzero, no_unliteral=True)
@@ -2549,7 +2549,7 @@ def nonzero_overload(A, parallel=False):
 def ffill_bfill_arr(
     arr,
 ):  # pragma: no cover
-    return arr
+    pass
 
 
 @overload(ffill_bfill_arr, no_unliteral=True)
@@ -2738,7 +2738,7 @@ def np_sort(A, axis=-1, kind=None, order=None):
 
 
 def repeat_kernel(A, repeats):  # pragma: no cover
-    return A
+    pass
 
 
 @overload(repeat_kernel, no_unliteral=True)

@@ -234,7 +234,7 @@ def test_log_loss(data, normalize, memory_leak_check):
     check_func(test_log_loss_1, data, is_out_distributed=False)
 
 
-def test_log_loss_error(memory_leak_check):
+def test_log_loss_error():
     def impl(y_true, y_pred):
         return log_loss(y_true, y_pred)
 

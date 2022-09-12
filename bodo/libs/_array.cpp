@@ -10,6 +10,7 @@
 #include <datetime.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <arrow/api.h>
+#include <arrow/python/pyarrow.h>
 #include <numpy/arrayobject.h>
 #include "_array_operations.h"
 #include "_array_utils.h"
@@ -473,11 +474,92 @@ array_info* info_from_table(table_info* table, int64_t col_ind) {
     return table->columns[col_ind];
 }
 
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs)                              \
+    if (!(res.status().ok())) {                                            \
+        std::string err_msg = std::string("Error in arrow ") + msg + " " + \
+                              res.status().ToString();                     \
+        std::cerr << msg << std::endl;                                     \
+    }                                                                      \
+    lhs = std::move(res).ValueOrDie();
+
+/**
+ * @brief create a Bodo string array from a PyArrow string array
+ *
+ * @param obj PyArrow string array
+ * @return NRT_MemInfo* meminfo of array(item) array containing string data
+ */
+NRT_MemInfo* string_array_from_pyarrow(PyObject* pyarrow_arr) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return NULL;                   \
+    }
+
+    // https://arrow.apache.org/docs/python/integration/extending.html
+    CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
+
+    // unwrap C++ Arrow array from pyarrow array
+    std::shared_ptr<arrow::Array> arrow_arr;
+    auto res = arrow::py::unwrap_array(pyarrow_arr);
+    CHECK_ARROW_AND_ASSIGN(res, "unwrap_array(pyarrow_arr)", arrow_arr);
+    CHECK(arrow_arr->offset() == 0,
+          "only Arrow arrays with zero offset supported");
+    std::shared_ptr<arrow::LargeStringArray> arrow_str_arr =
+        std::static_pointer_cast<arrow::LargeStringArray>(arrow_arr);
+
+    int64_t n = arrow_str_arr->length();
+
+    // allocate null bitmap and copy data
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n);
+    numpy_arr_payload null_bitmap_payload =
+        allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8);
+    uint8_t* null_bitmap = (uint8_t*)null_bitmap_payload.data;
+
+    // Arrow doesn't allocate null bitmap if there are no nulls in the array
+    if (arrow_str_arr->null_bitmap_data() != NULLPTR) {
+        memcpy(null_bitmap, arrow_str_arr->null_bitmap_data(), n_bytes);
+    } else {
+        CHECK(arrow_str_arr->null_count() == 0,
+              "expected no nulls in Arrow array");
+        // set all elements to non-null
+        memset(null_bitmap, 0xff, n_bytes);
+    }
+
+    // allocate characters array and copy data
+    // TODO[BE-3591]: support zero-copy Arrow array unboxing
+    int64_t n_chars = arrow_str_arr->total_values_length();
+    numpy_arr_payload char_buf_payload =
+        allocate_numpy_payload(n_chars, Bodo_CTypes::UINT8);
+    char* char_buff = char_buf_payload.data;
+    memcpy(char_buff, arrow_str_arr->raw_data(), n_chars);
+
+    // allocate offsets and copy data
+    numpy_arr_payload offsets_payload =
+        allocate_numpy_payload(n + 1, Bodo_CType_offset);
+    offset_t* offsets = (offset_t*)offsets_payload.data;
+    memcpy(offsets, arrow_str_arr->raw_value_offsets(),
+           sizeof(offset_t) * (n + 1));
+
+    // create array(item) meminfo and set data members
+    NRT_MemInfo* meminfo_array_item = alloc_array_item_arr_meminfo();
+    array_item_arr_numpy_payload* payload =
+        (array_item_arr_numpy_payload*)(meminfo_array_item->data);
+
+    payload->n_arrays = n;
+    payload->data = char_buf_payload;
+    payload->offsets = offsets_payload;
+    payload->null_bitmap = null_bitmap_payload;
+
+    return meminfo_array_item;
+#undef CHECK
+}
+
 /**
  * @brief create a concatenated string and offset table from a numpy array of
  * strings
  *
- * @param obj numpy array of strings
+ * @param obj numpy array of strings, pd.arrays.StringArray, or
+ * pd.arrays.ArrowStringArray
  * @param is_bytes whether the contents are bytes objects instead of str
  * @return NRT_MemInfo* meminfo of array(item) array containing string data
  */
@@ -501,9 +583,49 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
         return out_meminfo;
     }
 
+    // check if obj is ArrowStringArray to unbox it properly
+    // pd.arrays.ArrowStringArray
+    PyObject* pandas_mod = PyImport_ImportModule("pandas");
+    CHECK(pandas_mod, "importing pandas module failed");
+    PyObject* pd_arrays_obj = PyObject_GetAttrString(pandas_mod, "arrays");
+    CHECK(pd_arrays_obj, "getting pd.arrays failed");
+    PyObject* pd_arrow_str_arr_obj =
+        PyObject_GetAttrString(pd_arrays_obj, "ArrowStringArray");
+    CHECK(pd_arrays_obj, "getting pd.arrays.ArrowStringArray failed");
+
+    // isinstance(arr, ArrowStringArray)
+    int is_arrow_str_arr = PyObject_IsInstance(obj, pd_arrow_str_arr_obj);
+    CHECK(is_arrow_str_arr >= 0, "isinstance(obj, ArrowStringArray) fails");
+
+    Py_DECREF(pandas_mod);
+    Py_DECREF(pd_arrays_obj);
+    Py_DECREF(pd_arrow_str_arr_obj);
+
+    if (is_arrow_str_arr) {
+        // pyarrow_chunked_arr = obj._data
+        PyObject* pyarrow_chunked_arr = PyObject_GetAttrString(obj, "_data");
+        CHECK(pyarrow_chunked_arr, "getting obj._data failed");
+
+        // pyarrow_arr = pyarrow_chunked_arr.combine_chunks()
+        PyObject* pyarrow_arr =
+            PyObject_CallMethod(pyarrow_chunked_arr, "combine_chunks", "");
+        CHECK(pyarrow_arr, "array.combine_chunks() failed");
+
+        // pyarrow_arr_large_str = pyarrow_arr.cast("large_string")
+        // necessary since Pandas may have regular "string" with 32-bit offsets
+        PyObject* pyarrow_arr_large_str =
+            PyObject_CallMethod(pyarrow_arr, "cast", "s", "large_string");
+        CHECK(pyarrow_arr_large_str, "array.cast(\"large_string\") failed");
+
+        NRT_MemInfo* out = string_array_from_pyarrow(pyarrow_arr_large_str);
+        Py_DECREF(pyarrow_chunked_arr);
+        Py_DECREF(pyarrow_arr);
+        Py_DECREF(pyarrow_arr_large_str);
+        return out;
+    }
+
     // allocate null bitmap
-    // same formula as BytesForBits in Arrow
-    int64_t n_bytes = (n + 7) >> 3;
+    int64_t n_bytes = arrow::bit_util::BytesForBits(n);
     numpy_arr_payload null_bitmap_payload =
         allocate_numpy_payload(n_bytes, Bodo_CTypes::UINT8);
     uint8_t* null_bitmap = (uint8_t*)null_bitmap_payload.data;
@@ -571,11 +693,7 @@ NRT_MemInfo* string_array_from_sequence(PyObject* obj, int is_bytes) {
         (array_item_arr_numpy_payload*)(meminfo_array_item->data);
 
     payload->n_arrays = n;
-
-    // allocate data array
-    // TODO: support non-numpy data
     payload->data = outbuf_payload;
-    // TODO: support 64-bit offsets case
     payload->offsets = offsets_payload;
     payload->null_bitmap = null_bitmap_payload;
 

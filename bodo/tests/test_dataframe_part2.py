@@ -77,9 +77,15 @@ def test_setitem_na(memory_leak_check):
     S = pd.Series(["AA", np.nan, "", "D", "GG"], name="C")
     # TODO: support distributed setitem with scalar
     bodo_func = bodo.jit(impl)
-    pd.testing.assert_series_equal(bodo_func(S.copy(), 0), impl(S.copy(), 0))
-    pd.testing.assert_series_equal(bodo_func(S.copy(), 1), impl(S.copy(), 1))
-    pd.testing.assert_series_equal(bodo_func(S.copy(), 2), impl(S.copy(), 2))
+    pd.testing.assert_series_equal(
+        bodo_func(S.copy(), 0), impl(S.copy(), 0), check_dtype=False
+    )
+    pd.testing.assert_series_equal(
+        bodo_func(S.copy(), 1), impl(S.copy(), 1), check_dtype=False
+    )
+    pd.testing.assert_series_equal(
+        bodo_func(S.copy(), 2), impl(S.copy(), 2), check_dtype=False
+    )
 
 
 @pytest.mark.slow
@@ -177,8 +183,12 @@ def test_set_column_cond2(memory_leak_check):
 
     bodo_func = bodo.jit(distributed=False)(test_impl)
     n = 11
-    pd.testing.assert_frame_equal(bodo_func(n, True), test_impl(n, True))
-    pd.testing.assert_frame_equal(bodo_func(n, False), test_impl(n, False))
+    pd.testing.assert_frame_equal(
+        bodo_func(n, True), test_impl(n, True), check_column_type=False
+    )
+    pd.testing.assert_frame_equal(
+        bodo_func(n, False), test_impl(n, False), check_column_type=False
+    )
 
 
 def test_set_column_cond3(memory_leak_check):
@@ -196,12 +206,16 @@ def test_set_column_cond3(memory_leak_check):
     n = 11
     df1 = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
     df2 = df1.copy()
-    pd.testing.assert_frame_equal(bodo_func(df1, True), test_impl(df2, True))
-    pd.testing.assert_frame_equal(df1, df2)
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, True), test_impl(df2, True), check_column_type=False
+    )
+    pd.testing.assert_frame_equal(df1, df2, check_column_type=False)
     df1 = pd.DataFrame({"A": np.ones(n), "B": np.arange(n)})
     df2 = df1.copy()
-    pd.testing.assert_frame_equal(bodo_func(df1, False), test_impl(df2, False))
-    pd.testing.assert_frame_equal(df1, df2)
+    pd.testing.assert_frame_equal(
+        bodo_func(df1, False), test_impl(df2, False), check_column_type=False
+    )
+    pd.testing.assert_frame_equal(df1, df2, check_column_type=False)
 
 
 def test_set_column_setattr(memory_leak_check):
@@ -240,7 +254,7 @@ def test_set_column_reflect_error(memory_leak_check):
         df = f(df)
         return df
 
-    pd.testing.assert_frame_equal(bodo.jit(impl)(), impl())
+    pd.testing.assert_frame_equal(bodo.jit(impl)(), impl(), check_column_type=False)
 
 
 def test_set_column_native_reflect(memory_leak_check):
@@ -543,7 +557,7 @@ def test_create_series_input1(memory_leak_check):
 
     bodo_func = bodo.jit(test_impl)
     S = pd.Series([2, 4], [3, -1])
-    pd.testing.assert_frame_equal(bodo_func(S), test_impl(S))
+    pd.testing.assert_frame_equal(bodo_func(S), test_impl(S), check_column_type=False)
 
 
 def test_df_apply_getitem(memory_leak_check):
@@ -1603,7 +1617,9 @@ def test_df_slice(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     bodo_func = bodo.jit(impl)
     # TODO: proper distributed support for slicing
-    pd.testing.assert_frame_equal(bodo_func(df, n), impl(df, n))
+    pd.testing.assert_frame_equal(
+        bodo_func(df, n), impl(df, n), check_column_type=False
+    )
 
 
 def test_df_setitem_multi(memory_leak_check):
@@ -1671,9 +1687,13 @@ def test_iloc_slice(memory_leak_check):
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
     bodo_func = bodo.jit(test_impl)
     # TODO: proper distributed support for slicing
-    pd.testing.assert_frame_equal(bodo_func(df, n), test_impl(df, n))
+    pd.testing.assert_frame_equal(
+        bodo_func(df, n), test_impl(df, n), check_column_type=False
+    )
     bodo_func = bodo.jit(test_impl2)
-    pd.testing.assert_frame_equal(bodo_func(df, n), test_impl2(df, n))
+    pd.testing.assert_frame_equal(
+        bodo_func(df, n), test_impl2(df, n), check_column_type=False
+    )
 
 
 def test_iloc_getitem_row(memory_leak_check):
@@ -2304,7 +2324,7 @@ def test_df_schema_change(memory_leak_check):
 
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+    pd.testing.assert_frame_equal(bodo_func(df), test_impl(df), check_column_type=False)
 
 
 def test_set_df_column_names(memory_leak_check):
@@ -2412,7 +2432,7 @@ def test_df_multi_schema_change(memory_leak_check):
 
     df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [1.2, np.nan, 1.1, 3.1]})
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+    pd.testing.assert_frame_equal(bodo_func(df), test_impl(df), check_column_type=False)
 
 
 def test_df_drop_column_check(memory_leak_check):
@@ -2469,7 +2489,7 @@ def test_df_alias(memory_leak_check):
         return df
 
     bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_frame_equal(bodo_func(), test_impl())
+    pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_column_type=False)
 
 
 def test_df_type_unify_error():
@@ -2513,7 +2533,7 @@ def test_dataframe_constant_lowering(memory_leak_check):
     def impl():
         return df
 
-    pd.testing.assert_frame_equal(bodo.jit(impl)(), df)
+    pd.testing.assert_frame_equal(bodo.jit(impl)(), df, check_column_type=False)
 
     df2 = pd.DataFrame({"A": [2, 1], "B": [1.2, 3.3]})
     for i in range(bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD):
@@ -2522,7 +2542,9 @@ def test_dataframe_constant_lowering(memory_leak_check):
     def impl():
         return df2
 
-    pd.testing.assert_frame_equal(bodo.jit(impl)(), df2)
+    pd.testing.assert_frame_equal(
+        bodo.jit(impl)(), df2, check_column_type=False, check_dtype=False
+    )
 
 
 def test_dataframe_columns_const_passing(memory_leak_check):

@@ -68,7 +68,9 @@ def test_write_sql_aws(chunksize, memory_leak_check):
                 df_load_sort = (
                     df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
                 )
-                pd.testing.assert_frame_equal(df_load_sort, df_in_sort)
+                pd.testing.assert_frame_equal(
+                    df_load_sort, df_in_sort, check_column_type=False
+                )
             except Exception as e:
                 print("".join(traceback.format_exception(None, e, e.__traceback__)))
                 passed = 0
@@ -1467,7 +1469,7 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
         df_load_cols = df_load.columns.to_list()
         df_load_sort = df_load.sort_values(by=df_load_cols).reset_index(drop=True)
 
-        pd.testing.assert_frame_equal(df_in_sort, df_load_sort)
+        pd.testing.assert_frame_equal(df_in_sort, df_load_sort, check_column_type=False)
 
     except Exception as e:
         print("".join(traceback.format_exception(None, e, e.__traceback__)))
@@ -1830,7 +1832,9 @@ def test_snowflake_write_execute_copy_into(memory_leak_check):
             df_load_cols = df_load.columns.to_list()
             df_load_sort = df_load.sort_values(by=df_load_cols).reset_index(drop=True)
 
-            pd.testing.assert_frame_equal(df_in_sort, df_load_sort)
+            pd.testing.assert_frame_equal(
+                df_in_sort, df_load_sort, check_column_type=False
+            )
 
         except Exception as e:
             print("".join(traceback.format_exception(None, e, e.__traceback__)))
@@ -2078,7 +2082,9 @@ def test_write_sql_oracle(is_distributed, memory_leak_check):
             l_cols = df_in.columns.to_list()
             df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
             df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
-            pd.testing.assert_frame_equal(df_load_sort, df_in_sort)
+            pd.testing.assert_frame_equal(
+                df_load_sort, df_in_sort, check_column_type=False
+            )
         except Exception as e:
             print("".join(traceback.format_exception(None, e, e.__traceback__)))
             passed = 0
@@ -2177,7 +2183,9 @@ def test_to_sql_snowflake(
             output_df = output_df.sort_values(output_cols).reset_index(drop=True)
             py_cols = py_output.columns.to_list()
             py_output = py_output.sort_values(py_cols).reset_index(drop=True)
-            pd.testing.assert_frame_equal(output_df, py_output, check_dtype=False)
+            pd.testing.assert_frame_equal(
+                output_df, py_output, check_dtype=False, check_column_type=False
+            )
         except Exception as e:
             print("".join(traceback.format_exception(None, e, e.__traceback__)))
             passed = 0
@@ -2303,7 +2311,7 @@ def test_to_sql_colname_case(memory_leak_check):
     def sf_read(conn):
         return pd.read_sql(f"select * from {name}", conn)
 
-    bodo_result = bodo_result = bodo.jit(sf_read)(conn)
+    bodo_result = bodo.jit(sf_read)(conn)
     bodo_result = bodo.gatherv(bodo_result)
 
     passed = 1
@@ -2311,7 +2319,9 @@ def test_to_sql_colname_case(memory_leak_check):
         try:
             py_output = sf_read(conn)
             # disable dtype check. Int16 vs. int64
-            pd.testing.assert_frame_equal(bodo_result, py_output, check_dtype=False)
+            pd.testing.assert_frame_equal(
+                bodo_result, py_output, check_dtype=False, check_column_type=False
+            )
         except Exception as e:
             print("".join(traceback.format_exception(None, e, e.__traceback__)))
             passed = 0
@@ -2587,7 +2597,9 @@ def test_to_sql_postgres(is_distributed, memory_leak_check):
             l_cols = df_in.columns.to_list()
             df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
             df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
-            pd.testing.assert_frame_equal(df_load_sort, df_in_sort)
+            pd.testing.assert_frame_equal(
+                df_load_sort, df_in_sort, check_column_type=False
+            )
         except Exception as e:
             print("".join(traceback.format_exception(None, e, e.__traceback__)))
             passed = 0
@@ -2652,7 +2664,9 @@ def test_to_sql_oracle(is_distributed, memory_leak_check):
             df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
             df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
             # check_dtype is False because Date column is read by Pandas as `object`
-            pd.testing.assert_frame_equal(df_load_sort, df_in_sort, check_dtype=False)
+            pd.testing.assert_frame_equal(
+                df_load_sort, df_in_sort, check_dtype=False, check_column_type=False
+            )
         except Exception as e:
             print("".join(traceback.format_exception(None, e, e.__traceback__)))
             passed = 0

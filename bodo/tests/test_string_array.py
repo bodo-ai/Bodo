@@ -32,11 +32,14 @@ from bodo.utils.typing import BodoError
                     "한국,가,고싶다ㅠ",
                     "🢇🄐,🏈𠆶💑😅",
                 ],
+                dtype="string[pyarrow]",
             ),
             marks=pytest.mark.slow,
         ),
         # ASCII array
-        pd.array(["AB", "", "ABC", pd.NA, "C", "D", "abcd", "ABCD"]),
+        pd.array(
+            ["AB", "", "ABC", pd.NA, "C", "D", "abcd", "ABCD"], dtype="string[pyarrow]"
+        ),
     ]
 )
 def str_arr_value(request):

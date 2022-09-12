@@ -2309,7 +2309,7 @@ def test_scatterv_None_warning(df_value):
             "This data won't be sent to any other ranks and will be overwritten with data from rank 0."
         )
 
-    pd.testing.assert_frame_equal(df_proper, df_improper)
+    pd.testing.assert_frame_equal(df_proper, df_improper, check_column_type=False)
 
 
 def test_gatherv_empty_df(memory_leak_check):
@@ -2320,7 +2320,7 @@ def test_gatherv_empty_df(memory_leak_check):
 
     df = pd.DataFrame()
     df_gathered = bodo.jit()(impl)(df)
-    pd.testing.assert_frame_equal(df, df_gathered)
+    pd.testing.assert_frame_equal(df, df_gathered, check_column_type=False)
 
 
 def test_gatherv_str(memory_leak_check):
@@ -2338,6 +2338,7 @@ def test_gatherv_str(memory_leak_check):
             pd.concat([S] * bodo.get_size()).str.replace("A", "ABC"),
             S2,
             check_index=False,
+            check_dtype=False,
         )
 
 

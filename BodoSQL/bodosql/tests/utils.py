@@ -886,6 +886,17 @@ def _check_query_equal(
         convert_nullable_bodosql: Should BodoSQL nullable integers be converted to Object dtype with None.
 
     """
+    # convert pyarrow string data to regular object arrays to avoid dtype errors
+    for i in range(len(bodosql_output.columns)):
+        if bodosql_output.dtypes.iloc[i] == pd.StringDtype("pyarrow"):
+            arr = bodosql_output.iloc[:, i].values
+            # arr.to_numpy() fails in Arrow if all values are NA
+            # see test_cond.py::test_decode\[all_scalar_no_case_no_default\]
+            if arr.isna().all():
+                bodosql_output.iloc[:, i] = None
+            else:
+                bodosql_output.iloc[:, i] = arr.to_numpy()
+
     if sort_output:
         bodosql_output = bodosql_output.sort_values(
             bodosql_output.columns.tolist()
@@ -929,7 +940,9 @@ def _test_equal_guard(
         # convert bodosql output to a value that can be compared with Spark
         if convert_nullable_bodosql:
             bodosql_output = convert_nullable_object(bodosql_output)
-        pd.testing.assert_frame_equal(bodosql_output, expected_output, check_dtype)
+        pd.testing.assert_frame_equal(
+            bodosql_output, expected_output, check_dtype, check_column_type=False
+        )
     except Exception as e:
         print(e)
         passed = 0

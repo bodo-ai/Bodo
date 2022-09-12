@@ -31,7 +31,7 @@ def check_write(df):
             bodo.barrier()
             df_bodo = pd.read_parquet(fp_bodo)
             df_pandas = pd.read_parquet(fp_pandas)
-        pd.testing.assert_frame_equal(df_bodo, df_pandas)
+        pd.testing.assert_frame_equal(df_bodo, df_pandas, check_column_type=False)
 
 
 @pytest.mark.parametrize(

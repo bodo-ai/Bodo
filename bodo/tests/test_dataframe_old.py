@@ -68,7 +68,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_create_column2(self):
         # column arg uses list('AB')
@@ -78,7 +80,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_create_range_index1(self):
         def test_impl(n):
@@ -91,7 +95,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_create_ndarray1(self):
         def test_impl(n):
@@ -103,7 +109,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_create_ndarray_copy1(self):
         def test_impl(data):
@@ -116,7 +124,9 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         n = 11
         data = np.arange(9).reshape(3, 3)
-        pd.testing.assert_frame_equal(bodo_func(data.copy()), test_impl(data.copy()))
+        pd.testing.assert_frame_equal(
+            bodo_func(data.copy()), test_impl(data.copy()), check_column_type=False
+        )
 
     def test_create_empty_column1(self):
         def test_impl(n):
@@ -127,7 +137,9 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         df1 = bodo_func(n)
         df2 = test_impl(n)
-        pd.testing.assert_frame_equal(df1, df2)
+        pd.testing.assert_frame_equal(
+            df1, df2, check_column_type=False, check_dtype=False
+        )
 
     def test_create_cond1(self):
         def test_impl(A, B, c):
@@ -181,7 +193,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_box2(self):
         def test_impl():
@@ -189,7 +203,9 @@ class TestDataFrame(unittest.TestCase):
             return df
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_dtype=False)
+        pd.testing.assert_frame_equal(
+            bodo_func(), test_impl(), check_dtype=False, check_column_type=False
+        )
 
     def test_box3(self):
         def test_impl(df):
@@ -198,7 +214,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         df = pd.DataFrame({"A": ["aa", "bb", "dd", "cc"]}, [3, 1, 2, -1])
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df), check_dtype=False)
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df), check_dtype=False, check_column_type=False
+        )
 
     def test_box_dist_return(self):
         def test_impl(n):
@@ -378,7 +396,9 @@ class TestDataFrame(unittest.TestCase):
         n = 11
         df = pd.DataFrame({"B": np.ones(n), "A": np.arange(n) + n})
         df2 = df.copy()
-        pd.testing.assert_frame_equal(bodo_func(df, n), test_impl(df2, n))
+        pd.testing.assert_frame_equal(
+            bodo_func(df, n), test_impl(df2, n), check_column_type=False
+        )
 
     def test_set_column1(self):
         # set existing column
@@ -389,7 +409,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_set_column_reflect4(self):
         # set existing column
@@ -402,7 +424,7 @@ class TestDataFrame(unittest.TestCase):
         df2 = df1.copy()
         bodo_func(df1, n)
         test_impl(df2, n)
-        pd.testing.assert_frame_equal(df1, df2)
+        pd.testing.assert_frame_equal(df1, df2, check_column_type=False)
 
     def test_set_column_new_type1(self):
         # set existing column with a new type
@@ -413,7 +435,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_set_column2(self):
         # create new column
@@ -424,7 +448,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_set_column_reflect3(self):
         # create new column
@@ -437,7 +463,7 @@ class TestDataFrame(unittest.TestCase):
         df2 = df1.copy()
         bodo_func(df1, n)
         test_impl(df2, n)
-        pd.testing.assert_frame_equal(df1, df2)
+        pd.testing.assert_frame_equal(df1, df2, check_column_type=False)
 
     def test_set_column_bool1(self):
         def test_impl(df):
@@ -615,7 +641,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_pct_change1(self):
         def test_impl(n):
@@ -626,7 +654,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(returns_maybe_distributed=False)(test_impl)
         n = 11
-        pd.testing.assert_frame_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_frame_equal(
+            bodo_func(n), test_impl(n), check_column_type=False
+        )
 
     def test_mean1(self):
         # TODO: non-numeric columns should be ignored automatically
@@ -636,7 +666,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_series_equal(
+            bodo_func(n), test_impl(n), check_index_type=False
+        )
 
     def test_std1(self):
         # TODO: non-numeric columns should be ignored automatically
@@ -646,7 +678,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_series_equal(
+            bodo_func(n), test_impl(n), check_index_type=False
+        )
 
     def test_var1(self):
         # TODO: non-numeric columns should be ignored automatically
@@ -656,7 +690,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_series_equal(
+            bodo_func(n), test_impl(n), check_index_type=False
+        )
 
     def test_max1(self):
         # TODO: non-numeric columns should be ignored automatically
@@ -666,7 +702,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_series_equal(
+            bodo_func(n), test_impl(n), check_index_type=False
+        )
 
     def test_min1(self):
         # TODO: non-numeric columns should be ignored automatically
@@ -676,7 +714,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_series_equal(
+            bodo_func(n), test_impl(n), check_index_type=False
+        )
 
     def test_sum1(self):
         # TODO: non-numeric columns should be ignored automatically
@@ -686,7 +726,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_series_equal(
+            bodo_func(n), test_impl(n), check_index_type=False
+        )
 
     def test_prod1(self):
         # TODO: non-numeric columns should be ignored automatically
@@ -696,7 +738,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_series_equal(
+            bodo_func(n), test_impl(n), check_index_type=False
+        )
 
     def test_count1(self):
         # TODO: non-numeric columns should be ignored automatically
@@ -706,7 +750,9 @@ class TestDataFrame(unittest.TestCase):
 
         bodo_func = bodo.jit(test_impl)
         n = 11
-        pd.testing.assert_series_equal(bodo_func(n), test_impl(n))
+        pd.testing.assert_series_equal(
+            bodo_func(n), test_impl(n), check_index_type=False
+        )
 
     def test_df_fillna1(self):
         def test_impl(df):
@@ -714,7 +760,9 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df), check_column_type=False
+        )
 
     def test_df_fillna_str1(self):
         def test_impl(df):
@@ -722,7 +770,9 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({"A": ["aa", "b", None, "ccc"]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df), check_dtype=False)
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df), check_dtype=False, check_column_type=False
+        )
 
     def test_df_fillna_inplace1(self):
         def test_impl(A):
@@ -732,7 +782,9 @@ class TestDataFrame(unittest.TestCase):
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0]})
         df2 = df.copy()
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df2))
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df2), check_column_type=False
+        )
 
     def test_df_reset_index1(self):
         def test_impl(df):
@@ -740,7 +792,9 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df), check_column_type=False
+        )
 
     def test_df_reset_index_inplace1(self):
         def test_impl():
@@ -749,7 +803,7 @@ class TestDataFrame(unittest.TestCase):
             return df
 
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(), test_impl())
+        pd.testing.assert_frame_equal(bodo_func(), test_impl(), check_column_type=False)
 
     def test_df_dropna1(self):
         def test_impl(df):
@@ -759,7 +813,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         out = test_impl(df)
         h_out = bodo_func(df)
-        pd.testing.assert_frame_equal(out, h_out)
+        pd.testing.assert_frame_equal(out, h_out, check_column_type=False)
 
     def test_df_dropna2(self):
         def test_impl(df):
@@ -769,7 +823,7 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         out = test_impl(df)
         h_out = bodo_func(df)
-        pd.testing.assert_frame_equal(out, h_out)
+        pd.testing.assert_frame_equal(out, h_out, check_column_type=False)
 
     @unittest.skip("pending remove of old list(str) array")
     def test_df_dropna_str1(self):
@@ -786,7 +840,9 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         out = test_impl(df)
         h_out = bodo_func(df)
-        pd.testing.assert_frame_equal(out, h_out, check_dtype=False)
+        pd.testing.assert_frame_equal(
+            out, h_out, check_dtype=False, check_column_type=False
+        )
 
     def test_df_drop1(self):
         def test_impl(df):
@@ -794,7 +850,9 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df), check_column_type=False
+        )
 
     def test_df_drop_inplace2(self):
         # test droping after setting the column
@@ -806,7 +864,9 @@ class TestDataFrame(unittest.TestCase):
 
         df = pd.DataFrame({"A": [1, 2, 3], "B": [2, 3, 4]})
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df), check_column_type=False
+        )
 
     def test_df_drop_inplace1(self):
         def test_impl(df):
@@ -816,7 +876,9 @@ class TestDataFrame(unittest.TestCase):
         df = pd.DataFrame({"A": [1.0, 2.0, np.nan, 1.0], "B": [4, 5, 6, 7]})
         df2 = df.copy()
         bodo_func = bodo.jit(test_impl)
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df2))
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df2), check_column_type=False
+        )
 
     def test_isin_df1(self):
         def test_impl(df, df2):
@@ -827,7 +889,9 @@ class TestDataFrame(unittest.TestCase):
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
         df2 = pd.DataFrame({"A": np.arange(n), "C": np.arange(n) ** 2})
         df2.A[n // 2 :] = n
-        pd.testing.assert_frame_equal(bodo_func(df, df2), test_impl(df, df2))
+        pd.testing.assert_frame_equal(
+            bodo_func(df, df2), test_impl(df, df2), check_column_type=False
+        )
 
     @unittest.skip("needs dict typing in Numba")
     def test_isin_dict1(self):
@@ -838,7 +902,9 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df), check_column_type=False
+        )
 
     def test_isin_list1(self):
         def test_impl(df):
@@ -848,7 +914,9 @@ class TestDataFrame(unittest.TestCase):
         bodo_func = bodo.jit(test_impl)
         n = 11
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        pd.testing.assert_frame_equal(bodo_func(df), test_impl(df))
+        pd.testing.assert_frame_equal(
+            bodo_func(df), test_impl(df), check_column_type=False
+        )
 
     def test_append1(self):
         def test_impl(df, df2):
@@ -859,7 +927,9 @@ class TestDataFrame(unittest.TestCase):
         df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
         df2 = pd.DataFrame({"A": np.arange(n), "C": np.arange(n) ** 2})
         df2.A[n // 2 :] = n
-        pd.testing.assert_frame_equal(bodo_func(df, df2), test_impl(df, df2))
+        pd.testing.assert_frame_equal(
+            bodo_func(df, df2), test_impl(df, df2), check_column_type=False
+        )
 
     def test_append2(self):
         def test_impl(df, df2, df3):
@@ -871,7 +941,9 @@ class TestDataFrame(unittest.TestCase):
         df2 = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
         df2.A[n // 2 :] = n
         df3 = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2})
-        pd.testing.assert_frame_equal(bodo_func(df, df2, df3), test_impl(df, df2, df3))
+        pd.testing.assert_frame_equal(
+            bodo_func(df, df2, df3), test_impl(df, df2, df3), check_column_type=False
+        )
 
     def test_concat_columns1(self):
         def test_impl(S1, S2):
@@ -882,7 +954,9 @@ class TestDataFrame(unittest.TestCase):
         S2 = pd.Series([6.0, 7.0])
         # TODO: support int as column name
         pd.testing.assert_frame_equal(
-            bodo_func(S1, S2), test_impl(S1, S2).rename(columns={0: "0", 1: "1"})
+            bodo_func(S1, S2),
+            test_impl(S1, S2).rename(columns={0: "0", 1: "1"}),
+            check_column_type=False,
         )
 
     def test_var_rename(self):

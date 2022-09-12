@@ -238,7 +238,9 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
             try:
                 if bodo.get_rank() == 0:
                     if os.path.isfile(fname_arg):
-                        pd.testing.assert_frame_equal(read_impl(fname_arg), pd_res)
+                        pd.testing.assert_frame_equal(
+                            read_impl(fname_arg), pd_res, check_column_type=False
+                        )
                     else:
                         # pandas read single each json file in directory then concat
                         json_files = os.listdir(fname_arg)
@@ -257,11 +259,13 @@ def json_write_test(test_impl, read_impl, df, sort_col, reset_index=False):
                             pd.testing.assert_frame_equal(
                                 bodo_res.sort_values(sort_col).reset_index(drop=True),
                                 pd_res.sort_values(sort_col).reset_index(drop=True),
+                                check_column_type=False,
                             )
                         else:
                             pd.testing.assert_frame_equal(
                                 bodo_res.sort_values(sort_col),
                                 pd_res.sort_values(sort_col),
+                                check_column_type=False,
                             )
                 errors = comm.allgather(None)
             except Exception as e:

@@ -456,7 +456,11 @@ def test_array_index_box(index, memory_leak_check):
     def impl(A):
         return A
 
-    pd.testing.assert_index_equal(bodo.jit(impl)(index), impl(index))
+    bodo_out = bodo.jit(impl)(index)
+    # convert ArrowStringArray to regular Numpy
+    if bodo_out.dtype == pd.StringDtype("pyarrow"):
+        bodo_out = pd.Index(bodo_out.to_numpy())
+    pd.testing.assert_index_equal(bodo_out, index)
 
 
 @pytest.mark.slow
@@ -1688,7 +1692,7 @@ def test_string_index_constant_lowering(memory_leak_check):
         return si
 
     bodo_func = bodo.jit(distributed=False)(impl)
-    pd.testing.assert_index_equal(bodo_func(), impl())
+    pd.testing.assert_index_equal(pd.Index(bodo_func().values.to_numpy()), impl())
 
 
 def test_string_index_constant_get_loc(memory_leak_check):
@@ -2086,8 +2090,18 @@ def test_multi_index_unbox(m_ind, memory_leak_check):
     def test_impl(m_ind):
         return m_ind
 
-    bodo_func = bodo.jit(test_impl)
-    pd.testing.assert_index_equal(bodo_func(m_ind), test_impl(m_ind))
+    bodo_out = bodo.jit(test_impl)(m_ind)
+    bodo_out = pd.MultiIndex(
+        levels=[
+            v.values.to_numpy()
+            if isinstance(v.values, pd.arrays.ArrowStringArray)
+            else v
+            for v in bodo_out.levels
+        ],
+        codes=bodo_out.codes,
+        names=bodo_out.names,
+    )
+    pd.testing.assert_index_equal(bodo_out, m_ind)
 
 
 def test_init_string_index_array_analysis(memory_leak_check):
