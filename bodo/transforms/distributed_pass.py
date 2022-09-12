@@ -4568,6 +4568,8 @@ class DistributedPass:
 
         # optimization is possible, replace the total size variable in shape nodes
         require(scope is not None)
+        # If read size is None we don't have limit pushdown
+        require(read_size is not None)
         total_len_var = ir.Var(scope, mk_unique_var("total_df_len"), io_node.loc)
         self.typemap[total_len_var.name] = types.int64
         for stmt in shape_nodes:
