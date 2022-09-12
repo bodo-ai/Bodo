@@ -7,23 +7,14 @@ sequential and parallel code.
 
 import bodosql
 import numpy as np
-import pytest
-from bodosql.tests.utils import InputDist
 
+from bodo.tests.caching_tests.caching_tests_common import (  # noqa
+    fn_distribution,
+)
 from bodo.tests.utils import check_caching
 
 
-@pytest.mark.slow
-@pytest.mark.parametrize(
-    "input_dist",
-    [
-        InputDist.REP,
-        # Only checking REP until we fix the Rep/Dist caching issue
-        # InputDist.OneD,
-        # InputDist.OneDVar,
-    ],
-)
-def test_cache_int_add(basic_df, input_dist, is_cached):
+def test_cache_int_add(basic_df, fn_distribution, is_cached):
     """
     Test that caching works with named parameters
     for integer addition.
@@ -48,5 +39,5 @@ def test_cache_int_add(basic_df, input_dist, is_cached):
         test_impl,
         args,
         check_cache,
-        input_dist=input_dist,
+        input_dist=fn_distribution,
     )
