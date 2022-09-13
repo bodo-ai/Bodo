@@ -124,12 +124,14 @@ def test_snowflake_catalog_read(memory_leak_check):
     def impl(bc):
         return bc.sql("SELECT r_name FROM TPCH_SF1.REGION ORDER BY r_name")
 
+    bodo_connect_params = {"query_tag": "folder=folder1+ folder2&"}
     catalog = bodosql.SnowflakeCatalog(
         os.environ["SF_USER"],
         os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",
         "SNOWFLAKE_SAMPLE_DATA",
+        connection_params=bodo_connect_params,
     )
     bc = bodosql.BodoSQLContext(catalog=catalog)
     py_output = pd.read_sql(

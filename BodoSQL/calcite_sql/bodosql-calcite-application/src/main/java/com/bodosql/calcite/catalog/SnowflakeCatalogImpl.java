@@ -2,15 +2,19 @@ package com.bodosql.calcite.catalog;
 
 import static java.lang.Math.min;
 
+import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
 import com.bodosql.calcite.table.CatalogTableImpl;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.sql.*;
 import java.util.*;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
+import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +32,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   private final String accountName;
 
   private final String catalogName;
+
+  private final String warehouseName;
+
   // Account info contains the username and password information
   private final Properties accountInfo;
 
@@ -70,10 +77,12 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       String password,
       String accountName,
       String catalogName,
+      String warehouseName,
       Properties accountInfo) {
     this.username = username;
     this.password = password;
     this.accountName = accountName;
+    this.warehouseName = warehouseName;
     this.connectionString =
         String.format("jdbc:snowflake://%s.snowflakecomputing.com/", accountName);
     this.catalogName = catalogName;
@@ -320,25 +329,34 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     // always be included.
     StringBuilder connString = new StringBuilder();
     // Append the base url
-    connString.append(
-        String.format(
-            "snowflake://%s:%s@%s/%s/%s",
-            this.username, this.password, this.accountName, this.catalogName, schemaName));
-    // Add support for any additional optional properties
-    if (!this.accountInfo.isEmpty()) {
-      connString.append("?");
-      for (Map.Entry<Object, Object> entry : this.accountInfo.entrySet()) {
-        Object key = entry.getKey();
-        Object value = entry.getValue();
-        // TODO: Do we need to json encode any properties?
-        connString.append(key);
-        connString.append("=");
-        connString.append(value);
+
+    try {
+      connString.append(
+          String.format(
+              "snowflake://%s:%s@%s/%s/%s?warehouse=%s",
+              URLEncoder.encode(this.username, "UTF-8"),
+              URLEncoder.encode(this.password, "UTF-8"),
+              URLEncoder.encode(this.accountName, "UTF-8"),
+              URLEncoder.encode(this.catalogName, "UTF-8"),
+              URLEncoder.encode(schemaName, "UTF-8"),
+              URLEncoder.encode(this.warehouseName, "UTF-8")));
+
+      // Add support for any additional optional properties
+      if (!this.accountInfo.isEmpty()) {
         connString.append("&");
+        JSONObject o1 = new JSONObject();
+        for (Map.Entry<Object, Object> entry : this.accountInfo.entrySet()) {
+          Object key = entry.getKey();
+          Object value = entry.getValue();
+          o1.put(key, value);
+        }
+        String encodedJSONString = URLEncoder.encode(o1.toJSONString(), "UTF-8");
+        connString.append("session_parameters").append("=").append(encodedJSONString);
       }
-      // Remove the last &
-      connString.deleteCharAt(connString.length() - 1);
+    } catch (UnsupportedEncodingException e) {
+      throw new BodoSQLCodegenException("Internal Error: Unable to encode Python connection string. Error message: " + e);
     }
+
     return connString.toString();
   }
 
