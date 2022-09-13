@@ -14,13 +14,15 @@ public class SnowflakeGenTest {
     String sql = " select * from PUBLIC.LINEITEM1";
     Map envVars = System.getenv();
     Properties prop = new Properties();
-    prop.put("warehouse", "DEMO_WH");
+    prop.put("queryTimeout", 5);
+    prop.put("query_tag", "folder=folder1+ folder2&");
     BodoSQLCatalog catalog =
         new SnowflakeCatalogImpl(
             (String) envVars.get("SF_USER"),
             (String) envVars.get("SF_PASSWORD"),
             (String) envVars.get("SF_ACCOUNT"),
             (String) envVars.get("SF_CATALOG"),
+            "DEMO_WH",
             prop);
     BodoSqlSchema schema = new CatalogSchemaImpl("PUBLIC", catalog);
 
