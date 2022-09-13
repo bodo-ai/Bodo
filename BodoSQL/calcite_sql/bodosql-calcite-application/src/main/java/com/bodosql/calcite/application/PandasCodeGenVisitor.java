@@ -2260,6 +2260,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 operandsInfo.get(0).getExprCode(),
                 operandsInfo.get(0).getName(),
                 exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+          case "PREVIOUS_DAY":
+            assert operandsInfo.size() == 2;
+            return getDoubleArgDatetimeFnInfo(
+                fnName,
+                inputVar,
+                operandsInfo.get(0).getExprCode(),
+                operandsInfo.get(0).getName(),
+                operandsInfo.get(1).getExprCode(),
+                operandsInfo.get(1).getName(),
+                exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
           case "TO_DAYS":
             return generateToDaysCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
           case "TO_SECONDS":

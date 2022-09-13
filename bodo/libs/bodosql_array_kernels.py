@@ -72,6 +72,7 @@ broadcasted_fixed_arg_functions = {
     "nullif",
     "ord_ascii",
     "power",
+    "previous_day",
     "radians",
     "regexp_count",
     "regexp_instr",

@@ -10,21 +10,17 @@ import com.bodosql.calcite.application.Utils.BodoCtx;
 import java.util.*;
 
 public class DatetimeFnCodeGen {
+  static List<String> fnList =
+      Arrays.asList("DAYNAME", "LAST_DAY", "MONTHNAME", "PREVIOUS_DAY", "WEEKDAY", "YEAROFWEEKISO");
 
-  // Hashmap of functions for which there is a one to one mapping between the SQL function call,
-  // and a function call where any of the arguments can be scalars or vectors.
-  // IE SQLFN(C1, s1, C2, s2) => FN(C1, s1, C2, s2)
-  // EX WEEKDAY(A) => bodo.libs.bodosql_array_kernels.weekday(A)
-  static HashMap<String, String> equivalentFnMapBroadcast;
+  // HashMap of all trig functions which maps to array kernels
+  // which handle all combinations of scalars/arrays/nulls.
+  static HashMap<String, String> equivalentFnMap = new HashMap<>();
 
   static {
-    equivalentFnMapBroadcast = new HashMap<>();
-
-    equivalentFnMapBroadcast.put("DAYNAME", "bodo.libs.bodosql_array_kernels.dayname");
-    equivalentFnMapBroadcast.put("MONTHNAME", "bodo.libs.bodosql_array_kernels.monthname");
-    equivalentFnMapBroadcast.put("WEEKDAY", "bodo.libs.bodosql_array_kernels.weekday");
-    equivalentFnMapBroadcast.put("LAST_DAY", "bodo.libs.bodosql_array_kernels.last_day");
-    equivalentFnMapBroadcast.put("YEAROFWEEKISO", "bodo.libs.bodosql_array_kernels.yearofweekiso");
+    for (String fn : fnList) {
+      equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels." + fn.toLowerCase());
+    }
   }
 
   /**
@@ -44,20 +40,66 @@ public class DatetimeFnCodeGen {
     StringBuilder expr_code = new StringBuilder();
 
     // If the functions has a broadcasted array kernel, always use it
-    if (equivalentFnMapBroadcast.containsKey(fnName)) {
+    if (equivalentFnMap.containsKey(fnName)) {
       if (isSingleRow) {
         expr_code
             .append("bodo.utils.conversion.box_if_dt64(")
-            .append(equivalentFnMapBroadcast.get(fnName))
+            .append(equivalentFnMap.get(fnName))
             .append("(")
             .append("bodo.utils.conversion.unbox_if_timestamp(")
             .append(arg1Expr)
             .append(")))");
       } else {
+        expr_code.append(equivalentFnMap.get(fnName)).append("(").append(arg1Expr).append(")");
+      }
+      return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+    }
+
+    // If we made it here, something has gone very wrong
+    throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
+  }
+
+  /**
+   * Helper function that handles codegen for Single argument datetime functions
+   *
+   * @param fnName The name of the function
+   * @param arg1Expr The string expression of arg1
+   * @param arg1Name The name of arg1
+   * @param isSingleRow boolean value that determines if this function call is taking place within
+   *     an apply
+   * @return The RexNodeVisitorInfo corresponding to the function call
+   */
+  public static RexNodeVisitorInfo getDoubleArgDatetimeFnInfo(
+      String fnName,
+      String inputVar,
+      String arg1Expr,
+      String arg1Name,
+      String arg2Expr,
+      String arg2Name,
+      boolean isSingleRow) {
+    StringBuilder name = new StringBuilder();
+    name.append(fnName).append("(").append(arg1Name).append(")");
+    StringBuilder expr_code = new StringBuilder();
+
+    // If the functions has a broadcasted array kernel, always use it
+    if (equivalentFnMap.containsKey(fnName)) {
+      if (isSingleRow) {
         expr_code
-            .append(equivalentFnMapBroadcast.get(fnName))
+            .append("bodo.utils.conversion.box_if_dt64(")
+            .append(equivalentFnMap.get(fnName))
+            .append("(")
+            .append("bodo.utils.conversion.unbox_if_timestamp(")
+            .append(arg1Expr)
+            .append("),bodo.utils.conversion.unbox_if_timestamp(")
+            .append(arg2Expr)
+            .append(")))");
+      } else {
+        expr_code
+            .append(equivalentFnMap.get(fnName))
             .append("(")
             .append(arg1Expr)
+            .append(",")
+            .append(arg2Expr)
             .append(")");
       }
       return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
