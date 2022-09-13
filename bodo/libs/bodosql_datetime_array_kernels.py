@@ -123,6 +123,25 @@ def month_diff(arr0, arr1):
 
 
 @numba.generated_jit(nopython=True)
+def previous_day(arr0, arr1):
+    """Handles cases where previous_day receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [arr0, arr1]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.previous_day",
+                ["arr0", "arr1"],
+                i,
+            )
+
+    def impl(arr0, arr1):  # pragma: no cover
+        return previous_day_util(arr0, arr1)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def second_timestamp(arr):
     """Handles cases where second_timestamp receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -321,6 +340,45 @@ def monthname_util(arr):
     out_dtype = bodo.string_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def previous_day_util(arr0, arr1):
+    """A dedicated kernel for the SQL function PREVIOUS_DAY which takes in a datetime
+    and a string and returns the previous day of the week from the input datetime
+
+
+    Args:
+        arr0 (datetime array/series/scalar): the timestamp(s) with the day in question
+        arr1 (string array/series/scalar): the day of the week whose previous day is being
+        searched for
+
+    Returns:
+        datetime series/scalar: the previous day of the week from the input timestamp(s)
+    """
+
+    verify_datetime_arg(arr0, "PREVIOUS_DAY", "arr0")
+    verify_string_arg(arr1, "PREVIOUS_DAY", "arr1")
+
+    arg_names = ["arr0", "arr1"]
+    arg_types = [arr0, arr1]
+    propagate_null = [True] * 2
+    # TODO: lower the dictionary as a global rather that defined in the function text
+    prefix_code = (
+        "dow_map = {'mo': 0, 'tu': 1, 'we': 2, 'th': 3, 'fr': 4, 'sa': 5, 'su': 6}"
+    )
+    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0).normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1]))"
+
+    out_dtype = np.dtype("datetime64[ns]")
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        prefix_code=prefix_code,
+    )
 
 
 @numba.generated_jit(nopython=True)

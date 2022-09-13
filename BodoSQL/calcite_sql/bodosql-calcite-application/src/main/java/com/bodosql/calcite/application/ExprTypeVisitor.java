@@ -61,6 +61,7 @@ public class ExprTypeVisitor {
           "MONTHNAME",
           "NULLIF",
           "ORD",
+          "PREVIOUS_DAY",
           "QUARTER",
           "RADIANS",
           "REVERSE",

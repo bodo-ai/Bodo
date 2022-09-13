@@ -341,6 +341,49 @@ def test_month_diff(args):
     )
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
+                pd.Series(["su"] * 20),
+            )
+        ),
+        pytest.param(
+            (
+                pd.Series(pd.date_range("2019-01-01", "2020-01-01", periods=21)),
+                pd.Series(["mo", "tu", "we", "th", "fr", "sa", "su"] * 3),
+            )
+        ),
+    ],
+)
+def test_previous_day(args):
+    def impl(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.previous_day(arr0, arr1))
+
+    dow_map = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
+    # Simulates previous_day on a single row
+    def previous_day_scalar_fn(ts, day):
+        if pd.isna(ts) or pd.isna(day):
+            return None
+        else:
+            return pd.Timestamp(
+                (ts - pd.Timedelta(days=7 - ((dow_map[day] - ts.dayofweek) % 7))).date()
+            )
+
+    previous_day_answer = vectorized_sol(
+        args, previous_day_scalar_fn, np.datetime64, manual_coercion=True
+    )
+    check_func(
+        impl,
+        args,
+        py_output=previous_day_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 def test_weekday(dates_scalar_vector):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.weekday(arr))

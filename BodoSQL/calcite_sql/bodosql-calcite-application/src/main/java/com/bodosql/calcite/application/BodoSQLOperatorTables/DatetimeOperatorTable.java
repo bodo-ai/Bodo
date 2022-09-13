@@ -415,6 +415,25 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction PREVIOUS_DAY =
+      new SqlFunction(
+          "PREVIOUS_DAY",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.TIMESTAMP_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.sequence(
+              "PREVIOUS_DAY(DATETIME_OR_DATETIME_STRING, STRING_LITERAL)",
+              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+              OperandTypes.or(OperandTypes.STRING, OperandTypes.LITERAL)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           DATEADD,
@@ -441,7 +460,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           WEEKDAY,
           TO_DATE,
           DATE_TRUNC,
-          YEAROFWEEKISO);
+          YEAROFWEEKISO,
+          PREVIOUS_DAY);
 
   @Override
   public void lookupOperatorOverloads(
