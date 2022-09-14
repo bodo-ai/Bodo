@@ -8,6 +8,7 @@ import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import java.util.*;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 public class DatetimeFnCodeGen {
   static List<String> fnList =
@@ -341,5 +342,81 @@ public class DatetimeFnCodeGen {
       arg1Expr = "bodo.libs.bodosql_array_kernels.int_to_days(" + expr + ")";
     }
     return arg1Expr;
+  }
+
+  /**
+   * Helper function that handles the codegen for snowflake SQL's TIME and TO_TIME
+   *
+   * @param arg1Type The type of the first argument.
+   * @param arg1Info The VisitorInfo for the first argument.
+   * @param opName should be either "TIME" or "TO_TIME"
+   * @return the rexNodeVisitorInfo for the function call
+   */
+  public static RexNodeVisitorInfo generateToTimeCode(
+      SqlTypeName arg1Type, RexNodeVisitorInfo arg1Info, String opName) {
+    String name = opName + "(" + arg1Info.getName() + ")";
+    String outputExpression =
+        "bodo.libs.bodosql_array_kernels."
+            + opName.toLowerCase()
+            + "_util("
+            + arg1Info.getExprCode()
+            + ")";
+    return new RexNodeVisitorInfo(name, outputExpression);
+  }
+
+  /**
+   * Helper function that handles the codegen for snowflake SQL's TIME_FROM_PARTS
+   *
+   * @return the rexNodeVisitorInfo for the function call
+   */
+  public static RexNodeVisitorInfo generateTimeFromPartsCode(
+      RexNodeVisitorInfo arg1Info,
+      RexNodeVisitorInfo arg2Info,
+      RexNodeVisitorInfo arg3Info,
+      RexNodeVisitorInfo arg4Info) {
+    String name;
+    String outputExpression;
+
+    if (arg4Info == null) {
+      name =
+          "TIME_FROM_PARTS("
+              + arg1Info.getName()
+              + ", "
+              + arg2Info.getName()
+              + ", "
+              + arg3Info.getName()
+              + ")";
+      outputExpression =
+          "bodo.libs.bodosql_array_kernels.time_from_parts_util("
+              + arg1Info.getExprCode()
+              + ", "
+              + arg2Info.getExprCode()
+              + ", "
+              + arg3Info.getExprCode()
+              + ", 0)";
+    } else {
+      name =
+          "TIME_FROM_PARTS("
+              + arg1Info.getName()
+              + ", "
+              + arg2Info.getName()
+              + ", "
+              + arg3Info.getName()
+              + ", "
+              + arg4Info.getName()
+              + ")";
+      outputExpression =
+          "bodo.libs.bodosql_array_kernels.time_from_parts_util("
+              + arg1Info.getExprCode()
+              + ", "
+              + arg2Info.getExprCode()
+              + ", "
+              + arg3Info.getExprCode()
+              + ", "
+              + arg4Info.getExprCode()
+              + ")";
+    }
+
+    return new RexNodeVisitorInfo(name, outputExpression);
   }
 }

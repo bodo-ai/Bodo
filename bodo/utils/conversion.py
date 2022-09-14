@@ -261,6 +261,8 @@ def overload_coerce_to_ndarray(
 
         if isinstance(data, bodo.hiframes.time_ext.TimeType):
 
+            precision = data.precision
+
             def impl_ts(
                 data,
                 error_on_nonarray=True,
@@ -268,7 +270,7 @@ def overload_coerce_to_ndarray(
                 scalar_to_arr_len=None,
             ):  # pragma: no cover
                 n = scalar_to_arr_len
-                A = bodo.hiframes.time_ext.alloc_time_array(n)
+                A = bodo.hiframes.time_ext.alloc_time_array(n, precision)
                 for i in numba.parfors.parfor.internal_prange(n):
                     A[i] = data
                 return A

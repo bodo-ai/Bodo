@@ -417,6 +417,26 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
     return impl
 
 
+def is_valid_int_arg(arg):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is an integer
+       (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+
+    returns: True if the argument is an integer, False otherwise
+    """
+    return not (
+        arg != types.none
+        and not isinstance(arg, types.Integer)
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, types.Integer)
+        )
+        and not is_overload_int(arg)
+    )
+
+
 def verify_int_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is an integer
        (scalar or vector)
@@ -428,15 +448,7 @@ def verify_int_arg(arg, f_name, a_name):  # pragma: no cover
 
     raises: BodoError if the argument is not an integer, integer column, or NULL
     """
-    if (
-        arg != types.none
-        and not isinstance(arg, types.Integer)
-        and not (
-            bodo.utils.utils.is_array_typ(arg, True)
-            and isinstance(arg.dtype, types.Integer)
-        )
-        and not is_overload_int(arg)
-    ):
+    if not is_valid_int_arg(arg):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be an integer, integer column, or null"
         )

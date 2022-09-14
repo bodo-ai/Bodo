@@ -332,6 +332,14 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return setna_datetime_date
 
+    # Add support for bodo.Time array.
+    if isinstance(arr, bodo.TimeArrayType):
+
+        def setna_time(arr, ind, int_nan_const=0):
+            bodo.libs.int_arr_ext.set_bit_to_arr(arr._null_bitmap, ind, 0)
+
+        return setna_time
+
     # Add support for datetime.timedelta array
     if arr == datetime_timedelta_array_type:
 

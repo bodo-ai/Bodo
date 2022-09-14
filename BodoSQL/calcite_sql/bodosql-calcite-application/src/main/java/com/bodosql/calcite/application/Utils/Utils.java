@@ -268,6 +268,9 @@ public class Utils {
           dtype = "np.dtype(\"datetime64[ns]\")";
         }
         break;
+      case TIME:
+        dtype = "bodo.Time";
+        break;
       case VARCHAR:
       case CHAR:
         if (outputScalar) {

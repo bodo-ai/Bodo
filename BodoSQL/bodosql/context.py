@@ -78,12 +78,13 @@ class SqlTypeEnum(Enum):
     Float64 = 10
     Bool = 11
     Date = 12
-    Datetime = 13
-    Timedelta = 14
-    DateOffset = 15
-    String = 16
-    Binary = 17
-    Categorical = 18
+    Time = 13
+    Datetime = 14
+    Timedelta = 15
+    DateOffset = 16
+    String = 17
+    Binary = 18
+    Categorical = 19
 
 
 # Scalar dtypes for supported Bodo Arrays
@@ -103,9 +104,10 @@ _numba_to_sql_column_type_map = {
     types.bool_: SqlTypeEnum.Bool.value,
     bodo.string_type: SqlTypeEnum.String.value,
     bodo.bytes_type: SqlTypeEnum.Binary.value,
-    # Note date doesn't have native support yet, but the code to
-    # cast to datetime64 is handled in the Java code.
-    bodo.datetime_date_type: SqlTypeEnum.Date.value,
+    bodo.TimeType(0): SqlTypeEnum.Time.value,
+    bodo.TimeType(3): SqlTypeEnum.Time.value,
+    bodo.TimeType(6): SqlTypeEnum.Time.value,
+    bodo.TimeType(9): SqlTypeEnum.Time.value,
 }
 
 # Scalar dtypes for supported parameters
@@ -130,6 +132,10 @@ _numba_to_sql_param_type_map = {
     # and is support only for scalars
     bodo.date_offset_type: SqlTypeEnum.DateOffset.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
+    bodo.TimeType(0): SqlTypeEnum.Time.value,
+    bodo.TimeType(3): SqlTypeEnum.Time.value,
+    bodo.TimeType(6): SqlTypeEnum.Time.value,
+    bodo.TimeType(9): SqlTypeEnum.Time.value,
 }
 
 

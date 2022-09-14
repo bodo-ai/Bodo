@@ -166,7 +166,9 @@ def generate_and_write_library():
             for x in [
                 "weekofyear",
                 "dayofyear",
+                "nanosecond",
                 "microsecond",
+                "millisecond",
                 "second",
                 "minute",
                 "hour",
