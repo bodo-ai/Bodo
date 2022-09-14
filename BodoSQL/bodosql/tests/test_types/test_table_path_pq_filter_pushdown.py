@@ -542,3 +542,37 @@ def test_named_param_filter_pushdown(memory_leak_check):
             stream, "Filter pushdown successfully performed. Moving filter step:"
         )
         check_logger_msg(stream, "Columns loaded ['B', 'A', 'C', 'D']")
+
+
+@pytest.mark.slow
+def test_table_path_limit_pushdown_complex(memory_leak_check):
+    """
+    Tests that limit pushdown works with a possible complicated projection.
+    """
+
+    def impl(f1):
+        bc = bodosql.BodoSQLContext(
+            {
+                "table1": bodosql.TablePath(f1, "parquet"),
+            }
+        )
+        return bc.sql(
+            "Select A + 1 as A, B as newCol1, 'my_name' as newCol2 from table1 limit 5"
+        )
+
+    filename = "bodosql/tests/data/sample-parquet-data/no_index.pq"
+    py_output = pd.read_parquet(filename)[["A", "B"]]
+    py_output["A"] += 1
+    py_output = py_output.rename(columns={"B": "newCol1"}, copy=False)
+    py_output["newCol2"] = "my_name"
+    py_output = py_output.head(5)
+    check_func(
+        impl, (filename,), py_output=py_output, reset_index=True, check_dtype=False
+    )
+
+    # make sure limit pushdown worked
+    bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+    bodo_func(filename)
+    fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert hasattr(fir, "meta_head_only_info")
+    assert fir.meta_head_only_info[0] is not None
