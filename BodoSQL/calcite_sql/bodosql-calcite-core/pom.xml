@@ -73,6 +73,7 @@
 			<!-- Java version -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
+				<version>3.1</version>
 				<artifactId>maven-compiler-plugin</artifactId>
 				<configuration>
 					<source>${java.version}</source>
@@ -83,7 +84,7 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>
-
+				<version>3.3.0</version>
 				<executions>
 					<execution>
 						<id>add-generated-sources</id>
@@ -104,6 +105,7 @@
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>
+				<version>3.3.0</version>
 				<executions>
 					<execution>
 						<id>add-source</id>
@@ -138,6 +140,7 @@
 					<!-- Apache Calcite -->
 					<plugin>
 						<artifactId>maven-resources-plugin</artifactId>
+						<version>3.3.0</version>
 						<executions>
 							<execution>
 								<id>copy-fmpp-resources</id>
@@ -197,6 +200,7 @@
 					<plugin>
 						<groupId>org.apache.maven.plugins</groupId>
 						<artifactId>maven-checkstyle-plugin</artifactId>
+						<version>3.1.1</version>
 						<!--Note - the version would be inherited -->
 						<configuration>
 							<maxAllowedViolations>1286</maxAllowedViolations>
