@@ -521,8 +521,10 @@ def empty_like_type_overload(n, arr):
 
     if isinstance(arr, bodo.hiframes.time_ext.TimeArrayType):
 
+        precision = arr.precision
+
         def empty_like_type_time_arr(n, arr):
-            return bodo.hiframes.time_ext.alloc_time_array(n)
+            return bodo.hiframes.time_ext.alloc_time_array(n, precision)
 
         return empty_like_type_time_arr
 
@@ -811,8 +813,10 @@ def overload_alloc_type(n, t, s=None):
         )  # pragma: no cover
 
     if isinstance(typ.dtype, bodo.hiframes.time_ext.TimeType):
+        precision = typ.dtype.precision
+
         return lambda n, t, s=None: bodo.hiframes.time_ext.alloc_time_array(
-            n
+            n, precision
         )  # pragma: no cover
 
     if typ.dtype == bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type:

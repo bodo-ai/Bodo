@@ -8,7 +8,41 @@ import pytest
 
 import bodo
 from bodo.tests.utils import check_func
-from bodo.utils.testing import ensure_clean, ensure_clean_dir
+from bodo.utils.testing import ensure_clean
+
+
+@pytest.mark.parametrize(
+    "str_time,int_time",
+    [
+        pytest.param(
+            bodo.time_from_str("12:34:56", precision=0),
+            bodo.Time(12, 34, 56, precision=0),
+            id="second_str",
+        ),
+        pytest.param(
+            bodo.time_from_str("12:34:56.789", precision=3),
+            bodo.Time(12, 34, 56, 789, precision=3),
+            id="millisecond_str",
+        ),
+        pytest.param(
+            bodo.time_from_str("12:34:56.789123", precision=6),
+            bodo.Time(12, 34, 56, 789, 123, precision=6),
+            id="microsecond_str",
+        ),
+        pytest.param(
+            bodo.time_from_str("12:34:56.789123456", precision=9),
+            bodo.Time(12, 34, 56, 789, 123, 456, precision=9),
+            id="nanosecond_str",
+        ),
+        pytest.param(
+            bodo.time_from_str("12:34:56.789123456"),
+            bodo.Time(12, 34, 56, 789, 123, 456),
+            id="non_specified_str",
+        ),
+    ],
+)
+def test_time_python_constructor(str_time, int_time):
+    assert str_time == int_time
 
 
 @pytest.mark.parametrize(
@@ -41,6 +75,22 @@ from bodo.utils.testing import ensure_clean, ensure_clean_dir
         pytest.param(
             lambda: bodo.Time(12, 34, 56, 78, 12, 34, precision=9),
             id="nanosecond",
+        ),
+        pytest.param(
+            lambda: bodo.time_from_str("12:34:56", precision=0),
+            id="second_str",
+        ),
+        pytest.param(
+            lambda: bodo.time_from_str("12:34:56.789", precision=3),
+            id="millisecond_str",
+        ),
+        pytest.param(
+            lambda: bodo.time_from_str("12:34:56.789123", precision=6),
+            id="microsecond_str",
+        ),
+        pytest.param(
+            lambda: bodo.time_from_str("12:34:56.789123456", precision=9),
+            id="nanosecond_str",
         ),
     ],
 )
@@ -110,7 +160,7 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
     """
     fname = "time_test.pq"
     fname2 = "time_test_2.pq"
-    with ensure_clean(fname), ensure_clean_dir(fname2):
+    with ensure_clean(fname), ensure_clean(fname2):
         df_orig = pd.DataFrame(
             {
                 "A": bodo.Time(0, 0, 0, precision=precision),

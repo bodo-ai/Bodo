@@ -61,14 +61,15 @@ public interface BodoSQLColumn {
     FLOAT64(10, "FLOAT64"), // /< 8 byte floating point
     BOOL8(11, "BOOL8"), // /< Boolean using one byte per value, 0 == false, else true
     DATE(12, "DATE"), // /< equivalent to datetime.date value
-    DATETIME(13, "DATETIME"), // /< equivalent to datetime64[ns] value
-    TIMEDELTA(14, "TIMEDELTA"), // /< equivalent to timedelta64[ns] value
-    DATEOFFSET(15, "DATEOFFSET"), // /< equivalent to pd.DateOffset value
-    STRING(16, "STRING"), // /< String elements
-    BINARY(17, "BINARY"), // /< Binary (byte) array
-    CATEGORICAL(18, "CATEGORICAL"),
+    TIME(13, "TIME"), // /< equivalent to bodo.Time value
+    DATETIME(14, "DATETIME"), // /< equivalent to datetime64[ns] value
+    TIMEDELTA(15, "TIMEDELTA"), // /< equivalent to timedelta64[ns] value
+    DATEOFFSET(16, "DATEOFFSET"), // /< equivalent to pd.DateOffset value
+    STRING(17, "STRING"), // /< String elements
+    BINARY(18, "BINARY"), // /< Binary (byte) array
+    CATEGORICAL(19, "CATEGORICAL"),
     // `NUM_TYPE_IDS` must be last!
-    NUM_TYPE_IDS(19, "NUM_TYPE_IDS"); // /< Total number of type ids
+    NUM_TYPE_IDS(20, "NUM_TYPE_IDS"); // /< Total number of type ids
 
     private final int type_id;
     private final String type_id_name;
@@ -164,6 +165,9 @@ public interface BodoSQLColumn {
           // NOTE: BodoSQL doesn't support the date type yet, so all
           // date values are converted to timestamp.
           temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);
+          break;
+        case TIME:
+          temp = typeFactory.createSqlType(SqlTypeName.TIME);
           break;
         case DATETIME:
           temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);

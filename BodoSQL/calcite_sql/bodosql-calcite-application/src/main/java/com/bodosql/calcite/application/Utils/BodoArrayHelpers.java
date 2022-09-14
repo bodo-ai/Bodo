@@ -80,6 +80,8 @@ public class BodoArrayHelpers {
       case DATE:
       case TIMESTAMP:
         return "numba.core.types.Array(bodo.datetime64ns, 1, 'C')";
+      case TIME:
+        return "numba.core.types.Array(bodo.Time, 1, 'C')";
       case INTERVAL_DAY_HOUR:
       case INTERVAL_DAY_MINUTE:
       case INTERVAL_DAY_SECOND:

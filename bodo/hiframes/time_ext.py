@@ -61,6 +61,11 @@ class Time:
         precision=9,
     ):
         self.precision = precision
+        assert all(
+            np.issubdtype(type(val), np.integer) or pd.api.types.is_int64_dtype(val)
+            for val in (hour, minute, second, millisecond, microsecond, nanosecond)
+        ), "All time components must be integers"
+
         self.value = np.int64(
             hour * _nanos_per_hour
             + minute * _nanos_per_minute
@@ -139,6 +144,55 @@ class Time:
         return self.value % _nanos_per_micro
 
 
+def time_from_str(time_str, precision=9):
+    """Parse a time string into its components.
+    `time_str` is passed in the formats:
+    - 'hh:mm:ss'
+    - 'hh:mm:ss.mmm'
+    - 'hh:mm:SS.mmmμμμ'
+    - 'hh:mm:SS.mmmμμμnnn'
+
+    This function is used both by the native Python Time class as well as Bodo's
+    compiled Time constructor.
+    """
+    hour = 0
+    minute = 0
+    second = 0
+    millisecond = 0
+    microsecond = 0
+    nanosecond = 0
+    hour = int(time_str[:2])
+    assert time_str[2] == ":", "Invalid time string"
+    minute = int(time_str[3:5])
+    assert time_str[5] == ":", "Invalid time string"
+    second = int(time_str[6:8])
+
+    if len(time_str) > 8:
+        assert time_str[8] == ".", "Invalid time string"
+        millisecond = int(time_str[9:12])
+        if len(time_str) > 12:
+            microsecond = int(time_str[12:15])
+            if len(time_str) > 15:
+                nanosecond = int(time_str[15:18])
+
+    return Time(
+        hour,
+        minute,
+        second,
+        millisecond,
+        microsecond,
+        nanosecond,
+        precision=precision,
+    )
+
+
+@overload(time_from_str)
+def overload_time_from_str(time_str, precision=9):
+    """Overload time_from_str."""
+
+    return time_from_str
+
+
 ll.add_symbol("box_time_array", hdatetime_ext.box_time_array)
 ll.add_symbol("unbox_time_array", hdatetime_ext.unbox_time_array)
 
@@ -164,18 +218,33 @@ def typeof_time(val, c):
 def overload_time(
     hour=0, min=0, second=0, millisecond=0, microsecond=0, nanosecond=0, precision=9
 ):
-    def impl(
-        hour=0, min=0, second=0, millisecond=0, microsecond=0, nanosecond=0, precision=9
-    ):  # pragma: no cover
-        return cast_int_to_time(
-            _nanos_per_hour * hour
-            + _nanos_per_minute * min
-            + _nanos_per_second * second
-            + _nanos_per_milli * millisecond
-            + _nanos_per_micro * microsecond
-            + nanosecond,
-            precision,
-        )
+    if (
+        isinstance(hour, types.Integer)
+        or isinstance(hour, types.IntegerLiteral)
+        or hour == 0
+    ):
+
+        def impl(
+            hour=0,
+            min=0,
+            second=0,
+            millisecond=0,
+            microsecond=0,
+            nanosecond=0,
+            precision=9,
+        ):  # pragma: no cover
+            return cast_int_to_time(
+                _nanos_per_hour * hour
+                + _nanos_per_minute * min
+                + _nanos_per_second * second
+                + _nanos_per_milli * millisecond
+                + _nanos_per_micro * microsecond
+                + nanosecond,
+                precision,
+            )
+
+    else:
+        raise TypeError(f"Invalid type for Time: {type(hour)}")
 
     return impl
 
@@ -406,7 +475,7 @@ def impl_ctor_time(context, builder, sig, args):  # pragma: no cover
 @intrinsic
 def cast_int_to_time(typingctx, val, precision):
     """Cast int value to Time"""
-    assert val == types.int64, "val must be int64"
+    assert types.unliteral(val) == types.int64, "val must be int64"
     assert isinstance(
         precision, types.IntegerLiteral
     ), "precision must be an integer literal"
@@ -617,14 +686,11 @@ def lower_constant_time_arr(context, builder, typ, pyval):  # pragma: no cover
 
 
 @numba.njit(no_cpython_wrapper=True)
-def alloc_time_array(n):  # pragma: no cover
+def alloc_time_array(n, precision):  # pragma: no cover
     """Allocate a TimeArrayType with n elements"""
     data_arr = np.empty(n, dtype=np.int64)
-    # XXX: set all bits to not null since time array operations do not support
-    # NA yet. TODO: use 'empty' when all operations support NA
-    # nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
-    nulls = np.full((n + 7) >> 3, 255, np.uint8)
-    return init_time_array(data_arr, nulls)
+    nulls = np.empty((n + 7) >> 3, dtype=np.uint8)
+    return init_time_array(data_arr, nulls, precision)
 
 
 def alloc_time_array_equiv(self, scope, equiv_set, loc, args, kws):
@@ -632,7 +698,7 @@ def alloc_time_array_equiv(self, scope, equiv_set, loc, args, kws):
     analysis extension. Assigns output array's size as equivalent to the input size
     variable.
     """
-    assert len(args) == 1 and not kws, "Only one argument allowed"
+    assert len(args) == 2 and not kws, "alloc_time_array() takes two arguments"
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 

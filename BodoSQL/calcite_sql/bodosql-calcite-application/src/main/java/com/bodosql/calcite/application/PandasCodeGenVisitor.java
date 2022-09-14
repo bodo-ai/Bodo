@@ -2287,6 +2287,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
             exprCode =
                 generateCastCode(operandsInfo.get(0).getExprCode(), SqlTypeName.DATE, isSingleRow);
             return new RexNodeVisitorInfo(name, exprCode);
+          case "TIME":
+          case "TO_TIME":
+            return generateToTimeCode(
+                fnOperation.getOperands().get(0).getType().getSqlTypeName(),
+                operandsInfo.get(0),
+                fnName);
+          case "TIME_FROM_PARTS":
+            return generateTimeFromPartsCode(
+                operandsInfo.get(0),
+                operandsInfo.get(1),
+                operandsInfo.get(2),
+                operandsInfo.size() == 4 ? operandsInfo.get(3) : null);
           case "UNIX_TIMESTAMP":
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":

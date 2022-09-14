@@ -44,6 +44,8 @@ public class ExprTypeVisitor {
           "DEGREES",
           "EXP",
           "FACTORIAL",
+          "TO_TIME",
+          "TIME",
           "FROM_DAYS",
           "FROM_UNIXTIME",
           "HOUR",
@@ -409,7 +411,8 @@ public class ExprTypeVisitor {
           || fnName.equals("UTC_DATE")
           || fnName.equals("CURDATE")
           || fnName.equals("CURRENT_DATE")
-          || fnName.equals("UNIX_TIMESTAMP")) {
+          || fnName.equals("UNIX_TIMESTAMP")
+          || fnName.equals("TIME_FROM_PARTS")) {
         // PI/Rand take no arguments and output scalar.
         // TODO: Fix Rand as it should output a column in some cases
         exprTypes.put(key, BodoSQLExprType.ExprType.SCALAR);

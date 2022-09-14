@@ -422,6 +422,7 @@ static MPI_Datatype get_MPI_typ(int typ_enum) {
             return MPI_UNSIGNED;
         case Bodo_CTypes::INT64:
         case Bodo_CTypes::DATE:
+        case Bodo_CTypes::TIME:
         case Bodo_CTypes::DATETIME:
         case Bodo_CTypes::TIMEDELTA:
             return MPI_LONG_LONG_INT;

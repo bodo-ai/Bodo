@@ -77,6 +77,59 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction TO_TIME =
+      new SqlFunction(
+          "TO_TIME",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.TIME_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          OperandTypes.or(OperandTypes.INTEGER, OperandTypes.STRING),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TIME =
+      new SqlFunction(
+          "TIME",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.TIME_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          OperandTypes.or(OperandTypes.INTEGER, OperandTypes.STRING),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction TIME_FROM_PARTS =
+      new SqlFunction(
+          "TIME_FROM_PARTS",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.TIME_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          OperandTypes.or(
+              OperandTypes.sequence(
+                  "TIME_FROM_PARTS(HOUR, MINUTE, SECOND)",
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER),
+              OperandTypes.sequence(
+                  "TIME_FROM_PARTS(HOUR, MINUTE, SECOND, NANOSECOND)",
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
   public static final SqlFunction DATE_SUB =
       new SqlFunction(
           "DATE_SUB",
@@ -459,6 +512,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           YEARWEEK,
           WEEKDAY,
           TO_DATE,
+          TO_TIME,
+          TIME_FROM_PARTS,
+          TIME,
           DATE_TRUNC,
           YEAROFWEEKISO,
           PREVIOUS_DAY);

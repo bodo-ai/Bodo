@@ -18,16 +18,18 @@ public class ExtractCodeGen {
   /**
    * Function that return the necessary generated code for an Extract call.
    *
-   * @param dateVal The arg expr for selecting which date field to extract. This must be a constant
+   * @param datetimeVal The arg expr for selecting which datetime field to extract. This must be a constant
    *     string.
    * @param column The column arg expr.
    * @param outputScalar Should the output generate scalar code.
    * @return The code generated that matches the Extract expression.
    */
-  public static String generateExtractCode(String dateVal, String column, boolean outputScalar) {
+  public static String generateExtractCode(String datetimeVal, String column, boolean outputScalar) {
     String extractCode;
-    switch (dateVal) {
+    switch (datetimeVal) {
+      case "NANOSECOND":
       case "MICROSECOND":
+      case "MILLISECOND":
       case "SECOND":
       case "MINUTE":
       case "HOUR":
@@ -40,12 +42,12 @@ public class ExtractCodeGen {
         if (outputScalar) {
           extractCode =
               "bodosql.libs.generated_lib.sql_null_checking_"
-                  + dateVal.toLowerCase()
+                  + datetimeVal.toLowerCase()
                   + "("
                   + column
                   + ")";
         } else {
-          extractCode = "pd.Series(" + column + ").dt." + dateVal.toLowerCase() + ".values";
+          extractCode = "pd.Series(" + column + ").dt." + datetimeVal.toLowerCase() + ".values";
         }
         break;
       case "DAYOFMONTH":
@@ -85,7 +87,7 @@ public class ExtractCodeGen {
         break;
       default:
         throw new BodoSQLCodegenException(
-            "ERROR, date value: " + dateVal + " not supported inside of extract");
+            "ERROR, datetime value: " + datetimeVal + " not supported inside of extract");
     }
     return extractCode;
   }
@@ -93,13 +95,13 @@ public class ExtractCodeGen {
   /**
    * Function that returns the generated name for an Extract call.
    *
-   * @param dateName The name for selecting which date field to extract.
+   * @param datetimeName The name for selecting which datetime field to extract.
    * @param columnName The name of the column arg.
    * @return The name generated that matches the Extract expression.
    */
-  public static String generateExtractName(String dateName, String columnName) {
+  public static String generateExtractName(String datetimeName, String columnName) {
     StringBuilder nameBuilder = new StringBuilder();
-    nameBuilder.append("EXTRACT(").append(dateName).append(", ").append(columnName).append(")");
+    nameBuilder.append("EXTRACT(").append(datetimeName).append(", ").append(columnName).append(")");
     return escapePythonQuotes(nameBuilder.toString());
   }
 }
