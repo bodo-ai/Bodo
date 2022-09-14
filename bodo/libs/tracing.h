@@ -49,7 +49,13 @@ class Event {
 
     bool is_tracing() { return tracing; }
 
-    void add_attribute(const std::string& name, size_t value) {
+    void add_attribute(const std::string& name, unsigned long value) {
+        if (event_py)
+            PyObject_CallMethod(event_py, "add_attribute", "sn", name.c_str(),
+                                value);
+    }
+
+    void add_attribute(const std::string& name, unsigned long long value) {
         if (event_py)
             PyObject_CallMethod(event_py, "add_attribute", "sn", name.c_str(),
                                 value);

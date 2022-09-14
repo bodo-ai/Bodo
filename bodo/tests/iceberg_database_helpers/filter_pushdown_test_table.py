@@ -2,7 +2,6 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-import pyspark.sql.types as spark_types
 
 from bodo.tests.iceberg_database_helpers.utils import (
     DATABASE_NAME,
@@ -22,10 +21,10 @@ def create_table(table_name="filter_pushdown_test_table", spark=None):
         {
             "A": np.array(
                 [
-                    datetime.strptime("12/11/2018", "%d/%m/%Y"),
-                    datetime.strptime("12/11/2019", "%d/%m/%Y"),
-                    datetime.strptime("12/12/2018", "%d/%m/%Y"),
-                    datetime.strptime("13/11/2018", "%d/%m/%Y"),
+                    datetime.strptime("12/11/2018", "%d/%m/%Y").date(),
+                    datetime.strptime("12/11/2019", "%d/%m/%Y").date(),
+                    datetime.strptime("12/12/2018", "%d/%m/%Y").date(),
+                    datetime.strptime("13/11/2018", "%d/%m/%Y").date(),
                 ]
                 * 5
             ),
@@ -34,18 +33,11 @@ def create_table(table_name="filter_pushdown_test_table", spark=None):
         }
     )
     sql_schema = [
-        ("A", "date"),
-        ("B", "long"),
-        ("C", "string", "not null"),
+        ("A", "date", True),
+        ("B", "long", True),
+        ("C", "string", False),
     ]
-    spark_schema = spark_types.StructType(
-        [
-            spark_types.StructField("A", spark_types.DateType(), True),
-            spark_types.StructField("B", spark_types.LongType(), True),
-            spark_types.StructField("C", spark_types.StringType(), False),
-        ]
-    )
-    create_iceberg_table(df, sql_schema, spark_schema, table_name, spark)
+    create_iceberg_table(df, sql_schema, table_name, spark)
 
     # Change to partition on year
     print("Adding partition field (year)...")

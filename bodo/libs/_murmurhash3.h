@@ -13,7 +13,8 @@
 
 #if USE_XXH3_LOW
 // xxHash code from https://github.com/Cyan4973/xxHash
-// and corresponds to commit https://github.com/Cyan4973/xxHash/commit/4a20afceb625f62278e11f630156475aee40b055
+// and corresponds to commit
+// https://github.com/Cyan4973/xxHash/commit/4a20afceb625f62278e11f630156475aee40b055
 #include "xxh3.h"
 #endif
 
@@ -38,6 +39,8 @@ typedef unsigned __int64 uint64_t;
 
 //-----------------------------------------------------------------------------
 
+void MurmurHash3_x86_32(const void* key, int len, uint32_t seed, void* out);
+
 void MurmurHash3_x64_32(const void* key, int len, uint32_t seed, void* out);
 
 // out hash: uint32_t*, 32 bits
@@ -50,7 +53,8 @@ inline void hash_string_32(const char* str, const int len, const uint32_t seed,
         MurmurHash3_x64_32(str, len, seed, (void*)out_hash);
 #endif
 #if USE_XXH3_LOW
-        *out_hash = static_cast<uint32_t>(XXH3_64bits_withSeed(str, (size_t)len, seed));
+    *out_hash =
+        static_cast<uint32_t>(XXH3_64bits_withSeed(str, (size_t)len, seed));
 #endif
 }
 
@@ -60,9 +64,28 @@ inline void hash_inner_32(T* data, const uint32_t seed, uint32_t* out_hash) {
     MurmurHash3_x64_32((const void*)data, sizeof(T), seed, (void*)out_hash);
 #endif
 #if USE_XXH3_LOW
-    *out_hash =
-        static_cast<uint32_t>(XXH3_64bits_withSeed((const void*)data, sizeof(T), seed));
+    *out_hash = static_cast<uint32_t>(
+        XXH3_64bits_withSeed((const void*)data, sizeof(T), seed));
 #endif
+}
+
+// We need the MurMurHash3_x86_32 implementation for Iceberg.
+// (https://iceberg.apache.org/spec/#bucket-transform-details)
+// (https://iceberg.apache.org/spec/#appendix-b-32-bit-hash-requirements)
+
+inline void hash_string_murmurhash3_x86_32(const char* str, const int len,
+                                           const uint32_t seed,
+                                           uint32_t* out_hash) {
+    if (len == 0)
+        *out_hash = 0;
+    else
+        MurmurHash3_x86_32(str, len, seed, (void*)out_hash);
+}
+
+template <class T>
+inline void hash_inner_murmurhash3_x86_32(T* data, const uint32_t seed,
+                                          uint32_t* out_hash) {
+    MurmurHash3_x86_32((const void*)data, sizeof(T), seed, (void*)out_hash);
 }
 
 //-----------------------------------------------------------------------------

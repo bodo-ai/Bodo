@@ -41,17 +41,6 @@ constexpr int64_t DEFAULT_ROW_GROUP_SIZE = 1000000;  // in number of rows
     CHECK_ARROW(res.status(), msg)            \
     lhs = std::move(res).ValueOrDie();
 
-/**
- * Struct used during pq_write_partitioned to store the information for a
- * partition that this process is going to write: the file path of the parquet
- * file for this partition (e.g. sales_date=2020-01-01/part-00.parquet), and
- * the rows in the table that correspond to this partition.
- */
-struct partition_write_info {
-    std::string fpath;          // path and filename
-    std::vector<int64_t> rows;  // rows in this partition
-};
-
 Bodo_Fs::FsEnum filesystem_type(const char *fname) {
     Bodo_Fs::FsEnum fs_type;
     if (strncmp(fname, "s3://", 5) == 0) {
@@ -181,6 +170,10 @@ int64_t pq_write(
     ev.add_attribute("g_compression", compression);
     ev.add_attribute("g_write_rangeindex_to_metadata",
                      write_rangeindex_to_metadata);
+    ev.add_attribute("nrows", table->nrows());
+    ev.add_attribute("prefix", prefix);
+    ev.add_attribute("tz", tz);
+    ev.add_attribute("filename", filename);
     // Write actual values of start, stop, step to the metadata which is a
     // string that contains %d
     int check;
@@ -396,6 +389,7 @@ int64_t pq_write(
     int64_t file_size;
     CHECK_ARROW_AND_ASSIGN(tell_result, "arrow::io::OutputStream::Tell",
                            file_size);
+    ev.add_attribute("file_size", file_size);
     return file_size;
 }
 

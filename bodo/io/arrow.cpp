@@ -44,11 +44,12 @@ void pq_write_partitioned(const char* _path_name, table_info* table,
                           int64_t row_group_size, const char* prefix);
 
 // ---------- functions defined in iceberg_parquet_write.cpp ----
-void iceberg_pq_write_py_entry(
-    const char* fname, const char* table_data_loc, const table_info* table,
-    const array_info* col_names_arr, const char* compression, bool is_parallel,
-    const char* bucket_region, int64_t row_group_size, char* iceberg_metadata,
-    int64_t* record_count, int64_t* file_size_in_bytes);
+
+PyObject* iceberg_pq_write_py_entry(
+    const char* table_data_loc, table_info* table,
+    const array_info* col_names_arr, PyObject* partition_spec,
+    PyObject* sort_order, const char* compression, bool is_parallel,
+    const char* bucket_region, int64_t row_group_size, char* iceberg_metadata);
 
 // --------- function defined in snowflake_reader.cpp ---------
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,

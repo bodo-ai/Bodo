@@ -25,14 +25,6 @@ public class IcebergReadEntryPoint {
 
     Namespace nm = Namespace.of("db1");
     TableIdentifier id = TableIdentifier.of(nm, "table1");
-    //
-    //    Map<String, String> table_props = new HashMap<>();
-    //    table_props.put(TableProperties.FORMAT_VERSION, "2");
-    //
-    //    Schema schema =
-    //        new Schema(
-    //            Types.NestedField.required(1, "A", Types.IntegerType.get()),
-    //            Types.NestedField.required(2, "B", Types.IntegerType.get()));
 
     Table table = catalog.loadTable(id);
     System.out.println(table.schema());

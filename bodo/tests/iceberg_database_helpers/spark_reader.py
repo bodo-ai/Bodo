@@ -13,7 +13,6 @@ def read_iceberg_table(table_name, database_name, spark=None):
     df = spark.table(f"hadoop_prod.{database_name}.{table_name}")
     count = df.count()
     spark_schema = df.schema
-
     pd_df = df.toPandas()
     return pd_df, count, spark_schema
 

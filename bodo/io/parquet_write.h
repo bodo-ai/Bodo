@@ -7,11 +7,34 @@
 #endif
 
 #include "../libs/_bodo_common.h"
+#include "_fs_io.h"
 #include "arrow/ipc/writer.h"
 #include "arrow/util/base64.h"
 #include "parquet/arrow/schema.h"
 #include "parquet/arrow/writer.h"
 #include "parquet/file_writer.h"
+
+/**
+ * Struct used during pq_write_partitioned and iceberg_pq_write to store the
+ * information for a partition that this process is going to write: the file
+ * path of the parquet file for this partition (e.g.
+ * sales_date=2020-01-01/part-00.parquet), and the rows in the table that
+ * correspond to this partition.
+ * In case of Iceberg, we also store a Python tuple with the information
+ * about the file that gets written for each partition.
+ */
+struct partition_write_info {
+    std::string fpath;          // path and filename
+    std::vector<int64_t> rows;  // rows in this partition
+
+    // Iceberg only
+
+    // Python tuple consisting of (file_name, number_of_records, file_size,
+    // *partition_values)
+    PyObject *iceberg_file_info_py;
+};
+
+Bodo_Fs::FsEnum filesystem_type(const char *fname);
 
 /**
  * Write the Bodo table (the chunk in this process) to a parquet file.

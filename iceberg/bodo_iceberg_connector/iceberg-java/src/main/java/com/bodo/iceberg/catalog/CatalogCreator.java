@@ -55,8 +55,10 @@ public class CatalogCreator {
 
     // CachingCatalog is a simple map between table names and their `Table` object
     // Does not modify how the Table object works in any way
-    // Can be invalidated by CREATE / REPLACE ops or a timer (if time passed in as arg)
-    // Benefits: Potentially some speed up in collecting repeated metadata like schema
+    // Can be invalidated by CREATE / REPLACE ops or a timer (if time passed in as
+    // arg)
+    // Benefits: Potentially some speed up in collecting repeated metadata like
+    // schema
     // Downsides: Does not refresh if another program modifies the Catalog
     return CachingCatalog.wrap(catalog);
   }
