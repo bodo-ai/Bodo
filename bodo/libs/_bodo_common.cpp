@@ -225,6 +225,18 @@ array_info* alloc_nullable_array_no_nulls(int64_t length,
     return arr;
 }
 
+array_info* alloc_nullable_array_all_nulls(int64_t length,
+                                           Bodo_CTypes::CTypeEnum typ_enum,
+                                           int64_t extra_null_bytes) {
+    // Same as alloc_nullable_array but we set the null_bitmask
+    // such that all values are null values in the output.
+    // Useful for cases like the iceberg void transform.
+    array_info* arr = alloc_nullable_array(length, typ_enum, extra_null_bytes);
+    size_t n_bytes = ((length + 7) >> 3) + extra_null_bytes;
+    memset(arr->null_bitmask, 0x00, n_bytes);  // all nulls
+    return arr;
+}
+
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes) {
     // allocate underlying array(item) data array

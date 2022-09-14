@@ -335,6 +335,12 @@ struct array_info {
             case Bodo_CTypes::UINT16:
                 return std::to_string(this->at<uint16_t>(idx));
             case Bodo_CTypes::STRING: {
+                if (this->arr_type == bodo_array_type::DICT) {
+                    // In case of dictionary encoded string array
+                    // get the string value by indexing into the dictionary
+                    return this->info1->val_to_str(
+                        this->info2->at<int32_t>(idx));
+                }
                 offset_t* offsets = (offset_t*)data2;
                 return std::string(data1 + offsets[idx],
                                    offsets[idx + 1] - offsets[idx]);
@@ -393,6 +399,10 @@ array_info* alloc_nullable_array(int64_t length,
 array_info* alloc_nullable_array_no_nulls(int64_t length,
                                           Bodo_CTypes::CTypeEnum typ_enum,
                                           int64_t extra_null_bytes);
+
+array_info* alloc_nullable_array_all_nulls(int64_t length,
+                                           Bodo_CTypes::CTypeEnum typ_enum,
+                                           int64_t extra_null_bytes);
 
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
                                int64_t extra_null_bytes);

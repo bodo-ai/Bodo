@@ -34,7 +34,8 @@ uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
                              const uint32_t seed);
 
 void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                const uint32_t seed, bool is_parallel, bool global_dict_needed);
+                const uint32_t seed, bool is_parallel, bool global_dict_needed,
+                bool use_murmurhash = false);
 
 /**
  * Function for the getting table keys and returning its hashes

@@ -9,7 +9,6 @@ import re
 import sys
 from typing import Any, Dict, List
 from urllib.parse import urlparse
-from uuid import uuid4
 
 import numba
 import numpy as np
@@ -94,8 +93,8 @@ def _clean_schema(schema: pa.Schema) -> pa.Schema:
     """
     Constructs a new PyArrow schema that Bodo can support while conforming
     to Iceberg's typing specification
-    - Converts all floating-point fields to non-nullable (since Bodo does
-      not have nullable floating-point arrays)
+    - Converts all floating-point and timestamp fields to non-nullable
+      (since Bodo does not have nullable versions of these arrays)
     - Enforces that list fields are constructed using a field with name
       'element' (to aid Bodo's read_parquet infrastructure)
     """
@@ -104,8 +103,8 @@ def _clean_schema(schema: pa.Schema) -> pa.Schema:
     for i in range(len(schema)):
         field = schema.field(i)
 
-        # Set all floating point fields to not null by default
-        if pa.types.is_floating(field.type):
+        # Set all floating point and timestamp fields to not null by default
+        if pa.types.is_floating(field.type) or pa.types.is_timestamp(field.type):
             working_schema = working_schema.set(i, field.with_nullable(False))
         # Set all field names to 'element' so we can compare without worrying about
         # different names due to pyarrow ('item', 'element', 'field0', etc.) in case of lists.
@@ -226,7 +225,6 @@ def get_iceberg_file_list(
             raise BodoError(f"{e.message}:\n{e.java_error}")
         else:
             raise BodoError(e.message)
-
     return lst
 
 
@@ -498,20 +496,6 @@ def pyarrow_schema(df: DataFrameType) -> pa.Schema:
 
 
 # ----------------------------- Iceberg Write -----------------------------#
-@numba.njit
-def gen_iceberg_pq_fname():  # pragma: no cover
-    """
-    Generate a random file name for Iceberg Table write
-    Returns:
-        str: random filename of form {rank:05}-rank-{uuid}.parquet
-    """
-    with numba.objmode(file_name="unicode_type"):
-        comm = MPI.COMM_WORLD
-        rank = comm.Get_rank()
-        # Random data file name using UUID that also contains the MPI rank as a part number.
-        # This is similar to how Spark does it.
-        file_name = f"{rank:05}-{rank}-{uuid4()}.parquet"
-    return file_name
 
 
 def get_table_details_before_write(
@@ -520,12 +504,17 @@ def get_table_details_before_write(
     database_schema: str,
     df_pyarrow_schema,
     if_exists: str,
+    # Ordered list of column names in Bodo table
+    # being written.
+    col_names: List[str],
 ):
     """
     Wrapper around bodo_iceberg_connector.get_typing_info to perform
     dataframe typechecking, collect typing-related information for
     Iceberg writes, and project across all ranks.
     """
+
+    ev = tracing.Event("iceberg_get_table_details_before_write")
 
     import bodo_iceberg_connector as connector
 
@@ -534,9 +523,11 @@ def get_table_details_before_write(
     comm_exc = None
     iceberg_schema_id = None
     table_loc = ""
-    partition_spec = ""
-    sort_order = ""
+    partition_spec = []
+    sort_order = []
     iceberg_schema_str = ""
+    # Map column name to index for efficient lookup
+    col_name_to_idx_map = {col: i for (i, col) in enumerate(col_names)}
 
     # Communicate with the connector to check if the table exists.
     # It will return the warehouse location, iceberg-schema-id,
@@ -553,6 +544,28 @@ def get_table_details_before_write(
                 partition_spec,
                 sort_order,
             ) = connector.get_typing_info(conn, database_schema, table_name)
+
+            # Ensure that all column names in the partition spec and sort order are
+            # in the dataframe being written
+            for col_name, *_ in partition_spec:
+                assert (
+                    col_name in col_name_to_idx_map
+                ), f"Iceberg Partition column {col_name} not found in dataframe"
+            for col_name, *_ in sort_order:
+                assert (
+                    col_name in col_name_to_idx_map
+                ), f"Iceberg Sort column {col_name} not found in dataframe"
+
+            # Transform the partition spec and sort order tuples to convert
+            # column name to index in Bodo table
+            partition_spec = [
+                (col_name_to_idx_map[col_name], *rest)
+                for col_name, *rest in partition_spec
+            ]
+
+            sort_order = [
+                (col_name_to_idx_map[col_name], *rest) for col_name, *rest in sort_order
+            ]
 
             if (
                 if_exists == "append"
@@ -607,6 +620,8 @@ def get_table_details_before_write(
     else:
         already_exists = True
 
+    ev.finalize()
+
     return (
         already_exists,
         table_loc,
@@ -634,6 +649,7 @@ def register_table_write(
     Wrapper around bodo_iceberg_connector.commit_write to run on
     a single rank and broadcast the result
     """
+    ev = tracing.Event("iceberg_register_table_write")
 
     import bodo_iceberg_connector
 
@@ -658,7 +674,46 @@ def register_table_write(
         )
 
     success = comm.bcast(success)
+    ev.finalize()
     return success
+
+
+from numba.extending import NativeValue, box, models, register_model, unbox
+
+
+# TODO Use install_py_obj_class
+class PythonListOfHeterogeneousTuples(types.Opaque):
+    """
+    It is just a Python object (list of tuples) to be passed to C++.
+    Used for iceberg partition-spec, sort-order and iceberg-file-info
+    descriptions.
+    """
+
+    def __init__(self):
+        super(PythonListOfHeterogeneousTuples, self).__init__(
+            name="PythonListOfHeterogeneousTuples"
+        )
+
+
+python_list_of_heterogeneous_tuples_type = PythonListOfHeterogeneousTuples()
+types.python_list_of_heterogeneous_tuples_type = (
+    python_list_of_heterogeneous_tuples_type
+)
+register_model(PythonListOfHeterogeneousTuples)(models.OpaqueModel)
+
+
+@unbox(PythonListOfHeterogeneousTuples)
+def unbox_python_list_of_heterogeneous_tuples_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return NativeValue(val)
+
+
+@box(PythonListOfHeterogeneousTuples)
+def box_python_list_of_heterogeneous_tuples_type(typ, val, c):
+    # just return the Python object pointer
+    c.pyapi.incref(val)
+    return val
 
 
 @numba.njit()
@@ -668,6 +723,7 @@ def iceberg_write(
     database_schema,
     bodo_table,
     col_names,
+    col_names_py,
     # Same semantics as pandas to_sql for now
     if_exists,
     is_parallel,
@@ -681,6 +737,7 @@ def iceberg_write(
         database_schema (str): schema in iceberg database
         bodo_table : table object to pass to c++
         col_names : array object containing column names (passed to c++)
+        col_names_py (string array): array of column names
         index_col : array object containing table index (passed to c++)
         write_index (bool): whether or not to write the index
         index_name_ptr (str): name of index column
@@ -691,6 +748,8 @@ def iceberg_write(
     Raises:
         ValueError, Exception, BodoError
     """
+
+    ev = tracing.Event("iceberg_write_py", is_parallel)
     # Supporting REPL requires some refactor in the parquet write infrastructure,
     # so we're not implementing it for now. It will be added in a following PR.
     assert is_parallel, "Iceberg Write only supported for distributed dataframes"
@@ -698,8 +757,8 @@ def iceberg_write(
         already_exists="bool_",
         table_loc="unicode_type",
         iceberg_schema_id="i8",
-        partition_spec="unicode_type",
-        sort_order="unicode_type",
+        partition_spec="python_list_of_heterogeneous_tuples_type",
+        sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
     ):
         (
@@ -710,7 +769,12 @@ def iceberg_write(
             sort_order,
             iceberg_schema_str,
         ) = get_table_details_before_write(
-            table_name, conn, database_schema, df_pyarrow_schema, if_exists
+            table_name,
+            conn,
+            database_schema,
+            df_pyarrow_schema,
+            if_exists,
+            col_names_py.tolist(),
         )
 
     if already_exists and if_exists == "fail":
@@ -725,7 +789,6 @@ def iceberg_write(
     else:
         mode = "create"
 
-    fname = gen_iceberg_pq_fname()
     bucket_region = get_s3_bucket_region_njit(table_loc, is_parallel)
     # TODO [BE-3248] compression and row-group-size (and other properties)
     # should be taken from table properties
@@ -734,26 +797,27 @@ def iceberg_write(
     compression = "snappy"
     rg_size = -1
 
-    record_count = np.zeros(1, dtype=np.int64)
-    file_size_in_bytes = np.zeros(1, dtype=np.int64)
-
-    # Write the file using the parquet infra and get the metrics
-    if not partition_spec and not sort_order:
-        iceberg_pq_write_table_cpp(
-            unicode_to_utf8(fname),
-            unicode_to_utf8(table_loc),
-            bodo_table,
-            col_names,
-            unicode_to_utf8(compression),
-            is_parallel,
-            unicode_to_utf8(bucket_region),
-            rg_size,
-            unicode_to_utf8(iceberg_schema_str),
-            record_count.ctypes,
-            file_size_in_bytes.ctypes,
-        )  # type: ignore  Due to additional first argument typingctx
-    else:
-        raise Exception("Partition Spec and Sort Order not supported yet.")
+    # Call the C++ function to write the parquet files.
+    # Information about them will be returned as a list as tuples
+    # (iceberg_files_info) of the form
+    # (
+    #   file-path (after the table_loc prefix),
+    #   record-count,
+    #   file size in bytes,
+    #   *partition-values
+    # )
+    iceberg_files_info = iceberg_pq_write_table_cpp(
+        unicode_to_utf8(table_loc),
+        bodo_table,
+        col_names,
+        partition_spec,
+        sort_order,
+        unicode_to_utf8(compression),
+        is_parallel,
+        unicode_to_utf8(bucket_region),
+        rg_size,
+        unicode_to_utf8(iceberg_schema_str),
+    )  # type: ignore  Due to additional first argument typingctx
 
     # Metrics to provide to Iceberg:
     # Required:
@@ -770,27 +834,34 @@ def iceberg_write(
     # 8. lower_bounds
     # 9. upper_bounds
 
-    # Collect the file names and meterics
-    with numba.objmode(fnames="types.List(types.unicode_type)"):
-        comm = MPI.COMM_WORLD
-        fnames = comm.gather(fname)
-        # We need to return a list of strings on all ranks,
-        # so, we return dummy values on non rank 0
-        if comm.Get_rank() != 0:
-            fnames = ["a", "b"]
-
-    record_counts = bodo.gatherv(record_count)
-    file_sizes = bodo.gatherv(file_size_in_bytes)
-
-    # Send file names, metrics and schema to Iceberg connector
     with numba.objmode(success="bool_"):
+        # Collect the file names
+        comm = MPI.COMM_WORLD
+        fnames_local = [x[0] for x in iceberg_files_info]
+        fnames_lists = comm.gather(fnames_local)
+
+        if comm.Get_rank() != 0:
+            fnames = None
+        else:
+            # Flatten the list of lists
+            fnames = [item for sublist in fnames_lists for item in sublist]
+
+        # Collect the metrics
+        record_counts_local = np.array(
+            [x[1] for x in iceberg_files_info], dtype=np.int64
+        )
+        file_sizes_local = np.array([x[2] for x in iceberg_files_info], dtype=np.int64)
+        record_counts = bodo.gatherv(record_counts_local).tolist()
+        file_sizes = bodo.gatherv(file_sizes_local).tolist()
+
+        # Send file names, metrics and schema to Iceberg connector
         success = register_table_write(
             conn,
             database_schema,
             table_name,
             table_loc,
             fnames,
-            {"size": file_sizes.tolist(), "record_count": record_counts.tolist()},
+            {"size": file_sizes, "record_count": record_counts},
             iceberg_schema_id,
             df_pyarrow_schema,
             partition_spec,
@@ -803,6 +874,8 @@ def iceberg_write(
         # Note that this might not always be possible since
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg write failed.")
+
+    ev.finalize()
 
 
 import llvmlite.binding as ll
@@ -818,17 +891,16 @@ if bodo.utils.utils.has_pyarrow():
 @intrinsic
 def iceberg_pq_write_table_cpp(
     typingctx,
-    fname_t,
-    path_name_t,
+    table_data_loc_t,
     table_t,
     col_names_t,
+    partition_spec_t,
+    sort_order_t,
     compression_t,
     is_parallel_t,
     bucket_region,
     row_group_size,
     iceberg_metadata_t,
-    record_count_t,
-    file_size_in_bytes_t,
 ):
     """
     Call C++ iceberg parquet write function
@@ -836,39 +908,41 @@ def iceberg_pq_write_table_cpp(
 
     def codegen(context, builder, sig, args):
         fnty = lir.FunctionType(
-            lir.VoidType(),
+            # Iceberg Files Info (list of tuples)
+            lir.IntType(8).as_pointer(),
             [
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                # Partition Spec
+                lir.IntType(8).as_pointer(),
+                # Sort Order
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
-                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
             builder.module, fnty, name="iceberg_pq_write"
         )
-        builder.call(fn_tp, args)
+        ret = builder.call(fn_tp, args)
         bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
 
     return (
-        types.void(
-            types.voidptr,
+        types.python_list_of_heterogeneous_tuples_type(
             types.voidptr,
             table_t,
             col_names_t,
+            partition_spec_t,
+            sort_order_t,
             types.voidptr,
             types.boolean,
             types.voidptr,
             types.int64,
-            types.voidptr,
-            types.voidptr,
             types.voidptr,
         ),
         codegen,

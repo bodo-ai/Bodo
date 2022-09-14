@@ -4280,11 +4280,8 @@ def to_sql_overload(
         func_text += f"        info_list = [{data_args}]\n"
         func_text += f"        table = arr_info_list_to_table(info_list)\n"
 
-    if df.has_runtime_cols:
-        func_text += f"        columns_index = get_dataframe_column_names(df)\n"
-        # Note: C++ assumes the array is always a string array.
-        func_text += f"        names_arr = index_to_array(columns_index)\n"
-        func_text += f"        col_names = array_to_info(names_arr)\n"
+    if df.has_runtime_cols:  # pragma: no cover
+        func_text += f"        raise Exception('Writing dataframes with runtime columns to an Iceberg table is not supported yet.')\n"
     else:
         func_text += f"        col_names = array_to_info(col_names_arr)\n"
 
@@ -4294,8 +4291,8 @@ def to_sql_overload(
 
     func_text += (
         "        bodo.io.iceberg.iceberg_write(\n"
-        "            name, con_str, schema, table, col_names, if_exists,\n"
-        "            _is_parallel, pyarrow_table_schema,\n"
+        "            name, con_str, schema, table, col_names, col_names_arr,\n"
+        "            if_exists, _is_parallel, pyarrow_table_schema,\n"
         "        )\n"
     )
     func_text += f"        delete_table_decref_arrays(table)\n"

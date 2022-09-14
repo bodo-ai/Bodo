@@ -92,7 +92,7 @@ public class BodoIcebergHandler {
           catalog.newCreateTableTransaction(id, schema, PartitionSpec.unpartitioned(), properties);
 
     List<DataFileInfo> fileInfos = DataFileInfo.fromLists(fileNames, fileSizes, fileRecords);
-    this.addData(txn.newAppend(), PartitionSpec.unpartitioned(), fileInfos);
+    this.addData(txn.newAppend(), PartitionSpec.unpartitioned(), SortOrder.unsorted(), fileInfos);
     txn.commitTransaction();
   }
 
@@ -105,15 +105,19 @@ public class BodoIcebergHandler {
     if (table.schema().schemaId() != schemaID)
       throw new IllegalStateException("Iceberg Table has updated its schema");
 
-    // TODO: Have PartitionSpec as an argument to change mid way?
-    this.addData(table.newAppend(), table.spec(), fileInfos);
+    this.addData(table.newAppend(), table.spec(), table.sortOrder(), fileInfos);
   }
 
   /** Insert data files into the table */
-  public void addData(AppendFiles append, PartitionSpec currSpec, List<DataFileInfo> fileInfos) {
-    for (DataFileInfo info : fileInfos) {
+  public void addData(
+      AppendFiles append,
+      PartitionSpec currSpec,
+      SortOrder currOrder,
+      List<DataFileInfo> fileInfos) {
+    boolean isPartitionedPaths = currSpec.isPartitioned();
 
-      DataFile dataFile = info.toDataFile(currSpec);
+    for (DataFileInfo info : fileInfos) {
+      DataFile dataFile = info.toDataFile(currSpec, currOrder, isPartitionedPaths);
       append.appendFile(dataFile);
     }
 

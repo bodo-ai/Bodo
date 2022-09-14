@@ -36,8 +36,8 @@ def commit_write(
         all_metrics: Metrics about written data to include in commit
         iceberg_schema_id: Known Schema ID when files were written
         pa_schema: Arrow Schema of written data
-        partition_spec: Partitioning of data
-        sort_order: Column(s) that the data was sorted by before writing
+        partition_spec: Iceberg-based partitioning schema of data
+        sort_order: Iceberg-based sorting of data
         mode: Method of Iceberg write (`create`, `replace`, `append`)
 
     Returns:
@@ -71,7 +71,7 @@ def commit_write(
                 False,
             )
         except Py4JJavaError as e:
-            print("Error during table creation:\n", e)
+            print("Error during Iceberg table creation: ", e)
             return False
 
     elif mode == "replace":
@@ -84,7 +84,7 @@ def commit_write(
                 True,
             )
         except Py4JJavaError as e:
-            print("Error during table replace:\n", e)
+            print("Error during Iceberg table replace: ", e)
             return False
 
     else:
@@ -98,7 +98,7 @@ def commit_write(
                 fnames_java, size_metric, count_metric, iceberg_schema_id
             )
         except Py4JJavaError as e:
-            print("Error during table append:\n", e)
+            print("Error during Iceberg table append: ", e)
             return False
 
     return True

@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pyspark.sql.types as spark_types
 
 from bodo.tests.iceberg_database_helpers.utils import (
     DATABASE_NAME,
@@ -26,22 +25,13 @@ def create_table(table_name="schema_evolution_eg_table", spark=None):
         }
     )
     sql_schema = [
-        ("A", "string"),
-        ("B", "string"),
-        ("C", "string"),
-        ("D", "int"),
-        ("E", "float"),
+        ("A", "string", True),
+        ("B", "string", True),
+        ("C", "string", True),
+        ("D", "int", True),
+        ("E", "float", True),
     ]
-    spark_schema = spark_types.StructType(
-        [
-            spark_types.StructField("A", spark_types.StringType(), True),
-            spark_types.StructField("B", spark_types.StringType(), True),
-            spark_types.StructField("C", spark_types.StringType(), True),
-            spark_types.StructField("D", spark_types.IntegerType(), True),
-            spark_types.StructField("E", spark_types.FloatType(), True),
-        ]
-    )
-    create_iceberg_table(df, sql_schema, spark_schema, table_name, spark)
+    create_iceberg_table(df, sql_schema, table_name, spark)
 
     # Add column
     print("Adding column...")

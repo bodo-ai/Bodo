@@ -3,7 +3,7 @@ API used to translate a Java Schema object into various Pythonic
 representations (Arrow and Bodo)
 """
 from collections import namedtuple
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from bodo_iceberg_connector.catalog_conn import (
     gen_table_loc,
@@ -12,7 +12,10 @@ from bodo_iceberg_connector.catalog_conn import (
 )
 from bodo_iceberg_connector.config import DEFAULT_PORT
 from bodo_iceberg_connector.errors import IcebergError, IcebergJavaError
-from bodo_iceberg_connector.py4j_support import get_java_table_handler
+from bodo_iceberg_connector.py4j_support import (
+    get_java_table_handler,
+    launch_jvm,
+)
 from bodo_iceberg_connector.schema_helper import arrow_schema_j2py
 from py4j.protocol import Py4JJavaError
 
@@ -34,11 +37,24 @@ def get_typing_info(conn_str: str, schema: str, table: str):
     Return information about an Iceberg Table needed at compile-time
     Primarily used for writing to Iceberg
     """
-    schema_id, table_loc, _, pyarrow_schema, iceberg_schema_str = get_iceberg_info(
-        DEFAULT_PORT, conn_str, schema, table, False
-    )
 
-    return (table_loc, schema_id, pyarrow_schema, iceberg_schema_str, "", "")
+    (
+        schema_id,
+        warehouse,
+        _,
+        pyarrow_schema,
+        iceberg_schema_str,
+        partition_spec,
+        sort_order,
+    ) = get_iceberg_info(DEFAULT_PORT, conn_str, schema, table, False)
+    return (
+        warehouse,
+        schema_id,
+        pyarrow_schema,
+        iceberg_schema_str,
+        partition_spec,
+        sort_order,
+    )
 
 
 def get_iceberg_typing_schema(conn_str: str, schema: str, table: str):
@@ -47,7 +63,7 @@ def get_iceberg_typing_schema(conn_str: str, schema: str, table: str):
     used at typing. Also returns the pyarrow schema object.
     """
     # TODO: Combine with get_typing_info?
-    _, _, schemas, pyarrow_schema, _ = get_iceberg_info(
+    _, _, schemas, pyarrow_schema, _, _, _ = get_iceberg_info(
         DEFAULT_PORT, conn_str, schema, table
     )
     assert schemas is not None
@@ -59,7 +75,7 @@ def get_iceberg_runtime_schema(conn_str: str, schema: str, table: str):
     Returns the table schema information for a given iceberg table
     used at runtime.
     """
-    _, _, schemas, _, _ = get_iceberg_info(DEFAULT_PORT, conn_str, schema, table)
+    _, _, schemas, _, _, _, _ = get_iceberg_info(DEFAULT_PORT, conn_str, schema, table)
     assert schemas is not None
     return (schemas.field_ids, schemas.coltypes)
 
@@ -93,6 +109,8 @@ def get_iceberg_info(port: int, conn_str: str, schema: str, table: str, error=Tr
             pyarrow_schema = None
             pyarrow_types = []
             iceberg_schema = None
+            partition_spec = []
+            sort_order = []
 
             if warehouse is None:
                 raise IcebergError(
@@ -115,10 +133,23 @@ def get_iceberg_info(port: int, conn_str: str, schema: str, table: str, error=Tr
                 py_schema.field_ids,
                 py_schema.is_required,
             )
+            # Create a map from Iceberg column field id to
+            # column name
+            field_id_to_col_name_map: Dict[int, str] = {
+                py_schema.field_ids[i]: py_schema.colnames[i]
+                for i in range(len(py_schema.colnames))
+            }
 
             # TODO: Override when warehouse is passed in?
             # Or move the table? Java API has ability to do so
             table_loc = java_table_info.getLoc()
+
+            partition_spec = partition_spec_j2py(
+                java_table_info.getPartitionFields(), field_id_to_col_name_map
+            )
+            sort_order = sort_order_j2py(
+                java_table_info.getSortFields(), field_id_to_col_name_map
+            )
 
             assert (
                 py_schema.colnames == pyarrow_schema.names
@@ -138,6 +169,8 @@ def get_iceberg_info(port: int, conn_str: str, schema: str, table: str, error=Tr
         iceberg_schema,
         pyarrow_schema,
         iceberg_schema_str,
+        partition_spec,
+        sort_order,
     )
 
 
@@ -171,3 +204,57 @@ def iceberg_schema_java_to_py(java_schema):
         is_required_lst.append(is_required)
 
     return BodoIcebergSchema(colnames, coltypes, field_ids, is_required_lst)
+
+
+def partition_spec_j2py(
+    partition_list, field_id_to_col_name_map: Dict[int, str]
+) -> List[Tuple[str, str, int, str]]:
+    """
+    Generate python representation of partition spec which is
+    a tuple containing the column name, the name of the transform,
+    the argument for the transform, and the name of the transformed
+    column.
+    field_id_to_col_name_map is a map of field id of the columns in
+    table to its name.
+    """
+    return [
+        (
+            field_id_to_col_name_map[spec.sourceId()],
+            *get_transform_info(spec.transform()),
+            spec.name(),
+        )
+        for spec in partition_list
+    ]
+
+
+def sort_order_j2py(
+    sort_list, field_id_to_col_name_map: Dict[int, str]
+) -> List[Tuple[str, str, int, bool, bool]]:
+    """
+    Generate python representation of sort order which is
+    a tuple containing the column name, the name of the transform,
+    the argument for the transform, whether to sort in an ascending
+    order and whether to put nulls last when sorting.
+    field_id_to_col_name_map is a map of field id of the columns in
+    table to its name.
+    """
+    gateway = launch_jvm()
+    return [
+        (
+            field_id_to_col_name_map[order.sourceId()],
+            *get_transform_info(order.transform()),
+            order.direction() == gateway.jvm.org.apache.iceberg.SortDirection.ASC,  # type: ignore
+            order.nullOrder() == gateway.jvm.org.apache.iceberg.NullOrder.NULLS_LAST,  # type: ignore
+        )
+        for order in sort_list
+    ]
+
+
+def get_transform_info(transform) -> Tuple[str, int]:
+    name = transform.toString()
+    if name.startswith("truncate["):
+        return "truncate", int(name[(len("truncate") + 1) : -1])
+    elif name.startswith("bucket["):
+        return "bucket", int(name[(len("bucket") + 1) : -1])
+    else:
+        return name, -1

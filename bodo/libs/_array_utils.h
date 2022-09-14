@@ -666,4 +666,8 @@ size_t get_nunique_hashes(uint32_t const* const hashes, const size_t len,
 std::pair<size_t, size_t> get_nunique_hashes_global(
     uint32_t const* const hashes, const size_t len, bool is_parallel);
 
+std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype);
+
+std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type);
+
 #endif  // _ARRAY_UTILS_H_INCLUDED

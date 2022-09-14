@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pyspark.sql.types as spark_types
 
 from bodo.tests.iceberg_database_helpers.utils import (
     DATABASE_NAME,
@@ -24,18 +23,11 @@ def create_table(table_name="partitions_general_table", spark=None):
         }
     )
     sql_schema = [
-        ("A", "double"),
-        ("B", "long"),
-        ("C", "string", "not null"),
+        ("A", "double", True),
+        ("B", "long", True),
+        ("C", "string", False),
     ]
-    spark_schema = spark_types.StructType(
-        [
-            spark_types.StructField("A", spark_types.DoubleType(), True),
-            spark_types.StructField("B", spark_types.LongType(), True),
-            spark_types.StructField("C", spark_types.StringType(), False),
-        ]
-    )
-    create_iceberg_table(df, sql_schema, spark_schema, table_name, spark)
+    create_iceberg_table(df, sql_schema, table_name, spark)
 
     # Add partition field
     print("Adding partition field (year)...")
