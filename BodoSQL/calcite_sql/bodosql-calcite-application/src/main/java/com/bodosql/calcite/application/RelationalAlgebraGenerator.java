@@ -460,6 +460,8 @@ public class RelationalAlgebraGenerator {
               // we write a duplicate rule that operates directly on the condition of the join.
               .addRuleInstance(JoinReorderConditionRule.Config.DEFAULT.toRule())
               .addRuleInstance(LogicalFilterReorderConditionRule.Config.DEFAULT.toRule())
+              // Push a limit before a project (e.g. select col as alias from table limit 10)
+              .addRuleInstance(LimitProjectTransposeRule.Config.DEFAULT.toRule())
               .build();
 
     } else {

@@ -4506,9 +4506,14 @@ class DistributedPass:
                     ):
                         shape_nodes.append(stmt)
                         continue
-                    if is_call(rhs) and guard(find_callname, self.func_ir, rhs) == (
-                        "table_subset",
-                        "bodo.hiframes.table",
+                    if (
+                        is_call(rhs)
+                        and guard(find_callname, self.func_ir, rhs)
+                        == (
+                            "table_subset",
+                            "bodo.hiframes.table",
+                        )
+                        and rhs.args[0].name in arr_varnames
                     ):
                         # If we take a subset of a table treat it as a
                         # used array/table.
@@ -4558,8 +4563,12 @@ class DistributedPass:
                             "get_table_data",
                             "bodo.hiframes.table",
                         )
-                        and stmt.value.args[0].name in arr_varnames
+                        and rhs.args[0].name in arr_varnames
                     ):
+                        arr_varnames.add(stmt.target.name)
+                        continue
+                    if isinstance(rhs, ir.Var) and rhs.name in arr_varnames:
+                        # If we have a simple alias we just need to track the new lhs
                         arr_varnames.add(stmt.target.name)
                         continue
 
