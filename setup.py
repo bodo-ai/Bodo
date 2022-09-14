@@ -635,7 +635,13 @@ setup(
     author="Bodo.ai",
     packages=find_packages(),
     package_data={
-        "bodo.tests": ["data/*", "data/*/*", "data/*/*/*", "data/*/*/*/*"],
+        "bodo.tests": [
+            "caching_tests/*",
+            "data/*",
+            "data/*/*",
+            "data/*/*/*",
+            "data/*/*/*/*",
+        ],
         # on Windows and MacOS we copy libssl and libcrypto DLLs to
         # bodo/libs to bundle them with our package and avoid
         # external dependency
