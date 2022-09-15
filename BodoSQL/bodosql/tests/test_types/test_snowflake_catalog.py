@@ -7,6 +7,7 @@ direct BodoSQLContext.
 import os
 
 import bodosql
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -139,6 +140,54 @@ def test_snowflake_catalog_read(memory_leak_check):
         get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"),
     )
     check_func(impl, (bc,), py_output=py_output)
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_catalog_default(memory_leak_check):
+    """
+    Tests passing a default schema to SnowflakeCatalog.
+    """
+
+    def impl1(bc):
+        # Load with snowflake or local default
+        return bc.sql("SELECT r_name FROM REGION ORDER BY r_name")
+
+    def impl2(bc):
+        return bc.sql("SELECT r_name FROM LOCAL_REGION ORDER BY r_name")
+
+    def impl3(bc):
+        return bc.sql("SELECT r_name FROM __bodolocal__.REGION ORDER BY r_name")
+
+    bodo_connect_params = {"schema": "TPCH_SF1"}
+    catalog = bodosql.SnowflakeCatalog(
+        os.environ["SF_USER"],
+        os.environ["SF_PASSWORD"],
+        "bodopartner.us-east-1",
+        "DEMO_WH",
+        "SNOWFLAKE_SAMPLE_DATA",
+        connection_params=bodo_connect_params,
+    )
+    bc = bodosql.BodoSQLContext(catalog=catalog)
+    py_output = pd.read_sql(
+        "Select r_name from REGION ORDER BY r_name",
+        get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"),
+    )
+    check_func(impl1, (bc,), py_output=py_output)
+
+    # We use a different type for the local table to clearly tell if we
+    # got the correct table.
+    local_table = pd.DataFrame({"r_name": np.arange(100)})
+    bc = bc.add_or_replace_view("LOCAL_REGION", local_table)
+    # We should select the local table
+    check_func(impl2, (bc,), py_output=local_table, reset_index=True)
+    bc = bc.add_or_replace_view("REGION", local_table)
+    # We two default conflicts we should get the snowflake option
+    check_func(impl1, (bc,), py_output=py_output)
+    # If we manually specify "__bodolocal__" we should get the local one.
+    check_func(impl3, (bc,), py_output=local_table, reset_index=True)
 
 
 @pytest.mark.skipif(

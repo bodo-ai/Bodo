@@ -128,20 +128,23 @@ public class RelationalAlgebraGenerator {
    * the Planner member variables.
    */
   public void setupPlanner(
-      List<String> defaultSchema, SchemaPlus schema, String namedParamTableName) {
+      List<SchemaPlus> defaultSchemas, SchemaPlus schema, String namedParamTableName) {
     try {
-      String firstSchemaName = defaultSchema.iterator().next();
+      // Generate the schema paths for the operator table.
+      List<List<String>> defaultSchemaList = new ArrayList<>();
+      for (SchemaPlus defaultSchema : defaultSchemas) {
+        defaultSchemaList.add(CalciteSchema.from(defaultSchema).path(null));
+      }
       RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
-
       Properties props = new Properties();
-      props.setProperty("defaultSchema", firstSchemaName);
       List<SqlOperatorTable> sqlOperatorTables = new ArrayList<>();
       // TODO: Replace this code. Deprecated?
       sqlOperatorTables.add(SqlStdOperatorTable.instance());
       sqlOperatorTables.add(
           new CalciteCatalogReader(
-              CalciteSchema.from(schema.getSubSchema(firstSchemaName)),
-              defaultSchema,
+              CalciteSchema.from(schema),
+              defaultSchemaList,
+              defaultSchemaList.size(),
               new JavaTypeFactoryImpl(typeSystem),
               new CalciteConnectionConfigImpl(props)));
       sqlOperatorTables.add(DatetimeOperatorTable.instance());
@@ -152,7 +155,7 @@ public class RelationalAlgebraGenerator {
       sqlOperatorTables.add(ThreeOperatorStringTable.instance());
       config =
           Frameworks.newConfigBuilder()
-              .defaultSchema(schema.getSubSchema(firstSchemaName))
+              .defaultSchemas(defaultSchemas)
               .operatorTable(new ChainedSqlOperatorTable(sqlOperatorTables))
               .typeSystem(typeSystem)
               // Currently, Calcite only supports SOME/ANY/ALL if isExpand = false.
@@ -224,9 +227,9 @@ public class RelationalAlgebraGenerator {
       newSchemas.add(newSchema);
       SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
 
-      List<String> defaultSchema = new ArrayList<String>();
-      defaultSchema.add(newSchema.getName());
-      setupPlanner(defaultSchema, schema, namedParamTableName);
+      List<SchemaPlus> defaultSchemas = new ArrayList();
+      defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
+      setupPlanner(defaultSchemas, schema, namedParamTableName);
     } catch (Exception e) {
       throw new RuntimeException(
           String.format(
@@ -248,18 +251,22 @@ public class RelationalAlgebraGenerator {
     try {
       CalciteConnection calciteConnection = setupCalciteConnection();
       Set<String> schemaNames = catalog.getSchemaNames();
-      List<BodoSqlSchema> newSchemas = new ArrayList<BodoSqlSchema>();
+      List<BodoSqlSchema> newSchemas = new ArrayList();
 
-      newSchemas.add(new CatalogSchemaImpl(newSchema.getName(), catalog));
+      newSchemas.add(newSchema);
       for (String schemaName : schemaNames) {
         newSchemas.add(new CatalogSchemaImpl(schemaName, catalog));
       }
       SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
 
-      List<String> defaultSchema = new ArrayList<String>();
-      // TODO (allai5): implement hierarchy of default schemas
-      defaultSchema.add(newSchema.getName());
-      setupPlanner(defaultSchema, schema, namedParamTableName);
+      List<SchemaPlus> defaultSchemas = new ArrayList();
+      List<BodoSqlSchema> defaultCatalogSchema = catalog.getDefaultSchema();
+      for (BodoSqlSchema catalogDefaultSchema : defaultCatalogSchema) {
+        // Fetch the path from the root schema.
+        defaultSchemas.add(schema.getSubSchema(catalogDefaultSchema.getName()));
+      }
+      defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
+      setupPlanner(defaultSchemas, schema, namedParamTableName);
     } catch (Exception e) {
       throw new RuntimeException(
           String.format(

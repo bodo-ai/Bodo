@@ -47,6 +47,14 @@ public interface BodoSQLCatalog {
   Schema getSchema(String schemaName);
 
   /**
+   * Return the list of default schema for a user. In the future we may opt to include a default
+   * schema at each level, so we return a list of schema.
+   *
+   * @return List of any default Schema that exist.
+   */
+  List<BodoSqlSchema> getDefaultSchema();
+
+  /**
    * Generates the code necessary to produce a write expression from the given catalog.
    *
    * @param varName Name of the variable to write.
