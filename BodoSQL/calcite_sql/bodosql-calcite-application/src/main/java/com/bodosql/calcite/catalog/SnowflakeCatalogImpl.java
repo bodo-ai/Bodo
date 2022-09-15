@@ -4,6 +4,7 @@ import static java.lang.Math.min;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.schema.CatalogSchemaImpl;
 import com.bodosql.calcite.table.BodoSQLColumn;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
 import com.bodosql.calcite.table.BodoSQLColumnImpl;
@@ -91,6 +92,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     // Add the user and password to the properties for JDBC
     this.totalProperties.put("user", username);
     this.totalProperties.put("password", password);
+    // Add the catalog name as the default database.
+    this.totalProperties.put("db", catalogName);
     this.totalProperties.putAll(this.accountInfo);
     this.conn = null;
     this.dbMeta = null;
@@ -224,7 +227,7 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   }
 
   /**
-   * Implement of getTable that enables retrying if a cached connection fails
+   * Implementation of getTable that enables retrying if a cached connection fails
    *
    * @param schema BodoSQL schema containing the table.
    * @param tableName Name of the table.
@@ -278,6 +281,12 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     return getSchemaNamesImpl(isConnectionCached());
   }
 
+  /**
+   * Implementation of getSchemaNames that enables retrying if a cached connection fails
+   *
+   * @param shouldRetry Should we retry the connection if we see an exception?
+   * @return Set of available schema names.
+   */
   private Set<String> getSchemaNamesImpl(boolean shouldRetry) {
     HashSet<String> schemaNames = new HashSet<>();
     try {
@@ -318,6 +327,52 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   }
 
   /**
+   * Return the list of default schema for a user. In the future we may opt to include a default
+   * schema at each level, so we return a list of schema.
+   *
+   * @return List of default Schema if they exist.
+   */
+  public List<BodoSqlSchema> getDefaultSchema() {
+    return getDefaultSchemaImpl(isConnectionCached());
+  }
+
+  /**
+   * Implementation of getDefaultSchema that enables retrying if a cached connection fails
+   *
+   * @param shouldRetry Should we retry the connection if we see an exception?
+   * @return List of default Schema if they exist.
+   */
+  private List<BodoSqlSchema> getDefaultSchemaImpl(boolean shouldRetry) {
+    List<BodoSqlSchema> defaultSchema = new ArrayList<>();
+    try {
+      Connection conn = getConnection();
+      Statement stmt = conn.createStatement();
+      ResultSet schemaInfo = stmt.executeQuery("select current_schema()");
+      while (schemaInfo.next()) {
+        // Output in column 1
+        String schemaName = schemaInfo.getString(1);
+        if (schemaName != null) {
+          defaultSchema.add(new CatalogSchemaImpl(schemaName, this));
+        }
+      }
+      // TODO: Cache the same connection if possible
+      conn.close();
+    } catch (SQLException e) {
+
+      String errorMsg =
+          String.format("Unable to load default schema from snowflake. Error message: %s", e);
+      if (shouldRetry) {
+        LOGGER.warn(errorMsg);
+        closeConnections();
+        return getDefaultSchemaImpl(false);
+      } else {
+        throw new RuntimeException(errorMsg);
+      }
+    }
+    return defaultSchema;
+  }
+
+  /**
    * Generate a Python connection string used to read from or write to Snowflake in Bodo's SQL
    * Python code.
    *
@@ -354,7 +409,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         connString.append("session_parameters").append("=").append(encodedJSONString);
       }
     } catch (UnsupportedEncodingException e) {
-      throw new BodoSQLCodegenException("Internal Error: Unable to encode Python connection string. Error message: " + e);
+      throw new BodoSQLCodegenException(
+          "Internal Error: Unable to encode Python connection string. Error message: " + e);
     }
 
     return connString.toString();
