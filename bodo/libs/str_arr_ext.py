@@ -51,7 +51,6 @@ from bodo.libs.str_ext import memcmp, string_type, unicode_to_utf8_and_len
 from bodo.utils.typing import (
     BodoArrayIterator,
     BodoError,
-    decode_if_dict_array,
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_none,
@@ -2387,7 +2386,6 @@ def set_to_numeric_out_na_err_overload(out_arr, out_ind, err_code):
 
 @numba.njit(no_cpython_wrapper=True)
 def str_arr_item_to_numeric(out_arr, out_ind, str_arr, ind):  # pragma: no cover
-    str_arr = decode_if_dict_array(str_arr)
     err_code = _str_arr_item_to_numeric(
         get_arr_data_ptr(out_arr, out_ind),
         str_arr,

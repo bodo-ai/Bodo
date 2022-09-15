@@ -262,6 +262,7 @@ no_side_effect_call_tuples = {
     ("convert_dict_arr_to_int", "dict_arr_ext", "libs", bodo),
     ("cat_dict_str", "dict_arr_ext", "libs", bodo),
     ("str_replace", "dict_arr_ext", "libs", bodo),
+    ("dict_arr_to_numeric", "dict_arr_ext", "libs", bodo),
     ("dict_arr_eq", "dict_arr_ext", "libs", bodo),
     ("dict_arr_ne", "dict_arr_ext", "libs", bodo),
     ("str_startswith", "dict_arr_ext", "libs", bodo),

@@ -326,6 +326,23 @@ def test_str_cat_opt(memory_leak_check):
     assert dist_IR_contains(f_ir, "cat_dict_str")
 
 
+def test_to_numeric(memory_leak_check):
+    """test optimized pd.to_numeric() for dict-encoded string arrays"""
+
+    def impl(A):
+        return pd.to_numeric(pd.Series(A), errors="coerce", downcast="float")
+
+    data = ["1.4", "2.3333", None, "1.22", "555.1"] * 2
+    A = pa.array(data, type=pa.dictionary(pa.int32(), pa.string()))
+
+    check_func(impl, (A,), py_output=pd.to_numeric(data))
+    # make sure IR has the optimized function
+    bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl)
+    bodo_func(A)
+    f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+    assert dist_IR_contains(f_ir, "dict_arr_to_numeric")
+
+
 def test_str_replace(memory_leak_check):
     """test optimizaton of Series.str.replace() for dict array"""
 
