@@ -7,6 +7,7 @@ import numba
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.utils.typing import raise_bodo_error
 
 
 def make_time_to_time_util(name):
