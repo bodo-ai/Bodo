@@ -7,6 +7,8 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public interface BodoSQLColumn {
   /**
@@ -46,6 +48,9 @@ public interface BodoSQLColumn {
    */
   String getWriteCastExpr(String varName);
 
+  /** Logger * */
+  Logger LOGGER = LoggerFactory.getLogger(BodoSQLColumn.class);
+
   enum BodoSQLColumnDataType {
     // See SqlTypeEnum in context.py
     EMPTY(0, "EMPTY"), // / < Always null with no underlying data
@@ -68,8 +73,9 @@ public interface BodoSQLColumn {
     STRING(17, "STRING"), // /< String elements
     BINARY(18, "BINARY"), // /< Binary (byte) array
     CATEGORICAL(19, "CATEGORICAL"),
+    UNSUPPORTED(20, "UNSUPPORTED"), // Unknown type we may be able to prune
     // `NUM_TYPE_IDS` must be last!
-    NUM_TYPE_IDS(20, "NUM_TYPE_IDS"); // /< Total number of type ids
+    NUM_TYPE_IDS(21, "NUM_TYPE_IDS"); // /< Total number of type ids
 
     private final int type_id;
     private final String type_id_name;
@@ -124,12 +130,17 @@ public interface BodoSQLColumn {
         case SMALLINT:
           return INT16;
         case TIMESTAMP:
+        case TIMESTAMP_WITH_TIMEZONE:
+          // TODO: Define a separate type for containing timezones
           return DATETIME;
         case TINYINT:
           return INT8;
         default:
-          throw new RuntimeException(
-              String.format("Unsupported Java SQL Type: %s", typID.getName()));
+          // We may be able to prune the column so we just output a warning.
+          // TODO: Ensure these warnings are visible to users. This probably
+          // needs a larger refactoring on the Java side.
+          LOGGER.warn(String.format("Unsupported Java SQL Type: %s", typID.getName()));
+          return UNSUPPORTED;
       }
     }
 
@@ -195,9 +206,9 @@ public interface BodoSQLColumn {
           temp = typeFactory.createSqlType(SqlTypeName.VARBINARY);
           break;
         default:
-          temp = null;
+          // If a type is not supported default to unknown
+          temp = typeFactory.createSqlType(SqlTypeName.UNKNOWN);
       }
-      // TODO: Raise an exception if temp is NULL
       return temp;
     }
 
