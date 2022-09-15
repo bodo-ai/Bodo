@@ -869,6 +869,17 @@ def _gen_sql_reader_py(
         selected_cols_map = {c: i for i, c in enumerate(selected_cols)}
         nullable_cols = [int(is_nullable(col_typs[i])) for i in selected_cols]
 
+        # pass indices to C++ of the selected string columns that are to be read
+        # in dictionary-encoded format
+        str_as_dict_cols = [
+            i for i in selected_cols if col_typs[i] == bodo.dict_str_arr_type
+        ]
+        dict_str_cols_str = (
+            f"dict_str_cols_arr_{call_id}.ctypes, np.int32({len(str_as_dict_cols)})"
+            if str_as_dict_cols
+            else "0, 0"
+        )
+
         comma = "," if filter_args else ""
         func_text += (
             f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
@@ -889,6 +900,7 @@ def _gen_sql_reader_py(
             #     TODO Confirm that we're computing is_nullable correctly
             f"    nullable_cols_arr_{call_id}.ctypes,\n"
             f"    pyarrow_table_schema_{call_id},\n"
+            f"    {dict_str_cols_str},\n"
             f"    total_rows_np.ctypes,\n"
             f"  )\n"
             f"  check_and_propagate_cpp_exception()\n"
@@ -1113,6 +1125,7 @@ def _gen_sql_reader_py(
                 # out of this function
                 f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),  # type: ignore
                 f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),  # type: ignore
+                f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),  # type: ignore
                 f"py_table_type_{call_id}": py_table_type,
                 f"pyarrow_table_schema_{call_id}": pyarrow_table_schema,
                 "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
@@ -1188,6 +1201,8 @@ _iceberg_read = types.ExternalFunction(
         types.int32,
         types.voidptr,
         pyarrow_table_schema_type,
+        types.voidptr,
+        types.int32,
         types.voidptr,
     ),
 )

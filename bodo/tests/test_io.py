@@ -4044,8 +4044,8 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
                 "A": ["awerwe", "awerwev24v2", "3r2r32rfc3", "ERr32r23rrrrrr"] * 250,
                 # B should not be dictionary encoded
                 "B": [str(i) for i in range(1000)],
-                # C should be dictionary encoded
-                "C": ["r32r23r32r32r23"] * 1000,
+                # CC2 should be dictionary encoded
+                "CC2": ["r32r23r32r32r23"] * 1000,
                 # D is non-string column, so shouldn't be encoded even if specified
                 "D": np.arange(1000),
             }
@@ -4063,15 +4063,15 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
 
     @bodo.jit
     def test_impl3(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["C"])
+        return pd.read_parquet(fname, _bodo_read_as_dict=["CC2"])
 
     @bodo.jit
     def test_impl4(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "C"])
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "CC2"])
 
     @bodo.jit
     def test_impl5(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["B", "C"])
+        return pd.read_parquet(fname, _bodo_read_as_dict=["B", "CC2"])
 
     @bodo.jit
     def test_impl6(fname):
@@ -4079,13 +4079,13 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
 
     @bodo.jit
     def test_impl7(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B", "C"])
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B", "CC2"])
 
     # 'D' shouldn't be read as dictionary encoded since it's not a string column
 
     @bodo.jit
     def test_impl8(fname):
-        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B", "C", "D"])
+        return pd.read_parquet(fname, _bodo_read_as_dict=["A", "B", "CC2", "D"])
 
     @bodo.jit
     def test_impl9(fname):
@@ -4100,53 +4100,53 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             test_impl1(fname)
-            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+            check_logger_msg(stream, "Columns ['A', 'CC2'] using dictionary encoding")
 
         with set_logging_stream(logger, 1):
             test_impl2(fname)
             check_logger_msg(
-                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+                stream, "Columns ['A', 'B', 'CC2'] using dictionary encoding"
             )
 
         with set_logging_stream(logger, 1):
             test_impl3(fname)
-            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+            check_logger_msg(stream, "Columns ['A', 'CC2'] using dictionary encoding")
 
         with set_logging_stream(logger, 1):
             test_impl4(fname)
-            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+            check_logger_msg(stream, "Columns ['A', 'CC2'] using dictionary encoding")
 
         with set_logging_stream(logger, 1):
             test_impl5(fname)
             check_logger_msg(
-                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+                stream, "Columns ['A', 'B', 'CC2'] using dictionary encoding"
             )
 
         with set_logging_stream(logger, 1):
             test_impl6(fname)
             check_logger_msg(
-                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+                stream, "Columns ['A', 'B', 'CC2'] using dictionary encoding"
             )
 
         with set_logging_stream(logger, 1):
             test_impl7(fname)
             check_logger_msg(
-                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+                stream, "Columns ['A', 'B', 'CC2'] using dictionary encoding"
             )
 
         with set_logging_stream(logger, 1):
             test_impl8(fname)
             check_logger_msg(
-                stream, "Columns ['A', 'B', 'C'] using dictionary encoding"
+                stream, "Columns ['A', 'B', 'CC2'] using dictionary encoding"
             )
 
         with set_logging_stream(logger, 1):
             test_impl9(fname)
-            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+            check_logger_msg(stream, "Columns ['A', 'CC2'] using dictionary encoding")
 
         with set_logging_stream(logger, 1):
             test_impl10(fname)
-            check_logger_msg(stream, "Columns ['A', 'C'] using dictionary encoding")
+            check_logger_msg(stream, "Columns ['A', 'CC2'] using dictionary encoding")
 
         if bodo.get_rank() == 0:  # warning is thrown only on rank 0
             with pytest.warns(

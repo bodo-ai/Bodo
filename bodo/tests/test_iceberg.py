@@ -13,7 +13,9 @@ from typing import List, Optional
 # functions will be saved and used before we can change them
 import bodo_iceberg_connector  # noqa
 import mmh3
+import numpy as np
 import pandas as pd
+import pyspark.sql.types as spark_types
 import pytest
 import pytz
 from mpi4py import MPI
@@ -386,6 +388,180 @@ def test_column_pruning(iceberg_database, iceberg_table_conn):
 
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
     check_func(impl, (table_name, conn, db_schema), py_output=py_out)
+
+
+def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
+    """
+    Test reading string arrays as dictionary-encoded when specified by the user or
+    determined from properties of table data.
+    """
+
+    table_name = "simple_dict_encoded_string"
+
+    db_schema, warehouse_loc = iceberg_database
+    spark = get_spark()
+
+    # Write a simple dataset with strings (repetitive/non-repetitive) and non-strings
+    df = pd.DataFrame(
+        {
+            # non-string
+            "A": np.arange(2000) + 1.1,
+            # should be dictionary encoded
+            "B": ["awe", "awv2"] * 1000,
+            # should not be dictionary encoded
+            "C": [str(i) for i in range(2000)],
+            # non-string column
+            "D": np.arange(2000) + 3,
+            # should be dictionary encoded
+            "E": ["r32"] * 2000,
+            # non-string column
+            "F": np.arange(2000),
+        }
+    )
+    sql_schema = [
+        ("A", "double", True),
+        ("B", "string", False),
+        ("C", "string", True),
+        ("D", "long", False),
+        ("E", "string", True),
+        ("F", "long", True),
+    ]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    # read all columns and determine dict-encoding automatically
+    def impl1(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        return df
+
+    check_func(impl1, (table_name, conn, db_schema), py_output=df)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit()(impl1)(table_name, conn, db_schema)
+        check_logger_msg(stream, "Columns ['B', 'E'] using dictionary encoding")
+
+    # test dead column elimination with dict-encoded columns
+    def impl2(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        return df[["B", "D"]]
+
+    check_func(impl2, (table_name, conn, db_schema), py_output=df[["B", "D"]])
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit()(impl2)(table_name, conn, db_schema)
+        check_logger_msg(stream, "Columns ['B'] using dictionary encoding")
+
+    # test _bodo_read_as_dict (force non-dict to dict)
+    def impl3(table_name, conn, db_schema):
+        df = pd.read_sql_table(
+            table_name, conn, db_schema, _bodo_read_as_dict=["C", "E"]
+        )
+        return df[["B", "C", "D", "E"]]
+
+    check_func(impl3, (table_name, conn, db_schema), py_output=df[["B", "C", "D", "E"]])
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit()(impl3)(table_name, conn, db_schema)
+        check_logger_msg(stream, "Columns ['B', 'C', 'E'] using dictionary encoding")
+
+    # error checking _bodo_read_as_dict
+    with pytest.raises(BodoError, match=r"must be a constant list of column names"):
+
+        def impl4(table_name, conn, db_schema):
+            df = pd.read_sql_table(table_name, conn, db_schema, _bodo_read_as_dict=True)
+            return df
+
+        bodo.jit(impl4)(table_name, conn, db_schema)
+
+    with pytest.raises(BodoError, match=r"_bodo_read_as_dict is not in table columns"):
+
+        def impl5(table_name, conn, db_schema):
+            df = pd.read_sql_table(
+                table_name, conn, db_schema, _bodo_read_as_dict=["H"]
+            )
+            return df
+
+        bodo.jit(impl5)(table_name, conn, db_schema)
+
+    with pytest.raises(BodoError, match=r"is not a string column"):
+
+        def impl6(table_name, conn, db_schema):
+            df = pd.read_sql_table(
+                table_name, conn, db_schema, _bodo_read_as_dict=["D"]
+            )
+            return df
+
+        bodo.jit(impl6)(table_name, conn, db_schema)
+
+    # make sure dict-encoding detection works even if there is schema evolution
+    # test both column renaming and type changes since checked separately
+
+    # create a new table since CachingCatalog inside Bodo can't see schema changes done
+    # by Spark code below
+    table_name = "simple_dict_encoded_string2"
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    # rename B to B2
+    if bodo.get_rank() == 0:
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{db_schema}.{table_name} RENAME COLUMN B TO B2"
+        )
+        spark_schema = spark_types.StructType(
+            [
+                spark_types.StructField("A", spark_types.DoubleType(), True),
+                spark_types.StructField("B", spark_types.StringType(), False),
+                spark_types.StructField("C", spark_types.StringType(), True),
+                spark_types.StructField("D", spark_types.LongType(), False),
+                spark_types.StructField("E", spark_types.StringType(), True),
+                spark_types.StructField("F", spark_types.LongType(), True),
+            ]
+        )
+        sdf = spark.createDataFrame(df, schema=spark_schema)
+        sdf.withColumnRenamed("B", "B2").writeTo(
+            f"hadoop_prod.{db_schema}.{table_name}"
+        ).append()
+
+        # change type of C from string to int
+        spark.sql(f"ALTER TABLE hadoop_prod.{db_schema}.{table_name} DROP COLUMN C")
+        spark.sql(
+            f"ALTER TABLE hadoop_prod.{db_schema}.{table_name} ADD COLUMN C bigint AFTER B2"
+        )
+    bodo.barrier()
+    df = df.rename(columns={"B": "B2"})
+    df["C"] = 123
+    df["F"] = df.F + 10000
+    if bodo.get_rank() == 0:
+        spark_schema = spark_types.StructType(
+            [
+                spark_types.StructField("A", spark_types.DoubleType(), True),
+                spark_types.StructField("B2", spark_types.StringType(), False),
+                spark_types.StructField("C", spark_types.LongType(), True),
+                spark_types.StructField("D", spark_types.LongType(), False),
+                spark_types.StructField("E", spark_types.StringType(), True),
+                spark_types.StructField("F", spark_types.LongType(), True),
+            ]
+        )
+        sdf = spark.createDataFrame(df, schema=spark_schema)
+        sdf.writeTo(f"hadoop_prod.{db_schema}.{table_name}").append()
+    bodo.barrier()
+
+    def impl7(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        df = df[df.F >= 10000]
+        return df
+
+    check_func(impl7, (table_name, conn, db_schema), py_output=df)
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606

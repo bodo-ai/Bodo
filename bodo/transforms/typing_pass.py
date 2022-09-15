@@ -2538,11 +2538,71 @@ class TypingTransforms:
         check_unsupported_args(
             "read_sql_table", unsupported_args, arg_defaults, package_name="pandas"
         )
+
+        # _bodo_read_as_dict allows users to specify columns as dictionary-encoded
+        # string arrays manually. This is in addition to whatever columns bodo
+        # determines should be read in with dictionary encoding.
+        _bodo_read_as_dict_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            len(supported_args) + len(unsupported_args),
+            "_bodo_read_as_dict",
+            default=None,
+            use_default=True,
+        )
+        err_msg = "pandas.read_sql_table(): '_bodo_read_as_dict', if provided, must be a constant list of column names."
+        _bodo_read_as_dict = (
+            self._get_const_value(
+                _bodo_read_as_dict_var, label, rhs.loc, err_msg=err_msg
+            )
+            if _bodo_read_as_dict_var
+            else []
+        )
+        if not isinstance(_bodo_read_as_dict, list):
+            raise BodoError(err_msg)
+
         (
             col_names,
             arr_types,
             pyarrow_table_schema,
         ) = bodo.io.iceberg.get_iceberg_type_info(table_name, con, database_schema)
+
+        # check user-provided dict-encoded columns for errors
+        col_name_map = {c: i for i, c in enumerate(col_names)}
+        for c in _bodo_read_as_dict:
+            if c not in col_name_map:
+                raise BodoError(
+                    f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not in table columns {col_names}"
+                )
+            col_ind = col_name_map[c]
+            if arr_types[col_ind] != bodo.string_array_type:
+                raise BodoError(
+                    f"pandas.read_sql_table(): column name '{c}' in _bodo_read_as_dict is not a string column"
+                )
+
+        # estimate which string columns should be dict-encoded using existing Parquet
+        # infrastructure.
+        # setting get_row_counts=False since row counts of all files are only needed
+        # during runtime.
+        iceberg_pq_dset = bodo.io.iceberg.get_iceberg_pq_dataset(
+            con, database_schema, table_name, pyarrow_table_schema, get_row_counts=False
+        )
+        str_columns = bodo.io.parquet_pio.get_str_columns_from_pa_schema(
+            pyarrow_table_schema
+        )
+        # remove user provided dict-encoded columns
+        str_columns = list(set(str_columns) - set(_bodo_read_as_dict))
+        dict_str_cols = bodo.io.parquet_pio.determine_str_as_dict_columns(
+            iceberg_pq_dset.pq_dataset, pyarrow_table_schema, str_columns
+        )
+        all_dict_str_cols = set(dict_str_cols) | set(_bodo_read_as_dict)
+
+        # change string array types to dict-encoded
+        for c in all_dict_str_cols:
+            col_ind = col_name_map[c]
+            arr_types[col_ind] = bodo.dict_str_arr_type
+
         index = bodo.RangeIndexType(None)
         df_type = DataFrameType(
             tuple(arr_types),

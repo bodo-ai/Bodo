@@ -610,7 +610,6 @@ def _gen_pq_reader_py(
         for col_in_idx in selected_cols
     ]
 
-    # XXX is special handling needed for table format?
     # pass indices to C++ of the selected string columns that are to be read
     # in dictionary-encoded format
     str_as_dict_cols = []
@@ -1675,6 +1674,64 @@ def get_str_columns_from_pa_schema(pa_schema):
     return str_columns
 
 
+def _pa_schemas_match(pa_schema1, pa_schema2):
+    """check if Arrow schemas match or not"""
+    # check column names
+    if pa_schema1.names != pa_schema2.names:
+        return False
+
+    # check type matches
+    try:
+        unify_schemas([pa_schema1, pa_schema2])
+    except:
+        return False
+
+    return True
+
+
+def _get_sample_pq_pieces(pq_dataset, pa_schema):
+    """get a sample of pieces in the Parquet dataset to avoid the overhead of opening
+    every file in compile time.
+
+    Also filters the pieces that don't match the table schema, needed for Iceberg to
+    avoid errors. We don't know the filters early in the compilation pipeline, so we
+    want to avoid schema evolution issues for codes that would otherwise work when
+    filters are applied.
+
+    Args:
+        pq_dataset (ParquetDataset): input Parquet dataset
+        pa_schema (pyarrow.lib.Schema): Arrow schema to check
+
+    Returns:
+        list(ParquetPiece): a sample of filtered pieces
+    """
+
+    pieces = pq_dataset.pieces
+
+    # a sample of N files where N is the number of ranks. Each rank looks at
+    # the metadata of a different random file
+    if len(pieces) > bodo.get_size():
+        import random
+
+        random.seed(37)
+        pieces = random.sample(pieces, bodo.get_size())
+    else:
+        pieces = pieces
+
+    # Only use pieces that match the target schema. May reduces the sample size in cases
+    # with schema evolution, but not very likely to change the outcome due to Iceberg's
+    # random file name generation.
+    # NOTE: p.metadata opens the Parquet file and can be slow so not filtering before
+    # random sampling above.
+    pieces = [
+        p
+        for p in pieces
+        if _pa_schemas_match(p.metadata.schema.to_arrow_schema(), pa_schema)
+    ]
+
+    return pieces
+
+
 def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns):
     """
     Determine which string columns (str_columns) should be read by Arrow as
@@ -1690,16 +1747,9 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns):
     if len(str_columns) == 0:
         return set()  # no string as dict columns
 
-    # We don't want to open every file at compile time, so instead we will open
-    # a sample of N files where N is the number of ranks. Each rank looks at
-    # the metadata of a different random file
-    if len(pq_dataset.pieces) > bodo.get_size():
-        import random
+    # get a sample of Parquet pieces to avoid opening every file in compile time
+    pieces = _get_sample_pq_pieces(pq_dataset, pa_schema)
 
-        random.seed(37)
-        pieces = random.sample(pq_dataset.pieces, bodo.get_size())
-    else:
-        pieces = pq_dataset.pieces
     total_uncompressed_sizes = np.zeros(len(str_columns), dtype=np.int64)
     total_uncompressed_sizes_recv = np.zeros(len(str_columns), dtype=np.int64)
     if bodo.get_rank() < len(pieces):
@@ -1729,7 +1779,7 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns):
     str_as_dict = set()
     for i, metric in enumerate(str_column_metrics):
         if metric < READ_STR_AS_DICT_THRESHOLD:
-            col_name = str_columns[i][0]
+            col_name = str_columns[i]
             str_as_dict.add(col_name)
     return str_as_dict
 
