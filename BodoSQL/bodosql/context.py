@@ -85,6 +85,7 @@ class SqlTypeEnum(Enum):
     String = 17
     Binary = 18
     Categorical = 19
+    Unsupported = 20
 
 
 # Scalar dtypes for supported Bodo Arrays
@@ -141,7 +142,7 @@ _numba_to_sql_param_type_map = {
 
 def get_sql_column_type(arr_type, col_name):
     """get SQL type for a given array type."""
-    err_msg = f"Pandas column '{col_name}' with type {arr_type} not supported in BodoSQL. Please cast your data to a supported type. https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
+    warning_msg = f"DataFrame column '{col_name}' with type {arr_type} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
     if arr_type.dtype in _numba_to_sql_column_type_map:
         col_dtype = ColumnTypeClass.fromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
@@ -159,7 +160,12 @@ def get_sql_column_type(arr_type, col_name):
         col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Datetime.value)
         elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
     else:
-        raise BodoError(err_msg)
+        # The type is unsupported we raise a warning indicating this is a possible
+        # error but we generate a dummy type because we may be able to support it
+        # if its optimized out.
+        warnings.warn(BodoSQLWarning(warning_msg))
+        col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
+        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
     return ColumnClass(col_name, col_dtype, elem_dtype)
 
 

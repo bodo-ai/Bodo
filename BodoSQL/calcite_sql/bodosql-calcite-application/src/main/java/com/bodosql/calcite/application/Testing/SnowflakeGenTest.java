@@ -11,11 +11,10 @@ import java.util.Properties;
 /** Class for locally testing codegen using a snowflake catalog */
 public class SnowflakeGenTest {
   public static void main(String[] args) throws Exception {
-    String sql = " select * from PUBLIC.LINEITEM1";
+    String sql = "select * from PUBLIC.LINEITEM1";
     Map envVars = System.getenv();
     Properties prop = new Properties();
     prop.put("queryTimeout", 5);
-    prop.put("query_tag", "folder=folder1+ folder2&");
     BodoSQLCatalog catalog =
         new SnowflakeCatalogImpl(
             (String) envVars.get("SF_USER"),
