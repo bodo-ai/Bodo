@@ -653,6 +653,33 @@ def cast_dict_str_arr_to_str_arr(context, builder, fromty, toty, val):
 
 
 @register_jitable
+def dict_arr_to_numeric(arr, errors, downcast):  # pragma: no cover
+    """
+    Optimized pd.to_numeric() for dictionary-encoded string arrays
+    """
+    dict_arr = arr._data
+    dict_arr_out = pd.to_numeric(dict_arr, errors, downcast)
+
+    # Assign output values from dict_arr_out
+    indices_arr = arr._indices
+    n_indices = len(indices_arr)
+    out_arr = bodo.utils.utils.alloc_type(n_indices, dict_arr_out, (-1,))
+    for i in range(n_indices):
+        if bodo.libs.array_kernels.isna(arr, i):
+            bodo.libs.array_kernels.setna(out_arr, i)
+            continue
+
+        dict_ind = indices_arr[i]
+        if bodo.libs.array_kernels.isna(dict_arr_out, dict_ind):
+            bodo.libs.array_kernels.setna(out_arr, i)
+            continue
+
+        out_arr[i] = dict_arr_out[dict_ind]
+
+    return out_arr
+
+
+@register_jitable
 def str_replace(arr, pat, repl, flags, regex):  # pragma: no cover
     """implement optimized string replace for dictionary array.
     Only transforms the dictionary array and just copies the indices.

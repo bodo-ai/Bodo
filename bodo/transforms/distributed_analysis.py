@@ -1379,6 +1379,7 @@ class DistributedAnalysis:
             "dict_arr_eq",
             "dict_arr_ne",
             "convert_dict_arr_to_int",
+            "dict_arr_to_numeric",
             "str_replace",
             "str_startswith",
             "str_endswith",

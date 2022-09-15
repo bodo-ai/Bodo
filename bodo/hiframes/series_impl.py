@@ -4866,40 +4866,31 @@ def overload_to_numeric(arg_a, errors="raise", downcast=None):
     if not is_str_arr_type(arg_a):
         raise BodoError(f"pd.to_numeric(): invalid argument type {arg_a}")
 
-    if out_dtype == types.float64:
+    # optimized path for dict-encoded string arrays
+    if arg_a == bodo.dict_str_arr_type:
+        return lambda arg_a, errors="raise", downcast=None: bodo.libs.dict_arr_ext.dict_arr_to_numeric(
+            arg_a, errors, downcast
+        )  # pragma: no cover
 
-        def to_numeric_float_impl(
-            arg_a, errors="raise", downcast=None
-        ):  # pragma: no cover
-            numba.parfors.parfor.init_prange()
-            n = len(arg_a)
-            B = np.empty(n, np.float64)
-            for i in numba.parfors.parfor.internal_prange(n):
-                if bodo.libs.array_kernels.isna(arg_a, i):
-                    bodo.libs.array_kernels.setna(B, i)
-                else:
-                    bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
+    _arr_typ = (
+        types.Array(types.float64, 1, "C")
+        if out_dtype == types.float64
+        else IntegerArrayType(types.int64)
+    )
 
-            return B
+    def to_numeric_impl(arg_a, errors="raise", downcast=None):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        n = len(arg_a)
+        B = bodo.utils.utils.alloc_type(n, _arr_typ, (-1,))
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(arg_a, i):
+                bodo.libs.array_kernels.setna(B, i)
+            else:
+                bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
 
-        return to_numeric_float_impl
-    else:
+        return B
 
-        def to_numeric_int_impl(
-            arg_a, errors="raise", downcast=None
-        ):  # pragma: no cover
-            numba.parfors.parfor.init_prange()
-            n = len(arg_a)
-            B = bodo.libs.int_arr_ext.alloc_int_array(n, np.int64)
-            for i in numba.parfors.parfor.internal_prange(n):
-                if bodo.libs.array_kernels.isna(arg_a, i):
-                    bodo.libs.array_kernels.setna(B, i)
-                else:
-                    bodo.libs.str_arr_ext.str_arr_item_to_numeric(B, i, arg_a, i)
-
-            return B
-
-        return to_numeric_int_impl
+    return to_numeric_impl
 
 
 def series_filter_bool(arr, bool_arr):  # pragma: no cover
