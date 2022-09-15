@@ -228,7 +228,7 @@ def get_iceberg_file_list(
     return lst
 
 
-class IcebergParquetDataset(object):
+class IcebergParquetDataset:
     """
     Store dataset info in the way expected by Arrow reader in C++.
     This is essentially a wrapper around the ParquetDataset
@@ -286,6 +286,7 @@ def get_iceberg_pq_dataset(
     expr_filters=None,
     tot_rows_to_read=None,
     is_parallel=False,
+    get_row_counts=True,
 ):
     """
     Get IcebergParquetDataset object for the specified table.
@@ -300,6 +301,8 @@ def get_iceberg_pq_dataset(
     'dnf_filters' are the filters that are passed to Iceberg.
     'expr_filters' are applied by our Parquet infrastructure.
     'is_parallel' : True if reading in parallel
+    'get_row_counts' : flag for getting row counts of Parquet files and validate
+        schemas, passed directly to get_parquet_dataset(). only needed during runtime.
     """
     ev = tracing.Event("get_iceberg_pq_dataset")
 
@@ -360,7 +363,7 @@ def get_iceberg_pq_dataset(
             # uniformly and reliably on all ranks.
             pq_dataset = bodo.io.parquet_pio.get_parquet_dataset(
                 pq_file_list,
-                get_row_counts=True,
+                get_row_counts=get_row_counts,
                 # dnf_filters were already handled by Iceberg
                 expr_filters=expr_filters,
                 is_parallel=is_parallel,

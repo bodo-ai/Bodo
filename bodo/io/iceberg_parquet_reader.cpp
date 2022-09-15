@@ -32,8 +32,10 @@ class IcebergParquetReader : public ParquetReader {
 
     virtual ~IcebergParquetReader() {}
 
-    void init_iceberg_reader() {
-        ParquetReader::init_pq_reader(nullptr, 0, nullptr, nullptr, 0);
+    void init_iceberg_reader(int32_t* str_as_dict_cols,
+                             int32_t num_str_as_dict_cols) {
+        ParquetReader::init_pq_reader(str_as_dict_cols, num_str_as_dict_cols,
+                                      nullptr, nullptr, 0);
     }
 
    protected:
@@ -129,6 +131,8 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             PyObject* expr_filters, int32_t* selected_fields,
                             int32_t num_selected_fields, int32_t* is_nullable,
                             PyObject* pyarrow_table_schema,
+                            int32_t* str_as_dict_cols,
+                            int32_t num_str_as_dict_cols,
                             int64_t* total_rows_out) {
     try {
         IcebergParquetReader reader(conn, database_schema, table_name, parallel,
@@ -136,7 +140,7 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                                     selected_fields, num_selected_fields,
                                     is_nullable, pyarrow_table_schema);
         // initialize reader
-        reader.init_iceberg_reader();
+        reader.init_iceberg_reader(str_as_dict_cols, num_str_as_dict_cols);
         *total_rows_out = reader.get_total_rows();
         return reader.read();
     } catch (const std::exception& e) {
