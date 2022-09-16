@@ -79,6 +79,21 @@ def over_clause_bounds(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        "RESPECT NULLS",
+        pytest.param(
+            "IGNORE NULLS",
+            marks=pytest.mark.skip("https://bodo.atlassian.net/browse/BE-3583"),
+        ),
+        pytest.param("", id="empty_str", marks=pytest.mark.slow),
+    ]
+)
+def null_respect_string(request):
+    """Returns the null behavior string, for use with LEAD/LAG and First/Last/Nth value"""
+    return request.param
+
+
 @pytest.fixture(params=["LEAD", "LAG"])
 def lead_or_lag(request):
     return request.param
@@ -156,7 +171,9 @@ def non_numeric_agg_funcs_subset(request):
     return request.param
 
 
-def gen_lead_lag_queries(window, fill_value, df_len, lead_or_lag_value):
+def gen_lead_lag_queries(
+    window, fill_value, df_len, lead_or_lag_value, null_respect_string
+):
     """Helper function, that generates a string of lead/lag queries"""
 
     shiftval_name_list = [
@@ -172,18 +189,18 @@ def gen_lead_lag_queries(window, fill_value, df_len, lead_or_lag_value):
     if fill_value != None:
         lead_lag_queries = ", ".join(
             [
-                f"{lead_or_lag_value}(A, {x}, {repr(fill_value)}) OVER {window} as {lead_or_lag_value}_{name}"
+                f"{lead_or_lag_value}(A, {x}, {repr(fill_value)}) {null_respect_string} OVER {window} as {lead_or_lag_value}_{name}"
                 for x, name in shiftval_name_list
             ]
         )
     else:
         lead_lag_queries = ", ".join(
             [
-                f"{lead_or_lag_value}(A, {x}) OVER {window} as {lead_or_lag_value}_{name}"
+                f"{lead_or_lag_value}(A, {x}) {null_respect_string} OVER {window} as {lead_or_lag_value}_{name}"
                 for x, name in shiftval_name_list
             ]
             + [
-                f"{lead_or_lag_value}(A) OVER {window} as {lead_or_lag_value}_default_shift",
+                f"{lead_or_lag_value}(A) {null_respect_string} OVER {window} as {lead_or_lag_value}_default_shift",
             ]
         )
     return lead_lag_queries
@@ -542,8 +559,13 @@ def test_nested_windowed_agg(
     "fill_value",
     [pytest.param(None, id="No_fill"), pytest.param(1, id="With_fill")],
 )
-def test_lead_lag_consts_numeric(
-    bodosql_numeric_types, lead_or_lag, spark_info, fill_value, memory_leak_check
+def test_lead_lag_consts(
+    bodosql_numeric_types,
+    lead_or_lag,
+    spark_info,
+    fill_value,
+    null_respect_string,
+    memory_leak_check,
 ):
     """tests the lead and lag aggregation functions"""
 
@@ -559,7 +581,11 @@ def test_lead_lag_consts_numeric(
     window = "(PARTITION BY B ORDER BY C)"
 
     lead_lag_queries = gen_lead_lag_queries(
-        window, fill_value, len(bodosql_numeric_types["table1"]["A"]), lead_or_lag
+        window,
+        fill_value,
+        len(bodosql_numeric_types["table1"]["A"]),
+        lead_or_lag,
+        null_respect_string,
     )
 
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
@@ -583,13 +609,22 @@ def test_lead_lag_consts_numeric(
     ],
 )
 def test_lead_lag_consts_datetime(
-    bodosql_datetime_types, lead_or_lag, spark_info, fill_value, memory_leak_check
+    bodosql_datetime_types,
+    lead_or_lag,
+    spark_info,
+    fill_value,
+    null_respect_string,
+    memory_leak_check,
 ):
     """tests the lead and lag aggregation functions on datetime types"""
 
     window = "(PARTITION BY B ORDER BY C)"
     lead_lag_queries = gen_lead_lag_queries(
-        window, fill_value, len(bodosql_datetime_types["table1"]["A"]), lead_or_lag
+        window,
+        fill_value,
+        len(bodosql_datetime_types["table1"]["A"]),
+        lead_or_lag,
+        null_respect_string,
     )
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
@@ -609,14 +644,23 @@ def test_lead_lag_consts_datetime(
     [pytest.param(None, id="No_fill"), pytest.param("foo", id="With_fill")],
 )
 def test_lead_lag_consts_string(
-    bodosql_string_types, lead_or_lag, spark_info, fill_value, memory_leak_check
+    bodosql_string_types,
+    lead_or_lag,
+    spark_info,
+    fill_value,
+    null_respect_string,
+    memory_leak_check,
 ):
     """tests the lead and lag aggregation functions on datetime types"""
 
     window = "(PARTITION BY B ORDER BY C)"
 
     lead_lag_queries = gen_lead_lag_queries(
-        window, fill_value, len(bodosql_string_types["table1"]["A"]), lead_or_lag
+        window,
+        fill_value,
+        len(bodosql_string_types["table1"]["A"]),
+        lead_or_lag,
+        null_respect_string,
     )
 
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
@@ -634,16 +678,42 @@ def test_lead_lag_consts_string(
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "fill_value",
-    [pytest.param(None, id="No_fill"), pytest.param("X'412412'", id="With_fill")],
+    [
+        pytest.param(None, id="No_fill"),
+        pytest.param(
+            "X'412412'",
+            id="With_fill",
+            marks=pytest.mark.skip("BE-3304, no support for binary literals"),
+        ),
+    ],
 )
 def test_lead_lag_consts_binary(
-    bodosql_binary_types, lead_or_lag, spark_info, fill_value, memory_leak_check
+    bodosql_binary_types,
+    lead_or_lag,
+    spark_info,
+    fill_value,
+    null_respect_string,
+    memory_leak_check,
 ):
     """tests the lead and lag aggregation functions on datetime types"""
 
+    cols_that_need_bytearray_conv = [
+        "A",
+        "B",
+        "C",
+        f"{lead_or_lag}_0",
+        f"{lead_or_lag}_1",
+        f"{lead_or_lag}_negative_1",
+        f"{lead_or_lag}_3",
+    ]
+
     window = "(PARTITION BY B ORDER BY C)"
     lead_lag_queries = gen_lead_lag_queries(
-        window, fill_value, len(bodosql_binary_types["table1"]["A"]), lead_or_lag
+        window,
+        fill_value,
+        len(bodosql_binary_types["table1"]["A"]),
+        lead_or_lag,
+        null_respect_string,
     )
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
@@ -654,15 +724,7 @@ def test_lead_lag_consts_binary(
         check_dtype=False,
         check_names=False,
         only_jit_1DVar=True,
-        convert_columns_bytearray=[
-            "A",
-            "B",
-            "C",
-            f"{lead_or_lag}_0",
-            f"{lead_or_lag}_1",
-            f"{lead_or_lag}_negative_1",
-            f"{lead_or_lag}_3",
-        ],
+        convert_columns_bytearray=cols_that_need_bytearray_conv,
     )
 
 
@@ -672,13 +734,22 @@ def test_lead_lag_consts_binary(
     [pytest.param(None, id="No_fill"), pytest.param("3 DAYS", id="With_fill")],
 )
 def test_lead_lag_consts_timedelta(
-    bodosql_interval_types, lead_or_lag, spark_info, fill_value, memory_leak_check
+    bodosql_interval_types,
+    lead_or_lag,
+    spark_info,
+    fill_value,
+    null_respect_string,
+    memory_leak_check,
 ):
     """tests the lead and lag aggregation functions on timedelta types"""
 
     window = "(PARTITION BY B ORDER BY C)"
     lead_lag_queries = gen_lead_lag_queries(
-        window, fill_value, len(bodosql_interval_types["table1"]["A"]), lead_or_lag
+        window,
+        fill_value,
+        len(bodosql_interval_types["table1"]["A"]),
+        lead_or_lag,
+        null_respect_string,
     )
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
@@ -707,13 +778,22 @@ def test_lead_lag_consts_timedelta(
     [pytest.param(None, id="No_fill"), pytest.param("TRUE", id="With_fill")],
 )
 def test_lead_lag_consts_boolean(
-    bodosql_boolean_types, lead_or_lag, spark_info, fill_value, memory_leak_check
+    bodosql_boolean_types,
+    lead_or_lag,
+    spark_info,
+    fill_value,
+    null_respect_string,
+    memory_leak_check,
 ):
     """tests the lead and lag aggregation functions on boolean types"""
 
     window = "(PARTITION BY B ORDER BY C)"
     lead_lag_queries = gen_lead_lag_queries(
-        window, fill_value, len(bodosql_boolean_types["table1"]["A"]), lead_or_lag
+        window,
+        fill_value,
+        len(bodosql_boolean_types["table1"]["A"]),
+        lead_or_lag,
+        null_respect_string,
     )
 
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
@@ -835,7 +915,11 @@ def test_row_number_boolean(bodosql_boolean_types, spark_info, memory_leak_check
 
 
 def test_nth_value_numeric(
-    bodosql_numeric_types, over_clause_bounds, spark_info, memory_leak_check
+    bodosql_numeric_types,
+    over_clause_bounds,
+    null_respect_string,
+    spark_info,
+    memory_leak_check,
 ):
     """tests the Nth value aggregation functon on numeric types"""
 
@@ -851,7 +935,7 @@ def test_nth_value_numeric(
     window = f"(PARTITION BY B ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
     nth_val_queries = ", ".join(
         [
-            f"NTH_VALUE(A, {x}) OVER {window} as NTH_VALUE_{name}"
+            f"NTH_VALUE(A, {x}) {null_respect_string} OVER {window} as NTH_VALUE_{name}"
             for x, name in [(1, "1"), (3, "3")]
         ]
     )
@@ -868,14 +952,18 @@ def test_nth_value_numeric(
 
 @pytest.mark.slow
 def test_nth_value_datetime(
-    bodosql_datetime_types, over_clause_bounds, spark_info, memory_leak_check
+    bodosql_datetime_types,
+    over_clause_bounds,
+    null_respect_string,
+    spark_info,
+    memory_leak_check,
 ):
     """tests the Nth value aggregation functon on numeric types"""
 
     window = f"(PARTITION BY B ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
     nth_val_queries = ", ".join(
         [
-            f"NTH_VALUE(A, {x}) OVER {window} as NTH_VALUE_{name}"
+            f"NTH_VALUE(A, {x}) {null_respect_string} OVER {window} as NTH_VALUE_{name}"
             for x, name in [(1, "1"), (3, "3")]
         ]
     )
@@ -892,14 +980,18 @@ def test_nth_value_datetime(
 
 @pytest.mark.slow
 def test_nth_value_timedelta(
-    bodosql_interval_types, over_clause_bounds, spark_info, memory_leak_check
+    bodosql_interval_types,
+    over_clause_bounds,
+    null_respect_string,
+    spark_info,
+    memory_leak_check,
 ):
     """tests the Nth value aggregation functon on numeric types"""
 
     window = f"(PARTITION BY B ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
     nth_val_queries = ", ".join(
         [
-            f"NTH_VALUE(A, {x}) OVER {window} as NTH_VALUE_{name}"
+            f"NTH_VALUE(A, {x}) {null_respect_string} OVER {window} as NTH_VALUE_{name}"
             for x, name in [(1, "1"), (3, "3")]
         ]
     )
@@ -917,14 +1009,18 @@ def test_nth_value_timedelta(
 
 @pytest.mark.slow
 def test_nth_value_string(
-    bodosql_string_types, over_clause_bounds, spark_info, memory_leak_check
+    bodosql_string_types,
+    over_clause_bounds,
+    null_respect_string,
+    spark_info,
+    memory_leak_check,
 ):
     """tests the Nth value aggregation functon on numeric types"""
 
     window = f"(PARTITION BY B ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
     nth_val_queries = ", ".join(
         [
-            f"NTH_VALUE(A, {x}) OVER {window} as NTH_VALUE_{name}"
+            f"NTH_VALUE(A, {x}) {null_respect_string} OVER {window} as NTH_VALUE_{name}"
             for x, name in [(1, "1"), (3, "3")]
         ]
     )
@@ -941,19 +1037,21 @@ def test_nth_value_string(
 
 @pytest.mark.slow
 def test_nth_value_binary(
-    bodosql_binary_types, over_clause_bounds, spark_info, memory_leak_check
+    bodosql_binary_types,
+    over_clause_bounds,
+    null_respect_string,
+    spark_info,
+    memory_leak_check,
 ):
     """tests the Nth value aggregation functon on binary types"""
-
     window = f"(PARTITION BY B ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
     nth_val_queries = ", ".join(
         [
-            f"NTH_VALUE(A, {x}) OVER {window} as NTH_VALUE_{name}"
+            f"NTH_VALUE(A, {x}) {null_respect_string} OVER {window} as NTH_VALUE_{name}"
             for x, name in [(1, "1"), (3, "3")]
         ]
     )
     query = f"select A, B, C, {nth_val_queries} from table1 ORDER BY B, C"
-
     check_query(
         query,
         bodosql_binary_types,
@@ -966,14 +1064,18 @@ def test_nth_value_binary(
 
 @pytest.mark.slow
 def test_nth_value_boolean(
-    bodosql_boolean_types, over_clause_bounds, spark_info, memory_leak_check
+    bodosql_boolean_types,
+    over_clause_bounds,
+    null_respect_string,
+    spark_info,
+    memory_leak_check,
 ):
     """tests the Nth value aggregation functon on boolean types"""
 
     window = f"(PARTITION BY B ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
     nth_val_queries = ", ".join(
         [
-            f"NTH_VALUE(A, {x}) OVER {window} as NTH_VALUE_{name}"
+            f"NTH_VALUE(A, {x}) {null_respect_string} OVER {window} as NTH_VALUE_{name}"
             for x, name in [(1, "1"), (3, "3")]
         ]
     )
@@ -991,38 +1093,18 @@ def test_nth_value_boolean(
 pytest.mark.slow
 
 
-def test_nth_value_binary(
-    bodosql_binary_types, over_clause_bounds, spark_info, memory_leak_check
-):
-    """tests the Nth value aggregation functon on binary types"""
-
-    window = f"(PARTITION BY B ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-    nth_val_queries = ", ".join(
-        [
-            f"NTH_VALUE(A, {x}) OVER {window} as NTH_VALUE_{name}"
-            for x, name in [(1, "1"), (3, "3")]
-        ]
-    )
-    query = f"select A, B, C, {nth_val_queries} from table1 ORDER BY B, C"
-
-    check_query(
-        query,
-        bodosql_binary_types,
-        spark_info,
-        check_dtype=False,
-        only_jit_1DVar=True,
-        convert_columns_bytearray=["A", "B", "C", f"NTH_VALUE_1", f"NTH_VALUE_3"],
-    )
-
-
 @pytest.mark.slow
 def test_first_last_value_binary(
-    bodosql_binary_types, over_clause_bounds, spark_info, memory_leak_check
+    bodosql_binary_types,
+    over_clause_bounds,
+    spark_info,
+    null_respect_string,
+    memory_leak_check,
 ):
     """tests the first and last value aggregation functon on binary types"""
 
     window = f"(PARTITION BY B ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-    query = f"select A, B, C, FIRST_VALUE(A) OVER {window} as FIRST_VALUE_A, LAST_VALUE(A) OVER {window} as LAST_VALUE_A from table1 ORDER BY B, C"
+    query = f"select A, B, C, FIRST_VALUE(A) {null_respect_string} OVER {window} as FIRST_VALUE_A, LAST_VALUE(A) {null_respect_string} OVER {window} as LAST_VALUE_A from table1 ORDER BY B, C"
 
     check_query(
         query,
@@ -1036,12 +1118,16 @@ def test_first_last_value_binary(
 
 @pytest.mark.slow
 def test_first_last_value_boolean(
-    bodosql_boolean_types, over_clause_bounds, spark_info, memory_leak_check
+    bodosql_boolean_types,
+    over_clause_bounds,
+    null_respect_string,
+    spark_info,
+    memory_leak_check,
 ):
     """tests the first and last value aggregation functon on boolean types"""
 
     window = f"(PARTITION BY B ORDER BY C ROWS BETWEEN {over_clause_bounds[0]} AND {over_clause_bounds[1]})"
-    query = f"select A, B, C, FIRST_VALUE(A) OVER {window} as FIRST_VALUE_A, LAST_VALUE(A) OVER {window} as LAST_VALUE_A from table1 ORDER BY B, C"
+    query = f"select A, B, C, FIRST_VALUE(A) {null_respect_string} OVER {window} as FIRST_VALUE_A, LAST_VALUE(A) {null_respect_string} OVER {window} as LAST_VALUE_A from table1 ORDER BY B, C"
 
     check_query(
         query,

@@ -856,3 +856,28 @@ def test_qualify_no_window_err():
         match=r".*QUALIFY clause must contain at least one windowed function*",
     ):
         impl(table1)
+
+
+def test_lag_respect_nulls_no_window():
+    """Tests LEAD/LAG with RESPECT NULLS but no OVER clause
+    This correctly validates in Calcite, so we have to handle it in our codegen.
+    I'm not sure if that's an error or not"""
+
+    table1 = pd.DataFrame(
+        {
+            "A": [1, 2, 3, 4, 5, 6, 7] * 3,
+            "B": [1, 1, 2, 2, 3, 3, 4] * 3,
+            "C": [1, 1, 1, 2, 2, 3, 3] * 3,
+        }
+    )
+
+    def impl(df):
+        query = "SELECT LAG(A) RESPECT NULLS from table1"
+        bc = bodosql.BodoSQLContext({"table1": df})
+        return bc.sql(query)
+
+    with pytest.raises(
+        BodoError,
+        match=r".*LAG requires OVER clause*",
+    ):
+        impl(table1)

@@ -449,9 +449,25 @@ public class ExprTypeVisitor {
         exprType = BodoSQLExprType.meet_elementwise_op(exprType, exprTypes.get(operandKey));
       }
       exprTypes.put(key, exprType);
+    } else if (node.getOperator() instanceof SqlNullTreatmentOperator) {
+      // This call only occurs wrapping the following windowed aggregations:
+      // FIRST_VALUE, LAST_VALUE, NTH_Value, LEAD and LAG
+      // The expr type output of this call is the same as the expr type of the wrapped call.
+      assert node.operands.size() == 1;
+      assert node.operands.get(0) instanceof RexCall;
+      SqlKind childKind = ((RexCall) node.operands.get(0)).getOperator().getKind();
+      assert childKind == SqlKind.LEAD
+          || childKind == SqlKind.LAG
+          || childKind == SqlKind.NTH_VALUE
+          || childKind == SqlKind.FIRST_VALUE
+          || childKind == SqlKind.LAST_VALUE;
+
+      String childOperandKey = generateRexNodeKey(node.operands.get(0), id);
+      BodoSQLExprType.ExprType childExprType = exprTypes.get(childOperandKey);
+      exprTypes.put(key, childExprType);
     } else {
       throw new BodoSQLExprTypeDeterminationException(
-          "Internal Error: Calcite Plan Produced an Unsupported RexCall");
+          "Internal Error: Calcite Plan Produced an Unsupported RexCall: " + node.getOperator());
     }
   }
 }
