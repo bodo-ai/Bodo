@@ -269,8 +269,9 @@ public class Utils {
         }
         break;
       case TIME:
-        dtype = "bodo.Time";
-        break;
+        // TODO [BE-3649]: The precision needs to be handled here.
+        throw new BodoSQLCodegenException(
+            "Internal Error: Calcite Plan Produced an Unsupported TIME Type");
       case VARCHAR:
       case CHAR:
         if (outputScalar) {
@@ -279,6 +280,17 @@ public class Utils {
           return "bodo.string_array_type";
         } else {
           dtype = "str";
+        }
+        break;
+      case VARBINARY:
+      case BINARY:
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_str";
+        } else if (outputArrayType) {
+          return "bodo.binary_array_type";
+        } else {
+          // TODO: FIXME?
+          dtype = "bodo.bytes_type";
         }
         break;
       case INTERVAL_DAY_HOUR:

@@ -238,9 +238,6 @@ def test_null_when_and_shortcircuit(
         pytest.param(
             (True, False),
             id="bools",
-            marks=pytest.mark.skip(
-                "Need support for scalar null AND/OR column (BS-723)"
-            ),
         ),
         pytest.param(("'hello'", "'world'"), id="strings"),
         pytest.param(
@@ -274,4 +271,84 @@ def test_null_scalars_cast(basic_df, spark_info, scalar_values, memory_leak_chec
         spark_info,
         check_dtype=False,
         check_names=False,
+    )
+
+
+def test_null_literal_then_else(major_types_nullable, memory_leak_check):
+    """
+    Tests passing a null literal to a case statement for each major type.
+    """
+    query = """
+        select
+            CASE when COND_COL THEN NULL ELSE C END as THEN_COL,
+            CASE when COND_COL THEN B ELSE NULL END as ELSE_COL
+        FROM
+            table1
+    """
+    then_list = []
+    else_list = []
+    orig_df = major_types_nullable["table1"]
+    for i, val in enumerate(orig_df["COND_COL"]):
+        if val is None or pd.isnull(val):
+            then_list.append(None)
+            else_list.append(orig_df.loc[i, "B"])
+        else:
+            then_list.append(orig_df.loc[i, "C"])
+            else_list.append(None)
+    if pd.api.types.is_integer_dtype(orig_df.dtypes["A"]):
+        dtype = "Int64"
+    else:
+        dtype = None
+    py_output = pd.DataFrame(
+        {
+            "THEN_COL": pd.Series(then_list, dtype=dtype),
+            "ELSE_COL": pd.Series(else_list, dtype=dtype),
+        }
+    )
+    check_query(
+        query,
+        major_types_nullable,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+    )
+
+
+def test_null_literal_cond(major_types_nullable, memory_leak_check):
+    """
+    Tests comparing IS_NULL and IS_NOT_NULL for each major type.
+    """
+    query = """
+        select
+            CASE when A IS NULL THEN B ELSE C END as NULL_COL,
+            CASE when A IS NOT NULL THEN B ELSE C END as NOT_NULL_COL
+        FROM
+            table1
+    """
+    null_list = []
+    not_null_list = []
+    orig_df = major_types_nullable["table1"]
+    for i, val in enumerate(orig_df["A"]):
+        if val is None or pd.isnull(val):
+            null_list.append(orig_df.loc[i, "B"])
+            not_null_list.append(orig_df.loc[i, "C"])
+        else:
+            null_list.append(orig_df.loc[i, "C"])
+            not_null_list.append(orig_df.loc[i, "B"])
+    if pd.api.types.is_integer_dtype(orig_df.dtypes["A"]):
+        dtype = "Int64"
+    else:
+        dtype = None
+    py_output = pd.DataFrame(
+        {
+            "NULL_COL": pd.Series(null_list, dtype=dtype),
+            "NOT_NULL_COL": pd.Series(not_null_list, dtype=dtype),
+        }
+    )
+    check_query(
+        query,
+        major_types_nullable,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
     )

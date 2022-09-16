@@ -33,6 +33,7 @@ public class LiteralCodeGen {
         case BIGINT:
         case DATE:
         case TIMESTAMP:
+        case TIME:
           // TODO: Support all remaining interval types.
         case INTERVAL_DAY_HOUR:
         case INTERVAL_DAY_MINUTE:

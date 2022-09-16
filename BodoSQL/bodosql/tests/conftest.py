@@ -1,4 +1,4 @@
-import gc
+import datetime
 import hashlib
 import os
 import sys
@@ -6,7 +6,6 @@ import sys
 import numpy as np
 import pandas as pd
 import pytest
-from numba.core.runtime import rtsys
 from pyspark.sql.types import (
     DoubleType,
     IntegerType,
@@ -17,6 +16,7 @@ from pyspark.sql.types import (
 
 import bodo
 import bodo.utils.allocation_tracking
+from bodo.tests.conftest import memory_leak_check  # noqa
 from bodo.tests.utils import gen_nonascii_list
 
 # Fix Issue on Azure CI where the driver defaults to a different Python version
@@ -465,6 +465,7 @@ def timestamp_literal_strings(request):
 def bodosql_string_types(request):
     return request.param
 
+
 @pytest.fixture(
     params=[
         {
@@ -565,6 +566,238 @@ def bodosql_nullable_numeric_types(request):
         "C": [7, 8, None, 9] * 3,
     }
     return {"table1": pd.DataFrame(data=int_data, dtype=dtype)}
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series([1, 2, None, 10000, None] * 3, dtype="Int64"),
+                    "B": pd.Series([-43241, None, None, None, 523] * 3, dtype="Int64"),
+                    "C": pd.Series([None, None, None, -234325, 0] * 3, dtype="Int64"),
+                }
+            ),
+            id="Integer",
+        ),
+        pytest.param(
+            # TODO: Update float to nullable float
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [1.312, 2.1, np.nan, 10000.0, np.nan] * 3, dtype="float64"
+                    ),
+                    "B": pd.Series(
+                        [-432.41, np.nan, np.nan, np.nan, 52.3] * 3, dtype="float64"
+                    ),
+                    "C": pd.Series(
+                        [np.nan, np.nan, np.nan, -234325.0, 0.0] * 3, dtype="float64"
+                    ),
+                }
+            ),
+            id="float",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series([True, True, None, False, None] * 3),
+                    "B": pd.Series([True, None, None, None, True] * 3),
+                    "C": pd.Series([None, None, None, False, False] * 3),
+                }
+            ),
+            id="boolean",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        ["bvrewg", "word", None, "32r9hẞ{} ß#rk230-k320-rk23", None] * 3
+                    ),
+                    "B": pd.Series(["V", None, None, None, "38442bhbedwẞ ß"] * 3),
+                    "C": pd.Series([None, None, None, "erwrewẞ ß", ""] * 3),
+                }
+            ),
+            id="string",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [b"bvrewg", b"word", None, b"32r9h {}#rk230-k320-rk23", None]
+                        * 3
+                    ),
+                    "B": pd.Series([b"V", None, None, None, b"38442bhbedw "] * 3),
+                    "C": pd.Series([None, None, None, b"erwrew ", b""] * 3),
+                }
+            ),
+            id="binary",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            datetime.date(2022, 1, 1),
+                            datetime.date(2022, 3, 15),
+                            None,
+                            datetime.date(2019, 3, 15),
+                            None,
+                        ]
+                        * 3
+                    ),
+                    "B": pd.Series(
+                        [
+                            datetime.date(2010, 1, 11),
+                            None,
+                            None,
+                            None,
+                            datetime.date(2018, 12, 25),
+                        ]
+                        * 3
+                    ),
+                    "C": pd.Series(
+                        [
+                            None,
+                            None,
+                            None,
+                            datetime.date(2028, 2, 25),
+                            datetime.date(2017, 11, 21),
+                        ]
+                        * 3
+                    ),
+                }
+            ),
+            id="date",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            pd.Timestamp(2021, 11, 21),
+                            pd.Timestamp(2021, 3, 3),
+                            np.datetime64("NaT"),
+                            np.datetime64("2007-01-01T03:30"),
+                            np.datetime64("NaT"),
+                        ]
+                        * 3
+                    ),
+                    "B": pd.Series(
+                        [
+                            pd.Timestamp(2022, 1, 12),
+                            np.datetime64("NaT"),
+                            np.datetime64("NaT"),
+                            np.datetime64("NaT"),
+                            np.datetime64("2020-11-11T13:21:03.172"),
+                        ]
+                        * 3
+                    ),
+                    "C": pd.Series(
+                        [
+                            np.datetime64("NaT"),
+                            np.datetime64("NaT"),
+                            np.datetime64("NaT"),
+                            np.datetime64("2020-12-01T13:56:03.172"),
+                            np.datetime64("2020-02-11"),
+                        ]
+                        * 3
+                    ),
+                }
+            ),
+            id="timestamp",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            np.timedelta64(2000000, "us"),
+                            np.timedelta64(3, "ms"),
+                            np.timedelta64("NaT"),
+                            np.timedelta64(4, "s"),
+                            np.timedelta64("NaT"),
+                        ]
+                        * 3
+                    ),
+                    "B": pd.Series(
+                        [
+                            np.timedelta64(10, "Y"),
+                            np.timedelta64("NaT"),
+                            np.timedelta64("NaT"),
+                            np.timedelta64("NaT"),
+                            np.timedelta64(5, "m"),
+                        ]
+                        * 3
+                    ),
+                    "C": pd.Series(
+                        [
+                            np.timedelta64("NaT"),
+                            np.timedelta64("NaT"),
+                            np.timedelta64("NaT"),
+                            np.timedelta64(8, "W"),
+                            np.timedelta64(6, "h"),
+                        ]
+                        * 3
+                    ),
+                }
+            ),
+            id="timedelta",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": pd.Series(
+                        [
+                            bodo.Time(23, 55, 55, precision=0),
+                            bodo.Time(0, 0, 0, precision=0),
+                            None,
+                            bodo.Time(23, 59, 59, precision=0),
+                            None,
+                        ]
+                        * 3
+                    ),
+                    "B": pd.Series(
+                        [
+                            bodo.Time(9, 9, 9, precision=0),
+                            None,
+                            None,
+                            None,
+                            bodo.Time(14, 11, 4, precision=0),
+                        ]
+                        * 3
+                    ),
+                    "C": pd.Series(
+                        [
+                            None,
+                            None,
+                            None,
+                            bodo.Time(12, 55, 56, precision=0),
+                            bodo.Time(1, 34, 51, precision=0),
+                        ]
+                        * 3
+                    ),
+                }
+            ),
+            id="time",
+            marks=pytest.mark.skip(
+                "[BE-3649] Time type needs to forward precision to SQL."
+            ),
+        ),
+    ]
+)
+def major_types_nullable(request):
+    """
+    Fixture that contains an entry for every major type class (e.g. integer
+    but not each bitwidth) with null values. These columns are always named
+    A, B, and C. In addition every DataFrame has an identical boolean column
+    that can be as the condition in case statements named COND_COL.
+    """
+    df = request.param.copy()
+    assert not (
+        len(df) % 3
+    ), "Appending a boolean column requires the DataFrame to be divisible by 3"
+    df["COND_COL"] = pd.Series([True, False, None] * (len(df) // 3))
+    return {"table1": df}
 
 
 @pytest.fixture(
@@ -1338,27 +1571,3 @@ def group_from_hash(testname, num_groups):
     # Hash val is a hex-string
     int_hash = int(hash_val, base=16) % num_groups
     return str(int_hash)
-
-
-@pytest.fixture(scope="function")
-def memory_leak_check():
-    """
-    A context manager fixture that makes sure there is no memory leak in the test.
-    Equivalent to Numba's MemoryLeakMixin:
-    https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/tests/support.py#L688
-    """
-    gc.collect()
-    old = rtsys.get_allocation_stats()
-    old_bodo = bodo.utils.allocation_tracking.get_allocation_stats()
-    yield
-    gc.collect()
-    new = rtsys.get_allocation_stats()
-    new_bodo = bodo.utils.allocation_tracking.get_allocation_stats()
-    old_stats = [old, old_bodo]
-    new_stats = [new, new_bodo]
-    total_alloc = sum([m[0] for m in new_stats]) - sum([m[0] for m in old_stats])
-    total_free = sum([m[1] for m in new_stats]) - sum([m[1] for m in old_stats])
-    total_mi_alloc = sum([m[2] for m in new_stats]) - sum([m[2] for m in old_stats])
-    total_mi_free = sum([m[3] for m in new_stats]) - sum([m[3] for m in old_stats])
-    assert total_alloc == total_free
-    assert total_mi_alloc == total_mi_free

@@ -889,7 +889,8 @@ def _check_query_equal(
     """
     # convert pyarrow string data to regular object arrays to avoid dtype errors
     for i in range(len(bodosql_output.columns)):
-        if bodosql_output.dtypes.iloc[i] == pd.StringDtype("pyarrow"):
+        # pd dtype must be the first value for comparing numpy dtypes
+        if pd.StringDtype("pyarrow") == bodosql_output.dtypes.iloc[i]:
             arr = bodosql_output.iloc[:, i].values
             # arr.to_numpy() fails in Arrow if all values are NA
             # see test_cond.py::test_decode\[all_scalar_no_case_no_default\]
