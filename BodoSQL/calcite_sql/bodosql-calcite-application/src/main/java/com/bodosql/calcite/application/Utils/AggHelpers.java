@@ -24,6 +24,7 @@ public class AggHelpers {
     simpleColnameMap.put(SqlKind.MAX, "max");
     simpleColnameMap.put(SqlKind.VAR_SAMP, "var_samp");
     simpleColnameMap.put(SqlKind.AVG, "avg");
+    simpleColnameMap.put(SqlKind.MEDIAN, "median");
     simpleColnameMap.put(SqlKind.STDDEV_SAMP, "std_samp");
     simpleColnameMap.put(SqlKind.STDDEV_POP, "std");
     simpleColnameMap.put(SqlKind.VAR_POP, "var");
@@ -78,6 +79,8 @@ public class AggHelpers {
         return colExpr + ".count()";
       case AVG:
         return colExpr + ".mean()";
+      case MEDIAN:
+        return colExpr + ".median()";
       case STDDEV_SAMP:
         return colExpr + ".std()";
       case STDDEV_POP:

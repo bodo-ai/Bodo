@@ -43,6 +43,7 @@ public class WindowAggCodeGen {
     windowOptimizedKernels.put(SqlKind.SUM0, "bodo.libs.bodosql_array_kernels.windowed_sum");
     windowOptimizedKernels.put(SqlKind.COUNT, "bodo.libs.bodosql_array_kernels.windowed_count");
     windowOptimizedKernels.put(SqlKind.AVG, "bodo.libs.bodosql_array_kernels.windowed_avg");
+    windowOptimizedKernels.put(SqlKind.MEDIAN, "bodo.libs.bodosql_array_kernels.windowed_median");
   }
 
   /**

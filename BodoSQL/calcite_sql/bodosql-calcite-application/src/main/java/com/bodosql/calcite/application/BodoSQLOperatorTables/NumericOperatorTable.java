@@ -11,6 +11,7 @@ import org.apache.calcite.sql.type.ReturnTypes;
 import org.apache.calcite.sql.type.SqlOperandTypeInference;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
+import org.apache.calcite.util.Optionality;
 
 public final class NumericOperatorTable implements SqlOperatorTable {
 
@@ -290,17 +291,17 @@ public final class NumericOperatorTable implements SqlOperatorTable {
 
   public static final SqlBasicAggFunction VARIANCE_POP =
       SqlBasicAggFunction.create(
-          "VARIANCE_POP",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.INTEGER,
-          OperandTypes.NUMERIC);
+          "VARIANCE_POP", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.NUMERIC);
 
   public static final SqlBasicAggFunction VARIANCE_SAMP =
       SqlBasicAggFunction.create(
-          "VARIANCE_SAMP",
-          SqlKind.OTHER_FUNCTION,
-          ReturnTypes.INTEGER,
-          OperandTypes.NUMERIC);
+          "VARIANCE_SAMP", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.NUMERIC);
+
+  public static final SqlAggFunction MEDIAN =
+      SqlBasicAggFunction.create(
+              "MEDIAN", SqlKind.MEDIAN, ReturnTypes.ARG0_NULLABLE_IF_EMPTY, OperandTypes.NUMERIC)
+          .withGroupOrder(Optionality.FORBIDDEN)
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
 
   private List<SqlOperator> functionList =
       Arrays.asList(
@@ -322,6 +323,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           HAVERSINE,
           LOG,
           LOG2,
+          MEDIAN,
           POW,
           CONV,
           FACTORIAL,
@@ -329,8 +331,8 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           TRUNC,
           WIDTH_BUCKET,
           GREATEST,
-          LEAST, 
-          VARIANCE_POP, 
+          LEAST,
+          VARIANCE_POP,
           VARIANCE_SAMP);
 
   @Override

@@ -34,6 +34,7 @@ public class AggCodeGen {
     equivalentPandasMethodMap.put(SqlKind.MIN, "min");
     equivalentPandasMethodMap.put(SqlKind.MAX, "max");
     equivalentPandasMethodMap.put(SqlKind.AVG, "mean");
+    equivalentPandasMethodMap.put(SqlKind.MEDIAN, "median");
     equivalentPandasMethodMap.put(SqlKind.STDDEV_SAMP, "std");
     equivalentPandasMethodMap.put(SqlKind.VAR_SAMP, "var");
     equivalentPandasMethodMap.put(SqlKind.ANY_VALUE, "iloc");
