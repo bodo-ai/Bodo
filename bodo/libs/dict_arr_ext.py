@@ -471,9 +471,9 @@ def dict_arr_setitem(A, idx, val):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def find_dict_ind(arr, val):
+def find_dict_ind_unique(arr, val):  # pragma: no cover
     """find index of 'val' in dictionary of 'arr'. Return -1 if not found.
-    NOTE: Assumes that values in the dictionary are unique.
+    Assumes that values in the dictionary are unique.
     """
     dict_ind = -1
     data = arr._data
@@ -488,33 +488,87 @@ def find_dict_ind(arr, val):
 
 
 @numba.njit(no_cpython_wrapper=True)
-def dict_arr_eq(arr, val):
-    """implements equality comparison between a dictionary array and a scalar value"""
-    n = len(arr)
-    # NOTE: Assumes that values in the dictionary are unique.
-    dict_ind = find_dict_ind(arr, val)
+def find_dict_ind_non_unique(arr, val):  # pragma: no cover
+    """
+    Find indexes of value 'val' in dictionary of 'arr'. Return empty set if not found.
+    Does not assume that values in the dictionary are unique.
 
-    if dict_ind == -1:
-        return init_bool_array(
-            np.full(n, False, np.bool_), arr._indices._null_bitmap.copy()
-        )
+    Args:
+        arr (dictionary encoded array): The array to search
+        val (string): The scalar string to search the array for
 
-    return arr._indices == dict_ind
+    Returns:
+        Set(int): A set of the indicies. Empty if no matching indicies are found.
+    """
+    output_set = set()
+    data = arr._data
+    for i in range(len(data)):
+        if bodo.libs.array_kernels.isna(data, i):
+            continue
+        if data[i] == val:
+            output_set.add(i)
+
+    return output_set
 
 
 @numba.njit(no_cpython_wrapper=True)
-def dict_arr_ne(arr, val):
+def dict_arr_eq(arr, val):  # pragma: no cover
+    """implements equality comparison between a dictionary array and a scalar value"""
+    n = len(arr)
+    if arr._has_global_dictionary:
+        # In bodo, if we have a global dictionary, then we know that
+        # the values in the dictionary are unique.
+        dict_ind = find_dict_ind_unique(arr, val)
+        if dict_ind == -1:
+            return init_bool_array(
+                np.full(n, False, np.bool_), arr._indices._null_bitmap.copy()
+            )
+        return arr._indices == dict_ind
+    else:
+        # In this case, we may have multiple indicies with a value
+        dict_ind_set = find_dict_ind_non_unique(arr, val)
+
+        if len(dict_ind_set) == 0:
+            return init_bool_array(
+                np.full(n, False, np.bool_), arr._indices._null_bitmap.copy()
+            )
+
+        values_arr = np.empty(n, dtype=np.bool_)
+
+        for i in range(len(arr._indices)):
+            values_arr[i] = arr._indices[i] in dict_ind_set
+
+        return init_bool_array(values_arr, arr._indices._null_bitmap.copy())
+
+
+@numba.njit(no_cpython_wrapper=True)
+def dict_arr_ne(arr, val):  # pragma: no cover
     """implements inequality comparison between a dictionary array and a scalar value"""
     n = len(arr)
-    # NOTE: Assumes that values in the dictionary are unique.
-    dict_ind = find_dict_ind(arr, val)
+    if arr._has_global_dictionary:
+        # In bodo, if we have a global dictionary, then we know that
+        # the values in the dictionary are unique.
+        dict_ind = find_dict_ind_unique(arr, val)
+        if dict_ind == -1:
+            return init_bool_array(
+                np.full(n, True, np.bool_), arr._indices._null_bitmap.copy()
+            )
+        return arr._indices != dict_ind
+    else:
+        # In this case, we may have multiple indicies with a value
+        dict_ind_set = find_dict_ind_non_unique(arr, val)
 
-    if dict_ind == -1:
-        return init_bool_array(
-            np.full(n, True, np.bool_), arr._indices._null_bitmap.copy()
-        )
+        if len(dict_ind_set) == 0:
+            return init_bool_array(
+                np.full(n, True, np.bool_), arr._indices._null_bitmap.copy()
+            )
 
-    return arr._indices != dict_ind
+        values_arr = np.empty(n, dtype=np.bool_)
+
+        for i in range(len(arr._indices)):
+            values_arr[i] = arr._indices[i] not in dict_ind_set
+
+        return init_bool_array(values_arr, arr._indices._null_bitmap.copy())
 
 
 def get_binary_op_overload(op, lhs, rhs):
