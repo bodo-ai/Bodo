@@ -1339,7 +1339,7 @@ def shift():  # pragma: no cover
 
 # using overload since njit bakes in Literal[bool](False) for parallel
 @overload(shift, jit_options={"cache": True})
-def shift_overload(in_arr, shift, parallel):
+def shift_overload(in_arr, shift, parallel, default_fill_value=None):
     # TODO: Removing this check passes our internal shift tests.
     # We should remove this check if possible so this implementation
     # always returns a function.
@@ -1347,12 +1347,12 @@ def shift_overload(in_arr, shift, parallel):
         return shift_impl
 
 
-def shift_impl(in_arr, shift, parallel):  # pragma: no cover
+def shift_impl(in_arr, shift, parallel, default_fill_value=None):  # pragma: no cover
     N = len(in_arr)
     # fallback to regular string array if dictionary-encoded array
     # TODO(ehsan): support dictionary-encoded arrays directly
     in_arr = decode_if_dict_array(in_arr)
-    output = alloc_shift(N, in_arr, (-1,))
+    output = alloc_shift(N, in_arr, (-1,), fill_value=default_fill_value)
     send_right = shift > 0
     send_left = shift <= 0
     is_parallel_str = False
@@ -1361,7 +1361,9 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
         n_pes = bodo.libs.distributed_api.get_size()
         halo_size = np.int32(abs(shift))
         if _is_small_for_parallel(N, halo_size):
-            return _handle_small_data_shift(in_arr, shift, rank, n_pes)
+            return _handle_small_data_shift(
+                in_arr, shift, rank, n_pes, default_fill_value
+            )
 
         comm_data = _border_icomm(in_arr, rank, n_pes, halo_size, send_right, send_left)
         (
@@ -1388,7 +1390,7 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
                 output,
             )
 
-    shift_seq(in_arr, shift, output, is_parallel_str)
+    shift_seq(in_arr, shift, output, is_parallel_str, default_fill_value)
 
     if parallel:
         if send_right:
@@ -1421,7 +1423,9 @@ def shift_impl(in_arr, shift, parallel):  # pragma: no cover
 
 
 @register_jitable(cache=True)
-def shift_seq(in_arr, shift, output, is_parallel_str=False):  # pragma: no cover
+def shift_seq(
+    in_arr, shift, output, is_parallel_str=False, default_fill_value=None
+):  # pragma: no cover
     N = len(in_arr)
     # maximum shift size is N
     sign_shift = 1 if shift > 0 else -1
@@ -1431,7 +1435,11 @@ def shift_seq(in_arr, shift, output, is_parallel_str=False):  # pragma: no cover
     # We never need to do this for rank != 0 because if shift > N
     # another code path is chosen.
     if shift > 0 and (not is_parallel_str or bodo.get_rank() == 0):
-        bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
+        if default_fill_value is None:
+            bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
+        else:
+            for i in range(shift):
+                output[i] = bodo.utils.conversion.unbox_if_timestamp(default_fill_value)
 
     # range is shift..N for positive shift, 0..N+shift for negative shift
     start = max(shift, 0)
@@ -1445,7 +1453,11 @@ def shift_seq(in_arr, shift, output, is_parallel_str=False):  # pragma: no cover
 
     # NOTE: updating end of array later since string arrays require in order setitem
     if shift < 0:
-        bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
+        if default_fill_value is None:
+            bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
+        else:
+            for i in range(end, N):
+                output[i] = bodo.utils.conversion.unbox_if_timestamp(default_fill_value)
 
     return output
 
@@ -1860,7 +1872,9 @@ def overload_bcast_n_chars_if_str_binary_arr(arr):
 
 
 @register_jitable
-def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
+def _handle_small_data_shift(
+    in_arr, shift, rank, n_pes, default_fill_value
+):  # pragma: no cover
     """Gather data and run shift computation on rank 0,
     then broadcast the result.
     This is used when input data is too small compared to window size for efficient
@@ -1872,12 +1886,14 @@ def _handle_small_data_shift(in_arr, shift, rank, n_pes):  # pragma: no cover
     )
     all_in_arr = bodo.libs.distributed_api.gatherv(in_arr)
     if rank == 0:
-        all_out = alloc_shift(len(all_in_arr), all_in_arr, (-1,))
-        shift_seq(all_in_arr, shift, all_out)
+        all_out = alloc_shift(
+            len(all_in_arr), all_in_arr, (-1,), fill_value=default_fill_value
+        )
+        shift_seq(all_in_arr, shift, all_out, default_fill_value=default_fill_value)
         n_chars = bcast_n_chars_if_str_binary_arr(all_out)
     else:
         n_chars = bcast_n_chars_if_str_binary_arr(in_arr)
-        all_out = alloc_shift(all_N, in_arr, (n_chars,))
+        all_out = alloc_shift(all_N, in_arr, (n_chars,), fill_value=default_fill_value)
 
     bodo.libs.distributed_api.bcast(all_out)
     # 1D_Var chunk sizes can be variable, TODO: use 1D flag to avoid exscan
@@ -2043,27 +2059,32 @@ def _dropna(arr):  # pragma: no cover
     return A
 
 
-def alloc_shift(n, A, s=None):  # pragma: no cover
+def alloc_shift(n, A, s=None, fill_value=None):  # pragma: no cover
     return np.empty(n, A.dtype)
 
 
 @overload(alloc_shift, no_unliteral=True)
-def alloc_shift_overload(n, A, s=None):
+def alloc_shift_overload(n, A, s=None, fill_value=None):
     """allocate output array for shift(). It is the same type as input, except for
     non-nullable int case which requires float (to store nulls).
     """
 
     # non-Numpy case is same as input
     if not isinstance(A, types.Array):
-        return lambda n, A, s=None: bodo.utils.utils.alloc_type(
+        return lambda n, A, s=None, fill_value=None: bodo.utils.utils.alloc_type(
             n, A, s
         )  # pragma: no cover
 
-    # output of non-nullable int is float64 to be able to store nulls
-    if isinstance(A.dtype, types.Integer):
-        return lambda n, A, s=None: np.empty(n, np.float64)  # pragma: no cover
+    # output of non-nullable int is float64 to be able to store nulls,
+    # unless a integer fill value is provided
+    if isinstance(A.dtype, types.Integer) and not isinstance(fill_value, types.Integer):
+        return lambda n, A, s=None, fill_value=None: np.empty(
+            n, np.float64
+        )  # pragma: no cover
 
-    return lambda n, A, s=None: np.empty(n, A.dtype)  # pragma: no cover
+    return lambda n, A, s=None, fill_value=None: np.empty(
+        n, A.dtype
+    )  # pragma: no cover
 
 
 def alloc_pct_change(n, A):  # pragma: no cover

@@ -12,11 +12,13 @@ import bodo
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.tests.utils import (
     DistTestPipeline,
+    check_func,
     count_array_OneDs,
     count_array_REPs,
     count_parfor_OneDs,
     count_parfor_REPs,
     dist_IR_contains,
+    gen_random_string_binary_array,
     get_start_end,
 )
 
@@ -587,6 +589,66 @@ class TestHiFrames(unittest.TestCase):
         np.testing.assert_almost_equal(bodo_func(n), test_impl(n))
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
+
+    def test_shift_float_fill(self):
+        def test_impl(df, shift_amnt):
+            Ac = df.A.shift(shift_amnt, fill_value=0.2)
+            return Ac
+
+        np.random.seed(5)
+        # test with small/large series sizes, to ensure both possible paths in
+        # shift_impl are taken. (alternate path is taken if shift size is greater
+        # than the amnt of data stored on each rank) Pytest won't allow me to
+        # parametrize these tests,
+        # so I have to do it manually
+        for df_len in [12, 10000]:
+            for shift_amnt in [1, -3, 20, 0, 100, 10000]:
+                df = pd.DataFrame(
+                    {"A": np.arange(df_len) + 1.0, "B": np.random.ranf(df_len)}
+                )
+                check_func(test_impl, (df, shift_amnt))
+
+    def test_shift_str_fill(self):
+        def test_impl(df, shift_amnt):
+            Ac = df.A.shift(shift_amnt, fill_value="Muhahah")
+            return Ac
+
+        np.random.seed(5)
+        # test with small/large series sizes, to ensure both possible paths in
+        # shift_impl are taken. (alternate path is taken if shift size is greater
+        # than the amnt of data stored on each rank) Pytest won't allow me to
+        # parametrize these tests,
+        # so I have to do it manually
+        for df_len in [12, 10000]:
+            for shift_amnt in [1, -3, 20, 0, 100, 10000]:
+                df = pd.DataFrame(
+                    {
+                        "A": gen_random_string_binary_array(df_len),
+                        "B": np.random.ranf(df_len),
+                    }
+                )
+                check_func(test_impl, (df, shift_amnt))
+
+    def test_shift_binary_fill(self):
+        def test_impl(df, shift_amnt):
+            Ac = df.A.shift(shift_amnt, fill_value=b"Muhahah")
+            return Ac
+
+        np.random.seed(5)
+        # test with small/large series sizes, to ensure both possible paths in
+        # shift_impl are taken. (alternate path is taken if shift size is greater
+        # than the amnt of data stored on each rank) Pytest won't allow me to
+        # parametrize these tests,
+        # so I have to do it manually
+        for df_len in [12, 10000]:
+            for shift_amnt in [1, -3, 20, 0, 100, 10000]:
+                df = pd.DataFrame(
+                    {
+                        "A": gen_random_string_binary_array(df_len, is_binary=True),
+                        "B": np.random.ranf(df_len),
+                    }
+                )
+                check_func(test_impl, (df, shift_amnt))
 
     def test_df_input(self):
         def test_impl(df):

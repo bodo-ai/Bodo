@@ -3904,8 +3904,8 @@ def overload_series_dropna(S, axis=0, inplace=False, how=None):
 @overload_method(SeriesType, "shift", inline="always", no_unliteral=True)
 def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
 
-    unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
-    arg_defaults = dict(freq=None, axis=0, fill_value=None)
+    unsupported_args = dict(freq=freq, axis=axis)
+    arg_defaults = dict(freq=None, axis=0)
     check_unsupported_args(
         "Series.shift",
         unsupported_args,
@@ -3917,8 +3917,8 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.shift()")
 
     # Bodo specific limitations for supported types
-    # Currently only float (not nullable), int, dt64, and nullable int/bool/decimal/date
-    # arrays are supported
+    # Currently only float (not nullable), int, dt64, nullable int/bool/decimal/date,
+    # and string arrays are supported
     if not is_supported_shift_array_type(S.data):
         # TODO: Link to supported Series input types.
         raise BodoError(
@@ -3933,7 +3933,7 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        out_arr = bodo.hiframes.rolling.shift(arr, periods, False)
+        out_arr = bodo.hiframes.rolling.shift(arr, periods, False, fill_value)
         return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl

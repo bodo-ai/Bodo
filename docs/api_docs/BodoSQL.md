@@ -1220,7 +1220,7 @@ all types:
 
     Count the number of elements in a column or group.
 
-    
+
 #### ANY_VALUE
 -   `ANY_VALUE`
 
@@ -1283,7 +1283,7 @@ numeric types
     Is equivalent to
     ```sql
     SELECT SUM(CASE WHEN A THEN 1 ELSE 0 END) FROM table1
-    ```  
+    ```
 
 #### VARIANCE
 -   `VARIANCE`
@@ -2239,8 +2239,8 @@ influences the final output.
 
 For BodoSQL, `PARTITION BY` is required, but
 `ORDER BY` is optional for most functions and
-`ROWS BETWEEN` is optional for all of them. If 
-`ROWS BETWEEN` is not specified then it defaults to either 
+`ROWS BETWEEN` is optional for all of them. If
+`ROWS BETWEEN` is not specified then it defaults to either
 computing the result over the entire window (if no `ORDER BY`
 clause is specified) or to using the window `UNBOUNDED PRECEDING TO CURRENT ROW`
 (if there is an `ORDER BY` clause).
@@ -2288,7 +2288,7 @@ Currently BodoSQL supports the following Window functions:
 
     Compute the variance for a population over the window or
     `NULL` if the window is empty.
-    
+
 
 #### MAX
 -   `MAX(COLUMN_EXPRESSION)`
@@ -2307,35 +2307,39 @@ Currently BodoSQL supports the following Window functions:
 -   `COUNT(COLUMN_EXPRESSION)`
 
     Compute the number of non-NULL entries in a window.
-    
+
 #### COUNT_IF
 
 -   `COUNT_IF(BOOLEAN_COLUMN_EXPRESSION)`
 
     Compute the number of `true` entries in a boolean column.
-    
+
 
 #### LEAD
--   `LEAD(COLUMN_EXPRESSION, N)`
+-   `LEAD(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
 
-    Returns the row that follows the current row by N. If
+    Returns the row that follows the current row by N. If N
+    is not specified, defaults to 1. If FILL_VALUE is not
+    specified, defaults to `NULL`. If
     there are fewer than N rows the follow the current row in
-    the window, it returns `NULL`. N must be a literal
-    non-negative integer. Note: at this time Bodo does not
-    support providing 1 or 3 arguments instead of 2, or
-    the `IGNORE NULLS` keyword.
+    the window, it returns FILL_VALUE. N must be a literal
+    non-negative integer if specified. FILL_VALUE must be a
+    scalar if specified. Note: at this time Bodo does not
+    support the `IGNORE NULLS` keyword.
 
     This function cannot be used with `ROWS BETWEEN`.
 
 #### LAG
--   `LAG(COLUMN_EXPRESSION, N)`
+-   `LAG(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
 
-    Returns the row that precedes the current row by N. If
+    Returns the row that precedes the current row by N. If N
+    is not specified, defaults to 1. If FILL_VALUE is not
+    specified, defaults to `NULL`. If
     there are fewer than N rows the precede the current row in
-    the window, it returns `NULL`. N must be a literal
-    non-negative integer. Note: at this time Bodo does not
-    support providing 1 or 3 arguments instead of 2, or
-    the `IGNORE NULLS` keyword.
+    the window, it returns FILL_VALUE. N must be a literal
+    non-negative integer if specified. FILL_VALUE must be a
+    scalar if specified. Note: at this time Bodo does not
+    support the `IGNORE NULLS` keyword.
 
     This function cannot be used with `ROWS BETWEEN`.
 
@@ -2365,7 +2369,7 @@ Currently BodoSQL supports the following Window functions:
     Select an arbitrary value in the window or `NULL` if the window
     is empty. Note: currently BodoSQL always selects the first value,
     but this is subject to change at any time.
-    
+
 
 #### NTILE
 -   `NTILE(N)`
@@ -2407,14 +2411,14 @@ Currently BodoSQL supports the following Window functions:
 
     Compute the cumulative distribution of the value(s) in each row based on the value(s) relative to all value(s)
     within the window partition. `ORDER BY` is required for this function.
-    
+
 
 #### ROW_NUMBER
 -   `ROW_NUMBER()`
 
     Compute an increasing row number (starting at 1) for each
     row. This function cannot be used with `ROWS BETWEEN`.
-    
+
 
 #### CONDITIONAL_TRUE_EVENT
 -   `CONDITIONAL_TRUE_EVENT(BOOLEAN_COLUMN_EXPRESSION)`
