@@ -109,6 +109,9 @@ _numba_to_sql_column_type_map = {
     bodo.TimeType(3): SqlTypeEnum.Time.value,
     bodo.TimeType(6): SqlTypeEnum.Time.value,
     bodo.TimeType(9): SqlTypeEnum.Time.value,
+    # Note date doesn't have native support yet, but the code to
+    # cast to datetime64 is handled in the Java code.
+    bodo.datetime_date_type: SqlTypeEnum.Date.value,
 }
 
 # Scalar dtypes for supported parameters
