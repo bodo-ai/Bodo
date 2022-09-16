@@ -73,7 +73,8 @@ public class WindowAggCodeGen {
       final String sortByCols,
       final String ascendingList,
       final String NAPositionList,
-      final boolean isLead) {
+      final boolean isLead,
+      final boolean isRespectNulls) {
 
     // Currently, we don't support aggregation fusion for lead and lag,
     // so we expect to only handle 1 lead/lag call in this function
@@ -347,7 +348,8 @@ public class WindowAggCodeGen {
       final boolean lower_bounded,
       final String lower_bound_expr,
       final String zeroExpr,
-      final List<List<WindowedAggregationArgument>> argsListList) {
+      final List<List<WindowedAggregationArgument>> argsListList,
+      final boolean isRespectNulls) {
 
     // Before doing anything else, filter the partition columns out of the input dataframe. This is
     // done to enable Bodo to know that these columns are unused within this function
@@ -600,7 +602,8 @@ public class WindowAggCodeGen {
               sortByCols,
               ascendingList,
               NAPositionList,
-              (agg == SqlKind.LEAD)),
+              (agg == SqlKind.LEAD),
+              isRespectNulls),
           returnedDfOutputCols);
     }
 
@@ -859,6 +862,11 @@ public class WindowAggCodeGen {
       funcText.append(indent).append(indent).append(indent).append("output_index = i\n");
 
       if (agg == SqlKind.LAST_VALUE || agg == SqlKind.FIRST_VALUE || agg == SqlKind.NTH_VALUE) {
+
+        if (!isRespectNulls) {
+          String errMsg = "IGNORE_NULLS not yet supported for " + agg.toString();
+          throw new BodoSQLCodegenException(errMsg);
+        }
         // For LAST/FIRST/NTH value, we can simply perform a get item on the input series
 
         // The value to be passed into ILOC, depending on if we are selecting the first/last value

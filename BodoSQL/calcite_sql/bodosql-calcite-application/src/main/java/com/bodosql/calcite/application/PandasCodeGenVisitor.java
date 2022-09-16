@@ -935,6 +935,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       List<RexOver> tmp = new ArrayList<>();
       tmp.add((RexOver) node);
       result = visitAggOverOp(tmp, colNames, id, inputVar, isSingleRow, ctx).get(0);
+    } else if (node instanceof RexCall
+        && ((RexCall) node).getOperator() instanceof SqlNullTreatmentOperator) {
+      result = visitNullTreatmentOp((RexCall) node, colNames, id, inputVar, isSingleRow, ctx);
     } else if (node instanceof RexCall) {
       result = visitRexCall((RexCall) node, colNames, id, inputVar, isSingleRow, ctx);
     } else if (node instanceof RexNamedParam) {
@@ -944,6 +947,54 @@ public class PandasCodeGenVisitor extends RelVisitor {
           "Internal Error: Calcite Plan Produced an Unsupported RexNode");
     }
     return result;
+  }
+
+  /**
+   * Visitor for RexCalls IGNORE NULLS and RESPECT NULLS This function is only called if IGNORE
+   * NULLS and RESPECT NULLS is called without an associated window. Otherwise, it is included as an
+   * field in the REX OVER node.
+   *
+   * <p>Currently, we always throw an error when entering this call. Frankly, based on my reading of
+   * calcite's syntax, we only reach this node through invalid syntax in Calcite (LEAD/LAG
+   * RESPECT/IGNORE NULL's without a window)
+   *
+   * @param node RexCall being visited
+   * @param colNames List of colNames used in the relational expression
+   * @param id The RelNode id used to uniquely identify the table.
+   * @param inputVar Name of dataframe from which InputRefs select Columns
+   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
+   *     Operations that operate per row (i.e. Case switch this to True). This is used for
+   *     determining if an expr returns a scalar or a column.
+   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
+   *     List of precomputed column variables that need to be added to the dataframe before an
+   *     apply, and the list of named parameters that need to be passed to an apply function as
+   *     arguments.
+   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
+   *     relational expression.
+   */
+  public RexNodeVisitorInfo visitNullTreatmentOp(
+      RexCall node,
+      List<String> colNames,
+      int id,
+      String inputVar,
+      boolean isSingleRow,
+      BodoCtx ctx) {
+
+    SqlKind innerCallKind = node.getOperands().get(0).getKind();
+    switch (innerCallKind) {
+      case LEAD:
+      case LAG:
+      case NTH_VALUE:
+      case FIRST_VALUE:
+      case LAST_VALUE:
+        throw new BodoSQLCodegenException(
+            "Error during codegen: " + innerCallKind.toString() + " requires OVER clause.");
+      default:
+        throw new BodoSQLCodegenException(
+            "Error during codegen: Unreachable code entered while evaluating the following rex"
+                + " node in visitNullTreatmentOp: "
+                + node.toString());
+    }
   }
 
   /**
@@ -998,7 +1049,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       result = visitGenericFuncOp(node, colNames, id, inputVar, isSingleRow, ctx);
     } else {
       throw new BodoSQLCodegenException(
-          "Internal Error: Calcite Plan Produced an Unsupported RexCall");
+          "Internal Error: Calcite Plan Produced an Unsupported RexCall:" + node.getOperator());
     }
     return result;
   }
@@ -1183,7 +1234,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<SqlKind> fnKinds = new ArrayList<>();
     List<String> fnNames = new ArrayList<>();
 
+    // Only used for LEAD/LAG and (FIRST/LAST/NTH)_Val
+    // defaults to True/Respect Nulls
+    // see https://docs.snowflake.com/en/sql-reference/functions/lag.html
+    List<Boolean> respectNullsList = new ArrayList<>();
+
     for (RexOver agg : aggOperations) {
+      respectNullsList.add(!agg.ignoreNulls());
       windows.add(agg.getWindow());
       fnKinds.add(agg.getAggOperator().getKind());
       fnNames.add(agg.getAggOperator().getName());
@@ -1196,7 +1253,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // TODO: relax this requirement.
     boolean canFuse = true;
     for (int i = 1; i < aggOperations.size(); i++) {
-      if (!(windows.get(i).equals(windows.get(0)) && fnKinds.get(i).equals(fnKinds.get(0)))) {
+      if (!(windows.get(i).equals(windows.get(0))
+          && fnKinds.get(i).equals(fnKinds.get(0))
+          && respectNullsList.get(i).equals(respectNullsList.get(0)))) {
         canFuse = false;
         break;
       }
@@ -1216,6 +1275,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               windows.get(0),
               fnKinds.get(0),
               fnNames.get(0),
+              respectNullsList.get(0),
               id,
               inputVar,
               ctx);
@@ -1251,6 +1311,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 curAggOp.getWindow(),
                 curAggOp.getAggOperator().getKind(),
                 curAggOp.getAggOperator().getName(),
+                respectNullsList.get(i),
                 id,
                 inputVar,
                 ctx);
@@ -1330,6 +1391,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       RexWindow window,
       SqlKind aggFn,
       String name,
+      Boolean isRespectNulls,
       int id,
       String inputVar,
       BodoCtx ctx) {
@@ -1662,7 +1724,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
               !lowerUnBound,
               lowerBound,
               zeroExpr,
-              argsListList);
+              argsListList,
+              isRespectNulls);
       String fn_text = out.getKey();
       outputColList = out.getValue();
       // The length of the output column list should be the same length as argsListList
@@ -2491,8 +2554,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     RexNode patternNode = node.operands.get(1);
 
     if (!(patternNode instanceof RexLiteral)) {
-      throw new BodoSQLCodegenException(
-          "Error: Pattern must be a string literal");
+      throw new BodoSQLCodegenException("Error: Pattern must be a string literal");
     }
     RexNodeVisitorInfo pattern =
         visitRexNode(patternNode, colNames, id, inputVar, isSingleRow, ctx);
