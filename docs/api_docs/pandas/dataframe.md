@@ -1,6 +1,6 @@
 # DataFrame
 
-Bodo provides extensive DataFrame support documented below.    
+Bodo provides extensive DataFrame support documented below.
 
 #### pd.DataFrame
 
@@ -8,7 +8,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
 
     - `data`: constant key dictionary, 2D Numpy array
         - `columns` argument is required when using a 2D Numpy array
@@ -19,21 +19,21 @@ Bodo provides extensive DataFrame support documented below.
     - `copy`: boolean
         - **Must be constant at Compile Time**
 
-## Attributes and underlying data    
+## Attributes and underlying data
 #### `pd.DataFrame.columns++
 
 - ++pandas.DataFrame.%%columns%%++
-    
+
     ***Example Usage***
 
     ```py
-    
+
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": ["X", "Y", "Z"], "C": [pd.Timedelta(10, unit="D"), pd.Timedelta(10, unit="H"), pd.Timedelta(10, unit="S")]})
     ...   return df.columns
     >>> f()
-    Index(['A', 'B', 'C'], dtype='object')    
+    Index(['A', 'B', 'C'], dtype='object')
     ```
 
 #### `pd.DataFrame.dtypes`
@@ -44,7 +44,7 @@ Bodo provides extensive DataFrame support documented below.
     ***Example Usage***
 
     ```py
-    
+
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": ["X", "Y", "Z"], "C": [pd.Timedelta(10, unit="D"), pd.Timedelta(10, unit="H"), pd.Timedelta(10, unit="S")]})
@@ -53,7 +53,7 @@ Bodo provides extensive DataFrame support documented below.
     A              int64
     B             string
     C    timedelta64[ns]
-    dtype: object    
+    dtype: object
     ```
 
 #### `pd.DataFrame.empty`
@@ -63,30 +63,30 @@ Bodo provides extensive DataFrame support documented below.
     ***Example Usage***
 
     ```py
-    
+
     >>> @bodo.jit
     ... def f():
     ...   df1 = pd.DataFrame({"A": [1,2,3]})
     ...   df2 = pd.DataFrame()
     ...   return df1.empty, df2.empty
     >>> f()
-    (False, True)    
+    (False, True)
     ```
 
 #### `pd.DataFrame.index`
 
 - ++pandas.DataFrame.%%index%%++
-    
+
     ***Example Usage***
 
     ```py
-    
+
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3]}, index=["x", "y", "z"])
     ...   return df.index
     >>> f()
-    Index(['x', 'y', 'z'], dtype='object')    
+    Index(['x', 'y', 'z'], dtype='object')
     ```
 
 #### `pd.DataFrame.ndim`
@@ -103,8 +103,8 @@ Bodo provides extensive DataFrame support documented below.
     ...   return df.ndim
     >>> f()
     2
-    ```   
-  
+    ```
+
 #### `pd.DataFrame.select_dtypes`
 
 - ++pandas.DataFrame.%%select_dtypes%%(include=None, exclude=None)++
@@ -136,7 +136,7 @@ Bodo provides extensive DataFrame support documented below.
       A
     0  1
           D
-    0  True    
+    0  True
     ```
 
 #### `pd.DataFrame.filter`
@@ -146,7 +146,7 @@ Bodo provides extensive DataFrame support documented below.
 
     ***Supported Arguments***
 
-    
+
     - `items`: Constant list of String
     - `like`: Constant string
     - `regex`: Constant String
@@ -171,7 +171,7 @@ Bodo provides extensive DataFrame support documented below.
       hello world
     0            2
       ababab
-    0       1    
+    0       1
     ```
 
 #### `pd.DataFrame.shape`
@@ -187,7 +187,7 @@ Bodo provides extensive DataFrame support documented below.
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [3,4,5]})
     ...   return df.shape
     >>> f()
-    (3, 2)    
+    (3, 2)
     ```
 
 #### `pd.DataFrame.size`
@@ -203,7 +203,7 @@ Bodo provides extensive DataFrame support documented below.
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [3,4,5]})
     ...   return df.size
     >>> f()
-    6    
+    6
     ```
 
 #### `pd.DataFrame.to_numpy`
@@ -211,7 +211,7 @@ Bodo provides extensive DataFrame support documented below.
 - ++pandas.DataFrame.%%to_numpy%%(dtype=None, copy=False, na_value=NoDefault.no_default)++
 
     ***Supported Arguments***
-    
+
     - `copy`: boolean
 
     ***Example Usage***
@@ -225,7 +225,7 @@ Bodo provides extensive DataFrame support documented below.
     >>> f()
     [[1.  3.1]
      [2.  4.2]
-     [3.  5.3]]    
+     [3.  5.3]]
     ```
 
 #### `pd.DataFrame.values`
@@ -245,8 +245,8 @@ Bodo provides extensive DataFrame support documented below.
      [2.  4.2]
      [3.  5.3]]
     ```
-  
-## Conversion    
+
+## Conversion
 
 
 #### `pd.DataFrame.astype`
@@ -272,7 +272,7 @@ Bodo provides extensive DataFrame support documented below.
          A                             B
     0  1.0 1970-01-01 00:00:00.000000003
     1  2.0 1970-01-01 00:00:00.000000004
-    2  3.0 1970-01-01 00:00:00.000000005    
+    2  3.0 1970-01-01 00:00:00.000000005
     ```
 
 #### `pd.DataFrame.copy`
@@ -309,7 +309,7 @@ Bodo provides extensive DataFrame support documented below.
       A
     0  1
     1  2
-    2  3    
+    2  3
     ```
 
 #### `pd.DataFrame.isna`
@@ -329,7 +329,7 @@ Bodo provides extensive DataFrame support documented below.
            A
     0  False
     1   True
-    2  False    
+    2  False
     ```
 
 #### `pd.DataFrame.isnull`
@@ -348,7 +348,7 @@ Bodo provides extensive DataFrame support documented below.
            A
     0  False
     1   True
-    2  False    
+    2  False
     ```
 
 #### `pd.DataFrame.notna`
@@ -368,7 +368,7 @@ Bodo provides extensive DataFrame support documented below.
            A
     0   True
     1  False
-    2   True    
+    2   True
     ```
 
 #### `pd.DataFrame.notnull`
@@ -388,7 +388,7 @@ Bodo provides extensive DataFrame support documented below.
            A
     0   True
     1  False
-    2   True    
+    2   True
     ```
 
 #### `pd.DataFrame.info`
@@ -399,7 +399,7 @@ Bodo provides extensive DataFrame support documented below.
     ***Supported Arguments***: None
 
     ***Example Usage***
-    
+
     ```
     >>> @bodo.jit
     ... def f():
@@ -416,11 +416,11 @@ Bodo provides extensive DataFrame support documented below.
     2  C       3 non-null      timedelta64[ns]
     dtypes: int64(1), timedelta64[ns](1), unicode_type(1)
     memory usage: 108.0 bytes
-  
-    ```      
-  
+
+    ```
+
     !!! note
-        The exact output string may vary slightly from Pandas.    
+        The exact output string may vary slightly from Pandas.
 
 
 #### `pd.DataFrame.infer_objects`
@@ -429,7 +429,7 @@ Bodo provides extensive DataFrame support documented below.
 - ++pandas.DataFrame.%%infer_objects%%()++
 
     ***Example Usage***
-    
+
     ```py
     >>> @bodo.jit
     ... def f():
@@ -443,7 +443,7 @@ Bodo provides extensive DataFrame support documented below.
     !!! note
         Bodo does not internally use the object dtype, so types are never inferred. As a result, this API just produces a deep copy, consistent with Pandas.
 
-## Indexing, iteration    
+## Indexing, iteration
 
 #### `pd.DataFrame.head`
 
@@ -465,7 +465,7 @@ Bodo provides extensive DataFrame support documented below.
            A
         0  0
         1  1
-        2  2    
+        2  2
     ```
 
 #### `pd.DataFrame.iat`
@@ -492,7 +492,7 @@ Bodo provides extensive DataFrame support documented below.
        A  B  C
     0  9  4  7
     1  2  5  8
-    2  3  6  9    
+    2  3  6  9
     ```
 
 #### `pd.DataFrame.iloc`
@@ -502,18 +502,18 @@ Bodo provides extensive DataFrame support documented below.
 
 
     *getitem*:
-    
+
     - `df.iloc` supports single integer indexing (returns row as series) `df.iloc[0]`
     - `df.iloc` supports single list/array/series of integers/bool `df.iloc[[0,1,2]]`
     - for tuples indexing `df.iloc[row_idx, col_idx]` we allow:
         - `row_idx` to be int list/array/series of integers/bool slice
         - `col_idx` to be constant int, constant list of integers, or constant slice
     - e.g.: `df.iloc[[0,1,2], :]`
-    
-    
-    
+
+
+
     *setitem*:
-    
+
     - `df.iloc` only supports scalar setitem
     - `df.iloc` only supports tuple indexing `df.iloc[row_idx, col_idx]`
     - `row_idx` can be anything supported for series setitem:
@@ -539,7 +539,7 @@ Bodo provides extensive DataFrame support documented below.
        A  B  C  D
     0  9  4  7  7
     1  2  4  4  4
-    2  3  6  9  9    
+    2  3  6  9  9
     ```
 
 #### `pd.DataFrame.insert`
@@ -549,7 +549,7 @@ Bodo provides extensive DataFrame support documented below.
 
     ***Supported Arguments***
 
-    
+
     - `loc`: constant integer
     - `column`: constant string
     - `value`: scalar, list/tuple, Pandas/Numpy array, Pandas index types, series
@@ -569,7 +569,7 @@ Bodo provides extensive DataFrame support documented below.
       A  B  C  D
     0  1  4  7 -1
     1  2  5  8 -2
-    2  3  6  9 -3    
+    2  3  6  9 -3
     ```
 
 #### `pd.DataFrame.isin`
@@ -578,7 +578,7 @@ Bodo provides extensive DataFrame support documented below.
 - ++pandas.DataFrame.%%isin%%(values)++
 
     ***Supported Arguments***
-    
+
     - `values`: DataFrame (must have same indices) + iterable type, Numpy array types, Pandas array types, List/Tuple, Pandas Index Types (excluding interval Index and MultiIndex)
 
     ***Example Usage***
@@ -626,7 +626,7 @@ Bodo provides extensive DataFrame support documented below.
                 A      B      C
                 0  False  False  False
                 1  False  False  False
-                2  False  False  False    
+                2  False  False  False
         ```
 
 #### `pd.DataFrame.itertuples`
@@ -655,7 +655,7 @@ Bodo provides extensive DataFrame support documented below.
     (5, 8)
     Pandas(Index=2, A=3, B=6, C=9)
     2
-    (6, 9)    
+    (6, 9)
     ```
 
 #### `pd.DataFrame.query`
@@ -665,7 +665,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - `expr`:  Constant String
 
     ***Example Usage***
@@ -687,7 +687,7 @@ Bodo provides extensive DataFrame support documented below.
         * The output of the query must evaluate to a 1d boolean array.
         * Cannot refer to the index by name in the query string.
         * Query must be one line.
-        * If using environment variables, they should be passed as arguments to the function.    
+        * If using environment variables, they should be passed as arguments to the function.
 
 #### `pd.DataFrame.tail`
 
@@ -712,7 +712,7 @@ Bodo provides extensive DataFrame support documented below.
     998  998
     999  999
     ```
-    
+
 - ++pandas.DataFrame.%%where%%(cond, other=np.nan, inplace=False, axis=1, level=None, errors='raise', try_cast=NoDefault.no_default)++
 
     ***Supported Arguments***
@@ -773,8 +773,8 @@ Bodo provides extensive DataFrame support documented below.
     1    2  102.4
     2  103    1.2
     ```
-  
-## Function application, GroupBy & Window    
+
+## Function application, GroupBy & Window
 
 
 #### `pd.DataFrame.apply`
@@ -812,7 +812,7 @@ Bodo provides extensive DataFrame support documented below.
 
         Supports extra `_bodo_inline` boolean argument to manually control bodo's inlining behavior.
         Inlining user-defined functions (UDFs) can potentially improve performance at the expense of
-        extra compilation time. Bodo uses heuristics to make a decision automatically if `_bodo_inline` is not provided.    
+        extra compilation time. Bodo uses heuristics to make a decision automatically if `_bodo_inline` is not provided.
 
 #### `pd.DataFrame.groupby`
 
@@ -846,7 +846,7 @@ Bodo provides extensive DataFrame support documented below.
        B
     A
     1 -4
-    2  4    
+    2  4
     ```
 
 #### `pd.DataFrame.rolling`
@@ -882,10 +882,10 @@ Bodo provides extensive DataFrame support documented below.
     3  4.0
     4  NaN
     ```
-    
+
     For more information, please see [the Window section][pd_window_section].
 
-## Computations / Descriptive Stats    
+## Computations / Descriptive Stats
 
 
 #### `pd.DataFrame.abs`
@@ -894,7 +894,7 @@ Bodo provides extensive DataFrame support documented below.
 - ++pandas.DataFrame.%%abs%%()++
 
 
-    !!! note  
+    !!! note
         Only supported for dataframes containing numerical data and Timedeltas
 
     ***Example Usage***
@@ -908,7 +908,7 @@ Bodo provides extensive DataFrame support documented below.
     >>> f()
        A    B       C
     0  1  3.1 10 days
-    1  2  4.2 10 days    
+    1  2  4.2 10 days
     ```
 
 #### `pd.DataFrame.corr`
@@ -918,7 +918,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - `min_periods`: Integer
 
     ***Example Usage***
@@ -933,7 +933,7 @@ Bodo provides extensive DataFrame support documented below.
               A         B        c
     A  1.000000 -0.904656  0.92582
     B -0.904656  1.000000 -0.97714
-    c  0.925820 -0.977140  1.00000    
+    c  0.925820 -0.977140  1.00000
     ```
 
 #### `pd.DataFrame.count`
@@ -953,7 +953,7 @@ Bodo provides extensive DataFrame support documented below.
     ...   return df.count()
     >>> f()
     A    2
-    B    1    
+    B    1
     ```
 
 #### `pd.DataFrame.cov`
@@ -963,7 +963,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - `min_periods`: Integer
 
     ***Example Usage***
@@ -978,7 +978,7 @@ Bodo provides extensive DataFrame support documented below.
               A         B         C
     A  0.012346 -0.012346  0.047577
     B -0.012346  0.012346 -0.047577
-    C  0.047577 -0.047577  0.223293    
+    C  0.047577 -0.047577  0.223293
     ```
 
 #### `pd.DataFrame.cumprod`
@@ -1003,7 +1003,7 @@ Bodo provides extensive DataFrame support documented below.
     2  6  NaN
     ```
     !!! note
-        Not supported for dataframe with nullable integer.    
+        Not supported for dataframe with nullable integer.
 
 
 #### `pd.DataFrame.cumsum`
@@ -1028,7 +1028,7 @@ Bodo provides extensive DataFrame support documented below.
     2  6  NaN
     ```
     !!! note
-      Not supported for dataframe with nullable integer.    
+      Not supported for dataframe with nullable integer.
 
 
 #### `pd.DataFrame.describe`
@@ -1059,7 +1059,7 @@ Bodo provides extensive DataFrame support documented below.
     ```
 
     !!! note
-        Only supported for dataframes containing numeric data, and datetime data. Datetime_is_numeric defaults to True in JIT code.    
+        Only supported for dataframes containing numeric data, and datetime data. Datetime_is_numeric defaults to True in JIT code.
 
 #### `pd.DataFrame.diff`
 
@@ -1086,7 +1086,7 @@ Bodo provides extensive DataFrame support documented below.
     2  1.0 187 days
     ```
     !!! note
-        Only supported for dataframes containing float, non-null int, and datetime64ns values    
+        Only supported for dataframes containing float, non-null int, and datetime64ns values
 
 
 #### `pd.DataFrame.max`
@@ -1114,7 +1114,7 @@ Bodo provides extensive DataFrame support documented below.
     2    9
     ```
     !!! note
-        Only supported for dataframes containing float, non-null int, and datetime64ns values.    
+        Only supported for dataframes containing float, non-null int, and datetime64ns values.
 
 
 #### `pd.DataFrame.mean`
@@ -1144,7 +1144,7 @@ Bodo provides extensive DataFrame support documented below.
     ```
 
     !!! note
-      Only supported for dataframes containing float, non-null int, and datetime64ns values.    
+      Only supported for dataframes containing float, non-null int, and datetime64ns values.
 
 #### `pd.DataFrame.median`
 
@@ -1173,7 +1173,7 @@ Bodo provides extensive DataFrame support documented below.
     ```
 
     !!! note
-      Only supported for dataframes containing float, non-null int, and datetime64ns values.    
+      Only supported for dataframes containing float, non-null int, and datetime64ns values.
 
 #### `pd.DataFrame.min`
 
@@ -1202,16 +1202,16 @@ Bodo provides extensive DataFrame support documented below.
     ```
 
     !!! note
-        Only supported for dataframes containing float, non-null int, and datetime64ns values.    
+        Only supported for dataframes containing float, non-null int, and datetime64ns values.
 
 #### `pd.DataFrame.nunique`
 
 
 - ++pandas.DataFrame.%%nunique%%(axis=0, dropna=True)++
 
-   
+
     ***Supported Arguments***
-    
+
     - `dropna`: boolean
 
     ***Example Usage***
@@ -1225,7 +1225,7 @@ Bodo provides extensive DataFrame support documented below.
     >>> f()
     A    3
     B    1
-    C    2    
+    C    2
     ```
 
 #### `pd.DataFrame.pct_change`
@@ -1252,7 +1252,7 @@ Bodo provides extensive DataFrame support documented below.
     0  NaN
     1  9.0
     2  9.0
-    3  9.0    
+    3  9.0
     ```
 
 #### `pd.DataFrame.pipe`
@@ -1283,7 +1283,7 @@ Bodo provides extensive DataFrame support documented below.
     ...
     >>> f()
     A    10000
-    dtype: int64    
+    dtype: int64
     ```
 
 #### `pd.DataFrame.prod`
@@ -1311,7 +1311,7 @@ Bodo provides extensive DataFrame support documented below.
     A      6
     B    120
     C    504
-    dtype: int64    
+    dtype: int64
     ```
 
 #### `pd.DataFrame.product`
@@ -1339,7 +1339,7 @@ Bodo provides extensive DataFrame support documented below.
     A      6
     B    120
     C    504
-    dtype: int64    
+    dtype: int64
     ```
 
 #### `pd.DataFrame.quantile`
@@ -1369,7 +1369,7 @@ Bodo provides extensive DataFrame support documented below.
     B    5.0
     C    8.0
     dtype: float64
-    dtype: int64    
+    dtype: int64
     ```
 
 
@@ -1433,7 +1433,7 @@ Bodo provides extensive DataFrame support documented below.
     0    3.0
     1    3.0
     2    3.0
-    dtype: float64    
+    dtype: float64
     ```
 
 #### `pd.DataFrame.sum`
@@ -1460,7 +1460,7 @@ Bodo provides extensive DataFrame support documented below.
     0    12
     1    15
     2    18
-    dtype: int64    
+    dtype: int64
     ```
 
 #### `pd.DataFrame.var`
@@ -1487,7 +1487,7 @@ Bodo provides extensive DataFrame support documented below.
     0    9.0
     1    9.0
     2    9.0
-    dtype: float64    
+    dtype: float64
     ```
 
 #### `pd.DataFrame.memory_usage`
@@ -1497,7 +1497,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - `index`: boolean
 
     ***Example Usage***
@@ -1516,7 +1516,7 @@ Bodo provides extensive DataFrame support documented below.
     dtype: int64
     ```
 
-## Reindexing / Selection / Label manipulation    
+## Reindexing / Selection / Label manipulation
 
 
 #### `pd.DataFrame.drop`
@@ -1542,7 +1542,7 @@ Bodo provides extensive DataFrame support documented below.
        A
     0  1
     1  2
-    2  3    
+    2  3
     ```
 
 #### `pd.DataFrame.drop_duplicates`
@@ -1552,7 +1552,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-   
+
     - `subset`: Constant list/tuple of String column names, Constant list/tuple of Integer column names, Constant String column names, Constant Integer column names
 
     ***Example Usage***
@@ -1567,7 +1567,7 @@ Bodo provides extensive DataFrame support documented below.
        A  B   C
     0  1  1   7
     2  3  3   9
-    3  4  3  10    
+    3  4  3  10
     ```
 
 #### `pd.DataFrame.duplicated`
@@ -1590,7 +1590,7 @@ Bodo provides extensive DataFrame support documented below.
     1     True
     2    False
     3    False
-    dtype: bool    
+    dtype: bool
     ```
 
 #### `pd.DataFrame.first`
@@ -1598,18 +1598,18 @@ Bodo provides extensive DataFrame support documented below.
 - ++pandas.DataFrame.%%first%%(offset)++
 
     ***Supported Arguments***
-    
+
     - `offset`: String or Offset type
         - String argument must be a valid [frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases){target=blank}.
-    
+
     !!! note
         DataFrame must have a valid DatetimeIndex and is assumed to already be sorted.
         This function have undefined behavior if the DatetimeIndex is not sorted.
-        
+
     ***Example Usage***
-    
+
     ```py
-    
+
     >>> @bodo.jit
     ... def f(df, offset):
     ...     return df.first(offset)
@@ -1621,7 +1621,7 @@ Bodo provides extensive DataFrame support documented below.
     2022-01-23 02:54:32.727272727  2  102
     2022-02-03 04:21:49.090909091  3  103
     2022-02-14 05:49:05.454545454  4  104
-    2022-02-25 07:16:21.818181818  5  105    
+    2022-02-25 07:16:21.818181818  5  105
     ```
 
 #### `pd.DataFrame.idxmax`
@@ -1643,7 +1643,7 @@ Bodo provides extensive DataFrame support documented below.
     A    2
     B    2
     C    2
-    dtype: int64    
+    dtype: int64
     ```
 
 #### `pd.DataFrame.idxmin`
@@ -1664,7 +1664,7 @@ Bodo provides extensive DataFrame support documented below.
     A    0
     B    0
     C    20
-    dtype: int64    
+    dtype: int64
     ```
 
 #### `pd.DataFrame.last`
@@ -1673,17 +1673,17 @@ Bodo provides extensive DataFrame support documented below.
 - ++pandas.DataFrame.%%last%%(offset)++
 
     ***Supported Arguments***
-    
+
     - `offset`: String or Offset type
         - String argument must be a valid [frequency alias](https://pandas.pydata.org/docs/user_guide/timeseries.html#timeseries-offset-aliases){target=blank}
-    
+
     !!! note
         DataFrame must have a valid DatetimeIndex and is assumed to already be sorted.
         This function have undefined behavior if the DatetimeIndex is not sorted.
-        
+
     ***Example Usage***
-    
-    ```py    
+
+    ```py
     >>> @bodo.jit
     ... def f(df, offset):
     ...     return df.last(offset)
@@ -1695,7 +1695,7 @@ Bodo provides extensive DataFrame support documented below.
     2024-11-27 19:38:10.909090912  96  196
     2024-12-08 21:05:27.272727264  97  197
     2024-12-19 22:32:43.636363632  98  198
-    2024-12-31 00:00:00.000000000  99  199    
+    2024-12-31 00:00:00.000000000  99  199
     ```
 
 #### `pd.DataFrame.rename`
@@ -1711,7 +1711,7 @@ Bodo provides extensive DataFrame support documented below.
     - `columns`: must be constant dictionary
     - `axis`: Integer
         - Can only be used alongside mapper argument
-    - `copy`: boolean   
+    - `copy`: boolean
     - `inplace`:  must be constant boolean
 
     ***Example Usage***
@@ -1726,7 +1726,7 @@ Bodo provides extensive DataFrame support documented below.
        X  Y  Z
     0  1  4  7
     1  2  5  8
-    2  3  6  9    
+    2  3  6  9
     ```
 
 #### `pd.DataFrame.reset_index`
@@ -1754,7 +1754,7 @@ Bodo provides extensive DataFrame support documented below.
       index  A  B  C
     0     X  1  4  7
     1     Y  2  5  8
-    2     Z  3  6  9    
+    2     Z  3  6  9
     ```
 
 #### `pd.DataFrame.set_index`
@@ -1763,7 +1763,7 @@ Bodo provides extensive DataFrame support documented below.
 - ++pandas.DataFrame.%%set_index%%(keys, drop=True, append=False, inplace=False, verify_integrity=False)++
 
     ***Supported Arguments***
-    
+
     - keys: must be a constant string
 
     ***Example Usage***
@@ -1779,7 +1779,7 @@ Bodo provides extensive DataFrame support documented below.
     C
     7  1  4
     8  2  5
-    9  3  6    
+    9  3  6
     ```
 
 #### `pd.DataFrame.take`
@@ -1788,7 +1788,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - indices: scalar Integer, Pandas Integer Array, Numpy Integer Array, Integer Series
 
     ***Example Usage***
@@ -1805,7 +1805,7 @@ Bodo provides extensive DataFrame support documented below.
     1  2  5  8
     ```
 
-## Missing data handling    
+## Missing data handling
 
 
 #### `pd.DataFrame.dropna`
@@ -1815,7 +1815,7 @@ Bodo provides extensive DataFrame support documented below.
 
     ***Supported Arguments***
 
-    
+
        - `how`: Constant String: either "all" or "any"
        - `thresh`: Integer
        - `subset`: Constant list/tuple of String column names, Constant list/tuple of Integer column names, Constant String column names, Constant Integer column names
@@ -1836,7 +1836,7 @@ Bodo provides extensive DataFrame support documented below.
     0  1  4     6
     1  2  5  <NA>
        A  B  C
-    0  1  4  6    
+    0  1  4  6
     ```
 
 #### `pd.DataFrame.fillna`
@@ -1863,7 +1863,7 @@ Bodo provides extensive DataFrame support documented below.
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3,None], "B": [4, 5,None, None], "C": [6, None, None, None]})
     ...   return df.fillna(-1)
-    >>> f()    
+    >>> f()
     ```
 
 #### `pd.DataFrame.replace`
@@ -1893,22 +1893,22 @@ Bodo provides extensive DataFrame support documented below.
     2  3  6  9
     ```
 
-## Reshaping, sorting, transposing    
+## Reshaping, sorting, transposing
 
 
 #### `pd.DataFrame.explode`
 
 
 - ++pandas.DataFrame.%%explode%%(column, ignore_index=False)++
-    
-    
+
+
     ***Supported Arguments***
-    
+
     - `column`: Constant Column label or list of labels
-     
+
     ***Example Usage***
-    
-    ```py    
+
+    ```py
     >>> @bodo.jit
     ... def f(df, cols):
     ...   return df.explode(cols)
@@ -1921,7 +1921,7 @@ Bodo provides extensive DataFrame support documented below.
     1     5  7  <NA>
     2  <NA>  2  <NA>
     3     3  4     1
-    3     4  4     2    
+    3     4  4     2
     ```
 
 #### `pd.DataFrame.melt`
@@ -1949,7 +1949,7 @@ Bodo provides extensive DataFrame support documented below.
     2  c        B      5
     3  a        C      2
     4  b        C      4
-    5  c        C      6    
+    5  c        C      6
     ```
 
     !!! note
@@ -1965,7 +1965,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - `values`: Constant Column Label or list of labels
     - `index`: Constant Column Label or list of labels
     - `columns`: Constant Column Label
@@ -1993,7 +1993,7 @@ Bodo provides extensive DataFrame support documented below.
     3  12.0   NaN
     4  20.0   NaN
     5   NaN  21.0
-    6   NaN  22.0    
+    6   NaN  22.0
     ```
 
 #### `pd.DataFrame.pivot_table`
@@ -2002,7 +2002,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - `values`: Constant Column Label or list of labels
     - `index`: Constant Column Label or list of labels
     - `columns`: Constant Column Label
@@ -2036,7 +2036,7 @@ Bodo provides extensive DataFrame support documented below.
     3  12.0   NaN
     4  20.0   NaN
     5   NaN  21.0
-    6   NaN  22.0    
+    6   NaN  22.0
     ```
 
 #### `pd.DataFrame.sample`
@@ -2046,7 +2046,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - `n`: Integer
     - `frac`: Float
     - `replace`: boolean
@@ -2062,7 +2062,7 @@ Bodo provides extensive DataFrame support documented below.
     ...   return df.sample(1)
     >>> f()
        A  B  C
-    2  3  6  9    
+    2  3  6  9
     ```
 
 #### `pd.DataFrame.sort_index`
@@ -2072,7 +2072,7 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - `ascending`: boolean
     - `na_position`:constant String ("first" or "last")
 
@@ -2089,7 +2089,7 @@ Bodo provides extensive DataFrame support documented below.
          A
     3    3
     1    1
-    NaN  2    
+    NaN  2
     ```
 
 #### `pd.DataFrame.sort_values`
@@ -2097,16 +2097,16 @@ Bodo provides extensive DataFrame support documented below.
 - ++pandas.DataFrame.%%sort_values%%(by, axis=0, ascending=True, inplace=False, kind='quicksort', na_position='last', ignore_index=False, key=None)++
 
     ***Supported Arguments***
-    
+
     - `by`: constant String or constant list of strings
     - `ascending`: boolean, list/tuple of boolean, with length equal to the number of key columns
     - `inplace`: Constant boolean
     - `na_position`: constant String ("first" or "last"), constant list/tuple of String, with length equal to the number of key columns
-    
+
     ***Example Usage***
-    
+
     ```py
-    
+
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,2,None], "B": [4, 5, 6, None]})
@@ -2117,7 +2117,7 @@ Bodo provides extensive DataFrame support documented below.
     3  <NA>  <NA>
     0     1     4
     2     2     6
-    1     2     5    
+    1     2     5
     ```
 
 #### `pd.DataFrame.to_string`
@@ -2125,7 +2125,7 @@ Bodo provides extensive DataFrame support documented below.
 -  ++pandas.DataFrame.%%to_string%%(buf=None, columns=None, col_space=None, header=True, index=True, na_rep='NaN', formatters=None, float_format=None, sparsify=None, index_names=True, justify=None, max_rows=None, min_rows=None, max_cols=None, show_dimensions=False, decimal='.', line_width=None, max_colwidth=None, encoding=None)++
 
     ***Supported Arguments***
-    
+
     * `buf`
     * `columns`
     * `col_space`
@@ -2145,13 +2145,13 @@ Bodo provides extensive DataFrame support documented below.
     * `line_width`
     * `max_colwidth`
     * `encoding`
-    
-    
-    
+
+
+
     ***Example Usage***
-    
+
     ```py
-    
+
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3]})
@@ -2166,7 +2166,7 @@ Bodo provides extensive DataFrame support documented below.
        * This function is not optimized.
        * When called on a distributed dataframe, the string returned for each rank will be reflective of the dataframe for that rank.
 
-## Combining / joining / merging     
+## Combining / joining / merging
 
 
 #### `pd.DataFrame.append`
@@ -2175,13 +2175,13 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
     - `other`: DataFrame, list/tuple of DataFrame
     - `ignore_index`: constant boolean
 
     ***Example Usage***
-    
-    ```py    
+
+    ```py
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6]})
@@ -2193,7 +2193,7 @@ Bodo provides extensive DataFrame support documented below.
     2  3  6.0  NaN
     0 -1  NaN  4.0
     1 -2  NaN  5.0
-    2 -3  NaN  6.0    
+    2 -3  NaN  6.0
     ```
 
 #### `pd.DataFrame.assign`
@@ -2202,8 +2202,8 @@ Bodo provides extensive DataFrame support documented below.
 - <code><apihead>pandas.DataFrame.<apiname>assign</apiname>(\**kwargs)</apihead></code>
 
     ***Example Usage***
-    
-    ```py    
+
+    ```py
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1,2,3], "B": [4,5,6]})
@@ -2217,8 +2217,8 @@ Bodo provides extensive DataFrame support documented below.
     ```
 
     !!! note
-        arguments can be JIT functions, lambda functions, or values that can be used to initialize a Pandas Series.    
-     
+        arguments can be JIT functions, lambda functions, or values that can be used to initialize a Pandas Series.
+
 
 #### `pd.DataFrame.join`
 
@@ -2226,14 +2226,14 @@ Bodo provides extensive DataFrame support documented below.
 
 
     ***Supported Arguments***
-    
+
        - `other`: DataFrame
        - `on`: constant string column name, constant list/tuple of column names
-    
+
     ***Example Usage***
-    
+
     ```py
-    
+
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1,1,3], "B": [4,5,6]})
@@ -2243,11 +2243,11 @@ Bodo provides extensive DataFrame support documented below.
     0  1  4    -2     5
     1  1  5    -2     5
     2  3  6  <NA>  <NA>
-    
+
     ```
-    
+
     !!! note
-        Joined dataframes cannot have common columns. The output dataframe is not sorted by default for better parallel performance    
+        Joined dataframes cannot have common columns. The output dataframe is not sorted by default for better parallel performance
 
 #### `pd.DataFrame.merge`
 
@@ -2255,13 +2255,13 @@ Bodo provides extensive DataFrame support documented below.
 - ++pandas.DataFrame.%%merge%%(right, how='inner', on=None, left_on=None, right_on=None, left_index=False, right_index=False, sort=False, suffixes=('_x', '_y'), copy=True, indicator=False, validate=None)++
 
 
-    !!! note 
+    !!! note
         See [`pd.merge`][pdmerge] for full list of supported arguments, and more examples.
-    
+
     ***Example Usage***
-    
+
     ```py
-    
+
     >>> @bodo.jit
     ... def f():
     ...   df = pd.DataFrame({"A": [1,1,3], "B": [4,5,6]})
@@ -2272,10 +2272,10 @@ Bodo provides extensive DataFrame support documented below.
     1  1  4 -2  4
     2  3  6 -3  6
     ```
-  
-  
-  
-## Time series-related    
+
+
+
+## Time series-related
 
 
 #### `pd.DataFrame.shift`
@@ -2302,13 +2302,13 @@ Bodo provides extensive DataFrame support documented below.
     1  1.0  4.0
     2  1.0  5.0
     ```
-    
+
     !!! note
         Only supported for dataframes containing numeric, boolean, datetime.date and string types.
 
 ## Serialization, IO, Conversion
 
-Also see [S3][] and [HDFS][] configuration requirements and more on [Scalable File I/O][file_io].    
+Also see [S3][] and [HDFS][] configuration requirements and more on [Scalable File I/O][file_io].
 
 
 #### `pd.DataFrame.to_csv`
@@ -2320,7 +2320,7 @@ Also see [S3][] and [HDFS][] configuration requirements and more on [Scalable Fi
     * `mode` argument supports only the default value `"w"`.
     * `errors` argument supports only the default value `strict`.
     * `storage_options` argument supports only the default value `None`.
-    
+
 #### `pd.DataFrame.to_json`
 -  ++pandas.DataFrame.%%to_json%%++
 
@@ -2334,11 +2334,11 @@ Also see [S3][] and [HDFS][] configuration requirements and more on [Scalable Fi
     * `index` argument must be a constant bool or `None`. Default: `None`.
     * `partition_cols` argument is supported in most cases, except when the columns in the DataFrame cannot be determined at compile time. This must be a list of column names or `None`. Default: `None`.
     * `storage_options` argument supports only the default value `None`.
-    * `row_group_size` argument can be used to specify the size of the row-groups in the generated parquet files. This must be an integer. If not specified, Bodo writes row-groups with 1M rows.
+    * `row_group_size` argument can be used to specify the maximum size of the row-groups in the generated parquet files; the actual size of the written row-groups may be smaller then this value. This must be an integer. If not specified, Bodo writes row-groups with 1M rows.
 
     !!! note
+      Bodo writes multiple files in parallel (one per core), and the total number of row-groups across all files is roughly `max(num_cores, total_rows / row_group_size)`.
       The size of the row groups can affect read performance significantly. In general, the dataset should have at least as many row-groups as the number of cores used for reading, but ideally a lot more.
-      Bodo typically writes multiple files in parallel (one per core), and the total number of row-groups across all files is roughly `total_rows / row_group_size`.
       At the same time, the row-groups shouldn't be too small since this can lead to overheads at read time.
       For more details, refer to the [parquet file format](https://parquet.apache.org/docs/concepts/){target=blank}.
 
@@ -2357,13 +2357,13 @@ Also see [S3][] and [HDFS][] configuration requirements and more on [Scalable Fi
 
 #### `pd.DataFrame.to_sql`
 -  ++pandas.DataFrame.%%to_sql%%++
-    
+
     * See [Example Usage and more system specific instructions][sql-section].
     * Argument `con` is supported but only as a string form. SQLalchemy `connectable` is not supported.
     * Argument `name`, `schema`, `if_exists`, `index`, `index_label`, `dtype`, `method` are supported.
     * Argument `chunksize` is not supported.
 
-## Plotting    
+## Plotting
 
 #### `pd.DataFrame.plot`
 
