@@ -81,21 +81,45 @@ public class WindowAggCodeGen {
         argsListList.size() == 1,
         "generateLeadLagAggFn was supplied with more then one aggregation");
 
-    // Lead/Lag expects two arguments, a column, and a scalar literal.
+    List<WindowedAggregationArgument> curArgsList = argsListList.get(0);
+    int num_arguments = curArgsList.size();
+    // Lead/Lag expects one required argument, a column, and two optional arguments, an offset, and
+    // a
+    // default value
     assertWithErrMsg(
-        argsListList.get(0).size() == 2,
-        "Lead/Lag expects two arguments got: " + argsListList.get(0).size());
+        1 <= num_arguments && num_arguments <= 3,
+        "Lead/Lag expects between 1 and 3 arguments, instead got: " + curArgsList.size());
 
-    WindowedAggregationArgument aggColArg = argsListList.get(0).get(0);
-    WindowedAggregationArgument shiftAmountArg = argsListList.get(0).get(1);
+    WindowedAggregationArgument aggColArg = curArgsList.get(0);
 
-    assertWithErrMsg(
-        aggColArg.isDfCol() && !shiftAmountArg.isDfCol(),
-        "Lead/Lag expects a column, and a scalar literal as arguments. Got: "
-            + argsListList.get(0).toString());
+    assertWithErrMsg(aggColArg.isDfCol(), "Lead/Lag's first argument must be a column");
 
     String aggColName = aggColArg.getExprString();
-    String shiftAmount = shiftAmountArg.getExprString();
+
+    // Default shift amount is 1
+    String shiftAmount = "1";
+    String fillValue = "";
+
+    if (num_arguments >= 2) {
+      WindowedAggregationArgument shiftAmountArg = curArgsList.get(1);
+      assertWithErrMsg(
+          !shiftAmountArg.isDfCol(),
+          "Lead/Lag expects the offset to be a scalar literal, if it is provided. Got: "
+              + curArgsList.toString());
+
+      shiftAmount = shiftAmountArg.getExprString();
+
+      // Add the default fill value (if it's present)
+      if (num_arguments == 3) {
+        WindowedAggregationArgument fillValueArg = curArgsList.get(2);
+        // I don't know if this is handled within Calcite or not, so throwing it as a Bodo error
+        if (fillValueArg.isDfCol()) {
+          throw new BodoSQLCodegenException(
+              "Error! Only scalar fill value is supported for LEAD/LAG");
+        }
+        fillValue = fillValueArg.getExprString();
+      }
+    }
 
     // Sort the input dataframe, if needed.
     funcText.append(
@@ -109,7 +133,13 @@ public class WindowAggCodeGen {
     funcText
         .append(indent)
         .append(indent)
-        .append(aggColRef + " = " + aggColRef + ".shift(" + shiftAmount + ")\n");
+        .append(aggColRef + " = " + aggColRef + ".shift(" + shiftAmount);
+
+    if (!fillValue.equals("")) {
+      funcText.append(", fill_value=").append(fillValue);
+    }
+
+    funcText.append(")\n");
 
     funcText
         .append(indent)

@@ -1443,14 +1443,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       List<WindowedAggregationArgument> curArgslist = new ArrayList<>();
       RexOver curAggOperation = aggOperations.get(j);
-      // Calcite allows LEAD/LAG without specifying the second argument. We don't, so throw an
-      // explicit error
-      if ((aggFn == SqlKind.LEAD || aggFn == SqlKind.LAG)
-          && curAggOperation.getOperands().size() <= 1) {
-        throw new BodoSQLCodegenException(
-            "Internal Error: BodoSQL does not support LEAD or LAG without a second argument."
-                + " Please supply a second argument");
-      }
 
       if (curAggOperation.getOperands().size() == 0) {
         // count* and NTILE case. In both of these cases, we can just

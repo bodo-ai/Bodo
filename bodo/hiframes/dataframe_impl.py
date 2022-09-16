@@ -2050,10 +2050,16 @@ def overload_dataframe_take(df, indices, axis=0, convert=None, is_copy=True):
 @overload_method(DataFrameType, "shift", inline="always", no_unliteral=True)
 def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
     check_runtime_cols_unsupported(df, "DataFrame.shift()")
-    # TODO: handle fill_value, freq, int NA
-    # TODO: Support nullable integer/float types
-    unsupported_args = dict(freq=freq, axis=axis, fill_value=fill_value)
-    arg_defaults = dict(freq=None, axis=0, fill_value=None)
+    # TODO: handle freq, int NA
+    # TODO: Support nullable float types
+    unsupported_args = dict(
+        freq=freq,
+        axis=axis,
+    )
+    arg_defaults = dict(
+        freq=None,
+        axis=0,
+    )
     check_unsupported_args(
         "DataFrame.shift",
         unsupported_args,
@@ -2061,6 +2067,7 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
         package_name="pandas",
         module_name="DataFrame",
     )
+
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.shift()")
 
     # Bodo specific limitations for supported types
@@ -2077,7 +2084,7 @@ def overload_dataframe_shift(df, periods=1, freq=None, axis=0, fill_value=None):
         raise BodoError("DataFrame.shift(): 'periods' input must be an integer.")
 
     data_args = ", ".join(
-        f"bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), periods, False)"
+        f"bodo.hiframes.rolling.shift(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), periods, False, fill_value)"
         for i in range(len(df.columns))
     )
     header = "def impl(df, periods=1, freq=None, axis=0, fill_value=None):\n"

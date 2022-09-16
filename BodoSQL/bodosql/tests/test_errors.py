@@ -637,23 +637,6 @@ def test_row_fn_jit():
 
 
 @pytest.mark.slow
-def test_lead_lag_no_2nd_arg():
-    """tests that lead and lag throw a reasonable error when not supplied a second argument"""
-
-    @bodo.jit
-    def impl(df):
-        bc = bodosql.BodoSQLContext({"table1": df})
-        return bc.sql("select LEAD(A) over (PARTITION BY B ORDER BY C) from table1")
-
-    df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100), "C": np.arange(100)})
-    with pytest.raises(
-        BodoError,
-        match=r"BodoSQL does not support LEAD or LAG without a second argument. Please supply a second argument",
-    ):
-        impl(df)
-
-
-@pytest.mark.slow
 def test_invalid_syntax_fn():
     """
     Checks that incorrectly formated windowed aggregations. Raise a JIT error

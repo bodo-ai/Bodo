@@ -155,6 +155,39 @@ def non_numeric_agg_funcs_subset(request):
     return request.param
 
 
+def gen_lead_lag_queries(window, fill_value, df_len, lead_or_lag_value):
+    """Helper function, that generates a string of lead/lag queries"""
+
+    shiftval_name_list = [
+        (0, "0"),
+        (1, "1"),
+        (-1, "negative_1"),
+        (3, "3"),
+        (df_len, f"{df_len}"),
+        (-df_len, f"negative_{df_len}"),
+        (df_len * 2, f"{df_len*2}"),
+        (-df_len * 2, f"negative_{df_len*2}"),
+    ]
+    if fill_value != None:
+        lead_lag_queries = ", ".join(
+            [
+                f"{lead_or_lag_value}(A, {x}, {repr(fill_value)}) OVER {window} as {lead_or_lag_value}_{name}"
+                for x, name in shiftval_name_list
+            ]
+        )
+    else:
+        lead_lag_queries = ", ".join(
+            [
+                f"{lead_or_lag_value}(A, {x}) OVER {window} as {lead_or_lag_value}_{name}"
+                for x, name in shiftval_name_list
+            ]
+            + [
+                f"{lead_or_lag_value}(A) OVER {window} as {lead_or_lag_value}_default_shift",
+            ]
+        )
+    return lead_lag_queries
+
+
 # TODO: fix memory leak issues with groupby apply, see [BS-530/BE-947]
 def test_windowed_upper_lower_bound_numeric(
     bodosql_numeric_types,
@@ -534,8 +567,12 @@ def test_nested_windowed_agg(
     )
 
 
-def test_lead_lag_consts(
-    bodosql_numeric_types, lead_or_lag, spark_info, memory_leak_check
+@pytest.mark.parametrize(
+    "fill_value",
+    [pytest.param(None, id="No_fill"), pytest.param(1, id="With_fill")],
+)
+def test_lead_lag_consts_numeric(
+    bodosql_numeric_types, lead_or_lag, spark_info, fill_value, memory_leak_check
 ):
     """tests the lead and lag aggregation functions"""
 
@@ -549,12 +586,11 @@ def test_lead_lag_consts(
         pytest.skip("Skipped due to memory leak")
 
     window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = ", ".join(
-        [
-            f"{lead_or_lag}(A, {x}) OVER {window} as {lead_or_lag}_{name}"
-            for x, name in [(0, "0"), (1, "1"), (-1, "negative_1"), (3, "3")]
-        ]
+
+    lead_lag_queries = gen_lead_lag_queries(
+        window, fill_value, len(bodosql_numeric_types["table1"]["A"]), lead_or_lag
     )
+
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
     check_query(
@@ -568,17 +604,21 @@ def test_lead_lag_consts(
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    "fill_value",
+    [
+        pytest.param(None, id="No_fill"),
+        pytest.param("TIMESTAMP 2022/02/18", id="With_fill"),
+    ],
+)
 def test_lead_lag_consts_datetime(
-    bodosql_datetime_types, lead_or_lag, spark_info, memory_leak_check
+    bodosql_datetime_types, lead_or_lag, spark_info, fill_value, memory_leak_check
 ):
     """tests the lead and lag aggregation functions on datetime types"""
 
     window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = ", ".join(
-        [
-            f"{lead_or_lag}(A, {x}) OVER {window} as {lead_or_lag}_{name}"
-            for x, name in [(0, "0"), (1, "1"), (-1, "negative_1"), (3, "3")]
-        ]
+    lead_lag_queries = gen_lead_lag_queries(
+        window, fill_value, len(bodosql_datetime_types["table1"]["A"]), lead_or_lag
     )
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
@@ -593,18 +633,21 @@ def test_lead_lag_consts_datetime(
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    "fill_value",
+    [pytest.param(None, id="No_fill"), pytest.param("foo", id="With_fill")],
+)
 def test_lead_lag_consts_string(
-    bodosql_string_types, lead_or_lag, spark_info, memory_leak_check
+    bodosql_string_types, lead_or_lag, spark_info, fill_value, memory_leak_check
 ):
     """tests the lead and lag aggregation functions on datetime types"""
 
     window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = ", ".join(
-        [
-            f"{lead_or_lag}(A, {x}) OVER {window} as {lead_or_lag}_{name}"
-            for x, name in [(0, "0"), (1, "1"), (-1, "negative_1"), (3, "3")]
-        ]
+
+    lead_lag_queries = gen_lead_lag_queries(
+        window, fill_value, len(bodosql_string_types["table1"]["A"]), lead_or_lag
     )
+
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
     check_query(
@@ -618,17 +661,18 @@ def test_lead_lag_consts_string(
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    "fill_value",
+    [pytest.param(None, id="No_fill"), pytest.param("X'412412'", id="With_fill")],
+)
 def test_lead_lag_consts_binary(
-    bodosql_binary_types, lead_or_lag, spark_info, memory_leak_check
+    bodosql_binary_types, lead_or_lag, spark_info, fill_value, memory_leak_check
 ):
     """tests the lead and lag aggregation functions on datetime types"""
 
     window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = ", ".join(
-        [
-            f"{lead_or_lag}(A, {x}) OVER {window} as {lead_or_lag}_{name}"
-            for x, name in [(0, "0"), (1, "1"), (-1, "negative_1"), (3, "3")]
-        ]
+    lead_lag_queries = gen_lead_lag_queries(
+        window, fill_value, len(bodosql_binary_types["table1"]["A"]), lead_or_lag
     )
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
@@ -652,17 +696,18 @@ def test_lead_lag_consts_binary(
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    "fill_value",
+    [pytest.param(None, id="No_fill"), pytest.param("3 DAYS", id="With_fill")],
+)
 def test_lead_lag_consts_timedelta(
-    bodosql_interval_types, lead_or_lag, spark_info, memory_leak_check
+    bodosql_interval_types, lead_or_lag, spark_info, fill_value, memory_leak_check
 ):
     """tests the lead and lag aggregation functions on timedelta types"""
 
     window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = ", ".join(
-        [
-            f"{lead_or_lag}(A, {x}) OVER {window} as {lead_or_lag}_{name}"
-            for x, name in [(0, "0"), (1, "1"), (-1, "negative_1"), (3, "3")]
-        ]
+    lead_lag_queries = gen_lead_lag_queries(
+        window, fill_value, len(bodosql_interval_types["table1"]["A"]), lead_or_lag
     )
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
@@ -686,18 +731,20 @@ def test_lead_lag_consts_timedelta(
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize(
+    "fill_value",
+    [pytest.param(None, id="No_fill"), pytest.param("TRUE", id="With_fill")],
+)
 def test_lead_lag_consts_boolean(
-    bodosql_boolean_types, lead_or_lag, spark_info, memory_leak_check
+    bodosql_boolean_types, lead_or_lag, spark_info, fill_value, memory_leak_check
 ):
     """tests the lead and lag aggregation functions on boolean types"""
 
     window = "(PARTITION BY B ORDER BY C)"
-    lead_lag_queries = ", ".join(
-        [
-            f"{lead_or_lag}(A, {x}) OVER {window} as {lead_or_lag}_{name}"
-            for x, name in [(0, "0"), (1, "1"), (-1, "negative_1"), (3, "3")]
-        ]
+    lead_lag_queries = gen_lead_lag_queries(
+        window, fill_value, len(bodosql_boolean_types["table1"]["A"]), lead_or_lag
     )
+
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
     check_query(

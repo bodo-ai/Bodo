@@ -22,10 +22,16 @@ from bodo.tests.utils import (
     check_func,
     count_array_OneDs,
     count_parfor_OneDs,
+    gen_random_string_binary_array,
     is_bool_object_series,
 )
 from bodo.utils.typing import BodoError, BodoWarning
 from bodo.utils.utils import is_call_assign
+
+
+@pytest.fixture(params=[1, -3, 20, 0, 1000])
+def shift_amnt(request):
+    return request.param
 
 
 @pytest.mark.slow
@@ -2198,11 +2204,55 @@ def test_df_sort_index(df_value):
     check_func(impl, (df_value,), check_typing_issues=False)
 
 
-def test_df_shift(numeric_df_value, memory_leak_check):
-    def impl(df):
-        return df.shift(2)
+def test_df_shift_numeric(numeric_df_value, shift_amnt, memory_leak_check):
+    def impl(df, n):
+        return df.shift(n)
 
-    check_func(impl, (numeric_df_value,))
+    check_func(
+        impl,
+        (
+            numeric_df_value,
+            shift_amnt,
+        ),
+        check_dtype=False,
+    )
+
+
+def test_df_shift_numeric_with_fill(numeric_df_value, shift_amnt, memory_leak_check):
+    def impl(df, fill_val, n):
+        return df.shift(n, fill_value=fill_val)
+
+    check_func(impl, (numeric_df_value, numeric_df_value.iloc[0, 0], shift_amnt))
+
+
+def test_df_shift_string_df_with_fill(shift_amnt, memory_leak_check):
+    df = pd.DataFrame(
+        {
+            "A": gen_random_string_binary_array(12),
+            "B": gen_nonascii_list(12),
+            "C": gen_random_string_binary_array(12),
+        }
+    )
+
+    def impl(df, n):
+        return df.shift(n, fill_value="foo")
+
+    check_func(impl, (df, shift_amnt))
+
+
+def test_df_shift_binary_df_with_fill(shift_amnt, memory_leak_check):
+    df = pd.DataFrame(
+        {
+            "A": gen_random_string_binary_array(12, is_binary=True),
+            "B": gen_random_string_binary_array(12, is_binary=True),
+            "C": gen_random_string_binary_array(12, is_binary=True),
+        }
+    )
+
+    def impl(df, n):
+        return df.shift(n, fill_value=b"foo")
+
+    check_func(impl, (df, shift_amnt))
 
 
 @pytest.mark.slow
@@ -2217,6 +2267,7 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
     for column_type in bodo_type.data:
         if not bodo.hiframes.rolling.is_supported_shift_array_type(column_type):
             is_unsupported = True
+            break
 
     def impl(df):
         return df.shift(2)
