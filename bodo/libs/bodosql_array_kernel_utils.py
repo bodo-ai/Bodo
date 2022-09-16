@@ -33,6 +33,7 @@ def gen_vectorized(
     arg_sources=None,
     array_override=None,
     support_dict_encoding=True,
+    may_cause_duplicate_dict_array_values=False,
     prefix_code=None,
 ):
     """Creates an impl for a column compute function that has several inputs
@@ -42,25 +43,29 @@ def gen_vectorized(
         arg_names (string list): the names of each argument
         arg_types (dtype list): the types of each argument
         propagate_null (bool list): a mask indicating which arguments produce
-        an output of null when the input is null
+            an output of null when the input is null
         scalar_text (string): the func_text of the core operation done on each
-        set of scalar values after all broadcasting is handled. The string should
-        refer to the scalar values as arg0, arg1, arg2, etc. (where arg0
-        corresponds to the current value from arg_names[0]), and store the final
-        answer of the calculation in res[i]
+            set of scalar values after all broadcasting is handled. The string should
+            refer to the scalar values as arg0, arg1, arg2, etc. (where arg0
+            corresponds to the current value from arg_names[0]), and store the final
+            answer of the calculation in res[i]
         out_dtype (dtype): the dtype of the output array
         arg_string (optional string): the string that goes in the def line to
-        describe the parameters. If not provided, is inferred from arg_names
+            describe the parameters. If not provided, is inferred from arg_names
         arg_sources (optional dict): key-value pairings describing how to
-        obtain the arg_names from the arguments described in arg_string
+            obtain the arg_names from the arguments described in arg_string
         array_override (optional string): a string representing how to obtain
-        the length of the final array. If not provided, inferred from arg_types.
-        If provided, ensures that the returned answer is always an array,
-        even if all of the arg_types are scalars.
-        support_dict_encoding (optional boolean) if true, allows dictionary
-        encoded outputs under certain conditions
+            the length of the final array. If not provided, inferred from arg_types.
+            If provided, ensures that the returned answer is always an array,
+            even if all of the arg_types are scalars.
+        support_dict_encoding (optional boolean): if true, allows dictionary
+            encoded outputs under certain conditions
+        may_cause_duplicate_dict_array_values (optional boolean): Indicates that the
+            given operation may cause duplicate values in the ._data field of a dictionary
+            encoded output (slicing, for example). Only has effect if support_dict_encoding
+            is also true.
         prefix_code (optional string): if provided, embedes the code string
-        right before the loop begins.
+            right before the loop begins.
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -230,7 +235,15 @@ def gen_vectorized(
                 func_text += (
                     f"   indices = {arg_names[dict_encoded_arg]}._indices.copy()\n"
                 )
-                func_text += f"   has_global = {arg_names[dict_encoded_arg]}._has_global_dictionary\n"
+
+                # In Bodo, if has _has_global_dictionary is True, we assume no duplicate values in the
+                # dictionary. Therefore, if we're performing an operation that may create duplicate values,
+                # we need to set the values appropriatly.
+                if may_cause_duplicate_dict_array_values:
+                    func_text += f"   has_global = False\n"
+                else:
+                    func_text += f"   has_global = {arg_names[dict_encoded_arg]}._has_global_dictionary\n"
+
                 func_text += (
                     f"   {arg_names[i]} = {arg_names[dict_encoded_arg]}._data\n"
                 )

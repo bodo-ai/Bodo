@@ -208,7 +208,6 @@ def test_repeat(dict_arr_value, memory_leak_check):
     check_func(test_impl, (dict_arr_value, np.arange(len(dict_arr_value))))
 
 
-@pytest.mark.slow
 def test_cmp_opt(dict_arr_value, memory_leak_check):
     """test optimizaton of comparison operators (eq, ne) for dict array"""
 

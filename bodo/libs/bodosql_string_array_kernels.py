@@ -504,7 +504,14 @@ def initcap_util(arr, delim):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
 
 
 @numba.generated_jit(nopython=True)
@@ -785,7 +792,12 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
         out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
         return gen_vectorized(
-            arg_names, arg_types, propagate_null, scalar_text, out_dtype
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+            may_cause_duplicate_dict_array_values=True,
         )
 
     return overload_left_right_util
@@ -861,7 +873,12 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
                     res[i] = {pad_line}"""
 
         return gen_vectorized(
-            arg_names, arg_types, propagate_null, scalar_text, out_dtype
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+            may_cause_duplicate_dict_array_values=True,
         )
 
     return overload_lpad_rpad_util
@@ -933,7 +950,15 @@ def repeat_util(arr, repeats):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    # NOTE: we can cause duplicate values in hte case that repeats == 0 (everything goes to empty str)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
 
 
 @numba.generated_jit(nopython=True)
@@ -967,7 +992,14 @@ def replace_util(arr, to_replace, replace_with):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
 
 
 @numba.generated_jit(nopython=True)
@@ -1096,7 +1128,13 @@ def strcmp_util(arr0, arr1):
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
 
 
 @numba.generated_jit(nopython=True)
@@ -1147,7 +1185,14 @@ def strtok_util(source, delim, part):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
 
 
 @numba.generated_jit(nopython=True)
@@ -1184,7 +1229,14 @@ def substring_util(arr, start, length):
     scalar_text += "   if arg1 > 0: arg1 -= 1\n"
     scalar_text += "   res[i] = arg0[arg1:arg1+arg2]\n"
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
 
 
 @numba.generated_jit(nopython=True)
@@ -1221,7 +1273,14 @@ def substring_index_util(arr, delimiter, occurrences):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
 
 
 @numba.generated_jit(nopython=True)
@@ -1261,4 +1320,11 @@ def translate_util(arr, source, target):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
