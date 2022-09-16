@@ -134,7 +134,7 @@ def change_event(S):
 @numba.generated_jit(nopython=True)
 def windowed_sum(S, lower_bound, upper_bound):
     verify_int_float_arg(S, "windowed_sum", S)
-    if not bodo.utils.utils.is_array_typ(S, True):
+    if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
         raise_bodo_error("Input must be an array type")
 
     calculate_block = "res[i] = total"
@@ -159,7 +159,7 @@ def windowed_sum(S, lower_bound, upper_bound):
 
 @numba.generated_jit(nopython=True)
 def windowed_count(S, lower_bound, upper_bound):
-    if not bodo.utils.utils.is_array_typ(S, True):
+    if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
         raise_bodo_error("Input must be an array type")
 
     calculate_block = "res[i] = in_window"
@@ -178,7 +178,7 @@ def windowed_count(S, lower_bound, upper_bound):
 @numba.generated_jit(nopython=True)
 def windowed_avg(S, lower_bound, upper_bound):
     verify_int_float_arg(S, "windowed_avg", S)
-    if not bodo.utils.utils.is_array_typ(S, True):
+    if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
         raise_bodo_error("Input must be an array type")
 
     calculate_block = "res[i] = total / in_window"
@@ -187,6 +187,29 @@ def windowed_avg(S, lower_bound, upper_bound):
     setup_block = "total = 0"
     enter_block = "total += elem"
     exit_block = "total -= elem"
+
+    return gen_windowed(
+        calculate_block,
+        constant_block,
+        out_dtype,
+        setup_block=setup_block,
+        enter_block=enter_block,
+        exit_block=exit_block,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def windowed_median(S, lower_bound, upper_bound):
+    verify_int_float_arg(S, "windowed_median", S)
+    if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
+        raise_bodo_error("Input must be an array type")
+
+    calculate_block = "res[i] = np.median(arr2)"
+    constant_block = "constant_value = S.median()"
+    out_dtype = types.Array(bodo.float64, 1, "C")
+    setup_block = "arr2 = np.zeros(0, dtype=np.float64)"
+    enter_block = "arr2 = np.append(arr2, elem)"
+    exit_block = "arr2 = np.delete(arr2, np.argwhere(arr2 == elem)[0])"
 
     return gen_windowed(
         calculate_block,

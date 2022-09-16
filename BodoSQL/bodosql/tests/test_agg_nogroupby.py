@@ -16,6 +16,7 @@ from bodo.tests.utils import (
     count_array_REPs,
     dist_IR_contains,
 )
+from BodoSQL.bodosql.tests.utils import get_equivalent_spark_agg_query
 
 
 def test_agg_numeric(
@@ -30,18 +31,82 @@ def test_agg_numeric(
 
     query = f"select {numeric_agg_builtin_funcs}(B), {numeric_agg_builtin_funcs}(C) from table1"
 
-    spark_query = query
-    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
-        var_typ = numeric_agg_builtin_funcs[9:]
-        spark_query = f"select VAR_{var_typ}(B), VAR_{var_typ}(C) from table1"
-
     check_query(
         query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         check_dtype=False,
         check_names=False,
+        is_out_distributed=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                "select median(A) from table1",
+                pd.DataFrame(
+                    {
+                        "A": [3.35],
+                    }
+                ),
+            ),
+        ),
+        pytest.param(
+            (
+                "select median(B) from table1",
+                pd.DataFrame(
+                    {
+                        "B": [-3.35],
+                    }
+                ),
+            ),
+        ),
+        pytest.param(
+            (
+                "select median(C) from table1",
+                pd.DataFrame(
+                    {
+                        "C": [0.0],
+                    }
+                ),
+            ),
+        ),
+        pytest.param(
+            (
+                "select median(D) from table1",
+                pd.DataFrame(
+                    {
+                        "D": [1.0],
+                    }
+                ),
+            ),
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_median(args, spark_info, memory_leak_check):
+
+    df1 = pd.DataFrame(
+        {
+            "A": [1.0, 2.5, 1000.0, 100.0, 4.2, 1.001],
+            "B": [-1.0, -2.5, -1000.0, -100.0, -4.2, 4.5],
+            "C": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "D": [0, 0, 1, 1, 1, 1],
+        }
+    )
+    query, expected_output = args
+
+    check_query(
+        query,
+        {"table1": df1},
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
         is_out_distributed=False,
     )
 
@@ -59,16 +124,11 @@ def test_aliasing_agg_numeric(
 
     query = f"select {numeric_agg_builtin_funcs}(B) as testCol from table1"
 
-    spark_query = query
-    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
-        var_typ = numeric_agg_builtin_funcs[9:]
-        spark_query = f"select VAR_{var_typ}(B) as testCol from table1"
-
     check_query(
         query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         check_dtype=False,
         check_names=False,
         is_out_distributed=False,
@@ -491,14 +551,12 @@ def test_any_value(query, spark_info, memory_leak_check):
         )
     }
 
-    equivalent_query = query.replace("ANY_VALUE", "FIRST")
-
     check_query(
         query,
         ctx,
         spark_info,
         check_dtype=False,
         check_names=False,
-        equivalent_spark_query=equivalent_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         is_out_distributed=False,
     )

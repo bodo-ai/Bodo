@@ -16,7 +16,7 @@ from bodosql.tests.test_rows import (  # noqa
     numeric_agg_funcs_subset,
     over_clause_bounds,
 )
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 import bodo
 
@@ -48,7 +48,7 @@ def test_QUALIFY_no_bounds(bodosql_numeric_types, spark_info, memory_leak_check)
         bodosql_query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
         sort_output=False,
         check_dtype=False,
         check_names=False,
@@ -111,9 +111,7 @@ def test_QUALIFY_upper_lower_bound_numeric(
         query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=spark_query.replace("ANY_VALUE", "FIRST").replace(
-            "VARIANCE_SAMP", "VAR_SAMP"
-        ),
+        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
         sort_output=False,
         check_dtype=False,
         check_names=False,
@@ -174,7 +172,7 @@ def test_QUALIFY_upper_lower_bound_timestamp(
         query,
         bodosql_datetime_types,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
         sort_output=False,
         check_dtype=False,
         check_names=False,
@@ -237,7 +235,7 @@ def test_QUALIFY_upper_lower_bound_string(
         query,
         bodosql_string_types,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
         sort_output=False,
         check_dtype=False,
         check_names=False,
@@ -299,7 +297,7 @@ def test_windowed_upper_lower_bound_binary(
         query,
         bodosql_binary_types,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
         sort_output=True,  # For binary, we have to sort the output dataframe in python, as the behavior for sorting behavior for spark differs: BE-3279
         check_dtype=False,
         check_names=False,
@@ -366,7 +364,7 @@ def test_QUALIFY_upper_lower_bound_timedelta(
             query,
             bodosql_interval_types,
             spark_info,
-            equivalent_spark_query=spark_query,
+            equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
             sort_output=False,
             check_dtype=False,
             check_names=False,
@@ -380,7 +378,7 @@ def test_QUALIFY_upper_lower_bound_timedelta(
             query,
             bodosql_interval_types,
             spark_info,
-            equivalent_spark_query=spark_query,
+            equivalent_spark_query=get_equivalent_spark_agg_query(spark_query),
             sort_output=False,
             check_dtype=False,
             check_names=False,

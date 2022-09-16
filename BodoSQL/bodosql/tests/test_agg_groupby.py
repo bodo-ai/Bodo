@@ -5,7 +5,7 @@ Test correctness of SQL aggregation operations with groupby on BodoSQL
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 
 @pytest.fixture
@@ -46,18 +46,11 @@ def test_agg_numeric(
 
     query = f"select {numeric_agg_builtin_funcs}(B), {numeric_agg_builtin_funcs}(C) from table1 group by A"
 
-    spark_query = query
-    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
-        var_typ = numeric_agg_builtin_funcs[9:]
-        spark_query = (
-            f"select VAR_{var_typ}(B), VAR_{var_typ}(C) from table1 group by A"
-        )
-
     check_query(
         query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         check_dtype=False,
         check_names=False,
     )
@@ -82,18 +75,11 @@ def test_agg_numeric_larger_group(
 
     query = f"select {numeric_agg_builtin_funcs}(B), {numeric_agg_builtin_funcs}(C) from table1 group by A"
 
-    spark_query = query
-    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
-        var_typ = numeric_agg_builtin_funcs[9:]
-        spark_query = (
-            f"select VAR_{var_typ}(B), VAR_{var_typ}(C) from table1 group by A"
-        )
-
     check_query(
         query,
         grouped_dfs,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         check_dtype=False,
         check_names=False,
     )
@@ -119,16 +105,11 @@ def test_aliasing_agg_numeric(
 
     query = f"select {numeric_agg_builtin_funcs}(B) as testCol from table1 group by A"
 
-    spark_query = query
-    if numeric_agg_builtin_funcs in ("VARIANCE_SAMP", "VARIANCE_POP"):
-        var_typ = numeric_agg_builtin_funcs[9:]
-        spark_query = f"select VAR_{var_typ}(B) as testCol from table1 group by A"
-
     check_query(
         query,
         bodosql_numeric_types,
         spark_info,
-        equivalent_spark_query=spark_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         check_dtype=False,
         check_names=False,
     )
@@ -770,7 +751,6 @@ def test_any_value(args, spark_info, memory_leak_check):
         + " FROM table1 GROUP BY "
         + ", ".join(group_cols)
     )
-    equivalent_query = query.replace("ANY_VALUE", "FIRST")
 
     check_query(
         query,
@@ -778,7 +758,7 @@ def test_any_value(args, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
-        equivalent_spark_query=equivalent_query,
+        equivalent_spark_query=get_equivalent_spark_agg_query(query),
         # TODO[BE-3456]: enable dict-encoded string test when segfault is fixed
         use_dict_encoded_strings=False,
     )

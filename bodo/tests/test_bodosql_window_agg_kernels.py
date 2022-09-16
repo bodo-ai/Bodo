@@ -207,6 +207,7 @@ def test_change_event(args):
 @pytest.mark.parametrize(
     "func",
     [
+        "median",
         "sum",
         "count",
         "avg",
@@ -223,6 +224,11 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
 
     def impl3(S, lower, upper):
         return pd.Series(bodo.libs.bodosql_array_kernels.windowed_avg(S, lower, upper))
+
+    def impl4(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_median(S, lower, upper)
+        )
 
     def test_answer(S, lower, upper, func):
         L = []
@@ -245,11 +251,14 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
                     result = len(elems)
                 elif func == "avg":
                     result = None if len(elems) == 0 else sum(elems) / len(elems)
+                elif func == "median":
+                    result = None if len(elems) == 0 else np.median(elems)
             L.append(result)
         out_dtype = {
             "sum": pd.Int64Dtype() if "int" in S.dtype.name else np.float64,
             "count": pd.Int64Dtype(),
             "avg": np.float64,
+            "median": np.float64,
         }[func]
         return pd.Series(L, dtype=out_dtype)
 
@@ -257,6 +266,7 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
         "sum": impl1,
         "count": impl2,
         "avg": impl3,
+        "median": impl4,
     }[func]
     check_func(
         impl,

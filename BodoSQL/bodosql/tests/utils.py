@@ -3,6 +3,7 @@ Infrastructure used to test correctness.
 """
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import os
+import re
 from decimal import Decimal
 from enum import Enum
 
@@ -1192,3 +1193,42 @@ def create_pyspark_schema_from_dataframe(df):
             raise TypeError("Type mapping to Pyspark Schema not implemented yet.")
         field_list.append(StructField(col, pyspark_type, True))
     return StructType(field_list)
+
+
+def remap_spark_agg_fn_name(query):
+    """
+    Spark uses slightly different naming conventions for certain SQL functions
+    from Snowflake, so we use the builtin str.replace() method to re-map
+    SQL function names/keywords to Spark ones.
+
+    This method is the remap function for all window/aggregation functions
+    currently supported in BodoSQL.
+
+    This method is not intended for Bodo users but for our internal testing,
+    so this does not account for SQL function names/keywords appearing as
+    variable names or literals in SQL queries.
+    """
+    spark_dict = {
+        "ANY_VALUE": "FIRST",
+        "VARIANCE_POP": "VAR_POP",
+        "VARIANCE_SAMP": "VAR_SAMP",
+    }
+
+    for key in spark_dict.keys():
+        query = query.replace(key, spark_dict[key])
+
+    return query
+
+
+def get_equivalent_spark_agg_query(query):
+    """
+    Uses the Python regex library re and remap_spark_agg_fn_name (defined above) to
+    convert the input BodoSQL query into an equivalent Spark query.
+    """
+    spark_query = remap_spark_agg_fn_name(query)
+    spark_query = re.sub(
+        "MEDIAN\\(([a-zA-Z0-9-_]+)\\)", "APPROX_PERCENTILE(\\1, .5)", spark_query
+    )
+
+    return spark_query
+    # TODO (allai5): BY CUBE, BY ROLLUP
