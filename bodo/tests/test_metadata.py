@@ -8,8 +8,7 @@ import pytest
 import bodo
 from bodo.hiframes.boxing import (
     _dtype_from_type_enum_list,
-    _infer_series_dtype,
-    dtype_to_array_type,
+    _infer_series_arr_type,
 )
 from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.series_common import series_val  # noqa
@@ -213,11 +212,19 @@ def check_series_typing_metadata(orig_series, output_series):
     (original series must contain >= 1 non null element)
 
     """
+    meta_dtype = _dtype_from_type_enum_list(
+        output_series._bodo_meta["type_metadata"][1]
+    )
+    orig_arr_type = _infer_series_arr_type(orig_series)
+    orig_dtype = (
+        bodo.libs.int_arr_ext.IntDtype(orig_arr_type.dtype)
+        if isinstance(orig_arr_type, bodo.IntegerArrayType)
+        else orig_arr_type.dtype
+    )
     return (
         hasattr(output_series, "_bodo_meta")
         and "type_metadata" in output_series._bodo_meta
-        and _dtype_from_type_enum_list(output_series._bodo_meta["type_metadata"][1])
-        == _infer_series_dtype(orig_series)
+        and meta_dtype == orig_dtype
         and _dtype_from_type_enum_list(output_series._bodo_meta["type_metadata"][0])
         == bodo.typeof(orig_series).index
     )
@@ -250,7 +257,7 @@ def check_dataframe_typing_metadata(orig_df, output_df):
         cur_series = orig_df.iloc[:, i]
         if not (
             _dtype_from_type_enum_list(cur_type_enum_list)
-            == dtype_to_array_type(_infer_series_dtype(cur_series))
+            == _infer_series_arr_type(cur_series)
         ):
             return False
 

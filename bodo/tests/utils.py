@@ -1080,7 +1080,7 @@ def _typeof(val):
             if isinstance(S.dtype, pd.core.arrays.floating.FloatingDtype):
                 col_typs.append(typeof_pd_float_dtype(S.dtype))
             else:
-                col_typs.append(bodo.hiframes.boxing._infer_series_dtype(S))
+                col_typs.append(bodo.hiframes.boxing._infer_series_arr_type(S).dtype)
         col_typs = (dtype_to_array_type(typ) for typ in col_typs)
         col_names = tuple(val.columns.to_list())
         index_typ = numba.typeof(val.index)

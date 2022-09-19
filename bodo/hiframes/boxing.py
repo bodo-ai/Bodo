@@ -17,7 +17,6 @@ from numba.core.ir_utils import GuardException, guard
 from numba.core.typing import signature
 from numba.cpython.listobj import ListInstance
 from numba.extending import NativeValue, box, intrinsic, typeof_impl, unbox
-from numba.np import numpy_support
 from numba.np.arrayobj import _getitem_array_single_int
 from numba.typed.typeddict import Dict
 
@@ -48,16 +47,8 @@ from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
-from bodo.libs.int_arr_ext import (
-    IntDtype,
-    IntegerArrayType,
-    typeof_pd_int_dtype,
-)
+from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
-from bodo.libs.pd_datetime_arr_ext import (
-    DatetimeArrayType,
-    PandasDatetimeTZDtype,
-)
 from bodo.libs.str_arr_ext import string_array_type, string_type
 from bodo.libs.str_ext import string_type
 from bodo.libs.struct_arr_ext import StructArrayType, StructType
@@ -170,14 +161,13 @@ def typeof_pd_series(val, c):
     else:
         idx_typ = numba.typeof(val.index)
 
-    dtype = _infer_series_dtype(val)
-    arr_typ = dtype_to_array_type(dtype)
+    arr_typ = _infer_series_arr_type(val)
     # use dictionary-encoded array if necessary for testing (_use_dict_str_type set)
     if _use_dict_str_type and arr_typ == string_array_type:
         arr_typ = bodo.dict_str_arr_type
 
     return SeriesType(
-        dtype,
+        arr_typ.dtype,
         data=arr_typ,
         index=idx_typ,
         name_typ=numba.typeof(val.name),
@@ -246,7 +236,7 @@ def get_hiframes_dtypes(df):
     """get hiframe data types for a pandas dataframe"""
 
     # If the dataframe has typing metadata, pass the typing metadata for the given
-    # column to _infer_series_dtype
+    # column to _infer_series_arr_type
     if (
         hasattr(df, "_bodo_meta")
         and df._bodo_meta is not None
@@ -260,9 +250,7 @@ def get_hiframes_dtypes(df):
     else:
         column_typing_metadata = [None] * len(df.columns)
     hi_typs = [
-        dtype_to_array_type(
-            _infer_series_dtype(df.iloc[:, i], array_metadata=column_typing_metadata[i])
-        )
+        _infer_series_arr_type(df.iloc[:, i], array_metadata=column_typing_metadata[i])
         for i in range(len(df.columns))
     ]
     # use dictionary-encoded array if necessary for testing (_use_dict_str_type set)
@@ -800,11 +788,64 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
         raise GuardException("Unable to convert type")
 
 
-def _infer_series_dtype(S, array_metadata=None):
+def _is_wrapper_pd_arr(arr):
+    """return True if 'arr' is a Pandas wrapper array around regular Numpy like PandasArray"""
+
+    # Pandas bug (as of 1.4): StringArray is a subclass of PandasArray for some reason
+    if isinstance(arr, pd.arrays.StringArray):
+        return False
+
+    return isinstance(arr, (pd.arrays.PandasArray, pd.arrays.TimedeltaArray)) or (
+        isinstance(arr, pd.arrays.DatetimeArray) and arr.tz is None
+    )
+
+
+def unwrap_pd_arr(arr):
+    """Unwrap Numpy array from the PandasArray wrapper for unboxing purposes
+
+    Args:
+        arr (pd.Array): input array which could be PandasArray
+
+    Returns:
+        pd.array or np.ndarray: numpy array or Pandas extension array
+    """
+    if _is_wrapper_pd_arr(arr):
+        # call np.ascontiguousarray() on array since it may not be contiguous
+        # the typing infrastructure assumes C-contiguous arrays
+        # see test_df_multi_get_level() for an example of non-contiguous input
+        return np.ascontiguousarray(arr._ndarray)
+
+    return arr
+
+
+def _fix_series_arr_type(pd_arr):
+    """remove Pandas array wrappers like PandasArray to make Series typing easier"""
+    if _is_wrapper_pd_arr(pd_arr):
+        return pd_arr._ndarray
+
+    return pd_arr
+
+
+def _infer_series_arr_type(S, array_metadata=None):
+    """infer underlying array type for unboxing a Pandas Series object
+
+    Args:
+        S (pd.Series): input Pandas Series to unbox
+        array_metadata (list(enum), optional): type metadata that Bodo stores during
+        boxing to help with typing object arrays. Defaults to None.
+
+    Raises:
+        BodoError: cannot handle Pandas nullable float arrays
+        BodoError: cannot handle tz-aware datetime with non-ns unit
+        BodoError: other potential unsupported types
+
+    Returns:
+        types.Type: array type for Series data
+    """
 
     if S.dtype == np.dtype("O"):
         # We check the metadata if the data is empty or all null
-        if len(S.values) == 0 or S.isna().sum() == len(S):
+        if len(S.array) == 0 or S.isna().sum() == len(S):
             if array_metadata != None:
                 # If the metadata is passed by the dataframe, it is the type of the underlying array.
 
@@ -812,7 +853,7 @@ def _infer_series_dtype(S, array_metadata=None):
                 # type of the Series. This will return different types for null integer,
                 # but for object series, I can't think of a situation in which the
                 # dtypes would be different.
-                return _dtype_from_type_enum_list(array_metadata).dtype
+                return _dtype_from_type_enum_list(array_metadata)
             elif (
                 hasattr(S, "_bodo_meta")
                 and S._bodo_meta is not None
@@ -825,7 +866,7 @@ def _infer_series_dtype(S, array_metadata=None):
                 # dtype of the series
                 return _dtype_from_type_enum_list(type_list)
 
-        return numba.typeof(S.values).dtype
+        return bodo.typeof(_fix_series_arr_type(S.array))
 
     # Pandas float dtype
     # We don't currently support pandas floating arrays (https://bodo.atlassian.net/browse/BE-41)
@@ -834,26 +875,23 @@ def _infer_series_dtype(S, array_metadata=None):
         raise BodoError(
             "Bodo does not currently support Series constructed with Pandas FloatingArray.\nPlease use Series.astype() to convert any input Series input to Bodo JIT functions."
         )
-    # nullable int dtype
-    if isinstance(S.dtype, pd.core.arrays.integer._IntegerDtype):
-        return typeof_pd_int_dtype(S.dtype, None)
-    elif isinstance(S.dtype, pd.CategoricalDtype):
-        return bodo.typeof(S.dtype)
-    elif isinstance(S.dtype, pd.StringDtype):
-        return string_type
-    elif isinstance(S.dtype, pd.BooleanDtype):
-        return types.bool_
 
-    if isinstance(S.dtype, pd.DatetimeTZDtype):
-        unit = S.dtype.unit
-        if unit != "ns":
-            raise BodoError("Timezone-aware datetime data requires 'ns' units")
-        tz_val = bodo.libs.pd_datetime_arr_ext.get_pytz_type_info(S.dtype.tz)
-        return PandasDatetimeTZDtype(tz_val)
-
-    # regular numpy types
+    # infer type of underlying data array
     try:
-        return numpy_support.from_dtype(S.dtype)
+        arr_type = bodo.typeof(_fix_series_arr_type(S.array))
+
+        # always unbox boolean Series using nullable boolean array instead of Numpy
+        # because some processes may have nulls, leading to inconsistent data types
+        if arr_type == types.Array(types.bool_, 1, "C"):
+            arr_type = bodo.boolean_array
+
+        # We make all Series data arrays contiguous during unboxing to avoid type errors
+        # see test_df_query_stringliteral_expr
+        if isinstance(arr_type, types.Array):
+            assert arr_type.ndim == 1, "invalid numpy array type in Series"
+            arr_type = types.Array(arr_type.dtype, 1, "C")
+
+        return arr_type
     except:  # pragma: no cover
         raise BodoError(f"data type {S.dtype} for column {S.name} not supported yet")
 
@@ -1107,26 +1145,13 @@ def get_df_obj_column_codegen(context, builder, pyapi, df_obj, col_ind, data_typ
 
     df_iloc_obj = pyapi.object_getattr_string(df_obj, "iloc")
     series_obj = pyapi.object_getitem(df_iloc_obj, slice_ind_tup_obj)
-    if isinstance(data_typ, bodo.DatetimeArrayType):
-        # Pandas DatetimeArray aren't accessed with values. That returns
-        # the underlying numpy array. Instead we use array to get the
-        # Pandas array.
-        arr_obj_orig = pyapi.object_getattr_string(series_obj, "array")
-    else:
-        arr_obj_orig = pyapi.object_getattr_string(series_obj, "values")
+    arr_obj_orig = pyapi.object_getattr_string(series_obj, "array")
 
-    if isinstance(data_typ, types.Array):
-        # call np.ascontiguousarray() on array since it may not be contiguous
-        # the typing infrastructure assumes C-contiguous arrays
-        # see test_df_multi_get_level() for an example of non-contiguous input
-        np_mod_name = context.insert_const_string(builder.module, "numpy")
-        np_class_obj = pyapi.import_module_noblock(np_mod_name)
-        arr_obj = pyapi.call_method(np_class_obj, "ascontiguousarray", (arr_obj_orig,))
-        pyapi.decref(arr_obj_orig)
-        pyapi.decref(np_class_obj)
-    else:
-        arr_obj = arr_obj_orig
+    unwrap_pd_arr_obj = pyapi.unserialize(pyapi.serialize_object(unwrap_pd_arr))
+    arr_obj = pyapi.call_function_objargs(unwrap_pd_arr_obj, [arr_obj_orig])
 
+    pyapi.decref(arr_obj_orig)
+    pyapi.decref(unwrap_pd_arr_obj)
     pyapi.decref(slice_class_obj)
     pyapi.decref(slice_obj)
     pyapi.decref(col_ind_obj)
@@ -1207,22 +1232,14 @@ def unbox_col_if_needed(df, i):  # pragma: no cover
 
 @unbox(SeriesType)
 def unbox_series(typ, val, c):
-    if isinstance(typ.data, DatetimeArrayType):
-        arr_obj_orig = c.pyapi.object_getattr_string(val, "array")
-    else:
-        arr_obj_orig = c.pyapi.object_getattr_string(val, "values")
+    # use "array" attribute instead of "values" to handle ExtensionArrays like
+    # DatetimeArray properly. Non-ExtensionArrays just use the PandasArray wrapper
+    # around Numpy
+    # https://pandas.pydata.org/docs/reference/api/pandas.Series.array.html#pandas.Series.array
+    arr_obj_orig = c.pyapi.object_getattr_string(val, "array")
 
-    if isinstance(typ.data, types.Array):
-        # make contiguous by calling np.ascontiguousarray()
-        np_mod_name = c.context.insert_const_string(c.builder.module, "numpy")
-        np_class_obj = c.pyapi.import_module_noblock(np_mod_name)
-        arr_obj = c.pyapi.call_method(
-            np_class_obj, "ascontiguousarray", (arr_obj_orig,)
-        )
-        c.pyapi.decref(arr_obj_orig)
-        c.pyapi.decref(np_class_obj)
-    else:
-        arr_obj = arr_obj_orig
+    unwrap_pd_arr_obj = c.pyapi.unserialize(c.pyapi.serialize_object(unwrap_pd_arr))
+    arr_obj = c.pyapi.call_function_objargs(unwrap_pd_arr_obj, [arr_obj_orig])
 
     data_val = _unbox_series_data(typ.dtype, typ.data, arr_obj, c).value
 
@@ -1236,6 +1253,8 @@ def unbox_series(typ, val, c):
         c.context, c.builder, typ, data_val, index_val, name_val
     )
     # TODO: set parent pointer
+    c.pyapi.decref(unwrap_pd_arr_obj)
+    c.pyapi.decref(arr_obj_orig)
     c.pyapi.decref(arr_obj)
     c.pyapi.decref(index_obj)
     c.pyapi.decref(name_obj)

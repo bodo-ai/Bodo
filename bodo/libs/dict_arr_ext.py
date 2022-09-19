@@ -172,7 +172,10 @@ def to_pa_dict_arr(A):
     if (
         isinstance(A, pd.arrays.ArrowStringArray)
         and pa.types.is_dictionary(A._data.type)
-        and pa.types.is_large_string(A._data.type.value_type)
+        and (
+            pa.types.is_string(A._data.type.value_type)
+            or pa.types.is_large_string(A._data.type.value_type)
+        )
         and pa.types.is_int32(A._data.type.index_type)
     ):
         return A._data.combine_chunks()

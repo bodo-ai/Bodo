@@ -137,8 +137,11 @@ def typeof_pd_datetime_array(val, c):
         raise BodoError(
             "Cannot support timezone naive pd.arrays.DatetimeArray. Please convert to a numpy array with .astype('datetime64[ns]')."
         )
-    else:
-        return DatetimeArrayType(val.dtype.tz)
+
+    if val.dtype.unit != "ns":
+        raise BodoError("Timezone-aware datetime data requires 'ns' units")
+
+    return DatetimeArrayType(val.dtype.tz)
 
 
 @unbox(DatetimeArrayType)
