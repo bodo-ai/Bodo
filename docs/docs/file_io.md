@@ -638,7 +638,9 @@ def example_read_iceberg():
       are not supported yet.
 
 
-Bodo has basic support for writing Iceberg tables from Pandas Dataframes using the `to_sql` API.
+Bodo has basic support for writing Iceberg tables from Pandas Dataframes using the `to_sql` API, including
+support for appending to tables with an existing [partition spec](https://iceberg.apache.org/spec/#partitioning){target="blank"} 
+and/or [sort order](https://iceberg.apache.org/spec/#sorting){target="blank"}.
 
 Example code for writing:
 
@@ -658,6 +660,8 @@ def write_iceberg_table(df: pandas.DataFrame):
     - Writing Pandas Dataframe index to an Iceberg table is not supported. If `index` and `index_label`
       are provided, they will be ignored.
     - `chunksize`, `dtype` and `method` arguments are not supported and will be ignored if provided.
+    - While Bodo can *append* to tables with an existing partition spec and/or sort order, it does not 
+      support creating new tables with a Partition Spec or Sort Order.
 
 
 ### Numpy binaries {#numpy-binary-section}
