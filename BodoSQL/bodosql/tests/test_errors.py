@@ -9,6 +9,7 @@ import bodosql
 import numpy as np
 import pandas as pd
 import pytest
+from bodosql.utils import BodoSQLWarning
 
 import bodo
 from bodo.utils.typing import BodoError
@@ -141,9 +142,9 @@ def test_unsupported_types(memory_leak_check):
         bc = bodosql.BodoSQLContext({"table1": df})
 
     df = pd.DataFrame({"A": [1, 2, 3, 4], "B": [Decimal(1.2)] * 4})
-    with pytest.raises(
-        BodoError,
-        match="Pandas column 'B' with type DecimalArrayType\\(38, 18\\) not supported in BodoSQL.",
+    with pytest.warns(
+        BodoSQLWarning,
+        match="DataFrame column 'B' with type DecimalArrayType\\(38, 18\\) not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types:.*",
     ):
         impl(df)
 
@@ -161,9 +162,9 @@ def test_unsupported_types_jit(memory_leak_check):
         return bc.sql("select * from table1")
 
     df = pd.DataFrame({"A": [1, 2, 3, 4], "B": [Decimal(1.2)] * 4})
-    with pytest.raises(
-        BodoError,
-        match="Pandas column 'B' with type DecimalArrayType\\(38, 18\\) not supported in BodoSQL.",
+    with pytest.warns(
+        BodoSQLWarning,
+        match="DataFrame column 'B' with type DecimalArrayType\\(38, 18\\) not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types:.*",
     ):
         impl(df)
 
