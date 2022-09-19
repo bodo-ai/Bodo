@@ -1493,6 +1493,22 @@ class UntypedPass:
             default=False,
             use_default=True,
         )
+        # Allows users specify what columns should be read in as dictionary-encoded
+        # string arrays manually.
+        _bodo_read_as_dict = self._get_const_arg(
+            "pd.read_csv",
+            rhs.args,
+            kws,
+            -1,
+            "_bodo_read_as_dict",
+            rhs.loc,
+            use_default=True,
+            default=[],
+        )
+        if not isinstance(_bodo_read_as_dict, list):
+            raise BodoError(
+                "pandas.read_csv(): '_bodo_read_as_dict', if provided, must be a constant list of column names."
+            )
 
         # List of all possible args and a support default value. This should match the header above.
         # If a default value is not supported, use None. We provide the default value to enable passing
@@ -1554,6 +1570,7 @@ class UntypedPass:
             # TODO: Specify this is kwonly in error checks
             ("_bodo_upcast_to_float64", False),
             ("sample_nrows", 100),
+            ("_bodo_read_as_dict", None),
         )
         # Arguments that are supported
         supported_args = set(
@@ -1576,6 +1593,7 @@ class UntypedPass:
                 "escapechar",
                 "storage_options",
                 "sample_nrows",
+                "_bodo_read_as_dict",
             )
         )
         # Iterate through the provided args. If an argument is in the supported_args,
@@ -1697,9 +1715,6 @@ class UntypedPass:
                     csv_storage_options,
                     csv_sample_nrows,
                 )
-            df_type = df_type.copy(
-                tuple(to_str_arr_if_dict_array(t) for t in df_type.data)
-            )
             dtypes = df_type.data
             # Generate usecols indices
             col_name_src = col_names if col_names else df_type.columns
@@ -1766,6 +1781,22 @@ class UntypedPass:
                 dtype_map = _dtype_val_to_arr_type(
                     dtype_map_const, "pd.read_csv", rhs.loc
                 )
+
+        # error check _bodo_read_as_dict values and update string arrays to dict-encoded
+        if _bodo_read_as_dict:
+            for c in _bodo_read_as_dict:
+                if c not in col_names:
+                    raise BodoError(
+                        f"pandas.read_csv(): column name '{c}' in _bodo_read_as_dict is not in data columns {col_names}"
+                    )
+            dtype_map_cpy = dtype_map.copy()
+            for c, t in dtype_map_cpy.items():
+                if c in _bodo_read_as_dict:
+                    if dtype_map[c] != bodo.string_array_type:
+                        raise BodoError(
+                            f"pandas.read_csv(): column name '{c}' in _bodo_read_as_dict is not a string column"
+                        )
+                    dtype_map[c] = bodo.dict_str_arr_type
 
         columns, _, out_types = _get_read_file_col_info(
             dtype_map, date_cols, col_names, lhs
@@ -3477,9 +3508,6 @@ def _get_csv_df_type_from_file(
             f"error from: {type(df_type_or_e).__name__}: {str(df_type_or_e)}\n"
         )
 
-    df_type_or_e = df_type_or_e.copy(
-        data=tuple(to_str_arr_if_dict_array(t) for t in df_type_or_e.data)
-    )
     return df_type_or_e
 
 

@@ -4275,6 +4275,67 @@ def test_csv_relative_path(datapath, memory_leak_check):
     check_func(impl1, (), check_dtype=False, py_output=py_output)
 
 
+def test_read_csv_dict_encoded_string_arrays(datapath, memory_leak_check):
+    """
+    Test reading string arrays as dictionary-encoded in read_csv when specified by the
+    user
+    """
+    fname = datapath("example.csv")
+
+    # all string data as dict-encoded, dead column elimination
+    def impl1(fname):
+        df = pd.read_csv(fname, _bodo_read_as_dict=["two", "five"])
+        return df[["two", "four", "five"]]
+
+    py_output = pd.read_csv(fname)[["two", "four", "five"]]
+    check_func(impl1, (fname,), py_output=py_output)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit()(impl1)(fname)
+        check_logger_msg(stream, "Columns ['two', 'five'] using dictionary encoding")
+
+    # only one string column as dict-encoded
+    def impl2(fname):
+        df = pd.read_csv(fname, _bodo_read_as_dict=["two"])
+        return df[["one", "two", "five"]]
+
+    py_output = pd.read_csv(fname)[["one", "two", "five"]]
+    check_func(impl2, (fname,), py_output=py_output)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit()(impl2)(fname)
+        check_logger_msg(stream, "Columns ['two'] using dictionary encoding")
+
+    # error checking _bodo_read_as_dict
+    with pytest.raises(BodoError, match=r"must be a constant list of column names"):
+
+        def impl4(fname):
+            df = pd.read_csv(fname, _bodo_read_as_dict=True)
+            return df
+
+        bodo.jit(impl4)(fname)
+
+    with pytest.raises(BodoError, match=r"_bodo_read_as_dict is not in data columns"):
+
+        def impl5(fname):
+            df = pd.read_csv(fname, _bodo_read_as_dict=["H"])
+            return df
+
+        bodo.jit(impl5)(fname)
+
+    with pytest.raises(BodoError, match=r"is not a string column"):
+
+        def impl6(fname):
+            df = pd.read_csv(fname, _bodo_read_as_dict=["one"])
+            return df
+
+        bodo.jit(impl6)(fname)
+
+
 @pytest.mark.slow
 def test_csv_nrows(memory_leak_check):
     """Test pd.read_csv with nrows argument"""
