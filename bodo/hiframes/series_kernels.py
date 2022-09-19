@@ -18,7 +18,9 @@ from bodo.utils.typing import decode_if_dict_array
 # TODO: series index and name
 # float columns can have regular np.nan
 def _column_filter_impl(B, ind):  # pragma: no cover
-    A = bodo.hiframes.rolling.alloc_shift(len(B), B, (-1,))
+    # I'm not entirly certain why, but we need to specify the optional argument here,
+    # or else we get Numba bugs.
+    A = bodo.hiframes.rolling.alloc_shift(len(B), B, (-1,), None)
     for i in numba.parfors.parfor.internal_prange(len(A)):
         if ind[i]:
             A[i] = B[i]

@@ -6,7 +6,7 @@ import bodosql
 import numpy as np
 import pandas as pd
 import pytest
-from bodosql.tests.utils import check_query
+from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 import bodo
 from bodo.tests.utils import (
@@ -16,7 +16,6 @@ from bodo.tests.utils import (
     count_array_REPs,
     dist_IR_contains,
 )
-from BodoSQL.bodosql.tests.utils import get_equivalent_spark_agg_query
 
 
 def test_agg_numeric(
