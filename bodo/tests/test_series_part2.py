@@ -3241,7 +3241,7 @@ def test_series_np_select(series_val, memory_leak_check):
 
     from numba.core import types
 
-    infered_typ = bodo.hiframes.boxing._infer_series_dtype(series_val)
+    infered_typ = bodo.hiframes.boxing._infer_series_arr_type(series_val).dtype
     if not (infered_typ == bodo.bool_ or isinstance(infered_typ, types.Number)):
         py_out = na_impl(A1, A2, cond1, cond2)
         if infered_typ == bodo.datetime64ns:
@@ -3302,7 +3302,7 @@ def test_series_np_select_non_unitype(series_val, memory_leak_check):
 
     from numba.core import types
 
-    infered_typ = bodo.hiframes.boxing._infer_series_dtype(series_val)
+    infered_typ = bodo.hiframes.boxing._infer_series_arr_type(series_val).dtype
     if not (infered_typ == bodo.bool_ or isinstance(infered_typ, types.Number)):
         py_out = na_impl(A1, A2, cond1, cond2)
 

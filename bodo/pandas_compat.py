@@ -77,7 +77,10 @@ def ArrowStringArray__init__(self, values):
         or pa.types.is_large_string(self._data.type)
         or (
             pa.types.is_dictionary(self._data.type)
-            and pa.types.is_large_string(self._data.type.value_type)
+            and (
+                pa.types.is_string(self._data.type.value_type)
+                or pa.types.is_large_string(self._data.type.value_type)
+            )
             and pa.types.is_int32(self._data.type.index_type)
         )
     ):

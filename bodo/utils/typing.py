@@ -1442,20 +1442,18 @@ def can_literalize_type(t, pyobject_to_literal=False):
     )
 
 
-def dtype_to_array_type(dtype):
+def dtype_to_array_type(dtype, convert_nullable=False):
     """get default array type for scalar dtype
 
 
     Args:
-        dtype (IntDtype): scalar data type
+        dtype (types.Type): scalar data type
     """
     dtype = types.unliteral(dtype)
 
     # UDFs may return lists, but we store array of array for output
     if isinstance(dtype, types.List):
         dtype = dtype_to_array_type(dtype.dtype)
-
-    convert_nullable = False
 
     # UDFs may use Optional types for setting array values.
     # These should use the nullable type of the non-null case
@@ -1496,7 +1494,7 @@ def dtype_to_array_type(dtype):
     # struct array
     if isinstance(dtype, bodo.libs.struct_arr_ext.StructType):
         return bodo.StructArrayType(
-            tuple(dtype_to_array_type(t) for t in dtype.data), dtype.names
+            tuple(dtype_to_array_type(t, True) for t in dtype.data), dtype.names
         )
 
     # tuple array
