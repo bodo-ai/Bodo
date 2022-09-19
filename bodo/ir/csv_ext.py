@@ -326,7 +326,6 @@ def csv_distributed_run(
                 for i, c in enumerate(csv_node.df_colnames)
                 if isinstance(col_types[i], bodo.libs.dict_arr_ext.DictionaryArrayType)
             ]
-            # TODO: Test. Dictionary encoding isn't supported yet.
             if dict_encoded_cols:
                 encoding_msg = "Finished optimized encoding on read_csv node:\n%s\nColumns %s using dictionary encoding to reduce memory usage.\n"
                 bodo.user_logging.log_message(
@@ -623,6 +622,14 @@ def _get_dtype_str(t):
 
 
 def _get_pd_dtype_str(t):
+    """Get data type string to pass to df.astype() for Bodo array type
+
+    Args:
+        t (types.Type): Bodo array type
+
+    Returns:
+        str: data type string (e.g. 'np.int64', 'Int64', ...)
+    """
     dtype = t.dtype
 
     if isinstance(dtype, PDCategoricalDtype):
@@ -631,7 +638,8 @@ def _get_pd_dtype_str(t):
     if dtype == types.NPDatetime("ns"):
         return "str"
 
-    if t == string_array_type:
+    # NOTE: this is just a placeholder since strings are not handled with astype()
+    if t == string_array_type or t == bodo.dict_str_arr_type:
         return "str"
 
     # nullable int array
@@ -930,7 +938,11 @@ def _gen_read_csv_objmode(
     func_text += "        parse_dates=[{}],\n".format(date_inds)
     # Check explanation near top of the function for why we specify
     # only some types here directly
-    func_text += f"        dtype={{i:str for i in str_col_nums_{call_id}_2}},\n"
+    # NOTE: this works for dict-encoded string arrays too since Bodo's unboxing calls
+    # dictionary_encode() if necessary
+    func_text += (
+        f"        dtype={{i:'string[pyarrow]' for i in str_col_nums_{call_id}_2}},\n"
+    )
     # NOTE: using repr() for sep to support cases like "\n" properly
     # and escapechar to support `\\` properly.
     func_text += f"        usecols=usecols_arr_{call_id}_2, sep={sep!r}, low_memory=False, escapechar={escapechar!r})\n"
