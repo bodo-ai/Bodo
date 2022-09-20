@@ -48,6 +48,7 @@ public class LiteralCodeGen {
         case INTERVAL_YEAR:
         case INTERVAL_MONTH:
         case INTERVAL_YEAR_MONTH:
+        case NULL:
           codeBuilder.append("None");
           break;
         case FLOAT:
