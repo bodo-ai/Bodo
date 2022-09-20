@@ -55,7 +55,11 @@ def gen_lead_lag_queries(
 
 @pytest.mark.parametrize(
     "fill_value",
-    [pytest.param(None, id="No_fill"), pytest.param(1, id="With_fill")],
+    [
+        pytest.param(None, id="No_fill"),
+        pytest.param(1, id="With_fill"),
+        pytest.param("NULL", id="With_NULL_fill"),
+    ],
 )
 def test_lead_lag_consts(
     bodosql_numeric_types,
@@ -84,6 +88,7 @@ def test_lead_lag_consts(
         len(bodosql_numeric_types["table1"]["A"]),
         lead_or_lag,
         null_respect_string,
+        use_fill_repr=False,
     )
 
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
@@ -104,6 +109,7 @@ def test_lead_lag_consts(
     [
         pytest.param(None, id="No_fill"),
         pytest.param("TIMESTAMP '2022-02-18'", id="With_fill"),
+        pytest.param("NULL", id="With_NULL_fill"),
     ],
 )
 def test_lead_lag_consts_datetime(
@@ -140,7 +146,11 @@ def test_lead_lag_consts_datetime(
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "fill_value",
-    [pytest.param(None, id="No_fill"), pytest.param("foo", id="With_fill")],
+    [
+        pytest.param(None, id="No_fill"),
+        pytest.param("foo", id="With_fill"),
+        pytest.param("NULL", id="With_NULL_fill"),
+    ],
 )
 def test_lead_lag_consts_string(
     bodosql_string_types,
@@ -160,6 +170,7 @@ def test_lead_lag_consts_string(
         len(bodosql_string_types["table1"]["A"]),
         lead_or_lag,
         null_respect_string,
+        use_fill_repr=fill_value != "NULL",
     )
 
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
@@ -184,6 +195,7 @@ def test_lead_lag_consts_string(
             id="With_fill",
             marks=pytest.mark.skip("BE-3304, no support for binary literals"),
         ),
+        pytest.param("NULL", id="With_NULL_fill"),
     ],
 )
 def test_lead_lag_consts_binary(
@@ -219,6 +231,7 @@ def test_lead_lag_consts_binary(
         len(bodosql_binary_types["table1"]["A"]),
         lead_or_lag,
         null_respect_string,
+        use_fill_repr=False,
     )
     query = f"select A, B, C, {lead_lag_queries} from table1 ORDER BY B, C"
 
@@ -239,6 +252,7 @@ def test_lead_lag_consts_binary(
     [
         pytest.param((None, None), id="No_fill"),
         pytest.param(("Interval 3 DAYS", "259200000000000"), id="With_fill"),
+        pytest.param(("NULL", "NULL"), id="With_NULL_fill"),
     ],
 )
 def test_lead_lag_consts_timedelta(
@@ -299,7 +313,11 @@ def test_lead_lag_consts_timedelta(
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "fill_value",
-    [pytest.param(None, id="No_fill"), pytest.param("TRUE", id="With_fill")],
+    [
+        pytest.param(None, id="No_fill"),
+        pytest.param("TRUE", id="With_fill"),
+        pytest.param("NULL", id="With_NULL_fill"),
+    ],
 )
 def test_lead_lag_consts_boolean(
     bodosql_boolean_types,
