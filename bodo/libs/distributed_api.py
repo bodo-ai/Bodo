@@ -714,7 +714,9 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
 
         return gatherv_impl_int_arr
 
-    if isinstance(data, (IntegerArrayType, DecimalArrayType, bodo.TimeArrayType)) or data in (
+    if isinstance(
+        data, (IntegerArrayType, DecimalArrayType, bodo.TimeArrayType)
+    ) or data in (
         boolean_array,
         datetime_date_array_type,
     ):
