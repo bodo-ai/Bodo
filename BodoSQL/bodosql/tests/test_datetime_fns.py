@@ -1155,25 +1155,33 @@ def test_weekiso_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
 dm = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
 
 
+@pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
 @pytest.mark.parametrize("dow_str", ["days_of_week", "su"])
-def test_previous_day_cols(spark_info, dt_fn_dataframe, dow_str, memory_leak_check):
+def test_next_previous_day_cols(
+    spark_info, dt_fn_dataframe, next_or_prev, dow_str, memory_leak_check
+):
     if dow_str in dm.keys():
-        query = f"SELECT PREVIOUS_DAY(timestamps, '{dow_str}') from table1"
+        query = f"SELECT {next_or_prev}_DAY(timestamps, '{dow_str}') from table1"
     else:
-        query = f"SELECT PREVIOUS_DAY(timestamps, {dow_str}) from table1"
-    prev_day = lambda ts, dow: (
+        query = f"SELECT {next_or_prev}_DAY(timestamps, {dow_str}) from table1"
+
+    mlt = 1 if next_or_prev == "NEXT" else -1
+    next_prev_day = lambda ts, dow: (
         ts
-        - pd.to_timedelta(
-            7 - ((pd.Series(dow).map(dm).values - ts.dt.dayofweek.values) % 7), unit="D"
+        + mlt
+        * pd.to_timedelta(
+            7 - (mlt * (ts.dt.dayofweek.values - pd.Series(dow).map(dm).values) % 7),
+            unit="D",
         )
     ).dt.normalize()
+
     dow_col = (
         dt_fn_dataframe["table1"]["days_of_week"]
         if dow_str == "days_of_week"
         else np.array([dow_str])
     )
     py_output = pd.DataFrame(
-        {"A": prev_day(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
+        {"A": next_prev_day(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
     )
     check_query(
         query,
@@ -1185,21 +1193,28 @@ def test_previous_day_cols(spark_info, dt_fn_dataframe, dow_str, memory_leak_che
     )
 
 
+@pytest.mark.parametrize("next_or_prev", ["NEXT", "PREVIOUS"])
 @pytest.mark.parametrize("dow_str", ["days_of_week", "su"])
-def test_previous_day_scalars(spark_info, dt_fn_dataframe, dow_str, memory_leak_check):
+def test_next_previous_day_scalars(
+    spark_info, dt_fn_dataframe, next_or_prev, dow_str, memory_leak_check
+):
     if dow_str in dm.keys():
-        query = f"SELECT CASE WHEN MONTH(PREVIOUS_DAY(timestamps, '{dow_str}')) < 4 THEN  TIMESTAMP '2021-05-31' ELSE PREVIOUS_DAY(timestamps, '{dow_str}') END from table1"
+        query = f"SELECT CASE WHEN MONTH({next_or_prev}_DAY(timestamps, '{dow_str}')) < 4 THEN  TIMESTAMP '2021-05-31' ELSE {next_or_prev}_DAY(timestamps, '{dow_str}') END from table1"
     else:
-        query = f"SELECT CASE WHEN MONTH(PREVIOUS_DAY(timestamps, {dow_str})) < 4 THEN  TIMESTAMP '2021-05-31' ELSE PREVIOUS_DAY(timestamps, {dow_str}) END from table1"
-    prev_day = lambda ts, dow: (
+        query = f"SELECT CASE WHEN MONTH({next_or_prev}_DAY(timestamps, {dow_str})) < 4 THEN  TIMESTAMP '2021-05-31' ELSE {next_or_prev}_DAY(timestamps, {dow_str}) END from table1"
+
+    mlt = 1 if next_or_prev == "NEXT" else -1
+    next_prev_day = lambda ts, dow: (
         ts
-        - pd.to_timedelta(
-            7 - ((pd.Series(dow).map(dm).values - ts.dt.dayofweek.values) % 7), unit="D"
+        + mlt
+        * pd.to_timedelta(
+            7 - (mlt * (ts.dt.dayofweek.values - pd.Series(dow).map(dm).values) % 7),
+            unit="D",
         )
     ).dt.normalize()
 
-    def prev_day_case(ts, dow):
-        ret = prev_day(ts, dow)
+    def next_prev_day_case(ts, dow):
+        ret = next_prev_day(ts, dow)
         ret[ret.dt.month < 4] = pd.Timestamp("2021-05-31")
         return ret
 
@@ -1209,9 +1224,8 @@ def test_previous_day_scalars(spark_info, dt_fn_dataframe, dow_str, memory_leak_
         else np.array([dow_str])
     )
     py_output = pd.DataFrame(
-        {"A": prev_day_case(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
+        {"A": next_prev_day_case(dt_fn_dataframe["table1"]["timestamps"], dow_col)}
     )
-    print(py_output)
     check_query(
         query,
         dt_fn_dataframe,
