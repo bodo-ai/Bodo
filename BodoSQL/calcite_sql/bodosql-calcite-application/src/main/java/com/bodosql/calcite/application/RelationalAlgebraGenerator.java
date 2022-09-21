@@ -221,21 +221,14 @@ public class RelationalAlgebraGenerator {
   public RelationalAlgebraGenerator(BodoSqlSchema newSchema, String namedParamTableName) {
     this.catalog = null;
     System.setProperty("calcite.default.charset", "UTF-8");
-    try {
-      CalciteConnection calciteConnection = setupCalciteConnection();
-      List<BodoSqlSchema> newSchemas = new ArrayList<BodoSqlSchema>();
-      newSchemas.add(newSchema);
-      SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
+    CalciteConnection calciteConnection = setupCalciteConnection();
+    List<BodoSqlSchema> newSchemas = new ArrayList<BodoSqlSchema>();
+    newSchemas.add(newSchema);
+    SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
 
-      List<SchemaPlus> defaultSchemas = new ArrayList();
-      defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
-      setupPlanner(defaultSchemas, schema, namedParamTableName);
-    } catch (Exception e) {
-      throw new RuntimeException(
-          String.format(
-              "Internal Error: Unable to create Relational Algebra Generator. Error message: %s",
-              e));
-    }
+    List<SchemaPlus> defaultSchemas = new ArrayList();
+    defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
+    setupPlanner(defaultSchemas, schema, namedParamTableName);
   }
 
   /**
@@ -248,31 +241,24 @@ public class RelationalAlgebraGenerator {
       BodoSQLCatalog catalog, BodoSqlSchema newSchema, String namedParamTableName) {
     this.catalog = catalog;
     System.setProperty("calcite.default.charset", "UTF-8");
-    try {
-      CalciteConnection calciteConnection = setupCalciteConnection();
-      Set<String> schemaNames = catalog.getSchemaNames();
-      List<BodoSqlSchema> newSchemas = new ArrayList();
+    CalciteConnection calciteConnection = setupCalciteConnection();
+    Set<String> schemaNames = catalog.getSchemaNames();
+    List<BodoSqlSchema> newSchemas = new ArrayList();
 
-      newSchemas.add(newSchema);
-      for (String schemaName : schemaNames) {
-        newSchemas.add(new CatalogSchemaImpl(schemaName, catalog));
-      }
-      SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
-
-      List<SchemaPlus> defaultSchemas = new ArrayList();
-      List<BodoSqlSchema> defaultCatalogSchema = catalog.getDefaultSchema();
-      for (BodoSqlSchema catalogDefaultSchema : defaultCatalogSchema) {
-        // Fetch the path from the root schema.
-        defaultSchemas.add(schema.getSubSchema(catalogDefaultSchema.getName()));
-      }
-      defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
-      setupPlanner(defaultSchemas, schema, namedParamTableName);
-    } catch (Exception e) {
-      throw new RuntimeException(
-          String.format(
-              "Internal Error: Unable to create Relational Algebra Generator. Error message: %s",
-              e));
+    newSchemas.add(newSchema);
+    for (String schemaName : schemaNames) {
+      newSchemas.add(new CatalogSchemaImpl(schemaName, catalog));
     }
+    SchemaPlus schema = setupSchema(calciteConnection, newSchemas);
+
+    List<SchemaPlus> defaultSchemas = new ArrayList();
+    List<BodoSqlSchema> defaultCatalogSchema = catalog.getDefaultSchema();
+    for (BodoSqlSchema catalogDefaultSchema : defaultCatalogSchema) {
+      // Fetch the path from the root schema.
+      defaultSchemas.add(schema.getSubSchema(catalogDefaultSchema.getName()));
+    }
+    defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
+    setupPlanner(defaultSchemas, schema, namedParamTableName);
   }
 
   public void setRules(List<RelOptRule> rules) {
@@ -529,7 +515,7 @@ public class RelationalAlgebraGenerator {
   }
 
   public String getRelationalAlgebraString(String sql, boolean optimizePlan)
-      throws SqlSyntaxException, SqlValidationException, RelConversionException {
+          throws SqlSyntaxException, SqlValidationException, RelConversionException {
     String response = "";
 
     try {
@@ -544,6 +530,8 @@ public class RelationalAlgebraGenerator {
       // System.out.println("Found syntax err!");
       throw ex;
       // return "fail: \n " + ex.getMessage();
+    } catch (RelConversionException ex) {
+      throw ex;
     } catch (Exception ex) {
       // System.out.println(ex.toString());
       // System.out.println(ex.getMessage());
