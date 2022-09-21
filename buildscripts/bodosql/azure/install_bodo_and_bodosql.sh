@@ -23,4 +23,7 @@ BODO_BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version
 $CONDA_INSTALL -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$bodo_artifactory_channel -c conda-forge bodo=${BODO_BODOSQL_VERSION}
 #TODO: figure out how to version lock the iceberg connector in the same way that we do the bodo version
 $CONDA_INSTALL -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$bodo_artifactory_channel -c conda-forge bodo-iceberg-connector
+#Install sqlalchemy, and the snowflake connector, which is needed as a testing dependency for snowflake
+$CONDA_INSTALL -c conda-forge sqlalchemy snowflake-sqlalchemy snowflake-connector-python
+#Finally, install bodosql
 $CONDA_INSTALL bodosql=${BODO_BODOSQL_VERSION}  -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/${bodosql_artifactory_channel} -c conda-forge
