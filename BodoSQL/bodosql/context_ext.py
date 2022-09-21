@@ -396,7 +396,7 @@ def _gen_pd_func_text_and_lowered_globals(
                 func_text_or_error_msg += f"{pd_code}\n"
         except Exception as e:
             func_text_or_error_msg = (
-                f"Unable to parse SQL Query due to unexpected runtime error: \n{str(e)}"
+                f"Unable to parse SQL Query due to unexpected runtime error: \n{java_error_to_msg(e)}"
             )
             failed = True
     failed = bcast_scalar(failed)
