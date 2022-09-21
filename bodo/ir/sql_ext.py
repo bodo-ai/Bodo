@@ -60,6 +60,7 @@ class SqlReader(ir.Stmt):
         unsupported_columns,
         unsupported_arrow_types,
         is_select_query,
+        has_side_effects,
         index_column_name,
         index_column_type,
         database_schema,
@@ -91,6 +92,9 @@ class SqlReader(ir.Stmt):
         self.unsupported_columns = unsupported_columns
         self.unsupported_arrow_types = unsupported_arrow_types
         self.is_select_query = is_select_query
+        # Does this query have side effects (e.g. DELETE). If so
+        # we cannot perform DCE on the whole node.
+        self.has_side_effects = has_side_effects
         # Name of the index column. None if index=False.
         self.index_column_name = index_column_name
         # Type of the index array. types.none if index=False.
@@ -185,17 +189,24 @@ def remove_dead_sql(
     """
     table_var = sql_node.out_vars[0].name
     index_var = sql_node.out_vars[1].name
-    if table_var not in lives and index_var not in lives:
-        # If neither the table or index is live, remove the node.
+    if (
+        not sql_node.has_side_effects
+        and table_var not in lives
+        and index_var not in lives
+    ):
+        # If neither the table or index is live and it has
+        # no side effects, remove the node.
         return None
-    elif table_var not in lives:
-        # If table isn't live we only want to load the index.
-        # To do this we should mark the df_colnames as empty
+
+    if table_var not in lives:
+        # If table isn't live we mark the df_colnames as empty
+        # and avoid loading the table
         sql_node.out_types = []
         sql_node.df_colnames = []
         sql_node.out_used_cols = []
         sql_node.is_live_table = False
-    elif index_var not in lives:
+
+    if index_var not in lives:
         # If the index_var not in lives we don't load the index.
         # To do this we mark the index_column_name as None
         sql_node.index_column_name = None
@@ -303,7 +314,9 @@ def sql_distributed_run(
     func_text = f"def sql_impl(sql_request, conn, database_schema, {extra_args}):\n"
     # If we are doing regular SQL, filters are embedded into the query.
     # Iceberg passes these to parquet instead.
-    if sql_node.filters and sql_node.db_type != "iceberg":  # pragma: no cover
+    if (
+        sql_node.is_select_query and sql_node.filters and sql_node.db_type != "iceberg"
+    ):  # pragma: no cover
         # This path is only taken on Azure because snowflake
         # is not tested on AWS.
 
@@ -376,6 +389,7 @@ def sql_distributed_run(
         sql_node.filters,
         sql_node.pyarrow_table_schema,
         not sql_node.is_live_table,
+        sql_node.is_select_query,
     )
 
     schema_type = types.none if sql_node.database_schema is None else string_type
@@ -447,9 +461,9 @@ def sql_distributed_run(
     # At most one of the table and the index
     # can be dead because otherwise the whole
     # node should have already been removed.
-    assert not (
+    assert sql_node.has_side_effects or not (
         sql_node.index_column_name is None and not sql_node.is_live_table
-    ), "At most one of table and index should be dead if the SQL IR node is live"
+    ), "At most one of table and index should be dead if the SQL IR node is live and has no side effects"
     if sql_node.index_column_name is None:
         # If the index_col is dead, remove the node.
         nodes.pop(-1)
@@ -756,11 +770,12 @@ def _gen_sql_reader_py(
     targetctx,
     db_type: str,
     limit: Optional[int],
-    parallel,
+    parallel: bool,
     typemap,
     filters,
     pyarrow_table_schema: "Optional[pyarrow.Schema]",
-    is_dead_table,
+    is_dead_table: bool,
+    is_select_query: bool,
 ):
     """
     Function that generates the main SQL implementation. There are
@@ -794,6 +809,7 @@ def _gen_sql_reader_py(
                This should only be used if db_type == "iceberg".
     pyarrow_table_schema -- pyarrow schema for the table. This should only
                             be used if db_type == "iceberg".
+    is_select_query -- Are we executing a select?
     """
     # a unique int used to create global variables with unique names
     call_id = next_label()
@@ -986,8 +1002,9 @@ def _gen_sql_reader_py(
         # data this is garbage.
         func_text += "  total_rows_np = np.array([0], dtype=np.int64)\n"
         func_text += f"  out_table = snowflake_read(unicode_to_utf8(sql_request), unicode_to_utf8(conn), {parallel}, {len(nullable_cols_array)}, nullable_cols_array.ctypes,\n"
-        func_text += f"       snowflake_dict_cols_array.ctypes, {len(snowflake_dict_cols_array)}, total_rows_np.ctypes)\n"
+        func_text += f"       snowflake_dict_cols_array.ctypes, {len(snowflake_dict_cols_array)}, total_rows_np.ctypes, {is_select_query and len(used_col_names) == 0}, {is_select_query})\n"
         func_text += "  check_and_propagate_cpp_exception()\n"
+
         func_text += f"  total_rows = total_rows_np[0]\n"
         if parallel:
             func_text += f"  local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
@@ -1182,6 +1199,8 @@ _snowflake_read = types.ExternalFunction(
         types.voidptr,
         types.int32,
         types.voidptr,
+        types.boolean,
+        types.boolean,
     ),
 )
 

@@ -78,4 +78,12 @@ public interface BodoSQLCatalog {
    * no-op.
    */
   void closeConnections();
+
+  /**
+   * Generates the code necessary to submit the remote query to the catalog DB.
+   *
+   * @param query Query to submit.
+   * @return The generated code.
+   */
+  String generateRemoteQuery(String query);
 }

@@ -2629,13 +2629,14 @@ class TypingTransforms:
                 set(),
                 "iceberg",
                 lhs.loc,
-                [],
-                [],
-                True,
-                None,
-                types.none,
-                database_schema,
-                pyarrow_table_schema,
+                [],  # unsupported_columns
+                [],  # unsupported_arrow_types
+                True,  # is_select_query
+                False,  # has_side_effects
+                None,  # index_column_name
+                types.none,  # index_column_type
+                database_schema,  # database_schema
+                pyarrow_table_schema,  # pyarrow_table_schema
             )
         ]
         data_args = ["table_val", "idx_arr_val"]

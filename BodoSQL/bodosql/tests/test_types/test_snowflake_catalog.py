@@ -5,13 +5,21 @@ direct BodoSQLContext.
 """
 
 import os
+import time
 
 import bodosql
 import numpy as np
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
-from bodo.tests.utils import check_func, get_snowflake_connection_string
+import bodo
+from bodo.tests.utils import (
+    check_func,
+    create_snowflake_table,
+    get_snowflake_connection_string,
+)
+from bodo.utils.typing import BodoError
 
 
 @pytest.fixture(
@@ -238,3 +246,155 @@ def test_snowflake_catalog_read_tpch(memory_leak_check):
     )
 
     check_func(impl, (bc,), py_output=py_output, reset_index=True)
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_delete_simple(memory_leak_check):
+    """
+    Tests a simple delete clause inside of Snowflake.
+    """
+    comm = MPI.COMM_WORLD
+
+    schema = "PUBLIC"
+    db = "TEST_DB"
+    new_df = pd.DataFrame(
+        {
+            "A": [1, 2, 3] * 10,
+            "B": np.arange(30),
+        }
+    )
+
+    def impl1(query, bc):
+        df = bc.sql(query)
+        # Use the column name to confirm we use a standard name.
+        return df["ROWCOUNT"].iloc[0]
+
+    def impl2(query, bc):
+        # Verify the delete is still performed even if the output
+        # is unused
+        bc.sql(query)
+        return 10
+
+    with create_snowflake_table(
+        new_df, "bodosql_delete_test", db, schema
+    ) as table_name:
+        catalog = bodosql.SnowflakeCatalog(
+            os.environ["SF_USER"],
+            os.environ["SF_PASSWORD"],
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            db,
+        )
+        bc = bodosql.BodoSQLContext(catalog=catalog)
+        num_rows_to_delete = 10
+
+        query1 = f"DELETE FROM {schema}.{table_name} WHERE A = 1"
+
+        query2 = f"DELETE FROM {schema}.{table_name} WHERE A = 2"
+
+        # We run only 1 distribution because DELETE has side effects
+        check_func(impl1, (query1, bc), only_1D=True, py_output=num_rows_to_delete)
+        check_func(impl2, (query2, bc), only_1D=True, py_output=num_rows_to_delete)
+        output_df = None
+        # Load the table on rank 0 to verify the drop. We wait a few
+        # seconds in case there could be a delay
+        time.sleep(3)
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Convert output to match the input.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+        output_df = comm.bcast(output_df)
+        result_df = new_df[new_df.A == 3]
+        # Data doesn't have a defined ordering so sort.
+        output_df.sort_values(by=["A", "B"])
+        result_df.sort_values(by=["A", "B"])
+        # Drop the index
+        output_df = output_df.reset_index(drop=True)
+        result_df = result_df.reset_index(drop=True)
+        pd.testing.assert_frame_equal(output_df, result_df)
+
+
+def test_delete_named_param():
+    """
+    Tests submitting a delete query with a named param. Since we just
+    push the query into Snowflake without any changes, this query
+    should just raise a reasonable error.
+    """
+    comm = MPI.COMM_WORLD
+
+    schema = "PUBLIC"
+    db = "TEST_DB"
+    new_df = pd.DataFrame(
+        {
+            "A": [1, 2, 3] * 10,
+            "B": np.arange(30),
+        }
+    )
+
+    @bodo.jit
+    def impl(query, bc, pyvar):
+        return bc.sql(query, {"pyvar": pyvar})
+
+    with create_snowflake_table(
+        new_df, "bodosql_dont_delete_test_param", db, schema
+    ) as table_name:
+        catalog = bodosql.SnowflakeCatalog(
+            os.environ["SF_USER"],
+            os.environ["SF_PASSWORD"],
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            db,
+        )
+        bc = bodosql.BodoSQLContext(catalog=catalog)
+        # Snowflake cannot support out named_params
+        query = f"DELETE FROM {schema}.{table_name} WHERE A = @pyvar"
+        with pytest.raises(
+            BodoError,
+            match="Please verify that all of your Delete query syntax is supported inside of Snowflake",
+        ):
+            impl(query, bc, 1)
+
+
+def test_delete_bodosql_syntax():
+    """
+    Tests submitting a delete query with SQL that does not match
+    Snowflake syntax. Since we just push the query into Snowflake
+    without any changes, this query should just raise a reasonable error.
+    """
+    comm = MPI.COMM_WORLD
+
+    schema = "PUBLIC"
+    db = "TEST_DB"
+    new_df = pd.DataFrame(
+        {
+            "A": [1, 2, 3] * 10,
+            "B": np.arange(30),
+        }
+    )
+
+    @bodo.jit
+    def impl(query, bc):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "bodosql_dont_delete_test", db, schema
+    ) as table_name:
+        catalog = bodosql.SnowflakeCatalog(
+            os.environ["SF_USER"],
+            os.environ["SF_PASSWORD"],
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            db,
+        )
+        bc = bodosql.BodoSQLContext(catalog=catalog)
+        # Snowflake doesn't have a CEILING function
+        query = f"DELETE FROM {schema}.{table_name} WHERE A = CEILING(1.5)"
+        with pytest.raises(
+            BodoError,
+            match="Please verify that all of your Delete query syntax is supported inside of Snowflake",
+        ):
+            impl(query, bc)

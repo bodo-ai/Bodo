@@ -217,4 +217,13 @@ public abstract class BodoSqlTable implements Table {
    * @return The generated code to read the table.
    */
   public abstract String generateReadCode();
+
+  /**
+   * Generates the code necessary to submit the remote query to the catalog DB. This is not
+   * supported for local tables.
+   *
+   * @param query Query to submit.
+   * @return The generated code.
+   */
+  public abstract String generateRemoteQuery(String query);
 }

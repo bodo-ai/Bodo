@@ -26,6 +26,19 @@ public class LocalSchemaImpl extends BodoSqlSchema {
   }
 
   /**
+   * Generates the code necessary to submit the remote query to the catalog DB. This is not
+   * supported for local tables.
+   *
+   * @param query Query to submit.
+   * @return The generated code.
+   */
+  @Override
+  public String generateRemoteQuery(String query) {
+    throw new UnsupportedOperationException(
+        "A remote query cannot be submitted with a local schema");
+  }
+
+  /**
    * Returns a table with a given name. This table must be registered in the schemas tables using
    * addTable.
    *
