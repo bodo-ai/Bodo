@@ -358,25 +358,49 @@ def test_month_diff(args):
         ),
     ],
 )
-def test_previous_day(args):
-    def impl(arr0, arr1):
+def test_next_previous_day(args):
+    def next_impl(arr0, arr1):
+        return pd.Series(bodo.libs.bodosql_array_kernels.next_day(arr0, arr1))
+
+    def prev_impl(arr0, arr1):
         return pd.Series(bodo.libs.bodosql_array_kernels.previous_day(arr0, arr1))
 
     dow_map = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
-    # Simulates previous_day on a single row
-    def previous_day_scalar_fn(ts, day):
-        if pd.isna(ts) or pd.isna(day):
-            return None
-        else:
-            return pd.Timestamp(
-                (ts - pd.Timedelta(days=7 - ((dow_map[day] - ts.dayofweek) % 7))).date()
-            )
+    # Simulates next/previous_day on a single row
+    def next_prev_day_scalar_fn(is_prev=False):
+        mlt = -1 if is_prev else 1
 
-    previous_day_answer = vectorized_sol(
-        args, previous_day_scalar_fn, np.datetime64, manual_coercion=True
+        def impl(ts, day):
+            if pd.isna(ts) or pd.isna(day):
+                return None
+            else:
+                return pd.Timestamp(
+                    (
+                        ts
+                        + mlt
+                        * pd.Timedelta(
+                            days=7 - ((mlt * (ts.dayofweek - dow_map[day])) % 7)
+                        )
+                    ).date()
+                )
+
+        return impl
+
+    next_day_answer = vectorized_sol(
+        args, next_prev_day_scalar_fn(), np.datetime64, manual_coercion=True
     )
     check_func(
-        impl,
+        next_impl,
+        args,
+        py_output=next_day_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+    previous_day_answer = vectorized_sol(
+        args, next_prev_day_scalar_fn(True), np.datetime64, manual_coercion=True
+    )
+    check_func(
+        prev_impl,
         args,
         py_output=previous_day_answer,
         check_dtype=False,

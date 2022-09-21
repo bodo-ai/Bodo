@@ -12,7 +12,14 @@ import org.apache.calcite.sql.type.SqlTypeName;
 
 public class DatetimeFnCodeGen {
   static List<String> fnList =
-      Arrays.asList("DAYNAME", "LAST_DAY", "MONTHNAME", "PREVIOUS_DAY", "WEEKDAY", "YEAROFWEEKISO");
+      Arrays.asList(
+          "DAYNAME",
+          "LAST_DAY",
+          "MONTHNAME",
+          "NEXT_DAY",
+          "PREVIOUS_DAY",
+          "WEEKDAY",
+          "YEAROFWEEKISO");
 
   // HashMap of all trig functions which maps to array kernels
   // which handle all combinations of scalars/arrays/nulls.

@@ -70,6 +70,7 @@ broadcasted_fixed_arg_functions = {
     "month_diff",
     "monthname",
     "negate",
+    "next_day",
     "nullif",
     "ord_ascii",
     "power",

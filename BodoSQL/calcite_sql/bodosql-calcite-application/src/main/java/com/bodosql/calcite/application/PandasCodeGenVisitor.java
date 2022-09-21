@@ -2315,6 +2315,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 operandsInfo.get(0).getExprCode(),
                 operandsInfo.get(0).getName(),
                 exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+          case "NEXT_DAY":
           case "PREVIOUS_DAY":
             assert operandsInfo.size() == 2;
             return getDoubleArgDatetimeFnInfo(
