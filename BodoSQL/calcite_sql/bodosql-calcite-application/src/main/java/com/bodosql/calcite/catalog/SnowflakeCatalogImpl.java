@@ -388,14 +388,17 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     try {
       connString.append(
           String.format(
-              "snowflake://%s:%s@%s/%s/%s?warehouse=%s",
+              "snowflake://%s:%s@%s/%s",
               URLEncoder.encode(this.username, "UTF-8"),
               URLEncoder.encode(this.password, "UTF-8"),
               URLEncoder.encode(this.accountName, "UTF-8"),
-              URLEncoder.encode(this.catalogName, "UTF-8"),
-              URLEncoder.encode(schemaName, "UTF-8"),
-              URLEncoder.encode(this.warehouseName, "UTF-8")));
-
+              URLEncoder.encode(this.catalogName, "UTF-8")));
+      if (schemaName != "") {
+        // Append a schema if it exists
+        connString.append(String.format("/%s", URLEncoder.encode(schemaName, "UTF-8")));
+      }
+      connString.append(
+          String.format("?warehouse=%s", URLEncoder.encode(this.warehouseName, "UTF-8")));
       // Add support for any additional optional properties
       if (!this.accountInfo.isEmpty()) {
         connString.append("&");
@@ -463,5 +466,65 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     }
     dbMeta = null;
     conn = null;
+  }
+
+  /**
+   * Generates the code necessary to submit the remote query to the catalog DB.
+   *
+   * @param query Query to submit.
+   * @return The generated code.
+   */
+  @Override
+  public String generateRemoteQuery(String query) {
+    // For correctness we need to verify that Snowflake can support this
+    // query in its entirely (no BodoSQL specific features). To do this
+    // we run an explain, which won't execute the query.
+    executeExplainQuery(query);
+    // We need to include the default schema to ensure the query works as intended
+    List<BodoSqlSchema> schemaList = getDefaultSchema();
+    String schemaName = "";
+    if (schemaList.size() > 0) {
+      schemaName = schemaList.get(0).getName();
+    }
+    return String.format("pd.read_sql('%s', '%s')", query, generatePythonConnStr(schemaName));
+  }
+
+  /**
+   * Verify that a query can be executed inside Snowflake by performing the EXPLAIN QUERY
+   * functionality. This is done to provide a better error message than a random failure inside
+   * Bodo.
+   *
+   * @param query Query to push into Snowflake.
+   */
+  private void executeExplainQuery(String query) {
+    executeExplainQueryImpl(query, isConnectionCached());
+  }
+
+  /**
+   * Implementation of executeExplainQuery that enables retrying if a cached connection fails.
+   *
+   * @param query Query to push into Snowflake.
+   * @param shouldRetry Should we retry the connection if we see an exception?
+   */
+  private void executeExplainQueryImpl(String query, boolean shouldRetry) {
+    try {
+      conn = getConnection();
+      Statement stmt = conn.createStatement();
+      stmt.executeQuery(String.format("Explain %s", query));
+    } catch (SQLException e) {
+      String errorMsg =
+          String.format(
+              "Error encountered while trying verify a query to push into Snowflake.\n"
+                  + "Query: \"\"\"%s\"\"\"\n"
+                  + "Snowflake Error Message: %s",
+              query, e.getMessage());
+      if (shouldRetry) {
+        LOGGER.warn(errorMsg);
+        closeConnections();
+        executeExplainQueryImpl(query, false);
+      } else {
+        throw new RuntimeException(errorMsg);
+      }
+    }
   }
 }

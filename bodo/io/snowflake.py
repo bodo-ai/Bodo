@@ -2,6 +2,7 @@ import os
 import sys
 import warnings
 from tempfile import TemporaryDirectory
+from typing import Optional, Tuple
 from urllib.parse import parse_qsl, urlparse
 from uuid import uuid4
 
@@ -13,6 +14,13 @@ from bodo.io.helpers import ExceptionPropagatingThread, update_env_vars
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning
+
+# Imports for convenience.
+try:
+    from snowflake.connector import JSONResultBatch, SnowflakeConnection
+except ImportError:
+    JSONResultBatch = None
+    SnowflakeConnection = None
 
 # A configurable variable by which we determine whether to dictionary-encode
 # a string column.
@@ -200,11 +208,84 @@ class SnowflakeDataset(object):
         self.conn = conn  # SnowflakeConnection instance
 
 
-def get_dataset(query, conn_str, only_fetch_length=False):
-    """Get snowflake dataset info required by Arrow reader in C++.
-    only_fetch_length is used when loading 0 columns to indicate
-    we should create an 'empty' dataset and we are just computing
-    a count(*)"""
+class FakeArrowJSONResultBatch:
+    """
+    Results Batch used to return a JSONResult in arrow format while
+    conforming to the same APIS as ArrowResultBatch
+    """
+
+    def __init__(self, json_batch: JSONResultBatch, schema: pa.Schema) -> None:
+        self._json_batch = json_batch
+        self._schema = schema
+
+    @property
+    def rowcount(self):
+        return self._json_batch.rowcount
+
+    def to_arrow(self, conn: Optional[SnowflakeConnection] = None) -> pa.Table:
+        """
+        Return the data in arrow format.
+
+        Args:
+            conn (Optional[snowflake.connection.SnowflakeConnection]): Connection
+                that is accepted by ArrowResultBatch. We ignore this argument but
+                conform to the same API.
+
+        Returns:
+            pa.Table: The data in arrow format.
+        """
+        # Iterate over the data to use the pa.Table.from_pylist
+        # constructor
+        pylist = []
+        for row in self._json_batch.create_iter():
+            pylist.append(
+                {self._schema.names[i]: col_val for i, col_val in enumerate(row)}
+            )
+        table = pa.Table.from_pylist(pylist, schema=self._schema)
+        return table
+
+
+def get_dataset(
+    query: str,
+    conn_str: str,
+    only_fetch_length: Optional[bool] = False,
+    is_select_query: Optional[bool] = True,
+) -> Tuple[SnowflakeDataset, int]:
+    """Get snowflake dataset info required by Arrow reader in C++ and execute
+    the Snowflake query
+
+    Args:
+        query (str): Query to execute inside Snowflake
+        conn_str (str): Connection string Bodo will parse to connect to Snowflake.
+        only_fetch_length (bool, optional): Is the query just used to fetch rather
+            than return a table? If so we just run a COUNT(*) query and broadcast
+            the length without any batches.. Defaults to False.
+        is_select_query (bool, optional): Is this query a select?
+
+    Raises:
+        BodoError: Raises an error if Bodo returns the data in the wrong format.
+
+    Returns:
+        Tuple([SnowflakeDataset, int]): Returns a pair of values:
+            - The SnowflakeDataset object that holds the information to access
+              the actual data results.
+            - The number of rows in the output.
+    """
+    assert not (
+        only_fetch_length and not is_select_query
+    ), "The only length optimization can only be run with select queries"
+
+    # Snowflake import
+    try:
+        import snowflake.connector
+    except ImportError:
+        raise BodoError(
+            "Snowflake Python connector packages not found. "
+            "Fetching data from Snowflake requires snowflake-connector-python. "
+            "This can be installed by calling 'conda install -c conda-forge snowflake-connector-python' "
+            "or 'pip install snowflake-connector-python'."
+        )
+
     ev = tracing.Event("get_snowflake_dataset")
 
     comm = MPI.COMM_WORLD
@@ -220,7 +301,7 @@ def get_dataset(query, conn_str, only_fetch_length=False):
     batches = []
     schema = pa.schema([])
 
-    if only_fetch_length:
+    if only_fetch_length and is_select_query:
         # If we are loading 0 columns, the query will just be a COUNT(*).
         # In this case we can skip computing the query
         if bodo.get_rank() == 0:
@@ -243,8 +324,11 @@ def get_dataset(query, conn_str, only_fetch_length=False):
             # before they can start reading, so we want to get the schema asap)
             # TODO is there a way to get Arrow schema without loading data?
             ev_get_schema = tracing.Event("get_schema", is_parallel=False)
-            query_probe = f"select * from ({query}) x LIMIT {100}"
-            arrow_data = cur.execute(query_probe).fetch_arrow_all()
+            if is_select_query:
+                query_probe = f"select * from ({query}) x LIMIT {100}"
+                arrow_data = cur.execute(query_probe).fetch_arrow_all()
+            else:
+                arrow_data = None
             if arrow_data is None:
                 # If we don't load any data we construct a schema from describe.
                 described_query = cur.describe(query)
@@ -268,7 +352,29 @@ def get_dataset(query, conn_str, only_fetch_length=False):
             # get the list of result batches (this doesn't load data).
             # Batch type is snowflake.connector.result_batch.ArrowResultBatch
             batches = cur.get_result_batches()
-            # Broadcast the number of rows, batches, and schema
+            if len(batches) > 0 and not isinstance(
+                batches[0], snowflake.connector.result_batch.ArrowResultBatch
+            ):
+                if (
+                    not is_select_query
+                    and len(batches) == 1
+                    and isinstance(
+                        batches[0], snowflake.connector.result_batch.JSONResultBatch
+                    )
+                ):
+                    # When executing a non-select query (e.g. DELETE), we may not obtain
+                    # the result in Arrow format and instead get a JSONResultBatch. If so
+                    # we convert the JSONResultBatch to a fake arrow that supports the same
+                    # APIs.
+                    #
+                    # To be conservative against possible performance issues during development, we
+                    # only allow a single batch. Every query that is currently supported only returns
+                    # a single row.
+                    batches = [FakeArrowJSONResultBatch(x, schema) for x in batches]
+                else:
+                    raise BodoError(
+                        f"Batches returns from Snowflake don't match the expected format. Expected Arrow batches but got {type(batches[0])}"
+                    )
             comm.bcast((num_rows, batches, schema))
         else:
             num_rows, batches, schema = comm.bcast(None)

@@ -137,4 +137,13 @@ public abstract class BodoSqlSchema implements Schema {
   public Schema snapshot(SchemaVersion sv) {
     throw new UnsupportedOperationException("Not supported yet.");
   }
+
+  /**
+   * Generates the code necessary to submit the remote query to the catalog DB. This is not
+   * supported for local tables.
+   *
+   * @param query Query to submit.
+   * @return The generated code.
+   */
+  public abstract String generateRemoteQuery(String query);
 }

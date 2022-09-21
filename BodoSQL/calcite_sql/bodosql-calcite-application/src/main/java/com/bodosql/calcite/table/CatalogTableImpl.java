@@ -76,4 +76,16 @@ public class CatalogTableImpl extends BodoSqlTable {
   public String generateReadCode() {
     return this.getCatalogSchema().generateReadCode(this.getName());
   }
+
+  /**
+   * Generates the code necessary to submit the remote query to the catalog DB. This is not
+   * supported for local tables.
+   *
+   * @param query Query to submit.
+   * @return The generated code.
+   */
+  @Override
+  public String generateRemoteQuery(String query) {
+    return this.getCatalogSchema().generateRemoteQuery(query);
+  }
 }

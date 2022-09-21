@@ -89,4 +89,17 @@ public class LocalTableImpl extends BodoSqlTable {
   public String generateReadCode() {
     return this.readCode;
   }
+
+  /**
+   * Generates the code necessary to submit the remote query to the catalog DB. This is not
+   * supported for local tables.
+   *
+   * @param query Query to submit.
+   * @return The generated code.
+   */
+  @Override
+  public String generateRemoteQuery(String query) {
+    throw new UnsupportedOperationException(
+        "A remote query cannot be submitted with a local table");
+  }
 }

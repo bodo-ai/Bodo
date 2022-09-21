@@ -97,6 +97,18 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
   }
 
   /**
+   * Generates the code necessary to submit the remote query to the catalog DB. This is not
+   * supported for local tables.
+   *
+   * @param query Query to submit.
+   * @return The generated code.
+   */
+  @Override
+  public String generateRemoteQuery(String query) {
+    return this.catalog.generateRemoteQuery(query);
+  }
+
+  /**
    * API specific to CatalogSchemaImpl and not all schemas. Since schemas with the same catalog
    * often share the same code generation process, the write code for a given table with a catalog
    * is controlled by that catalog.
@@ -119,5 +131,10 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
    */
   public String generateReadCode(String tableName) {
     return this.catalog.generateReadCode(this.getName(), tableName);
+  }
+
+  /** @return The catalog for the schema. */
+  public BodoSQLCatalog getCatalog() {
+    return catalog;
   }
 }

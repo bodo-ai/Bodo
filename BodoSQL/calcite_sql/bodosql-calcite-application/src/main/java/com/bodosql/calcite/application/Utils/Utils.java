@@ -2,6 +2,11 @@ package com.bodosql.calcite.application.Utils;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
+import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
+import com.bodosql.calcite.schema.BodoSqlSchema;
+import com.bodosql.calcite.schema.CatalogSchemaImpl;
+import com.bodosql.calcite.table.BodoSqlTable;
+import com.bodosql.calcite.table.CatalogTableImpl;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -576,5 +581,14 @@ public class Utils {
     if (!test) {
       throw new RuntimeException(msg);
     }
+  }
+
+  public static boolean isSnowflakeCatalogTable(BodoSqlTable table) {
+    BodoSqlSchema schema = table.getSchema();
+    if (table instanceof CatalogTableImpl && schema instanceof CatalogSchemaImpl) {
+      CatalogSchemaImpl catalogSchema = (CatalogSchemaImpl) schema;
+      return catalogSchema.getCatalog() instanceof SnowflakeCatalogImpl;
+    }
+    return false;
   }
 }

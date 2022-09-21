@@ -934,6 +934,7 @@ class UntypedPass:
             unsupported_columns,
             unsupported_arrow_types,
             is_select_query,
+            has_side_effects,
         ) = _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs)
 
         index_ind = None
@@ -967,6 +968,7 @@ class UntypedPass:
                 unsupported_columns,
                 unsupported_arrow_types,
                 is_select_query,
+                has_side_effects,
                 index_col_name,
                 index_arr_typ,
                 None,
@@ -3060,6 +3062,9 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs):
     db_type, con_paswd = bodo.ir.sql_ext.parse_dbtype(con_const)
     # Whether SQL statement is SELECT query
     is_select_query = False
+    # Does the SQL node have side effects (e.g. DELETE). If
+    # so we cannot perform DCE.
+    has_side_effects = False
     # Operations that create or edit objects don't return data.
     # They work with Pandas but then raises an exception
     # and ends program. So we avoid them.
@@ -3074,16 +3079,20 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs):
     # Oracle: cx_oracle doesn't support them. Bodo displays same error as Pandas.
     # Postgresql: SELECT and SHOW only.
     # Declare what Bodo supports.  Users may run them to explore their database
-    supported_sql_queries = ("SELECT", "SHOW", "DESCRIBE", "DESC")
-    sql_word = sql_const.lstrip().split(maxsplit=1)[0]
-    if sql_word.upper() not in supported_sql_queries:
+    supported_sql_queries = ("SELECT", "SHOW", "DESCRIBE", "DESC", "DELETE")
+    sql_word = sql_const.lstrip().split(maxsplit=1)[0].upper()
+    if sql_word not in supported_sql_queries:
         raise BodoError(f"{sql_word} query is not supported.\n")
-    elif sql_word.upper() == "SELECT":
+    elif sql_word == "SELECT":
         is_select_query = True
-    elif db_type in ("snowflake", "oracle") or (
-        db_type == "postgresql" and sql_word in ("DESCRIBE", "DESC")
+    elif (
+        db_type == "oracle"
+        or (db_type == "postgresql" and sql_word in ("DESCRIBE", "DESC", "DELETE"))
+        or (db_type == "snowflake" and sql_word in ("DESCRIBE", "DESC", "SHOW"))
     ):
         raise BodoError(f"{sql_word} query is not supported with {db_type}.\n")
+    elif sql_word == "DELETE":
+        has_side_effects = True
     # find df type
     (
         df_type,
@@ -3116,6 +3125,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs):
         unsupported_columns,
         unsupported_arrow_types,
         is_select_query,
+        has_side_effects,
     )
 
 
@@ -3180,8 +3190,12 @@ def _get_sql_df_type_from_db(
                     is_nullable.append(x.is_nullable)
                 # TODO: Avoid executing the query once its possible to determine
                 # the exact arrow types.
-                executed_query = cursor.execute(sql_call)
-                arrow_data = executed_query.fetch_arrow_all()
+                if is_select_query:
+                    # We can only execute a sample query if we are performing a select.
+                    executed_query = cursor.execute(sql_call)
+                    arrow_data = executed_query.fetch_arrow_all()
+                else:
+                    arrow_data = None
                 if arrow_data is None:
                     # If there is no data to load, construct the types
                     # based on the metadata.

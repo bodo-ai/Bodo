@@ -8,9 +8,11 @@ import string
 import time
 import types as pytypes
 import warnings
+from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
 from typing import Dict
+from uuid import uuid4
 
 import numba
 import numpy as np
@@ -2070,3 +2072,60 @@ def get_snowflake_connection_string(db, schema, user=1):
     warehouse = "DEMO_WH"
     conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
     return conn
+
+
+@contextmanager
+def create_snowflake_table(
+    df: pd.DataFrame, base_table_name: str, db: str, schema: str
+) -> str:
+    """Creates a new table in Snowflake derived from the base table name
+    and using the DataFrame. The name from the base name is modified to help
+    reduce the likelihood of conflicts during concurrent tests.
+
+    Returns the name of the table added to Snowflake.
+
+    Args:
+        df (pd.DataFrame): DataFrame to insert
+        base_table_name (str): Base string for generating the table name.
+        db (str): Name of the snowflake db.
+        schema (str): Name of the snowflake schema
+
+    Returns:
+        str: The final table name.
+    """
+    try:
+        comm = MPI.COMM_WORLD
+        table_name = None
+        if bodo.get_rank() == 0:
+            unique_name = str(uuid4()).replace("-", "_")
+            table_name = f"{base_table_name}_{unique_name}".lower()
+            conn_str = get_snowflake_connection_string(db, schema)
+            df.to_sql(
+                table_name, conn_str, schema=schema, index=False, if_exists="replace"
+            )
+        table_name = comm.bcast(table_name)
+        yield table_name
+    finally:
+        drop_snowflake_table(table_name, db, schema)
+
+
+def drop_snowflake_table(table_name: str, db: str, schema: str):
+    """Drops a table from snowflake with the given table_name.
+    The db and schema are also provided to connect to Snowflake.
+
+    Args:
+        table_name (str): Table Name inside Snowflake.
+        db (str): Snowflake database name
+        schema (str): Snowflake schema name.
+    """
+    comm = MPI.COMM_WORLD
+    drop_err = None
+    if bodo.get_rank() == 0:
+        try:
+            conn_str = get_snowflake_connection_string(db, schema)
+            pd.read_sql(f"drop table {table_name}", conn_str)
+        except Exception as e:
+            drop_err = e
+    drop_err = comm.bcast(drop_err)
+    if isinstance(drop_err, Exception):
+        raise drop_err

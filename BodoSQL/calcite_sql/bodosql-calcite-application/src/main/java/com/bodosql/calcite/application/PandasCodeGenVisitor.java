@@ -126,15 +126,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
   */
   private HashMap<String, String> loweredGlobals;
 
+  // The original SQL query. This is used for any operations that must be entirely
+  // pushed into a remote db (e.g. Snowflake)
+  private String originalSQLQuery;
+
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
       HashMap<String, RexNode> searchMap,
-      HashMap<String, String> loweredGlobalVariablesMap) {
+      HashMap<String, String> loweredGlobalVariablesMap,
+      String originalSQLQuery) {
     super();
     this.exprTypesMap = exprTypesMap;
     this.searchMap = searchMap;
     this.varCache = new HashMap<Integer, Pair<String, List<String>>>();
     this.loweredGlobals = loweredGlobalVariablesMap;
+    this.originalSQLQuery = originalSQLQuery;
   }
 
   /**
@@ -648,6 +654,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       case INSERT:
         this.visitInsertInto(node);
         break;
+      case DELETE:
+        this.visitDelete(node);
+        break;
       default:
         throw new BodoSQLCodegenException(
             "Internal Error: Encountered Unsupported Calcite Modify operation "
@@ -694,6 +703,56 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
     outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
     this.generatedCode.append(outputCode);
+  }
+
+  /**
+   * Visitor for SQL Delete Operation with a remote database. We currently only support delete via
+   * our Snowflake Catalog.
+   *
+   * <p>Note: This operation DOES NOT support caching as it has side effects.
+   */
+  public void visitDelete(LogicalTableModify node) {
+    RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
+    BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
+    String outputVar = this.genDfVar();
+    List<String> outputColumns = node.getRowType().getFieldNames();
+    if (isSnowflakeCatalogTable(bodoSqlTable)) {
+      // If we are updating Snowflake we push the query into Snowflake.
+      // We require the Snowflake Catalog to ensure we don't need to remap
+      // any names.
+      try {
+        this.generatedCode
+            .append(getBodoIndent())
+            .append(outputVar)
+            .append(" = ")
+            .append(bodoSqlTable.generateRemoteQuery(this.originalSQLQuery))
+            .append("\n");
+      } catch (RuntimeException e) {
+        // If we encounter an exception we cannot push the query into Snowflake.
+        String errorMsg =
+            "BodoSQL implements Delete for Snowflake tables by pushing the entire query into"
+                + " Snowflake.\n"
+                + "Please verify that all of your Delete query syntax is supported inside of"
+                + " Snowflake and doesn't contain any BodoSQL Specific Features.\n"
+                + "Detailed Error:\n"
+                + e.getMessage();
+        throw new RuntimeException(errorMsg);
+      }
+      // Update the column names to ensure they match as we don't know the
+      // Snowflake names right now
+      this.generatedCode.append(getBodoIndent()).append(outputVar).append(".columns = ");
+      this.generatedCode.append("[");
+      for (String colName : outputColumns) {
+        this.generatedCode.append(makeQuoted(colName)).append(", ");
+      }
+      this.generatedCode.append("]\n");
+    } else {
+      throw new BodoSQLCodegenException(
+          "Delete only supported when all source tables are found within a user's Snowflake"
+              + " account and are provided via the Snowflake catalog.");
+    }
+    this.varGenStack.push(outputVar);
+    this.columnNamesStack.push(outputColumns);
   }
 
   /**

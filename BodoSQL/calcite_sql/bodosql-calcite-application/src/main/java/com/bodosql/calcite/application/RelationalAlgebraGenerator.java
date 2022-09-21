@@ -546,15 +546,15 @@ public class RelationalAlgebraGenerator {
 
   public String getPandasString(String sql) throws Exception {
     RelNode optimizedPlan = getRelationalAlgebra(sql, true);
-    return getPandasStringFromPlan(optimizedPlan);
+    return getPandasStringFromPlan(optimizedPlan, sql);
   }
 
   public String getPandasStringUnoptimized(String sql) throws Exception {
     RelNode unOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, true);
-    return getPandasStringFromPlan(unOptimizedPlan);
+    return getPandasStringFromPlan(unOptimizedPlan, sql);
   }
 
-  private String getPandasStringFromPlan(RelNode plan) throws Exception {
+  private String getPandasStringFromPlan(RelNode plan, String originalSQL) throws Exception {
     /**
      * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
      * this, we use two components. First, each RelNode comes with a unique id, which This is used
@@ -566,7 +566,7 @@ public class RelationalAlgebraGenerator {
     ExprTypeVisitor.determineRelNodeExprType(plan, exprTypes, searchMap);
     this.loweredGlobalVariables = new HashMap<>();
     PandasCodeGenVisitor codegen =
-        new PandasCodeGenVisitor(exprTypes, searchMap, this.loweredGlobalVariables);
+        new PandasCodeGenVisitor(exprTypes, searchMap, this.loweredGlobalVariables, originalSQL);
     codegen.go(plan);
     String pandas_code = codegen.getGeneratedCode();
     return pandas_code;
