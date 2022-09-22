@@ -790,13 +790,15 @@ def major_types_nullable(request):
     Fixture that contains an entry for every major type class (e.g. integer
     but not each bitwidth) with null values. These columns are always named
     A, B, and C. In addition every DataFrame has an identical boolean column
-    that can be as the condition in case statements named COND_COL.
+    that can be used as the condition in case statements named COND_COL. They also
+    have a distinct column for sorting called ORDERBY_COl.
     """
     df = request.param.copy()
     assert not (
         len(df) % 3
     ), "Appending a boolean column requires the DataFrame to be divisible by 3"
     df["COND_COL"] = pd.Series([True, False, None] * (len(df) // 3))
+    df["ORDERBY_COl"] = np.arange(len(df))
     return {"table1": df}
 
 

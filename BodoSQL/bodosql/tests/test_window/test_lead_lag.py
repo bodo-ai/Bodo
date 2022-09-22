@@ -351,6 +351,48 @@ def test_lead_lag_consts_boolean(
     )
 
 
+def test_lead_lag_case_null_literal(
+    major_types_nullable,
+    lead_or_lag,
+    spark_info,
+    null_respect_string,
+    memory_leak_check,
+):
+    """
+    Tests support for passing a null literal as the fill_value within
+    a lead/lag used in a case statement. See the usage example within
+    [BE-3564]
+    """
+    window = "(PARTITION BY B ORDER BY ORDERBY_COl)"
+    query = f"""
+        Select
+            B,
+            CASE WHEN COND_COL THEN {lead_or_lag}(C, 1, NULL) {null_respect_string} OVER {window} ELSE NULL END as CASE_COL
+        FROM
+            Table1
+    """
+    output_cols = ["B", "CASE_COL"]
+    convert_columns_bytearray = None
+    convert_columns_bool = None
+    convert_columns_timedelta = None
+    if isinstance(major_types_nullable["table1"]["A"].values[0], bytes):
+        convert_columns_bytearray = output_cols
+    elif isinstance(major_types_nullable["table1"]["A"].values[0], bool):
+        convert_columns_bool = output_cols
+    elif isinstance(major_types_nullable["table1"]["A"].values[0], np.timedelta64):
+        convert_columns_timedelta = output_cols
+    check_query(
+        query,
+        major_types_nullable,
+        spark_info,
+        check_dtype=False,
+        only_jit_1DVar=True,
+        convert_columns_bytearray=convert_columns_bytearray,
+        convert_columns_bool=convert_columns_bool,
+        convert_columns_timedelta=convert_columns_timedelta,
+    )
+
+
 # @pytest.mark.skip(
 #     "specifying non constant arg1 for lead/lag is not supported in spark, but currently allowed in Calcite. Can revisit this later if needed for a customer"
 # )
