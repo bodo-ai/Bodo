@@ -588,6 +588,7 @@ class TypingTransforms:
 
         if (
             is_expr(index_def, "binop")
+            or self._is_and_filter_pushdown(index_def)
             or self._is_na_filter_pushdown_func(index_def, index_call_name)
             or self._is_isin_filter_pushdown_func(index_def, index_call_name)
             or self._starts_ends_with_filter_pushdown_func(index_def, index_call_name)
@@ -713,17 +714,18 @@ class TypingTransforms:
             require(read_node.db_type in ("snowflake", "iceberg"))
 
         # make sure all filters have the right form
-        # If we have a call expression, then we just pass
+        # If we don't have a binary operation, then we just pass
         # the single def as the index_def and set the lhs_def
         # and rhs_def to none.
-        if is_call(index_def):
+        if is_expr(index_def, "binop") or self._is_and_filter_pushdown(index_def):
+            lhs_def = get_definition(func_ir, get_binop_arg(index_def, 0))
+            lhs_def = self._remove_series_wrappers_from_def(lhs_def)
+            rhs_def = get_definition(func_ir, get_binop_arg(index_def, 1))
+            rhs_def = self._remove_series_wrappers_from_def(rhs_def)
+        else:
             lhs_def = None
             rhs_def = None
-        else:
-            lhs_def = get_definition(func_ir, index_def.lhs)
-            lhs_def = self._remove_series_wrappers_from_def(lhs_def)
-            rhs_def = get_definition(func_ir, index_def.rhs)
-            rhs_def = self._remove_series_wrappers_from_def(rhs_def)
+
         df_var = assign.value.value
         filters = self._get_partition_filters(
             index_def,
@@ -901,19 +903,18 @@ class TypingTransforms:
         be excluded from filter dependency reordering
         """
         # e.g. (df["A"] == 3) | (df["A"] == 4)
-        if is_expr(index_def, "binop") and index_def.fn in (
-            operator.or_,
-            operator.and_,
-        ):
+        if (
+            is_expr(index_def, "binop") and index_def.fn == operator.or_
+        ) or self._is_and_filter_pushdown(index_def):
             left_nodes = self._get_filter_nodes(
                 self._remove_series_wrappers_from_def(
-                    get_definition(func_ir, index_def.lhs)
+                    get_definition(func_ir, get_binop_arg(index_def, 0))
                 ),
                 func_ir,
             )
             right_nodes = self._get_filter_nodes(
                 self._remove_series_wrappers_from_def(
-                    get_definition(func_ir, index_def.rhs)
+                    get_definition(func_ir, get_binop_arg(index_def, 1))
                 ),
                 func_ir,
             )
@@ -1020,53 +1021,50 @@ class TypingTransforms:
         # https://github.com/sympy/sympy/blob/da5cd290017814e6100859e5a3f289b3eda4ca6c/sympy/logic/boolalg.py#L1565
         # Or case: call recursively on arguments and concatenate
         # e.g. A or B
-        if is_expr(index_def, "binop"):
-            if index_def.fn == operator.or_:
-                if is_expr(lhs_def, "binop"):
-                    l_def = get_definition(func_ir, lhs_def.lhs)
-                    l_def = self._remove_series_wrappers_from_def(l_def)
-                    r_def = get_definition(func_ir, lhs_def.rhs)
-                    r_def = self._remove_series_wrappers_from_def(r_def)
-                    left_or = self._get_partition_filters(
-                        lhs_def, df_var, l_def, r_def, func_ir, read_node
-                    )
-                else:
-                    left_or = [
-                        [
-                            self._get_call_filter(
-                                lhs_def, func_ir, df_var, df_col_names, is_snowflake
-                            )
-                        ]
+
+        def get_child_filter(child_def):
+            """
+            Function that abstracts away the recursive steps of getting the filters
+            from the child exprs of index_def.
+            """
+            if is_expr(child_def, "binop") or self._is_and_filter_pushdown(child_def):
+                l_def = get_definition(func_ir, get_binop_arg(child_def, 0))
+                l_def = self._remove_series_wrappers_from_def(l_def)
+                r_def = get_definition(func_ir, get_binop_arg(child_def, 1))
+                r_def = self._remove_series_wrappers_from_def(r_def)
+                child_or = self._get_partition_filters(
+                    child_def, df_var, l_def, r_def, func_ir, read_node
+                )
+            else:
+                child_or = [
+                    [
+                        self._get_call_filter(
+                            child_def, func_ir, df_var, df_col_names, is_snowflake
+                        )
                     ]
-                if is_expr(rhs_def, "binop"):
-                    l_def = get_definition(func_ir, rhs_def.lhs)
-                    l_def = self._remove_series_wrappers_from_def(l_def)
-                    r_def = get_definition(func_ir, rhs_def.rhs)
-                    r_def = self._remove_series_wrappers_from_def(r_def)
-                    right_or = self._get_partition_filters(
-                        rhs_def, df_var, l_def, r_def, func_ir, read_node
-                    )
-                else:
-                    right_or = [
-                        [
-                            self._get_call_filter(
-                                rhs_def, func_ir, df_var, df_col_names, is_snowflake
-                            )
-                        ]
-                    ]
+                ]
+            return child_or
+
+        if is_expr(index_def, "binop") or self._is_and_filter_pushdown(index_def):
+            if is_expr(index_def, "binop") and index_def.fn == operator.or_:
+                left_or = get_child_filter(lhs_def)
+                right_or = get_child_filter(rhs_def)
                 return left_or + right_or
 
             # And case: distribute Or over And to normalize if needed
-            if index_def.fn == operator.and_:
+            if self._is_and_filter_pushdown(index_def):
 
                 # rhs is Or
                 # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
                 if is_expr(rhs_def, "binop") and rhs_def.fn == operator.or_:
                     # lhs And rhs.lhs (A And B)
                     new_lhs = ir.Expr.binop(
-                        operator.and_, index_def.lhs, rhs_def.lhs, index_def.loc
+                        operator.and_,
+                        get_binop_arg(index_def, 0),
+                        get_binop_arg(rhs_def, 0),
+                        index_def.loc,
                     )
-                    new_lhs_rdef = get_definition(func_ir, rhs_def.lhs)
+                    new_lhs_rdef = get_definition(func_ir, get_binop_arg(rhs_def, 0))
                     new_lhs_rdef = self._remove_series_wrappers_from_def(new_lhs_rdef)
                     left_or = self._get_partition_filters(
                         new_lhs,
@@ -1078,9 +1076,12 @@ class TypingTransforms:
                     )
                     # lhs And rhs.rhs (A And C)
                     new_rhs = ir.Expr.binop(
-                        operator.and_, index_def.lhs, rhs_def.rhs, index_def.loc
+                        operator.and_,
+                        get_binop_arg(index_def, 0),
+                        get_binop_arg(rhs_def, 1),
+                        index_def.loc,
                     )
-                    new_rhs_rdef = get_definition(func_ir, rhs_def.rhs)
+                    new_rhs_rdef = get_definition(func_ir, get_binop_arg(rhs_def, 1))
                     new_rhs_rdef = self._remove_series_wrappers_from_def(new_rhs_rdef)
                     right_or = self._get_partition_filters(
                         new_rhs,
@@ -1097,9 +1098,12 @@ class TypingTransforms:
                 if is_expr(lhs_def, "binop") and lhs_def.fn == operator.or_:
                     # lhs.lhs And rhs (B And A)
                     new_lhs = ir.Expr.binop(
-                        operator.and_, lhs_def.lhs, index_def.rhs, index_def.loc
+                        operator.and_,
+                        get_binop_arg(lhs_def, 0),
+                        get_binop_arg(index_def, 1),
+                        index_def.loc,
                     )
-                    new_lhs_ldef = get_definition(func_ir, lhs_def.lhs)
+                    new_lhs_ldef = get_definition(func_ir, get_binop_arg(lhs_def, 0))
                     new_lhs_ldef = self._remove_series_wrappers_from_def(new_lhs_ldef)
                     left_or = self._get_partition_filters(
                         new_lhs,
@@ -1111,9 +1115,12 @@ class TypingTransforms:
                     )
                     # lhs.rhs And rhs (C And A)
                     new_rhs = ir.Expr.binop(
-                        operator.and_, lhs_def.rhs, index_def.rhs, index_def.loc
+                        operator.and_,
+                        get_binop_arg(lhs_def, 1),
+                        get_binop_arg(index_def, 1),
+                        index_def.loc,
                     )
-                    new_rhs_ldef = get_definition(func_ir, lhs_def.rhs)
+                    new_rhs_ldef = get_definition(func_ir, get_binop_arg(lhs_def, 1))
                     new_rhs_ldef = self._remove_series_wrappers_from_def(new_rhs_ldef)
                     right_or = self._get_partition_filters(
                         new_rhs,
@@ -1126,38 +1133,8 @@ class TypingTransforms:
                     return left_or + right_or
 
                 # both lhs and rhs are And/literal expressions.
-                if is_expr(lhs_def, "binop"):
-                    l_def = get_definition(func_ir, lhs_def.lhs)
-                    l_def = self._remove_series_wrappers_from_def(l_def)
-                    r_def = get_definition(func_ir, lhs_def.rhs)
-                    r_def = self._remove_series_wrappers_from_def(r_def)
-                    left_or = self._get_partition_filters(
-                        lhs_def, df_var, l_def, r_def, func_ir, read_node
-                    )
-                else:
-                    left_or = [
-                        [
-                            self._get_call_filter(
-                                lhs_def, func_ir, df_var, df_col_names, is_snowflake
-                            )
-                        ]
-                    ]
-                if is_expr(rhs_def, "binop"):
-                    l_def = get_definition(func_ir, rhs_def.lhs)
-                    l_def = self._remove_series_wrappers_from_def(l_def)
-                    r_def = get_definition(func_ir, rhs_def.rhs)
-                    r_def = self._remove_series_wrappers_from_def(r_def)
-                    right_or = self._get_partition_filters(
-                        rhs_def, df_var, l_def, r_def, func_ir, read_node
-                    )
-                else:
-                    right_or = [
-                        [
-                            self._get_call_filter(
-                                rhs_def, func_ir, df_var, df_col_names, is_snowflake
-                            )
-                        ]
-                    ]
+                left_or = get_child_filter(lhs_def)
+                right_or = get_child_filter(rhs_def)
 
                 # If either expression is an AND, we may still have ORs inside
                 # the AND. As a result, distributed ANDs across all ORs.
@@ -4071,6 +4048,20 @@ class TypingTransforms:
             )
         )
 
+    def _is_and_filter_pushdown(self, index_def):
+        """
+        Performs an equality check on the index_def expr with & / AND,
+        depending on whether the operator is a binop or a function call respectively.
+        This is to ensure that we can support filter pushdown for AND as well instead of just &.
+        """
+        if is_expr(index_def, "binop"):
+            return index_def.fn == operator.and_
+        elif is_call(index_def):
+            call_name = guard(find_callname, self.func_ir, index_def, self.typemap)
+            return call_name == ("booland", "bodo.libs.bodosql_array_kernels")
+        else:
+            return False
+
     def _is_na_filter_pushdown_func(self, index_def, index_call_name):
         """
         Does an expression match a supported is/not na call that can
@@ -4306,6 +4297,26 @@ def _find_updated_containers(blocks, topo_order):
             updated_containers[w] = m
 
     return updated_containers, equiv_vars
+
+
+def get_binop_arg(child_def, arg_no):
+    """
+    The child accessors of an expr differ depending on whether
+    the expr is a binop or a function call.
+
+    Therefore this is a wrapper method to support both types of expr
+    with a single interface, using an index (arg_no) of either 0 or 1, which
+    maps to child_def.lhs and child_def.rhs respectively.
+    """
+    require(arg_no == 0 or arg_no == 1)
+
+    if is_expr(child_def, "binop"):
+        if arg_no == 0:
+            return child_def.lhs
+        else:
+            return child_def.rhs
+
+    return child_def.args[arg_no]
 
 
 def guard_const(func, *args, **kwargs):
