@@ -379,6 +379,11 @@ def remove_hiframes(rhs, lives, call_list):
         # all bodosql functions are side effect-free
         return True
 
+    # Check for all bodosql array kernels.
+    if call_list[1:] == ["bodosql_array_kernels", "libs", bodo]:  # pragma: no cover
+        # all bodosql array kernels are side effect-free
+        return True
+
     # TODO: handle copy() of the relevant types properly
     if len(call_list) == 2 and call_list[0] == "copy":
         return True
