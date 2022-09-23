@@ -5,7 +5,6 @@ direct BodoSQLContext.
 """
 
 import os
-import time
 
 import bodosql
 import numpy as np
@@ -45,6 +44,60 @@ def dummy_snowflake_catalogs(request):
     """
     List of table paths that should be suppported.
     None of these actually point to valid data
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        bodosql.SnowflakeCatalog(
+            os.environ.get("SF_USER", ""),
+            os.environ.get("SF_PASSWORD", ""),
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            "TEST_DB",
+            connection_params={"schema": "PUBLIC"},
+        )
+    ]
+)
+def test_db_snowflake_catalog(request):
+    """
+    The test_db snowflake catalog used for most tests.
+    Although this is a fixture there is intentionally a
+    single element.
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        bodosql.SnowflakeCatalog(
+            os.environ.get("SF_USER", ""),
+            os.environ.get("SF_PASSWORD", ""),
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            "SNOWFLAKE_SAMPLE_DATA",
+            connection_params={
+                "schema": "TPCH_SF1",
+                "query_tag": "folder=folder1+ folder2&",
+            },
+        )
+    ]
+)
+def snowflake_sample_data_snowflake_catalog(request):
+    """
+    The snowflake_sample_data snowflake catalog used for most tests.
+    Although this is a fixture there is intentionally a
+    single element.
+    """
+    return request.param
+
+
+@pytest.fixture(params=[False, True])
+def use_default_schema(request):
+    """
+    Should this test assume the snowflake catalog has a default
+    schema.
     """
     return request.param
 
@@ -129,23 +182,18 @@ def test_snowflake_catalog_constructor(memory_leak_check):
     "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
-def test_snowflake_catalog_read(memory_leak_check):
+def test_snowflake_catalog_read(
+    snowflake_sample_data_snowflake_catalog, memory_leak_check
+):
     def impl(bc):
         return bc.sql("SELECT r_name FROM TPCH_SF1.REGION ORDER BY r_name")
 
-    bodo_connect_params = {"query_tag": "folder=folder1+ folder2&"}
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USER"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "SNOWFLAKE_SAMPLE_DATA",
-        connection_params=bodo_connect_params,
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
     py_output = pd.read_sql(
         "Select r_name from REGION ORDER BY r_name",
-        get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"),
+        get_snowflake_connection_string(
+            snowflake_sample_data_snowflake_catalog.database, "TPCH_SF1"
+        ),
     )
     check_func(impl, (bc,), py_output=py_output)
 
@@ -154,7 +202,106 @@ def test_snowflake_catalog_read(memory_leak_check):
     "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
-def test_snowflake_catalog_default(memory_leak_check):
+def test_snowflake_catalog_insert_into(
+    test_db_snowflake_catalog, use_default_schema, memory_leak_check
+):
+    """
+    Tests executing insert into with a Snowflake Catalog.
+    """
+    comm = MPI.COMM_WORLD
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": [1, 3, 5, 7, 9] * 10, "B": ["Afe", "fewfe"] * 25, "C": 1.1}
+    )
+
+    def impl(bc, query):
+        bc.sql(query)
+        # Return an arbitrary value. This is just to enable a py_output
+        # so we can reuse the check_func infrastructure.
+        return 5
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    # Create the table
+    with create_snowflake_table(
+        new_df, "bodosql_catalog_write_test1", db, schema
+    ) as table_name:
+        # Write to Snowflake
+        insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
+        query = f"INSERT INTO {insert_table}(B, C) Select 'literal', A + 1 from table1"
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(impl, (bc, query), only_1D=True, py_output=5)
+        output_df = None
+        # Load the data from snowflake on rank 0 and then broadcast all ranks. This is
+        # to reduce the demand on Snowflake.
+        if bodo.get_rank() == 0:
+            conn_str = get_snowflake_connection_string(db, schema)
+            output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+            # Reset the columns to the original names for simpler testing.
+            output_df.columns = [colname.upper() for colname in output_df.columns]
+        output_df = comm.bcast(output_df)
+        # Recreate the expected output by manually doing an append.
+        result_df = pd.concat(
+            (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
+        )
+        assert_tables_equal(output_df, result_df)
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_catalog_insert_into_read(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests insert into in a snowflake catalog and afterwards reading the result.
+    """
+    comm = MPI.COMM_WORLD
+    schema = "PUBLIC"
+    db = "TEST_DB"
+    new_df = pd.DataFrame(
+        {"A": [1, 3, 5, 7, 9] * 10, "B": ["Afe", "fewfe"] * 25, "C": 1.1}
+    )
+
+    def impl(bc, write_query, read_query):
+        bc.sql(write_query)
+        return bc.sql(read_query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    # Recreate the expected output with an append.
+    py_output = pd.concat(
+        (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
+    )
+    # Rename columns for comparison with the default capitalization when
+    # read from Snowflake.
+    py_output.columns = ["a", "b", "c"]
+    # Create the table
+    with create_snowflake_table(
+        new_df, "bodosql_catalog_write_test3", db, schema
+    ) as table_name:
+        write_query = f"INSERT INTO {schema}.{table_name}(B, C) Select 'literal', A + 1 from table1"
+        read_query = f"Select * from {schema}.{table_name}"
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(
+            impl,
+            (bc, write_query, read_query),
+            sort_output=True,
+            reset_index=True,
+            only_1D=True,
+            py_output=py_output,
+        )
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_catalog_default(
+    snowflake_sample_data_snowflake_catalog, memory_leak_check
+):
     """
     Tests passing a default schema to SnowflakeCatalog.
     """
@@ -169,19 +316,13 @@ def test_snowflake_catalog_default(memory_leak_check):
     def impl3(bc):
         return bc.sql("SELECT r_name FROM __bodolocal__.REGION ORDER BY r_name")
 
-    bodo_connect_params = {"schema": "TPCH_SF1"}
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USER"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "SNOWFLAKE_SAMPLE_DATA",
-        connection_params=bodo_connect_params,
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
     py_output = pd.read_sql(
         "Select r_name from REGION ORDER BY r_name",
-        get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"),
+        get_snowflake_connection_string(
+            snowflake_sample_data_snowflake_catalog.database,
+            snowflake_sample_data_snowflake_catalog.connection_params["schema"],
+        ),
     )
     check_func(impl1, (bc,), py_output=py_output)
 
@@ -202,7 +343,9 @@ def test_snowflake_catalog_default(memory_leak_check):
     "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
-def test_snowflake_catalog_read_tpch(memory_leak_check):
+def test_snowflake_catalog_read_tpch(
+    snowflake_sample_data_snowflake_catalog, memory_leak_check
+):
     tpch_query = """select
                       n_name,
                       sum(l_extendedprice * (1 - l_discount)) as revenue
@@ -232,17 +375,12 @@ def test_snowflake_catalog_read_tpch(memory_leak_check):
     def impl(bc):
         return bc.sql(tpch_query)
 
-    catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USER"],
-        os.environ["SF_PASSWORD"],
-        "bodopartner.us-east-1",
-        "DEMO_WH",
-        "SNOWFLAKE_SAMPLE_DATA",
-    )
-    bc = bodosql.BodoSQLContext(catalog=catalog)
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
     py_output = pd.read_sql(
         tpch_query,
-        get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "TPCH_SF1"),
+        get_snowflake_connection_string(
+            snowflake_sample_data_snowflake_catalog.database, "TPCH_SF1"
+        ),
     )
 
     check_func(impl, (bc,), py_output=py_output, reset_index=True)
@@ -252,14 +390,14 @@ def test_snowflake_catalog_read_tpch(memory_leak_check):
     "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
-def test_delete_simple(memory_leak_check):
+def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests a simple delete clause inside of Snowflake.
     """
     comm = MPI.COMM_WORLD
 
-    schema = "PUBLIC"
-    db = "TEST_DB"
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
     new_df = pd.DataFrame(
         {
             "A": [1, 2, 3] * 10,
@@ -281,14 +419,7 @@ def test_delete_simple(memory_leak_check):
     with create_snowflake_table(
         new_df, "bodosql_delete_test", db, schema
     ) as table_name:
-        catalog = bodosql.SnowflakeCatalog(
-            os.environ["SF_USER"],
-            os.environ["SF_PASSWORD"],
-            "bodopartner.us-east-1",
-            "DEMO_WH",
-            db,
-        )
-        bc = bodosql.BodoSQLContext(catalog=catalog)
+        bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
         num_rows_to_delete = 10
 
         query1 = f"DELETE FROM {schema}.{table_name} WHERE A = 1"
@@ -299,9 +430,7 @@ def test_delete_simple(memory_leak_check):
         check_func(impl1, (query1, bc), only_1D=True, py_output=num_rows_to_delete)
         check_func(impl2, (query2, bc), only_1D=True, py_output=num_rows_to_delete)
         output_df = None
-        # Load the table on rank 0 to verify the drop. We wait a few
-        # seconds in case there could be a delay
-        time.sleep(3)
+        # Load the table on rank 0 to verify the drop.
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
@@ -309,25 +438,17 @@ def test_delete_simple(memory_leak_check):
             output_df.columns = [colname.upper() for colname in output_df.columns]
         output_df = comm.bcast(output_df)
         result_df = new_df[new_df.A == 3]
-        # Data doesn't have a defined ordering so sort.
-        output_df.sort_values(by=["A", "B"])
-        result_df.sort_values(by=["A", "B"])
-        # Drop the index
-        output_df = output_df.reset_index(drop=True)
-        result_df = result_df.reset_index(drop=True)
-        pd.testing.assert_frame_equal(output_df, result_df)
+        assert_tables_equal(output_df, result_df)
 
 
-def test_delete_named_param():
+def test_delete_named_param(test_db_snowflake_catalog):
     """
     Tests submitting a delete query with a named param. Since we just
     push the query into Snowflake without any changes, this query
     should just raise a reasonable error.
     """
-    comm = MPI.COMM_WORLD
-
-    schema = "PUBLIC"
-    db = "TEST_DB"
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
     new_df = pd.DataFrame(
         {
             "A": [1, 2, 3] * 10,
@@ -342,14 +463,7 @@ def test_delete_named_param():
     with create_snowflake_table(
         new_df, "bodosql_dont_delete_test_param", db, schema
     ) as table_name:
-        catalog = bodosql.SnowflakeCatalog(
-            os.environ["SF_USER"],
-            os.environ["SF_PASSWORD"],
-            "bodopartner.us-east-1",
-            "DEMO_WH",
-            db,
-        )
-        bc = bodosql.BodoSQLContext(catalog=catalog)
+        bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
         # Snowflake cannot support out named_params
         query = f"DELETE FROM {schema}.{table_name} WHERE A = @pyvar"
         with pytest.raises(
@@ -359,16 +473,14 @@ def test_delete_named_param():
             impl(query, bc, 1)
 
 
-def test_delete_bodosql_syntax():
+def test_delete_bodosql_syntax(test_db_snowflake_catalog):
     """
     Tests submitting a delete query with SQL that does not match
     Snowflake syntax. Since we just push the query into Snowflake
     without any changes, this query should just raise a reasonable error.
     """
-    comm = MPI.COMM_WORLD
-
-    schema = "PUBLIC"
-    db = "TEST_DB"
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
     new_df = pd.DataFrame(
         {
             "A": [1, 2, 3] * 10,
@@ -383,14 +495,7 @@ def test_delete_bodosql_syntax():
     with create_snowflake_table(
         new_df, "bodosql_dont_delete_test", db, schema
     ) as table_name:
-        catalog = bodosql.SnowflakeCatalog(
-            os.environ["SF_USER"],
-            os.environ["SF_PASSWORD"],
-            "bodopartner.us-east-1",
-            "DEMO_WH",
-            db,
-        )
-        bc = bodosql.BodoSQLContext(catalog=catalog)
+        bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
         # Snowflake doesn't have a CEILING function
         query = f"DELETE FROM {schema}.{table_name} WHERE A = CEILING(1.5)"
         with pytest.raises(
@@ -398,3 +503,20 @@ def test_delete_bodosql_syntax():
             match="Please verify that all of your Delete query syntax is supported inside of Snowflake",
         ):
             impl(query, bc)
+
+
+def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame):
+    """Asserts df1 and df2 have the same data without regard
+    for ordering or index.
+
+    Args:
+        df1 (pd.DataFrame): First dataframe.
+        df2 (pd.DataFrame): Second dataframe.
+    """
+    # Output ordering is not defined so we sort.
+    df1 = df1.sort_values(by=[col for col in df1.columns])
+    df2 = df2.sort_values(by=[col for col in df2.columns])
+    # Drop the index
+    df1 = df1.reset_index(drop=True)
+    df2 = df2.reset_index(drop=True)
+    pd.testing.assert_frame_equal(df1, df2)

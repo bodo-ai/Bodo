@@ -689,6 +689,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.visit(node.getInput(), 0, node);
     // Generate the to_sql code
     StringBuilder outputCode = new StringBuilder();
+    List<String> colNames = this.columnNamesStack.pop();
     String outVar = this.varGenStack.pop();
     RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
     BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
@@ -700,6 +701,31 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String castExpr = bodoSqlTable.generateWriteCastCode(outVar);
     if (castExpr != "") {
       outputCode.append(getBodoIndent()).append(outVar).append(" = ").append(castExpr).append("\n");
+    }
+    // Update column names to the write names.
+    List<String> writeColNames = bodoSqlTable.getWriteColumnNames();
+    boolean hasRename = false;
+    for (int i = 0; i < writeColNames.size(); i++) {
+      if (!colNames.get(i).equals(writeColNames.get(i))) {
+        if (!hasRename) {
+          // Only generate the rename if at least 1 column needs renaming to avoid any empty
+          // dictionary issues.
+          outputCode
+              .append(getBodoIndent())
+              .append(outVar)
+              .append(" = ")
+              .append(outVar)
+              .append(".rename(columns={");
+          hasRename = true;
+        }
+        outputCode.append(makeQuoted(colNames.get(i)));
+        outputCode.append(" : ");
+        outputCode.append(makeQuoted(writeColNames.get(i)));
+        outputCode.append(", ");
+      }
+    }
+    if (hasRename) {
+      outputCode.append("}, copy=False)\n");
     }
     outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
     this.generatedCode.append(outputCode);

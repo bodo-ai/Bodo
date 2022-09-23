@@ -245,14 +245,15 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         // Column name is stored in column 4
         // Data type is stored in column 5
         // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getColumns
-        String columnName = tableInfo.getString(4);
-        if (columnName.equals(columnName.toUpperCase())) {
-          columnName = columnName.toLowerCase();
+        String writeName = tableInfo.getString(4);
+        String readName = writeName;
+        if (readName.equals(readName.toUpperCase())) {
+          readName = readName.toLowerCase();
         }
         int dataType = tableInfo.getInt(5);
         BodoSQLColumnDataType type =
             BodoSQLColumnDataType.fromJavaSqlType(JDBCType.valueOf(dataType));
-        columns.add(new BodoSQLColumnImpl(columnName, type));
+        columns.add(new BodoSQLColumnImpl(readName, writeName, type));
       }
       return new CatalogTableImpl(tableName, schema, columns);
     } catch (SQLException e) {
