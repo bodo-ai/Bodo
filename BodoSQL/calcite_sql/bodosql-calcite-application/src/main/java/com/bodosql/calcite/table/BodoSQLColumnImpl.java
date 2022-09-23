@@ -25,7 +25,10 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   private final BodoSQLColumnDataType elemType;
 
   /** The name of the column. */
-  private final String name;
+  private final String readName;
+
+  /** The name of the column to use for writing. */
+  private final String writeName;
 
   /**
    * Create a new column from a name and a type.
@@ -35,20 +38,45 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
    */
   public BodoSQLColumnImpl(String name, BodoSQLColumnDataType type) {
     this.dataType = type;
-    this.name = name;
+    this.readName = name;
+    this.writeName = name;
+    this.elemType = BodoSQLColumnDataType.EMPTY;
+  }
+
+  public BodoSQLColumnImpl(String readName, String writeName, BodoSQLColumnDataType type) {
+    this.dataType = type;
+    this.readName = readName;
+    this.writeName = writeName;
     this.elemType = BodoSQLColumnDataType.EMPTY;
   }
 
   public BodoSQLColumnImpl(
       String name, BodoSQLColumnDataType type, BodoSQLColumnDataType elemType) {
     this.dataType = type;
-    this.name = name;
+    this.readName = name;
+    this.writeName = name;
+    this.elemType = elemType;
+  }
+
+  public BodoSQLColumnImpl(
+      String readName,
+      String writeName,
+      BodoSQLColumnDataType type,
+      BodoSQLColumnDataType elemType) {
+    this.dataType = type;
+    this.readName = readName;
+    this.writeName = writeName;
     this.elemType = elemType;
   }
 
   @Override
   public String getColumnName() {
-    return this.name;
+    return this.readName;
+  }
+
+  @Override
+  public String getWriteColumnName() {
+    return this.writeName;
   }
 
   @Override
@@ -115,6 +143,6 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   }
 
   private String getCommonCastExpr(String varName, String castValue) {
-    return String.format("%s['%s'].astype(%s, copy=False)", varName, this.name, castValue);
+    return String.format("%s['%s'].astype(%s, copy=False)", varName, this.readName, castValue);
   }
 }

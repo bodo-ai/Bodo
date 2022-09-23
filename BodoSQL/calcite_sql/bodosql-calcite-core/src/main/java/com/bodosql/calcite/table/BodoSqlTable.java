@@ -51,6 +51,23 @@ public abstract class BodoSqlTable implements Table {
     return this.schema;
   }
 
+  public List<String> getColumnNames() {
+    List<String> colNames = new ArrayList<>();
+    for (BodoSQLColumn col : this.columns) {
+      colNames.add(col.getColumnName());
+    }
+    return colNames;
+  }
+
+  /** @return A list of names to use for columns when writing this table. */
+  public List<String> getWriteColumnNames() {
+    List<String> colNames = new ArrayList<>();
+    for (BodoSQLColumn col : this.columns) {
+      colNames.add(col.getWriteColumnName());
+    }
+    return colNames;
+  }
+
   /**
    * Return a row type for the table that can be used in calcite.
    *

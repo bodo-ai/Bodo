@@ -17,6 +17,9 @@ public interface BodoSQLColumn {
    */
   String getColumnName();
 
+  /** Name to use for the column when writing to the original DB. * */
+  String getWriteColumnName();
+
   BodoSQLColumnDataType getColumnDataType();
 
   RelDataType convertToSqlType(RelDataTypeFactory typeFactory);
