@@ -576,3 +576,88 @@ def test_table_path_limit_pushdown_complex(memory_leak_check):
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
     assert hasattr(fir, "meta_head_only_info")
     assert fir.meta_head_only_info[0] is not None
+
+
+@pytest.mark.slow
+def test_boolean_logic_filter_pushdown(memory_leak_check):
+    """
+    Tests that filter pushdown works with different boolean logic expressions of conditionals
+
+    Different boolean logic expressions as followed:
+        - A AND B,
+        - A AND (B OR C)
+        - A OR B
+        - A OR (B AND C)
+        - (A AND B) OR C
+        - (A AND B) OR (C AND D)
+        - (A OR B) AND C
+        - (A OR B) AND (C OR D)
+
+    where A, B, C, D are conditional expressions
+    """
+
+    def impl(filename, query):
+        bc = bodosql.BodoSQLContext(
+            {
+                "table1": bodosql.TablePath(filename, "parquet"),
+            }
+        )
+        return bc.sql(query)
+
+    filename = "bodosql/tests/data/tpch-test-data/parquet/lineitem.parquet"
+    read_df = pd.read_parquet(filename)
+
+    expr_a = "L_ORDERKEY > 10"
+    expr_b = "L_LINENUMBER = 3"
+    expr_c = "L_COMMENT != 'SHIP'"
+    expr_d = "L_SHIPMODE = 'SHIP'"
+
+    cond_a = read_df["L_ORDERKEY"] > 10
+    cond_b = read_df["L_LINENUMBER"] == 3
+    cond_c = read_df["L_COMMENT"] != "SHIP"
+    cond_d = read_df["L_SHIPMODE"] == "SHIP"
+
+    out_cols = ["L_ORDERKEY", "L_LINENUMBER"]
+    select_string = f"Select {out_cols[0]}, {out_cols[1]} from table 1 where"
+
+    queries = [
+        f"{select_string} {expr_a} AND {expr_b}",
+        f"{select_string} {expr_a} AND ({expr_b} OR {expr_c})",
+        f"{select_string} {expr_a} OR {expr_b}",
+        f"{select_string} {expr_a} OR ({expr_b} AND {expr_c})",
+        f"{select_string} ({expr_a} AND {expr_b}) OR {expr_c}",
+        f"{select_string} ({expr_a} AND {expr_b}) OR ({expr_c} AND {expr_d})",
+        f"{select_string} ({expr_a} OR {expr_b}) AND {expr_c}",
+        f"{select_string} ({expr_a} OR {expr_b}) AND ({expr_c} OR {expr_d})",
+    ]
+
+    py_outputs = [
+        read_df.loc[cond_a & cond_b][out_cols],
+        read_df.loc[cond_a & (cond_b | cond_c)][out_cols],
+        read_df.loc[cond_a | cond_b][out_cols],
+        read_df.loc[cond_a | (cond_b & cond_c)][out_cols],
+        read_df.loc[(cond_a & cond_b) | (cond_c)][out_cols],
+        read_df.loc[(cond_a & cond_b) | (cond_c & cond_d)][out_cols],
+        read_df.loc[(cond_a | cond_b) & (cond_c)][out_cols],
+        read_df.loc[(cond_a | cond_b) & (cond_c | cond_d)][out_cols],
+    ]
+
+    for i, query in enumerate(queries):
+        check_func(
+            impl,
+            (
+                filename,
+                query,
+            ),
+            py_output=py_outputs[i],
+            reset_index=True,
+            check_dtype=False,
+        )
+
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+
+        with set_logging_stream(logger, 1):
+            bodo_func = bodo.jit(impl)
+            bodo_func(filename, query)
+            check_logger_msg(stream, "Filter pushdown successfully performed. ")
