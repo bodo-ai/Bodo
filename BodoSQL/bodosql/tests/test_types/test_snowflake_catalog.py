@@ -258,9 +258,8 @@ def test_snowflake_catalog_insert_into_read(
     """
     Tests insert into in a snowflake catalog and afterwards reading the result.
     """
-    comm = MPI.COMM_WORLD
-    schema = "PUBLIC"
-    db = "TEST_DB"
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
     new_df = pd.DataFrame(
         {"A": [1, 3, 5, 7, 9] * 10, "B": ["Afe", "fewfe"] * 25, "C": 1.1}
     )
@@ -283,6 +282,51 @@ def test_snowflake_catalog_insert_into_read(
         new_df, "bodosql_catalog_write_test3", db, schema
     ) as table_name:
         write_query = f"INSERT INTO {schema}.{table_name}(B, C) Select 'literal', A + 1 from table1"
+        read_query = f"Select * from {schema}.{table_name}"
+        # Only test with only_1D=True so we only insert into the table once.
+        check_func(
+            impl,
+            (bc, write_query, read_query),
+            sort_output=True,
+            reset_index=True,
+            only_1D=True,
+            py_output=py_output,
+        )
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_catalog_insert_into_null_literal(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests insert into in a snowflake catalog with a literal null value.
+    """
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": [1, 3, 5, 7, 9] * 10, "B": ["Afe", "fewfe"] * 25, "C": 1.1}
+    )
+
+    def impl(bc, write_query, read_query):
+        bc.sql(write_query)
+        return bc.sql(read_query)
+
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    bc = bc.add_or_replace_view("table1", pd.DataFrame({"A": np.arange(10)}))
+    # Create the table
+    with create_snowflake_table(
+        new_df, "bodosql_catalog_write_test_nulls", db, schema
+    ) as table_name:
+        # Generate the expected output.
+        py_output = pd.concat(
+            (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
+        )
+        # Rename columns for comparison
+        py_output.columns = ["a", "b", "c"]
+        write_query = f"INSERT INTO {schema}.{table_name}(A, B, C) Select NULL as A, 'literal', A + 1 from table1"
         read_query = f"Select * from {schema}.{table_name}"
         # Only test with only_1D=True so we only insert into the table once.
         check_func(
