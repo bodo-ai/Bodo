@@ -846,7 +846,7 @@ def _infer_series_arr_type(S, array_metadata=None):
     if S.dtype == np.dtype("O"):
         # We check the metadata if the data is empty or all null
         if len(S.array) == 0 or S.isna().sum() == len(S):
-            if array_metadata != None:
+            if array_metadata is not None:
                 # If the metadata is passed by the dataframe, it is the type of the underlying array.
 
                 # TODO: array metadata is going to return the type of the array, not the
@@ -864,7 +864,8 @@ def _infer_series_arr_type(S, array_metadata=None):
                 type_list = S._bodo_meta["type_metadata"][1]
                 # If the Series itself has the typing metadata, it will be the original
                 # dtype of the series
-                return _dtype_from_type_enum_list(type_list)
+                # TODO: Update the encoded type metadata for array type instead of dtype.
+                return dtype_to_array_type(_dtype_from_type_enum_list(type_list))
 
         return bodo.typeof(_fix_series_arr_type(S.array))
 
