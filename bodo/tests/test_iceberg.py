@@ -55,6 +55,7 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
+    ColumnDelTestPipeline,
     DistTestPipeline,
     _gather_output,
     _get_dist_arg,
@@ -562,6 +563,73 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
         return df
 
     check_func(impl7, (table_name, conn, db_schema), py_output=df)
+
+
+def test_dict_encoding_sync_determination(iceberg_database, iceberg_table_conn):
+    """
+    Test that columns with dictionary encoding are determined
+    in a deterministic fashion across all ranks. This test is
+    only useful when run on multiple ranks.
+    We saw that there can be bugs when e.g. the list of string
+    columns passed to determine_str_as_dict_columns is not
+    ordered the same on all ranks.
+    For more context, see https://bodo.atlassian.net/browse/BE-3679
+    This was fixed in https://github.com/Bodo-inc/Bodo/pull/4356.
+    The probability of invoking the failure is high when the
+    number of columns is higher, which is why we are creating
+    a table with 100 string columns: 50 which should be dictionary
+    encoded, and 50 which shouldn't.
+    This is not guaranteed to work, but provides at least some
+    protection against regressions.
+    """
+
+    table_name = "test_dict_encoding_sync_determination"
+
+    db_schema, warehouse_loc = iceberg_database
+    spark = get_spark()
+
+    # For convenience name them the columns differently so
+    # we can check just the name during validation.
+    dict_enc_columns = [f"A{i}" for i in range(1, 51)]
+    reg_str_columns = [f"B{i}" for i in range(1, 51)]
+
+    cols = {c: ["awe", "awv2"] * 1000 for c in dict_enc_columns}
+    cols.update({c: [str(i) for i in range(2000)] for c in reg_str_columns})
+
+    df = pd.DataFrame(cols)
+    sql_schema = [(c, "string", False) for c in dict_enc_columns] + [
+        (c, "string", True) for c in reg_str_columns
+    ]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    # ColumnDelTestPipeline preserves the typemap which is what we need.
+    @bodo.jit(pipeline_class=ColumnDelTestPipeline)
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        return df
+
+    impl(table_name, conn, db_schema)
+    typemap = impl.overloads[impl.signatures[0]].metadata["preserved_typemap"]
+
+    # Validate that all columns are typed correctly.
+    passed = 1
+    try:
+        for (col_name, col_type) in zip(typemap["df"].columns, typemap["df"].data):
+            if col_name.startswith("A"):
+                assert isinstance(col_type, bodo.libs.dict_arr_ext.DictionaryArrayType)
+            elif col_name.startswith("B"):
+                assert isinstance(col_type, bodo.libs.str_arr_ext.StringArrayType)
+            else:
+                raise ValueError(
+                    f"Expected a column starting with A or B, got {col_name} instead."
+                )
+    except:
+        passed = 0
+    passed = reduce_sum(passed)
+    assert passed == bodo.get_size(), "Datatype validation failed on one or more ranks."
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606

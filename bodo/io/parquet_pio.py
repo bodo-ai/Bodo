@@ -1732,7 +1732,7 @@ def _get_sample_pq_pieces(pq_dataset, pa_schema):
     return pieces
 
 
-def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns):
+def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> set:
     """
     Determine which string columns (str_columns) should be read by Arrow as
     dictionary encoded arrays, based on this heuristic:
@@ -1750,6 +1750,9 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns):
     # get a sample of Parquet pieces to avoid opening every file in compile time
     pieces = _get_sample_pq_pieces(pq_dataset, pa_schema)
 
+    # Sort the list to ensure same order on all ranks. This is
+    # important for correctness.
+    str_columns = sorted(str_columns)
     total_uncompressed_sizes = np.zeros(len(str_columns), dtype=np.int64)
     total_uncompressed_sizes_recv = np.zeros(len(str_columns), dtype=np.int64)
     if bodo.get_rank() < len(pieces):

@@ -2570,6 +2570,8 @@ class TypingTransforms:
         )
         # remove user provided dict-encoded columns
         str_columns = list(set(str_columns) - set(_bodo_read_as_dict))
+        # Sort the columns to ensure same order on all ranks
+        str_columns = sorted(str_columns)
         dict_str_cols = bodo.io.parquet_pio.determine_str_as_dict_columns(
             iceberg_pq_dset.pq_dataset, pyarrow_table_schema, str_columns
         )
