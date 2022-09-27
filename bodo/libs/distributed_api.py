@@ -2514,7 +2514,9 @@ def bcast_tuple(val, root=MPI_ROOT):
     """broadcast a tuple value
     calls bcast_scalar() on individual elements
     """
-    assert isinstance(val, types.BaseTuple)
+    assert isinstance(
+        val, types.BaseTuple
+    ), "Internal Error: Argument to bcast tuple must be of type tuple"
     n_elem = len(val)
     func_text = f"def bcast_tuple_impl(val, root={MPI_ROOT}):\n"
     func_text += "  return ({}{})".format(
