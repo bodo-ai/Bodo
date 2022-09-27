@@ -199,6 +199,32 @@ def test_copy(dict_arr_value, memory_leak_check):
     )
 
 
+def test_all_null_pa_bug(memory_leak_check):
+    """Test for a bug in Arrow that fails in to_numpy() when all values are null"""
+
+    def test_impl(A):
+        df = pd.DataFrame({"A": A})
+        print(df)
+        return df
+
+    A = pd.arrays.ArrowStringArray(
+        pa.array(
+            [None, None],
+            type=pa.dictionary(pa.int32(), pa.string()),
+        ).cast(pa.dictionary(pa.int32(), pa.large_string()))
+    )
+
+    check_func(test_impl, (A,), only_seq=True)
+    A = pd.arrays.ArrowStringArray(
+        pa.array(
+            [],
+            type=pa.dictionary(pa.int32(), pa.string()),
+        ).cast(pa.dictionary(pa.int32(), pa.large_string()))
+    )
+
+    check_func(test_impl, (A,), only_seq=True)
+
+
 @pytest.mark.slow
 def test_repeat(dict_arr_value, memory_leak_check):
     def test_impl(A, n):
