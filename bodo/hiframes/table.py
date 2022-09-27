@@ -983,11 +983,7 @@ def lower_constant_table(context, builder, table_type, pyval):
     return lir.Constant.literal_struct(arr_lists + [parent, t_len])
 
 
-@intrinsic
-def init_table(typingctx, table_type, to_str_if_dict_t):
-    """initialize a table object with same structure as input table without setting it's
-    array blocks (to be set later)
-    """
+def get_init_table_output_type(table_type, to_str_if_dict_t):
     out_table_type = (
         table_type.instance_type
         if isinstance(table_type, types.TypeRef)
@@ -1001,6 +997,23 @@ def init_table(typingctx, table_type, to_str_if_dict_t):
     # convert dictionary-encoded string arrays to regular string arrays
     if is_overload_true(to_str_if_dict_t):
         out_table_type = to_str_arr_if_dict_array(out_table_type)
+
+    return out_table_type
+
+
+@intrinsic
+def init_table(typingctx, table_type, to_str_if_dict_t):
+    """initialize a table object with same structure as input table without setting it's
+    array blocks (to be set later)
+
+    NOTE: currently, to_str_if_dict_t is only set to True in decode_if_dict_table, and
+    our gatherv implementation.
+    If you're writing code that calls this function with to_str_if_dict_t==True,
+    be sure to properly handle the case where the input table has a column of string,
+    and dict_encoded string. These two blocks in the input table will be mapped to
+    the same block in the output table.
+    """
+    out_table_type = get_init_table_output_type(table_type, to_str_if_dict_t)
 
     def codegen(context, builder, sig, args):
         table = cgutils.create_struct_proxy(out_table_type)(context, builder)
@@ -1579,6 +1592,192 @@ def table_subset_equiv(self, scope, equiv_set, loc, args, kws):
 ArrayAnalysis._analyze_op_call_bodo_hiframes_table_table_subset = table_subset_equiv
 
 
+def gen_str_and_dict_enc_cols_to_one_block_fn_txt(
+    in_table_type, out_table_type, glbls, is_gatherv=False
+):
+    """
+    Helper function to avoid duplication in decode_if_dict_table and our gatherv impl.
+
+    Given the input and output table types. Generates a func text that extracts
+    the string/encoded string columns from input table "T" and uses those values to set a singular
+    string block in output table "T2". If is_gatherv is set, performs a gather on the input arrays
+    before setting the output table.
+
+    Here is an example generated functext:
+
+    input_str_arr_list = get_table_block(T, 0)
+    input_dict_enc_str_arr_list = get_table_block(T, 1)
+    out_arr_list_0 = alloc_list_like(input_str_arr_list, 4, True)
+    for input_str_ary_idx, output_str_arr_offset in enumerate(output_table_str_arr_offsets_in_combined_block):
+        arr_ind_str = arr_inds_0[input_str_ary_idx]
+        ensure_column_unboxed(T, input_str_arr_list, input_str_ary_idx, arr_ind_str)
+        out_arr_str = input_str_arr_list[input_str_ary_idx]
+        out_arr_str = bodo.gatherv(out_arr_str, allgather, warn_if_rep, root)
+        out_arr_list_0[output_str_arr_offset] = out_arr_str
+    for input_dict_enc_str_ary_idx, output_dict_enc_str_arr_offset in enumerate(output_table_dict_enc_str_arr_offsets_in_combined_block):
+        arr_ind_dict_enc_str = arr_inds_1[input_dict_enc_str_ary_idx]
+        ensure_column_unboxed(T, input_dict_enc_str_arr_list, input_dict_enc_str_ary_idx, arr_ind_dict_enc_str)
+        out_arr_dict_enc_str = decode_if_dict_array(input_dict_enc_str_arr_list[input_dict_enc_str_ary_idx])
+        out_arr_dict_enc_str = bodo.gatherv(out_arr_dict_enc_str, allgather, warn_if_rep, root)
+        out_arr_list_0[output_dict_enc_str_arr_offset] = out_arr_dict_enc_str
+    T2 = set_table_block(T2, out_arr_list_0, 0)
+
+    Args:
+        in_table_type (TableType): The input table, from which to source the string columns.
+                                   Must contain a string and encoded string block
+        out_table_type (TableType): The out table, whoose columns will be set.
+                                    Must contain a string block
+        glbls (dict): The dict of global variable to be used when executing this functext.
+                      keys 'arr_inds_(input table string block)', 'arr_inds_(input table dict encoded string block)',
+                      'decode_if_dict_array', and 'output_table_str_arr_idxs_in_combined_block' are added by this function
+        is_gatherv (optional bool): If set, the functext will perform a gatherv on the input arrays
+                                    before setting the output table.
+    """
+
+    # NOTE: there are several asserts throughout this file which we expect to never run.
+    # These asserts are needed, as any incorrect assumptions in this portion of the code
+    # can lead to very difficult to debug errors.
+
+    assert (
+        bodo.string_array_type in in_table_type.type_to_blk
+        and bodo.string_array_type in in_table_type.type_to_blk
+    ), f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: Table type {in_table_type} does not contain both a string, and encoded string column"
+
+    input_string_ary_blk = in_table_type.type_to_blk[bodo.string_array_type]
+    input_dict_encoded_string_ary_blk = in_table_type.type_to_blk[
+        bodo.dict_str_arr_type
+    ]
+
+    # NOTE: Care must be taken to ensure that arrays are placed into the output block
+    # in the correct ordering. The ordering in which the arrays will be placed into the physical table
+    # is dependent on the logical ordering of the columns in the tabletype's arr_types atribute.
+    # For example, if the input table has array_types in the order
+    # (String, dict_enc, String, dict_enc)
+    # which correspond to the arrays:
+    # (str_col_0, dict_col_0, str_col_1, dict_col_1)
+    # The locations of each of the arrays in input table would be (In the format (name, block, index_into_block))
+    # (str_col_0, block_str, 0), (dict_col_0, block_dict_str, 0), (str_col_1, block_str, 1), (dict_col_1, block_dict_str, 1)
+
+    # After the cast, the array types of the output table are
+    # (String, String, String, String)
+    # Therefore, we expect the offsets in the output table to be (In the format (name, block, index_into_block))
+    # (str_col_0, block_str, 0), (dict_col_0, block_str, 1), (str_col_1, block_str, 2), (dict_col_1, block_str, 3)
+
+    # In order to handle this, we need to get the expected ordering from
+    # the type itself.
+
+    logical_string_array_idxs = in_table_type.block_to_arr_ind.get(input_string_ary_blk)
+    logical_dic_enc_string_array_idxs = in_table_type.block_to_arr_ind.get(
+        input_dict_encoded_string_ary_blk
+    )
+
+    string_array_physical_offset_in_output_block = []
+    dict_enc_string_array_physical_offset_in_output_block = []
+
+    cur_str_ary_idx = 0
+    cur_dict_enc_str_ary_idx = 0
+
+    # Iterate over the logical indicies of the string/dictionary columns
+    # for each physical index in the output string block, we assign it to whichever
+    # column appears first in the logical ordering
+    for cur_output_table_offset in range(
+        len(logical_string_array_idxs) + len(logical_dic_enc_string_array_idxs)
+    ):
+
+        if cur_str_ary_idx == len(logical_string_array_idxs):
+            # We've already assigned all the string columns
+            dict_enc_string_array_physical_offset_in_output_block.append(
+                cur_output_table_offset
+            )
+            continue
+        elif cur_dict_enc_str_ary_idx == len(logical_dic_enc_string_array_idxs):
+            # We've already assigned all the dict columns
+            string_array_physical_offset_in_output_block.append(cur_output_table_offset)
+            continue
+
+        cur_string_array_logical_idx = logical_string_array_idxs[cur_str_ary_idx]
+        cur_dict_enc_string_array_logical_idx = logical_dic_enc_string_array_idxs[
+            cur_dict_enc_str_ary_idx
+        ]
+
+        if cur_string_array_logical_idx < cur_dict_enc_string_array_logical_idx:
+            # If the lowest logical column number for string columns is lower than the lowest
+            # dict encoded string array, assign the string column the physical offset
+            string_array_physical_offset_in_output_block.append(cur_output_table_offset)
+            cur_str_ary_idx += 1
+        else:
+            # Otherwise, assign it to the dict encoded column
+            dict_enc_string_array_physical_offset_in_output_block.append(
+                cur_output_table_offset
+            )
+            cur_dict_enc_str_ary_idx += 1
+
+    assert (
+        "output_table_str_arr_offsets_in_combined_block" not in glbls
+    ), "Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: key 'output_table_str_arr_idxs_in_combined_block' already present as a global variable"
+    glbls["output_table_str_arr_offsets_in_combined_block"] = np.array(
+        string_array_physical_offset_in_output_block
+    )
+    assert (
+        "output_table_dict_enc_str_arr_offsets_in_combined_block" not in glbls
+    ), "Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: key 'output_table_str_arr_idxs_in_combined_block' already present as a global variable"
+    glbls["output_table_dict_enc_str_arr_offsets_in_combined_block"] = np.array(
+        dict_enc_string_array_physical_offset_in_output_block
+    )
+
+    glbls["decode_if_dict_array"] = decode_if_dict_array
+
+    out_table_block = out_table_type.type_to_blk[bodo.string_array_type]
+
+    assert (
+        f"arr_inds_{input_string_ary_blk}" not in glbls
+    ), f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: arr_inds_{input_string_ary_blk} already present in global variables"
+    glbls[f"arr_inds_{input_string_ary_blk}"] = np.array(
+        in_table_type.block_to_arr_ind[input_string_ary_blk], dtype=np.int64
+    )
+
+    assert (
+        f"arr_inds_{input_dict_encoded_string_ary_blk}" not in glbls
+    ), f"Error in gen_str_and_dict_enc_cols_to_one_block_fn_txt: arr_inds_{input_dict_encoded_string_ary_blk} already present in global variables"
+    glbls[f"arr_inds_{input_dict_encoded_string_ary_blk}"] = np.array(
+        in_table_type.block_to_arr_ind[input_dict_encoded_string_ary_blk],
+        dtype=np.int64,
+    )
+
+    func_text = f"  input_str_arr_list = get_table_block(T, {input_string_ary_blk})\n"
+    func_text += f"  input_dict_enc_str_arr_list = get_table_block(T, {input_dict_encoded_string_ary_blk})\n"
+
+    func_text += f"  out_arr_list_{out_table_block} = alloc_list_like(input_str_arr_list, {len(string_array_physical_offset_in_output_block) + len(dict_enc_string_array_physical_offset_in_output_block)}, True)\n"
+
+    # handle string arrays
+    func_text += f"  for input_str_ary_idx, output_str_arr_offset in enumerate(output_table_str_arr_offsets_in_combined_block):\n"
+    func_text += (
+        f"    arr_ind_str = arr_inds_{input_string_ary_blk}[input_str_ary_idx]\n"
+    )
+    func_text += f"    ensure_column_unboxed(T, input_str_arr_list, input_str_ary_idx, arr_ind_str)\n"
+    func_text += f"    out_arr_str = input_str_arr_list[input_str_ary_idx]\n"
+    if is_gatherv:
+        func_text += f"    out_arr_str = bodo.gatherv(out_arr_str, allgather, warn_if_rep, root)\n"
+
+    func_text += (
+        f"    out_arr_list_{out_table_block}[output_str_arr_offset] = out_arr_str\n"
+    )
+
+    # handle dict encoded string arrays
+    func_text += f"  for input_dict_enc_str_ary_idx, output_dict_enc_str_arr_offset in enumerate(output_table_dict_enc_str_arr_offsets_in_combined_block):\n"
+    func_text += f"    arr_ind_dict_enc_str = arr_inds_{input_dict_encoded_string_ary_blk}[input_dict_enc_str_ary_idx]\n"
+    func_text += f"    ensure_column_unboxed(T, input_dict_enc_str_arr_list, input_dict_enc_str_ary_idx, arr_ind_dict_enc_str)\n"
+    func_text += f"    out_arr_dict_enc_str = decode_if_dict_array(input_dict_enc_str_arr_list[input_dict_enc_str_ary_idx])\n"
+    if is_gatherv:
+        func_text += f"    out_arr_dict_enc_str = bodo.gatherv(out_arr_dict_enc_str, allgather, warn_if_rep, root)\n"
+
+    func_text += f"    out_arr_list_{out_table_block}[output_dict_enc_str_arr_offset] = out_arr_dict_enc_str\n"
+
+    func_text += f"  T2 = set_table_block(T2, out_arr_list_{out_table_block}, {out_table_block})\n"
+
+    return func_text
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def decode_if_dict_table(T):
     """
@@ -1603,16 +1802,59 @@ def decode_if_dict_table(T):
         "alloc_list_like": alloc_list_like,
         "decode_if_dict_array": decode_if_dict_array,
     }
-    for blk in T.type_to_blk.values():
-        glbls[f"arr_inds_{blk}"] = np.array(T.block_to_arr_ind[blk], dtype=np.int64)
-        func_text += f"  arr_list_{blk} = get_table_block(T, {blk})\n"
-        func_text += f"  out_arr_list_{blk} = alloc_list_like(arr_list_{blk}, len(arr_list_{blk}), True)\n"
-        func_text += f"  for i in range(len(arr_list_{blk})):\n"
-        func_text += f"    arr_ind_{blk} = arr_inds_{blk}[i]\n"
-        func_text += f"    ensure_column_unboxed(T, arr_list_{blk}, i, arr_ind_{blk})\n"
-        func_text += f"    out_arr_{blk} = decode_if_dict_array(arr_list_{blk}[i])\n"
-        func_text += f"    out_arr_list_{blk}[i] = out_arr_{blk}\n"
-        func_text += f"  T2 = set_table_block(T2, out_arr_list_{blk}, {blk})\n"
+
+    out_table_type = bodo.hiframes.table.get_init_table_output_type(T, True)
+    input_table_has_str_and_dict_encoded_str = (
+        bodo.string_array_type in T.type_to_blk
+        and bodo.dict_str_arr_type in T.type_to_blk
+    )
+
+    # In the case that we have both normal and dict encoded string arrays, we need to do
+    # special handling, as the dict encoded string arrays will be converted to string arrays,
+    # so the two blocks for string arrays and dict encoded string arrays in the input table
+    # will be stored in only one block in the output table
+    if input_table_has_str_and_dict_encoded_str:
+        func_text += gen_str_and_dict_enc_cols_to_one_block_fn_txt(
+            T, out_table_type, glbls
+        )
+
+    for typ, input_blk in T.type_to_blk.items():
+        # Skip these blocks if we handle them above
+        if input_table_has_str_and_dict_encoded_str and typ in (
+            bodo.string_array_type,
+            bodo.dict_str_arr_type,
+        ):
+            continue
+
+        # Output block num may be different from input block num in certain cases.
+        # Specifically, if the input table has a string and dict encoded string block,
+        # which will be fused into one block in the output table.
+        if typ == bodo.dict_str_arr_type:
+            assert (
+                bodo.string_array_type in out_table_type.type_to_blk
+            ), "Error in decode_if_dict_table: If encoded string type is present in the input, then non-encoded string type should be present in the output"
+            output_blk = out_table_type.type_to_blk[bodo.string_array_type]
+        else:
+            assert (
+                typ in out_table_type.type_to_blk
+            ), "Error in decode_if_dict_table: All non-encoded string types present in the input should be present in the output"
+            output_blk = out_table_type.type_to_blk[typ]
+
+        glbls[f"arr_inds_{input_blk}"] = np.array(
+            T.block_to_arr_ind[input_blk], dtype=np.int64
+        )
+        func_text += f"  arr_list_{input_blk} = get_table_block(T, {input_blk})\n"
+        func_text += f"  out_arr_list_{input_blk} = alloc_list_like(arr_list_{input_blk}, len(arr_list_{input_blk}), True)\n"
+        func_text += f"  for i in range(len(arr_list_{input_blk})):\n"
+        func_text += f"    arr_ind_{input_blk} = arr_inds_{input_blk}[i]\n"
+        func_text += f"    ensure_column_unboxed(T, arr_list_{input_blk}, i, arr_ind_{input_blk})\n"
+        func_text += (
+            f"    out_arr_{input_blk} = decode_if_dict_array(arr_list_{input_blk}[i])\n"
+        )
+        func_text += f"    out_arr_list_{input_blk}[i] = out_arr_{input_blk}\n"
+        func_text += (
+            f"  T2 = set_table_block(T2, out_arr_list_{input_blk}, {output_blk})\n"
+        )
     func_text += f"  T2 = set_table_len(T2, l)\n"
     func_text += f"  return T2\n"
 

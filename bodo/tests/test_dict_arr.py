@@ -10,7 +10,13 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.tests.utils import SeriesOptTestPipeline, check_func, dist_IR_contains
+from bodo.tests.utils import (
+    SeriesOptTestPipeline,
+    _test_equal_guard,
+    check_func,
+    dist_IR_contains,
+    reduce_sum,
+)
 
 
 @pytest.fixture(
@@ -1480,3 +1486,96 @@ def test_concat(memory_leak_check):
         if bodo.get_rank() == 0:
             os.remove(temp_file_1)
             os.remove(temp_file_2)
+
+
+@pytest.mark.parametrize(
+    "A_enc",
+    [
+        True,
+        False,
+    ],
+)
+@pytest.mark.parametrize(
+    "B_enc",
+    [
+        True,
+        pytest.param(False, marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "C_enc",
+    [
+        True,
+        False,
+    ],
+)
+@pytest.mark.parametrize(
+    "D_enc",
+    [
+        True,
+        pytest.param(False, marks=pytest.mark.slow),
+    ],
+)
+def test_gatherv_dict_enc_and_normal_str_array_table(
+    A_enc, B_enc, C_enc, D_enc, memory_leak_check
+):
+    """
+    Tests that we can properly handle tables contianing both string and dict encoded string arrays,
+    in gatherv. Currently, this is an operation which will decode the dict encoded string arrays,
+    but this may be changed in the future: https://bodo.atlassian.net/browse/BE-3681
+    """
+
+    func_text = "def make_df_impl(A, B, C, D):\n"
+    if not A_enc:
+        func_text += "  A = decode_if_dict_array(A)\n"
+    if not B_enc:
+        func_text += "  B = decode_if_dict_array(B)\n"
+    if not C_enc:
+        func_text += "  C = decode_if_dict_array(C)\n"
+    if not D_enc:
+        func_text += "  D = decode_if_dict_array(D)\n"
+
+    func_text += "  df = pd.DataFrame({'A': A, 'B': B, 'C': C, 'D': D })\n"
+    func_text += "  scattered_df = bodo.scatterv(df)\n"
+    func_text += "  return scattered_df\n"
+
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "bodo": bodo,
+            "pd": pd,
+            "decode_if_dict_array": bodo.utils.typing.decode_if_dict_array,
+        },
+        loc_vars,
+    )
+    make_df_impl = bodo.jit(loc_vars["make_df_impl"])
+    tmp_range = pd.Series(np.arange(10).astype(str))
+    orig_use_dict_str_type = bodo.hiframes.boxing._use_dict_str_type
+    orig_TABLE_FORMAT_THRESHOLD = bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD
+    try:
+        bodo.hiframes.boxing._use_dict_str_type = True
+        bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = 0
+        (A, B, C, D) = (
+            "A_" + tmp_range,
+            "B_" + tmp_range,
+            "C_" + tmp_range,
+            "D_" + tmp_range,
+        )
+        expected_output = pd.DataFrame({"A": A, "B": B, "C": C, "D": D})
+        table_format_df_scattered = make_df_impl(A, B, C, D)
+        bodo.hiframes.boxing._use_dict_str_type = False
+        # Gatherv will cause the dict encoded
+        bodo_output = bodo.gatherv(table_format_df_scattered)
+        passed = 1
+        if bodo.get_rank() == 0:
+            passed = _test_equal_guard(
+                bodo_output,
+                expected_output,
+            )
+        n_passed = reduce_sum(passed)
+        assert n_passed == bodo.get_size()
+
+    finally:
+        bodo.hiframes.boxing._use_dict_str_type = orig_use_dict_str_type
+        bodo.hiframes.boxing.TABLE_FORMAT_THRESHOLD = orig_TABLE_FORMAT_THRESHOLD
