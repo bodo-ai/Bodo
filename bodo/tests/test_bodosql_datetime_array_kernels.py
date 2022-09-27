@@ -84,9 +84,7 @@ def test_day_timestamp(days):
         else:
             return pd.Timestamp(days, unit="D")
 
-    days_answer = vectorized_sol(
-        (days,), days_scalar_fn, np.datetime64, manual_coercion=True
-    )
+    days_answer = vectorized_sol((days,), days_scalar_fn, "datetime64[ns]")
     check_func(
         impl,
         (days,),
@@ -122,11 +120,9 @@ def test_int_to_days(days):
         if pd.isna(days):
             return None
         else:
-            return np.timedelta64(days, "D")
+            return pd.Timedelta(days=days)
 
-    itd_answer = vectorized_sol(
-        (days,), itd_scalar_fn, np.timedelta64, manual_coercion=True
-    )
+    itd_answer = vectorized_sol((days,), itd_scalar_fn, "timedelta64[ns]")
     check_func(
         impl,
         (days,),
@@ -149,9 +145,7 @@ def test_last_day(dates_scalar_vector):
         if pd.isna(elem):
             return None
         else:
-            return np.datetime64(
-                elem + pd.tseries.offsets.MonthEnd(n=0, normalize=True)
-            )
+            return elem + pd.tseries.offsets.MonthEnd(n=0, normalize=True)
 
     last_day_answer = vectorized_sol((dates_scalar_vector,), last_day_scalar_fn, None)
     check_func(
@@ -197,9 +191,8 @@ def test_makedate(args):
         if pd.isna(year) or pd.isna(day):
             return None
         else:
-            return np.datetime64(
-                pd.Timestamp(year=year, month=1, day=1)
-                + pd.Timedelta(day - 1, unit="D")
+            return pd.Timestamp(year=year, month=1, day=1) + pd.Timedelta(
+                day - 1, unit="D"
             )
 
     makedate_answer = vectorized_sol(args, makedate_scalar_fn, None)
@@ -240,9 +233,7 @@ def test_second_timestamp(seconds):
         else:
             return pd.Timestamp(seconds, unit="s")
 
-    second_answer = vectorized_sol(
-        (seconds,), second_scalar_fn, np.datetime64, manual_coercion=True
-    )
+    second_answer = vectorized_sol((seconds,), second_scalar_fn, "datetime64[ns]")
     check_func(
         impl,
         (seconds,),
@@ -479,12 +470,12 @@ def test_calendar_optional():
     for flag0 in [True, False]:
         for flag1 in [True, False]:
             for flag2 in [True, False]:
-                a0 = np.datetime64("2018-04-30") if flag0 else None
+                a0 = pd.Timestamp("2018-04-30") if flag0 else None
                 a1 = "Sunday" if flag0 else None
                 a2 = "April" if flag0 else None
                 a3 = 6 if flag0 else None
                 a4 = 2018 if flag0 else None
-                a5 = np.datetime64("2005-12-31") if flag1 and flag2 else None
+                a5 = pd.Timestamp("2005-12-31") if flag1 and flag2 else None
                 check_func(
                     impl,
                     (A, B, C, flag0, flag1, flag2),
@@ -504,8 +495,8 @@ def test_option_timestamp():
 
     for flag0 in [True, False]:
         for flag1 in [True, False]:
-            A0 = np.datetime64(pd.Timestamp(1000000, unit="s")) if flag0 else None
-            A1 = np.datetime64(pd.Timestamp(10000, unit="D")) if flag1 else None
+            A0 = pd.Timestamp(1000000, unit="s") if flag0 else None
+            A1 = pd.Timestamp(10000, unit="D") if flag1 else None
             check_func(
                 impl,
                 (1000000, 10000, flag0, flag1),
@@ -520,7 +511,7 @@ def test_option_int_to_days():
         return bodo.libs.bodosql_array_kernels.int_to_days(arg)
 
     for flag in [True, False]:
-        answer = np.timedelta64(pd.Timedelta(days=10)) if flag else None
+        answer = pd.Timedelta(days=10) if flag else None
         check_func(impl, (10, flag), py_output=answer)
 
 
