@@ -761,7 +761,9 @@ def str_replace(arr, pat, repl, flags, regex):  # pragma: no cover
                 continue
             out_str_arr[i] = data_arr[i].replace(pat, repl)
 
-    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)
+    # NOTE: this operation may introduce non-unqiue values in the dictionary. Therefore,
+    # We have to set _has_global_dictionary to false
+    return init_dict_arr(out_str_arr, arr._indices.copy(), False)
 
 
 @register_jitable
@@ -934,7 +936,7 @@ def str_match(arr, pat, case, flags, na):  # pragma: no cover
     return out_arr
 
 
-def create_simple_str2str_methods(func_name, func_args):
+def create_simple_str2str_methods(func_name, func_args, can_create_non_unique):
     """
     Returns the dictionary-encoding optimized implementation for
     capitalize, lower, swapcase, title, upper, lstrip, rstrip, strip
@@ -942,6 +944,8 @@ def create_simple_str2str_methods(func_name, func_args):
     "func_name" is the name of the function to be created, and
     "func_args" is a tuple whose elements are the arguments that the function
     takes in.
+    "can_create_non_unique" is a boolean value which indicates if the function
+    in question can create non-unique values in output the dicitonary array
     For example: func_name = "center", func_args = ("arr", "width", "fillchar")
     """
     func_text = (
@@ -954,8 +958,14 @@ def create_simple_str2str_methods(func_name, func_args):
         "            bodo.libs.array_kernels.setna(out_str_arr, i)\n"
         "            continue\n"
         f"        out_str_arr[i] = data_arr[i].{func_name}({', '.join(func_args[1:])})\n"
-        "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)\n"
     )
+
+    if can_create_non_unique:
+        func_text += (
+            "    return init_dict_arr(out_str_arr, arr._indices.copy(), False)\n"
+        )
+    else:
+        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)\n"
 
     loc_vars = {}
     exec(
@@ -978,8 +988,33 @@ def _register_simple_str2str_methods():
         **dict.fromkeys(["center", "ljust", "rjust"], ("arr", "width", "fillchar")),
         **dict.fromkeys(["zfill"], ("arr", "width")),
     }
+
+    # a dictionary that maps function names to a boolean flag that
+    # indicates if the function can create non-unique values in output the dicitonary
+    # array
+    can_create_unique_dict = {
+        **dict.fromkeys(
+            [
+                "capitalize",
+                "lower",
+                "title",
+                "upper",
+                "lstrip",
+                "rstrip",
+                "strip",
+                "center",
+                "zfill",
+                "ljust",
+                "rjust",
+            ],
+            True,
+        ),
+        **dict.fromkeys(["swapcase"], False),
+    }
     for func_name in args_dict.keys():
-        func_impl = create_simple_str2str_methods(func_name, args_dict[func_name])
+        func_impl = create_simple_str2str_methods(
+            func_name, args_dict[func_name], can_create_unique_dict[func_name]
+        )
         func_impl = register_jitable(func_impl)
         globals()[f"str_{func_name}"] = func_impl
 
@@ -1181,7 +1216,9 @@ def str_slice(arr, start, stop, step):  # pragma: no cover
             continue
         out_str_arr[i] = data_arr[i][start:stop:step]
 
-    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)
+    # Slice can result in duplicate values in the data array, so we have to set
+    # _has_global_dictionary to False in the output
+    return init_dict_arr(out_str_arr, arr._indices.copy(), False)
 
 
 @register_jitable
@@ -1228,7 +1265,11 @@ def str_repeat_int(arr, repeats):  # pragma: no cover
             bodo.libs.array_kernels.setna(out_str_arr, i)
             continue
         out_str_arr[i] = data_arr[i] * repeats
-    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)
+
+    # NOTE: this must be false in the case that repeats is 0, as we would generate copies in the data array
+    return init_dict_arr(
+        out_str_arr, arr._indices.copy(), arr._has_global_dictionary and repeats != 0
+    )
 
 
 def create_str2bool_methods(func_name):
@@ -1319,9 +1360,9 @@ def str_extract(arr, pat, flags, n_cols):  # pragma: no cover
             bodo.libs.array_kernels.setna(out_indices_arr, i)
 
     out_arr_list = [
-        init_dict_arr(
-            out_dict_arr_list[i], out_indices_arr.copy(), arr._has_global_dictionary
-        )
+        # Note: extract can return duplicate values, so we have to
+        # set global dict to false
+        init_dict_arr(out_dict_arr_list[i], out_indices_arr.copy(), False)
         for i in range(n_cols)
     ]
 
@@ -1407,7 +1448,7 @@ def create_extractall_methods(is_multi_group):
         "            curr_ind += 1\n"
         "    out_arr_list = [\n"
         "        init_dict_arr(\n"
-        "            out_dict_arr_list[i], out_indices_arr.copy(), arr._has_global_dictionary\n"
+        "            out_dict_arr_list[i], out_indices_arr.copy(), False\n"
         "        )\n"
         "        for i in range(n_cols)\n"
         "    ]\n"

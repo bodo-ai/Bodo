@@ -1749,7 +1749,7 @@ def test_translate(args):
 
 
 @pytest.mark.slow
-def test_option_char_ord_ascii():
+def test_option_char_ord_ascii(memory_leak_check):
     def impl(A, B, flag0, flag1):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
