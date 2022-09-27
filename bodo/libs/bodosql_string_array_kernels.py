@@ -1095,7 +1095,14 @@ def split_part_util(source, delim, part):
 
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
 
 
 @numba.generated_jit(nopython=True)

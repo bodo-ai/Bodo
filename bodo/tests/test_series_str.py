@@ -238,6 +238,8 @@ def test_split_n():
 
     S = pd.Series(["°, ∞, ‰,", "± × ÷ √", "♩ ♪ ♫ ♬ ♭ ♮ ♯,"] * 5)
 
+    check_func(test_impl, (S,))
+
 
 # TODO: Add memory_leak_check when bugs are resolved.
 @pytest.mark.slow
@@ -271,6 +273,8 @@ def test_split_regex():
         ]
         * 5
     )
+
+    check_func(test_impl, (S,))
 
 
 def test_series_str_split_explode(memory_leak_check):
@@ -603,7 +607,7 @@ def test_re_syntax(case, memory_leak_check):
     # ?x = verbose. Whitespace within the pattern is ignored
     def test_impl_x(S):
         return S.str.contains(
-            r"""(?x)\d  +  
+            r"""(?x)\d  +
                                 .""",
             regex=True,
             case=case,
