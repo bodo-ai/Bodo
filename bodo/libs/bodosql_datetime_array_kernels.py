@@ -245,11 +245,17 @@ def day_timestamp_util(arr):
     """
 
     verify_int_arg(arr, "day_timestamp", "arr")
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_timestamp"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
 
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0, unit='D'))"
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0, unit='D'))"
 
     out_dtype = np.dtype("datetime64[ns]")
 
@@ -270,13 +276,17 @@ def int_to_days_util(arr):
     """
 
     verify_int_arg(arr, "int_to_days", "arr")
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_timestamp"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
 
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = (
-        "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timedelta(days=arg0))"
-    )
+    scalar_text = f"res[i] = {unbox_str}(pd.Timedelta(days=arg0))"
 
     out_dtype = np.dtype("timedelta64[ns]")
 
@@ -298,11 +308,17 @@ def last_day_util(arr):
     """
 
     verify_datetime_arg(arr, "LAST_DAY", "arr")
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_timestamp"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
 
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0) + pd.tseries.offsets.MonthEnd(n=0, normalize=True))"
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0) + pd.tseries.offsets.MonthEnd(n=0, normalize=True))"
 
     out_dtype = np.dtype("datetime64[ns]")
 
@@ -324,11 +340,18 @@ def makedate_util(year, day):
     """
     verify_int_arg(year, "MAKEDATE", "year")
     verify_int_arg(day, "MAKEDATE", "day")
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_timestamp"
+        if bodo.utils.utils.is_array_typ(year, True)
+        or bodo.utils.utils.is_array_typ(day, True)
+        else ""
+    )
 
     arg_names = ["year", "day"]
     arg_types = [year, day]
     propagate_null = [True] * 2
-    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(year=arg0, month=1, day=1) + pd.Timedelta(days=arg1-1))"
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(year=arg0, month=1, day=1) + pd.Timedelta(days=arg1-1))"
 
     out_dtype = np.dtype("datetime64[ns]")
 
@@ -378,6 +401,13 @@ def next_day_util(arr0, arr1):
 
     verify_datetime_arg(arr0, "NEXT_DAY", "arr0")
     verify_string_arg(arr1, "NEXT_DAY", "arr1")
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_timestamp"
+        if bodo.utils.utils.is_array_typ(arr0, True)
+        or bodo.utils.utils.is_array_typ(arr1, True)
+        else ""
+    )
 
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
@@ -386,7 +416,7 @@ def next_day_util(arr0, arr1):
     prefix_code = (
         "dow_map = {'mo': 0, 'tu': 1, 'we': 2, 'th': 3, 'fr': 4, 'sa': 5, 'su': 6}"
     )
-    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0).normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1]))"
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1]))"
 
     out_dtype = np.dtype("datetime64[ns]")
 
@@ -417,6 +447,13 @@ def previous_day_util(arr0, arr1):
 
     verify_datetime_arg(arr0, "PREVIOUS_DAY", "arr0")
     verify_string_arg(arr1, "PREVIOUS_DAY", "arr1")
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_timestamp"
+        if bodo.utils.utils.is_array_typ(arr0, True)
+        or bodo.utils.utils.is_array_typ(arr1, True)
+        else ""
+    )
 
     arg_names = ["arr0", "arr1"]
     arg_types = [arr0, arr1]
@@ -425,7 +462,7 @@ def previous_day_util(arr0, arr1):
     prefix_code = (
         "dow_map = {'mo': 0, 'tu': 1, 'we': 2, 'th': 3, 'fr': 4, 'sa': 5, 'su': 6}"
     )
-    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0).normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1]))"
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1]))"
 
     out_dtype = np.dtype("datetime64[ns]")
 
@@ -489,11 +526,17 @@ def second_timestamp_util(arr):
     """
 
     verify_int_arg(arr, "second_timestamp", "arr")
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_timestamp"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
 
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = "res[i] = bodo.utils.conversion.unbox_if_timestamp(pd.Timestamp(arg0, unit='s'))"
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0, unit='s'))"
 
     out_dtype = np.dtype("datetime64[ns]")
 
