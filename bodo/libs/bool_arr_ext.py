@@ -895,8 +895,12 @@ def bool_arr_ind_getitem(A, ind):
             boolean_array,
         )
     ):
-        # XXX assuming data value for NAs is False
-        return lambda A, ind: A[ind._data]
+
+        def impl(A, ind):  # pragma: no cover
+            new_ind = bodo.utils.conversion.nullable_bool_to_bool_na_false(ind)
+            return A[new_ind]
+
+        return impl
 
 
 @lower_cast(types.Array(types.bool_, 1, "C"), boolean_array)
