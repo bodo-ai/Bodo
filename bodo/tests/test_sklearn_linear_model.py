@@ -547,6 +547,7 @@ def test_logistic_regression(memory_leak_check):
     Shamelessly copied from the sklearn tests:
     https://github.com/scikit-learn/scikit-learn/blob/0fb307bf39bbdacd6ed713c00724f8f871d60370/sklearn/tests/test_multiclass.py#L240
     """
+    np.random.seed(42)
     # Toy dataset where features correspond directly to labels.
     X = np.array([[0, 0, 5], [0, 5, 0], [3, 0, 0], [0, 0, 6], [6, 0, 0]])
     y = np.array([1, 2, 2, 1, 2])
