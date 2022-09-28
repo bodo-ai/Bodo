@@ -1689,7 +1689,7 @@ def _pa_schemas_match(pa_schema1, pa_schema2):
     return True
 
 
-def _get_sample_pq_pieces(pq_dataset, pa_schema):
+def _get_sample_pq_pieces(pq_dataset, pa_schema, is_iceberg):
     """get a sample of pieces in the Parquet dataset to avoid the overhead of opening
     every file in compile time.
 
@@ -1718,21 +1718,27 @@ def _get_sample_pq_pieces(pq_dataset, pa_schema):
     else:
         pieces = pieces
 
-    # Only use pieces that match the target schema. May reduces the sample size in cases
+    # Only use pieces that match the target schema. May reduce the sample size in cases
     # with schema evolution, but not very likely to change the outcome due to Iceberg's
     # random file name generation.
     # NOTE: p.metadata opens the Parquet file and can be slow so not filtering before
     # random sampling above.
-    pieces = [
-        p
-        for p in pieces
-        if _pa_schemas_match(p.metadata.schema.to_arrow_schema(), pa_schema)
-    ]
+    # Schema matching isn't straightforward for Parquet datasets, since piece schemas
+    # don't include the Hive partitioned columns.
+    # See https://bodo.atlassian.net/browse/BE-3679
+    if is_iceberg:
+        pieces = [
+            p
+            for p in pieces
+            if _pa_schemas_match(p.metadata.schema.to_arrow_schema(), pa_schema)
+        ]
 
     return pieces
 
 
-def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> set:
+def determine_str_as_dict_columns(
+    pq_dataset, pa_schema, str_columns: list, is_iceberg: bool = False
+) -> set:
     """
     Determine which string columns (str_columns) should be read by Arrow as
     dictionary encoded arrays, based on this heuristic:
@@ -1748,7 +1754,7 @@ def determine_str_as_dict_columns(pq_dataset, pa_schema, str_columns: list) -> s
         return set()  # no string as dict columns
 
     # get a sample of Parquet pieces to avoid opening every file in compile time
-    pieces = _get_sample_pq_pieces(pq_dataset, pa_schema)
+    pieces = _get_sample_pq_pieces(pq_dataset, pa_schema, is_iceberg)
 
     # Sort the list to ensure same order on all ranks. This is
     # important for correctness.

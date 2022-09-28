@@ -4180,6 +4180,53 @@ def test_read_parquet_bodo_read_as_dict(memory_leak_check):
             os.remove(fname)
 
 
+def test_read_parquet_partitioned_read_as_dict(memory_leak_check):
+    """
+    Make sure dict-encoding determination works for partitioned Parquet datasets
+    See https://bodo.atlassian.net/browse/BE-3679
+    """
+    fname = "pq_data_dict"
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    try:
+        if bodo.get_rank() == 0:
+            table = pa.table(
+                {
+                    # A should be dictionary encoded
+                    "A": ["awerwe", "awerwev24v2", "3r2r32rfc3", "ERr32r23rrrrrr"]
+                    * 250,
+                    # B should not be dictionary encoded
+                    "B": [str(i) for i in range(1000)],
+                    # CC2 should be dictionary encoded
+                    "CC2": ["r32r23r32r32r23"] * 1000,
+                    # D is non-string column, so shouldn't be encoded even if specified
+                    "D": np.arange(1000),
+                    # partitions
+                    "part": ["A", "B", "C", "D"] * 250,
+                }
+            )
+            pq.write_to_dataset(table, fname, partition_cols=["part"])
+        bodo.barrier()
+
+        def test_impl1(fname):
+            return pd.read_parquet(fname)
+
+        check_func(test_impl1, (fname,))
+
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(test_impl1)(fname)
+            check_logger_msg(stream, "Columns ['A', 'CC2'] using dictionary encoding")
+
+    finally:
+        if bodo.get_rank() == 0:
+            shutil.rmtree(fname, ignore_errors=True)
+        bodo.barrier()
+
+
 def test_read_parquet_large_string_array(memory_leak_check):
     """
     Test that we can read `pa.large_string` arrays.
