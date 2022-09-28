@@ -760,7 +760,9 @@ SELECT MAX(A), B - 1 as val FROM table1 GROUP BY val HAVING val 5
 
 ### QUALIFY
 
-QUALIFY is similar to HAVING, except it applies filters after computing the results of one or more window functions. This occurs after WHERE and HAVING. For example:
+`QUALIFY` is similar to `HAVING`, except it applies filters after computing the results of at least one window function. `QUALIFY` is used after using `WHERE` and `HAVING`.
+
+For example:
 
 ```sql
 SELECT column_name(s),
@@ -2133,6 +2135,7 @@ BodoSQL currently supports the following regex functions:
     Returns true if A and B are both `NULL`, or both non-null and
     equal to each other.
 
+
 #### IF
 -   `IF(Cond, TrueValue, FalseValue)`
 
@@ -2206,35 +2209,36 @@ row and its surrounding rows. Most window functions have the
 following syntax:
 
 ```sql
-SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND AND <UPPER_BOUND>) FROM table_name
+SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>) FROM table_name
 ```
-The `ROWS BETWEEN ROWS BETWEEN <LOWER_BOUNDAND <UPPER_BOUND>`
+The `ROWS BETWEEN ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>`
 section is used to specify the window over which to compute the
 function. A bound can can come before the current row, using
 `PRECEDING` or after the current row, using
 `FOLLOWING`. The bounds can be relative (i.e.
-`N PRECEDING`) or they can be absolute using the `UNBOUNDED`
-keyword. These bounds are inclusive.
+`N PRECEDING` or `N FOLLOWING`), where `N` is a positive integer,
+or they can be absolute (i.e. `UNBOUNDED PRECEDING` or
+`UNBOUNDED FOLLOWING`).
 
 For example:
+
 ```sql
 SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM table1
 ```
-Computes a sum for each row of the current row, the row preceding,
-and the row following. In contrast:
+This query computes the sum of every 3 rows, i.e. the sum of a row of interest, its preceding row, and its following row.
+
+In contrast:
+
 ```sql
 SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM table1
 ```
-Computes the cumulative sum because the window always starts at
-the first row and grows by 1 for each subsequent row.
+This query computes the cumulative sum over a row and all of its preceding rows.
 
-Window functions execute by performing a series of steps which
-influences the final output.
+Window functions perform a series of steps as followed:
 
-1.  Partition by the `PARTITION_COLUMN`. This effectively performs a
-    groupby on the provided `PARTITION_COLUMN`.
-2.  Sort each group according to the Order By clause.
-3.  Apply the function over the "window" given by the window.
+1.  Partition the data by `PARTITION_COLUMN`. This is effectively a groupby operation on `PARTITION_COLUMN`.
+2.  Sort each group as specified by the `ORDER BY` clause.
+3.  Perform the calculation over the specified window, i.e. the newly ordered subset of data.
 4.  Shuffle the data back to the original ordering.
 
 For BodoSQL, `PARTITION BY` is required, but
@@ -2259,11 +2263,12 @@ Currently BodoSQL supports the following Window functions:
     Compute the sum over the window or `NULL` if the window is
     empty.
 
-####AVG
+#### AVG
 -   `AVG(COLUMN_EXPRESSION)`
 
     Compute the average over the window or `NULL` if the window
     is empty.
+
 
 #### STDDEV
 -   `STDDEV(COLUMN_EXPRESSION)`
@@ -2288,7 +2293,6 @@ Currently BodoSQL supports the following Window functions:
 
     Compute the variance for a population over the window or
     `NULL` if the window is empty.
-
 
 #### MAX
 -   `MAX(COLUMN_EXPRESSION)`
@@ -2695,55 +2699,170 @@ def run_queries(f1, f2, target_date):
 run_queries(f1, f2, target_date)
 ```
 
+## BodoSQLContext API
 
-### TablePath API
+The `BodoSQLContext` API is the primary interface for executing SQL queries. It performs two roles:
 
-The `TablePath` API a general purpose IO interface to specify IO sources. It is meant as an alternative to loading the exact tables that you are using inside your JIT function. The `TablePath` API indicates how to find a table if needed. BodoSQL will then load that table when needed within a single query. For example, here is some sample code that loads two DataFrames from parquet using the `TablePath` API.
+  1. Registering data and connection information to load tables of interest.
+  2. Forwarding SQL queries to the BodoSQL engine for compilation and execution. This is done via the
+     `bc.sql(query)` method, where `bc` is a `BodoSQLContext` object.
+
+
+
+A `BodoSQLContext` can be defined in regular Python and passed as an argument to JIT functions or can be
+defined directly inside JIT functions. We recommend defining and modifying a `BodoSQLContext` in regular
+Python whenever possible.
+
+For example:
 
 ```py
-@bodo.jit
-def f(f1, f2):
-    bc = bodosql.BodoSQLContext(
-        {
-            "t1": bodosql.TablePath(f1, "parquet"),
-            "t2": bodosql.TablePath(f2, "parquet"),
-        }
+bc = bodosql.BodoSQLContext(
+    {
+        "t1": bodosql.TablePath("my_file_path.pq", "parquet"),
+    },
+    catalog=bodosql.SnowflakeCatalog(
+        username,
+        password,
+        account_name,
+        warehouse_name,
+        database name,
     )
+)
+
+@bodo.jit
+def f(bc):
+    return bc.sql("select t1.A, t2.B from t1, catalogSchema.t2 where t1.C > 5 and t1.D = catalogSchema.t2.D")
+```
+
+### API Reference
+
+- ++bodosql.%%BodoSQLContext%%(tables: Optional[Dict[str, Union[pandas.DataFrame|TablePath]]] = None, catalog: Optional[DatabaseCatalog] = None)++
+<br><br>
+
+    Defines a `BodoSQLContext` with the given local tables and catalog.
+
+    ***Arguments***
+
+    - `tables`: A dictionary that maps a name used in a SQL query to a `DataFrame` or `TablePath` object.
+
+    - `catalog`: A `DatabaseCatalog` used to load tables from a remote database (e.g. Snowflake).
+
+
+- ++bodosql.BodoSQLContext.%%sql%%(self, query: str, params_dict: Optional[Dict[str, Any] = None)++
+<br><br>
+
+    Executes a SQL query using the tables registered in this `BodoSQLContext`. This function should
+    be used inside a `@bodo.jit` function.
+
+    ***Arguments***
+
+    - `query`: The SQL query to execute. This function generates code that is compiled so the `query` argument is required
+    to be a compile time constant.
+
+   -  `params_dict`: A dictionary that maps a SQL usable name to Python variables. For more information please
+    refer to [the BodoSQL named parameters section][bodosql_named_params].
+
+    ***Returns***
+
+    A `DataFrame` that results from executing the query.
+
+
+- ++bodosql.BodoSQLContext.%%add_or_replace_view%%(self, name: str, table: Union[pandas.DataFrame, TablePath])++
+<br><br>
+
+    Create a new `BodoSQLContext` from an existing `BodoSQLContext` by adding or replacing a table.
+
+    ***Arguments***
+
+    - `name`: The name of the table to add. If the name already exists references to that table
+    are removed from the new context.
+
+    - `table`: The table object to add. `table` must be a `DataFrame` or `TablePath` object.
+
+    ***Returns***
+
+    A new `BodoSQLContext` that retains the tables and catalogs from the old `BodoSQLContext` and inserts the new table specified.
+
+    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+    e.g. `bc = bc.add_or_replace_view("t1", table)`
+
+
+
+- ++bodosql.BodoSQLContext.%%remove_view%%(self, name: str)++
+<br><br>
+
+    Creates a new `BodoSQLContext` from an existing context by removing the table with the
+    given name. If the name does not exist, a `BodoError` is thrown.
+
+    ***Arguments***
+
+    - `name`: The name of the table to remove.
+
+    ***Returns***
+
+    A new `BodoSQLContext` that retains the tables and catalogs from the old `BodoSQLContext` minus the table specified.
+
+    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+    e.g. `bc = bc.remove_view("t1")`
+
+
+- ++bodosql.BodoSQLContext.%%add_or_replace_catalog%%(self, catalog: DatabaseCatalog)++
+<br><br>
+
+    Create a new `BodoSQLContext` from an existing context by replacing the `BodoSQLContext` object's `DatabaseCatalog` with
+    a new catalog.
+
+    ***Arguments***
+
+    - `catalog`: The catalog to insert.
+
+    ***Returns***
+
+    A new `BodoSQLContext` that retains tables from the old `BodoSQLContext` but replaces the old catalog with the new catalog specified.
+
+    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+    e.g. `bc = bc.add_or_replace_catalog(catalog)`
+
+
+- ++bodosql.BodoSQLContext.%%remove_catalog%%(self)++
+<br><br>
+
+    Create a new `BodoSQLContext` from an existing context by removing its `DatabaseCatalog`.
+
+    ***Returns***
+
+    A new `BodoSQLContext` that retains tables from the old `BodoSQLContext` but removes the old catalog.
+
+    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+    e.g. `bc = bc.remove_catalog()`
+
+
+## TablePath API
+
+The `TablePath` API is a general purpose IO interface to specify IO sources. This API is meant
+as an alternative to natively loading tables in Python inside JIT functions.
+The `TablePath` API stores the user-defined data location and the storage type to load a table of interest.
+For example, here is some sample code that loads two DataFrames from parquet using the `TablePath` API.
+
+```py
+bc = bodosql.BodoSQLContext(
+    {
+        "t1": bodosql.TablePath("my_file_path1.pq", "parquet"),
+        "t2": bodosql.TablePath("my_file_path2.pq", "parquet"),
+    }
+)
+
+@bodo.jit
+def f(bc):
     return bc.sql("select t1.A, t2.B from t1, t2 where t1.C > 5 and t1.D = t2.D")
 ```
 
-Here, the `TablePath` constructor doesn't load any data (even when used in regular Python). Instead, a `BodoSQLContext` will generate code to load that data once it sees the contents are used inside the query. This allows you to declare your tables once without worrying about memory usage resulting from loading an entire dataset. For example:
+Here, the `TablePath` constructor doesn't load any data. Instead, a `BodoSQLContext` internally generates code to load the tables of interest after parsing the SQL query. Note that a `BodoSQLContext` loads all used tables from I/O *on every query*, which means that if users would like to perform multiple queries on the same data, they should consider loading the DataFrames once in a separate JIT function.
 
-```py
-t1 = bodosql.TablePath(f1, "parquet")
-t2 = bodosql.TablePath(f2, "parquet")
+### API Reference
 
-@bodo.jit
-def f1(t1):
-    bc = bodosql.BodoSQLContext(
-        {
-            "t1": t1
-        }
-    )
-    ...
-
-
-@bodo.jit
-def f2(t2):
-    bc = bodosql.BodoSQLContext(
-        {
-            "t2": t2,
-        }
-    )
-    ...
-
-```
-
-Additionally, `TablePath` provides the best filter pushdown support on individual BodoSQL queries. Note that it loads all used tables from IO *on every query*. If you reuse the same table and columns across multiple queries, you should consider loading the DataFrame once in a separate JIT function.
-
-#### API Reference
-
-- ++bodosql.%%TablePath%%(file_path, file_type, *, conn_str=None, reorder_io=None)++
+- ++bodosql.%%TablePath%%(file_path: str, file_type: str, *, conn_str: Optional[str] = None, reorder_io: Optional[bool] = None)++
+<br><br>
 
     Specifies how a DataFrame should be loaded from IO by a BodoSQL query. This
     can only load data when used with a `BodoSQLContext` constructor.
@@ -2758,3 +2877,139 @@ Additionally, `TablePath` provides the best filter pushdown support on individua
 
    - `reorder_io`: Boolean flag determining when to load IO. If `False`, all used tables are loaded before executing any of the query. If `True`, tables are loaded just before first use inside the query, which often results in decreased
     peak memory usage as each table is partially processed before loading the next table. The default value, `None`, behaves like `True`, but this may change in the future. This must be constant at compile time if used inside JIT.
+
+
+## Database Catalogs
+
+Database Catalogs are configuration objects that grant BodoSQL access to load tables from a remote database.
+For example, when a user wants to load data from Snowflake, a user will create a `SnowflakeCatalog` to grant
+BodoSQL access to their Snowflake account and load the tables of interest.
+
+A database catalog can be registered during the construction of the `BodoSQLContext` by passing it in as a parameter, or can be manually set using the
+`BodoSQLContext.add_or_replace_catalog` API. Currently, a `BodoSQLContext` can support at most one database catalog.
+
+When using a catalog in a `BodoSQLContext` we strongly recommend creating the `BodoSQLContext` once in regular Python and then
+passing the `BodoSQLContext` as an argument to JIT functions. There is no benefit to creating the
+`BodoSQLContext` in JIT and this could increase compilation time.
+
+```py
+catalog = bodosql.SnowflakeCatalog(
+    username,
+    password,
+    account_name,
+    "DEMO_WH", # warehouse name
+    "SNOWFLAKE_SAMPLE_DATA", # database name
+)
+bc = bodosql.BodoSQLContext({"local_table1": df1}, catalog=catalog)
+
+@bodo.jit
+def run_query(bc):
+    return bc.sql("SELECT r_name, local_id FROM TPCH_SF1.REGION, local_table1 WHERE R_REGIONKEY = local_table1.region_key ORDER BY r_name")
+
+run_query(bc)
+```
+
+Database catalogs can be used alongside local, in-memory `DataFrame` or `TablePath` tables. If a table is
+specified without a schema then BodoSQL resolves the table in the following order:
+
+1. Default Catalog Schema
+2. Local (in-memory) DataFrames / TablePath names
+
+An error is raised if the table cannot be resolved after searching through both of these data sources.
+
+This ordering indicates that in the event of a name conflict between a table in the database catalog and a local table, the table in the database catalog is used.
+
+If a user wants to use the local table instead, the user can explicitly specify the table with the local schema `__bodolocal__`.
+
+For example:
+
+```SQL
+SELECT A from __bodolocal__.table1
+```
+
+Currently BodoSQL supports catalogs Snowflake, but support other data storage systems will be added in future releases.
+
+### SnowflakeCatalog
+
+The Snowflake Catalog offers an interface for users to connect their Snowflake accounts to use with BodoSQL.
+With a Snowflake Catalog, users only have to specify their Snowflake connection once, and can access any tables of interest in their Snowflake account. Currently the Snowflake Catalog is defined to
+use a single `DATABASE` (e.g. `USE DATABASE`)  at a time, as shown below.
+
+```py
+
+catalog = bodosql.SnowflakeCatalog(
+    username,
+    password,
+    account_name,
+    "DEMO_WH", # warehouse name
+    "SNOWFLAKE_SAMPLE_DATA", # database name
+)
+bc = bodosql.BodoSQLContext(catalog=catalog)
+
+@bodo.jit
+def run_query(bc):
+    return bc.sql("SELECT r_name FROM TPCH_SF1.REGION ORDER BY r_name")
+
+run_query(bc)
+```
+
+BodoSQL does not currently support Snowflake syntax for specifying defaults
+and session parameters (e.g. `USING SCHEMA <NAME>`). Instead users can pass
+any session parameters through the optional `connection_params` argument, which
+accepts a `Dict[str, str]` for each session parameter. For example, users can provide
+a default schema to simplify the previous example.
+
+```py
+
+catalog = bodosql.SnowflakeCatalog(
+    username,
+    password,
+    account,
+    "DEMO_WH", # warehouse name
+    "SNOWFLAKE_SAMPLE_DATA", # database name
+    connection_params={"schema": "TPCH_SF1"}
+)
+bc = bodosql.BodoSQLContext(catalog=catalog)
+
+@bodo.jit
+def run_query(bc):
+    return bc.sql("SELECT r_name FROM REGION ORDER BY r_name")
+
+run_query(bc)
+```
+
+Internally, Bodo uses the following connections to Snowflake:
+
+1. A JDBC connection to lazily fetch metadata.
+2. The Snowflake-Python-Connector's distributed fetch API to load batches of arrow data.
+
+#### API Reference
+
+- ++bodosql.%%SnowflakeCatalog%%(username: str, password: str, account: str, warehouse: str, database: str, connection_params: Optional[Dict[str, str]] = None)++
+<br><br>
+
+    Constructor for `SnowflakeCatalog`. Allows users to execute queries on tables stored in Snowflake when the `SnowflakeCatalog` object is registered with a `BodoSQLContext`.
+
+    ***Arguments***
+
+    - `username`: Snowflake account username.
+
+    - `password`: Snowflake account password.
+
+    - `account`: Snowflake account name.
+
+    - `warehouse`: Snowflake warehouse to use when loading data.
+
+    - `database`: Name of Snowflake database to load data from. The Snowflake
+        Catalog is currently restricted to using a single Snowflake `database`.
+
+    - `connection_params`: A dictionary of Snowflake session parameters.
+
+
+#### Supported Query Types
+
+The `SnowflakeCatalog` currently supports the following types of SQL queries:
+
+  * SELECT
+  * INSERT INTO
+  * DELETE
