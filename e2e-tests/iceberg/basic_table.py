@@ -96,10 +96,12 @@ def test_builder(
 ) -> Tuple[Callable[[pd.DataFrame], None], Callable[[], pd.DataFrame]]:
     @bodo.jit(distributed=["df"], cache=True)
     def write_impl(df):
+        print("starting write...")
         df.to_sql(table_name, conn, schema=db_name, if_exists="fail")
 
     @bodo.jit(cache=True)
     def read_back_impl():
+        print("starting read...")
         out_df = pd.read_sql_table(table_name, conn, schema=db_name)
         return out_df
 
@@ -155,6 +157,7 @@ if __name__ == "__main__":
     parser.add_argument("table_name", type=str)
     parser.add_argument("--require_cache", action="store_true", default=False)
     args = parser.parse_args()
+    print("starting test...")
 
     table_name = args.table_name
 
@@ -171,6 +174,7 @@ if __name__ == "__main__":
 
     passed = 0
     for key, (write_test_func, read_test_func) in tests.items():
+        print(f"Running {key}")
         try:
             write_test_func(_get_dist_arg(df))
             out_df = read_test_func()
@@ -188,11 +192,9 @@ if __name__ == "__main__":
                     ), f"ERROR: Bodo did not load read function from cache"
 
             passed += 1
-            if bodo.get_rank() == 0:
-                print(f"Finished {key} Test successfully...")
+            print(f"Finished {key} Test successfully...")
         except Exception as e:
-            if bodo.get_rank() == 0:
-                print(f"Error During {key} Test\n{e}")
+            print(f"Error During {key} Test\n{e}")
 
     # Cleanup of Test Cases
     bodo.barrier()
