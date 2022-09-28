@@ -62,6 +62,7 @@ from bodo.tests.utils import (
     _test_equal,
     _test_equal_guard,
     check_func,
+    convert_non_pandas_columns,
     reduce_sum,
     sync_dtypes,
 )
@@ -993,6 +994,14 @@ def test_basic_write_new_append(
     expected_df = (
         pd.concat([df, df]).reset_index(drop=True) if behavior == "append" else df
     )
+    not_hashable = False
+    for i in range(len(expected_df.columns)):
+        # Technically bytes are hashable but Spark uses bytearray and that's not.
+        if isinstance(expected_df.iloc[0, i], (list, dict, set, bytearray, bytes)):
+            not_hashable = True
+            break
+    if not_hashable:
+        expected_df = convert_non_pandas_columns(expected_df)
 
     # Read using Bodo and PySpark, and then check that it's what's expected
     bodo_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
@@ -1000,10 +1009,18 @@ def test_basic_write_new_append(
     passed = None
     comm = MPI.COMM_WORLD
     if bodo.get_rank() == 0:
+        if base_name == "dt_tsz_table":
+            expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1))
+            bodo_out["B"] = bodo_out["B"].fillna(
+                pd.Timestamp(year=1970, month=1, day=1, tz="UTC")
+            )
+
+        if not_hashable:
+            bodo_out = convert_non_pandas_columns(bodo_out)
         passed = _test_equal_guard(
             expected_df,
             bodo_out,
-            sort_output=False,
+            sort_output=True,
             check_dtype=False,
             reset_index=True,
         )
@@ -1042,14 +1059,18 @@ def test_basic_write_new_append(
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies both
         # dataframes to match Spark.
         if base_name == "dt_tsz_table":
-            expected_df["B"] = expected_df["B"].fillna(datetime(1970, 1, 1))
+            expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1))
             spark_out["B"] = spark_out["B"].fillna(datetime(1970, 1, 1))
+
+        if not_hashable:
+            spark_out = convert_non_pandas_columns(spark_out)
 
         spark_passed = _test_equal_guard(
             expected_df,
             spark_out,
-            sort_output=False,
+            sort_output=True,
             check_dtype=False,
+            reset_index=True,
         )
     spark_n = reduce_sum(spark_passed)
     assert spark_n == n_pes
@@ -1337,7 +1358,7 @@ def test_write_partitioned(
     # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
     # df to match Spark.
     if base_name == "dt_tsz_table":
-        expected_df["B"] = expected_df["B"].fillna(datetime(1970, 1, 1))
+        expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1))
 
     # Validate Bodo read output:
     bodo_out = bodo.jit(distributed=["df"])(
@@ -1348,7 +1369,9 @@ def test_write_partitioned(
     # timestamps, so we convert all NaTs to epoch for consistent
     # comparison
     if base_name == "dt_tsz_table":
-        bodo_out["B"] = bodo_out["B"].fillna(datetime(1970, 1, 1))
+        bodo_out["B"] = bodo_out["B"].fillna(
+            pd.Timestamp(year=1970, month=1, day=1, tz="UTC")
+        )
     bodo_out = _gather_output(bodo_out)
 
     passed = None
@@ -1459,7 +1482,7 @@ def test_write_sorted(
     # timestamps, so we convert all NaTs to epoch for consistent
     # comparison
     if base_name == "dt_tsz_table":
-        expected_df["B"] = expected_df["B"].fillna(datetime(1970, 1, 1))
+        expected_df["B"] = expected_df["B"].fillna(pd.Timestamp(1970, 1, 1))
 
     if base_name == "bool_binary_table":
         # [BE-3585] Bodo write binary columns as string when partitioned,
@@ -1474,7 +1497,9 @@ def test_write_sorted(
     # timestamps, so we convert all NaTs to epoch for consistent
     # comparison
     if base_name == "dt_tsz_table":
-        bodo_out["B"] = bodo_out["B"].fillna(datetime(1970, 1, 1))
+        bodo_out["B"] = bodo_out["B"].fillna(
+            pd.Timestamp(year=1970, month=1, day=1, tz="UTC")
+        )
     bodo_out = _gather_output(bodo_out)
 
     passed = None

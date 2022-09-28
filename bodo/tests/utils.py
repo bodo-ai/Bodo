@@ -1395,12 +1395,14 @@ def convert_non_pandas_columns(df):
     col_names_array_item = []
     col_names_arrow_array_item = []
     col_names_decimal = []
+    col_names_bytes = []
     for e_col_name in list_col:
         e_col = df[e_col_name]
         nb_list_string = 0
         nb_array_item = 0
         nb_arrow_array_item = 0
         nb_decimal = 0
+        nb_bytes = 0
         for i_row in range(n_rows):
             e_ent = e_col.iat[i_row]
             if isinstance(
@@ -1431,6 +1433,8 @@ def convert_non_pandas_columns(df):
                 nb_arrow_array_item += 1
             if isinstance(e_ent, Decimal):
                 nb_decimal += 1
+            if isinstance(e_ent, bytearray):
+                nb_bytes += 1
         if nb_list_string > 0:
             col_names_list_string.append(e_col_name)
         if nb_array_item > 0:
@@ -1439,6 +1443,8 @@ def convert_non_pandas_columns(df):
             col_names_arrow_array_item.append(e_col_name)
         if nb_decimal > 0:
             col_names_decimal.append(e_col_name)
+        if nb_bytes > 0:
+            col_names_bytes.append(e_col_name)
     for e_col_name in col_names_list_string:
         e_list_str = []
         e_col = df[e_col_name]
@@ -1494,6 +1500,11 @@ def convert_non_pandas_columns(df):
             else:
                 e_list_float.append(np.nan)
         df_copy[e_col_name] = e_list_float
+    for e_col_name in col_names_bytes:
+        # Convert bytearray to bytes
+        df_copy[e_col_name] = df[e_col_name].apply(
+            lambda x: bytes(x) if isinstance(x, bytearray) else x
+        )
     return df_copy
 
 
