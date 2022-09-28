@@ -7,6 +7,7 @@ from utils.utils import run_cmd
 
 def test_iceberg_basic_df():
     num_processes = 36
+    timeout = 300
 
     table_name = f"types_table_{str(uuid4())[:8]}"
     cmd = [
@@ -28,11 +29,11 @@ def test_iceberg_basic_df():
         os.chdir(os.path.dirname(__file__))
         # remove __pycache__ (numba stores cache in there)
         shutil.rmtree("__pycache__", ignore_errors=True)
-        run_cmd(cmd)
+        run_cmd(cmd, timeout=timeout)
 
         # Run again on cached code
         cmd.append("--require_cache")
-        run_cmd(cmd)
+        run_cmd(cmd, timeout=timeout)
 
     finally:
         # make sure all state is restored even in the case of exceptions

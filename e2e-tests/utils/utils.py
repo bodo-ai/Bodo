@@ -111,15 +111,19 @@ def get_sf_read_conn():
     return f"snowflake://{username}:{password}@{account}/{database}/{schema}?warehouse={warehouse}"
 
 
-def run_cmd(cmd, print_output=True):
+def run_cmd(cmd, print_output=True, timeout=3600):
     # TODO: specify a timeout to check_output or will the CI handle this? (e.g.
     # situations where Bodo hangs for some reason)
     # stderr=subprocess.STDOUT to also capture stderr in the result
     try:
         output = subprocess.check_output(
-            cmd, stderr=subprocess.STDOUT, text=True, errors="replace"
+            cmd,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+            timeout=timeout,
         )
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         print(e.output)
         raise
     if print_output:
