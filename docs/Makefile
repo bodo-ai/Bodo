@@ -23,10 +23,14 @@ pip-install: $(VENV)
 #
 # MKDOCS
 #
-.PHONY: build
+.PHONY: mkdocs-build
 mkdocs-build: pip-install
 	$(PYTHON) -m mkdocs build
 
-.PHONY: serve
+.PHONY: mkdocs-serve
 mkdocs-serve: pip-install
 	$(PYTHON) -m mkdocs serve
+
+.PHONY: gen_api
+gen_api: pip-install
+	$(PYTHON) gen_api.py

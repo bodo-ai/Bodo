@@ -760,7 +760,9 @@ SELECT MAX(A), B - 1 as val FROM table1 GROUP BY val HAVING val 5
 
 ### QUALIFY
 
-`QUALIFY` is similar to `HAVING`, except it applies filters after computing the results of one or more window functions. This occurs after `WHERE` and `HAVING`. For example:
+`QUALIFY` is similar to `HAVING`, except it applies filters after computing the results of at least one window function. `QUALIFY` is used after using `WHERE` and `HAVING`.
+
+For example:
 
 ```sql
 SELECT column_name(s),
@@ -1220,6 +1222,14 @@ all types:
 
     Count the number of elements in a column or group.
 
+
+#### ANY_VALUE
+-   `ANY_VALUE`
+
+    Select an arbitrary value. Note: currently BodoSQL always selects the first value,
+    but this is subject to change at any time.
+
+
 In addition, Bodo SQL also supports the following functions on
 numeric types
 
@@ -1261,6 +1271,21 @@ numeric types
 -   `SUM`
 
     Compute the sum for a column.
+
+#### COUNT_IF
+-   `COUNT_IF`
+
+    Compute the total number of occurrences of `true` in a column
+    of booleans. For example:
+
+    ```sql
+    SELECT COUNT_IF(A) FROM table1
+    ```
+
+    Is equivalent to
+    ```sql
+    SELECT SUM(CASE WHEN A THEN 1 ELSE 0 END) FROM table1
+    ```
 
 #### VARIANCE
 -   `VARIANCE`
@@ -1833,6 +1858,249 @@ Bodo SQL currently supports the following string functions:
     and defaults to 1.
 
 
+###  Regex Functions
+
+BodoSQL currently uses Python's regular expression library via the `re`
+module. Although this may be subject to change, it means that there are
+several deviations from the behavior of Snowflake's regular expression
+functions [(see here for snowflake documentation)](https://docs.snowflake.com/en/sql-reference/functions-regexp.html).
+The key points and major deviations are noted below:
+
+* Snowflake uses a superset of the POSIX ERE regular expression syntax. This means that BodoSQL can utilize several syntactic forms of regular expressions that Snowflake cannot [(see here for Python re documentation)](https://docs.python.org/3/library/re.html). However, there are several features that POSIX ERE has that Python's `re` does not:
+
+   - POSIX character classes [(see here for a full list)](https://en.wikipedia.org/wiki/Regular_expression#Character_classes). BodoSQL does support these as macros for character sets. In other words, `[[:lower:]]` is transformed into `[a-z]`. However, this form of replacement cannot be escaped. Additionally, any character classes that are supposed to include the null terminator `\x00` instead start at `\x01`
+
+   - Equivalence classes (not supported by BodoSQL).
+
+   - Returning the longest match when using alternation patterns (BodoSQL returns the leftmost match).
+
+* The regex functions can optionally take in a flag argument. The flag is a string whose characters control how matches to patterns occur. The following characters have meaning when contained in the flag string:
+
+   - `'c'`: case-sensitive matching (the default behavior)
+   - `'i'`: case-insensitive matching (if both 'c' and 'i' are provided, whichever one occurs last is used)
+   - `'m'`: allows anchor patterns to interact with the start/end of each line, not just the start/end of the entire string.
+   - `'s'`: allows the `.` metacharacter to capture newline characters
+   - `'e'`: see `REGEXP_SUBSTR`/`REGEXP_INSTR`
+
+* Currently, BodoSQL supports the lazy `?` operator whereas Snowflake does not. So for example, in Snowflake, the pattern ``(.*?),'` would match with as many characters as possible so long as the last character was a comma. However, in BodoSQL, the match would end as soon as the first comma.
+
+* Currently, BodoSQL supports the following regexp features which should crash when done in Snowflake: `(?...)`, `\A`, `\Z`, `\1`, `\2`, `\3`, etc.
+
+* Currently, BodoSQL requires the pattern argument and the flag argument (if provided) to be string literals as opposed to columns or expressions.
+
+* Currently, extra backslashes may be required to escape certain characters if they have meaning in Python. The amount of backslashes required to properly escape a character depends on the useage.
+
+* All matches are non-overlapping.
+
+* If any of the numeric arguments are zero or negative, or the `group_num` argument is out of bounds, an error is raised. The only exception is `REGEXP_REPLACE`, which allows its occurrence argument to be zero.
+
+BodoSQL currently supports the following regex functions:
+
+#### REGEXP_LIKE
+-   `REGEXP_LIKE(str, pattern[, flag])`
+
+    Returns `true` if the entire string matches with the pattern.
+    If `flag` is not provided, `''` is used.
+
+    If the pattern is empty, then `true` is returned if
+    the string is also empty.
+
+    For example:
+
+    - 2 arguments: Returns `true` if `A` is a 5-character string where the first character is an a,
+    the last character is a z, and the middle 3 characters are also lowercase characters (case-sensitive).
+    ```sql
+    SELECT REGEXP_LIKE(A, 'a[a-z]{3}z')
+    ```
+
+    - 3 arguments: Returns `true` if `A` starts with the letters `'THE'` (case-insenstive).
+    ```sql
+    SELECT REGEXP_LIKE(A, 'THE.*', 'i')
+    ```
+
+
+#### REGEXP_COUNT
+-   `REGEXP_COUNT(str, pattern[, position[, flag]])`
+
+    Returns the number of times the string contains matches
+    to the pattern, starting at the location specified
+    by the `position` argument (with 1-indexing).
+    If `position` is not provided, `1` is used.
+    If `flag` is not provided, `''` is used.
+
+    If the pattern is empty, 0 is returned.
+
+    For example:
+
+    - 2 arguments: Returns the number of times that any letters occur in `A`.
+    ```sql
+    SELECT REGEXP_COUNT(A, '[[:alpha:]]')
+    ```
+
+    - 3 arguments: Returns the number of times that any digit characters occur in `A`, not including
+    the first 5 characters.
+    ```sql
+    SELECT REGEXP_COUNT(A, '\d', 6)
+    ```
+
+    - 4 arguments: Returns the number of times that a substring occurrs in `A` that contains two
+    ones with any character (including newlines) in between.
+    ```sql
+    SELECT REGEXP_COUNT(A, '1.1', 1, 's')
+    ```
+
+
+#### REGEXP_REPLACE
+-   `REGEXP_REPLACE(str, pattern[, replacement[, position[, occurrence[, flag]]]])`
+
+    Returns the a version of the inputted string where each
+    match to the pattern is replaced by the replacement string,
+    starting at the location specified by the `position` argument
+    (with 1-indexing). The occurrence argument specifies which
+    match to replace, where 0 means replace all occurrences. If
+    `replacement` is not provided, `''` is used. If `position` is
+    not provided, `1` is used. If `occurrence` is not provided,
+    `0` is used. If `flag` is not provided, `''` is used.
+
+    If there are an insufficient number of matches, or the pattern is empty,
+    the original string is returned.
+
+    Note: backreferences in the replacement pattern are supported,
+    but may require additional backslashes to work correctly.
+
+    For example:
+
+    - 2 arguments: Deletes all whitespace in `A`.
+    ```sql
+    SELECT REGEXP_REPLACE(A, '[[:space:]]')
+    ```
+
+    - 3 arguments: Replaces all occurrences of `'hate'` in `A` with `'love'` (case-sensitive).
+    ```sql
+    SELECT REGEXP_REPLACE(A, 'hate', 'love')
+    ```
+
+    - 4 arguments: Replaces all occurrences of two consecutive digits in `A` with the same two
+    digits reversed, excluding the first 2 characters.
+    ```sql
+    SELECT REGEXP_REPLACE(A, '(\d)(\d)', '\\\\2\\\\1', 3)
+    ```
+
+    - 5 arguments: Replaces the first character in `A` with an underscore.
+    ```sql
+    SELECT REGEXP_REPLACE(A, '^.', '_', 1, 2)
+    ```
+
+    - 6 arguments: Removes the first and last word from each line of `A` that contains
+    at least 3 words.
+    ```sql
+    SELECT REGEXP_REPLACE(A, '^\w+ (.*) \w+$', '\\\\1', 0, 1, 'm')
+    ```
+
+
+#### REGEXP_SUBSTR
+-   `REGEXP_SUBSTR(str, pattern[, position[, occurrence[, flag[, group_num]]]])`
+
+    Returns the substring of the original string that caused a
+    match with the pattern, starting at the location specified
+    by the `position` argument (with 1-indexing). The occurrence argument
+    specifies which match to extract (with 1-indexing). If `position` is
+    not provided, `1` is used. If `occurrence` is not provided,
+    `1` is used. If `flag` is not provided, `''` is used. If `group_num`
+    is not provided, and `flag` contains `'e`', `1` is used. If `group_num` is provided but the
+    flag does not contain `e`, then it behaves as if it did. If the flag does contain `e`,
+    then one of the subgroups of the match is returned instead of the entire match. The
+    subgroup returned corresponds to the `group_num` argument
+    (with 1-indexing).
+
+    If there are an insufficient number of matches, or the pattern is empty,
+    `NULL` is returned.
+
+    For example:
+
+    - 2 arguments: Returns the first number that occurs inside of `A`.
+    ```sql
+    SELECT REGEXP_SUBSTR(A, '\d+')
+    ```
+
+    - 3 arguments: Returns the first punctuation symbol that occurs inside of `A`, excluding the first 10 characters.
+    ```sql
+    SELECT REGEXP_SUBSTR(A, '[[:punct:]]', 11)
+    ```
+
+    - 4 arguments: Returns the fourth occurrence of two consecutive lowercase vowels in `A`.
+    ```sql
+    SELECT REGEXP_SUBSTR(A, '[aeiou]{2}', 1, 4)
+    ```
+
+    - 5 arguments: Returns the first 3+ character substring of `A` that starts with and ends with a vowel (case-insensitive, and
+    it can contain newline characters).
+    ```sql
+    SELECT REGEXP_SUBSTR(A, '[aeiou].+[aeiou]', 1, 1, 'im')
+    ```
+
+    - 6 arguments: Looks for third occurrence in `A` of a number followed by a colon, a space, and a word
+    that starts with `'a'` (case-sensitive) and returns the word that starts with `'a'`.
+    ```sql
+    SELECT REGEXP_SUBSTR(A, '(\d+): (a\w+)', 1, 3, 'e', 2)
+    ```
+
+
+#### REGEXP_INSTR
+-   `REGEXP_INSTR(str, pattern[, position[, occurrence[, option[, flag[, group_num]]]]])`
+
+    Returns the location within the original string that caused a
+    match with the pattern, starting at the location specified
+    by the `position` argument (with 1-indexing). The occurrence argument
+    specifies which match to extract (with 1-indexing). The option argument
+    specifies whether to return the start of the match (if `0`) or the first
+    location after the end of the match (if `1`). If `position` is
+    not provided, `1` is used. If `occurrence` is not provided,
+    `1` is used. If `option` is not provided, `0` is used. If `flag` is not
+    provided, `''` is used. If `group_num` is not provided, and `flag` contains `'e`', `1` is used.
+    If `group_num` is provided but the flag does not contain `e`, then
+    it behaves as if it did. If the flag does contain `e`, then the location of one of
+    the subgroups of the match is returned instead of the location of the
+    entire match. The subgroup returned corresponds to the `group_num` argument
+    (with 1-indexing).
+
+    If there are an insufficient number of matches, or the pattern is empty,
+    `0` is returned.
+
+    - 2 arguments: Returns the index of the first `'#'` in `A`.
+    ```sql
+    SELECT REGEXP_INSTR(A, '#')
+    ```
+
+    - 3 arguments: Returns the starting index of the first occurrence of 3 consecutive digits in `A`,
+    excluding the first 3 characters.
+     ```sql
+    SELECT REGEXP_INSTR(A, '\d{3}', 4)
+    ```
+
+    - 4 arguments: Returns the starting index of the 9th word sandwiched between angle brackets in `A`.
+    ```sql
+    SELECT REGEXP_INSTR(A, '<\w+>', 1, 9)
+    ```
+
+    - 5 arguments: Returns the ending index of the first substring of `A` that starts
+    and ends with non-ascii characters.
+    ```sql
+    SELECT REGEXP_INSTR(A, '[^[:ascii:]].*[^[:ascii:]]', 1, 1, 1)
+    ```
+
+    - 6 arguments: Returns the starting index of the second line of `A` that begins with an uppercase vowel.
+    ```sql
+    SELECT REGEXP_INSTR(A, '^[AEIOU].*', 1, 2, 0, 'm')
+    ```
+
+    - 7 arguments: Looks for the first substring of `A` that has the format of a name in a phonebook (i.e. `Lastname, Firstname`)
+    and returns the starting index of the first name.
+    ```sql
+    SELECT REGEXP_INSTR(A, '([[:upper]][[:lower:]]+), ([[:upper]][[:lower:]]+)', 1, 1, 0, 'e', 2)
+    ```
+
+
 ###   Control Flow Functions
 
 #### DECODE
@@ -1879,6 +2147,12 @@ Bodo SQL currently supports the following string functions:
     ```
 
 
+#### IFF
+-   `IFF(Cond, TrueValue, FalseValue)`
+
+    Equivalent to `IF`
+
+
 #### IFNULL
 -   `IFNULL(Arg0, Arg1)`
 
@@ -1887,10 +2161,23 @@ Bodo SQL currently supports the following string functions:
     to cast them all to a common type, which is currently
     undefined behavior.
 
+#### ZEROIFNULL
+-   `ZEROIFNULL(Arg0, Arg1)`
+
+    Equivalent to `IFNULL(Arg0, 0)`
+
+
 #### NVL
 -   `NVL(Arg0, Arg1)`
 
     Equivalent to `IFNULL`
+
+
+#### NVL2
+-   `NVL2(Arg0, Arg1, Arg2)`
+
+    Equivalent to `NVL(NVL(Arg0, Arg1), Arg2)`
+
 
 #### NULLIF
 -   `NULLIF(Arg0, Arg1)`
@@ -1898,12 +2185,71 @@ Bodo SQL currently supports the following string functions:
     Returns `null` if the `Arg0` evaluates to true, and otherwise
     returns `Arg1`
 
+
+#### NULLIFZERO
+-   `NULLIFZERO(Arg0)`
+
+    Equivalent to `NULLIF(Arg0, 0)`
+
+
 #### COALESCE
 -   `COALESCE(A, B, C, ...)`
 
     Returns the first non NULL argument, or NULL if no non NULL
     argument is found. Requires at least two arguments. If
     Arguments do not have the same type, Bodo SQL will attempt
+    to cast them to a common dtype, which is currently
+    undefined behavior.
+
+
+### Window Functions
+
+Window functions can be used to compute an aggregation across a
+row and its surrounding rows. Most window functions have the
+following syntax:
+
+```sql
+SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>) FROM table_name
+```
+The `ROWS BETWEEN ROWS BETWEEN <LOWER_BOUND> AND <UPPER_BOUND>`
+section is used to specify the window over which to compute the
+function. A bound can can come before the current row, using
+`PRECEDING` or after the current row, using
+`FOLLOWING`. The bounds can be relative (i.e.
+`N PRECEDING` or `N FOLLOWING`), where `N` is a positive integer,
+or they can be absolute (i.e. `UNBOUNDED PRECEDING` or
+`UNBOUNDED FOLLOWING`).
+
+For example:
+
+```sql
+SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM table1
+```
+This query computes the sum of every 3 rows, i.e. the sum of a row of interest, its preceding row, and its following row.
+
+In contrast:
+
+```sql
+SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM table1
+```
+This query computes the cumulative sum over a row and all of its preceding rows.
+
+Window functions perform a series of steps as followed:
+
+1.  Partition the data by `PARTITION_COLUMN`. This is effectively a groupby operation on `PARTITION_COLUMN`.
+2.  Sort each group as specified by the `ORDER BY` clause.
+3.  Perform the calculation over the specified window, i.e. the newly ordered subset of data.
+4.  Shuffle the data back to the original ordering.
+
+For BodoSQL, `PARTITION BY` is required, but
+`ORDER BY` is optional for most functions and
+`ROWS BETWEEN` is optional for all of them. If
+`ROWS BETWEEN` is not specified then it defaults to either
+computing the result over the entire window (if no `ORDER BY`
+clause is specified) or to using the window `UNBOUNDED PRECEDING TO CURRENT ROW`
+(if there is an `ORDER BY` clause).
+Note: `RANGE BETWEEN` is not currently supported.
+Currently BodoSQL supports the following Window functions:
 
 
 #### COUNT
@@ -1917,7 +2263,7 @@ Bodo SQL currently supports the following string functions:
     Compute the sum over the window or `NULL` if the window is
     empty.
 
-####AVG
+#### AVG
 -   `AVG(COLUMN_EXPRESSION)`
 
     Compute the average over the window or `NULL` if the window
@@ -1948,50 +2294,6 @@ Bodo SQL currently supports the following string functions:
     Compute the variance for a population over the window or
     `NULL` if the window is empty.
 
-
-### Window Functions
-
-Window functions can be used to compute an aggregation across a
-row and its surrounding rows. Most window functions have the
-following syntax:
-
-```sql
-SELECT WINDOW_FN(ARG1, ..., ARGN) OVER (PARTITION BY PARTITION_COLUMN_1, ..., PARTITION_COLUMN_N ORDER BY SORT_COLUMN_1, ..., SORT_COLUMN_N ROWS BETWEEN <LOWER_BOUND AND <UPPER_BOUND>) FROM table_name
-```
-The `ROWS BETWEEN ROWS BETWEEN <LOWER_BOUNDAND <UPPER_BOUND>`
-section is used to specify the window over which to compute the
-function. A bound can can come before the current row, using
-`PRECEDING` or after the current row, using
-`FOLLOWING`. The bounds can be relative (i.e.
-`N PRECEDING`) or they can be absolute using the `UNBOUNDED`
-keyword. These bounds are inclusive.
-
-For example:
-```sql
-SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM table1
-```
-Computes a sum for each row of the current row, the row preceding,
-and the row following. In contrast:
-```sql
-SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING AND 0 FOLLOWING) FROM table1
-```
-Computes the cumulative sum because the window always starts at
-the first row and grows by 1 for each subsequent row.
-
-Window functions execute by performing a series of steps which
-influences the final output.
-
-1.  Partition by the `PARTITION_COLUMN`. This effectively performs a
-    groupby on the provided `PARTITION_COLUMN`.
-2.  Sort each group according to the Order By clause.
-3.  Apply the function over the "window" given by the window.
-4.  Shuffle the data back to the original ordering.
-
-For BodoSQL, `PARTITION BY` and `ORDER BY` are required, but
-`ROWS BETWEEN` is optional. If `ROWS BETWEEN` is not specified
-then it defaults to computing the result over the entire window.
-Currently BodoSQL supports the following Window functions:
-
 #### MAX
 -   `MAX(COLUMN_EXPRESSION)`
 
@@ -2010,23 +2312,38 @@ Currently BodoSQL supports the following Window functions:
 
     Compute the number of non-NULL entries in a window.
 
-#### LEAD
--   `LEAD(COLUMN_EXPRESSION, N)`
+#### COUNT_IF
 
-    Returns the row that follows the current row by N. If
+-   `COUNT_IF(BOOLEAN_COLUMN_EXPRESSION)`
+
+    Compute the number of `true` entries in a boolean column.
+
+
+#### LEAD
+-   `LEAD(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
+
+    Returns the row that follows the current row by N. If N
+    is not specified, defaults to 1. If FILL_VALUE is not
+    specified, defaults to `NULL`. If
     there are fewer than N rows the follow the current row in
-    the window, it returns `NULL`. N must be a literal
-    non-negative integer.
+    the window, it returns FILL_VALUE. N must be a literal
+    non-negative integer if specified. FILL_VALUE must be a
+    scalar if specified. Note: at this time Bodo does not
+    support the `IGNORE NULLS` keyword.
 
     This function cannot be used with `ROWS BETWEEN`.
 
 #### LAG
--   `LAG(COLUMN_EXPRESSION, N)`
+-   `LAG(COLUMN_EXPRESSION, [N], [FILL_VALUE])`
 
-    Returns the row that precedes the current row by N. If
+    Returns the row that precedes the current row by N. If N
+    is not specified, defaults to 1. If FILL_VALUE is not
+    specified, defaults to `NULL`. If
     there are fewer than N rows the precede the current row in
-    the window, it returns `NULL`. N must be a literal
-    non-negative integer.
+    the window, it returns FILL_VALUE. N must be a literal
+    non-negative integer if specified. FILL_VALUE must be a
+    scalar if specified. Note: at this time Bodo does not
+    support the `IGNORE NULLS` keyword.
 
     This function cannot be used with `ROWS BETWEEN`.
 
@@ -2049,6 +2366,15 @@ Currently BodoSQL supports the following Window functions:
     the window is empty. If N is greater or than the window
     size, this returns `NULL`.
 
+
+#### ANY_VALUE
+-   `ANY_VALUE(COLUMN_EXPRESSION)`
+
+    Select an arbitrary value in the window or `NULL` if the window
+    is empty. Note: currently BodoSQL always selects the first value,
+    but this is subject to change at any time.
+
+
 #### NTILE
 -   `NTILE(N)`
 
@@ -2063,7 +2389,7 @@ Currently BodoSQL supports the following Window functions:
 
     Compute the rank of each row based on the value(s) in the row relative to all value(s) within the partition.
     The rank begins with 1 and increments by one for each succeeding value. Duplicate value(s) will produce
-    the same rank, producing gaps in the rank (compare with `DENSE_RANK).
+    the same rank, producing gaps in the rank (compare with `DENSE_RANK`). `ORDER BY` is required for this function.
 
 
 #### DENSE_RANK
@@ -2071,7 +2397,7 @@ Currently BodoSQL supports the following Window functions:
 
     Compute the rank of each row based on the value(s) in the row relative to all value(s) within the partition
     without producing gaps in the rank (compare with `RANK`). The rank begins with 1 and increments by one for each succeeding value.
-    Rows with the same value(s) produce the same rank.
+    Rows with the same value(s) produce the same rank. `ORDER BY` is required for this function.
 
 !!!note
     To compare `RANK` and `DENSE_RANK`, on input array `['a', 'b', 'b', 'c']`, `RANK` will output `[1, 2, 2, 4]` while `DENSE_RANK` outputs `[1, 2, 2, 3]`.
@@ -2081,21 +2407,36 @@ Currently BodoSQL supports the following Window functions:
 
     Compute the percentage ranking of the value(s) in each row based on the value(s) relative to all value(s)
     within the window partition. Ranking calcuated using `RANK()` divided by the number of rows in the window
-    partition minus one. Paritions with one row have `PERCENT_RANK()` of 0.
+    partition minus one. Paritions with one row have `PERCENT_RANK()` of 0. `ORDER BY` is required for this function.
 
 
 #### CUME_DIST
 -   `CUME_DIST()`
 
     Compute the cumulative distribution of the value(s) in each row based on the value(s) relative to all value(s)
-    within the window partition.
+    within the window partition. `ORDER BY` is required for this function.
+
 
 #### ROW_NUMBER
 -   `ROW_NUMBER()`
 
     Compute an increasing row number (starting at 1) for each
-    row. This function cannot be used with `ROWS BETWEEN`.to cast them to a common datatype, which is currently
-    undefined behavior.
+    row. This function cannot be used with `ROWS BETWEEN`.
+
+
+#### CONDITIONAL_TRUE_EVENT
+-   `CONDITIONAL_TRUE_EVENT(BOOLEAN_COLUMN_EXPRESSION)`
+
+    Computes a counter within each partition that starts at zero and increases by 1 each
+    time the boolean column's value is `true`. `ORDER BY` is required for this function.
+
+
+ #### CONDITIONAL_CHANGE_EVENT
+-   `CONDITIONAL_CHANGE_EVENT(COLUMN_EXPRESSION)`
+
+    Computes a counter within each partition that starts at zero and increases by 1 each
+    time the value inside the window changes. `NULL` does not count as a new/changed value.
+    `ORDER BY` is required for this function.
 
 
 ## Supported DataFrame Data Types
@@ -2358,56 +2699,177 @@ def run_queries(f1, f2, target_date):
 run_queries(f1, f2, target_date)
 ```
 
+## BodoSQLContext API
 
-### TablePath API
+The `BodoSQLContext` API is the primary interface for executing SQL queries. It performs two roles:
 
-The `TablePath` API a general purpose IO interface to specify IO sources. It is meant as an alternative to loading the exact tables that you are using inside your JIT function. The `TablePath` API indicates how to find a table if needed. BodoSQL will then load that table when needed within a single query. For example, here is some sample code that loads two DataFrames from parquet using the `TablePath` API.
+  1. Registering data and connection information to load tables of interest.
+  2. Forwarding SQL queries to the BodoSQL engine for compilation and execution. This is done via the
+     `bc.sql(query)` method, where `bc` is a `BodoSQLContext` object.
+
+
+
+A `BodoSQLContext` can be defined in regular Python and passed as an argument to JIT functions or can be
+defined directly inside JIT functions. We recommend defining and modifying a `BodoSQLContext` in regular
+Python whenever possible.
+
+For example:
 
 ```py
-@bodo.jit
-def f(f1, f2):
-    bc = bodosql.BodoSQLContext(
-        {
-            "t1": bodosql.TablePath(f1, "parquet"),
-            "t2": bodosql.TablePath(f2, "parquet"),
-        }
+bc = bodosql.BodoSQLContext(
+    {
+        "t1": bodosql.TablePath("my_file_path.pq", "parquet"),
+    },
+    catalog=bodosql.SnowflakeCatalog(
+        username,
+        password,
+        account_name,
+        warehouse_name,
+        database name,
     )
+)
+
+@bodo.jit
+def f(bc):
+    return bc.sql("select t1.A, t2.B from t1, catalogSchema.t2 where t1.C > 5 and t1.D = catalogSchema.t2.D")
+```
+
+### API Reference
+
+
+- <code><apihead>bodosql.<apiname>BodoSQLContext</apiname>(tables: Optional[Dict[str, Union[pandas.DataFrame|TablePath]]] = None, catalog: Optional[DatabaseCatalog] = None)</apihead></code>
+<br><br><br><br>
+
+    Defines a `BodoSQLContext` with the given local tables and catalog.
+
+    ***Arguments***
+
+    - `tables`: A dictionary that maps a name used in a SQL query to a `DataFrame` or `TablePath` object.
+
+    - `catalog`: A `DatabaseCatalog` used to load tables from a remote database (e.g. Snowflake).
+
+
+
+- <code><apihead>bodosql.BodoSQLContext.<apiname>sql</apiname>(self, query: str, params_dict: Optional[Dict[str, Any] = None)</apihead></code>
+<br><br><br><br>
+
+    Executes a SQL query using the tables registered in this `BodoSQLContext`. This function should
+    be used inside a `@bodo.jit` function.
+
+    ***Arguments***
+
+    - `query`: The SQL query to execute. This function generates code that is compiled so the `query` argument is required
+    to be a compile time constant.
+
+   -  `params_dict`: A dictionary that maps a SQL usable name to Python variables. For more information please
+    refer to [the BodoSQL named parameters section][bodosql_named_params].
+
+    ***Returns***
+
+    A `DataFrame` that results from executing the query.
+
+
+
+- <code><apihead>bodosql.BodoSQLContext.<apiname>add_or_replace_view</apiname>(self, name: str, table: Union[pandas.DataFrame, TablePath])</apihead></code>
+<br><br><br><br>
+
+    Create a new `BodoSQLContext` from an existing `BodoSQLContext` by adding or replacing a table.
+
+    ***Arguments***
+
+    - `name`: The name of the table to add. If the name already exists references to that table
+    are removed from the new context.
+
+    - `table`: The table object to add. `table` must be a `DataFrame` or `TablePath` object.
+
+    ***Returns***
+
+    A new `BodoSQLContext` that retains the tables and catalogs from the old `BodoSQLContext` and inserts the new table specified.
+
+    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+    e.g. `bc = bc.add_or_replace_view("t1", table)`
+
+
+
+
+- <code><apihead>bodosql.BodoSQLContext.<apiname>remove_view</apiname>(self, name: str)</apihead></code>
+<br><br><br><br>
+
+    Creates a new `BodoSQLContext` from an existing context by removing the table with the
+    given name. If the name does not exist, a `BodoError` is thrown.
+
+    ***Arguments***
+
+    - `name`: The name of the table to remove.
+
+    ***Returns***
+
+    A new `BodoSQLContext` that retains the tables and catalogs from the old `BodoSQLContext` minus the table specified.
+
+    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+    e.g. `bc = bc.remove_view("t1")`
+
+
+
+- <code><apihead>bodosql.BodoSQLContext.<apiname>add_or_replace_catalog</apiname>(self, catalog: DatabaseCatalog)</apihead></code>
+<br><br><br><br>
+
+    Create a new `BodoSQLContext` from an existing context by replacing the `BodoSQLContext` object's `DatabaseCatalog` with
+    a new catalog.
+
+    ***Arguments***
+
+    - `catalog`: The catalog to insert.
+
+    ***Returns***
+
+    A new `BodoSQLContext` that retains tables from the old `BodoSQLContext` but replaces the old catalog with the new catalog specified.
+
+    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+    e.g. `bc = bc.add_or_replace_catalog(catalog)`
+
+
+
+- <code><apihead>bodosql.BodoSQLContext.<apiname>remove_catalog</apiname>(self)</apihead></code>
+<br><br><br><br>
+
+    Create a new `BodoSQLContext` from an existing context by removing its `DatabaseCatalog`.
+
+    ***Returns***
+
+    A new `BodoSQLContext` that retains tables from the old `BodoSQLContext` but removes the old catalog.
+
+    Note: This **DOES NOT** update the given context. Users should always use the `BodoSQLContext` object returned from the function call.
+    e.g. `bc = bc.remove_catalog()`
+
+
+## TablePath API
+
+The `TablePath` API is a general purpose IO interface to specify IO sources. This API is meant
+as an alternative to natively loading tables in Python inside JIT functions.
+The `TablePath` API stores the user-defined data location and the storage type to load a table of interest.
+For example, here is some sample code that loads two DataFrames from parquet using the `TablePath` API.
+
+```py
+bc = bodosql.BodoSQLContext(
+    {
+        "t1": bodosql.TablePath("my_file_path1.pq", "parquet"),
+        "t2": bodosql.TablePath("my_file_path2.pq", "parquet"),
+    }
+)
+
+@bodo.jit
+def f(bc):
     return bc.sql("select t1.A, t2.B from t1, t2 where t1.C > 5 and t1.D = t2.D")
 ```
 
-Here, the `TablePath` constructor doesn't load any data (even when used in regular Python). Instead, a `BodoSQLContext` will generate code to load that data once it sees the contents are used inside the query. This allows you to declare your tables once without worrying about memory usage resulting from loading an entire dataset. For example:
+Here, the `TablePath` constructor doesn't load any data. Instead, a `BodoSQLContext` internally generates code to load the tables of interest after parsing the SQL query. Note that a `BodoSQLContext` loads all used tables from I/O *on every query*, which means that if users would like to perform multiple queries on the same data, they should consider loading the DataFrames once in a separate JIT function.
 
-```py
-t1 = bodosql.TablePath(f1, "parquet")
-t2 = bodosql.TablePath(f2, "parquet")
-
-@bodo.jit
-def f1(t1):
-    bc = bodosql.BodoSQLContext(
-        {
-            "t1": t1
-        }
-    )
-    ...
+### API Reference
 
 
-@bodo.jit
-def f2(t2):
-    bc = bodosql.BodoSQLContext(
-        {
-            "t2": t2,
-        }
-    )
-    ...
-
-```
-
-Additionally, `TablePath` provides the best filter pushdown support on individual BodoSQL queries. Note that it loads all used tables from IO *on every query*. If you reuse the same table and columns across multiple queries, you should consider loading the DataFrame once in a separate JIT function.
-
-#### API Reference
-
-- <code><apihead>bodosql.<apiname>TablePath</apiname>(file_path, file_type, *, conn_str=None, reorder_io=None)</apihead></code>
-<br><br>
+- <code><apihead>bodosql.<apiname>TablePath</apiname>(file_path: str, file_type: str, *, conn_str: Optional[str] = None, reorder_io: Optional[bool] = None)</apihead></code>
+<br><br><br><br>
 
     Specifies how a DataFrame should be loaded from IO by a BodoSQL query. This
     can only load data when used with a `BodoSQLContext` constructor.
@@ -2422,3 +2884,140 @@ Additionally, `TablePath` provides the best filter pushdown support on individua
 
    - `reorder_io`: Boolean flag determining when to load IO. If `False`, all used tables are loaded before executing any of the query. If `True`, tables are loaded just before first use inside the query, which often results in decreased
     peak memory usage as each table is partially processed before loading the next table. The default value, `None`, behaves like `True`, but this may change in the future. This must be constant at compile time if used inside JIT.
+
+
+## Database Catalogs
+
+Database Catalogs are configuration objects that grant BodoSQL access to load tables from a remote database.
+For example, when a user wants to load data from Snowflake, a user will create a `SnowflakeCatalog` to grant
+BodoSQL access to their Snowflake account and load the tables of interest.
+
+A database catalog can be registered during the construction of the `BodoSQLContext` by passing it in as a parameter, or can be manually set using the
+`BodoSQLContext.add_or_replace_catalog` API. Currently, a `BodoSQLContext` can support at most one database catalog.
+
+When using a catalog in a `BodoSQLContext` we strongly recommend creating the `BodoSQLContext` once in regular Python and then
+passing the `BodoSQLContext` as an argument to JIT functions. There is no benefit to creating the
+`BodoSQLContext` in JIT and this could increase compilation time.
+
+```py
+catalog = bodosql.SnowflakeCatalog(
+    username,
+    password,
+    account_name,
+    "DEMO_WH", # warehouse name
+    "SNOWFLAKE_SAMPLE_DATA", # database name
+)
+bc = bodosql.BodoSQLContext({"local_table1": df1}, catalog=catalog)
+
+@bodo.jit
+def run_query(bc):
+    return bc.sql("SELECT r_name, local_id FROM TPCH_SF1.REGION, local_table1 WHERE R_REGIONKEY = local_table1.region_key ORDER BY r_name")
+
+run_query(bc)
+```
+
+Database catalogs can be used alongside local, in-memory `DataFrame` or `TablePath` tables. If a table is
+specified without a schema then BodoSQL resolves the table in the following order:
+
+1. Default Catalog Schema
+2. Local (in-memory) DataFrames / TablePath names
+
+An error is raised if the table cannot be resolved after searching through both of these data sources.
+
+This ordering indicates that in the event of a name conflict between a table in the database catalog and a local table, the table in the database catalog is used.
+
+If a user wants to use the local table instead, the user can explicitly specify the table with the local schema `__bodolocal__`.
+
+For example:
+
+```SQL
+SELECT A from __bodolocal__.table1
+```
+
+Currently BodoSQL supports catalogs Snowflake, but support other data storage systems will be added in future releases.
+
+### SnowflakeCatalog
+
+The Snowflake Catalog offers an interface for users to connect their Snowflake accounts to use with BodoSQL.
+With a Snowflake Catalog, users only have to specify their Snowflake connection once, and can access any tables of interest in their Snowflake account. Currently the Snowflake Catalog is defined to
+use a single `DATABASE` (e.g. `USE DATABASE`)  at a time, as shown below.
+
+```py
+
+catalog = bodosql.SnowflakeCatalog(
+    username,
+    password,
+    account_name,
+    "DEMO_WH", # warehouse name
+    "SNOWFLAKE_SAMPLE_DATA", # database name
+)
+bc = bodosql.BodoSQLContext(catalog=catalog)
+
+@bodo.jit
+def run_query(bc):
+    return bc.sql("SELECT r_name FROM TPCH_SF1.REGION ORDER BY r_name")
+
+run_query(bc)
+```
+
+BodoSQL does not currently support Snowflake syntax for specifying defaults
+and session parameters (e.g. `USING SCHEMA <NAME>`). Instead users can pass
+any session parameters through the optional `connection_params` argument, which
+accepts a `Dict[str, str]` for each session parameter. For example, users can provide
+a default schema to simplify the previous example.
+
+```py
+
+catalog = bodosql.SnowflakeCatalog(
+    username,
+    password,
+    account,
+    "DEMO_WH", # warehouse name
+    "SNOWFLAKE_SAMPLE_DATA", # database name
+    connection_params={"schema": "TPCH_SF1"}
+)
+bc = bodosql.BodoSQLContext(catalog=catalog)
+
+@bodo.jit
+def run_query(bc):
+    return bc.sql("SELECT r_name FROM REGION ORDER BY r_name")
+
+run_query(bc)
+```
+
+Internally, Bodo uses the following connections to Snowflake:
+
+1. A JDBC connection to lazily fetch metadata.
+2. The Snowflake-Python-Connector's distributed fetch API to load batches of arrow data.
+
+#### API Reference
+
+
+- <code><apihead>bodosql.<apiname>SnowflakeCatalog</apiname>(username: str, password: str, account: str, warehouse: str, database: str, connection_params: Optional[Dict[str, str]] = None)</apihead></code>
+<br><br><br><br>
+
+    Constructor for `SnowflakeCatalog`. Allows users to execute queries on tables stored in Snowflake when the `SnowflakeCatalog` object is registered with a `BodoSQLContext`.
+
+    ***Arguments***
+
+    - `username`: Snowflake account username.
+
+    - `password`: Snowflake account password.
+
+    - `account`: Snowflake account name.
+
+    - `warehouse`: Snowflake warehouse to use when loading data.
+
+    - `database`: Name of Snowflake database to load data from. The Snowflake
+        Catalog is currently restricted to using a single Snowflake `database`.
+
+    - `connection_params`: A dictionary of Snowflake session parameters.
+
+
+#### Supported Query Types
+
+The `SnowflakeCatalog` currently supports the following types of SQL queries:
+
+  * SELECT
+  * INSERT INTO
+  * DELETE

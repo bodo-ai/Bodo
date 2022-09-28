@@ -38,6 +38,21 @@ See more in [File IO][file_io], such as
     -   When a CSV file is read in parallel (distributed mode) and each
         process reads only a portion of the file, reading columns that
         contain line breaks is not supported.
+    -   `_bodo_read_as_dict` is a Bodo specific argument which forces 
+        the specified string columns to be read with dictionary-encoding.
+        Dictionary-encoding stores data in memory in an efficient
+        manner and is most effective when the column has many repeated values.
+        Read more about dictionary-encoded layout
+        [here](https://arrow.apache.org/docs/format/Columnar.html#dictionary-encoded-layout){target=blank}.
+
+        For example:
+        ```py
+        @bodo.jit()
+        def impl(f):
+          df = pd.read_csv(f, _bodo_read_as_dict=["A", "B", "C"])
+          return df
+        ```
+
 
 #### pd.read_excel
 
