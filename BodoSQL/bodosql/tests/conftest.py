@@ -1522,7 +1522,7 @@ def pytest_collection_modifyitems(items):
     """
     called after collection has been performed.
     Marks the test to run as single_mode.
-    Also Marks the tests with marker "part1", "part2", or "part3".
+    Also Marks the tests with marker "bodosql_<x>of4".
     """
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
@@ -1537,12 +1537,14 @@ def pytest_collection_modifyitems(items):
     for i, item in enumerate(items):
         # Divide the tests evenly so larger tests like TPCH
         # don't end up entirely in 1 group
-        if i % 3 == 0:
-            item.add_marker(pytest.mark.part1)
-        if i % 3 == 1:
-            item.add_marker(pytest.mark.part2)
-        if i % 3 == 2:
-            item.add_marker(pytest.mark.part3)
+        item.add_marker(
+            [
+                pytest.mark.bodosql_1of4,
+                pytest.mark.bodosql_2of4,
+                pytest.mark.bodosql_3of4,
+                pytest.mark.bodosql_4of4,
+            ][i % 4]
+        )
 
     # Check if we should try and mark groups for AWS Codebuild
     if "NUMBER_GROUPS_SPLIT" in os.environ:

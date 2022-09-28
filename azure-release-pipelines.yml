@@ -107,46 +107,54 @@ stages:
       caching_test: false
       PYTHON_VERSION: 3.10
       matrix:
-        BODO_TEST_1P_SLOW_FIRST_HALF:
+        BODO_1P_1_OF_4:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and firsthalf
-        BODO_TEST_1P_SLOW_SECOND_HALF:
+          PYTEST_MARKER: bodo_1of8 or bodo_2of8
+        BODO_1P_2_OF_4:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and not firsthalf
-        BODO_TEST_2P_SLOW_FIRST_THIRD:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and firstthird
-        BODO_TEST_2P_SLOW_SECOND_THIRD:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and secondthird
-        BODO_TEST_2P_SLOW_LAST_THIRD:
-          NP: 2
-          CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and lastthird
-        BODO_TEST_1P_NOT_SLOW_FIRST_HALF:
+          PYTEST_MARKER: bodo_3of8 or bodo_4of8
+        BODO_1P_3_OF_4:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and firsthalf
-        BODO_TEST_1P_NOT_SLOW_SECOND_HALF:
+          PYTEST_MARKER: bodo_5of8 or bodo_6of8
+        BODO_1P_4_OF_4:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and not firsthalf
-        BODO_TEST_2P_NOT_SLOW_FIRST_THIRD:
+          PYTEST_MARKER: bodo_7of8 or bodo_8of8
+        BODO_2P_1_OF_8:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and firstthird
-        BODO_TEST_2P_NOT_SLOW_SECOND_THIRD:
+          PYTEST_MARKER: bodo_1of8
+        BODO_2P_2_OF_8:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and secondthird
-        BODO_TEST_2P_NOT_SLOW_LAST_THIRD:
+          PYTEST_MARKER: bodo_2of8
+        BODO_2P_3_OF_8:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and lastthird
+          PYTEST_MARKER: bodo_3of8
+        BODO_2P_4_OF_8:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_4of8
+        BODO_2P_5_OF_8:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_5of8
+        BODO_2P_6_OF_8:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_6of8
+        BODO_2P_7_OF_8:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_7of8
+        BODO_2P_8_OF_8:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_8of8
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
@@ -173,18 +181,24 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
-        TEST_1P:
+        BODOSQL_1P_1_OF_2:
           NP: 1
-          PYTEST_MARKER: "slow"
-        TEST_2P_PART1:
+          PYTEST_MARKER: bodosql_1of4 or bodosql_2of4
+        BODOSQL_1P_2_OF_2:
+          NP: 1
+          PYTEST_MARKER: bodosql_3of4 or bodosql_4of4
+        BODOSQL_2P_1_OF_4:
           NP: 2
-          PYTEST_MARKER: "part1 and not part2 and not part3"
-        TEST_2P_PART2:
+          PYTEST_MARKER: bodosql_1of4
+        BODOSQL_2P_2_OF_4:
           NP: 2
-          PYTEST_MARKER: "part2 and not part1 and not part3"
-        TEST_2P_PART3:
+          PYTEST_MARKER: bodosql_2of4
+        BODOSQL_2P_3_OF_4:
           NP: 2
-          PYTEST_MARKER: "part3 and not part1 and not part2"
+          PYTEST_MARKER: bodosql_3of4
+        BODOSQL_2P_4_OF_4:
+          NP: 2
+          PYTEST_MARKER: bodosql_4of4
 
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:

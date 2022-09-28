@@ -91,26 +91,38 @@ stages:
       useNumbaDev: false
       caching_test: false
       matrix:
-        BODO_TEST_3P_SLOW_FIRST_THIRD:
+        BODO_3P_1_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and firstthird
-        BODO_TEST_3P_SLOW_SECOND_THIRD:
+          PYTEST_MARKER: bodo_1_of_8
+        BODO_3P_2_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and secondthird
-        BODO_TEST_3P_SLOW_LAST_THIRD:
+          PYTEST_MARKER: bodo_2_of_8
+        BODO_3P_3_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and lastthird
-        BODO_TEST_3P_NOT_SLOW_FIRST_HALF:
+          PYTEST_MARKER: bodo_3_of_8
+        BODO_3P_4_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and firsthalf
-        BODO_TEST_3P_NOT_SLOW_SECOND_HALF:
+          PYTEST_MARKER: bodo_4_of_8
+        BODO_3P_5_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and not firsthalf
+          PYTEST_MARKER: bodo_5_of_8
+        BODO_3P_6_OF_8:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_6_of_8
+        BODO_3P_7_OF_8:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_7_of_8
+        BODO_3P_8_OF_8:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_8_of_8
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
@@ -119,30 +131,38 @@ stages:
       useNumbaDev: false
       caching_test: false
       matrix:
-        BODO_TEST_3P_SLOW_FIRST_THIRD:
+        BODO_3P_1_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and firstthird
-        BODO_TEST_3P_SLOW_SECOND_THIRD:
+          PYTEST_MARKER: bodo_1_of_8
+        BODO_3P_2_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and secondthird
-        BODO_TEST_3P_SLOW_LAST_THIRD:
+          PYTEST_MARKER: bodo_2_of_8
+        BODO_3P_3_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: slow and lastthird
-        BODO_TEST_3P_NOT_SLOW_FIRST_THIRD:
+          PYTEST_MARKER: bodo_3_of_8
+        BODO_3P_4_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and firstthird
-        BODO_TEST_3P_NOT_SLOW_SECOND_THIRD:
+          PYTEST_MARKER: bodo_4_of_8
+        BODO_3P_5_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and secondthird
-        BODO_TEST_3P_NOT_SLOW_LAST_THIRD:
+          PYTEST_MARKER: bodo_5_of_8
+        BODO_3P_6_OF_8:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: not slow and lastthird
+          PYTEST_MARKER: bodo_6_of_8
+        BODO_3P_7_OF_8:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_7_of_8
+        BODO_3P_8_OF_8:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_8_of_8
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
@@ -208,15 +228,18 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
-        TEST_3P_PART1:
+        BODOSQL_3P_PART_1_OF_4:
           NP: 3
-          PYTEST_MARKER: "part1 and not part2 and not part3"
-        TEST_3P_PART2:
+          PYTEST_MARKER: bodosql_1_of_4
+        BODOSQL_3P_PART_2_OF_4:
           NP: 3
-          PYTEST_MARKER: "part2 and not part1 and not part3"
-        TEST_3P_PART3:
+          PYTEST_MARKER: bodosql_2_of_4
+        BODOSQL_3P_PART_3_OF_4:
           NP: 3
-          PYTEST_MARKER: "part3 and not part1 and not part2"
+          PYTEST_MARKER: bodosql_3_of_4
+        BODOSQL_3P_PART_4_OF_4:
+          NP: 3
+          PYTEST_MARKER: bodosql_4_of_4
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
@@ -253,15 +276,18 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
-        TEST_3P_PART1:
+        BODOSQL_3P_PART_1_OF_4:
           NP: 3
-          PYTEST_MARKER: "part1 and not part2 and not part3"
-        TEST_3P_PART2:
+          PYTEST_MARKER: bodosql_1_of_4
+        BODOSQL_3P_PART_2_OF_4:
           NP: 3
-          PYTEST_MARKER: "part2 and not part1 and not part3"
-        TEST_3P_PART3:
+          PYTEST_MARKER: bodosql_2_of_4
+        BODOSQL_3P_PART_3_OF_4:
           NP: 3
-          PYTEST_MARKER: "part3 and not part1 and not part2"
+          PYTEST_MARKER: bodosql_3_of_4
+        BODOSQL_3P_PART_4_OF_4:
+          NP: 3
+          PYTEST_MARKER: bodosql_4_of_4
 
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:

@@ -72,8 +72,6 @@ def memory_leak_check():
 def pytest_collection_modifyitems(items):
     """
     called after collection has been performed.
-    Mark the first third of the tests with marker "firsthalf"
-    Using first third instead of first half because test suite is imbalanced
     """
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
@@ -86,16 +84,21 @@ def pytest_collection_modifyitems(items):
             if module_to_run == item.module.__name__.split(".")[-1] + ".py":
                 item.add_marker(pytest.mark.single_mod)
     n = len(items)
-    for item in items[0 : n // 3]:
-        item.add_marker(pytest.mark.firsthalf)
-        item.add_marker(pytest.mark.firstthird)
-    for item in items[n // 3 : n // 2]:
-        item.add_marker(pytest.mark.firsthalf)
-        item.add_marker(pytest.mark.secondthird)
-    for item in items[n // 2 : 2 * n // 3]:
-        item.add_marker(pytest.mark.secondthird)
-    for item in items[2 * n // 3 :]:
-        item.add_marker(pytest.mark.lastthird)
+
+    for i, item in enumerate(items):
+        # Divide the tests evenly so long tests don't end up in 1 group
+        item.add_marker(
+            [
+                pytest.mark.bodo_1of8,
+                pytest.mark.bodo_2of8,
+                pytest.mark.bodo_3of8,
+                pytest.mark.bodo_4of8,
+                pytest.mark.bodo_5of8,
+                pytest.mark.bodo_6of8,
+                pytest.mark.bodo_7of8,
+                pytest.mark.bodo_8of8,
+            ][i % 8]
+        )
 
     # Check if we should try and mark groups for AWS Codebuild
     if "NUMBER_GROUPS_SPLIT" in os.environ:
