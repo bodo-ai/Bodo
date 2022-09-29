@@ -73,6 +73,16 @@ def pytest_collection_modifyitems(items):
     """
     called after collection has been performed.
     """
+    azure_markers = [
+        pytest.mark.bodo_1of8,
+        pytest.mark.bodo_2of8,
+        pytest.mark.bodo_3of8,
+        pytest.mark.bodo_4of8,
+        pytest.mark.bodo_5of8,
+        pytest.mark.bodo_6of8,
+        pytest.mark.bodo_7of8,
+        pytest.mark.bodo_8of8,
+    ]
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
@@ -87,18 +97,13 @@ def pytest_collection_modifyitems(items):
 
     for i, item in enumerate(items):
         # Divide the tests evenly so long tests don't end up in 1 group
-        item.add_marker(
-            [
-                pytest.mark.bodo_1of8,
-                pytest.mark.bodo_2of8,
-                pytest.mark.bodo_3of8,
-                pytest.mark.bodo_4of8,
-                pytest.mark.bodo_5of8,
-                pytest.mark.bodo_6of8,
-                pytest.mark.bodo_7of8,
-                pytest.mark.bodo_8of8,
-            ][i % 8]
-        )
+        marker = azure_markers[i % 8]
+        # All of the test_s3.py tests must be on the same rank because they
+        # haven't been refactored to remove cross-test dependencies.
+        testfile = item.module.__name__.split(".")[-1] + ".py"
+        if "test_s3.py" in testfile:
+            marker = azure_markers[0]
+        item.add_marker(marker)
 
     # Check if we should try and mark groups for AWS Codebuild
     if "NUMBER_GROUPS_SPLIT" in os.environ:
