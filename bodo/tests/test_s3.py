@@ -882,7 +882,7 @@ def test_s3_json_read_records_lines_1D(minio_server, s3_bucket, test_df):
     check_func(test_read_infer_dtype, (), py_output=test_df)
 
 
-def test_s3_json_read_recoreds_lines_1D_var(minio_server, s3_bucket, test_df):
+def test_s3_json_read_records_lines_1D_var(minio_server, s3_bucket, test_df):
     """
     read_json(orient="records", lines=True)
     test the json file we just wrote in 1D Var

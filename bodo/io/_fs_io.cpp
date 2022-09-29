@@ -384,27 +384,31 @@ void parallel_in_order_write(
             // first receives signal from rank 0
             MPI_Recv(&token, 1, MPI_INT, 0, token_tag, MPI_COMM_WORLD,
                      MPI_STATUS_IGNORE);
-            // send buff in chunks no bigger than INT_MAX
-            while (sent_size < buff_size) {
-                if (buff_size - sent_size > INT_MAX)
-                    send_size = INT_MAX;
-                else
-                    send_size = buff_size - sent_size;
-                // send chunk size
-                ierr = MPI_Send(&send_size, 1, MPI_INT, 0, size_tag,
-                                MPI_COMM_WORLD);
-                CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
-                // send chunk data;
-                ierr = MPI_Send(buff + sent_size, send_size, MPI_CHAR, 0,
-                                data_tag, MPI_COMM_WORLD);
-                CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
-                sent_size += send_size;
-                if (sent_size == buff_size) complete = 1;
-                // signal rank 0 whether the entire buff is sent
+            do {
+                // Always send complete in case our rank has no data.
+                complete = sent_size >= buff_size;
                 ierr = MPI_Send(&complete, 1, MPI_INT, 0, complete_tag,
                                 MPI_COMM_WORLD);
                 CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
-            }
+                if (!complete) {
+                    // send buff in chunks no bigger than INT_MAX
+                    if (buff_size - sent_size > INT_MAX) {
+                        send_size = INT_MAX;
+                    } else {
+                        send_size = buff_size - sent_size;
+                    }
+                    // send chunk size
+                    ierr = MPI_Send(&send_size, 1, MPI_INT, 0, size_tag,
+                                    MPI_COMM_WORLD);
+
+                    CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                    // send chunk data;
+                    ierr = MPI_Send(buff + sent_size, send_size, MPI_CHAR, 0,
+                                    data_tag, MPI_COMM_WORLD);
+                    CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
+                    sent_size += send_size;
+                }
+            } while (!complete);
         } else {
             // 0 rank open outstream first
             open_file_outstream(Bodo_Fs::s3, "", fname, s3_fs, NULL,
@@ -420,36 +424,40 @@ void parallel_in_order_write(
                     CHECK_ARROW(out_stream->Write(buff, buff_size),
                                 "arrow::io::S3OutputStream::Write", file_type);
                 } else {
-                    while (complete == 0) {
-                        // first receive size of incoming data
-                        ierr = MPI_Recv(&recv_buff_size, 1, MPI_INT, rank,
-                                        size_tag, MPI_COMM_WORLD,
-                                        MPI_STATUS_IGNORE);
-                        CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
-                        // resize recv_buffer to fit incoming data
-                        recv_buffer.resize(recv_buff_size);
-                        // receive buffer data
-                        ierr = MPI_Recv(&recv_buffer[0], recv_buff_size,
-                                        MPI_CHAR, rank, data_tag,
-                                        MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                        CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
-                        CHECK_ARROW(out_stream->Write(recv_buffer.data(),
-                                                      recv_buff_size),
-                                    "arrow::io::S3OutputStream::Write",
-                                    file_type);
+                    do {
                         // receive whether the entire buff is received
                         ierr =
                             MPI_Recv(&complete, 1, MPI_INT, rank, complete_tag,
                                      MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                         CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
-                    }
+                        if (!complete) {
+                            // first receive size of incoming data
+                            ierr = MPI_Recv(&recv_buff_size, 1, MPI_INT, rank,
+                                            size_tag, MPI_COMM_WORLD,
+                                            MPI_STATUS_IGNORE);
+                            CHECK_MPI(ierr, err_class, err_string, &err_len,
+                                      fname);
+                            // resize recv_buffer to fit incoming data
+                            recv_buffer.resize(recv_buff_size);
+                            // receive buffer data
+
+                            ierr = MPI_Recv(&recv_buffer[0], recv_buff_size,
+                                            MPI_CHAR, rank, data_tag,
+                                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                            CHECK_MPI(ierr, err_class, err_string, &err_len,
+                                      fname);
+                            CHECK_ARROW(out_stream->Write(recv_buffer.data(),
+                                                          recv_buff_size),
+                                        "arrow::io::S3OutputStream::Write",
+                                        file_type);
+                        }
+                    } while (!complete);
                 }
                 if (rank != num_ranks - 1) {
                     ierr = MPI_Send(&token, 1, MPI_INT, rank + 1, token_tag,
                                     MPI_COMM_WORLD);
                     CHECK_MPI(ierr, err_class, err_string, &err_len, fname);
                 }
-                complete = 0;
             }
             CHECK_ARROW(out_stream->Close(), "arrow::io::S3OutputStream::Close",
                         file_type);
