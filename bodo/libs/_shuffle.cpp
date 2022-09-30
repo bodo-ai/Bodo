@@ -1151,15 +1151,17 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
         comm_info.recv_count.begin(), comm_info.recv_count.end(), int64_t(0));
     size_t n_cols = (size_t)in_table->ncols();
     std::vector<int64_t> n_sub_recvs(n_cols);
-    for (size_t i = 0; i < n_cols; i++)
+    for (size_t i = 0; i < n_cols; i++) {
         n_sub_recvs[i] =
             std::accumulate(comm_info.recv_count_sub[i].begin(),
                             comm_info.recv_count_sub[i].end(), int64_t(0));
+    }
     std::vector<int64_t> n_sub_sub_recvs(n_cols);
-    for (size_t i = 0; i < n_cols; i++)
+    for (size_t i = 0; i < n_cols; i++) {
         n_sub_sub_recvs[i] =
             std::accumulate(comm_info.recv_count_sub_sub[i].begin(),
                             comm_info.recv_count_sub_sub[i].end(), int64_t(0));
+    }
 
     // fill send buffer and send
     std::vector<array_info*> out_arrs;
@@ -1679,9 +1681,10 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
     }
 
     // computing the hash data structure
-    if (hashes == nullptr)
+    if (hashes == nullptr) {
         hashes =
             hash_keys_table(in_table, n_keys, SEED_HASH_PARTITION, is_parallel);
+    }
     comm_info->set_counts(hashes, is_parallel);
 
     table_info* table =

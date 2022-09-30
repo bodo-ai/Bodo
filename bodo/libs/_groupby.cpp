@@ -25,36 +25,36 @@ struct Bodo_FTypes {
     enum FTypeEnum {
         no_op = 0,  // To make sure ftypes[0] isn't accidently matched with any
                     // of the supported functions.
-        ngroup,
-        head,
-        transform,
-        size,
-        shift,
-        sum,
-        count,
-        nunique,
-        median,
-        cumsum,
-        cumprod,
-        cummin,
-        cummax,
-        mean,
-        min,
-        max,
-        prod,
-        first,
-        last,
-        idxmin,
-        idxmax,
-        var,
-        std,
-        udf,
-        gen_udf,
-        num_funcs,  // num_funcs is used to know how many functions up to this
-                    // point
-        mean_eval,
-        var_eval,
-        std_eval
+        ngroup = 1,
+        head = 2,
+        transform = 3,
+        size = 4,
+        shift = 5,
+        sum = 6,
+        count = 7,
+        nunique = 8,
+        median = 9,
+        cumsum = 10,
+        cumprod = 11,
+        cummin = 12,
+        cummax = 13,
+        mean = 14,
+        min = 15,
+        max = 16,
+        prod = 17,
+        first = 18,
+        last = 19,
+        idxmin = 20,
+        idxmax = 21,
+        var = 22,
+        std = 23,
+        udf = 24,
+        gen_udf = 25,
+        num_funcs = 26,  // num_funcs is used to know how many functions up to
+                         // this point
+        mean_eval = 27,
+        var_eval = 28,
+        std_eval = 29
     };
 };
 
@@ -1776,6 +1776,9 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
             if (ftype == Bodo_FTypes::cumprod) initVal = 1;
             std::pair<bool, T> ePair{false, initVal};
             while (true) {
+                if (i == -1) {
+                    break;
+                }
                 std::pair<bool, T> fPair = get_entry(i);
                 if (fPair.first) {  // the value is a NaN.
                     if (skipna) {
@@ -1796,7 +1799,6 @@ void cumulative_computation_T(array_info* arr, array_info* out_arr,
                     set_entry(i, ePair);
                 }
                 i = grp_info.next_row_in_group[i];
-                if (i == -1) break;
             }
         }
         T eVal_nan = GetTentry<T>(
@@ -1885,6 +1887,9 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
         int64_t i = grp_info.group_to_first_row[igrp];
         T ePair{false, {}};
         while (true) {
+            if (i == -1) {
+                break;
+            }
             T fPair = get_entry(i);
             if (fPair.first) {  // the value is a NaN.
                 if (skipna) {
@@ -1898,7 +1903,6 @@ void cumulative_computation_list_string(array_info* arr, array_info* out_arr,
                 V[i] = ePair;
             }
             i = grp_info.next_row_in_group[i];
-            if (i == -1) break;
         }
     }
     T pairNaN{true, {}};
@@ -1950,6 +1954,9 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
         int64_t i = grp_info.group_to_first_row[igrp];
         T ePair{false, ""};
         while (true) {
+            if (i == -1) {
+                break;
+            }
             T fPair = get_entry(i);
             if (fPair.first) {  // the value is a NaN.
                 if (skipna) {
@@ -1963,7 +1970,6 @@ void cumulative_computation_string(array_info* arr, array_info* out_arr,
                 V[i] = ePair;
             }
             i = grp_info.next_row_in_group[i];
-            if (i == -1) break;
         }
     }
     T pairNaN{true, ""};
@@ -2041,6 +2047,9 @@ void cumulative_computation_dict_encoded_string(array_info* arr,
         int64_t i = grp_info.group_to_first_row[igrp];
         T ePair{false, ""};
         while (true) {
+            if (i == -1) {
+                break;
+            }
             T fPair = get_entry(i);
             if (fPair.first) {  // the value is a NaN.
                 if (skipna) {
@@ -2054,7 +2063,6 @@ void cumulative_computation_dict_encoded_string(array_info* arr,
                 null_bit_val_vec[i] = ePair;
             }
             i = grp_info.next_row_in_group[i];
-            if (i == -1) break;
         }
     }
     T pairNaN{true, ""};
@@ -2337,6 +2345,9 @@ median_computation(array_info* arr, array_info* out_arr,
             std::vector<double> ListValue;
             bool HasNaN = false;
             while (true) {
+                if (i == -1) {
+                    break;
+                }
                 if (!isnan_entry(i)) {
                     char* ptr = arr->data1 + i * siztype;
                     double eVal = GetDoubleEntry(arr->dtype, ptr);
@@ -2348,7 +2359,6 @@ median_computation(array_info* arr, array_info* out_arr,
                     }
                 }
                 i = grp_info.next_row_in_group[i];
-                if (i == -1) break;
             }
             auto GetKthValue = [&](size_t const& pos) -> double {
                 std::nth_element(ListValue.begin(), ListValue.begin() + pos,
@@ -2560,8 +2570,15 @@ nunique_computation(array_info* arr, array_info* out_arr,
                     bool const& is_parallel) {
     tracing::Event ev("nunique_computation", is_parallel);
     size_t num_group = grp_info.group_to_first_row.size();
-    if (num_group == 0) return;
-    if (arr->arr_type == bodo_array_type::NUMPY) {
+    if (num_group == 0) {
+        return;
+    }
+    // Note: Dictionary encoded is supported because we just
+    // call nunique on the indices. See update that converts
+    // the dict array to its indices. This is tested with
+    // test_nunique_dict.
+    if (arr->arr_type == bodo_array_type::NUMPY ||
+        arr->arr_type == bodo_array_type::CATEGORICAL) {
         /**
          * Check if a pointer points to a NaN or not
          *
@@ -2581,6 +2598,9 @@ nunique_computation(array_info* arr, array_info* out_arr,
                 arr->dtype == Bodo_CTypes::TIMEDELTA) {
                 int64_t* ptr_i = (int64_t*)ptr;
                 return *ptr_i == std::numeric_limits<int64_t>::min();
+            }
+            if (arr->arr_type == bodo_array_type::CATEGORICAL) {
+                return isnan_categorical_ptr(arr->dtype, ptr);
             }
             return false;
         };
@@ -2602,7 +2622,9 @@ nunique_computation(array_info* arr, array_info* out_arr,
             int64_t i = grp_info.group_to_first_row[igrp];
             // with nunique mode=2 some groups might not be present in the
             // nunique table
-            if (i < 0) continue;
+            if (i < 0) {
+                continue;
+            }
             eset.clear();
             bool HasNullRow = false;
             while (true) {
@@ -2619,9 +2641,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
             if (HasNullRow && !dropna) size++;
             out_arr->at<int64_t>(igrp) = size;
         }
-    }
-
-    if (arr->arr_type == bodo_array_type::LIST_STRING) {
+    } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
         offset_t* in_index_offsets = (offset_t*)arr->data3;
         offset_t* in_data_offsets = (offset_t*)arr->data2;
         uint8_t* sub_null_bitmask = (uint8_t*)arr->sub_null_bitmask;
@@ -2641,7 +2661,9 @@ nunique_computation(array_info* arr, array_info* out_arr,
             int64_t i = grp_info.group_to_first_row[igrp];
             // with nunique mode=2 some groups might not be present in the
             // nunique table
-            if (i < 0) continue;
+            if (i < 0) {
+                continue;
+            }
             eset.clear();
             bool HasNullRow = false;
             while (true) {
@@ -2657,9 +2679,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
             if (HasNullRow && !dropna) size++;
             out_arr->at<int64_t>(igrp) = size;
         }
-    }
-
-    if (arr->arr_type == bodo_array_type::STRING) {
+    } else if (arr->arr_type == bodo_array_type::STRING) {
         offset_t* in_offsets = (offset_t*)arr->data2;
         const uint32_t seed = SEED_HASH_CONTAINER;
 
@@ -2675,7 +2695,9 @@ nunique_computation(array_info* arr, array_info* out_arr,
             int64_t i = grp_info.group_to_first_row[igrp];
             // with nunique mode=2 some groups might not be present in the
             // nunique table
-            if (i < 0) continue;
+            if (i < 0) {
+                continue;
+            }
             eset.clear();
             bool HasNullRow = false;
             while (true) {
@@ -2691,9 +2713,7 @@ nunique_computation(array_info* arr, array_info* out_arr,
             if (HasNullRow && !dropna) size++;
             out_arr->at<int64_t>(igrp) = size;
         }
-    }
-
-    if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+    } else if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         const size_t siztype = numpy_item_size[arr->dtype];
         HashNuniqueComputationNumpyOrNullableIntBool hash_fct{arr, siztype};
         KeyEqualNuniqueComputationNumpyOrNullableIntBool equal_fct{arr,
@@ -2709,7 +2729,9 @@ nunique_computation(array_info* arr, array_info* out_arr,
             int64_t i = grp_info.group_to_first_row[igrp];
             // with nunique mode=2 some groups might not be present in the
             // nunique table
-            if (i < 0) continue;
+            if (i < 0) {
+                continue;
+            }
             eset.clear();
             bool HasNullRow = false;
             while (true) {
@@ -2725,6 +2747,10 @@ nunique_computation(array_info* arr, array_info* out_arr,
             if (HasNullRow && !dropna) size++;
             out_arr->at<int64_t>(igrp) = size;
         }
+    } else {
+        throw std::runtime_error(
+            "Unsupported array type encountered with nunique. Found type: " +
+            GetArrType_as_string(arr->arr_type));
     }
 }
 
@@ -5929,8 +5955,7 @@ class TransformColSet : public BasicColSet<ARRAY> {
                 Bodo_PyErr_SetString(
                     PyExc_RuntimeError,
                     (std::string("unsuported data type for eval: ") +
-                     std::string(
-                         get_name_for_Bodo_CTypes(child_out_col->dtype)))
+                     std::string(GetDtype_as_string(child_out_col->dtype)))
                         .c_str());
                 return;
         }
@@ -6281,15 +6306,16 @@ class GroupbyPipeline {
         // if shuffle_before_update=true we are going to shuffle everything
         // first so we don't need statistics of current hashes
         if (is_parallel && !shuffle_before_update) {
-            if (nunique_op)
+            if (nunique_op) {
                 // nunique_hashes_global is currently only used for gb.nunique
                 // heuristic
                 std::tie(nunique_hashes, nunique_hashes_global) =
                     get_nunique_hashes_global(hashes, in_table->nrows(),
                                               is_parallel);
-            else
+            } else {
                 nunique_hashes =
                     get_nunique_hashes(hashes, in_table->nrows(), is_parallel);
+            }
         } else if (!is_parallel) {
             nunique_hashes =
                 get_nunique_hashes(hashes, in_table->nrows(), is_parallel);
@@ -6563,9 +6589,10 @@ class GroupbyPipeline {
                 cumulative_op || shift_op || transform_op || ngroup_op;
             get_group_info_iterate(tables, hashes, nunique_hashes, grp_infos,
                                    consider_missing, key_dropna, is_parallel);
-        } else
+        } else {
             get_group_info(tables, hashes, nunique_hashes, grp_infos, true,
                            key_dropna, is_parallel);
+        }
         grouping_info& grp_info = grp_infos[0];
         grp_info.dispatch_table = dispatch_table;
         grp_info.dispatch_info = dispatch_info;
@@ -6578,19 +6605,25 @@ class GroupbyPipeline {
             update_col_len = compute_head_row_list(grp_infos[0], head_row_list);
         }
 
+        // Now if we have multiple tables, this step recombines them into
+        // a single update table. There could be multiple tables if different
+        // operations shuffle at different times. For example nunique + sum
+        // in test_711.py e2e tests.
         update_table = cur_table = new table_info();
-        if (cumulative_op || shift_op || transform_op || head_op || ngroup_op)
+        if (cumulative_op || shift_op || transform_op || head_op || ngroup_op) {
             num_keys = 0;  // there are no key columns in output of cumulative
                            // operations
-        else
+        } else {
             alloc_init_keys(tables, update_table);
+        }
 
         for (auto col_set : col_sets) {
             std::vector<ARRAY*> list_arr;
             col_set->alloc_update_columns(update_col_len, n_pivot, is_crosstab,
                                           list_arr);
-            for (auto& e_arr : list_arr)
+            for (auto& e_arr : list_arr) {
                 push_back_arrays(update_table->columns, e_arr);
+            }
             auto head_col = dynamic_cast<HeadColSet<ARRAY>*>(col_set);
             if (head_col) head_col->set_head_row_list(head_row_list);
             col_set->update(grp_infos);
@@ -6598,9 +6631,10 @@ class GroupbyPipeline {
         // gb.head() already added the index to the tables columns.
         // This is need to do head_computation on it as well.
         // since it will not be the same length as the in_table.
-        if (!head_op && return_index)
+        if (!head_op && return_index) {
             update_table->columns.push_back(
                 copy_array(in_table->columns.back()));
+        }
         if (n_udf > 0) {
             int n_gen_udf = gen_udf_col_sets.size();
             if (n_udf > n_gen_udf)
@@ -6642,8 +6676,9 @@ class GroupbyPipeline {
 
         // update column sets with columns from shuffled table
         auto it = update_table->columns.begin() + num_keys;
-        for (auto col_set : col_sets)
+        for (auto col_set : col_sets) {
             it = col_set->update_after_shuffle(it, n_pivot);
+        }
     }
 
     /**
@@ -6765,21 +6800,22 @@ class GroupbyPipeline {
     void gb_nunique_preprocess(int* ftypes, int num_funcs,
                                size_t nunique_hashes_global) {
         tracing::Event ev("gb_nunique_preprocess", is_parallel);
-        if (!is_parallel)
+        if (!is_parallel) {
             throw std::runtime_error(
                 "gb_nunique_preprocess called for non-distributed data");
-        if (shuffle_before_update)
+        }
+        if (shuffle_before_update) {
             throw std::runtime_error(
                 "gb_nunique_preprocess called with shuffle_before_update=true");
+        }
 
         // If it's just nunique we set table_id_counter to 0 because we won't
         // add in_table to our list of tables. Otherwise, set to 1 as 0 is
         // reserved for in_table
-        int table_id_counter;
-        if (nunique_only)
+        int table_id_counter = 1;
+        if (nunique_only) {
             table_id_counter = 0;
-        else
-            table_id_counter = 1;
+        }
 
         static constexpr float threshold_of_fraction_of_unique_hash = 0.5;
         ev.add_attribute("g_threshold_of_fraction_of_unique_hash",
@@ -6803,7 +6839,9 @@ class GroupbyPipeline {
                          shuffle_by_keys_and_value);
 
         for (int i = 0, col_idx = num_keys; i < num_funcs; i++, col_idx++) {
-            if (ftypes[i] != Bodo_FTypes::nunique) continue;
+            if (ftypes[i] != Bodo_FTypes::nunique) {
+                continue;
+            }
 
             table_info* tmp = new table_info();
             tmp->columns.assign(in_table->columns.begin(),
@@ -6869,20 +6907,22 @@ class GroupbyPipeline {
 
             // --------- shuffle column ---------
             if (shuffle_by_keys_and_value) {
-                if (drop_duplicates)
+                if (drop_duplicates) {
                     // Note that tmp here no longer contains the
                     // original input arrays
                     tmp2 = shuffle_table(tmp, tmp->ncols(), is_parallel);
-                else
+                } else {
                     // Since the arrays are unmodified we can reuse the hashes
                     tmp2 = shuffle_table(tmp, tmp->ncols(), is_parallel, false,
                                          key_value_hashes);
+                }
             } else {
-                if (drop_duplicates)
+                if (drop_duplicates) {
                     tmp2 = shuffle_table(tmp, num_keys, is_parallel);
-                else
+                } else {
                     tmp2 = shuffle_table(tmp, num_keys, is_parallel, false,
                                          hashes);
+                }
             }
             delete[] key_value_hashes;
             delete tmp;
@@ -6912,21 +6952,20 @@ class GroupbyPipeline {
      * @param group[in]: group number
      * @param from_tables[in] list of tables
      * @param key_col_idx[in]
-     * @param key_col[in] key column
-     * @param key_row[out] row
+     * @return The column and row containing the group.
      */
-    void find_key_for_group(int64_t group,
-                            const std::vector<table_info*>& from_tables,
-                            int64_t key_col_idx, array_info*& key_col,
-                            int64_t& key_row) {
+    std::tuple<array_info*, int64_t> find_key_for_group(
+        int64_t group, const std::vector<table_info*>& from_tables,
+        int64_t key_col_idx) {
         for (size_t k = 0; k < grp_infos.size(); k++) {
-            key_row = grp_infos[k].group_to_first_row[group];
+            int64_t key_row = grp_infos[k].group_to_first_row[group];
             if (key_row >= 0) {
-                key_col = (*from_tables[k])[key_col_idx];
-                return;
+                array_info* key_col = (*from_tables[k])[key_col_idx];
+                return {key_col, key_row};
             }
         }
-        // this is error
+        throw std::runtime_error("No valid row found for group: " +
+                                 std::to_string(group));
     }
 
     /**
@@ -6947,13 +6986,15 @@ class GroupbyPipeline {
                                 key_col->dtype, 0, key_col->num_categories);
                 int64_t dtype_size = numpy_item_size[key_col->dtype];
                 for (size_t j = 0; j < num_groups; j++) {
-                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i);
                     memcpy(new_key_col->data1 + j * dtype_size,
                            key_col->data1 + key_row * dtype_size, dtype_size);
                 }
                 if (key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
                     for (size_t j = 0; j < num_groups; j++) {
-                        find_key_for_group(j, from_tables, i, key_col, key_row);
+                        std::tie(key_col, key_row) =
+                            find_key_for_group(j, from_tables, i);
                         bool bit = key_col->get_null_bit(key_row);
                         new_key_col->set_null_bit(j, bit);
                     }
@@ -6965,7 +7006,10 @@ class GroupbyPipeline {
                     alloc_array(num_groups, -1, -1, key_indices->arr_type,
                                 key_indices->dtype, 0, 0);
                 for (size_t j = 0; j < num_groups; j++) {
-                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i);
+                    // Update key_indices with the new key col
+                    key_indices = key_col->info2;
                     new_key_indices->at<dict_indices_t>(j) =
                         key_indices->at<dict_indices_t>(key_row);
                     bool bit = key_indices->get_null_bit(key_row);
@@ -6988,7 +7032,8 @@ class GroupbyPipeline {
                                       // this column
                 offset_t* in_offsets;
                 for (size_t j = 0; j < num_groups; j++) {
-                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i);
                     in_offsets = (offset_t*)key_col->data2;
                     n_chars += in_offsets[key_row + 1] - in_offsets[key_row];
                 }
@@ -6999,7 +7044,8 @@ class GroupbyPipeline {
                 offset_t* out_offsets = (offset_t*)new_key_col->data2;
                 offset_t pos = 0;
                 for (size_t j = 0; j < num_groups; j++) {
-                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i);
                     in_offsets = (offset_t*)key_col->data2;
                     offset_t start_offset = in_offsets[key_row];
                     offset_t str_len = in_offsets[key_row + 1] - start_offset;
@@ -7022,7 +7068,8 @@ class GroupbyPipeline {
                 offset_t* in_index_offsets;
                 offset_t* in_data_offsets;
                 for (size_t j = 0; j < num_groups; j++) {
-                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i);
                     in_index_offsets = (offset_t*)key_col->data3;
                     in_data_offsets = (offset_t*)key_col->data2;
                     n_strings += in_index_offsets[key_row + 1] -
@@ -7044,7 +7091,8 @@ class GroupbyPipeline {
                 out_data_offsets[0] = 0;
                 out_index_offsets[0] = 0;
                 for (size_t j = 0; j < num_groups; j++) {
-                    find_key_for_group(j, from_tables, i, key_col, key_row);
+                    std::tie(key_col, key_row) =
+                        find_key_for_group(j, from_tables, i);
                     in_index_offsets = (offset_t*)key_col->data3;
                     in_data_offsets = (offset_t*)key_col->data2;
                     offset_t size_index = in_index_offsets[key_row + 1] -

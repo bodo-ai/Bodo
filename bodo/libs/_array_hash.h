@@ -104,8 +104,21 @@ struct multi_col_key {
                                 "multi-key-hashing dictionary the columns are "
                                 "not unified.");
                         }
-                        return c1->info2->at<dict_indices_t>(row) ==
-                               c2->info2->at<dict_indices_t>(other.row);
+                        if (c1->get_null_bit(row) !=
+                            c2->get_null_bit(other.row)) {
+                            return false;
+                        }
+                        if (!c1->get_null_bit(row)) {
+                            // If both are null then continue because
+                            // the dictionary contains garbage
+                            continue;
+                        }
+                        bool match = c1->info2->at<dict_indices_t>(row) ==
+                                     c2->info2->at<dict_indices_t>(other.row);
+                        if (!match) {
+                            return false;
+                        }
+                        continue;
                     } else {
                         throw std::runtime_error(
                             "multi-key-hashing dictionary array requires "

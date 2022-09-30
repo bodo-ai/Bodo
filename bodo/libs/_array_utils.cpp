@@ -1125,34 +1125,6 @@ bool TestEqualColumn(array_info* arr1, int64_t pos1, array_info* arr2,
     return true;
 };
 
-/** This function is used to determine if the value in a Categorical pointer
- * (pointer to a single value in a CategoricalArrayType) isnan.
- * @param the data type for the codes.
- * @param the Categorical Pointer
- * @returns if the value stored at the ptr is nan
- */
-inline bool isnan_categorical_ptr(int dtype, char* ptr) {
-    switch (dtype) {
-        case Bodo_CTypes::INT8:
-            return isnan_categorical<int8_t, Bodo_CTypes::INT8>(
-                *((const int8_t*)ptr));
-        case Bodo_CTypes::INT16:
-            return isnan_categorical<int16_t, Bodo_CTypes::INT16>(
-                *((const int16_t*)ptr));
-        case Bodo_CTypes::INT32:
-            return isnan_categorical<int32_t, Bodo_CTypes::INT32>(
-                *((const int32_t*)ptr));
-        case Bodo_CTypes::INT64:
-            return isnan_categorical<int64_t, Bodo_CTypes::INT64>(
-                *((const int64_t*)ptr));
-
-        default:
-            throw std::runtime_error(
-                "_array_utils.h::NumericComparison: Invalid dtype put on "
-                "CategoricalArrayType.");
-    }
-}
-
 int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
                                  size_t const& iRow1, array_info* arr2,
                                  size_t const& iRow2) {
@@ -1617,7 +1589,7 @@ std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
                 char* ptrdata1 = &(arr->data1[siztype * iRow]);
                 strOut = GetStringExpression(arr->dtype, ptrdata1, arr->scale);
             } else {
-                strOut = "false";
+                strOut = "NA";
             }
             ListStr[iRow] = strOut;
         }
@@ -1640,7 +1612,13 @@ std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
         std::vector<std::string> indexStr(nRow);
         indexStr = GetColumn_as_ListString(arr->info2);
         for (size_t iRow = 0; iRow < nRow; iRow++) {
-            ListStr[iRow] = dataStr[std::stoi(indexStr[iRow])];
+            bool bit = arr->get_null_bit(iRow);
+            if (!bit) {
+                strOut = "NA";
+            } else {
+                strOut = dataStr[std::stoi(indexStr[iRow])];
+            }
+            ListStr[iRow] = strOut;
         }
     }
     if (arr->arr_type == bodo_array_type::STRING) {
@@ -1671,7 +1649,7 @@ std::vector<std::string> GetColumn_as_ListString(array_info* arr) {
                 strOut = strname;
                 delete[] strname;
             } else {
-                strOut = "false";
+                strOut = "NA";
             }
             ListStr[iRow] = strOut;
         }

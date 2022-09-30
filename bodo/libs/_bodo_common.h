@@ -61,8 +61,6 @@ struct Bodo_CTypes {
     };
 };
 
-const char* get_name_for_Bodo_CTypes(int enumVal);
-
 typedef int32_t dict_indices_t;
 
 // use 64-bit offsets for string and nested arrays
