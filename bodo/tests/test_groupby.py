@@ -5522,6 +5522,54 @@ def test_nunique_supported_types(test_size_df, memory_leak_check):
     check_func(impl1, (test_size_df,), sort_output=True)
 
 
+def test_nunique_categorical(memory_leak_check):
+    """
+    Test groupby.nunique on a column with categorical data.
+    """
+
+    def impl1(df):
+        A = df.groupby("A").nunique()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").nunique(dropna=False)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": ["a", "b", "c", "d", "e"] * 16,
+            "B": pd.Categorical(["abc", "3e3", None, "rewrwe"] * 20),
+        }
+    )
+
+    check_func(impl1, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True)
+
+
+def test_nunique_dict(memory_leak_check):
+    """
+    Test groupby.nunique on a column with dictionary encode data.
+    """
+
+    def impl1(df):
+        A = df.groupby("A").nunique()
+        return A
+
+    def impl2(df):
+        A = df.groupby("A").nunique(dropna=False)
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": ["a", "b", "c", "d", "e"] * 16,
+            "B": pd.array(["abc", "3e3", None, "rewrwe"] * 20),
+        }
+    )
+
+    check_func(impl1, (df,), sort_output=True, use_dict_encoded_strings=True)
+    check_func(impl2, (df,), sort_output=True, use_dict_encoded_strings=True)
+
+
 @pytest.mark.slow
 def test_shift_supported_types(test_size_df, memory_leak_check):
     """

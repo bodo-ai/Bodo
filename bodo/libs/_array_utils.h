@@ -354,7 +354,27 @@ set_na_if_num_categories(T& val, int64_t num_categories) {
  * @param the Categorical Pointer
  * @returns if the value stored at the ptr is nan
  */
-bool isnan_categorical_ptr(int dtype, char* ptr);
+inline bool isnan_categorical_ptr(int dtype, char* ptr) {
+    switch (dtype) {
+        case Bodo_CTypes::INT8:
+            return isnan_categorical<int8_t, Bodo_CTypes::INT8>(
+                *((const int8_t*)ptr));
+        case Bodo_CTypes::INT16:
+            return isnan_categorical<int16_t, Bodo_CTypes::INT16>(
+                *((const int16_t*)ptr));
+        case Bodo_CTypes::INT32:
+            return isnan_categorical<int32_t, Bodo_CTypes::INT32>(
+                *((const int32_t*)ptr));
+        case Bodo_CTypes::INT64:
+            return isnan_categorical<int64_t, Bodo_CTypes::INT64>(
+                *((const int64_t*)ptr));
+
+        default:
+            throw std::runtime_error(
+                "_array_utils.h::NumericComparison: Invalid dtype put on "
+                "CategoricalArrayType.");
+    }
+}
 
 template <typename T, int dtype>
 inline typename std::enable_if<std::is_floating_point<T>::value, bool>::type
