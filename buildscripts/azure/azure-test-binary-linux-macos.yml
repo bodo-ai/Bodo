@@ -134,7 +134,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      mamba install -y -c conda-forge scikit-learn='1.0.*'
+      mamba install -y -c conda-forge scikit-learn='1.1.*'
     displayName: 'Setup scikit-learn testing'
 
   - script: |

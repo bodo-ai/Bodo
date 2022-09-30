@@ -240,6 +240,33 @@ def test_one_hot_encoder(X):
     check_func(test_transform, (X,))
 
 
+def test_one_hot_encoder_fit_attributes():
+    """
+    Test to make sure that the fit function results in an object with the
+    correct attributes to conform with version 1.1.*.
+    """
+
+    def get_model_fit(X):
+        m = OneHotEncoder(sparse=False)
+        m.fit(X)
+        return m
+
+    X = np.array([["a", "a"], ["ac", "b"]] * 5 + [["b", "a"]], dtype=object)
+    python_m = get_model_fit(X)
+    bodo_m = bodo.jit()(get_model_fit)(X)
+
+    for py_attr_name in dir(python_m):
+        if (
+            py_attr_name.startswith("_")
+            and not py_attr_name.startswith("__")
+            and not callable(getattr(python_m, py_attr_name))
+        ):
+            assert hasattr(bodo_m, py_attr_name), f"{py_attr_name} not found in bodo_m"
+            assert getattr(python_m, py_attr_name) == getattr(
+                bodo_m, py_attr_name
+            ), f"Attribute {py_attr_name} does not match between python and bodo"
+
+
 @pytest.mark.parametrize(
     "X, categories",
     [

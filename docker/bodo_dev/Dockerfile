@@ -21,7 +21,7 @@ RUN mamba install numpy=1.21 scipy pandas=${BODO_PD_VERSION:-'1.4.*'} boost-cpp=
 RUN mamba install hdf5='1.12.*=*mpich*' -c conda-forge
 RUN mamba install pyarrow=8.0.0 fsspec>=2021.09 s3fs boto3 botocore -c conda-forge
 RUN mamba install pytest sqlalchemy pymysql xlrd openpyxl cython -c conda-forge
-RUN mamba install numba=0.55.2 scikit-learn='1.0.*' -c conda-forge
+RUN mamba install numba=0.55.2 scikit-learn='1.1.*' -c conda-forge
 RUN mamba install ccache -c conda-forge
 RUN conda run pip install astor
 #

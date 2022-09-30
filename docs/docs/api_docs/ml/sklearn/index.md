@@ -1,11 +1,11 @@
 # Scikit-learn
 
-Bodo supports `scikit-learn` versions `1.0.*`.
+Bodo supports `scikit-learn` versions `1.1.*`.
 
 Install scikit-learn in your Bodo environment:
 
 ```shell
-conda install scikit-learn='1.0.*' -c conda-forge
+conda install scikit-learn='1.1.*' -c conda-forge
 ```
 
 <div class="grid cards" markdown>
