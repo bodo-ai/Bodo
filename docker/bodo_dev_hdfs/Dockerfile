@@ -25,7 +25,7 @@ RUN conda install -n BODODEV 'hdf5=1.12.*=*mpich*' -c conda-forge
 RUN conda install -n BODODEV python pyarrow=8.0.0 fsspec -c conda-forge
 RUN conda install -n BODODEV pytest ipython
 RUN conda install -n BODODEV sqlalchemy pymysql xlrd openpyxl mpi4py cython -c conda-forge
-# RUN conda install -n BODODEV scikit-learn='1.0.*' -c conda-forge
+# RUN conda install -n BODODEV scikit-learn='1.1.*' -c conda-forge
 RUN conda install -n BODODEV openjdk=11
 RUN conda install -n BODODEV hdfs3 -c conda-forge
 RUN conda install -n BODODEV ccache -c conda-forge

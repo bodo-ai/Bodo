@@ -12,7 +12,7 @@ source activate $CONDA_ENV
 # s3fs is required by pandas for S3 IO.
 mamba install -y -c conda-forge boto3 botocore fsspec>=2021.09 s3fs
 mamba install -y -c conda-forge pymysql sqlalchemy
-mamba install -y -c conda-forge scikit-learn='1.0.*' gcsfs
+mamba install -y -c conda-forge scikit-learn='1.1.*' gcsfs
 mamba install -y -c conda-forge matplotlib
 mamba install -y -c conda-forge pyspark=3.2 'openjdk=11'
 mamba install -y flake8

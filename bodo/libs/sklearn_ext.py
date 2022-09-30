@@ -70,9 +70,9 @@ from bodo.utils.typing import (
 this_module = sys.modules[__name__]
 
 _is_sklearn_supported_version = False
-_min_sklearn_version = (1, 0, 0)
+_min_sklearn_version = (1, 1, 0)
 _min_sklearn_ver_str = ".".join(str(x) for x in _min_sklearn_version)
-_max_sklearn_version_exclusive = (1, 1, 0)
+_max_sklearn_version_exclusive = (1, 2, 0)
 _max_sklearn_ver_str = ".".join(str(x) for x in _max_sklearn_version_exclusive)
 try:
     # Create capturing group for major, minor, and bugfix version numbers.
@@ -3848,6 +3848,8 @@ def sklearn_preprocessing_one_hot_encoder_overload(
     sparse=True,
     dtype=np.float64,
     handle_unknown="error",
+    min_frequency=None,
+    max_categories=None,
 ):
     """Provide implementation for __init__ function of OneHotEncoder.
     We simply call sklearn in objmode.
@@ -3902,11 +3904,15 @@ def sklearn_preprocessing_one_hot_encoder_overload(
     args_dict = {
         "sparse": sparse,
         "dtype": "float64" if "float64" in repr(dtype) else repr(dtype),
+        "min_frequency": min_frequency,
+        "max_categories": max_categories,
     }
 
     args_default_dict = {
         "sparse": False,
         "dtype": "float64",
+        "min_frequency": None,
+        "max_categories": None,
     }
     check_unsupported_args("OneHotEncoder", args_dict, args_default_dict, "ml")
 
@@ -3916,6 +3922,8 @@ def sklearn_preprocessing_one_hot_encoder_overload(
         sparse=True,
         dtype=np.float64,
         handle_unknown="error",
+        min_frequency=None,
+        max_categories=None,
     ):  # pragma: no cover
         with numba.objmode(m="preprocessing_one_hot_encoder_type"):
             m = sklearn.preprocessing.OneHotEncoder(
@@ -3924,6 +3932,8 @@ def sklearn_preprocessing_one_hot_encoder_overload(
                 sparse=sparse,
                 dtype=dtype,
                 handle_unknown=handle_unknown,
+                min_frequency=min_frequency,
+                max_categories=max_categories,
             )
         return m
 
@@ -3952,8 +3962,17 @@ def sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X):
     # Compute local categories by using default sklearn implementation.
     # This updates m.categories_ on each local rank
     try:
+        # NOTE: _validate_keywords() sets `_infrequent_enabled` flag which is necessary
+        # see https://bodo.atlassian.net/browse/BE-3337
+        # return counts is set to _infrequent_enabled to match sklearn 1.1.*'s behavior
+        # It does this because _infrequent_enabled allows infrequent categories to be
+        # returned
+        m._validate_keywords()
         fit_result_or_err = m._fit(
-            X, handle_unknown=m.handle_unknown, force_all_finite="allow-nan"
+            X,
+            handle_unknown=m.handle_unknown,
+            force_all_finite="allow-nan",
+            return_counts=m._infrequent_enabled,
         )
     except ValueError as e:  # pragma: no cover
         # Catch if any rank raises a ValueError for unknown categories,
@@ -4006,9 +4025,18 @@ def sklearn_preprocessing_one_hot_encoder_fit_dist_helper(m, X):
 
         m.categories_ = global_values_per_feat
 
+    # _infrequent_enabled is set here to match sklearn 1.1.*'s behavior,
+    # in which it is set after _fit() is called:
+    # https://github.com/scikit-learn/scikit-learn/blob/d2c713bce62974f7a17aab3e556d0bf14eebab3c/sklearn/preprocessing/_encoders.py#L832
+    if m._infrequent_enabled:  # pragma: no cover
+        m._fit_infrequent_category_mapping(
+            fit_result_or_err["n_samples"], fit_result_or_err["category_counts"]
+        )
+
     # Compute dropped indices. Since category info is now replicated,
     # we can just call sklearn
     m.drop_idx_ = m._compute_drop_idx()
+    m._n_features_outs = m._compute_n_features_outs()
 
     return m
 

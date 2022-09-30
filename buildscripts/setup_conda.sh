@@ -69,7 +69,7 @@ then
    $MAMBA_INSTALL numba=0.55.2 -c conda-forge
    $MAMBA_INSTALL cython -c conda-forge
    $MAMBA_INSTALL mpi4py -c conda-forge
-   $MAMBA_INSTALL scikit-learn='1.0.*' 'gcsfs>=2022.1' -c conda-forge
+   $MAMBA_INSTALL scikit-learn='1.1.*' 'gcsfs>=2022.1' -c conda-forge
    $MAMBA_INSTALL matplotlib='3.5.1' -c conda-forge
    $MAMBA_INSTALL pyspark=3.2 'openjdk=11' -c conda-forge
    $MAMBA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
