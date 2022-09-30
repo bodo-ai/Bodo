@@ -107,22 +107,30 @@ stages:
       caching_test: false
       PYTHON_VERSION: 3.10
       matrix:
-        BODO_1P_1_OF_4:
+        BODO_1P_1_OF_6:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1of8 or bodo_2of8
-        BODO_1P_2_OF_4:
+          PYTEST_MARKER: bodo_1of6
+        BODO_1P_2_OF_6:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3of8 or bodo_4of8
-        BODO_1P_3_OF_4:
+          PYTEST_MARKER: bodo_2of6
+        BODO_1P_3_OF_6:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5of8 or bodo_6of8
-        BODO_1P_4_OF_4:
+          PYTEST_MARKER: bodo_3of6
+        BODO_1P_4_OF_6:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_7of8 or bodo_8of8
+          PYTEST_MARKER: bodo_4of6
+        BODO_1P_5_OF_6:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_5of6
+        BODO_1P_6_OF_6:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_6of6
         BODO_2P_1_OF_8:
           NP: 2
           CONDA_ENV: 'bodo'
@@ -181,24 +189,33 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
-        BODOSQL_1P_1_OF_2:
+        BODOSQL_1P_1_OF_4:
           NP: 1
-          PYTEST_MARKER: bodosql_1of4 or bodosql_2of4
-        BODOSQL_1P_2_OF_2:
-          NP: 1
-          PYTEST_MARKER: bodosql_3of4 or bodosql_4of4
-        BODOSQL_2P_1_OF_4:
-          NP: 2
           PYTEST_MARKER: bodosql_1of4
-        BODOSQL_2P_2_OF_4:
-          NP: 2
+        BODOSQL_1P_2_OF_4:
+          NP: 1
           PYTEST_MARKER: bodosql_2of4
-        BODOSQL_2P_3_OF_4:
-          NP: 2
+        BODOSQL_1P_3_OF_4:
+          NP: 1
           PYTEST_MARKER: bodosql_3of4
-        BODOSQL_2P_4_OF_4:
-          NP: 2
+        BODOSQL_1P_4_OF_4:
+          NP: 1
           PYTEST_MARKER: bodosql_4of4
+        BODOSQL_2P_1_OF_5:
+          NP: 2
+          PYTEST_MARKER: bodosql_1of5
+        BODOSQL_2P_2_OF_5:
+          NP: 2
+          PYTEST_MARKER: bodosql_2of5
+        BODOSQL_2P_3_OF_5:
+          NP: 2
+          PYTEST_MARKER: bodosql_3of5
+        BODOSQL_2P_4_OF_5:
+          NP: 2
+          PYTEST_MARKER: bodosql_4of5
+        BODOSQL_2P_5_OF_5:
+          NP: 2
+          PYTEST_MARKER: bodosql_5of5
 
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:
