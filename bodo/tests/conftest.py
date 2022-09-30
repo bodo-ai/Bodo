@@ -73,7 +73,15 @@ def pytest_collection_modifyitems(items):
     """
     called after collection has been performed.
     """
-    azure_markers = [
+    azure_1p_markers = [
+        pytest.mark.bodo_1of6,
+        pytest.mark.bodo_2of6,
+        pytest.mark.bodo_3of6,
+        pytest.mark.bodo_4of6,
+        pytest.mark.bodo_5of6,
+        pytest.mark.bodo_6of6,
+    ]
+    azure_2p_markers = [
         pytest.mark.bodo_1of8,
         pytest.mark.bodo_2of8,
         pytest.mark.bodo_3of8,
@@ -97,13 +105,16 @@ def pytest_collection_modifyitems(items):
 
     for i, item in enumerate(items):
         # Divide the tests evenly so long tests don't end up in 1 group
-        marker = azure_markers[i % 8]
+        azure_1p_marker = azure_1p_markers[i % len(azure_1p_markers)]
+        azure_2p_marker = azure_2p_markers[i % len(azure_2p_markers)]
         # All of the test_s3.py tests must be on the same rank because they
         # haven't been refactored to remove cross-test dependencies.
         testfile = item.module.__name__.split(".")[-1] + ".py"
         if "test_s3.py" in testfile:
-            marker = azure_markers[0]
-        item.add_marker(marker)
+            azure_1p_marker = azure_1p_markers[0]
+            azure_2p_marker = azure_2p_markers[0]
+        item.add_marker(azure_1p_marker)
+        item.add_marker(azure_2p_marker)
 
     # Check if we should try and mark groups for AWS Codebuild
     if "NUMBER_GROUPS_SPLIT" in os.environ:

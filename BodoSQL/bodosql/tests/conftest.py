@@ -1524,6 +1524,19 @@ def pytest_collection_modifyitems(items):
     Marks the test to run as single_mode.
     Also Marks the tests with marker "bodosql_<x>of4".
     """
+    azure_1p_markers = [
+        pytest.mark.bodosql_1of4,
+        pytest.mark.bodosql_2of4,
+        pytest.mark.bodosql_3of4,
+        pytest.mark.bodosql_4of4,
+    ]
+    azure_2p_markers = [
+        pytest.mark.bodosql_1of5,
+        pytest.mark.bodosql_2of5,
+        pytest.mark.bodosql_3of5,
+        pytest.mark.bodosql_4of5,
+        pytest.mark.bodosql_5of5,
+    ]
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
@@ -1537,14 +1550,10 @@ def pytest_collection_modifyitems(items):
     for i, item in enumerate(items):
         # Divide the tests evenly so larger tests like TPCH
         # don't end up entirely in 1 group
-        item.add_marker(
-            [
-                pytest.mark.bodosql_1of4,
-                pytest.mark.bodosql_2of4,
-                pytest.mark.bodosql_3of4,
-                pytest.mark.bodosql_4of4,
-            ][i % 4]
-        )
+        azure_1p_marker = azure_1p_markers[i % len(azure_1p_markers)]
+        azure_2p_marker = azure_2p_markers[i % len(azure_2p_markers)]
+        item.add_marker(azure_1p_marker)
+        item.add_marker(azure_2p_marker)
 
     # Check if we should try and mark groups for AWS Codebuild
     if "NUMBER_GROUPS_SPLIT" in os.environ:
