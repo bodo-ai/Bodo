@@ -22,10 +22,36 @@ except ImportError:
     JSONResultBatch = None
     SnowflakeConnection = None
 
+# Whether to do a probe query to determine whether string columns should be
+# dictionary-encoded. This doesn't effect the _bodo_read_as_dict argument.
+SF_READ_AUTO_DICT_ENCODE_ENABLED = True
+
 # A configurable variable by which we determine whether to dictionary-encode
 # a string column.
-# Encode if num of unique elem / num of total rows <= DICT_ENCODE_CRITERION
-DICT_ENCODE_CRITERION = 0.5
+# Encode if num of unique elem / num of total rows <= SF_READ_DICT_ENCODE_CRITERION
+SF_READ_DICT_ENCODE_CRITERION = 0.5
+
+# How long the dictionary encoding probe query should run for in the worst case.
+# This is to guard against increasing compilation time prohibitively in case there are
+# issues with Snowflake, the data, etc.
+SF_READ_DICT_ENCODING_PROBE_TIMEOUT = 5
+
+# Default behavior if the query to determine dictionary encoding times out.
+# This is false by default since dict encoding is an optimization, and in cases where
+# we cannot definitively determine if it should be used, we should not use it. The
+# config flag is useful in cases where we (developers) want to test certain situations
+# manually.
+SF_READ_DICT_ENCODING_IF_TIMEOUT = False
+
+# Maximum number of rows to read from Snowflake in the probe query
+# This is calculated as # of string columns * # of rows
+# The default 100M should take a negligible amount of time.
+# This default value is based on empirical benchmarking to have
+# a good balance between accuracy of the query and compilation
+# time. Find more detailed analysis and results here:
+# https://bodo.atlassian.net/wiki/spaces/B/pages/1134985217/Support+reading+dictionary+encoded+string+columns+from+Snowflake#Prediction-query-and-heuristic
+SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT = 100_000_000
+
 # Mapping of the Snowflake field types to the pyarrow types taken
 # from the snowflake connector. These are not fully accurate and don't match
 # the arrow types. However, they can be used when the returned data is empty.

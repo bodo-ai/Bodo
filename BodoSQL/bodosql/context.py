@@ -289,6 +289,7 @@ def compute_df_types(df_list, is_bodo_type):
                         # _bodo_read_as_dict
                         None,
                         ir.Var(None, "dummy_var", ir.Loc("dummy_loc", -1)),
+                        ir.Loc("dummy_loc", -1),
                     )
                     # Future proof against additional return values that are unused
                     # by BodoSQL by returning a tuple.

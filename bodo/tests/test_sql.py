@@ -542,6 +542,144 @@ def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
         )
 
 
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requres Azure Pipelines")
+@pytest.mark.parametrize("enable_dict_encoding", [True, False])
+def test_sql_snowflake_dict_encoding_enabled(memory_leak_check, enable_dict_encoding):
+    """
+    Test that SF_READ_AUTO_DICT_ENCODE_ENABLED works as expected.
+    """
+    import bodo.io.snowflake
+
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    # l_shipmode, l_shipinstruct should be dictionary encoded based on Snowflake
+    # probe query.
+    # l_comment could be specified by the user to be dictionary encoded
+    # l_suppkey is not of type string and could not be dictionary encoded
+    query = "SELECT l_shipmode, l_shipinstruct, l_comment, l_suppkey FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 3000"
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    @bodo.jit
+    def test_impl(query, conn):
+        return pd.read_sql(query, conn)
+
+    @bodo.jit
+    def test_impl_with_forced_dict_encode(query, conn):
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_comment"])
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    orig_SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
+    )
+    bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = enable_dict_encoding
+
+    try:
+        if enable_dict_encoding:
+            # check that dictionary encoding works
+            with set_logging_stream(logger, 1):
+                test_impl(query, conn)
+                check_logger_msg(
+                    stream,
+                    "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding",
+                )
+
+            # Verify that _bodo_read_as_dict still works as expected
+            with set_logging_stream(logger, 1):
+                test_impl_with_forced_dict_encode(query, conn)
+                check_logger_msg(
+                    stream,
+                    "Columns ['l_shipmode', 'l_shipinstruct', 'l_comment'] using dictionary encoding",
+                )
+        else:
+            # check that dictionary encoding is disabled
+            with set_logging_stream(logger, 1):
+                test_impl(query, conn)
+                check_logger_no_msg(
+                    stream,
+                    "Columns ['l_shipmode', 'l_shipinstruct'] using dictionary encoding",
+                )
+
+            # Verify that _bodo_read_as_dict still works as expected
+            with set_logging_stream(logger, 1):
+                test_impl_with_forced_dict_encode(query, conn)
+                check_logger_msg(
+                    stream,
+                    "Columns ['l_comment'] using dictionary encoding",
+                )
+
+    finally:
+        bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED = (
+            orig_SF_READ_AUTO_DICT_ENCODE_ENABLED
+        )
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requres Azure Pipelines")
+@pytest.mark.parametrize("dict_encode_when_timeout", [True, False])
+def test_sql_snowflake_dict_encoding_timeout_behavior(
+    memory_leak_check, dict_encode_when_timeout
+):
+    """
+    Test that SF_READ_DICT_ENCODING_IF_TIMEOUT will effect the behavior when
+    there is a timeout in the probing query for dictionary encoding.
+    """
+    import bodo.io.snowflake
+
+    @bodo.jit
+    def test_impl(query, conn):
+        return pd.read_sql(query, conn)
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    # need to sort the output to make sure pandas and Bodo get the same rows
+    # l_shipmode, l_shipinstruct should be dictionary encoded.
+    # l_comment could be specified by the user to be dictionary encoded
+    # l_suppkey is not of type string and could not be dictionary encoded
+    query = "SELECT l_shipmode, l_shipinstruct, l_comment, l_suppkey FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 3000"
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    # set the timeout to 0.0001 so that the probing query will timeout no matter what
+    # Note that 0 doesn't work (might mean infinity)
+    original_SF_READ_DICT_ENCODING_PROBE_TIMEOUT = (
+        bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_TIMEOUT
+    )
+    bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_TIMEOUT = 0.0001
+
+    original_SF_READ_DICT_ENCODING_IF_TIMEOUT = (
+        bodo.io.snowflake.SF_READ_DICT_ENCODING_IF_TIMEOUT
+    )
+    bodo.io.snowflake.SF_READ_DICT_ENCODING_IF_TIMEOUT = dict_encode_when_timeout
+
+    try:
+        if dict_encode_when_timeout:
+            # check that dictionary encoding is enabled upon timeout
+            with set_logging_stream(logger, 2):
+                test_impl(query, conn)
+                check_logger_msg(
+                    stream, "The following columns will be dictionary encoded"
+                )
+        else:
+            # check that dictionary encoding is disabled upon timeout
+            with set_logging_stream(logger, 2):
+                test_impl(query, conn)
+                check_logger_msg(
+                    stream, "The following columns will not be dictionary encoded"
+                )
+    finally:
+        # reset the flags to prevent side effects
+        bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_TIMEOUT = (
+            original_SF_READ_DICT_ENCODING_PROBE_TIMEOUT
+        )
+        bodo.io.snowflake.SF_READ_DICT_ENCODING_IF_TIMEOUT = (
+            original_SF_READ_DICT_ENCODING_IF_TIMEOUT
+        )
+
+
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_sql_snowflake_nonascii(memory_leak_check):
     def impl(query, conn):
