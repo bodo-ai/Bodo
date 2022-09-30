@@ -935,7 +935,9 @@ class UntypedPass:
             unsupported_arrow_types,
             is_select_query,
             has_side_effects,
-        ) = _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs)
+        ) = _get_sql_types_arr_colnames(
+            sql_const, con_const, _bodo_read_as_dict, lhs, rhs.loc
+        )
 
         index_ind = None
         index_col_name = None
@@ -3047,7 +3049,7 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
     return columns, data_arrs, out_types
 
 
-def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs):
+def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, loc):
     """
     Wrapper function to determine the db_type, column names,
     array variables, array types, any column names
@@ -3100,7 +3102,13 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs):
         unsupported_columns,
         unsupported_arrow_types,
     ) = _get_sql_df_type_from_db(
-        sql_const, con_const, db_type, is_select_query, sql_word, _bodo_read_as_dict
+        sql_const,
+        con_const,
+        db_type,
+        is_select_query,
+        sql_word,
+        _bodo_read_as_dict,
+        loc,
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
@@ -3130,7 +3138,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs):
 
 
 def _get_sql_df_type_from_db(
-    sql_const, con_const, db_type, is_select_query, sql_word, _bodo_read_as_dict=None
+    sql_const, con_const, db_type, is_select_query, sql_word, _bodo_read_as_dict, loc
 ):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
@@ -3181,6 +3189,10 @@ def _get_sql_df_type_from_db(
                 from bodo.io.snowflake import snowflake_connect
 
                 conn = snowflake_connect(con_const)
+
+                # Import after snowflake_connect since it should be safe now.
+                import snowflake.connector
+
                 cursor = conn.cursor()
                 described_query = cursor.describe(sql_call)
                 col_names = []
@@ -3266,26 +3278,89 @@ def _get_sql_df_type_from_db(
                     # Always quote column names for correctness
                     query_args.append(f'count (distinct "{snowflake_case_map[name]}")')
                     string_col_ind.append(str_col_name_to_ind[snowflake_case_map[name]])
-                if len(query_args) != 0:
+
+                # determine if the string columns are dictionary encoded
+                try_dictionary_encode = (
+                    bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
+                )
+                if len(query_args) != 0 and try_dictionary_encode:
                     # the criterion with which we determine whether to convert or not
-                    criterion = bodo.io.snowflake.DICT_ENCODE_CRITERION
+                    criterion = bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION
+
+                    # the timeout for the probing query
+                    timeout = bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_TIMEOUT
+
+                    # what to do if there's a timeout
+                    encode_if_timeout = (
+                        bodo.io.snowflake.SF_READ_DICT_ENCODING_IF_TIMEOUT
+                    )
+
+                    # the limit on the number of rows total to read for the probe
+                    probe_limit = (
+                        bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT
+                    )
+                    probe_limit = max(probe_limit // len(query_args), 1)
+
                     # construct the prediction query script for the string columns
                     # in which we sample 1 percent of the data
-                    predict_cardinality_call = f"select count(*),{', '.join(query_args)} from ({sql_const}) SAMPLE (1)"
-                    prediction_query = cursor.execute(predict_cardinality_call)
-                    cardinality_data = prediction_query.fetch_arrow_all()
-                    # calculate the level of uniqueness for each string column
-                    total_rows = cardinality_data[0][0].as_py()
-                    uniqueness = [
-                        cardinality_data[i][0].as_py() / max(total_rows, 1)
-                        for i in range(1, len(query_args) + 1)
-                    ]
-                    # filter the string col indices based on the criterion
-                    col_inds_to_convert = filter(
-                        lambda x: x[0] <= criterion, zip(uniqueness, string_col_ind)
+                    # upper bound limits the total amount of sampling that will occur
+                    # to prevent a hang/timeout
+                    predict_cardinality_call = (
+                        f"select count(*),{', '.join(query_args)}"
+                        f"from ( select * from ({sql_const}) limit {probe_limit} ) SAMPLE (1)"
                     )
-                    for _, ind in col_inds_to_convert:
-                        col_types[ind] = dict_str_arr_type
+
+                    prediction_query_timed_out = False
+                    try:
+                        prediction_query = cursor.execute(
+                            predict_cardinality_call, timeout=timeout
+                        )
+                    except snowflake.connector.errors.ProgrammingError as e:
+                        # Catch timeouts
+                        if "SQL execution canceled" in str(e):
+                            prediction_query_timed_out = True
+                        else:
+                            raise
+                    if prediction_query_timed_out:
+                        # if the query times out, follow the default behavior set by
+                        # the SF_READ_DICT_ENCODING_IF_TIMEOUT flag
+                        if encode_if_timeout:
+                            for i in string_col_ind:
+                                col_types[i] = dict_str_arr_type
+
+                        # log the chosen behavior
+                        if bodo.user_logging.get_verbose_level() >= 2:
+                            msg = (
+                                "Timeout occured during probing query at:\n%s\n"
+                                "Maximum number of rows queried: %d\n"
+                            )
+                            if encode_if_timeout:
+                                msg += "The following columns will be dictionary encoded: %s\n"
+                            else:
+                                msg += "The following columns will not be dictionary encoded: %s\n"
+                            read_src = loc.strformat()
+                            string_col_names = ",".join(query_args)
+                            bodo.user_logging.log_message(
+                                "Dictionary Encoding Probe Query",
+                                msg,
+                                read_src,
+                                probe_limit,
+                                string_col_names,
+                            )
+                    else:
+                        cardinality_data = prediction_query.fetch_arrow_all()
+                        # calculate the level of uniqueness for each string column
+                        total_rows = cardinality_data[0][0].as_py()
+                        uniqueness = [
+                            cardinality_data[i][0].as_py() / max(total_rows, 1)
+                            for i in range(1, len(query_args) + 1)
+                        ]
+                        # filter the string col indices based on the criterion
+                        col_inds_to_convert = filter(
+                            lambda x: x[0] <= criterion, zip(uniqueness, string_col_ind)
+                        )
+                        for _, ind in col_inds_to_convert:
+                            col_types[ind] = dict_str_arr_type
 
                 # Ensure column name case matches Pandas/sqlalchemy. See:
                 # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
