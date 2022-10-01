@@ -1,7 +1,7 @@
 FROM ubuntu:20.04
 
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
-RUN apt-get update && apt-get install -y wget git curl
+RUN apt-get update && apt-get install -y wget git curl jq
 
 ADD buildscripts/setup_conda.sh .
 ADD buildscripts/aws/test_installs.sh .
