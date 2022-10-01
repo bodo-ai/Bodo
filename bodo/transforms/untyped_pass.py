@@ -3321,7 +3321,11 @@ def _get_sql_df_type_from_db(
                             prediction_query_timed_out = True
                         else:
                             raise
-                    if prediction_query_timed_out:
+                    if prediction_query_timed_out:  # pragma: no cover
+                        # It is hard to get Snowflake to consistently
+                        # and deterministically time out, so this branch
+                        # isn't tested in the unit tests.
+
                         # if the query times out, follow the default behavior set by
                         # the SF_READ_DICT_ENCODING_IF_TIMEOUT flag
                         if encode_if_timeout:
