@@ -27,5 +27,6 @@ if [ "$RUN_NIGHTLY" != "yes" ]; then
 fi
 mamba install -y -c conda-forge pytest pytest-cov
 python -m pip install deltalake
+python -m pip install awscli
 
 conda clean -a -y
