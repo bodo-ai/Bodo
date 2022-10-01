@@ -616,70 +616,6 @@ def test_sql_snowflake_dict_encoding_enabled(memory_leak_check, enable_dict_enco
         )
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requres Azure Pipelines")
-@pytest.mark.parametrize("dict_encode_when_timeout", [True, False])
-def test_sql_snowflake_dict_encoding_timeout_behavior(
-    memory_leak_check, dict_encode_when_timeout
-):
-    """
-    Test that SF_READ_DICT_ENCODING_IF_TIMEOUT will effect the behavior when
-    there is a timeout in the probing query for dictionary encoding.
-    """
-    import bodo.io.snowflake
-
-    @bodo.jit
-    def test_impl(query, conn):
-        return pd.read_sql(query, conn)
-
-    db = "SNOWFLAKE_SAMPLE_DATA"
-    schema = "TPCH_SF1"
-    conn = get_snowflake_connection_string(db, schema)
-
-    # need to sort the output to make sure pandas and Bodo get the same rows
-    # l_shipmode, l_shipinstruct should be dictionary encoded.
-    # l_comment could be specified by the user to be dictionary encoded
-    # l_suppkey is not of type string and could not be dictionary encoded
-    query = "SELECT l_shipmode, l_shipinstruct, l_comment, l_suppkey FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 3000"
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-
-    # set the timeout to 0.0001 so that the probing query will timeout no matter what
-    # Note that 0 doesn't work (might mean infinity)
-    original_SF_READ_DICT_ENCODING_PROBE_TIMEOUT = (
-        bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_TIMEOUT
-    )
-    bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_TIMEOUT = 0.0001
-
-    original_SF_READ_DICT_ENCODING_IF_TIMEOUT = (
-        bodo.io.snowflake.SF_READ_DICT_ENCODING_IF_TIMEOUT
-    )
-    bodo.io.snowflake.SF_READ_DICT_ENCODING_IF_TIMEOUT = dict_encode_when_timeout
-
-    try:
-        if dict_encode_when_timeout:
-            # check that dictionary encoding is enabled upon timeout
-            with set_logging_stream(logger, 2):
-                test_impl(query, conn)
-                check_logger_msg(
-                    stream, "The following columns will be dictionary encoded"
-                )
-        else:
-            # check that dictionary encoding is disabled upon timeout
-            with set_logging_stream(logger, 2):
-                test_impl(query, conn)
-                check_logger_msg(
-                    stream, "The following columns will not be dictionary encoded"
-                )
-    finally:
-        # reset the flags to prevent side effects
-        bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_TIMEOUT = (
-            original_SF_READ_DICT_ENCODING_PROBE_TIMEOUT
-        )
-        bodo.io.snowflake.SF_READ_DICT_ENCODING_IF_TIMEOUT = (
-            original_SF_READ_DICT_ENCODING_IF_TIMEOUT
-        )
-
-
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_sql_snowflake_nonascii(memory_leak_check):
     def impl(query, conn):
@@ -1091,41 +1027,43 @@ def test_sql_snowflake_isin_pushdown(memory_leak_check):
         use_dict_encoded_strings=False,
     )
     # TODO: BE-3404: Support `pandas.Series.isin` for dictionary-encoded arrays
-    prev_criterion = bodo.io.snowflake.DICT_ENCODE_CRITERION
-    bodo.io.snowflake.DICT_ENCODE_CRITERION = -1
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        bodo.jit(impl_isin)(query, conn, isin_list)
-        # Check the columns were pruned
-        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
-        # Check for filter pushdown
-        check_logger_msg(stream, "Filter pushdown successfully performed")
+    prev_criterion = bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION
+    bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION = -1
+    try:
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(impl_isin)(query, conn, isin_list)
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+            # Check for filter pushdown
+            check_logger_msg(stream, "Filter pushdown successfully performed")
 
-    check_func(
-        impl_isin_or, (query, conn, isin_list), check_dtype=False, reset_index=True
-    )
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        bodo.jit(impl_isin_or)(query, conn, isin_list)
-        # Check the columns were pruned
-        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
-        # Check for filter pushdown
-        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_func(
+            impl_isin_or, (query, conn, isin_list), check_dtype=False, reset_index=True
+        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(impl_isin_or)(query, conn, isin_list)
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+            # Check for filter pushdown
+            check_logger_msg(stream, "Filter pushdown successfully performed")
 
-    check_func(
-        impl_isin_and, (query, conn, isin_list), check_dtype=False, reset_index=True
-    )
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-        bodo.jit(impl_isin_and)(query, conn, isin_list)
-        # Check the columns were pruned
-        check_logger_msg(stream, "Columns loaded ['l_suppkey']")
-        # Check for filter pushdown
-        check_logger_msg(stream, "Filter pushdown successfully performed")
-    bodo.io.snowflake.DICT_ENCODE_CRITERION = prev_criterion
+        check_func(
+            impl_isin_and, (query, conn, isin_list), check_dtype=False, reset_index=True
+        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(impl_isin_and)(query, conn, isin_list)
+            # Check the columns were pruned
+            check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+            # Check for filter pushdown
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+    finally:
+        bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION = prev_criterion
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
