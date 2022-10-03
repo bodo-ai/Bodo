@@ -4,11 +4,11 @@ When compiling functions, Bodo introduces various optimizations to improve
 runtime performance. Since the success of certain optimizations can be essential,
 we provide the option to run Bodo in `verbose mode` and track certain optimizations
 at compile time. The information provided by `verbose mode` can help you better understand you workload's performance
-as well as how to debug the workload. Additionally, using Python's `logging` module alongside Bodo's `verbose mode` can be used to track optimizations across frequently running jobs. 
+as well as how to debug the workload. Additionally, using Python's `logging` module alongside Bodo's `verbose mode` can be used to track optimizations across frequently running jobs.
 
 
 !!! note
-      Currently all of our optimizations are tracked at compile time. This information is not stored if a function is cached. 
+      Currently all of our optimizations are tracked at compile time. This information is not stored if a function is cached.
 
 ## Example Usage
 
@@ -47,7 +47,7 @@ Columns loaded ['id']
 You can also log this information to a valid `logging.Logger` instance with Bodo.
 
 !!! important
-    The logger should be a variable set in a global scope. 
+    The logger should be a variable set in a global scope.
 
 ```py
 bodo.set_verbose_level(1)
@@ -115,7 +115,8 @@ the success/failure of optimizations can be an extremely useful first step to de
 
     | Verbose Level | Optimizations |
     |----------------------------------|--------------------------------------|
-    | 1 | <ul><li>Column Pruning</li><li>Filter Pushdown</li><li>Dictionary Encoding</li></ul> |
+    | 1 | <ul><li>Column Pruning</li><li>Filter Pushdown</li><li>Dictionary Encoding</li><li>Limit Pushdown</li></ul> |
+    | 2 | <ul><li>Join column pruning</li></ul> |
 
     ***Arguments***
 
