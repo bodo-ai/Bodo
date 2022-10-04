@@ -415,129 +415,13 @@ array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
                                     int64_t n_chars_keys,
                                     bool has_global_dictionary);
 
-/* Store several array_info in one structure and assign them
-   as required.
-   This is for pivot_table and crosstab.
-   The rows of the pivot_table / crosstab correspond to
-   the index. But the columns force us to create a multiple_array_info
-   with each column corresponding to an entry.
-   -
-   The vect_arr contains those columns.
-   the vect_access contains whether we have accessed to the entry or not.
-   It is important to keep track of this info since in contrast to the
-   groupby, some info may be missing.
-*/
-struct multiple_array_info {
-    bodo_array_type::arr_type_enum arr_type;
-    Bodo_CTypes::CTypeEnum dtype;
-    int64_t num_categories;  // for categorical arrays
-    int64_t length;
-    int64_t length_loc;
-    int64_t n_pivot;
-    std::vector<array_info*> vect_arr;
-    std::vector<array_info*> vect_access;
-    array_info* info1;  // for dict-encoded arrays
-    array_info* info2;  // for dict-encoded arrays
-    explicit multiple_array_info(std::vector<array_info*> _vect_arr)
-        : vect_arr(_vect_arr) {
-        n_pivot = vect_arr.size();
-        length_loc = vect_arr[0]->length;
-        length = length_loc * n_pivot;
-        num_categories = vect_arr[0]->num_categories;
-        arr_type = vect_arr[0]->arr_type;
-        dtype = vect_arr[0]->dtype;
-        int n_access = (n_pivot + 7) >> 3;
-        for (int i_access = 0; i_access < n_access; i_access++) {
-            array_info* arr_access =
-                alloc_numpy(length_loc, Bodo_CTypes::UINT8);
-            std::fill((uint8_t*)arr_access->data1,
-                      (uint8_t*)arr_access->data1 + length_loc, 0);
-            vect_access.push_back(arr_access);
-        }
-    }
-    explicit multiple_array_info(std::vector<array_info*> _vect_arr,
-                                 std::vector<array_info*> _vect_access)
-        : vect_arr(_vect_arr), vect_access(_vect_access) {
-        n_pivot = vect_arr.size();
-        length_loc = vect_arr[0]->length;
-        length = length_loc * n_pivot;
-        num_categories = vect_arr[0]->num_categories;
-        arr_type = vect_arr[0]->arr_type;
-        dtype = vect_arr[0]->dtype;
-    }
-    template <typename T>
-    T& at(size_t idx) {
-        // index for the value itself
-        size_t i_arr = idx % n_pivot;
-        size_t idx_loc = idx / n_pivot;
-        // setting up the access mask. If accessed the value stops to be missing
-        int64_t i_arr_access = i_arr / 8;
-        int64_t pos_arr_access = i_arr % 8;
-        uint8_t* ptr = (uint8_t*)vect_access[i_arr_access]->data1 + idx_loc;
-#ifdef DEBUG_ARRAY_ACCESS
-        std::cout << "     at access MULT for idx=" << idx << " i_arr=" << i_arr
-                  << " idx_loc=" << idx_loc << "\n";
-#endif
-        SetBitTo(ptr, pos_arr_access, true);
-        return ((T*)vect_arr[i_arr]->data1)[idx_loc];
-    }
-
-    bool get_access_bit(size_t idx) {
-        // index for the value itself
-        size_t i_arr = idx % n_pivot;
-        size_t idx_loc = idx / n_pivot;
-        // setting up the access mask. If accessed the value stops to be missing
-        int64_t i_arr_access = i_arr / 8;
-        int64_t pos_arr_access = i_arr % 8;
-        uint8_t* ptr = (uint8_t*)vect_access[i_arr_access]->data1 + idx_loc;
-        return GetBit(ptr, pos_arr_access);
-    }
-
-    bool get_null_bit(size_t idx) const {
-        size_t i_arr = idx % n_pivot;
-        size_t idx_loc = idx / n_pivot;
-        return GetBit((uint8_t*)vect_arr[i_arr]->null_bitmask, idx_loc);
-    }
-
-    void set_null_bit(size_t idx, bool bit) {
-        size_t i_arr = idx % n_pivot;
-        size_t idx_loc = idx / n_pivot;
-        SetBitTo((uint8_t*)vect_arr[i_arr]->null_bitmask, idx_loc, bit);
-    }
-
-    multiple_array_info& operator=(
-        multiple_array_info&& other) noexcept;  // move assignment operator
-};
-
-template <typename T>
-struct is_multiple_array {
-    static const bool value = false;
-};
-
-template <>
-struct is_multiple_array<multiple_array_info> {
-    static const bool value = true;
-};
-
-/* The "get-value" functionality for multiple_array_info and array_info.
+/* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.
    We cannot use at(idx) statements.
  */
-template <typename ARRAY, typename T>
-inline typename std::enable_if<is_multiple_array<ARRAY>::value, T&>::type getv(
-    ARRAY* arr, size_t idx) {
-    size_t i_arr = idx % arr->n_pivot;
-    size_t idx_loc = idx / arr->n_pivot;
-    int64_t i_arr_access = i_arr / 8;
-    int64_t pos_arr_access = i_arr % 8;
-    uint8_t* ptr = (uint8_t*)arr->vect_access[i_arr_access]->data1 + idx_loc;
-    SetBitTo(ptr, pos_arr_access, true);
-    return ((T*)arr->vect_arr[i_arr]->data1)[idx_loc];
-}
 
-template <typename ARRAY, typename T>
-inline typename std::enable_if<!is_multiple_array<ARRAY>::value, T&>::type getv(
-    ARRAY* arr, size_t idx) {
+template <typename T>
+inline T& getv(array_info* arr, size_t idx) {
     return ((T*)arr->data1)[idx];
 }
 
