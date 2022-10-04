@@ -151,21 +151,6 @@ array_info& array_info::operator=(array_info&& other) noexcept {
     return *this;
 }
 
-multiple_array_info& multiple_array_info::operator=(
-    multiple_array_info&& other) noexcept {
-    if (this != &other) {
-        this->arr_type = other.arr_type;
-        this->dtype = other.dtype;
-        this->num_categories = other.num_categories;
-        this->length = other.length;
-        this->length_loc = other.length_loc;
-        this->n_pivot = other.n_pivot;
-        this->vect_arr = std::move(other.vect_arr);
-        this->vect_access = std::move(other.vect_access);
-    }
-    return *this;
-}
-
 array_info* alloc_numpy(int64_t length, Bodo_CTypes::CTypeEnum typ_enum) {
     int64_t size = length * numpy_item_size[typ_enum];
     NRT_MemInfo* meminfo = NRT_MemInfo_alloc_safe_aligned(size, ALIGNMENT);

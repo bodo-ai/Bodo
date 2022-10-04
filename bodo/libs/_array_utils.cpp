@@ -1843,16 +1843,6 @@ void DEBUG_PrintColumn(std::ostream& os, array_info* arr) {
         os << "i_row=" << i_row << " S=" << LStr[i_row] << "\n";
 }
 
-void DEBUG_PrintColumn(std::ostream& os, multiple_array_info* arr) {
-    int n_rows = arr->length;
-    os << "MULTIPLE_ARRAY_INFO: Column n=" << n_rows
-       << " arr=" << GetArrType_as_string(arr->arr_type)
-       << " dtype=" << GetDtype_as_string(arr->dtype) << "\n";
-    std::vector<array_info*> total_arr = arr->vect_arr;
-    for (auto& earr : arr->vect_access) total_arr.push_back(earr);
-    DEBUG_PrintVectorArrayInfo(os, total_arr);
-}
-
 /**
  * Used for a custom reduction to merge all the HyperLogLog registers across
  * all ranks.

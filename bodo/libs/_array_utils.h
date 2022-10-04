@@ -584,14 +584,6 @@ int KeyComparisonAsPython_Column(bool const& na_position_bis, array_info* arr1,
  */
 void DEBUG_PrintColumn(std::ostream& os, array_info* arr);
 
-/* This is a function used by "DEBUG_PrintSetOfColumn"
- * It takes a column and returns a vector of string on output
- *
- * @param os is the output stream
- * @param arr is the pointer.
- */
-void DEBUG_PrintColumn(std::ostream& os, multiple_array_info* arr);
-
 /** The DEBUG_PrintSetOfColumn is printing the contents of the table to
  * the output stream.
  * All cases are supported (NUMPY, SRING, NULLABLE_INT_BOOL) as well as
