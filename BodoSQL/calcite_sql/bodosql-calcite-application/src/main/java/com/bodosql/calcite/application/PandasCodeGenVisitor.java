@@ -2244,10 +2244,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
                     exprTypes.get(0),
                     operandsInfo.get(1).getExprCode());
             return new RexNodeVisitorInfo(outputName, strExpr);
-          case "DATE":
-            return generateDateFnCode(operandsInfo.get(0).getExprCode());
           case "TIMESTAMP":
             return generateTimestampFnCode(operandsInfo.get(0).getExprCode());
+          case "DATE":
+            return generateDateFnCode(operandsInfo.get(0).getExprCode());
+          case "TO_DATE":
+            return generateToDateFnCode(operandsInfo);
+          case "TRY_TO_DATE":
+            return generateTryToDateFnCode(operandsInfo);
           case "ASINH":
           case "ACOSH":
           case "ATANH":
@@ -2417,17 +2421,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateToSecondsCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
           case "FROM_DAYS":
             return generateFromDaysCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
-          case "TO_DATE":
-            if (!valid_type_cast_to_date(
-                fnOperation.getOperands().get(0).getType().getSqlTypeName())) {
-              throw new BodoSQLCodegenException(
-                  "TO_DATE cannot be called on an operand of type: "
-                      + fnOperation.getOperands().get(0).getType().getSqlTypeName());
-            }
-            String name = generateCastName(operandsInfo.get(0).getName(), SqlTypeName.DATE);
-            exprCode =
-                generateCastCode(operandsInfo.get(0).getExprCode(), SqlTypeName.DATE, isSingleRow);
-            return new RexNodeVisitorInfo(name, exprCode);
           case "TIME":
           case "TO_TIME":
             return generateToTimeCode(

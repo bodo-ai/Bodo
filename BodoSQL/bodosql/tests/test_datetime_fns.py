@@ -91,6 +91,7 @@ def dt_fn_dataframe():
     ]
     timestamps = pd.Series([np.datetime64(x) for x in dt_strings])
     normalized_ts = timestamps.dt.normalize()
+    invalid_dt_strings = ["__" + str(x) + "__" for x in dt_strings]
     df = pd.DataFrame(
         {
             "timestamps": timestamps,
@@ -106,6 +107,7 @@ def dt_fn_dataframe():
                 np.timedelta64(2000000, "us"),
             ],
             "datetime_strings": dt_strings,
+            "invalid_dt_strings": invalid_dt_strings,
             "positive_integers": [1, 2, 31, 400, 123, 13, 7, 80],
             "small_positive_integers": [1, 2, 3, 4, 5, 6, 7, 8],
             "dt_format_strings": [
@@ -127,6 +129,16 @@ def dt_fn_dataframe():
                 "sa",
                 "su",
                 "mo",
+            ],
+            "digit_strings": [
+                None,
+                "-13",
+                "0",
+                "-2",
+                "5",
+                "-66",
+                "1234",
+                None,
             ],
             "valid_year_integers": [2000, 2100, 1999, 2020, 2021, 1998, 2200, 2012],
             "mixed_integers": [0, 1, -2, 3, -4, 5, -6, 7],

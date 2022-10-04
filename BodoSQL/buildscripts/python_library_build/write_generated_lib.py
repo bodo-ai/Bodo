@@ -200,6 +200,7 @@ def generate_and_write_library():
             ),
             ("scalar_conv_float32", generate_standard_python_fn_call("np.float32"), 1),
             ("scalar_conv_float64", generate_standard_python_fn_call("np.float64"), 1),
+            ("scalar_conv_str", generate_standard_python_fn_call("str"), 1),
         ]
     )
 

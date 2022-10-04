@@ -1196,6 +1196,18 @@ def create_pyspark_schema_from_dataframe(df):
     return StructType(field_list)
 
 
+def make_tables_nullable(input_ctx):
+    output_ctx = dict()
+    np.random.seed(42)
+
+    for table_name, table_value in input_ctx.items():
+        cond = np.random.ranf(table_value.shape) < 0.5
+        nullable_table_value = table_value.mask(cond, table_value, axis=0)
+        output_ctx[table_name] = nullable_table_value
+
+    return output_ctx
+
+
 def remap_spark_agg_fn_name(query):
     """
     Spark uses slightly different naming conventions for certain SQL functions

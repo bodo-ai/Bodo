@@ -8,6 +8,7 @@ from bodo.libs.bodosql_datetime_array_kernels import *  # noqa
 from bodo.libs.bodosql_numeric_array_kernels import *  # noqa
 from bodo.libs.bodosql_other_array_kernels import *  # noqa
 from bodo.libs.bodosql_regexp_array_kernels import *  # noqa
+from bodo.libs.bodosql_snowflake_conversion_array_kernels import *  # noqa
 from bodo.libs.bodosql_string_array_kernels import *  # noqa
 from bodo.libs.bodosql_time_array_kernels import *  # noqa
 from bodo.libs.bodosql_trig_array_kernels import *  # noqa
@@ -103,8 +104,13 @@ broadcasted_fixed_arg_functions = {
     "substring_index",
     "tan",
     "tanh",
+    "to_boolean",
+    "to_char",
+    "to_date",
     "translate",
     "trunc",
+    "try_to_boolean",
+    "try_to_date",
     "weekday",
     "width_bucket",
     "year_timestamp",

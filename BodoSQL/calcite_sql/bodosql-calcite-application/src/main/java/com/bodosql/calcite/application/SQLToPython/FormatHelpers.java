@@ -48,7 +48,7 @@ public class FormatHelpers {
 
   /**
    * Function that converts a String literal SQL format string into a Python format string that can
-   * be interpretted properly by pd.ToDatetime.
+   * be interpreted properly by pd.ToDatetime.
    *
    * @param SQLFormatStr The format string with valid SQL syntax.
    * @return An equivalent format string that can be used by Pandas.

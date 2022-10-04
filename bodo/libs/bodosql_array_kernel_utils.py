@@ -13,6 +13,10 @@ import pyarrow as pa
 from numba.core import types
 
 import bodo
+from bodo.hiframes.pd_series_ext import (
+    is_datetime_date_series_typ,
+    pd_timestamp_type,
+)
 from bodo.utils.typing import (
     is_overload_bool,
     is_overload_constant_bytes,
@@ -35,6 +39,7 @@ def gen_vectorized(
     support_dict_encoding=True,
     may_cause_duplicate_dict_array_values=False,
     prefix_code=None,
+    extra_globals=None,
 ):
     """Creates an impl for a column compute function that has several inputs
        that could all be scalars, nulls, or arrays by broadcasting appropriately.
@@ -138,7 +143,7 @@ def gen_vectorized(
                 dict_encoded_arg = i
         elif bodo.utils.utils.is_array_typ(arg_types[i], True):
             vector_args += 1
-            if arg_types[i].dtype == bodo.dict_str_arr_type:
+            if arg_types[i].data == bodo.dict_str_arr_type:
                 dict_encoded_arg = i
     use_dict_encoding = (
         support_dict_encoding and vector_args == 1 and dict_encoded_arg >= 0
@@ -351,17 +356,23 @@ def gen_vectorized(
 
         func_text += "   return res"
     loc_vars = {}
+
+    exec_globals = {
+        "bodo": bodo,
+        "math": math,
+        "numba": numba,
+        "re": re,
+        "np": np,
+        "out_dtype": out_dtype,
+        "pd": pd,
+    }
+
+    if not (extra_globals is None):
+        exec_globals.update(extra_globals)
+
     exec(
         func_text,
-        {
-            "bodo": bodo,
-            "math": math,
-            "numba": numba,
-            "re": re,
-            "np": np,
-            "out_dtype": out_dtype,
-            "pd": pd,
-        },
+        exec_globals,
         loc_vars,
     )
     impl = loc_vars["impl"]
@@ -498,11 +509,12 @@ def is_valid_string_arg(arg):  # pragma: no cover
         arg (dtype): the dtype of the argument being checked
     returns: False if the argument is not a string or string column
     """
+    arg = types.unliteral(arg)
     return not (
         arg not in (types.none, types.unicode_type)
-        and not isinstance(arg, types.StringLiteral)
         and not (
-            bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == types.unicode_type
+            bodo.utils.utils.is_array_typ(arg, True)
+            and (arg.dtype == types.unicode_type)
         )
         and not is_overload_constant_str(arg)
     )
@@ -521,6 +533,26 @@ def is_valid_binary_arg(arg):  # pragma: no cover
         )
         and not is_overload_constant_bytes(arg)
         and not isinstance(arg, types.Bytes)
+    )
+
+
+def is_valid_datetime_or_date_arg(arg):
+    """
+    Args:
+        arg (dtype): the dtype of the argument being checked
+    returns: False if the argument is not datetime or date data
+
+    Note: In BodoSQL, scalar date/datetime types are both timestamp,
+    and the columnar date/datetime types are both .
+    """
+
+    return arg == pd_timestamp_type or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and (
+            is_datetime_date_series_typ(arg)
+            or isinstance(arg, bodo.DatetimeArrayType)
+            or arg.dtype == bodo.datetime64ns
+        )
     )
 
 
