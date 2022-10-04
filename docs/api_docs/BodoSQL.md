@@ -1609,7 +1609,15 @@ Bodo SQL currently supports the following Timestamp functions:
 -   `TO_DATE(col_expr)`
 
     Casts the col_expr to a timestamp column truncated to the date
-    portion.
+    portion. Supported for Integers, Strings, and Datetime types.
+    For information on valid for conversion, see: https://docs.snowflake.com/en/sql-reference/functions/to_date.html.
+    Raises an error if suplied an invalid expression.
+
+#### TRY_TO_DATE
+-   `TRY_TO_DATE(col_expr)`
+
+    See TO_DATE. The only difference is that TRY_TO_DATE will return NULL upon encountering an invalid expression
+    NULL instead of raising an error. We recommend using this function for converting to date.
 
 ###  String Functions
 

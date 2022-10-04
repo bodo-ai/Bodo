@@ -196,6 +196,7 @@ def setna(arr, ind, int_nan_const=0):  # pragma: no cover
 
 @overload(setna, no_unliteral=True)
 def setna_overload(arr, ind, int_nan_const=0):
+
     if isinstance(arr.dtype, types.Float):
         return setna
 

@@ -153,6 +153,7 @@ public class RelationalAlgebraGenerator {
       sqlOperatorTables.add(CondOperatorTable.instance());
       sqlOperatorTables.add(SinceEpochFnTable.instance());
       sqlOperatorTables.add(ThreeOperatorStringTable.instance());
+      sqlOperatorTables.add(CastingOperatorTable.instance());
       config =
           Frameworks.newConfigBuilder()
               .defaultSchemas(defaultSchemas)

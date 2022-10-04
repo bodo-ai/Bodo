@@ -1913,6 +1913,27 @@ def overload_to_datetime(
 
         return impl_timestamp
 
+    # np datetime input. This ignores other fields and just returns value wrapped
+    # in a timestamp
+    if arg_a == bodo.datetime64ns:
+
+        def impl_np_datetime(
+            arg_a,
+            errors="raise",
+            dayfirst=False,
+            yearfirst=False,
+            utc=None,
+            format=None,
+            exact=True,
+            unit=None,
+            infer_datetime_format=False,
+            origin="unix",
+            cache=True,
+        ):  # pragma: no cover
+            return pd.Timestamp(arg_a)
+
+        return impl_np_datetime
+
     # TODO: input Type of a dataframe
     raise_bodo_error(f"pd.to_datetime(): cannot convert date type {arg_a}")
 

@@ -641,6 +641,7 @@ setup(
             "data/*/*",
             "data/*/*/*",
             "data/*/*/*/*",
+            "bodosql_array_kernel_tests/*",
         ],
         # on Windows and MacOS we copy libssl and libcrypto DLLs to
         # bodo/libs to bundle them with our package and avoid

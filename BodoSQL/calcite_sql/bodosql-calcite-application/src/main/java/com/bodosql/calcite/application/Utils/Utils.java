@@ -240,7 +240,6 @@ public class Utils {
         }
         break;
       case FLOAT:
-        if (outputArrayType) return "bodo.float32[::1]";
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float32";
         } else if (outputArrayType) {
@@ -251,7 +250,6 @@ public class Utils {
         break;
       case DOUBLE:
       case DECIMAL:
-        if (outputArrayType) return "bodo.float64[::1]";
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float64";
         } else if (outputArrayType) {
@@ -563,18 +561,6 @@ public class Utils {
     return String.format(
         "bodo.utils.typing.bodosql_case_placeholder(%s, len(%s), %s, %s, %s, %s)",
         inputDataStr, inputVar, initGlobal, bodyGlobal, outputArrayTypeGlobal, namedParamArgs);
-  }
-
-  static HashSet<SqlTypeName> validDateCastTypes;
-
-  static {
-    validDateCastTypes = new HashSet<>();
-    validDateCastTypes.addAll(SqlTypeName.STRING_TYPES);
-    validDateCastTypes.addAll(SqlTypeName.DATETIME_TYPES);
-  }
-
-  public static Boolean valid_type_cast_to_date(SqlTypeName typ) {
-    return validDateCastTypes.contains(typ);
   }
 
   public static void assertWithErrMsg(boolean test, String msg) {

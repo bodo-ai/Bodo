@@ -60,23 +60,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  // TODO: make this actually coerce to cast, so that Calcite can properly typecheck it at compile
-  // time as of right now, we do this check in our code.
-  public static final SqlFunction TO_DATE =
-      new SqlFunction(
-          "TO_DATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          OperandTypes.ANY,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
-
   public static final SqlFunction TO_TIME =
       new SqlFunction(
           "TO_TIME",
@@ -530,7 +513,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SUBDATE,
           YEARWEEK,
           WEEKDAY,
-          TO_DATE,
           TO_TIME,
           TIME_FROM_PARTS,
           TIME,
