@@ -810,8 +810,9 @@ def _test_equal(
             py_out = py_out.sort_values()
             bodo_out = bodo_out.sort_values()
         # avoid assert_index_equal() issues for ArrowStringArray comparison (exact=False
-        # still fails for some reason)
-        if bodo_out.dtype == pd.StringDtype("pyarrow"):
+        # still fails for some reason).
+        # Note: The pd.StringDtype must be the left to ensure we pick the correct operator.
+        if pd.StringDtype("pyarrow") == bodo_out.dtype:
             bodo_out = bodo_out.astype(object)
         if isinstance(bodo_out, pd.MultiIndex):
             bodo_out = pd.MultiIndex(
