@@ -618,7 +618,7 @@ def test_boolean_logic_filter_pushdown(memory_leak_check):
     cond_d = read_df["L_SHIPMODE"] == "SHIP"
 
     out_cols = ["L_ORDERKEY", "L_LINENUMBER"]
-    select_string = f"Select {out_cols[0]}, {out_cols[1]} from table 1 where"
+    select_string = f"Select {out_cols[0]}, {out_cols[1]} from table1 where"
 
     queries = [
         f"{select_string} {expr_a} AND {expr_b}",

@@ -149,8 +149,7 @@ setup(
     packages=find_packages(),
     package_data={
         "bodosql.tests": [
-            "data/*",
-            "test_window/*",
+            "*/*"
         ],
         "bodosql": ["pytest.ini", "jars/*.jar"],
     },
