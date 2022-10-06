@@ -1051,17 +1051,6 @@ def test_to_date_scalar(
     )
 
 
-@pytest.mark.slow
-def test_to_date_invalid_col_check(spark_info, dt_fn_dataframe, memory_leak_check):
-    import bodo
-
-    query = f"SELECT TO_DATE(mixed_integers) from table1"
-
-    msg = r".*TO_DATE cannot be called on an operand of type: BIGINT.*"
-    with pytest.raises(bodo.utils.typing.BodoError, match=msg):
-        bc = bodosql.BodoSQLContext(dt_fn_dataframe)
-        bc.sql(query)
-
 
 @pytest.mark.parametrize(
     "literal_str",
