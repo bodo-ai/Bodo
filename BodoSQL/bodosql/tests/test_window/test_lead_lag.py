@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import pytest
 from bodosql.tests.test_window.window_common import (  # noqa
     null_respect_string,
@@ -390,6 +391,81 @@ def test_lead_lag_case_null_literal(
         convert_columns_bytearray=convert_columns_bytearray,
         convert_columns_bool=convert_columns_bool,
         convert_columns_timedelta=convert_columns_timedelta,
+    )
+
+
+@pytest.mark.parametrize(
+    "windows",
+    [
+        pytest.param([("B", "C")] * 4, id="all_same"),
+        pytest.param([("B", "C"), ("C", "B")] * 2, id="half_new_part"),
+        pytest.param(
+            [("B", "C")] * 2 + [("C", "B")] * 2,
+            id="half_new_order",
+            marks=pytest.mark.slow,
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "lead_lag",
+    [
+        pytest.param(
+            ["lead(A)", "lead(A, 2)", "lead(A, 3, 0)", "lead(A, 4)"], id="all_lead"
+        ),
+        pytest.param(
+            ["lead(A)", "lag(A, 2)", "lead(A, 3, 0)", "lag(A, 4)"],
+            id="half_lead",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            ["lag(A)", "lag(A, 2)", "lag(A, 3, 0)", "lag(A, 4)"], id="all_lag"
+        ),
+    ],
+)
+def test_lead_lag_fusion(
+    windows,
+    lead_lag,
+    spark_info,
+    memory_leak_check,
+):
+    """tests the lead and lag aggregation functions with various fusion cases"""
+
+    assert len(windows) == len(lead_lag) == 4
+
+    clauses = []
+    for i in range(len(windows)):
+        partition, order = windows[i]
+        calculation = lead_lag[i]
+        clauses.append(
+            f"{calculation} OVER (PARTITION BY {partition} ORDER BY {order})"
+        )
+    query = f"SELECT {', '.join(clauses)} FROM table1"
+
+    ctx = {
+        "table1": pd.DataFrame(
+            {"A": list(range(20)), "B": list("ABCDE") * 4, "C": list("XXYXXYZYXX") * 2}
+        )
+    }
+
+    # Calculate the number of grouby-apply calls that should appear
+    # (needs to be updated as fusion improves)
+    cases = set()
+    for i in range(len(windows)):
+        cases.add((windows[i], lead_lag[i][:3]))
+    expected_closures = len(cases)
+
+    codegen = check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        return_codegen=True,
+    )["pandas_code"]
+
+    # Verify that the number of closures matches the expected behavior
+    assert (
+        codegen.count("def __bodo_dummy___sql_windowed_apply_fn") == expected_closures
     )
 
 

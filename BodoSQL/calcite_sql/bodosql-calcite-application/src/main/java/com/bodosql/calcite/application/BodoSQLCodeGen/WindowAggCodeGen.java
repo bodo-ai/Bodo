@@ -76,80 +76,80 @@ public class WindowAggCodeGen {
       final boolean isLead,
       final boolean isRespectNulls) {
 
-    // Currently, we don't support aggregation fusion for lead and lag,
-    // so we expect to only handle 1 lead/lag call in this function
-    // TODO: Support aggregation fusion for LEAD/LAG, see BS-615
-    assertWithErrMsg(
-        argsListList.size() == 1,
-        "generateLeadLagAggFn was supplied with more then one aggregation");
-
-    List<WindowedAggregationArgument> curArgsList = argsListList.get(0);
-    int num_arguments = curArgsList.size();
-    // Lead/Lag expects one required argument, a column, and two optional arguments, an offset, and
-    // a
-    // default value
-    assertWithErrMsg(
-        1 <= num_arguments && num_arguments <= 3,
-        "Lead/Lag expects between 1 and 3 arguments, instead got: " + curArgsList.size());
-
-    WindowedAggregationArgument aggColArg = curArgsList.get(0);
-
-    assertWithErrMsg(aggColArg.isDfCol(), "Lead/Lag's first argument must be a column");
-
-    String aggColName = aggColArg.getExprString();
-
-    // Default shift amount is 1
-    String shiftAmount = "1";
-    String fillValue = "";
-
-    if (num_arguments >= 2) {
-      WindowedAggregationArgument shiftAmountArg = curArgsList.get(1);
-      assertWithErrMsg(
-          !shiftAmountArg.isDfCol(),
-          "Lead/Lag expects the offset to be a scalar literal, if it is provided. Got: "
-              + curArgsList.toString());
-
-      shiftAmount = shiftAmountArg.getExprString();
-
-      // Add the default fill value (if it's present)
-      if (num_arguments == 3) {
-        WindowedAggregationArgument fillValueArg = curArgsList.get(2);
-        // I don't know if this is handled within Calcite or not, so throwing it as a Bodo error
-        if (fillValueArg.isDfCol()) {
-          throw new BodoSQLCodegenException(
-              "Error! Only scalar fill value is supported for LEAD/LAG");
-        }
-        fillValue = fillValueArg.getExprString();
-      }
-    }
-
     // Sort the input dataframe, if needed.
     funcText.append(
         sortLocalDfIfNeeded(
             argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
 
-    if (isLead) {
-      shiftAmount = "(-" + shiftAmount + ")";
-    }
-    String aggColRef = "sorted_df[" + makeQuoted(aggColName) + "]";
-    funcText
-        .append(indent)
-        .append(indent)
-        .append(aggColRef + " = " + aggColRef + ".shift(" + shiftAmount);
-
-    if (!fillValue.equals("")) {
-      funcText.append(", fill_value=").append(fillValue);
-    }
-
-    funcText.append(")\n");
-
-    funcText
-        .append(indent)
-        .append(indent)
-        .append("arr = sorted_df[" + makeQuoted(aggColName) + "]\n");
-
     List<String> arraysToSort = new ArrayList<>();
-    arraysToSort.add("arr");
+
+    // Repeat the procedure for each lead/lag call
+    for (Integer i = 0; i < argsListList.size(); i++) {
+
+      List<WindowedAggregationArgument> curArgsList = argsListList.get(i);
+      int num_arguments = curArgsList.size();
+      // Lead/Lag expects one required argument, a column, and two optional arguments, an offset,
+      // and
+      // an offset, and a default value
+      assertWithErrMsg(
+          1 <= num_arguments && num_arguments <= 3,
+          "Lead/Lag expects between 1 and 3 arguments, instead got: " + curArgsList.size());
+
+      WindowedAggregationArgument aggColArg = curArgsList.get(0);
+
+      assertWithErrMsg(aggColArg.isDfCol(), "Lead/Lag's first argument must be a column");
+
+      String aggColName = aggColArg.getExprString();
+
+      // Default shift amount is 1
+      String shiftAmount = "1";
+      String fillValue = "";
+
+      if (num_arguments >= 2) {
+        WindowedAggregationArgument shiftAmountArg = curArgsList.get(1);
+        assertWithErrMsg(
+            !shiftAmountArg.isDfCol(),
+            "Lead/Lag expects the offset to be a scalar literal, if it is provided. Got: "
+                + curArgsList.toString());
+
+        shiftAmount = shiftAmountArg.getExprString();
+
+        // Add the default fill value (if it's present)
+        if (num_arguments == 3) {
+          WindowedAggregationArgument fillValueArg = curArgsList.get(2);
+          // I don't know if this is handled within Calcite or not, so throwing it as a Bodo error
+          if (fillValueArg.isDfCol()) {
+            throw new BodoSQLCodegenException(
+                "Error! Only scalar fill value is supported for LEAD/LAG");
+          }
+          fillValue = fillValueArg.getExprString();
+        }
+      }
+
+      if (isLead) {
+        shiftAmount = "(-" + shiftAmount + ")";
+      }
+      String aggColRef = "sorted_df[" + makeQuoted(aggColName) + "]";
+      funcText
+          .append(indent)
+          .append(indent)
+          .append(aggColRef + " = " + aggColRef + ".shift(" + shiftAmount);
+
+      if (!fillValue.equals("")) {
+        funcText.append(", fill_value=").append(fillValue);
+      }
+
+      funcText.append(")\n");
+
+      String arrName = "arr" + String.valueOf(i);
+
+      funcText
+          .append(indent)
+          .append(indent)
+          .append(arrName + " = sorted_df[" + makeQuoted(aggColName) + "]\n");
+
+      arraysToSort.add(arrName);
+    }
 
     Pair<String, String> additionalFunctextAndOutputDfName =
         reverseSortLocalDfIfNeeded(
@@ -593,7 +593,6 @@ public class WindowAggCodeGen {
               lower),
           returnedDfOutputCols);
     } else if (agg == SqlKind.LAG || agg == SqlKind.LEAD) {
-      // LAG/LEAD require special handling
       return new Pair<>(
           generateLeadLagAggFn(
               funcText,

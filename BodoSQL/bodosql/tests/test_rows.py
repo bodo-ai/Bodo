@@ -1223,16 +1223,32 @@ def test_conditional_change_event(args, spark_info, memory_leak_check):
     )
 
 
-def test_first_value_fusion(basic_df, spark_info, memory_leak_check):
+@pytest.mark.parametrize(
+    "windows",
+    [
+        pytest.param(
+            ["PARTITION BY B ORDER BY C"] * 3,
+            id="all_same",
+        ),
+        pytest.param(
+            [
+                "PARTITION BY B ORDER BY C",
+                "PARTITION BY C ORDER BY B",
+                "PARTITION BY B ORDER BY C",
+            ],
+            id="two_same",
+        ),
+    ],
+)
+def test_first_value_fusion(windows, basic_df, spark_info, memory_leak_check):
     import copy
 
     new_ctx = copy.deepcopy(basic_df)
     new_ctx["table1"]["D"] = new_ctx["table1"]["A"] + 10
     new_ctx["table1"]["E"] = new_ctx["table1"]["A"] * 2
 
-    window = "(PARTITION BY B ORDER BY C)"
-
-    query = f"select FIRST_VALUE(A) OVER {window}, FIRST_VALUE(D) OVER {window}, FIRST_VALUE(E) OVER {window} from table1"
+    assert len(windows) == 3
+    query = f"select FIRST_VALUE(A) OVER ({windows[0]}), FIRST_VALUE(D) OVER ({windows[1]}), FIRST_VALUE(E) OVER ({windows[2]}) from table1"
 
     codegen = check_query(
         query,
@@ -1244,8 +1260,12 @@ def test_first_value_fusion(basic_df, spark_info, memory_leak_check):
         return_codegen=True,
     )["pandas_code"]
 
-    # Check that we only create one lambda function. If we didn't perform loop fusion, there would be three.
-    assert codegen.count("def __bodo_dummy___sql_windowed_apply_fn") == 1
+    # Check that the number of closures created corresponds to the number of
+    # distinct windows
+    expected_closures = len(set(windows))
+    assert (
+        codegen.count("def __bodo_dummy___sql_windowed_apply_fn") == expected_closures
+    )
 
 
 def test_first_value_optimized(spark_info, memory_leak_check):

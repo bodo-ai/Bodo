@@ -1315,56 +1315,86 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (aggOperations.size() == 0) {
       return new ArrayList<>();
     }
+
     List<RexWindow> windows = new ArrayList<>();
     List<SqlKind> fnKinds = new ArrayList<>();
     List<String> fnNames = new ArrayList<>();
+    List<List<RexOver>> aggSets = new ArrayList<>();
+
+    // Used to store how each output within each groupby-apply corresponds
+    // to one of the original column outputs in the SELECT statement
+    List<List<Integer>> indices = new ArrayList<>();
+
+    // Eventually used to store the names of each output
+    List<String> outputColExprs = new ArrayList<>();
 
     // Only used for LEAD/LAG and (FIRST/LAST/NTH)_Val
     // defaults to True/Respect Nulls
     // see https://docs.snowflake.com/en/sql-reference/functions/lag.html
     List<Boolean> respectNullsList = new ArrayList<>();
 
-    for (RexOver agg : aggOperations) {
-      respectNullsList.add(!agg.ignoreNulls());
-      windows.add(agg.getWindow());
-      fnKinds.add(agg.getAggOperator().getKind());
-      fnNames.add(agg.getAggOperator().getName());
-    }
-    // For right now, we're only handling the case where all the windows are identical, and all the
-    // aggregation functions are FIRST_VALUE.
-    // In the future, we can relax this to fuse any aggregations that that have the same partition
-    // columns, regardless of
-    // sorting, or the function call.
-    // TODO: relax this requirement.
-    boolean canFuse = true;
-    for (int i = 1; i < aggOperations.size(); i++) {
-      if (!(windows.get(i).equals(windows.get(0))
-          && fnKinds.get(i).equals(fnKinds.get(0))
-          && respectNullsList.get(i).equals(respectNullsList.get(0)))) {
-        canFuse = false;
-        break;
+    // Loop over each aggregation and identify if it can be fused with one
+    // of the aggregations already added to the aggSets list
+    for (Integer j = 0; j < aggOperations.size(); j++) {
+      outputColExprs.add(null);
+
+      RexOver agg = aggOperations.get(j);
+      Boolean canFuse = false;
+      RexWindow window = agg.getWindow();
+      SqlKind fnKind = agg.getAggOperator().getKind();
+      String fnName = agg.getAggOperator().getName();
+      Boolean respectNulls = !agg.ignoreNulls();
+      for (Integer i = 0; i < windows.size(); i++) {
+
+        // For now, can only fuse window function calls with the same window
+        // parittion/order/etc. if they are the same function, and that function
+        // is one of FIRST_VALUE, LEAD or LAG.
+        if (fnKind == SqlKind.FIRST_VALUE || fnKind == SqlKind.LEAD || fnKind == SqlKind.LAG) {
+          if (windows.get(i).equals(window)
+              && fnKinds.get(i).equals(fnKind)
+              && respectNullsList.get(i).equals(respectNulls)) {
+            canFuse = true;
+            aggSets.get(i).add(agg);
+            indices.get(i).add(j);
+            break;
+          }
+        }
       }
+
+      // If it can fuse, skip the next step
+      if (canFuse) {
+        continue;
+      }
+
+      // If it can't, add a new entry and record what index it corresponded to
+      respectNullsList.add(respectNulls);
+      windows.add(window);
+      fnKinds.add(fnKind);
+      fnNames.add(fnName);
+      List<RexOver> newAggSet = new ArrayList<>();
+      List<Integer> newIndexList = new ArrayList<>();
+      newAggSet.add(agg);
+      newIndexList.add(j);
+      aggSets.add(newAggSet);
+      indices.add(newIndexList);
     }
-    // TODO: update when we support more aggregation fusion.
-    canFuse = fnKinds.get(0).equals(SqlKind.FIRST_VALUE) & canFuse;
 
-    List<String> outputColExprs = new ArrayList<>();
-    if (canFuse) {
-      // This will return two arguments, the expression of the manipulated dataframe, and a
-      // List of output columns where the overall output of the windowed aggregations are stored.
-
+    // For each distinct window/function combination, create a new
+    // closure and groupby-apply call
+    for (Integer i = 0; i < windows.size(); i++) {
+      RexWindow window = windows.get(i);
+      SqlKind fnKind = fnKinds.get(i);
+      String fnName = fnNames.get(i);
+      Boolean respectNulls = respectNullsList.get(i);
+      List<RexOver> aggSet = aggSets.get(i);
       Pair<String, List<String>> out =
           visitAggOverHelper(
-              aggOperations,
-              colNames,
-              windows.get(0),
-              fnKinds.get(0),
-              fnNames.get(0),
-              respectNullsList.get(0),
-              id,
-              inputVar,
-              ctx);
+              aggSet, colNames, window, fnKind, fnName, respectNulls, id, inputVar, ctx);
+
+      // Extract the dataframe whose columns contain the output(s) of the
+      // window aggregation
       String dfExpr = out.getKey();
+      List<String> outputDfColnameList = out.getValue();
       String generatedDfName = this.genWindowedAggDfName();
       this.generatedCode
           .append(indent)
@@ -1373,44 +1403,24 @@ public class PandasCodeGenVisitor extends RelVisitor {
           .append(dfExpr)
           .append("\n");
 
-      List<String> outputDfColnameList = out.getValue();
-
-      for (int i = 0; i < aggOperations.size(); i++) {
-        String outputDfColName = outputDfColnameList.get(i);
-        outputColExprs.add(
+      // For each aggregation that was fused into this window, extract the
+      // corresponding column
+      List<Integer> innerIndices = indices.get(i);
+      for (Integer j = 0; j < aggSet.size(); j++) {
+        String outputDfColName = outputDfColnameList.get(j);
+        String outputCode =
             new StringBuilder(generatedDfName)
                 .append("[" + makeQuoted(outputDfColName) + "].values")
-                .toString());
-      }
-    } else {
-      for (int i = 0; i < aggOperations.size(); i++) {
-        RexOver curAggOp = aggOperations.get(i);
-        // In this case, we perform one window function at a time, since we are unable to fuse them
-        // into the same
-        // groupby apply expression.
+                .toString();
 
-        Pair<String, List<String>> out =
-            visitAggOverHelper(
-                new ArrayList<>(Arrays.asList(curAggOp)),
-                colNames,
-                curAggOp.getWindow(),
-                curAggOp.getAggOperator().getKind(),
-                curAggOp.getAggOperator().getName(),
-                respectNullsList.get(i),
-                id,
-                inputVar,
-                ctx);
-        String dfExpr = out.getKey();
-        List<String> outputDfColnameList = out.getValue();
-        // Since we only do one function at a time, we always have exactly one output.
-        String outputDfColName = outputDfColnameList.get(0);
-        outputColExprs.add(
-            new StringBuilder(dfExpr)
-                .append("[" + makeQuoted(outputDfColName) + "].values")
-                .toString());
+        // Map the output value back to the correct column location
+        Integer index = innerIndices.get(j);
+        outputColExprs.set(index, outputCode);
       }
     }
-    assert outputColExprs.size() == aggOperations.size();
+
+    // Verify that all of the output columns were set
+    assert !outputColExprs.contains(null);
 
     List<RexNodeVisitorInfo> outputRexInfoList = new ArrayList<>();
 
