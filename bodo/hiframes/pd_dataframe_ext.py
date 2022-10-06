@@ -3022,17 +3022,17 @@ def concat_overload(
     raise BodoError("pd.concat(): input type {} not supported yet".format(objs))
 
 
-def sort_values_dummy(df, by, ascending, inplace, na_position):  # pragma: no cover
-    return df.sort_values(
-        by, ascending=ascending, inplace=inplace, na_position=na_position
-    )
+def sort_values_dummy(
+    df, by, ascending, inplace, na_position, _bodo_chunk_bounds
+):  # pragma: no cover
+    pass
 
 
 @infer_global(sort_values_dummy)
 class SortDummyTyper(AbstractTemplate):
     def generic(self, args, kws):
         assert not kws
-        df, by, ascending, inplace, na_position = args
+        df = args[0]
 
         index = df.index
         if isinstance(index, bodo.hiframes.pd_index_ext.RangeIndexType):

@@ -1120,6 +1120,117 @@ def test_sort_values_force_literal(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_sort_values_input_boundaries(memory_leak_check):
+    """
+    Test sort_values() with redistribution boundaries passed in manually
+    """
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, A):
+        bounds = bodo.libs.distributed_api.get_chunk_bounds(A)
+        return df.sort_values(by="A", _bodo_chunk_bounds=bounds)
+
+    # create data chunks on different processes and check expected output
+    rank = bodo.get_rank()
+    n_pes = bodo.get_size()
+    if n_pes > 3:
+        return
+    if n_pes == 1:
+        df = pd.DataFrame({"A": np.array([2, 11, 3, 2], np.int64), "B": [4, 3, 2, 1]})
+        A = np.array([2, 3, 11])
+        out = df.sort_values("A").reset_index(drop=True)
+    elif n_pes == 2:
+        if rank == 0:
+            df = pd.DataFrame({"A": np.array([4, 11, 8], np.int64), "B": [3, 1, 2]})
+            A = np.array([3, 6])
+            out = pd.DataFrame({"A": np.array([3, 4], np.int64), "B": [4, 3]})
+        else:
+            df = pd.DataFrame({"A": np.array([10, 3], np.int64), "B": [5, 4]})
+            A = np.array([7, 9, 11], np.int64)
+            out = pd.DataFrame({"A": np.array([8, 10, 11], np.int64), "B": [2, 5, 1]})
+    elif n_pes == 3:
+        if rank == 0:
+            df = pd.DataFrame({"A": np.array([8, 4], np.int64), "B": [1, 2]})
+            A = np.array([2, 3, 5])
+            out = pd.DataFrame({"A": np.array([0, 4], np.int64), "B": [4, 2]})
+        elif rank == 1:
+            df = pd.DataFrame({"A": np.array([11, 0], np.int64), "B": [3, 4]})
+            A = np.array([6, 7, 8])
+            out = pd.DataFrame({"A": np.array([6, 8], np.int64), "B": [6, 1]})
+        # rank 2
+        else:
+            df = pd.DataFrame({"A": np.array([9, 6], np.int64), "B": [5, 6]})
+            A = np.array([9, 11])
+            out = pd.DataFrame({"A": np.array([9, 11], np.int64), "B": [5, 3]})
+
+    pd.testing.assert_frame_equal(impl(df, A).reset_index(drop=True), out)
+
+    # test empty chunk corner cases
+    if n_pes == 1:
+        df = pd.DataFrame({"A": np.array([], np.int64), "B": np.array([], np.float64)})
+        A = np.array([2, 3, 11])
+        out = df.copy()
+    elif n_pes == 2:
+        if rank == 0:
+            df = pd.DataFrame(
+                {"A": np.array([3], np.int64), "B": np.array([1], np.float64)}
+            )
+            A = np.array([1])
+            out = pd.DataFrame(
+                {"A": np.array([], np.int64), "B": np.array([], np.float64)}
+            )
+        else:
+            df = pd.DataFrame(
+                {"A": np.array([], np.int64), "B": np.array([], np.float64)}
+            )
+            A = np.array([3])
+            out = pd.DataFrame(
+                {"A": np.array([3], np.int64), "B": np.array([1], np.float64)}
+            )
+    elif n_pes == 3:
+        if rank == 0:
+            df = pd.DataFrame(
+                {"A": np.array([], np.int64), "B": np.array([], np.float64)}
+            )
+            A = np.array([3])
+            out = pd.DataFrame(
+                {"A": np.array([3], np.int64), "B": np.array([1], np.float64)}
+            )
+        elif rank == 1:
+            df = pd.DataFrame(
+                {"A": np.array([3, 5], np.int64), "B": np.array([1, 2], np.float64)}
+            )
+            A = np.array([4])
+            out = pd.DataFrame(
+                {"A": np.array([], np.int64), "B": np.array([], np.float64)}
+            )
+        else:
+            df = pd.DataFrame(
+                {"A": np.array([], np.int64), "B": np.array([], np.float64)}
+            )
+            A = np.array([5])
+            out = pd.DataFrame(
+                {"A": np.array([5], np.int64), "B": np.array([2], np.float64)}
+            )
+
+    pd.testing.assert_frame_equal(impl(df, A).reset_index(drop=True), out)
+
+    # error checking unsupported array type
+    with pytest.raises(BodoError, match=(r"only supported when there is a single key")):
+
+        @bodo.jit(distributed=["df"])
+        def impl(df, A):
+            bounds = bodo.libs.distributed_api.get_chunk_bounds(A)
+            return df.sort_values(by=["A", "B"], _bodo_chunk_bounds=bounds)
+
+        df = pd.DataFrame(
+            {"A": np.array([1], np.int64), "B": np.array([1.2], np.float64)}
+        )
+        A = np.array([5])
+        impl(df, A)
+
+
+@pytest.mark.slow
 def test_list_string(memory_leak_check):
     """Sorting values by list of strings"""
 

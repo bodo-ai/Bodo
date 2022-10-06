@@ -256,7 +256,7 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         table_info *sorted_new_table = sort_values_table(
             new_table, transform_cols.size(), vect_ascending.data(),
             na_position.data(), /*dead_keys=*/nullptr, /*out_n_rows=*/nullptr,
-            is_parallel);
+            /*bounds=*/nullptr, is_parallel);
 
         // Remove the unused transform columns
         // TODO Optimize to not remove if they can be reused for partition spec

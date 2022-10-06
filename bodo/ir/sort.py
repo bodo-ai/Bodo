@@ -8,6 +8,7 @@ import numpy as np
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
+    mk_unique_var,
     replace_arg_nodes,
     replace_vars_inner,
     visit_vars_inner,
@@ -33,7 +34,7 @@ from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
     remove_dead_column_extensions,
 )
-from bodo.utils.typing import MetaType, type_has_unknown_cats
+from bodo.utils.typing import MetaType, is_overload_none, type_has_unknown_cats
 from bodo.utils.utils import gen_getitem
 
 
@@ -49,6 +50,7 @@ class Sort(ir.Stmt):
         loc: ir.Loc,
         ascending_list: Union[List[bool], bool] = True,
         na_position: Union[List[str], str] = "last",
+        _bodo_chunk_bounds: Union[ir.Var, None] = None,
         is_table_format: bool = False,
         num_table_arrays: int = 0,
     ):
@@ -74,6 +76,9 @@ class Sort(ir.Stmt):
                 order (can be set per key). Defaults to True.
             na_position (str|list[str], optional): Place null values first or last in
                 output array. Can be set per key. Defaults to "last".
+            _bodo_chunk_bounds (ir.Var|None): parallel chunk bounds for data
+                redistribution during the parallel algorithm (optional).
+                Currently only used for Iceberg MERGE INTO.
             is_table_format (bool): flag for table format case (first variable is a
                 table in in_vars/out_vars)
             num_table_arrays: number of columns in the table in case of table format
@@ -85,6 +90,7 @@ class Sort(ir.Stmt):
         self.out_vars = out_vars
         self.key_inds = key_inds
         self.inplace = inplace
+        self._bodo_chunk_bounds = _bodo_chunk_bounds
         self.is_table_format = is_table_format
         self.num_table_arrays = num_table_arrays
         # Logical indices of dead columns in input/output (excluding keys), updated in
@@ -300,6 +306,11 @@ def visit_vars_sort(sort_node, callback, cbdata):
                 sort_node.out_vars[i], callback, cbdata
             )
 
+    if sort_node._bodo_chunk_bounds is not None:
+        sort_node._bodo_chunk_bounds = visit_vars_inner(
+            sort_node._bodo_chunk_bounds, callback, cbdata
+        )
+
 
 ir_utils.visit_vars_extensions[Sort] = visit_vars_sort
 
@@ -391,6 +402,9 @@ def sort_usedefs(sort_node, use_set=None, def_set=None):
     if not sort_node.inplace:
         def_set.update({v.name for v in sort_node.get_live_out_vars()})
 
+    if sort_node._bodo_chunk_bounds is not None:
+        use_set.add(sort_node._bodo_chunk_bounds.name)
+
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
@@ -435,6 +449,11 @@ def apply_copies_sort(
             sort_node.in_vars[i] = replace_vars_inner(sort_node.in_vars[i], var_dict)
         if sort_node.out_vars[i] is not None:
             sort_node.out_vars[i] = replace_vars_inner(sort_node.out_vars[i], var_dict)
+
+    if sort_node._bodo_chunk_bounds is not None:
+        sort_node._bodo_chunk_bounds = replace_vars_inner(
+            sort_node._bodo_chunk_bounds, var_dict
+        )
 
 
 ir_utils.apply_copy_propagate_extensions[Sort] = apply_copies_sort
@@ -490,7 +509,7 @@ def sort_distributed_run(
         typemap[v.name] if v is not None else types.none for v in sort_node.out_vars
     ]
 
-    func_text, glbls = get_sort_cpp_section(sort_node, out_types, parallel)
+    func_text, glbls = get_sort_cpp_section(sort_node, out_types, typemap, parallel)
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -513,16 +532,24 @@ def sort_distributed_run(
     )
     glbls.update({f"out_type{i}": out_types[i] for i in range(len(out_types))})
 
+    bounds = sort_node._bodo_chunk_bounds
+    bounds_var = bounds
+    if bounds is None:
+        loc = sort_node.loc
+        bounds_var = ir.Var(ir.Scope(None, loc), mk_unique_var("$bounds_none"), loc)
+        typemap[bounds_var.name] = types.none
+        nodes.append(ir.Assign(ir.Const(None, loc), bounds_var, loc))
+
     f_block = compile_to_numba_ir(
         sort_impl,
         glbls,
         typingctx=typingctx,
         targetctx=targetctx,
-        arg_typs=tuple(typemap[v.name] for v in in_vars),
+        arg_typs=tuple(typemap[v.name] for v in in_vars) + (typemap[bounds_var.name],),
         typemap=typemap,
         calltypes=calltypes,
     ).blocks.popitem()[1]
-    replace_arg_nodes(f_block, in_vars)
+    replace_arg_nodes(f_block, in_vars + [bounds_var])
     # get return value from cast node, the last node before cast isn't output assignment
     ret_var = f_block.body[-2].value.value
     nodes += f_block.body[:-2]
@@ -575,7 +602,7 @@ def _copy_array_nodes(var, nodes, typingctx, targetctx, typemap, calltypes, dead
     return nodes[-1].target
 
 
-def get_sort_cpp_section(sort_node, out_types, parallel):
+def get_sort_cpp_section(sort_node, out_types, typemap, parallel):
     """generate function text for passing arrays to C++, calling sort, and returning
     outputs in correct order.
 
@@ -617,7 +644,7 @@ def get_sort_cpp_section(sort_node, out_types, parallel):
             if i not in sort_node.dead_var_inds:
                 in_args.append(f"arg{i}")
 
-    func_text = f"def f({', '.join(in_args)}):\n"
+    func_text = f"def f({', '.join(in_args)}, bounds_in):\n"
 
     if sort_node.is_table_format:
         comma = "," if n_in_vars - 1 == 1 else ""
@@ -649,7 +676,13 @@ def get_sort_cpp_section(sort_node, out_types, parallel):
     )
     # single-element numpy array to return number of rows from C++
     func_text += f"  total_rows_np = np.array([0], dtype=np.int64)\n"
-    func_text += f"  out_cpp_table = sort_values_table(in_cpp_table, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, total_rows_np.ctypes, {parallel})\n"
+    bounds_in = sort_node._bodo_chunk_bounds
+    bounds_table = (
+        "0"
+        if bounds_in is None or is_overload_none(typemap[bounds_in.name])
+        else "arr_info_list_to_table([array_to_info(bounds_in)])"
+    )
+    func_text += f"  out_cpp_table = sort_values_table(in_cpp_table, {key_count}, vect_ascending.ctypes, na_position.ctypes, dead_keys.ctypes, total_rows_np.ctypes, {bounds_table}, {parallel})\n"
 
     if sort_node.is_table_format:
         comma = "," if n_out_vars == 1 else ""
