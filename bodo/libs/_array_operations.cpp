@@ -235,10 +235,120 @@ table_info* sort_values_table_local(table_info* in_table, int64_t n_key_t,
     return ret_table;
 }
 
+/**
+ * @brief Compute data redistribution boundaries for parallel sort using a
+ * sample of the data
+ *
+ * @param local_sort locally sorted table
+ * @param n_key_t number of sort keys
+ * @param vect_ascending ascending/descending order for each key
+ * @param na_position NA behavior (first or last) for each key
+ * @param n_local number of local rows
+ * @param n_total number of global rows
+ * @param myrank MPI rank
+ * @param n_pes total MPI ranks
+ * @param parallel parallel flag (should be true here but passing around for
+ * code consistency)
+ * @return table_info*
+ */
+table_info* get_parallel_sort_bounds(table_info* local_sort, int64_t n_key_t,
+                                     int64_t* vect_ascending,
+                                     int64_t* na_position, int64_t n_local,
+                                     int64_t n_total, int myrank, int n_pes,
+                                     bool parallel) {
+    int mpi_root = 0;
+
+    // Sample sort with random sampling (we use a fixed seed for the random
+    // generator for deterministic results across runs).
+    // With random sampling as described by Blelloch et al. [1], each
+    // processor divides its local sorted input into s blocks of size (N/ps)
+    // (where N is the global number of rows, p the number of processors,
+    // s is the oversampling ratio) and samples a random key in each block.
+    // The samples are gathered on rank 0 and rank 0 chooses the splitters
+    // by picking evenly spaced keys from the overall sample of size ps.
+    // We choose the global of number of samples according to this theorem:
+    // "With O(p log N / epsilon^2) samples overall, sample sort with
+    // random sampling achieves (1 + epsilon) load balance with high
+    // probability." [1] Guy E. Blelloch, Charles E. Leiserson, Bruce M
+    // Maggs, C Greg Plaxton, Stephen J
+    //     Smith, and Marco Zagha. 1998. An experimental analysis of
+    //     parallel sorting algorithms. Theory of Computing Systems 31, 2
+    //     (1998), 135-167.
+    std::mt19937 gen(1234567890);
+    double epsilon = 0.1;
+    char* bodo_sort_epsilon = std::getenv("BODO_SORT_EPSILON");
+    if (bodo_sort_epsilon) {
+        epsilon = std::stod(bodo_sort_epsilon);
+    }
+    if (epsilon < 0) {
+        throw std::runtime_error("sort_values: epsilon < 0");
+    }
+
+    double n_global_sample = n_pes * log(n_total) / pow(epsilon, 2.0);
+    n_global_sample =
+        std::min(std::max(n_global_sample, double(n_pes)), double(n_total));
+    int64_t n_loc_sample = std::min(n_global_sample / n_pes, double(n_local));
+    double block_size = double(n_local) / n_loc_sample;
+    std::vector<int64_t> ListIdx(n_loc_sample);
+    double cur_lo = 0;
+    for (int64_t i = 0; i < n_loc_sample; i++) {
+        int64_t lo = round(cur_lo);
+        int64_t hi = round(cur_lo + block_size) - 1;
+        ListIdx[i] = std::uniform_int_distribution<int64_t>(lo, hi)(gen);
+        cur_lo += block_size;
+    }
+    for (int64_t i_key = 0; i_key < n_key_t; i_key++)
+        incref_array(local_sort->columns[i_key]);
+    table_info* samples = RetrieveTable(local_sort, ListIdx, n_key_t);
+
+    // Collecting all samples
+    bool all_gather = false;
+    table_info* all_samples =
+        gather_table(samples, n_key_t, all_gather, parallel);
+    delete_table(samples);
+
+    // Computing the bounds (splitters) on root
+    table_info* pre_bounds = nullptr;
+    if (myrank == mpi_root) {
+        table_info* all_samples_sort =
+            sort_values_table_local(all_samples, n_key_t, vect_ascending,
+                                    na_position, nullptr, parallel);
+        int64_t n_samples = all_samples_sort->nrows();
+        int64_t step = ceil(double(n_samples) / double(n_pes));
+        std::vector<int64_t> ListIdxBounds(n_pes - 1);
+        for (int i = 0; i < n_pes - 1; i++) {
+            size_t pos = std::min((i + 1) * step, n_samples - 1);
+            ListIdxBounds[i] = pos;
+        }
+        pre_bounds = RetrieveTable(all_samples_sort, ListIdxBounds, -1);
+        delete_table(all_samples_sort);
+    } else {
+        // all ranks need to trace the event
+        // TODO the right way would be to call sort_values_table_local with
+        // an empty table
+        tracing::Event ev_dummy("sort_values_table_local", parallel);
+    }
+    delete_table(all_samples);
+
+    // broadcasting the bounds
+    // The local_sort is used as reference for the data type of the array.
+    // This is because pre_bounds is NULL for ranks != 0
+    // The underlying dictionary is the same for local_sort and pre_bounds
+    // for the dict columns, as needed for broadcast_table.
+    table_info* bounds =
+        broadcast_table(local_sort, pre_bounds, n_key_t, parallel);
+
+    if (myrank == mpi_root) {
+        delete_table(pre_bounds);
+    }
+
+    return bounds;
+}
+
 table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
                               int64_t* vect_ascending, int64_t* na_position,
                               int64_t* dead_keys, int64_t* out_n_rows,
-                              bool parallel) {
+                              table_info* bounds, bool parallel) {
     try {
         tracing::Event ev("sort_values_table", parallel);
 
@@ -263,12 +373,12 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         table_info* local_sort = sort_values_table_local(
             in_table, n_key_t, vect_ascending, na_position,
             parallel ? nullptr : dead_keys, parallel);
-        if (!parallel) return local_sort;
 
-        // preliminary definitions.
-        tracing::Event ev_sample("sort sampling", parallel);
+        if (!parallel) {
+            return local_sort;
+        }
+
         int n_pes, myrank;
-        int mpi_root = 0;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
@@ -276,86 +386,28 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         int64_t n_total;
         MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
                       MPI_COMM_WORLD);
-        if (n_total == 0) return local_sort;
 
-        // Sample sort with random sampling (we use a fixed seed for the random
-        // generator for deterministic results across runs).
-        // With random sampling as described by Blelloch et al. [1], each
-        // processor divides its local sorted input into s blocks of size (N/ps)
-        // (where N is the global number of rows, p the number of processors,
-        // s is the oversampling ratio) and samples a random key in each block.
-        // The samples are gathered on rank 0 and rank 0 chooses the splitters
-        // by picking evenly spaced keys from the overall sample of size ps.
-        // We choose the global of number of samples according to this theorem:
-        // "With O(p log N / epsilon^2) samples overall, sample sort with
-        // random sampling achieves (1 + epsilon) load balance with high
-        // probability." [1] Guy E. Blelloch, Charles E. Leiserson, Bruce M
-        // Maggs, C Greg Plaxton, Stephen J
-        //     Smith, and Marco Zagha. 1998. An experimental analysis of
-        //     parallel sorting algorithms. Theory of Computing Systems 31, 2
-        //     (1998), 135-167.
-        std::mt19937 gen(1234567890);
-        double epsilon = 0.1;
-        char* bodo_sort_epsilon = std::getenv("BODO_SORT_EPSILON");
-        if (bodo_sort_epsilon) {
-            epsilon = std::stod(bodo_sort_epsilon);
-        }
-        if (epsilon < 0) throw std::runtime_error("sort_values: epsilon < 0");
-        double n_global_sample = n_pes * log(n_total) / pow(epsilon, 2.0);
-        n_global_sample =
-            std::min(std::max(n_global_sample, double(n_pes)), double(n_total));
-        int64_t n_loc_sample =
-            std::min(n_global_sample / n_pes, double(n_local));
-        double block_size = double(n_local) / n_loc_sample;
-        std::vector<int64_t> ListIdx(n_loc_sample);
-        double cur_lo = 0;
-        for (int64_t i = 0; i < n_loc_sample; i++) {
-            int64_t lo = round(cur_lo);
-            int64_t hi = round(cur_lo + block_size) - 1;
-            ListIdx[i] = std::uniform_int_distribution<int64_t>(lo, hi)(gen);
-            cur_lo += block_size;
-        }
-        for (int64_t i_key = 0; i_key < n_key_t; i_key++)
-            incref_array(local_sort->columns[i_key]);
-        table_info* samples = RetrieveTable(local_sort, ListIdx, n_key_t);
-
-        // Collecting all samples
-        bool all_gather = false;
-        table_info* all_samples =
-            gather_table(samples, n_key_t, all_gather, parallel);
-        delete_table(samples);
-
-        // Computing the bounds (splitters) on root
-        table_info* pre_bounds = nullptr;
-        if (myrank == mpi_root) {
-            table_info* all_samples_sort =
-                sort_values_table_local(all_samples, n_key_t, vect_ascending,
-                                        na_position, nullptr, parallel);
-            int64_t n_samples = all_samples_sort->nrows();
-            int64_t step = ceil(double(n_samples) / double(n_pes));
-            std::vector<int64_t> ListIdxBounds(n_pes - 1);
-            for (int i = 0; i < n_pes - 1; i++) {
-                size_t pos = std::min((i + 1) * step, n_samples - 1);
-                ListIdxBounds[i] = pos;
+        if (n_total == 0) {
+            if (bounds != nullptr) {
+                delete_table_decref_arrays(bounds);
             }
-            pre_bounds = RetrieveTable(all_samples_sort, ListIdxBounds, -1);
-            delete_table(all_samples_sort);
-        } else {
-            // all ranks need to trace the event
-            // TODO the right way would be to call sort_values_table_local with
-            // an empty table
-            tracing::Event ev_dummy("sort_values_table_local", parallel);
+            return local_sort;
         }
-        delete_table(all_samples);
 
-        // broadcasting the bounds
-        // The local_sort is used as reference for the data type of the array.
-        // This is because pre_bounds is NULL for ranks != 0
-        // The underlying dictionary is the same for local_sort and pre_bounds
-        // for the dict columns, as needed for broadcast_table.
-        table_info* bounds =
-            broadcast_table(local_sort, pre_bounds, n_key_t, parallel);
-        if (myrank == mpi_root) delete_table(pre_bounds);
+        tracing::Event ev_sample("sort sampling", parallel);
+
+        if (bounds == nullptr) {
+            bounds = get_parallel_sort_bounds(
+                local_sort, n_key_t, vect_ascending, na_position, n_local,
+                n_total, myrank, n_pes, parallel);
+        } else if (n_key_t != 1) {
+            // throw error if more than one key since the rest of manual bounds
+            // handling only supports one key cases
+            throw std::runtime_error(
+                "sort_values_table(): passing bounds only supported when there "
+                "is a single key.");
+        }
+
         // Now computing to which process it all goes.
         tracing::Event ev_hashes("compute_destinations", parallel);
         std::vector<uint32_t> hashes_v(n_local);
@@ -364,6 +416,9 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             size_t shift_key1 = 0, shift_key2 = 0;
             // using 'while' since a partition can be empty which needs to be
             // skipped
+            // Go to next destination rank if bound of current destination rank
+            // is less than the current key. All destination keys should be less
+            // than or equal its bound (k <= bounds[node_id])
             while (node_id < uint32_t(n_pes - 1) &&
                    KeyComparisonAsPython(n_key_t, vect_ascending,
                                          bounds->columns, shift_key2, node_id,

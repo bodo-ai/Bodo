@@ -2381,6 +2381,7 @@ def sort_values_table(
     na_position_b_t,
     dead_keys_t,
     n_rows_t,
+    bounds_t,
     parallel_t,
 ):
     """
@@ -2398,6 +2399,7 @@ def sort_values_table(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
+                context.get_value_type(bounds_t),
                 lir.IntType(1),
             ],
         )
@@ -2418,6 +2420,7 @@ def sort_values_table(
             types.voidptr,
             types.voidptr,
             types.voidptr,
+            bounds_t,
             types.boolean,
         ),
         codegen,

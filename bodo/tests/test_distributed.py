@@ -2342,6 +2342,65 @@ def test_gatherv_str(memory_leak_check):
         )
 
 
+def test_get_chunk_bounds(memory_leak_check):
+    """make sure get_chunk_bounds() works properly"""
+
+    @bodo.jit(distributed=["A"])
+    def impl(A):
+        return bodo.libs.distributed_api.get_chunk_bounds(A)
+
+    # create data chunks on different processes and check expected output
+    rank = bodo.get_rank()
+    n_pes = bodo.get_size()
+    if n_pes > 3:
+        return
+    if n_pes == 1:
+        A = np.array([4, 6, 8, 11], np.int64)
+        out = np.array([11], np.int64)
+    elif n_pes == 2:
+        if rank == 0:
+            A = np.array([3, 4, 7, 11, 16], np.int64)
+        else:
+            A = np.array([17, 19], np.int64)
+        out = np.array([16, 19], np.int64)
+    elif n_pes == 3:
+        if rank == 0:
+            A = np.array([3, 4], np.int64)
+        elif rank == 1:
+            A = np.array([3, 4, 7, 11, 16], np.int64)
+        else:
+            A = np.array([17, 19], np.int64)
+        out = np.array([4, 16, 19], np.int64)
+
+    np.testing.assert_array_equal(impl(A), out)
+
+    # test empty chunk corner cases
+    int64_min = np.iinfo(np.int64).min
+    if n_pes == 1:
+        A = np.array([], np.int64)
+        out = np.array([int64_min], np.int64)
+    elif n_pes == 2:
+        if rank == 0:
+            A = np.array([3], np.int64)
+        else:
+            A = np.array([], np.int64)
+        out = np.array([3, 3], np.int64)
+    elif n_pes == 3:
+        if rank == 0:
+            A = np.array([], np.int64)
+        elif rank == 1:
+            A = np.array([3, 4, 7, 11, 16], np.int64)
+        else:
+            A = np.array([], np.int64)
+        out = np.array([int64_min, 16, 16], np.int64)
+
+    np.testing.assert_array_equal(impl(A), out)
+
+    # error checking unsupported array type
+    with pytest.raises(BodoError, match=(r"only supports Numpy int input")):
+        impl(np.array([1.1]))
+
+
 @pytest.mark.slow
 @pytest.mark.parametrize(
     "val1, val2",

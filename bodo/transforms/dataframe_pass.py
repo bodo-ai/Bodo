@@ -877,7 +877,14 @@ class DataFramePass:
         """Implements support for df.sort_values().
         Translates sort_values_dummy() to a Sort IR node.
         """
-        df_var, by_var, ascending_var, inplace_var, na_position_var = rhs.args
+        (
+            df_var,
+            by_var,
+            ascending_var,
+            inplace_var,
+            na_position_var,
+            _bodo_chunk_bounds,
+        ) = rhs.args
         df_typ = self.typemap[df_var.name]
         is_table_format = self.typemap[lhs.name].is_table_format
         inplace = guard(find_const, self.func_ir, inplace_var)
@@ -972,6 +979,7 @@ class DataFramePass:
                 lhs.loc,
                 ascending_list,
                 na_position,
+                _bodo_chunk_bounds,
                 is_table_format=is_table_format,
                 num_table_arrays=len(df_typ.columns) if is_table_format else 0,
             )

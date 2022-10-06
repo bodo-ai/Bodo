@@ -2800,6 +2800,57 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
     return getitem_impl
 
 
+def get_chunk_bounds(A):  # pragma: no cover
+    pass
+
+
+@overload(get_chunk_bounds, jit_options={"cache": True})
+def get_chunk_bounds_overload(A):
+    """get chunk boundary value (last element) of array A for each rank and make it
+    available on all ranks.
+    For example, given A data on rank 0 [1, 4, 6], and on rank 1 [7, 8, 11],
+    output will be [6, 11] on all ranks.
+
+    Designed for MERGE INTO support currently. Only supports Numpy int arrays, and
+    handles empty chunk corner cases to support boundaries of sort in ascending order.
+    See https://bodo.atlassian.net/wiki/spaces/B/pages/1157529601/MERGE+INTO+Design
+
+    Args:
+        A (Bodo Numpy int array): input array chunk on this rank
+
+    Returns:
+        Bodo Numpy int array: chunk boundaries of all ranks
+    """
+    if not (isinstance(A, types.Array) and isinstance(A.dtype, types.Integer)):
+        raise BodoError("get_chunk_bounds() only supports Numpy int input currently.")
+
+    def impl(A):  # pragma: no cover
+        n_pes = get_size()
+        all_bounds = np.empty(n_pes, A.dtype)
+        all_empty = np.empty(n_pes, np.int8)
+
+        # using int64 min value in case the first chunk is empty. This will ensure
+        # the first rank will be assigned an empty output chunk in sort.
+        val = numba.cpython.builtins.get_type_min_value(numba.core.types.int64)
+        empty = 1
+        if len(A) != 0:
+            val = A[-1]
+            empty = 0
+
+        allgather(all_bounds, val)
+        allgather(all_empty, empty)
+
+        # for empty chunks, use the boundary from previous rank to ensure empty output
+        # chunk in sort (ascending order)
+        for i, empty in enumerate(all_empty):
+            if empty and i != 0:
+                all_bounds[i] = all_bounds[i - 1]
+
+        return all_bounds
+
+    return impl
+
+
 # send_data, recv_data, send_counts, recv_counts, send_disp, recv_disp, typ_enum
 c_alltoallv = types.ExternalFunction(
     "c_alltoallv",

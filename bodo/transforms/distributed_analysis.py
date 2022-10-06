@@ -3099,6 +3099,11 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, args[0].name, array_dists)
             return
 
+        # output is replicated but input can stay distributed
+        if func_name == "get_chunk_bounds":
+            self._set_var_dist(lhs, array_dists, Distribution.REP)
+            return
+
         # set REP if not found
         self._analyze_call_set_REP(
             lhs, args, array_dists, "bodo.libs.distributed_api." + func_name, loc

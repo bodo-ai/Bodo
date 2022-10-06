@@ -4853,6 +4853,7 @@ def overload_dataframe_sort_values(
     na_position="last",
     ignore_index=False,
     key=None,
+    _bodo_chunk_bounds=None,
     _bodo_transformed=False,
 ):
     check_runtime_cols_unsupported(df, "DataFrame.sort_values()")
@@ -4869,7 +4870,9 @@ def overload_dataframe_sort_values(
     # df type can change if inplace is set (e.g. RangeIndex to Int64Index)
     handle_inplace_df_type_change(inplace, _bodo_transformed, "sort_values")
 
-    validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position)
+    validate_sort_values_spec(
+        df, by, axis, ascending, inplace, kind, na_position, _bodo_chunk_bounds
+    )
 
     def _impl(
         df,
@@ -4881,17 +4884,20 @@ def overload_dataframe_sort_values(
         na_position="last",
         ignore_index=False,
         key=None,
+        _bodo_chunk_bounds=None,
         _bodo_transformed=False,
     ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, by, ascending, inplace, na_position
+            df, by, ascending, inplace, na_position, _bodo_chunk_bounds
         )
 
     return _impl
 
 
-def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_position):
+def validate_sort_values_spec(
+    df, by, axis, ascending, inplace, kind, na_position, _bodo_chunk_bounds
+):
     """validates sort_values spec
     Note that some checks are due to unsupported functionalities
     """
@@ -4918,6 +4924,12 @@ def validate_sort_values_spec(df, by, axis, ascending, inplace, kind, na_positio
     if len(key_names.difference(valid_keys_set)) > 0:
         invalid_keys = list(set(get_overload_const_list(by)).difference(valid_keys_set))
         raise_bodo_error(f"sort_values(): invalid keys {invalid_keys} for by.")
+
+    # make sure there is only one key when bounds are passed (as currently supported)
+    if not is_overload_none(_bodo_chunk_bounds) and len(key_names) != 1:
+        raise_bodo_error(
+            f"sort_values(): _bodo_chunk_bounds only supported when there is a single key."
+        )
 
     # make sure axis has default value 0
     if not is_overload_zero(axis):
@@ -5044,7 +5056,7 @@ def overload_dataframe_sort_index(
     ):  # pragma: no cover
 
         return bodo.hiframes.pd_dataframe_ext.sort_values_dummy(
-            df, "$_bodo_index_", ascending, inplace, na_position
+            df, "$_bodo_index_", ascending, inplace, na_position, None
         )
 
     return _impl
