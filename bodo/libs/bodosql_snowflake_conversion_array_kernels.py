@@ -174,6 +174,13 @@ def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
         "optionalConversionFormatString",
     )
 
+    is_out_arr = bodo.utils.utils.is_array_typ(
+        conversionVal, True
+    ) or bodo.utils.utils.is_array_typ(optionalConversionFormatString, True)
+
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = "unbox_if_timestamp" if is_out_arr else ""
+
     # If the format string is specified, then arg0 must be string
     if not is_overload_none(optionalConversionFormatString):
         verify_string_arg(
@@ -184,7 +191,7 @@ def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
         scalar_text += "if not was_successful:\n"
         scalar_text += f"   {errorString}\n"
         scalar_text += "else:\n"
-        scalar_text += "   res[i] = unbox_if_timestamp(tmp_val.floor(freq='D'))\n"
+        scalar_text += f"   res[i] = {unbox_str}(tmp_val.floor(freq='D'))\n"
 
     # NOTE: gen_vectorized will automatically map this function over the values dictionary
     # of a dict encoded string array instead of decoding it whenever possible
@@ -199,7 +206,7 @@ def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
         # Conversion needs to be done incase arg0 is unichr array
         scalar_text = "arg0 = str(arg0)\n"
         scalar_text += "if (arg0.isnumeric() or (len(arg0) > 1 and arg0[0] == '-' and arg0[1:].isnumeric())):\n"
-        scalar_text += '   res[i] = unbox_if_timestamp(int_to_datetime(np.int64(arg0)).floor(freq="D"))\n'
+        scalar_text += f'   res[i] = {unbox_str}(int_to_datetime(np.int64(arg0)).floor(freq="D"))\n'
 
         scalar_text += "else:\n"
         scalar_text += (
@@ -208,20 +215,16 @@ def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
         scalar_text += "   if not was_successful:\n"
         scalar_text += f"      {errorString}\n"
         scalar_text += "   else:\n"
-        scalar_text += "      res[i] = unbox_if_timestamp(tmp_val.floor(freq='D'))\n"
+        scalar_text += f"      res[i] = {unbox_str}(tmp_val.floor(freq='D'))\n"
 
     elif isinstance(conversionVal, types.Integer) or (
         bodo.utils.utils.is_array_typ(conversionVal, True)
         and isinstance(conversionVal.dtype, types.Integer)
     ):
-        scalar_text = (
-            'res[i] = unbox_if_timestamp(int_to_datetime(arg0).floor(freq="D"))\n'
-        )
+        scalar_text = f'res[i] = {unbox_str}(int_to_datetime(arg0).floor(freq="D"))\n'
 
     elif is_valid_datetime_or_date_arg(conversionVal):
-        scalar_text = (
-            "res[i] = unbox_if_timestamp(pd.Timestamp(arg0).floor(freq='D'))\n"
-        )
+        scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).floor(freq='D'))\n"
     else:
         raise raise_bodo_error(
             f"Internal error: unsupported type passed to to_date_util for argument conversionVal: {conversionVal}"
@@ -239,7 +242,6 @@ def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
         "convert_sql_date_format_str_to_py_format": convert_sql_date_format_str_to_py_format,
         "unbox_if_timestamp": bodo.utils.conversion.unbox_if_timestamp,
     }
-
     return gen_vectorized(
         arg_names,
         arg_types,
