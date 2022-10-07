@@ -164,14 +164,7 @@ def test_try(request):
 
 def scalar_to_date_equiv_fn(val, formatstr=None):
     """wrapper fn that converts timestamp to np dt64 if needed"""
-
-    to_date_sol = scalar_to_date_equiv_fn_inner(val, formatstr=None)
-
-    # Array kernal always returns numpy dt64 (or None for null)
-    if isinstance(to_date_sol, pd.Timestamp):
-        to_date_sol = to_date_sol.to_datetime64()
-
-    return to_date_sol
+    return scalar_to_date_equiv_fn_inner(val, formatstr=None)
 
 
 def scalar_to_date_equiv_fn_inner(val, formatstr=None):
@@ -207,7 +200,7 @@ def scalar_to_date_equiv_fn_inner(val, formatstr=None):
             return None
 
 
-def test_to_date_valid_ints(valid_to_date_ints, test_try):
+def test_to_date_valid_ints(valid_to_date_ints, test_try, memory_leak_check):
     def to_date_impl(val):
         return bodo.libs.bodosql_array_kernels.to_date(val, None)
 
@@ -244,7 +237,9 @@ def test_to_date_valid_ints(valid_to_date_ints, test_try):
         pytest.param(False, id="don't_use_dict_enc"),
     ],
 )
-def test_to_date_valid_strings(valid_to_date_strings, test_try, use_dict_enc):
+def test_to_date_valid_strings(
+    valid_to_date_strings, test_try, use_dict_enc, memory_leak_check
+):
 
     if not use_dict_enc:
         return
@@ -280,7 +275,7 @@ def test_to_date_valid_strings(valid_to_date_strings, test_try, use_dict_enc):
         )
 
 
-def test_to_date_valid_digit_strings(valid_to_date_ints, test_try):
+def test_to_date_valid_digit_strings(valid_to_date_ints, test_try, memory_leak_check):
 
     if isinstance(valid_to_date_ints[0], int):
         valid_digit_strs = (str(valid_to_date_ints[0]),)
@@ -319,7 +314,7 @@ def test_to_date_valid_digit_strings(valid_to_date_ints, test_try):
         )
 
 
-def test_to_date_valid_datetime_types(to_date_td_vals, test_try):
+def test_to_date_valid_datetime_types(to_date_td_vals, test_try, memory_leak_check):
     def to_date_impl(val):
         return bodo.libs.bodosql_array_kernels.to_date(val, None)
 
@@ -353,7 +348,7 @@ def test_to_date_valid_datetime_types(to_date_td_vals, test_try):
     "TODO: support format string, https://bodo.atlassian.net/browse/BE-3614"
 )
 def test_to_date_valid_strings_with_format(
-    valid_to_date_strings_with_format_str, test_try
+    valid_to_date_strings_with_format_str, test_try, memory_leak_check
 ):
     def to_date_impl(val, format):
         return bodo.libs.bodosql_array_kernels.to_date(val, None)
@@ -416,7 +411,7 @@ def test_invalid_to_date_args(invalid_to_date_args, test_try):
 
 
 @pytest.mark.slow
-def test_to_dates_option():
+def test_to_dates_option(memory_leak_check):
     def impl(A, B, flag0, flag1):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -429,7 +424,7 @@ def test_to_dates_option():
     # it's supported. (https://bodo.atlassian.net/browse/BE-3614)
     for flag0 in [True, False]:
         for flag1 in [False]:
-            fn_output = pd.Timestamp("2022-02-18").to_datetime64() if flag0 else None
+            fn_output = pd.Timestamp("2022-02-18") if flag0 else None
 
             answer = (fn_output, fn_output)
             check_func(impl, ("2022-02-18", "TODO", flag0, flag1), py_output=answer)

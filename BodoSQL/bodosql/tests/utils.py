@@ -1034,8 +1034,31 @@ def convert_nullable_object(df):
     Object Datatype replaces pd.NA with None. This is used so Spark
     can interpret the results.
     """
-    if any([isinstance(x, pd.core.arrays.integer._IntegerDtype) for x in df.dtypes]):
-        return df.astype(object).where(pd.notnull(df), None)
+    if any(
+        [
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.boolean.BooleanDtype,
+                    pd.StringDtype,
+                ),
+            )
+            for x in df.dtypes
+        ]
+    ):
+        df = df.copy()
+        for i, x in enumerate(df.dtypes):
+            if isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.core.arrays.boolean.BooleanDtype,
+                    pd.StringDtype,
+                ),
+            ):
+                S = df.iloc[:, i]
+                df[df.columns[i]] = S.astype(object).where(pd.notnull(S), None)
     return df
 
 

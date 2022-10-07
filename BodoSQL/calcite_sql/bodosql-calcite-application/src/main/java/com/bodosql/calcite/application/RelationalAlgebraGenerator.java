@@ -516,7 +516,7 @@ public class RelationalAlgebraGenerator {
   }
 
   public String getRelationalAlgebraString(String sql, boolean optimizePlan)
-          throws SqlSyntaxException, SqlValidationException, RelConversionException {
+      throws SqlSyntaxException, SqlValidationException, RelConversionException {
     String response = "";
 
     try {

@@ -3,7 +3,6 @@
 Test correctness of SQL dateime functions with BodoSQL
 """
 
-import bodosql
 import numpy as np
 import pandas as pd
 import pytest
@@ -84,14 +83,21 @@ def dt_fn_dataframe():
         "1971-02-02",
         "2021-03-03",
         "2021-05-31",
+        None,
         "2020-12-01T13:56:03.172",
         "2007-01-01T03:30",
+        None,
         "2001-12-01T12:12:02.21",
         "2100-10-01T13:00:33.1",
     ]
-    timestamps = pd.Series([np.datetime64(x) for x in dt_strings])
+    timestamps = pd.Series(
+        [np.datetime64(x) if x is not None else x for x in dt_strings],
+        dtype="datetime64[ns]",
+    )
     normalized_ts = timestamps.dt.normalize()
-    invalid_dt_strings = ["__" + str(x) + "__" for x in dt_strings]
+    invalid_dt_strings = [
+        "__" + str(x) + "__" if x is not None else x for x in dt_strings
+    ]
     df = pd.DataFrame(
         {
             "timestamps": timestamps,
@@ -102,14 +108,20 @@ def dt_fn_dataframe():
                 np.timedelta64(8, "W"),
                 np.timedelta64(6, "h"),
                 np.timedelta64(5, "m"),
+                None,
                 np.timedelta64(4, "s"),
                 np.timedelta64(3, "ms"),
                 np.timedelta64(2000000, "us"),
+                None,
             ],
             "datetime_strings": dt_strings,
             "invalid_dt_strings": invalid_dt_strings,
-            "positive_integers": [1, 2, 31, 400, 123, 13, 7, 80],
-            "small_positive_integers": [1, 2, 3, 4, 5, 6, 7, 8],
+            "positive_integers": pd.Series(
+                [1, 2, 31, 400, None, None, 123, 13, 7, 80], dtype=pd.Int64Dtype()
+            ),
+            "small_positive_integers": pd.Series(
+                [1, 2, 3, None, 4, 5, 6, None, 7, 8], dtype=pd.Int64Dtype()
+            ),
             "dt_format_strings": [
                 "%Y",
                 "%a, %b, %c",
@@ -117,8 +129,40 @@ def dt_fn_dataframe():
                 "%Y, %M, %D",
                 "%y",
                 "%T",
+                None,
                 "%r",
                 "%j",
+                None,
+            ],
+            "valid_year_integers": pd.Series(
+                [
+                    2000,
+                    None,
+                    2100,
+                    1990,
+                    2020,
+                    None,
+                    2021,
+                    1998,
+                    2200,
+                    1970,
+                ],
+                dtype=pd.Int64Dtype(),
+            ),
+            "mixed_integers": pd.Series(
+                [None, 0, 1, -2, 3, -4, 5, -6, 7, None], dtype=pd.Int64Dtype()
+            ),
+            "digit_strings": [
+                None,
+                "-13",
+                "0",
+                "-2",
+                "23",
+                "5",
+                "5",
+                "-66",
+                "1234",
+                None,
             ],
             "days_of_week": [
                 "mo",
@@ -127,8 +171,10 @@ def dt_fn_dataframe():
                 "th",
                 "fr",
                 "sa",
+                None,
                 "su",
                 "mo",
+                None,
             ],
             "digit_strings": [
                 None,
@@ -137,11 +183,29 @@ def dt_fn_dataframe():
                 "-2",
                 "5",
                 "-66",
+                "42",
+                None,
                 "1234",
                 None,
             ],
-            "valid_year_integers": [2000, 2100, 1999, 2020, 2021, 1998, 2200, 2012],
-            "mixed_integers": [0, 1, -2, 3, -4, 5, -6, 7],
+            "valid_year_integers": pd.Series(
+                [
+                    2000,
+                    2100,
+                    None,
+                    1999,
+                    2020,
+                    None,
+                    2021,
+                    1998,
+                    2200,
+                    2012,
+                ],
+                dtype=pd.Int64Dtype(),
+            ),
+            "mixed_integers": pd.Series(
+                [None, 0, 1, -2, 3, -4, 5, -6, 7, None], dtype=pd.Int64Dtype()
+            ),
         }
     )
     return {"table1": df}
@@ -198,15 +262,9 @@ def dt_fn_dataframe():
     + [
         pytest.param(
             ("CURDATE", [], ("TIMESTAMP 2020-04-25", "TIMESTAMP 2020-04-25")),
-            marks=pytest.mark.skip(
-                "Requires engine fix for overflow issue with pd.Timestamp.floor, see [BE-1022]"
-            ),
         ),
         pytest.param(
             ("CURRENT_DATE", [], ("TIMESTAMP 2020-04-25", "TIMESTAMP 2020-04-25")),
-            marks=pytest.mark.skip(
-                "Requires engine fix for overflow issue with pd.Timestamp.floor, see [BE-1022]"
-            ),
         ),
     ]
     + [
@@ -546,6 +604,9 @@ def test_monthname_scalars(basic_df, spark_info, memory_leak_check):
 def test_make_date_cols(spark_info, dt_fn_dataframe, memory_leak_check):
     """tests makedate on column values"""
 
+    # TODO: fix null issues with make_date: https://bodo.atlassian.net/browse/BE-3640
+    ctx_dict = {"table1": dt_fn_dataframe["table1"].fillna(method="bfill")}
+
     # Spark's make_date, takes three arguments: Y, M, D, where MYSQL's makedate is Y, D
     query = "SELECT makedate(valid_year_integers, positive_integers) from table1"
     spark_query = "SELECT DATE_ADD(MAKE_DATE(valid_year_integers, 1, 1), positive_integers-1) from table1"
@@ -558,7 +619,7 @@ def test_make_date_cols(spark_info, dt_fn_dataframe, memory_leak_check):
 
     check_query(
         query,
-        dt_fn_dataframe,
+        ctx_dict,
         spark_info,
         check_names=False,
         check_dtype=False,
@@ -1051,7 +1112,6 @@ def test_to_date_scalar(
     )
 
 
-
 @pytest.mark.parametrize(
     "literal_str",
     [
@@ -1102,7 +1162,7 @@ def test_yearofweekiso_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
         {
             "A": dt_fn_dataframe["table1"]["timestamps"]
             .dt.isocalendar()
-            .year.apply(lambda x: 1 if x > 2015 else 0)
+            .year.apply(lambda x: 1 if pd.notna(x) and x > 2015 else 0)
         }
     )
     check_query(
