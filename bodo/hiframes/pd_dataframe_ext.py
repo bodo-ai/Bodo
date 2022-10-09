@@ -4062,6 +4062,7 @@ def to_sql_exception_guard(
     _is_parallel=False,
 ):  # pragma: no cover
     """Call of to_sql and guard the exception and return it as string if error happens"""
+    ev = tracing.Event("to_sql_exception_guard", is_parallel=_is_parallel)
     err_msg = "all_ok"
     # Find the db_type to determine if we are using Snowflake
     db_type, con_paswd = bodo.ir.sql_ext.parse_dbtype(con)
@@ -4124,6 +4125,7 @@ def to_sql_exception_guard(
             dtype = dtyp
 
         try:
+            ev_df_to_sql = tracing.Event("df_to_sql", is_parallel=_is_parallel)
             df.to_sql(
                 name,
                 con,
@@ -4135,6 +4137,7 @@ def to_sql_exception_guard(
                 dtype,
                 method,
             )
+            ev_df_to_sql.finalize()
         except Exception as e:
             err_msg = e.args[0]
             if db_type == "oracle" and "ORA-12899" in err_msg:
@@ -4148,6 +4151,7 @@ def to_sql_exception_guard(
 
     finally:
         df.columns = df_columns_original
+        ev.finalize()
 
 
 @numba.njit
@@ -4165,7 +4169,11 @@ def to_sql_exception_guard_encaps(
     _is_table_create=False,
     _is_parallel=False,
 ):  # pragma: no cover
+    ev = tracing.Event("to_sql_exception_guard_encaps", is_parallel=_is_parallel)
     with numba.objmode(out="unicode_type"):
+        ev_objmode = tracing.Event(
+            "to_sql_exception_guard_encaps:objmode", is_parallel=_is_parallel
+        )
         out = to_sql_exception_guard(
             df,
             name,
@@ -4180,6 +4188,8 @@ def to_sql_exception_guard_encaps(
             _is_table_create,
             _is_parallel,
         )
+        ev_objmode.finalize()
+    ev.finalize()
     return out
 
 
@@ -4326,14 +4336,28 @@ def to_sql_overload(
         "            parquet_path='unicode_type',\n"
         "            upload_using_snowflake_put='boolean',\n"
         "            old_creds='DictType(unicode_type, unicode_type)',\n"
+        "            azure_stage_direct_upload='boolean',\n"
+        "            old_core_site='unicode_type',\n"
+        "            old_sas_token='unicode_type',\n"
         "        ):\n"
         "            (\n"
-        "                cursor, tmp_folder, stage_name, parquet_path, upload_using_snowflake_put, old_creds\n"
+        "                cursor, tmp_folder, stage_name, parquet_path, upload_using_snowflake_put, old_creds, azure_stage_direct_upload, old_core_site, old_sas_token,\n"
         "            ) = bodo.io.snowflake.connect_and_get_upload_info(con)\n"
     )
 
     # Barrier ensures that internal stage exists before we upload files to it
     func_text += "        bodo.barrier()\n"
+
+    # Force reset the existing hadoop filesystem instance. This is very important
+    # in case there are multiple Snowflake writes (to the same Snowflake account)
+    # in the same process since Snowflake will usually create the stage in the
+    # same Azure storage account (but different containers). This means that we
+    # need to use the new SAS token. To do this, we need to force Hadoop to read
+    # the SAS Token again using the BodoSASTokenProvider (which will read it from
+    # the file again, which should now have the latest token).
+    # Note that this is a NOP if the filesystem hasn't been initialized yet.
+    func_text += "        if azure_stage_direct_upload:\n"
+    func_text += "            bodo.libs.distributed_api.disconnect_hdfs_njit()\n"
 
     # Estimate chunk size by repeating internal implementation of `df.memory_usage()`.
     # Calling `df.memory_usage()` provides much poorer performance as the call
@@ -4472,9 +4496,20 @@ def to_sql_overload(
         "        df_columns = df.columns\n"
         "        with bodo.objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
-        "                cursor, stage_name, location, df_columns, if_exists, old_creds, tmp_folder,\n"
+        "                cursor, stage_name, location, df_columns,\n"
+        "                if_exists, old_creds, tmp_folder,\n"
+        "                azure_stage_direct_upload, old_core_site,\n"
+        "                old_sas_token,\n"
         "            )\n"
     )
+
+    # Force reset the existing hadoop filesystem instance to avoid conflicts
+    # with any future ADLS operations in this same process. See the comment
+    # above for more information.
+    # Note that this is idempotent, so it can be called safely again during
+    # atexit without any side effects (will be a NOP).
+    func_text += "        if azure_stage_direct_upload:\n"
+    func_text += "            bodo.libs.distributed_api.disconnect_hdfs_njit()\n"
     func_text += "        ev.finalize(sync=False)\n"
 
     # -------------------------- Default to_sql Impl --------------------------

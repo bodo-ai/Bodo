@@ -4,6 +4,8 @@ import shutil
 from contextlib import contextmanager
 from pathlib import Path
 
+import pandas as pd
+
 import bodo
 
 cwd = Path(__file__).resolve().parent
@@ -114,6 +116,50 @@ def ensure_clean_mysql_psql_table(conn, table_name_prefix="test_small_table"):
                 engine = create_engine(conn)
                 connection = engine.connect()
                 connection.execute(f"drop table if exists `{table_name}`")
+            except Exception as e:
+                drop_err = e
+        drop_err = comm.bcast(drop_err)
+        if isinstance(drop_err, Exception):
+            raise drop_err
+
+
+@contextmanager
+def ensure_clean_snowflake_table(conn, table_name_prefix="test_table"):
+    """
+    Context Manager that creates a unique table name,
+    and then drops the table with that name (if one exists)
+    after the test is done.
+
+    Args:
+        conn (str): connection string
+        table_name_prefix (str; optional): Prefix for the
+            table name to generate. Default: "test_small_table"
+    """
+    import uuid
+
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    try:
+        table_name = None
+        if bodo.get_rank() == 0:
+            # Add a uuid to avoid potential conflict as this may be running in
+            # several different CI sessions at once. This may be the source of
+            # sporadic failures (although this is uncertain).
+            # We do `.hex` since we don't want `-`s in the name.
+            # `.upper()` to avoid case sensitivity issues.
+            table_name = f"{table_name_prefix}_{uuid.uuid4().hex}".upper()
+        table_name = comm.bcast(table_name)
+        yield table_name
+    finally:
+        # Drop the temporary table (if one was created) to avoid accumulating
+        # too many tables in Snowflake
+        bodo.barrier()
+        drop_err = None
+        if bodo.get_rank() == 0:
+            try:
+                pd.read_sql(f"drop table if exists {table_name}", conn)
             except Exception as e:
                 drop_err = e
         drop_err = comm.bcast(drop_err)

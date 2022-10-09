@@ -30,8 +30,6 @@ phases:
   build:
     commands:
       - echo Entered the build phase...
-        #TODO: split install_iceberg_connector. Currently we build the iceberg connector twice, since
-        # the install file builds it.
       - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/install_iceberg_connector.sh
         #BodoSQL version of this also builds Bodo and icerberg
       - ./buildscripts/bodosql/aws/CI_if_changes.sh ./buildscripts/bodosql/build.sh

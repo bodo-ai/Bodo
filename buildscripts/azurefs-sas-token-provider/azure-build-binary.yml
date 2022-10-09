@@ -1,0 +1,43 @@
+# Copied from Iceberg Connector
+parameters:
+    name: ''
+    vmImage: ''
+    pythonVersion: ''
+
+jobs:
+- job: ${{ parameters.name }}
+  timeoutInMinutes: 240
+  pool:
+    vmImage: ${{ parameters.vmImage }}
+
+  steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: ${{ parameters.pythonVersion }}
+    displayName: 'Use Python ${{ parameters.pythonVersion }}'
+
+  - script: |
+      set -eo pipefail
+      buildscripts/azurefs-sas-token-provider/install.sh
+    env:
+      PYTHON_VERSION: ${{ parameters.pythonVersion }}
+    displayName: 'Setup Conda Installation + Dependencies'
+
+  - task: DownloadSecureFile@1
+    name: secret_file
+    displayName: 'Download Secrets File'
+    inputs:
+      secureFile: 'publish_binary_secrets'
+
+  - script: |
+      set -eo pipefail
+      sudo chmod a+r $(secret_file.secureFilePath)
+      sudo cp $(secret_file.secureFilePath) $HOME/secret_file
+
+      artifactory_channel="bodo.ai"
+      echo "artifactory_channel: $artifactory_channel"
+      buildscripts/azurefs-sas-token-provider/publish_binary.sh $artifactory_channel
+    env:
+      BODO_CHANNEL_NAME: 'bodo.ai'
+      TARGET_NAME: ${{ parameters.name }}
+    displayName: 'Conda Build and Publish Bodo-AzureFS-SAS-Token-Provider Binary to Artifactory'

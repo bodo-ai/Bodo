@@ -24,9 +24,14 @@ from bodo.tests.utils import (
     get_start_end,
     oracle_user_pass_and_hostname,
     reduce_sum,
+    snowflake_cred_env_vars_present,
     sql_user_pass_and_hostname,
 )
-from bodo.utils.testing import ensure_clean_mysql_psql_table
+from bodo.utils.testing import (
+    ensure_clean_mysql_psql_table,
+    ensure_clean_snowflake_table,
+)
+from bodo.utils.typing import BodoWarning
 
 
 @pytest.mark.parametrize(
@@ -518,31 +523,39 @@ def test_to_sql_invalid_password(memory_leak_check):
         impl(df)
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 @pytest.mark.parametrize("df_size", [17000 * 3, 2])
 @pytest.mark.parametrize("sf_write_overlap", [True, False])
 @pytest.mark.parametrize("sf_write_use_put", [True, False])
+@pytest.mark.parametrize("snowflake_user", [1, pytest.param(3, marks=pytest.mark.slow)])
 def test_to_sql_snowflake(
-    df_size, sf_write_overlap, sf_write_use_put, memory_leak_check
+    df_size, sf_write_overlap, sf_write_use_put, snowflake_user, memory_leak_check
 ):
     """
     Tests that df.to_sql works as expected. Since Snowflake has a limit of ~16k
     per insert, we insert 17k rows per rank to emulate a "large" insert.
     """
+
+    # Skip test if env vars with snowflake creds required for this test are not set.
+    if not snowflake_cred_env_vars_present(snowflake_user):
+        pytest.skip(reason="Required env vars with Snowflake credentials not set")
+
+    if (
+        ("AGENT_NAME" in os.environ)
+        and sf_write_overlap
+        and sf_write_use_put
+        and (snowflake_user == 3)
+    ):
+        pytest.skip(
+            reason="[BE-3758] This test fails on Azure pipelines for a yet to be determined reason."
+        )
+
     import platform
 
     import bodo
 
-    # This test runs on both Mac and Linux, so give each table a different
-    # name for the highly unlikely but possible case the tests run concurrently.
-    # We use uppercase table names as Snowflake by default quotes identifiers.
-    if platform.system() == "Darwin":
-        name = "TOSQLLARGEMAC"
-    else:
-        name = "TOSQLLARGELINUX"
     db = "TEST_DB"
     schema = "PUBLIC"
-    conn = get_snowflake_connection_string(db, schema)
+    conn = get_snowflake_connection_string(db, schema, user=snowflake_user)
 
     # Specify Snowflake write hyperparameters
     import bodo.io.snowflake
@@ -577,30 +590,55 @@ def test_to_sql_snowflake(
         df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
         bodo.barrier()
 
-    test_write(df, name, conn, schema)
+    try:
+        with ensure_clean_snowflake_table(conn) as name:
+            # If using a Azure Snowflake account, the stage will be ADLS backed, so
+            # when writing to it directly, we need a proper ADLS/Haddop setup
+            # and the bodo_azurefs_sas_token_provider library, both of which are only
+            # done for Linux. So we verify that it shows user the appropriate warning
+            # about falling back to the PUT method.
+            if (
+                snowflake_user == 3
+                and (not sf_write_use_put)
+                and (platform.system() != "Linux")
+            ):
+                if bodo.get_rank() == 0:
+                    # Warning is only raised on rank 0
+                    with pytest.warns(
+                        BodoWarning,
+                        match="Falling back to PUT command for upload for now.",
+                    ):
+                        test_write(df, name, conn, schema)
+                else:
+                    test_write(df, name, conn, schema)
+            else:
+                test_write(df, name, conn, schema)
 
-    passed = 1
-    if bodo.get_rank() == 0:
-        try:
-            output_df = pd.read_sql(f"select * from {name}", conn)
-            # Row order isn't defined, so sort the data.
-            output_cols = output_df.columns.to_list()
-            output_df = output_df.sort_values(output_cols).reset_index(drop=True)
-            py_cols = py_output.columns.to_list()
-            py_output = py_output.sort_values(py_cols).reset_index(drop=True)
-            pd.testing.assert_frame_equal(
-                output_df, py_output, check_dtype=False, check_column_type=False
-            )
-        except Exception as e:
-            print("".join(traceback.format_exception(None, e, e.__traceback__)))
-            passed = 0
+            bodo.barrier()
+            passed = 1
+            if bodo.get_rank() == 0:
+                try:
+                    output_df = pd.read_sql(f"select * from {name}", conn)
+                    # Row order isn't defined, so sort the data.
+                    output_cols = output_df.columns.to_list()
+                    output_df = output_df.sort_values(output_cols).reset_index(
+                        drop=True
+                    )
+                    py_cols = py_output.columns.to_list()
+                    py_output = py_output.sort_values(py_cols).reset_index(drop=True)
+                    pd.testing.assert_frame_equal(
+                        output_df, py_output, check_dtype=False, check_column_type=False
+                    )
+                except Exception as e:
+                    print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                    passed = 0
 
-    bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = old_sf_write_overlap
-    bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_sf_write_use_put
-
-    n_passed = reduce_sum(passed)
-    assert n_passed == bodo.get_size()
-    bodo.barrier()
+            n_passed = reduce_sum(passed)
+            assert n_passed == bodo.get_size()
+            bodo.barrier()
+    finally:
+        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = old_sf_write_overlap
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_sf_write_use_put
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")

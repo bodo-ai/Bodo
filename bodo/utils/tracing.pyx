@@ -169,7 +169,9 @@ cdef generic_aggregate_func(object traces_all):
                 # attributes called g_xxx are global and don't need aggregation
                 # and we don't aggregate string or list values
                 continue
-            values = np.array([t["args"][arg] for t in traces_all])
+            # We use .get and default to 0 since it's possible that some ranks don't have
+            # some attributes.
+            values = np.array([t["args"].get(arg, 0) for t in traces_all])
             try:
                 aggregate_helper(values, arg, result)
                 del result["args"][arg]

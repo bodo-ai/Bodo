@@ -2075,15 +2075,44 @@ def get_snowflake_connection_string(db, schema, user=1):
     if user == 1:
         username = os.environ["SF_USER"]
         password = os.environ["SF_PASSWORD"]
+        account = "bodopartner.us-east-1"
     elif user == 2:
         username = os.environ["SF_USER2"]
         password = os.environ["SF_PASSWORD2"]
+        account = "bodopartner.us-east-1"
+    elif user == 3:
+        username = os.environ["SF_AZURE_USER"]
+        password = os.environ["SF_AZURE_PASSWORD"]
+        account = "kl02615.east-us-2.azure"
     else:
         raise ValueError("Invalid user")
-    account = "bodopartner.us-east-1"
+
     warehouse = "DEMO_WH"
     conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
     return conn
+
+
+def snowflake_cred_env_vars_present(user=1) -> bool:
+    """
+    Simple function to check if environment variables for the
+    snowflake credentials are set or not. Goes along with
+    get_snowflake_connection_string.
+
+    Args:
+        user (int, optional): Same user definition as get_snowflake_connection_string.
+            Defaults to 1.
+
+    Returns:
+        bool: Whether env vars are set or not
+    """
+    if user == 1:
+        return ("SF_USER" in os.environ) and ("SF_PASSWORD" in os.environ)
+    elif user == 2:
+        return ("SF_USER2" in os.environ) and ("SF_PASSWORD2" in os.environ)
+    elif user == 3:
+        return ("SF_AZURE_USER" in os.environ) and ("SF_AZURE_PASSWORD" in os.environ)
+    else:
+        raise ValueError("Invalid user")
 
 
 @contextmanager

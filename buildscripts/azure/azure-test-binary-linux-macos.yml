@@ -141,6 +141,31 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
+      mamba install -y -c conda-forge openjdk=11
+      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+        wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | tar -xzf - -C /opt
+      else
+        echo "Skipping..."
+      fi
+    displayName: 'Download Hadoop for ADLS testing (only linux)'
+  
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
+      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+        mamba install -y -c conda-forge 'openjdk=11' maven
+        cd azurefs-sas-token-provider
+        python setup.py develop
+      else
+        echo "Skipping..."
+      fi
+    displayName: "Setup Snowflake ADLS Testing (only Linux)"
+  
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/miniconda3/bin:$PATH
+      source activate $CONDA_ENV
       mamba install -y -c conda-forge xlrd xlsxwriter openpyxl
     displayName: 'Setup excel testing'
 
@@ -207,6 +232,27 @@ jobs:
       else
         export LD_LIBRARY_PATH=/usr/local/lib/instantclient_19_8:$LD_LIBRARY_PATH
       fi
+
+      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+        echo "Setting up Hadoop (and Arrow) environment variables"
+        export HADOOP_HOME=/opt/hadoop-3.3.2
+        export HADOOP_INSTALL=$HADOOP_HOME
+        export HADOOP_MAPRED_HOME=$HADOOP_HOME
+        export HADOOP_COMMON_HOME=$HADOOP_HOME
+        export HADOOP_HDFS_HOME=$HADOOP_HOME
+        export YARN_HOME=$HADOOP_HOME
+        export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+        export HADOOP_OPTS='-Djava.library.path=$HADOOP_HOME/lib'
+        export HADOOP_OPTIONAL_TOOLS=hadoop-azure
+        export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
+        export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
+      else
+        echo "Skipping hadoop/arrow env var setup"
+      fi
+
+      # For debugging purposes
+      export BODO_SF_WRITE_DEBUG=1
+
       cd $HOME/bodo-inc
       cp `python -c "import bodo; print(bodo.__file__[:-11])"`pytest.ini .
       if [[ "${{ parameters.caching_test }}" == "true" ]]; then
@@ -219,6 +265,8 @@ jobs:
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
       SF_USER2: $(SNOWFLAKE_USER2)
       SF_PASSWORD2: $(SNOWFLAKE_PASSWORD2)
+      SF_AZURE_USER: $(SF_AZURE_USER)
+      SF_AZURE_PASSWORD: $(SF_AZURE_PASSWORD)
     displayName: 'Test Bodo'
 
   - script: |

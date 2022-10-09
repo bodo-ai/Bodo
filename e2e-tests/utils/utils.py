@@ -63,14 +63,20 @@ def drop_sf_table(table_name, sf_conn):
     return result
 
 
-def get_sf_write_conn():
+def get_sf_write_conn(user=1):
     """
     Get Snowflake connection string of the form:
     "snowflake://{username}:{password}@{account}/{database}/{schema}?warehouse={warehouse}"
 
-    username is derived from the SF_USERNAME environment variable
-    password is derived from the SF_PASSWORD environment variable
-    account is derived from the SF_ACCOUNT environment variable
+    When user=1, we use an AWS based account
+        username is derived from the SF_USERNAME environment variable
+        password is derived from the SF_PASSWORD environment variable
+        account is derived from the SF_ACCOUNT environment variable
+    When user=2, we use an Azure based account
+        username is derived from the SF_AZURE_USERNAME environment variable
+        password is derived from the SF_AZURE_PASSWORD environment variable
+        account is derived from the SF_AZURE_ACCOUNT environment variable
+
     database is E2E_TESTS_DB
     schema is 'public'
     warehouse is DEMO_WH
@@ -78,9 +84,18 @@ def get_sf_write_conn():
     Returns:
         str: snowflake connection string
     """
-    username = os.environ["SF_USERNAME"]
-    password = os.environ["SF_PASSWORD"]
-    account = os.environ["SF_ACCOUNT"]
+    if user == 1:
+        username = os.environ["SF_USERNAME"]
+        password = os.environ["SF_PASSWORD"]
+        account = os.environ["SF_ACCOUNT"]
+    elif user == 2:
+        username = os.environ["SF_AZURE_USERNAME"]
+        password = os.environ["SF_AZURE_PASSWORD"]
+        account = os.environ["SF_AZURE_ACCOUNT"]
+    else:
+        raise ValueError(
+            f"Unsupported user value {user} for get_sf_write_conn. Supported values: [1, 2]"
+        )
     database = "E2E_TESTS_DB"
     schema = "public"
     warehouse = "DEMO_WH"

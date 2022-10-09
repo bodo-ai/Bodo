@@ -64,7 +64,10 @@ bodo/utils/tracing.c
 iceberg_db
 iceberg/bodo_iceberg_connector/iceberg-java/target
 iceberg/bodo_iceberg_connector/jars
-iceberg_db
+
+# Bodo AzureFS Sas Token Provider
+azurefs-sas-token-provider/bodo_azurefs_sas_token_provider/target
+azurefs-sas-token-provider/bodo_azurefs_sas_token_provider/jars
 
 #                                 --------BodoSQL--------
 

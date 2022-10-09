@@ -15,6 +15,7 @@ from utils.utils import (
 )
 
 import bodo
+import bodo.io.snowflake
 
 comm = MPI.COMM_WORLD
 
@@ -96,6 +97,8 @@ def main(read_path, fdate, table_name, sf_conn):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("user", type=int)
+    parser.add_argument("--use_put_method", action="store_true", default=False)
     parser.add_argument("--require_cache", action="store_true", default=False)
     args = parser.parse_args()
 
@@ -108,8 +111,13 @@ if __name__ == "__main__":
         table_name = f"lineitem_out_{str(uuid4())[:8]}".upper()
     table_name = comm.bcast(table_name)
 
-    # Get Snowflake connection string
-    sf_conn = get_sf_write_conn()
+    # Get Snowflake connection string based on the user.
+    # user=1 is an AWS based account, and user=2 is an Azure based account.
+    sf_conn = get_sf_write_conn(args.user)
+
+    if args.use_put_method:
+        # Force PUT method for testing purposes
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = True
 
     # Perform the e2e test
     t0 = time.time()

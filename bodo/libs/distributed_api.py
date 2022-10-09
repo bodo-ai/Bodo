@@ -3349,6 +3349,17 @@ def overload_check_for_cpp_errors():
 
 
 @numba.njit
+def disconnect_hdfs_njit():  # pragma: no cover
+    """
+    Simple njit wrapper around disconnect_hdfs.
+    This is useful for resetting the singleton
+    hadoop filesystem instance. This is a NOP
+    if the filesystem hasn't been initialized yet.
+    """
+    disconnect_hdfs()
+
+
+@numba.njit
 def call_finalize():  # pragma: no cover
     finalize()
     finalize_s3()

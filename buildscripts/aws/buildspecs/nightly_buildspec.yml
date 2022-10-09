@@ -30,4 +30,5 @@ phases:
         - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
         - buildscripts/aws/publish_binary.sh
         - buildscripts/install_iceberg_connector.sh
+        - buildscripts/install_azurefs_sas_token_provider.sh
         - buildscripts/aws/run_nightly_tests.sh
