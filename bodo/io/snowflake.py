@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 import warnings
 from tempfile import TemporaryDirectory
 from typing import Optional, Tuple
@@ -10,7 +11,11 @@ import pyarrow as pa
 from mpi4py import MPI
 
 import bodo
-from bodo.io.helpers import ExceptionPropagatingThread, update_env_vars
+from bodo.io.helpers import (
+    ExceptionPropagatingThread,
+    update_env_vars,
+    update_file_contents,
+)
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning
@@ -137,6 +142,39 @@ SF_WRITE_PARQUET_COMPRESSION = "snappy"
 #     internal filesystem-write infrastructure. This method is faster but does
 #     not support Azure and GCS-backed Snowflake accounts.
 SF_WRITE_UPLOAD_USING_PUT = False
+
+
+# Content to put in core-site.xml for Snowflake write. For ADLS backed stages,
+# Snowflake gives us a SAS token for access to the stage. Unfortunately,
+# SAS tokens cannot be directly provided in core-site, and instead require
+# a SASTokenProvider implementation. This core-site specifies our own
+# SASTokenProvider class (BodoSASTokenProvider) as the implementation.
+# This implementation simply reads the token from a file
+# (SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION) and returns it. Note that
+# this is meant to be a constant, not something that  users should
+# need to modify.
+SF_AZURE_WRITE_HDFS_CORE_SITE = """<configuration>
+  <property>
+    <name>fs.azure.account.auth.type</name>
+    <value>SAS</value>
+  </property>
+  <property>
+    <name>fs.azure.sas.token.provider.type</name>
+    <value>org.bodo.azurefs.sas.BodoSASTokenProvider</value>
+  </property>
+  <property>      
+    <name>fs.abfs.impl</name>      
+    <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
+  </property>
+</configuration>
+"""
+
+# Temporary location to write the SAS token to. This will
+# be read by BodoSASTokenProvider.
+# Keep this in sync with the location in BodoSASTokenProvider.java
+SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION = os.path.join(
+    bodo.HDFS_CORE_SITE_LOC_DIR.name, "sas_token.txt"
+)
 
 
 def snowflake_connect(conn_str, is_parallel=False):  # pragma: no cover
@@ -801,6 +839,22 @@ def connect_and_get_upload_info(conn):
             set to True if we don't support the stage type returned by Snowflake.
         old_creds (Dict(str, str)): Old environment variables that were
             overwritten to update credentials for uploading to stage
+        azure_stage_direct_upload (boolean): Whether the stage is ADLS backed
+            and we'll be writing parquet files to it directly using our existing
+            hdfs and parquet infrastructure.
+        old_core_site (str): In case azure_stage_direct_upload=True, we replace
+            bodo.HDFS_CORE_SITE_LOC with a new core-site.xml. `old_core_site`
+            contains the original contents of the file (or "__none__" if file
+            didn't originally exist -- see bodo.io.helpers.update_file_contents
+            for more details), so that it can be restored later during
+            create_table_copy_into
+        old_sas_token (str): In case azure_stage_direct_upload=True, we replace
+            contents in SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION (if any)
+            with the SAS token for this upload. `old_sas_token`
+            contains the original contents of the file (or "__none__" if file
+            didn't originally exist -- see bodo.io.helpers.update_file_contents
+            for more details), so that it can be restored later during
+            create_table_copy_into
     """
     ev = tracing.Event("connect_and_get_upload_info")
 
@@ -816,6 +870,9 @@ def connect_and_get_upload_info(conn):
     parquet_path = ""  # Forward declaration
     upload_creds = {}  # Forward declaration
     old_creds = {}  # Forward declaration
+    old_core_site = ""  # Forward declaration
+    sas_token = ""  # Forward declaration
+    old_sas_token = ""  # Forward declaration
 
     err = None  # Forward declaration
     if my_rank == 0:
@@ -836,7 +893,10 @@ def connect_and_get_upload_info(conn):
                 stage_info = get_snowflake_stage_info(cursor, stage_name, tmp_folder)
                 upload_info = stage_info["data"]["uploadInfo"]
 
-                if upload_info["locationType"] == "S3":
+                location_type = upload_info.get("locationType", "UNKNOWN")
+                fallback_to_put = False
+
+                if location_type == "S3":
                     # Parquet path format: s3://<bucket_name>/<key_name>
                     # E.g. s3://sfc-va2-ds1-9-customer-stage/b9zr-s-v2st3620/stages/547e65a7-fa2c-491b-98c3-6e4313db7741/
                     # See https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-bucket-intro.html#accessing-a-bucket-using-S3-format
@@ -850,28 +910,114 @@ def connect_and_get_upload_info(conn):
                         "AWS_SESSION_TOKEN": upload_info["creds"]["AWS_TOKEN"],
                         "AWS_DEFAULT_REGION": upload_info["region"],
                     }
+                elif location_type == "AZURE":
+
+                    # We cannot upload directly to ADLS unless this package is installed,
+                    # so check that first.
+                    bodo_azurefs_sas_token_provider_installed = False
+                    try:
+                        import bodo_azurefs_sas_token_provider  # noqa
+
+                        bodo_azurefs_sas_token_provider_installed = True
+                    except ImportError:
+                        pass
+
+                    # Also check for environment variables such as HADOOP_HOME, ARROW_LIBHDFS_DIR
+                    # and CLASSPATH, since if those are not set, the pq_write would fail anyway.
+                    import os
+
+                    hadoop_env_vars_set = (
+                        (len(os.environ.get("HADOOP_HOME", "")) > 0)
+                        and (len(os.environ.get("ARROW_LIBHDFS_DIR", "")) > 0)
+                        # CLASSPATH should be initialized by bodo_azurefs_sas_token_provider even if it
+                        # didn't originally exist, but doesn't hurt to check.
+                        and (len(os.environ.get("CLASSPATH", "")) > 0)
+                    )
+
+                    if (
+                        bodo_azurefs_sas_token_provider_installed
+                        and hadoop_env_vars_set
+                    ):
+                        # Upload path format: abfs[s]://<file_system>@<account_name>.dfs.core.windows.net/<path>/<file_name>
+                        # E.g. abfs://stageszz05dc579c-e473-4aa2-b8a3-62a1ae425a11@qiavr8sfcb1stg.dfs.core.windows.net/<file_name>
+                        # For URI syntax, see https://docs.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-introduction-abfs-uri#uri-syntax
+                        container_name, _, path = upload_info["location"].partition("/")
+                        path = path.rstrip("/")
+
+                        account_name = upload_info["storageAccount"]
+                        sas_token = upload_info["creds"]["AZURE_SAS_TOKEN"].lstrip("?")
+
+                        if len(path) == 0:
+                            parquet_path = f"abfs://{container_name}@{account_name}.dfs.core.windows.net/"
+                        else:
+                            parquet_path = f"abfs://{container_name}@{account_name}.dfs.core.windows.net/{path}/"
+
+                        if not ("BODO_PLATFORM_WORKSPACE_UUID" in os.environ):
+                            # Since setting up Hadoop can be notoriously difficult, we warn the users that
+                            # they may need to fall back to the PUT method manually in case of failure.
+                            # Note that this shouldn't be an issue on our platform where Hadoop is set
+                            # up correctly, and is meant for on-prem users. BODO_PLATFORM_WORKSPACE_UUID
+                            # should be an environment variable on all platform clusters, which is why we
+                            # use this as a heuristic for showing this warning.
+                            warnings.warn(
+                                BodoWarning(
+                                    "Detected Azure Stage. Bodo will try to upload to the stage directly. "
+                                    "If this fails, there might be issues with your Hadoop configuration "
+                                    "and you may need to use the PUT method instead by setting\n"
+                                    "import bodo\n"
+                                    "bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = True\n"
+                                    "before calling this function."
+                                )
+                            )
+
+                    else:
+                        # If the package doesn't exist or one of the required hadoop env vars is not set,
+                        # fall back to PUT, but show a warning so users can install the package
+                        # and/or set up hadoop for next time.
+                        fallback_to_put = True
+                        warning_msg = "Detected Azure Stage. "
+                        if not bodo_azurefs_sas_token_provider_installed:
+                            warning_msg += (
+                                "Required package bodo_azurefs_sas_token_provider "
+                                "is not installed. To use direct upload to stage in the future, install the package using: "
+                                "'conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge'.\n"
+                            )
+                        if not hadoop_env_vars_set:
+                            warning_msg += (
+                                "You need to download and set up Hadoop. For more information, "
+                                "refer to our documentation: https://docs.bodo.ai/latest/file_io/?h=hdfs#HDFS.\n"
+                            )
+                        warning_msg += "Falling back to PUT command for upload for now."
+                        warnings.warn(BodoWarning(warning_msg))
 
                 else:
                     # Unsupported internal stage location. This code falls back to objmode upload
+                    fallback_to_put = True
                     warnings.warn(
                         BodoWarning(
                             f"Direct upload to stage is not supported for internal stage "
-                            f"type '{upload_info['locationType']}'. Falling back to PUT "
+                            f"type '{location_type}'. Falling back to PUT "
                             f"command for upload."
                         )
                     )
 
+                if fallback_to_put:
+                    # If falling back to PUT method, drop this stage and create a non-temporary
+                    # stage instead.
                     drop_internal_stage(cursor, stage_name)
                     stage_name = create_internal_stage(cursor, is_temporary=False)
 
         except Exception as e:
             err = e
+            if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
 
     err = comm.bcast(err)
     if isinstance(err, Exception):
         raise err
 
     parquet_path = comm.bcast(parquet_path)
+    azure_stage_direct_upload = parquet_path.startswith("abfs://")
 
     if parquet_path == "":
         # Falling back to PUT for upload. The internal stage type could be
@@ -893,6 +1039,27 @@ def connect_and_get_upload_info(conn):
         upload_creds = comm.bcast(upload_creds)
         old_creds = update_env_vars(upload_creds)
 
+        if azure_stage_direct_upload:
+            # parquet_path will be start with abfs:// if this import worked on rank-0,
+            # so it should be safe to do it here on all other ranks.
+            # This adds the required jars to the CLASSPATH.
+            import bodo_azurefs_sas_token_provider  # noqa
+
+            # If writing directly to an ADLS stage, we need to initialize
+            # the directory for core-site and the core-site itself.
+            bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+            # We want to get original the contents of the files
+            # (core-site.xml and sas_token.txt) so that
+            # we can restore them later.
+            # This happens in `create_table_copy_into`.
+            old_core_site = update_file_contents(
+                bodo.HDFS_CORE_SITE_LOC, SF_AZURE_WRITE_HDFS_CORE_SITE
+            )
+            sas_token = comm.bcast(sas_token)
+            old_sas_token = update_file_contents(
+                SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION, sas_token
+            )
+
     stage_name = comm.bcast(stage_name)
 
     ev.finalize()
@@ -903,6 +1070,9 @@ def connect_and_get_upload_info(conn):
         parquet_path,
         upload_using_snowflake_put,
         old_creds,
+        azure_stage_direct_upload,
+        old_core_site,
+        old_sas_token,
     )
 
 
@@ -914,6 +1084,9 @@ def create_table_copy_into(
     if_exists,
     old_creds,
     tmp_folder,
+    azure_stage_direct_upload,
+    old_core_site,
+    old_sas_token,
 ):
     """Auto-create a new table if needed, execute COPY_INTO, and clean up
     created internal stage, and restore old environment variables.
@@ -932,6 +1105,21 @@ def create_table_copy_into(
         old_creds (Dict(str, str or None)): Old environment variables to restore.
             Previously overwritten to update credentials for uploading to stage
         tmp_folder (TemporaryDirectory): TemporaryDirectory object to clean up
+        azure_stage_direct_upload (boolean): Whether the stage is ADLS backed
+            and we wrote parquet files to it directly using our existing
+            hdfs and parquet infrastructure.
+        old_core_site (str): In case azure_stage_direct_upload=True, we replaced
+            bodo.HDFS_CORE_SITE_LOC with a new core-site.xml in
+            connect_and_get_upload_info. `old_core_site` contains the original
+            contents of the file (or "__none__" if file didn't originally
+            exist -- see bodo.io.helpers.update_file_contents
+            for more details), which we'll restore in this function.
+        old_sas_token (str): In case azure_stage_direct_upload=True, we replaced
+            contents of SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION with a new SAS
+            token in connect_and_get_upload_info. `old_sas_token` contains the
+            original contents of the file (or "__none__" if file didn't
+            originally exist -- see bodo.io.helpers.update_file_contents
+            for more details), which we'll restore in this function.
     """
     ev = tracing.Event("create_table_copy_into", is_parallel=False)
 
@@ -975,13 +1163,25 @@ def create_table_copy_into(
 
         except Exception as e:
             err = e
+            if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
 
     err = comm.bcast(err)
     if isinstance(err, Exception):
         raise err
 
+    # Put back the environment variables
     update_env_vars(old_creds)
 
+    # Cleanup the folder that was created to store parquet chunks for upload
     tmp_folder.cleanup()
+
+    # azure_stage_direct_upload will be true if direct upload to Azure was used.
+    # If it was, restore the contents. It is highly unlikely
+    # that there was actual contents, and in most cases the file
+    # will just be removed.
+    if azure_stage_direct_upload:
+        update_file_contents(bodo.HDFS_CORE_SITE_LOC, old_core_site)
+        update_file_contents(SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION, old_sas_token)
 
     ev.finalize()

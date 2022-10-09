@@ -305,6 +305,71 @@ def update_env_vars(env_vars):
     return old_env_vars
 
 
+def update_file_contents(fname: str, contents: str, is_parallel=True) -> str:
+    """
+    Similar to update_env_vars, except here we will update the contents
+    of a file and return the original contents if there are any.
+    If the file didn't originally exist, we return "__none__",
+    so that when the function is called back to restore the original
+    contents, we can remove the file instead.
+    We use "__none__" instead of `None` for type stability reasons when
+    passing the output between JIT and regular Python.
+
+    Args:
+        fname (str): filename to update contents of
+        contents (str): content to write to the file. In case this is
+            "__none__", the file is removed.
+        is_parallel (bool, optional): Whether or not the operation
+            should be done in parallel. In case of is_parallel=True,
+            the filesystem operations are only done on the first rank
+            of every node, to avoid filesystem contention.
+            Defaults to True.
+
+    Returns:
+        str: Original contents of the file. Returns "__none__"
+            in case the file doesn't exist.
+    """
+    comm = MPI.COMM_WORLD
+
+    old_content = None
+    if (not is_parallel) or (comm.Get_rank() == 0):
+        if os.path.exists(fname):
+            # If the file does exist, get
+            # its contents
+            with open(fname, "r") as f:
+                old_content = f.read()
+    if is_parallel:
+        old_content = comm.bcast(old_content)
+
+    if old_content is None:
+        # If the file didn't originally exist,
+        # we use "__none__" as the identifier
+        # so we can delete it later when
+        # the function is called with
+        # contents = "__none__"
+        old_content = "__none__"
+
+    # If parallel, choose the first rank on each node as the active
+    # rank for performing filesystem operations. If not parallel,
+    # all ranks are active ranks.
+    active_rank = (
+        (bodo.get_rank() in bodo.get_nodes_first_ranks()) if is_parallel else True
+    )
+    # As explained above, if  contents == "__none__",
+    # then remove the file if it exists
+    if contents == "__none__":
+        if active_rank and os.path.exists(fname):
+            os.remove(fname)
+    else:
+        # Else, restore the contents
+        if active_rank:
+            with open(fname, "w") as f:
+                f.write(contents)
+    if is_parallel:
+        comm.Barrier()
+    return old_content
+
+
 @numba.njit
 def uuid4_helper():
     """Helper function that enters objmode and calls uuid4 from JIT

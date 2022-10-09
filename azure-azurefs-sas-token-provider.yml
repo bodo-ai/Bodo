@@ -1,0 +1,15 @@
+trigger:
+- refs/tags/*
+
+pr: none
+
+
+stages:
+- stage: Build_AzureFS_SAS_Token_Provider_Binary
+  displayName: 'Build Bodo AzureFS SAS Token Provider Binary'
+  jobs:
+  - template: buildscripts/azurefs-sas-token-provider/azure-build-binary.yml
+    parameters:
+      name: Noarch
+      vmImage: ubuntu-latest
+      pythonVersion: '3.10'

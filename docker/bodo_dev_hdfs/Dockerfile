@@ -31,7 +31,7 @@ RUN conda install -n BODODEV hdfs3 -c conda-forge
 RUN conda install -n BODODEV ccache -c conda-forge
 
 # installing hadoop and libhdfs (JNI)
-ARG hdfs=3.2.1
+ARG hdfs=3.3.2
 ENV HADOOP_HOME=/opt/hadoop-${hdfs}
 ENV HADOOP_YARN_HOME=$HADOOP_HOME
 ENV HADOOP_MAPRED_HOME=$HADOOP_HOME
@@ -40,6 +40,7 @@ RUN wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download
 # copy hadoop configuration for pseudo-distributed
 COPY core-site.xml $HADOOP_HOME/etc/hadoop/
 COPY hdfs-site.xml $HADOOP_HOME/etc/hadoop/
+COPY reset_hdfs.sh /root
 
 # install ssh server
 RUN apt-get update
@@ -68,7 +69,7 @@ RUN echo "cd /Bodo" >> ~/.bashrc
 RUN echo "python setup.py develop" >> ~/.bashrc
 
 # environment variables for arrow
-RUN echo "export hdfs=3.2.1" >> ~/.bashrc
+RUN echo "export hdfs=3.3.2" >> ~/.bashrc
 RUN echo "export HADOOP_HOME=/opt/hadoop-${hdfs}" >> ~/.bashrc
 RUN echo "export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native" >> ~/.bashrc
 RUN echo "export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`" >> ~/.bashrc
