@@ -15,6 +15,7 @@ from bodosql.context import (
     RelationalAlgebraGeneratorClass,
     compute_df_types,
     intialize_schema,
+    update_schema,
 )
 from bodosql.utils import java_error_to_msg
 from numba.core import cgutils, types
@@ -359,9 +360,7 @@ def _gen_pd_func_text_and_lowered_globals(
         # So the other ranks don't hang forever if we encounter an unexpected runtime error
         try:
             table_names = bodo_sql_context_type.names
-            schema = intialize_schema(
-                table_names, df_types, orig_bodo_types, True, (param_keys, param_values)
-            )
+            schema = intialize_schema((param_keys, param_values))
             if bodo_sql_context_type.catalog_type != types.none:
                 generator = RelationalAlgebraGeneratorClass(
                     bodo_sql_context_type.catalog_type.get_java_object(),
@@ -372,6 +371,10 @@ def _gen_pd_func_text_and_lowered_globals(
                 generator = RelationalAlgebraGeneratorClass(
                     schema, NAMED_PARAM_TABLE_NAME
                 )
+            # Handle the parsing step.
+            generator.parseQuery(sql_str)
+            # Update the schema with types.
+            update_schema(schema, table_names, df_types, orig_bodo_types, True)
             try:
                 if is_optimized:
                     pd_code = str(generator.getPandasString(sql_str))

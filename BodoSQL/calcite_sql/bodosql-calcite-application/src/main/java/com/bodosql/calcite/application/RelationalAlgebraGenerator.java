@@ -69,6 +69,11 @@ public class RelationalAlgebraGenerator {
   private HepProgram program;
   /** Stores the context for the program hep planner. E.G. it stores the schema. */
   private FrameworkConfig config;
+  /**
+   * Stores the output of parsing the given SQL query. This is done to allow separating parsing from
+   * other steps.
+   */
+  private SqlNode parseNode = null;
 
   private List<RelOptRule> rules;
 
@@ -266,18 +271,32 @@ public class RelationalAlgebraGenerator {
     this.rules = rules;
   }
 
-  public SqlNode validateQuery(String sql) throws SqlSyntaxException, SqlValidationException {
-    SqlNode tempNode;
+  /**
+   * Parses the SQL query into a SQLNode and updates the relational Algebra Generator's state
+   *
+   * @param sql Query to parse
+   * @return The generated SQLNode
+   * @throws SqlSyntaxException if the SQL syntax is incorrect.
+   */
+  public void parseQuery(String sql) throws SqlSyntaxException {
     try {
-      tempNode = planner.parse(sql);
+      this.parseNode = planner.parse(sql);
     } catch (SqlParseException e) {
       planner.close();
       throw new SqlSyntaxException(sql, e);
     }
+  }
 
+  public SqlNode validateQuery(String sql) throws SqlSyntaxException, SqlValidationException {
+    if (this.parseNode == null) {
+      parseQuery(sql);
+    }
+    SqlNode parseNode = this.parseNode;
+    // Clear the parseNode because we will advance the planner
+    this.parseNode = null;
     SqlNode validatedSqlNode;
     try {
-      validatedSqlNode = planner.validate(tempNode);
+      validatedSqlNode = planner.validate(parseNode);
     } catch (ValidationException e) {
       planner.close();
       throw new SqlValidationException(sql, e);
