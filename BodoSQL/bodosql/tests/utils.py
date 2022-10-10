@@ -61,7 +61,7 @@ def check_query(
     only_python=False,
     only_jit_seq=False,
     only_jit_1D=False,
-    only_jit_1DVar=False,
+    only_jit_1DVar=None,
     spark_dataframe_dict=None,
     equivalent_spark_query=None,
     optimize_calcite_plan=True,
@@ -205,6 +205,15 @@ def check_query(
         is_out_distributed: flag to whether gather the output before equality checking.
             Default True.
     """
+
+    # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
+    # testing behavior, to test with only 1D_var. This environment variable is set in our
+    # PR CI environment
+    if only_jit_1DVar is None and not (only_python or only_jit_1D or only_jit_seq):
+        only_jit_1DVar = (
+            os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
+        )
+
     # Determine which bodo versions to run
     if only_python:
         run_python, run_jit_seq, run_jit_1D, run_jit_1DVar = True, False, False, False
