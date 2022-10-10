@@ -518,6 +518,10 @@ def is_overload_int(val):
     return is_overload_constant_int(val) or isinstance(val, types.Integer)
 
 
+def is_overload_float(val):
+    return is_overload_constant_float(val) or isinstance(val, types.Float)
+
+
 def is_overload_constant_int(val):
     return (
         isinstance(val, int)

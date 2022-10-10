@@ -1,11 +1,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-Test correctness of Snowflake TO_X functions in BodoSQL
+Test correctness of Snowflake TO_X functions for date-related casting in BodoSQL
 """
-
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-"""Test Bodo's array kernel utilities for BodoSQL numeric functions"""
-
 
 import bodosql
 import pandas as pd

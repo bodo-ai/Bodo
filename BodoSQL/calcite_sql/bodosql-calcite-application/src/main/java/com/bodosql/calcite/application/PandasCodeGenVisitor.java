@@ -13,6 +13,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getDo
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getSingleArgCondFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitIf;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitVariadic;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateSubCodeGen.*;
@@ -40,7 +41,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.generateSortCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getAscendingBoolString;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPositionString;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StrToDateCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatFnInfo;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.TimestampDiffCodeGen.generateTimestampDiffInfo;
@@ -2262,6 +2262,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateToDateFnCode(operandsInfo);
           case "TRY_TO_DATE":
             return generateTryToDateFnCode(operandsInfo);
+          case "TRY_TO_BOOLEAN":
+          case "TO_BOOLEAN":
+            return generateToBooleanFnCode(operandsInfo, fnName);
           case "ASINH":
           case "ACOSH":
           case "ATANH":

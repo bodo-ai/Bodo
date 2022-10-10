@@ -19,9 +19,11 @@ from bodo.hiframes.pd_series_ext import (
 )
 from bodo.utils.typing import (
     is_overload_bool,
+    is_overload_constant_bool,
     is_overload_constant_bytes,
     is_overload_constant_number,
     is_overload_constant_str,
+    is_overload_float,
     is_overload_int,
     raise_bodo_error,
 )
@@ -461,6 +463,47 @@ def is_valid_int_arg(arg):  # pragma: no cover
     )
 
 
+def is_valid_float_arg(arg):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a float
+        (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+
+    returns: True if the argument is a float, False otherwise
+    """
+    return not (
+        arg != types.none
+        and not isinstance(arg, types.Float)
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, types.Float)
+        )
+        and not is_overload_float(arg)
+    )
+
+
+def is_valid_numeric_bool(arg):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a numeric or boolean
+        (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+
+    returns: True if the argument is a numeric or boolean, False otherwise
+    """
+    return not (
+        arg != types.none
+        and not isinstance(arg, (types.Integer, types.Float, types.Boolean))
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True)
+            and isinstance(arg.dtype, (types.Integer, types.Float, types.Boolean))
+        )
+        and not is_overload_constant_number(arg)
+        and not is_overload_constant_bool(arg)
+    )
+
+
 def verify_int_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is an integer
        (scalar or vector)
@@ -616,6 +659,22 @@ def verify_string_binary_arg(arg, f_name, a_name):  # pragma: no cover
     else:
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a binary data, string, string column, or null"
+        )
+
+
+def verify_string_numeric_arg(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a string, integer, float, or boolean
+        (scalar or vector)
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+    raises: BodoError if the argument is not a string, integer, float, boolean, string column,
+            integer column, float column, or boolean column
+    """
+    if not is_valid_string_arg(arg) and not is_valid_numeric_bool(arg):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a string, integer, float, boolean, string column, integer column, float column, or boolean column"
         )
 
 
