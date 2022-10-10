@@ -3119,7 +3119,9 @@ class DistributedAnalysis:
             "variable '{}' is marked as distributed by '{}' but not possible to"
             " distribute in caller function '{}'.\nDistributed diagnostics:\n{}"
         )
-        metadata = self._handle_dispatcher_args(dispatcher, rhs, array_dists, err_msg)
+        metadata = self._handle_dispatcher_args(
+            dispatcher, lhs, rhs, array_dists, err_msg
+        )
 
         # check return value for distributed flag
         is_return_distributed = metadata.get("is_return_distributed", False)
@@ -3161,7 +3163,7 @@ class DistributedAnalysis:
                 lhs, array_dists, _get_ret_new_dist(lhs_typ, is_return_distributed)
             )
 
-    def _handle_dispatcher_args(self, dispatcher, rhs, array_dists, err_msg):
+    def _handle_dispatcher_args(self, dispatcher, lhs, rhs, array_dists, err_msg):
         """
         Get distributed flags of inputs and raise error if caller passes REP for an
         argument explicitly specified as distributed.
@@ -3232,7 +3234,7 @@ class DistributedAnalysis:
             # some other dispatcher may have changed variable distributions in types,
             # so overload signature may not match anymore and needs recompilation
             # see test_dist_type_change_multi_func2
-            self._recompile_func(rhs, dispatcher.__name__)
+            self._recompile_func(lhs, rhs, dispatcher.__name__)
         metadata = dispatcher.overloads[arg_types].metadata
         recompile = False
         new_arg_types = list(arg_types)
@@ -3274,7 +3276,7 @@ class DistributedAnalysis:
                 )
         if recompile:
             arg_types = tuple(new_arg_types)
-            self._recompile_func(rhs, dispatcher.__name__)
+            self._recompile_func(lhs, rhs, dispatcher.__name__)
 
         metadata = dispatcher.overloads[arg_types].metadata
         return metadata
@@ -4047,7 +4049,7 @@ class DistributedAnalysis:
 
         return concat_reduce_vars
 
-    def _recompile_func(self, rhs, fname):
+    def _recompile_func(self, lhs, rhs, fname):
         """Recompile function call due to distribution change in input data types"""
         self._add_diag_info(
             f"Recompiling {fname} since argument data distribution changed after analysis",
@@ -4059,6 +4061,11 @@ class DistributedAnalysis:
             tuple(self.typemap[v.name] for v in rhs.args),
             {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()},
         )
+        # We need to update the output datatype, as for certain types (DataFrame),
+        # The distribution is an field of the type, and recompilation can result
+        # in changed data distribution
+        self.typemap.pop(lhs)
+        self.typemap[lhs] = self.calltypes[rhs].return_type
 
     def _add_diag_info(self, info, loc):
         """append diagnostics info to be displayed in distributed diagnostics output"""

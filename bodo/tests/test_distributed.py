@@ -2811,3 +2811,20 @@ def test_gatherv_global(memory_leak_check):
 
     np.testing.assert_array_equal(impl1(), arr)
     np.testing.assert_array_equal(impl2(), arr)
+
+
+def test_dist_flag_info_propogation(memory_leak_check):
+    """
+    Tests that distribution information is properly propogated when calling nested Bodo functions with
+    flags specifying distribution information
+    """
+    df = pd.DataFrame({"A": np.arange(12)})
+
+    @bodo.jit()
+    def inner_fn(argument_df):
+        return argument_df
+
+    def outer_fn(argument_df):
+        return inner_fn(argument_df)
+
+    check_func(outer_fn, (df,))
