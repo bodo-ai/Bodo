@@ -1,7 +1,7 @@
 import re
 import warnings
 from enum import Enum
-from typing import List, Union
+from typing import List, Optional, Tuple, Union
 
 import numba
 import numpy as np
@@ -469,12 +469,11 @@ class BodoSQLContext:
                 names.append(k)
                 dfs.append(v)
             orig_bodo_types, df_types = compute_df_types(dfs, False)
-            schema = intialize_schema(
-                names, df_types, orig_bodo_types, False, param_key_values=None
-            )
+            schema = intialize_schema(None)
             self.schema = schema
-            self.orig_bodo_types = orig_bodo_types
+            self.names = names
             self.df_types = df_types
+            self.orig_bodo_types = orig_bodo_types
         except Exception as e:
             failed = True
             msg = str(e)
@@ -630,6 +629,12 @@ class BodoSQLContext:
             try:
                 self._setup_named_params(params_dict)
                 generator = self._create_generator()
+                # Handle the parsing step.
+                generator.parseQuery(sql)
+                # Update the schema with types.
+                update_schema(
+                    self.schema, self.names, self.df_types, self.orig_bodo_types, False
+                )
                 plan_or_err_msg = str(generator.getOptimizedPlanString(sql))
                 # Remove the named Params table
                 self._remove_named_params()
@@ -654,6 +659,12 @@ class BodoSQLContext:
             try:
                 self._setup_named_params(params_dict)
                 generator = self._create_generator()
+                # Handle the parsing step.
+                generator.parseQuery(sql)
+                # Update the schema with types.
+                update_schema(
+                    self.schema, self.names, self.df_types, self.orig_bodo_types, False
+                )
                 plan_or_err_msg = str(generator.getUnoptimizedPlanString(sql))
                 # Remove the named Params table
                 self._remove_named_params()
@@ -674,6 +685,12 @@ class BodoSQLContext:
             )
 
         generator = self._create_generator()
+        # Handle the parsing step.
+        generator.parseQuery(sql)
+        # Update the schema with types.
+        update_schema(
+            self.schema, self.names, self.df_types, self.orig_bodo_types, False
+        )
 
         if optimized:
             try:
@@ -818,23 +835,13 @@ class BodoSQLContext:
 
 
 def intialize_schema(
-    table_names: List[str],
-    df_types: List[bodo.DataFrameType],
-    bodo_types: List[types.Type],
-    from_jit: bool,
-    param_key_values=None,
+    param_key_values: Optional[Tuple[List[str], List[str]]] = None,
 ):
     """Create the BodoSQL Schema used to store all local DataFrames
-    and fill it with the necessary tables.
+    and update the named parameters.
 
     Args:
-        table_names (List[str]): List of tables to add to the schema.
-        df_types (List[bodo.DataFrameType]): List of Bodo DataFrame types for each table.
-        bodo_types (List[types.Type]): List of Bodo types for each table. This stores
-            the original type, so a TablePath isn't converted to its
-            DataFrameType, which it is for df_types.
-        from_jit (bool): _description_
-        param_key_values (Tuple[List[Str], List[Str]], optional): Tuple of
+        param_key_values (Optional[Tuple[List[str], List[str]]]): Tuple of
             lists of named_parameter key value pairs. Defaults to None.
 
     Returns:
@@ -846,13 +853,34 @@ def intialize_schema(
     # TODO(ehsan): create and store generator during bodo_sql_context initialization
     if bodo.get_rank() == 0:
         schema = LocalSchemaClass("__bodolocal__")
-        for i in range(len(table_names)):
-            add_table_type(
-                table_names[i], schema, df_types[i], bodo_types[i], i, from_jit
-            )
         if param_key_values is not None:
             (param_keys, param_values) = param_key_values
             add_param_table(NAMED_PARAM_TABLE_NAME, schema, param_keys, param_values)
     else:
         schema = None
     return schema
+
+
+def update_schema(
+    schema: LocalSchemaClass,
+    table_names: List[str],
+    df_types: List[bodo.DataFrameType],
+    bodo_types: List[types.Type],
+    from_jit: bool,
+):
+    """Update a local schema with local tables.
+
+    Args:
+        schema (LocalSchemaClass): The schema to update.
+        table_names (List[str]): List of tables to add to the schema.
+        df_types (List[bodo.DataFrameType]): List of Bodo DataFrame types for each table.
+        bodo_types (List[types.Type]): List of Bodo types for each table. This stores
+            the original type, so a TablePath isn't converted to its
+            DataFrameType, which it is for df_types.
+        from_jit (bool): Is this typing coming from JIT?
+    """
+    if bodo.get_rank() == 0:
+        for i in range(len(table_names)):
+            add_table_type(
+                table_names[i], schema, df_types[i], bodo_types[i], i, from_jit
+            )
