@@ -32,6 +32,36 @@ public class CastingOperatorTable implements SqlOperatorTable {
   // TODO: make all of these actually coerce to cast, so that Calcite can properly typecheck it at
   // compile
   // time as of right now, we do this check in our code.
+  public static final SqlFunction TO_BOOLEAN =
+      new SqlFunction(
+          "TO_BOOLEAN",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.BOOLEAN_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // For conversion to boolean, snowflake allows a string or numeric expr.
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction TRY_TO_BOOLEAN =
+      new SqlFunction(
+          "TRY_TO_BOOLEAN",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.BOOLEAN_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // For conversion to boolean, snowflake allows a string or numeric expr.
+          OperandTypes.or(OperandTypes.STRING, OperandTypes.NUMERIC),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction TO_DATE =
       new SqlFunction(
           "TO_DATE",
@@ -83,7 +113,8 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
-  private List<SqlOperator> functionList = Arrays.asList(TO_DATE, TRY_TO_DATE);
+  private List<SqlOperator> functionList =
+      Arrays.asList(TO_BOOLEAN, TRY_TO_BOOLEAN, TO_DATE, TRY_TO_DATE);
 
   @Override
   public void lookupOperatorOverloads(

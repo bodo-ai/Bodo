@@ -7,7 +7,7 @@ import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import java.util.List;
 
-public class StrToDateCodeGen {
+public class ConversionCodeGen {
   /**
    * Function that return the necessary generated code for a StrToDate Function Call.
    *
@@ -98,6 +98,26 @@ public class StrToDateCodeGen {
     String name = "TO_DATE(" + operandsInfo.get(0).getName() + ")";
     String exprCode =
         "bodo.libs.bodosql_array_kernels.to_date(" + operandsInfo.get(0).getExprCode() + ", None)";
+    return new RexNodeVisitorInfo(name, exprCode);
+  }
+
+  /**
+   * Handles codegen for Snowflake TO_BOOLEAN and TRY_TO_BOOLEAN function.
+   *
+   * @param operandsInfo List of operands
+   * @param fnName name of the function (TO_BOOLEAN or TRY_TO_BOOLEAN)
+   * @return RexVisitorInfo for the TO_BOOLEAN or TRY_TO_BOOLEAN function
+   */
+  public static RexNodeVisitorInfo generateToBooleanFnCode(
+      List<RexNodeVisitorInfo> operandsInfo, String fnName) {
+    assert operandsInfo.size() == 1 : "Error, " + fnName + " function takes 1 argument";
+    String name = fnName + "(" + operandsInfo.get(0).getName() + ")";
+    String exprCode =
+        "bodo.libs.bodosql_array_kernels."
+            + fnName.toLowerCase()
+            + "("
+            + operandsInfo.get(0).getExprCode()
+            + ")";
     return new RexNodeVisitorInfo(name, exprCode);
   }
 
