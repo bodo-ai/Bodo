@@ -399,18 +399,26 @@ def test_accuracy_score(data, normalize, memory_leak_check):
             y_true, y_pred, sample_weight=sample_weight_, normalize=normalize
         )
 
-    check_func(test_accuracy_score_0, tuple(data[0:2]), is_out_distributed=False)
-    check_func(test_accuracy_score_1, tuple(data[0:2]), is_out_distributed=False)
-    check_func(test_accuracy_score_2, tuple(data), is_out_distributed=False)
+    check_func(
+        test_accuracy_score_0, tuple(data[0:2]), only_seq=True, is_out_distributed=False
+    )
+    check_func(
+        test_accuracy_score_1, tuple(data[0:2]), only_seq=True, is_out_distributed=False
+    )
+    check_func(
+        test_accuracy_score_2, tuple(data), only_seq=True, is_out_distributed=False
+    )
     check_func(
         test_accuracy_score_3,
         tuple(data),
         is_out_distributed=False,
+        only_seq=True,
     )
     check_func(
         test_accuracy_score_4,
         tuple(data),
         is_out_distributed=False,
+        only_seq=True,
     )
 
 
@@ -479,23 +487,38 @@ def test_confusion_matrix(data, labels, normalize, memory_leak_check):
     def test_confusion_matrix_5(y_true, y_pred, labels_):
         return confusion_matrix(y_true, y_pred, normalize=normalize, labels=labels_)
 
-    check_func(test_confusion_matrix_0, tuple(data[0:2]), is_out_distributed=False)
-    check_func(test_confusion_matrix_1, tuple(data[0:2]), is_out_distributed=False)
-    check_func(test_confusion_matrix_2, tuple(data), is_out_distributed=False)
+    check_func(
+        test_confusion_matrix_0,
+        tuple(data[0:2]),
+        only_seq=True,
+        is_out_distributed=False,
+    )
+    check_func(
+        test_confusion_matrix_1,
+        tuple(data[0:2]),
+        only_seq=True,
+        is_out_distributed=False,
+    )
+    check_func(
+        test_confusion_matrix_2, tuple(data), only_seq=True, is_out_distributed=False
+    )
     check_func(
         test_confusion_matrix_3,
         (data[0], data[1], labels),
         is_out_distributed=False,
+        only_seq=True,
     )
     check_func(
         test_confusion_matrix_4,
         (*data, labels),
         is_out_distributed=False,
+        only_seq=True,
     )
     check_func(
         test_confusion_matrix_5,
         (data[0], data[1], labels),
         is_out_distributed=False,
+        only_seq=True,
     )
 
 
@@ -552,26 +575,40 @@ def test_confusion_matrix_string_labels(data, normalize, memory_leak_check):
     def test_confusion_matrix_5(y_true, y_pred, labels_):
         return confusion_matrix(y_true, y_pred, normalize=normalize, labels=labels_)
 
-    check_func(test_confusion_matrix_0, (y_true, y_pred), is_out_distributed=False)
-    check_func(test_confusion_matrix_1, (y_true, y_pred), is_out_distributed=False)
+    check_func(
+        test_confusion_matrix_0,
+        (y_true, y_pred),
+        only_seq=True,
+        is_out_distributed=False,
+    )
+    check_func(
+        test_confusion_matrix_1,
+        (y_true, y_pred),
+        only_seq=True,
+        is_out_distributed=False,
+    )
     check_func(
         test_confusion_matrix_2,
         (y_true, y_pred, sample_weight),
+        only_seq=True,
         is_out_distributed=False,
     )
     check_func(
         test_confusion_matrix_3,
         (y_true, y_pred, labels),
+        only_seq=True,
         is_out_distributed=False,
     )
     check_func(
         test_confusion_matrix_4,
         (y_true, y_pred, sample_weight, labels),
+        only_seq=True,
         is_out_distributed=False,
     )
     check_func(
         test_confusion_matrix_5,
         (y_true, y_pred, labels),
+        only_seq=True,
         is_out_distributed=False,
     )
     bodo.barrier()

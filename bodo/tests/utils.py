@@ -141,7 +141,7 @@ def check_func(
     reorder_columns=False,
     only_seq=False,
     only_1D=False,
-    only_1DVar=False,
+    only_1DVar=None,
     check_categorical=False,
     atol=1e-08,
     rtol=1e-05,
@@ -187,6 +187,13 @@ def check_func(
     format for testing.
     If None, tests both formats if input arguments have string arrays.
     """
+
+    # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
+    # testing behavior, to test with only 1D_var. This environment variable is set in our
+    # PR CI environment
+    if only_1DVar is None and not (only_seq or only_1D):
+        only_1DVar = os.environ.get("BODO_TESTING_ONLY_RUN_1D_VAR", None) is not None
+
     run_seq, run_1D, run_1DVar = False, False, False
     if only_seq:
         if only_1D or only_1DVar:
