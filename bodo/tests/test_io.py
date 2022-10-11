@@ -1321,7 +1321,8 @@ def test_read_write_parquet(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_partition_cols(memory_leak_check):
+@pytest.mark.parametrize("test_tz", [True, False])
+def test_partition_cols(test_tz, memory_leak_check):
 
     from mpi4py import MPI
 
@@ -1333,8 +1334,19 @@ def test_partition_cols(memory_leak_check):
     def impl(df, part_cols):
         df.to_parquet(TEST_DIR, partition_cols=part_cols)
 
+    @bodo.jit(distributed=["df"])
+    def impl_tz(df, part_cols):
+        df.to_parquet(TEST_DIR, partition_cols=part_cols, _bodo_timestamp_tz="CET")
+
     datetime_series = pd.Series(
         pd.date_range(start="2/1/2021", end="2/8/2021", periods=8)
+    )
+    datetime_series_tz = pd.Series(
+        pd.date_range(start="2/1/2021", end="2/8/2021", periods=8, tz="CET")
+    )
+    timestamp_series = pd.Series([pd.Timestamp(f"200{i}-01-01") for i in range(8)])
+    timestamp_series_tz = pd.Series(
+        [pd.Timestamp(f"200{i}-01-01", tz="CET") for i in range(8)]
     )
     date_series_str = datetime_series.astype(str)
     date_series = datetime_series.dt.date
@@ -1345,13 +1357,14 @@ def test_partition_cols(memory_leak_check):
             "C": [True, True, False, False, True, True, False, False],
             "D": pd.Categorical(date_series_str),
             "E": date_series,
-            "F": datetime_series,
+            "F": datetime_series_tz if test_tz else datetime_series,
             # TODO test following F column as partition column
             # for some reason, Bodo throws
             # "bodo.utils.typing.BodoError: Cannot convert dtype DatetimeDateType() to index type"
             # in _get_dist_arg with this:
             # "F": pd.Categorical(date_series),
             "G": range(8),
+            "HH": timestamp_series_tz if test_tz else timestamp_series,
         }
     )
 
@@ -1365,7 +1378,10 @@ def test_partition_cols(memory_leak_check):
                 # TODO. can't write categorical to parquet currently because of metadata issue
                 del df_in["D"]
             bodo.barrier()
-            impl(_get_dist_arg(df_in, False), part_cols)
+            if test_tz:
+                impl_tz(_get_dist_arg(df_in, False), part_cols)
+            else:
+                impl(_get_dist_arg(df_in, False), part_cols)
             bodo.barrier()
 
             err = None
