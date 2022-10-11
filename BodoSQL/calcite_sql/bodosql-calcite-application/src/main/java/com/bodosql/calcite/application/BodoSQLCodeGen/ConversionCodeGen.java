@@ -102,10 +102,30 @@ public class ConversionCodeGen {
   }
 
   /**
+   * Handles codegen for Snowflake TO_CHAR function.
+   *
+   * @param operandsInfo List of operands
+   * @param fnName Name of the function (TO_CHAR or TRY_VARCHAR)
+   * @return RexVisitorInfo for the TO_CHAR function
+   */
+  public static RexNodeVisitorInfo generateToCharFnCode(
+      List<RexNodeVisitorInfo> operandsInfo, String fnName) {
+    if (operandsInfo.size() > 1) {
+      // TODO (BE-3742): Support format string for TO_CHAR
+      throw new BodoSQLCodegenException(
+          "Error, format string for " + fnName + " not yet supported");
+    }
+    String name = fnName + "(" + operandsInfo.get(0).getName() + ")";
+    String exprCode =
+        "bodo.libs.bodosql_array_kernels.to_char(" + operandsInfo.get(0).getExprCode() + ")";
+    return new RexNodeVisitorInfo(name, exprCode);
+  }
+
+  /**
    * Handles codegen for Snowflake TO_BOOLEAN and TRY_TO_BOOLEAN function.
    *
    * @param operandsInfo List of operands
-   * @param fnName name of the function (TO_BOOLEAN or TRY_TO_BOOLEAN)
+   * @param @param fnName Name of the function (TO_BOOLEAN or TRY_TO_BOOLEAN)
    * @return RexVisitorInfo for the TO_BOOLEAN or TRY_TO_BOOLEAN function
    */
   public static RexNodeVisitorInfo generateToBooleanFnCode(

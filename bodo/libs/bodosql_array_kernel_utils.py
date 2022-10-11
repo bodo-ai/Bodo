@@ -599,6 +599,21 @@ def is_valid_datetime_or_date_arg(arg):
     )
 
 
+def is_valid_boolean_arg(arg):  # pragma: no cover
+    """
+    Args:
+        arg (dtype): the dtype of the argument being checked
+    returns: False if the argument is not a boolean or boolean column
+    """
+    return not (
+        arg != types.boolean
+        and not (
+            bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == types.boolean
+        )
+        and not is_overload_constant_bool(arg)
+    )
+
+
 def verify_string_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a string
        (scalar or vector)

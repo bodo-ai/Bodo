@@ -6,6 +6,7 @@ import javax.annotation.Nullable;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.type.OperandTypes;
 import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 /**
@@ -62,6 +63,54 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  public static final SqlFunction TO_CHAR =
+      new SqlFunction(
+          "TO_CHAR",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // For conversion to string, snowflake any expresison type. If the first argument is
+          // numeric,
+          // datetime/timestamp, or binary, then an optional format string is allowed as a second
+          // argument.
+          OperandTypes.or(
+              OperandTypes.ANY,
+              OperandTypes.or(
+                  OperandTypes.family(SqlTypeFamily.NUMERIC, SqlTypeFamily.STRING),
+                  OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.STRING),
+                  OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.STRING),
+                  OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.STRING))),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
+  public static final SqlFunction TO_VARCHAR =
+      new SqlFunction(
+          "TO_VARCHAR",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.VARCHAR_2000_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // For conversion to string, snowflake any expresison type. If the first argument is
+          // numeric,
+          // datetime/timestamp, or binary, then an optional format string is allowed as a second
+          // argument.
+          OperandTypes.or(
+              OperandTypes.ANY,
+              OperandTypes.or(
+                  OperandTypes.family(SqlTypeFamily.NUMERIC, SqlTypeFamily.STRING),
+                  OperandTypes.family(SqlTypeFamily.DATETIME, SqlTypeFamily.STRING),
+                  OperandTypes.family(SqlTypeFamily.TIMESTAMP, SqlTypeFamily.STRING),
+                  OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.STRING))),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.USER_DEFINED_FUNCTION);
+
   public static final SqlFunction TO_DATE =
       new SqlFunction(
           "TO_DATE",
@@ -114,7 +163,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           SqlFunctionCategory.TIMEDATE);
 
   private List<SqlOperator> functionList =
-      Arrays.asList(TO_BOOLEAN, TRY_TO_BOOLEAN, TO_DATE, TRY_TO_DATE);
+      Arrays.asList(TO_BOOLEAN, TO_DATE, TRY_TO_BOOLEAN, TRY_TO_DATE, TO_CHAR, TO_VARCHAR);
 
   @Override
   public void lookupOperatorOverloads(

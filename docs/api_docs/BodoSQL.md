@@ -2446,7 +2446,7 @@ Currently BodoSQL supports the following Window functions:
     time the value inside the window changes. `NULL` does not count as a new/changed value.
     `ORDER BY` is required for this function.
 
- 
+  
 ### Casting / Conversion Functions
 
 BodoSQL currently supports the following casting/conversion functions:
@@ -2528,6 +2528,42 @@ BodoSQL currently supports the following casting/conversion functions:
     2   <NA>   True  False
     ```
 
+
+#### TO_CHAR
+-  `TO_CHAR(COLUMN_EXPRESSION)`
+
+    Casts the input to a string value. If the input is a boolean, it will be cast to `'true'` if it is `true` and `'false'` if it is `false`. If the input is `NULL`, the output will be `NULL`.
+    
+    _Example:_
+
+    We are given `table1` with columns `a` and `b` and `c`
+    ```python
+    table1 = pd.DataFrame({
+        'a': [1.1, 0, 2],
+        'b': [True, False, True],
+        'c': [None, 1, 0]
+    })
+    ```
+    upon query
+    ```sql
+    SELECT
+        TO_CHAR(a) AS a,
+        TO_CHAR(b) AS b,
+        TO_CHAR(c) AS c
+    FROM table1;
+    ```
+    we will get the following output:
+    ```
+        a      b      c
+    0  1.1   true   <NA>
+    1    0  false      1
+    2    2   true      0
+    ```
+
+#### TO_VARCHAR
+-  `TO_VARCHAR(COLUMN_EXPRESSION)`
+
+    Alias for `TO_CHAR`.
 
 ## Supported DataFrame Data Types
 
