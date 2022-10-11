@@ -767,8 +767,13 @@ class TypingTransforms:
         # set ParquetReader/SQLReader node filters (no exception was raise until this end point
         # so filters are valid)
         read_node.filters = filters
-        # remove filtering code since not necessary anymore
-        assign.value = assign.value.value
+        # Merge into only filters by file not within rows, so we cannot remove the filter.
+        keep_filter = (
+            isinstance(read_node, bodo.ir.sql_ext.SqlReader) and read_node.is_merge_into
+        )
+        if not keep_filter:
+            # remove filtering code since not necessary anymore
+            assign.value = assign.value.value
 
         # Mark the IR as changed
         self.changed = True
@@ -2515,6 +2520,23 @@ class TypingTransforms:
         check_unsupported_args(
             "read_sql_table", unsupported_args, arg_defaults, package_name="pandas"
         )
+        err_msg = "pandas.read_sql_table(): '_bodo_merge_into', if provided, must be a constant boolean."
+        # Support the bodo specific `_bodo_merge_into` argument. This argument should only be present if we are
+        # performing merge into and should have the effect of only filtering on files during filter pushdown.
+        _bodo_merge_into_var = get_call_expr_arg(
+            func_str,
+            rhs.args,
+            kws,
+            -1,  # Support this argument by keyword only
+            "_bodo_merge_into",
+            default=False,
+            use_default=True,
+        )
+        _bodo_merge_into = (
+            self._get_const_value(_bodo_merge_into_var, label, rhs.loc, err_msg=err_msg)
+            if _bodo_merge_into_var
+            else False
+        )
 
         # _bodo_read_as_dict allows users to specify columns as dictionary-encoded
         # string arrays manually. This is in addition to whatever columns bodo
@@ -2523,7 +2545,7 @@ class TypingTransforms:
             func_str,
             rhs.args,
             kws,
-            len(supported_args) + len(unsupported_args),
+            -1,  # Support this argument by keyword only
             "_bodo_read_as_dict",
             default=None,
             use_default=True,
@@ -2619,6 +2641,7 @@ class TypingTransforms:
                 types.none,  # index_column_type
                 database_schema,  # database_schema
                 pyarrow_table_schema,  # pyarrow_table_schema
+                _bodo_merge_into,  # is_merge_into
             )
         ]
         data_args = ["table_val", "idx_arr_val"]

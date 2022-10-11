@@ -67,6 +67,7 @@ class SqlReader(ir.Stmt):
         # Only relevant for Iceberg at the moment,
         # but potentially for Snowflake in the future
         pyarrow_table_schema=None,
+        is_merge_into=False,
     ):
         self.connector_typ = "sql"
         self.sql_request = sql_request
@@ -111,13 +112,16 @@ class SqlReader(ir.Stmt):
         # Only relevant for Iceberg at the moment,
         # but potentially for Snowflake in the future
         self.pyarrow_table_schema = pyarrow_table_schema
+        # Is this table load done as part of a merge into operation.
+        # If so we have special behavior regarding filtering.
+        self.is_merge_into = is_merge_into
         # Is the variable currently alive. This should be replaced with more
         # robust handling in connectors.
         self.is_live_table = True
 
     def __repr__(self):  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
-        return f"{out_varnames} = ReadSql(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_table_schema={self.pyarrow_table_schema})"
+        return f"{out_varnames} = ReadSql(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_table_schema={self.pyarrow_table_schema}, is_merge_into={self.is_merge_into})"
 
 
 def parse_dbtype(con_str):
@@ -390,6 +394,7 @@ def sql_distributed_run(
         sql_node.pyarrow_table_schema,
         not sql_node.is_live_table,
         sql_node.is_select_query,
+        sql_node.is_merge_into,
     )
 
     schema_type = types.none if sql_node.database_schema is None else string_type
@@ -776,6 +781,7 @@ def _gen_sql_reader_py(
     pyarrow_table_schema: "Optional[pyarrow.Schema]",
     is_dead_table: bool,
     is_select_query: bool,
+    is_merge_into: bool,
 ):
     """
     Function that generates the main SQL implementation. There are
@@ -810,6 +816,9 @@ def _gen_sql_reader_py(
     pyarrow_table_schema -- pyarrow schema for the table. This should only
                             be used if db_type == "iceberg".
     is_select_query -- Are we executing a select?
+    is_merge_into -- Does this query result from a merge into query? If so
+                     this limits the filtering we can do with Iceberg as we
+                     must load entire files.
     """
     # a unique int used to create global variables with unique names
     call_id = next_label()
@@ -918,6 +927,7 @@ def _gen_sql_reader_py(
             f"    pyarrow_table_schema_{call_id},\n"
             f"    {dict_str_cols_str},\n"
             f"    total_rows_np.ctypes,\n"
+            f"    {is_merge_into},\n"
             f"  )\n"
             f"  check_and_propagate_cpp_exception()\n"
         )
@@ -1223,6 +1233,7 @@ _iceberg_read = types.ExternalFunction(
         types.voidptr,
         types.int32,
         types.voidptr,
+        types.boolean,
     ),
 )
 

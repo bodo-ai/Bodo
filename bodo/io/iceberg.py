@@ -318,6 +318,7 @@ def get_iceberg_pq_dataset(
     # Sonar cube only runs on rank 0, so we add no cover to avoid the warning
     if bodo.get_rank() == 0:  # pragma: no cover
         ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
+        ev_iceberg_fl.add_attribute("g_dnf_filter", str(dnf_filters))
         try:
             pq_file_list_or_e = get_iceberg_file_list(
                 table_name, conn, database_schema, dnf_filters
@@ -365,6 +366,7 @@ def get_iceberg_pq_dataset(
                 pq_file_list,
                 get_row_counts=get_row_counts,
                 # dnf_filters were already handled by Iceberg
+                # We only pass expr_filters if we don't need to load the whole file.
                 expr_filters=expr_filters,
                 is_parallel=is_parallel,
                 # Provide baseline schema to detect schema evolution
