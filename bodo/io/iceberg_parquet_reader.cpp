@@ -19,7 +19,8 @@ class IcebergParquetReader : public ParquetReader {
                          int64_t tot_rows_to_read, PyObject* _dnf_filters,
                          PyObject* _expr_filters, int32_t* _selected_fields,
                          int32_t num_selected_fields, int32_t* is_nullable,
-                         PyObject* _pyarrow_table_schema)
+                         PyObject* _pyarrow_table_schema,
+                         bool _is_merge_into_cow)
         : ParquetReader(/*path*/ nullptr, _parallel, _dnf_filters,
                         _expr_filters,
                         /*storage_options*/ PyDict_New(), tot_rows_to_read,
@@ -28,7 +29,8 @@ class IcebergParquetReader : public ParquetReader {
           pyarrow_table_schema(_pyarrow_table_schema),
           conn(_conn),
           database_schema(_database_schema),
-          table_name(_table_name) {}
+          table_name(_table_name),
+          is_merge_into_cow(_is_merge_into_cow) {}
 
     virtual ~IcebergParquetReader() {}
 
@@ -53,7 +55,7 @@ class IcebergParquetReader : public ParquetReader {
         // ds = bodo.io.iceberg.get_iceberg_pq_dataset(
         //          conn, database_schema, table_name,
         //          pyarrow_table_schema, dnf_filters,
-        //          expr_filters, tot_rows_to_read, parallel,
+        //          expr_filters, tot_rows_to_read, parallel
         //      )
 
         PyObject* ds = PyObject_CallMethod(
@@ -99,6 +101,8 @@ class IcebergParquetReader : public ParquetReader {
     const char* conn;
     const char* database_schema;
     const char* table_name;
+    // Is this a target table for merge into with cow?
+    bool is_merge_into_cow;
 };
 
 /**
@@ -123,6 +127,9 @@ class IcebergParquetReader : public ParquetReader {
  * @param pyarrow_table_schema : Pyarrow schema (instance of pyarrow.lib.Schema)
  * determined at compile time. Used for schema evolution detection, and for
  * evaluating transformations in the future.
+ * @param is_merge_into : Is this table loaded as the target table for merge
+ * into with COW. If True we will only apply filters that limit the number of
+ * files and cannot filter rows within a file.
  * @return table containing all the arrays read.
  */
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,
@@ -133,12 +140,18 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             PyObject* pyarrow_table_schema,
                             int32_t* str_as_dict_cols,
                             int32_t num_str_as_dict_cols,
-                            int64_t* total_rows_out) {
+                            int64_t* total_rows_out, bool is_merge_into_cow) {
     try {
-        IcebergParquetReader reader(conn, database_schema, table_name, parallel,
-                                    tot_rows_to_read, dnf_filters, expr_filters,
-                                    selected_fields, num_selected_fields,
-                                    is_nullable, pyarrow_table_schema);
+        if (is_merge_into_cow) {
+            // If is_merge_into=True then we don't want to use any expr_filters
+            // as we must load the whole file.
+            Py_DECREF(expr_filters);
+            expr_filters = Py_None;
+        }
+        IcebergParquetReader reader(
+            conn, database_schema, table_name, parallel, tot_rows_to_read,
+            dnf_filters, expr_filters, selected_fields, num_selected_fields,
+            is_nullable, pyarrow_table_schema, is_merge_into_cow);
         // initialize reader
         reader.init_iceberg_reader(str_as_dict_cols, num_str_as_dict_cols);
         *total_rows_out = reader.get_total_rows();

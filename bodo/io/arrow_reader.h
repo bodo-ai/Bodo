@@ -134,9 +134,10 @@ class ArrowDataframeReader {
                              create_dict_encoding_from_strings);
         rows_left = count;
         read_all(builder);
-        if (rows_left != 0)
+        if (rows_left != 0) {
             throw std::runtime_error(
                 "ArrowDataframeReader::read(): did not read all rows");
+        }
         return builder.get_table();
     }
 

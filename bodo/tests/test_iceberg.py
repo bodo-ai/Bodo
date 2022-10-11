@@ -49,6 +49,7 @@ from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
 )
+from bodo.tests.tracing_utils import TracingContextManager
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -696,6 +697,94 @@ def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
         sort_output=True,
         reset_index=True,
     )
+
+
+def test_filter_pushdown_file_filters(iceberg_database, iceberg_table_conn):
+    """
+    Test that simple filter pushdown works inside the parquet file.
+    """
+
+    table_name = "simple_numeric_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        df = df[df.B == 2]
+        return df
+
+    spark = get_spark()
+    py_out = spark.sql(
+        f"""
+    select * from hadoop_prod.{db_schema}.{table_name}
+    WHERE B = 2
+    """
+    )
+    py_out = py_out.toPandas()
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(table_name, conn, db_schema)
+        check_logger_msg(stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+
+
+def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
+    """
+    Test that passing _bodo_merge_into still has filter pushdown succeed
+    but doesn't filter files.
+    """
+
+    table_name = "simple_numeric_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema, _bodo_merge_into=True)
+        df = df[df.B == 2]
+        return df
+
+    spark = get_spark()
+    py_out = spark.sql(
+        f"""
+    select * from hadoop_prod.{db_schema}.{table_name}
+    WHERE B = 2
+    """
+    )
+    py_out = py_out.toPandas()
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=py_out,
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
+    tracing_info = TracingContextManager()
+    with tracing_info:
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            bodo.jit(impl)(table_name, conn, db_schema)
+            check_logger_msg(stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F']")
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+    # Load the tracing results
+    dnf_filters = tracing_info.get_event_attribute(
+        "get_iceberg_file_list", "g_dnf_filter"
+    )
+    expr_filters = tracing_info.get_event_attribute("get_row_counts", "g_expr_filters")
+    # Verify we have dnf filters.
+    assert dnf_filters != "None", "No DNF filters were pushed"
+    # Verify we don't have expr filters
+    assert expr_filters == "None", "Expr filters were pushed unexpectedly"
 
 
 def _check_for_sql_read_head_only(bodo_func, head_size):
