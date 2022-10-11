@@ -62,8 +62,8 @@ Bodo_Fs::FsEnum filesystem_type(const char *fname);
  * @param filename Name of the file to be written. Currently this is only used
  * by Iceberg -- this will be refactored in future PRs.
  * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
- * string ("") to not specify one. This is primarily required for Iceberg, for
- * which we specify "UTC".
+ * string ("") to not specify one. This is primarily required for
+ * Iceberg/Snowflake, for which we specify "UTC".
  * @param time_unit Time-Unit (NANO / MICRO / MILLI / SECOND) to use for
  * Datetime (/timestamp) arrays. Bodo arrays store information in nanoseconds.
  * When this is not nanoseconds, the data is converted to the specified type
@@ -113,6 +113,9 @@ int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
  * @param is_parallel true if the table is part of a distributed table
  * @param row_group_size Row group size in number of rows
  * @param prefix Prefix to use for each file created in distributed case
+ * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
+ * string ("") to not specify one. NOTE: this will be applied for all datetime
+ * columns.
  */
 void pq_write_partitioned(const char *_path_name, table_info *table,
                           const array_info *col_names_arr,
@@ -120,4 +123,5 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                           table_info *categories_table, int *partition_cols_idx,
                           int num_partition_cols, const char *compression,
                           bool is_parallel, const char *bucket_region,
-                          int64_t row_group_size, const char *prefix);
+                          int64_t row_group_size, const char *prefix,
+                          const char *tz);

@@ -3957,7 +3957,10 @@ def to_parquet_overload(
         func_text += "                            _is_parallel,\n"
         func_text += "                            unicode_to_utf8(bucket_region),\n"
         func_text += "                            row_group_size,\n"
-        func_text += "                            unicode_to_utf8(_bodo_file_prefix))\n"
+        func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
+        func_text += (
+            "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
+        )
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names_no_partitions)\n"

@@ -2084,6 +2084,7 @@ def parquet_write_table_partitioned_cpp(
     bucket_region,
     row_group_size,
     file_prefix,
+    timestamp_tz,
 ):
     """
     Call C++ parquet write partitioned function
@@ -2105,6 +2106,7 @@ def parquet_write_table_partitioned_cpp(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),  # tz
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -2127,6 +2129,7 @@ def parquet_write_table_partitioned_cpp(
             types.voidptr,
             types.int64,
             types.voidptr,
+            types.voidptr,  # tz
         ),
         codegen,
     )

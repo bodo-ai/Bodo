@@ -421,7 +421,8 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                           table_info *categories_table, int *partition_cols_idx,
                           int num_partition_cols, const char *compression,
                           bool is_parallel, const char *bucket_region,
-                          int64_t row_group_size, const char *prefix) {
+                          int64_t row_group_size, const char *prefix,
+                          const char *tz) {
     // TODOs
     // - Do is parallel here?
     // - sequential (only rank 0 writes, or all write with same name -which?-)
@@ -560,7 +561,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
                      nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
                      false, -1, -1, -1, /*TODO*/ "", bucket_region,
-                     row_group_size, prefix);
+                     row_group_size, prefix, tz);
             delete_table_decref_arrays(part_table);
         }
         delete new_table;
