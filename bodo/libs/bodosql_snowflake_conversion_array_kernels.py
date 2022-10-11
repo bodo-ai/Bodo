@@ -11,6 +11,7 @@ from numba.extending import register_jitable
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
+    BodoError,
     dtype_to_array_type,
     get_overload_const_bool,
     is_overload_none,
@@ -150,6 +151,162 @@ def to_date(conversionVal, optionalConversionFormatString):
         )
 
     return impl
+
+
+@numba.generated_jit(nopython=True)
+def try_to_boolean(arr):
+    """Handles cases where TO_BOOLEAN receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument("bodo.libs.bodosql_array_kernels.to_boolean", ["arr"], 0)
+
+    def impl(arr):
+        return to_boolean_util(arr, numba.literally(True))
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def to_boolean(arr):
+    """Handles cases where TO_BOOLEAN receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument("bodo.libs.bodosql_array_kernels.to_boolean", ["arr"], 0)
+
+    def impl(arr):
+        return to_boolean_util(arr, numba.literally(False))
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def to_boolean_util(arr, _try=False):
+    """A dedicated kernel for the SQL function TO_BOOLEAN which takes in a
+    number (or column) and returns True if it is not zero and not null,
+    False if it is zero, and NULL otherwise.
+
+
+    Args:
+        arr (numerical array/series/scalar): the number(s) being operated on
+        _try (bool): whether to return NULL (iff true) on error or raise an exception
+
+    Returns:
+        boolean series/scalar: the boolean value of the number(s) with the
+        specified null handling rules
+    """
+    verify_string_numeric_arg(arr, "TO_BOOLEAN", "arr")
+    is_string = is_valid_string_arg(arr)
+    is_float = is_valid_float_arg(arr)
+    _try = get_overload_const_bool(_try)
+
+    if _try:
+        on_fail = "bodo.libs.array_kernels.setna(res, i)\n"
+    else:
+        if is_string:
+            err_msg = "string must be one of {'true', 't', 'yes', 'y', 'on', '1'} or {'false', 'f', 'no', 'n', 'off', '0'}"
+        else:
+            err_msg = "value must be a valid numeric expression"
+        on_fail = (
+            f"""raise ValueError("invalid value for boolean conversion: {err_msg}")"""
+        )
+
+    arg_names = ["arr", "_try"]
+    arg_types = [arr, _try]
+    # TODO: fix this for float case
+    propagate_null = [True, False]
+
+    prefix_code = None
+    if is_string:
+        prefix_code = "true_vals = {'true', 't', 'yes', 'y', 'on', '1'}\n"
+        prefix_code += "false_vals = {'false', 'f', 'no', 'n', 'off', '0'}"
+    if is_string:
+        scalar_text = "s = arg0.lower()\n"
+        scalar_text += f"res[i] = s in true_vals\n"
+        scalar_text += f"if not res[i] and s not in false_vals:\n"
+        scalar_text += f"  {on_fail}\n"
+    elif is_float:
+        # TODO: fix this for float case (see above)
+        # np.isnan should error here, but it will not reach because
+        # NaNs will be caught since propogate_null[0] is True
+        scalar_text = "if np.isinf(arg0) or np.isnan(arg0):\n"
+        scalar_text += f"  {on_fail}\n"
+        scalar_text += "else:\n"
+        scalar_text += f"  res[i] = bool(arg0)\n"
+    else:
+        scalar_text = f"res[i] = bool(arg0)"
+
+    out_dtype = bodo.libs.bool_arr_ext.boolean_array
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        prefix_code=prefix_code,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def to_char(arr):
+    """Handles cases where TO_CHAR receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):
+        return unopt_argument("bodo.libs.bodosql_array_kernels.to_char", ["arr"], 0)
+
+    def impl(arr):  # pragma: no cover
+        return to_char_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def to_char_util(arr):
+    """A dedicated kernel for the SQL function TO_CHAR which takes in a
+    number (or column) and returns a string representation of it.
+
+    Args:
+        arr (numerical array/series/scalar): the number(s) being operated on
+        opt_fmt_str (string array/series/scalar): the format string(s) to use
+
+    Returns:
+        string series/scalar: the string representation of the number(s) with the
+        specified null handling rules
+    """
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+
+    # TODO [BE-2744]: support binary data for to_char
+    if is_valid_binary_arg(arr):
+        raise BodoError("to_char(): binary input currently unsupported")
+
+    if is_valid_datetime_or_date_arg(arr):
+        scalar_text = "res[i] = pd.Timestamp(arg0).isoformat(' ')"
+    elif is_valid_float_arg(arr):
+        scalar_text = "if np.isinf(arg0):\n"
+        scalar_text += "  res[i] = 'inf' if arg0 > 0 else '-inf'\n"
+        # currently won't use elif branch since np.nan is caught by
+        # propagate_null[0] being True, presently
+        # TODO [BE-3491]: treat NaNs and nulls differently
+        scalar_text += "elif np.isnan(arg0):\n"
+        scalar_text += "  res[i] = 'NaN'\n"
+        scalar_text += "else:\n"
+        scalar_text += "  res[i] = str(arg0)"
+    elif is_valid_boolean_arg(arr):
+        scalar_text = "res[i] = 'true' if arg0 else 'false'"
+    else:
+        scalar_text = "res[i] = str(arg0)"
+
+    out_dtype = bodo.string_array_type
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
 
 
 @register_jitable

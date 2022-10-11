@@ -217,3 +217,141 @@ def test_to_boolean_opt(to_boolean_test_arrs_null):
         reset_index=True,
         check_names=False,
     )
+
+
+_dates = pd.Series(pd.date_range("20130101", periods=10, freq="D"))
+_times = pd.Series(pd.date_range("20130101", periods=10, freq="H"))
+_dates_nans = _dates.copy()
+_times_nans = _times.copy()
+_dates_nans[4] = _dates_nans[7] = np.nan
+_times_nans[2] = _dates_nans[7] = np.nan
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (pd.Series([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),),
+            id="int_to_str",
+        ),
+        pytest.param(
+            (pd.Series([1.1, 2.2, 3.3, 4.4, 5.5, 6.6, 7.7, 8.8, 9.9, 10.1]),),
+            id="float_to_str",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [True, False, True, False, True, False, True, False, True, False]
+                ),
+            ),
+            id="bool_to_str",
+        ),
+        pytest.param(
+            (_dates,),
+            id="date_to_str",
+        ),
+        pytest.param(
+            (_times,),
+            id="time_to_str",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    np.array([bytes(32), b"abcde", b"ihohi04324", None] * 3, object)
+                ),
+            ),
+            id="binary",
+        ),
+    ],
+)
+def test_to_char(args):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_char(arr))
+
+    arr = args[0]
+    py_output = None
+    if pd.api.types.is_float_dtype(arr):
+        py_output = vectorized_sol(
+            args, lambda x: np.nan if pd.isna(x) else f"{x:.6f}", "string"
+        )
+    elif pd.api.types.infer_dtype(arr) == "bytes":
+        with pytest.raises(BodoError, match="binary input currently unsupported"):
+            bodo.jit(impl)(arr)
+    elif pd.api.types.is_bool_dtype(arr):
+        py_output = vectorized_sol(
+            args,
+            lambda x: np.nan if pd.isna(x) else ("true" if x else "false"),
+            "string",
+        )
+    else:
+        py_output = vectorized_sol(
+            args, lambda x: np.nan if pd.isna(x) else str(x), "string"
+        )
+    if py_output is not None:
+        check_func(
+            impl,
+            args,
+            py_output=py_output,
+            check_dtype=False,
+            reset_index=True,
+            check_names=False,
+        )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (pd.Series([1, 2, 3, None, 5, 6, 7, None, 9, 10]),),
+            id="int_with_nulls",
+        ),
+        pytest.param(
+            (pd.Series([1.1, 2.2, 3.3, None, 5.5, 6.6, 7.7, None, 9.9, 10.1]),),
+            id="float_with_nulls",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [True, False, True, None, True, False, True, None, True, False],
+                    dtype="boolean",
+                ),
+            ),
+            id="bool_with_nulls",
+        ),
+        pytest.param(
+            (_dates_nans,),
+            id="date_with_nulls",
+        ),
+        pytest.param(
+            (_times_nans,),
+            id="time_with_nulls",
+        ),
+    ],
+)
+def test_to_char_opt(args):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_char(arr))
+
+    arr = args[0]
+    if pd.api.types.is_float_dtype(arr):
+        py_output = vectorized_sol(
+            args, lambda x: np.nan if pd.isna(x) else f"{x:.6f}", "string"
+        )
+    elif pd.api.types.is_bool_dtype(arr):
+        py_output = vectorized_sol(
+            args,
+            lambda x: np.nan if pd.isna(x) else ("true" if x else "false"),
+            "string",
+        )
+    else:
+        py_output = vectorized_sol(
+            args, lambda x: np.nan if pd.isna(x) else str(x), "string"
+        )
+    check_func(
+        impl,
+        args,
+        py_output=py_output,
+        check_dtype=False,
+        reset_index=True,
+        check_names=False,
+    )

@@ -2265,6 +2265,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "TRY_TO_BOOLEAN":
           case "TO_BOOLEAN":
             return generateToBooleanFnCode(operandsInfo, fnName);
+          case "TO_CHAR":
+          case "TO_VARCHAR":
+            return generateToCharFnCode(operandsInfo, fnName);
           case "ASINH":
           case "ACOSH":
           case "ATANH":

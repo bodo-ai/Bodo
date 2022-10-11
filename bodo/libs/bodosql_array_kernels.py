@@ -107,6 +107,7 @@ broadcasted_fixed_arg_functions = {
     "to_boolean",
     "to_char",
     "to_date",
+    "to_varchar",
     "translate",
     "trunc",
     "try_to_boolean",
