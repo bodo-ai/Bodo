@@ -10,6 +10,10 @@ import pytest
 from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
 
 import bodo
+from bodo.tests.conftest import (  # pragma: no cover
+    iceberg_database,
+    iceberg_table_conn,
+)
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
@@ -147,7 +151,8 @@ def test_remove_view(memory_leak_check):
                     ),
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                     "t3": TablePath(
-                        "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
+                        "bodosql/tests/data/sample-parquet-data/partitioned",
+                        "parquet",
                     ),
                 },
             ),
@@ -161,7 +166,8 @@ def test_remove_view(memory_leak_check):
                     ),
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                     "t3": TablePath(
-                        "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
+                        "bodosql/tests/data/sample-parquet-data/partitioned",
+                        "parquet",
                     ),
                 },
                 SnowflakeCatalog(
@@ -241,7 +247,9 @@ def test_bodosql_context_boxed_sql(bc, memory_leak_check):
     check_func(impl, (bc,), py_output=py_output)
 
 
-def test_bodosql_context_boxed_sql_table_path(memory_leak_check):
+def test_bodosql_context_boxed_sql_table_path(
+    memory_leak_check, datapath, iceberg_database, iceberg_table_conn
+):
     """
     Tests boxing and unboxing with a BodoSQL context where 1
     table uses the table path API.
@@ -250,19 +258,18 @@ def test_bodosql_context_boxed_sql_table_path(memory_leak_check):
     def impl(bc):
         return bc.sql("select * from t1")
 
-    py_output = pd.DataFrame(
+    py_out = pd.DataFrame(
         {"A": np.arange(100), "B": ["r32r", "R32", "Rew", "r32r"] * 25}
     )
+
     bc = BodoSQLContext(
         {
-            "t1": py_output,
+            "t1": py_out,
             "t2": pd.DataFrame({"C": [b"345253"] * 100}),
-            "t3": TablePath(
-                "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
-            ),
+            "t3": TablePath(datapath("sample-parquet-data/partitioned"), "parquet"),
         }
     )
-    check_func(impl, (bc,), py_output=py_output)
+    check_func(impl, (bc,), py_output=py_out)
 
 
 def test_add_or_replace_view_jit(memory_leak_check):

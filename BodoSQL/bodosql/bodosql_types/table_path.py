@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
@@ -21,6 +21,7 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_str,
     is_overload_constant_bool,
+    is_overload_constant_list,
     is_overload_constant_str,
     is_overload_none,
     raise_bodo_error,
@@ -28,7 +29,12 @@ from bodo.utils.typing import (
 
 
 def check_tablepath_constant_arguments(
-    file_path, file_type, conn_str, reorder_io, db_schema
+    file_path,
+    file_type,
+    conn_str,
+    reorder_io,
+    db_schema,
+    bodo_read_as_dict,
 ):
     """
     Helper function used to do the majority of error checking for the TablePath
@@ -72,8 +78,21 @@ def check_tablepath_constant_arguments(
             f"bodosql.TablePath(): `reorder_io` must be a boolean if provided."
         )
 
+    if not (
+        (bodo_read_as_dict is None)
+        or (
+            isinstance(bodo_read_as_dict, list)
+            and all(isinstance(item, str) for item in bodo_read_as_dict)
+        )
+    ):
+        raise BodoError(
+            f"bodosql.TablePath(): `bodo_read_as_dict` must be a constant list of strings if provided."
+        )
 
-def convert_tablepath_constructor_args(file_path, file_type, conn_str, reorder_io):
+
+def convert_tablepath_constructor_args(
+    file_path, file_type, conn_str, reorder_io, bodo_read_as_dict
+):
     """
     Helper function to modify the TablePath arguments in a consistent way across
     JIT code and the Python API. This takes entirely Python objects.
@@ -89,7 +108,7 @@ def convert_tablepath_constructor_args(file_path, file_type, conn_str, reorder_i
         # a running DB but pq should be True?
         reorder_io = True
 
-    return file_path, file_type, conn_str, reorder_io
+    return file_path, file_type, conn_str, reorder_io, bodo_read_as_dict
 
 
 class TablePath:
@@ -107,15 +126,22 @@ class TablePath:
         conn_str: Optional[str] = None,
         reorder_io: Optional[bool] = None,
         db_schema: Optional[str] = None,
+        bodo_read_as_dict: Optional[List[str]] = None,
     ):
         # Update the arguments.
-        file_path, file_type, conn_str, reorder_io = convert_tablepath_constructor_args(
-            file_path, file_type, conn_str, reorder_io
+        (
+            file_path,
+            file_type,
+            conn_str,
+            reorder_io,
+            bodo_read_as_dict,
+        ) = convert_tablepath_constructor_args(
+            file_path, file_type, conn_str, reorder_io, bodo_read_as_dict
         )
 
         # Check the arguments
         check_tablepath_constant_arguments(
-            file_path, file_type, conn_str, reorder_io, db_schema
+            file_path, file_type, conn_str, reorder_io, db_schema, bodo_read_as_dict
         )
 
         self._file_path = file_path
@@ -123,14 +149,19 @@ class TablePath:
         self._conn_str = conn_str
         self._reorder_io = reorder_io
         self._db_schema = db_schema
+        self._bodo_read_as_dict = bodo_read_as_dict
 
     def __key(self):
+        bodo_read_dict = (
+            None if self._bodo_read_as_dict is None else tuple(self._bodo_read_as_dict)
+        )
         return (
             self._file_path,
             self._file_type,
             self._conn_str,
             self._reorder_io,
             self._db_schema,
+            bodo_read_dict,
         )
 
     def __hash__(self):
@@ -152,10 +183,10 @@ class TablePath:
         return self == other
 
     def __repr__(self):
-        return f"TablePath({self._file_path!r}, {self._file_type!r}, conn_str={self._conn_str!r}, reorder_io={self._reorder_io!r}), db_schema={self._db_schema!r}"
+        return f"TablePath({self._file_path!r}, {self._file_type!r}, conn_str={self._conn_str!r}, reorder_io={self._reorder_io!r}), db_schema={self._db_schema!r}, bodo_read_as_dict={self._bodo_read_as_dict!r}"
 
     def __str__(self):
-        return f"TablePath({self._file_path}, {self._file_type}, conn_str={self._conn_str}, reorder_io={self._reorder_io}), db_schema={self._db_schema}"
+        return f"TablePath({self._file_path}, {self._file_type}, conn_str={self._conn_str}, reorder_io={self._reorder_io}), db_schema={self._db_schema}, bodo_read_as_dict={self._bodo_read_as_dict}"
 
 
 class TablePathType(types.Type):
@@ -165,14 +196,16 @@ class TablePathType(types.Type):
     that should describe the type of file to read.
     """
 
-    def __init__(self, file_path, file_type, conn_str, reorder_io, db_schema):
+    def __init__(
+        self, file_path, file_type, conn_str, reorder_io, db_schema, bodo_read_as_dict
+    ):
         # This assumes that file_path, file_type, and conn_str
         # are validated at a previous step, either the init
         # function or in Python.
         # TODO: Replace the file_path with the schema for better caching.
         # TODO: Remove conn_str from the caching requirement?
         super(TablePathType, self).__init__(
-            name=f"TablePath({file_path}, {file_type}, {conn_str}, {reorder_io}, {db_schema})"
+            name=f"TablePath({file_path}, {file_type}, {conn_str}, {reorder_io}, {db_schema}, {bodo_read_as_dict})"
         )
         # TODO: Replace with using file_path at runtime if the schema
         # is provided.
@@ -181,6 +214,7 @@ class TablePathType(types.Type):
         self._conn_str = conn_str
         self._reorder_io = reorder_io
         self._db_schema = db_schema
+        self._bodo_read_as_dict = bodo_read_as_dict
 
     @property
     def file_path_type(self):
@@ -207,7 +241,12 @@ class TablePathType(types.Type):
 @typeof_impl.register(TablePath)
 def typeof_table_path(val, c):
     return TablePathType(
-        val._file_path, val._file_type, val._conn_str, val._reorder_io, val._db_schema
+        val._file_path,
+        val._file_type,
+        val._conn_str,
+        val._reorder_io,
+        val._db_schema,
+        val._bodo_read_as_dict,
     )
 
 
@@ -257,10 +296,18 @@ def box_table_path(typ, val, c):
         types.bool_, c.context.get_constant(types.bool_, typ._reorder_io), c.env_manager
     )
 
+    bodo_read_as_dict_obj = c.pyapi.unserialize(
+        c.pyapi.serialize_object(typ._bodo_read_as_dict)
+    )
+
     table_path_obj = c.pyapi.unserialize(c.pyapi.serialize_object(TablePath))
     args = c.pyapi.tuple_pack([file_path_obj, file_type_obj])
     kws = c.pyapi.dict_pack(
-        [("conn_str", conn_str_obj), ("reorder_io", reorder_io_obj)]
+        [
+            ("conn_str", conn_str_obj),
+            ("reorder_io", reorder_io_obj),
+            ("bodo_read_as_dict", bodo_read_as_dict_obj),
+        ]
     )
     res = c.pyapi.call(
         table_path_obj,
@@ -271,6 +318,7 @@ def box_table_path(typ, val, c):
     c.pyapi.decref(file_type_obj)
     c.pyapi.decref(conn_str_obj)
     c.pyapi.decref(reorder_io_obj)
+    c.pyapi.decref(bodo_read_as_dict_obj)
     c.pyapi.decref(table_path_obj)
     c.pyapi.decref(args)
     c.pyapi.decref(kws)
@@ -305,7 +353,12 @@ def unbox_table_path(typ, val, c):
 # Implement the constructor so the same code can be run in Python and JIT
 @overload(TablePath, no_unliteral=True)
 def overload_table_path_constructor(
-    file_path, file_type, conn_str=None, reorder_io=None, db_schema=None
+    file_path,
+    file_type,
+    conn_str=None,
+    reorder_io=None,
+    db_schema=None,
+    bodo_read_as_dict=None,
 ):
     """
     Table Path Constructor to enable calling TablePath("myfile", "parquet")
@@ -313,16 +366,29 @@ def overload_table_path_constructor(
     """
 
     def impl(
-        file_path, file_type, conn_str=None, reorder_io=None, db_schema=None
+        file_path,
+        file_type,
+        conn_str=None,
+        reorder_io=None,
+        db_schema=None,
+        bodo_read_as_dict=None,
     ):  # pragma: no cover
-        return init_table_path(file_path, file_type, conn_str, reorder_io, db_schema)
+        return init_table_path(
+            file_path, file_type, conn_str, reorder_io, db_schema, bodo_read_as_dict
+        )
 
     return impl
 
 
 @intrinsic
 def init_table_path(
-    typingctx, file_path_typ, file_type_typ, conn_str_typ, reorder_io_typ, db_schema
+    typingctx,
+    file_path_typ,
+    file_type_typ,
+    conn_str_typ,
+    reorder_io_typ,
+    db_schema,
+    bodo_read_as_dict_typ,
 ):
     """
     Instrinsic used to actually construct the TablePath from the constructor.
@@ -346,6 +412,13 @@ def init_table_path(
         raise raise_bodo_error(
             f"bodosql.TablePath(): `db_schema` must be a constant string if provided."
         )
+    if not (
+        is_overload_none(bodo_read_as_dict_typ)
+        or is_overload_constant_list(bodo_read_as_dict_typ)
+    ):
+        raise raise_bodo_error(
+            f"bodosql.TablePath(): `_bodo_read_as_dict_typ` must be a constant list of strings if provided."
+        )
 
     # Extract the literal values
     literal_file_path = get_overload_const_str(file_path_typ)
@@ -353,6 +426,7 @@ def init_table_path(
     literal_conn_str_typ = get_literal_value(conn_str_typ)
     literal_reorder_io_typ = get_literal_value(reorder_io_typ)
     literal_db_schema_typ = get_literal_value(db_schema)
+    literal_bodo_read_as_dict_typ = get_literal_value(bodo_read_as_dict_typ)
 
     # Convert the values
     (
@@ -360,11 +434,13 @@ def init_table_path(
         literal_file_type,
         literal_conn_str_typ,
         literal_reorder_io_typ,
+        literal_bodo_read_as_dict_typ,
     ) = convert_tablepath_constructor_args(
         literal_file_path,
         literal_file_type,
         literal_conn_str_typ,
         literal_reorder_io_typ,
+        literal_bodo_read_as_dict_typ,
     )
 
     # Error checking.
@@ -374,10 +450,11 @@ def init_table_path(
         literal_conn_str_typ,
         literal_reorder_io_typ,
         literal_db_schema_typ,
+        literal_bodo_read_as_dict_typ,
     )
 
     def codegen(context, builder, signature, args):  # pragma: no cover
-        file_path, _, conn_str, _, _ = args
+        file_path, _, conn_str, _, _, _ = args
         typ = signature.return_type
         table_path = cgutils.create_struct_proxy(typ)(context, builder)
         table_path.file_path = file_path
@@ -390,6 +467,7 @@ def init_table_path(
         literal_conn_str_typ,
         literal_reorder_io_typ,
         literal_db_schema_typ,
+        literal_bodo_read_as_dict_typ,
     )
     # Convert file_path to unicode type because we always store it as a
     # regular string.
@@ -401,6 +479,7 @@ def init_table_path(
             ret_type.conn_str_type,
             reorder_io_typ,
             db_schema,
+            bodo_read_as_dict_typ,
         ),
         codegen,
     )

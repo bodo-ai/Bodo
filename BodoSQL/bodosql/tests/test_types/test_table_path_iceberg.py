@@ -111,11 +111,15 @@ def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn)
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
-    def impl(table_name, conn, db_schema):
+    def impl(table_name, conn, db_schema, bodo_read_as_dict):
         bc = bodosql.BodoSQLContext(
             {
                 "iceberg_tbl": bodosql.TablePath(
-                    table_name, "sql", conn_str=conn, db_schema=db_schema
+                    table_name,
+                    "sql",
+                    conn_str=conn,
+                    db_schema=db_schema,
+                    bodo_read_as_dict=bodo_read_as_dict,
                 )
             }
         )
@@ -128,12 +132,16 @@ def test_column_pruning(memory_leak_check, iceberg_database, iceberg_table_conn)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     res = None
+    bodo_read_as_dict = ["A"]
     with set_logging_stream(logger, 1):
-        res = bodo.jit()(impl)(table_name, conn, db_schema)
+        res = bodo.jit()(impl)(table_name, conn, db_schema, bodo_read_as_dict)
         check_logger_msg(stream, "Columns loaded ['A', 'C']")
+        check_logger_msg(
+            stream, f"Columns {bodo_read_as_dict} using dictionary encoding"
+        )
 
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
-    check_func(impl, (table_name, conn, db_schema), py_output=py_out)
+    check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
 
 
 def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table_conn):
@@ -168,3 +176,47 @@ def test_zero_columns_pruning(memory_leak_check, iceberg_database, iceberg_table
     check_func(
         impl, (table_name, conn, db_schema), py_output=py_out, is_out_distributed=False
     )
+
+
+def test_tablepath_dict_encoding(
+    memory_leak_check, iceberg_database, iceberg_table_conn
+):
+    """
+    Test simple read operation on test table simple_string_table
+    with column pruning and multiple columns being dictionary encoded.
+    """
+
+    table_name = "simple_string_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema, bodo_read_as_dict):
+        bc = bodosql.BodoSQLContext(
+            {
+                "iceberg_tbl": bodosql.TablePath(
+                    table_name,
+                    "sql",
+                    conn_str=conn,
+                    db_schema=db_schema,
+                    bodo_read_as_dict=bodo_read_as_dict,
+                )
+            }
+        )
+        df = bc.sql("SELECT A, C FROM iceberg_tbl")
+        return df
+
+    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = py_out[["A", "C"]]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    res = None
+    bodo_read_as_dict = ["A", "C"]
+    with set_logging_stream(logger, 1):
+        res = bodo.jit()(impl)(table_name, conn, db_schema, bodo_read_as_dict)
+        check_logger_msg(
+            stream, f"Columns {bodo_read_as_dict} using dictionary encoding"
+        )
+
+    py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
+    check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
