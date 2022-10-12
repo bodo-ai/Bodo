@@ -12,8 +12,7 @@ source activate $CONDA_ENV
 
 
 # ------ Run Tests -----------
-git clone https://github.com/Bodo-inc/BodoSQL-Customer-Examples.git $BODOSQL_CUSTOMER_TESTS
-cd $BODOSQL_CUSTOMER_TESTS
+cd ./BodoSQL-Customer-Examples/
 source deactivate || true
 source activate $CONDA_ENV
 python -m pytest -s -v -p no:faulthandler --durations=0
