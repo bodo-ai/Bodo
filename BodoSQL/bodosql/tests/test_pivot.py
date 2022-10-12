@@ -34,9 +34,8 @@ def test_multicol_pivot(basic_df, spark_info):
     )
 
 
-# TODO: fix memory leak issues with groupby apply, see [BS-530/BE-947]
 @pytest.mark.slow
-def test_basic_null_pivot(basic_df, spark_info):
+def test_basic_null_pivot(basic_df, spark_info, memory_leak_check):
     """
     Basic test for PIVOT with 1 column without a match somewhere.
     """
@@ -47,12 +46,12 @@ def test_basic_null_pivot(basic_df, spark_info):
         FOR A IN (1 as single, 7 as triple)
     )
     """
-    check_query(query, basic_df, spark_info, convert_float_nan=True)
+    # set check_dtype=False because of int64 vs Int64 difference
+    check_query(query, basic_df, spark_info, convert_float_nan=True, check_dtype=False)
 
 
-# TODO: Determine memory leak issues in pivot
 @pytest.mark.slow
-def test_multicol_null_pivot(basic_df, spark_info):
+def test_multicol_null_pivot(basic_df, spark_info, memory_leak_check):
     """
     Basic test for PIVOT with mulitple columns without a match somewhere.
     """
@@ -63,6 +62,12 @@ def test_multicol_null_pivot(basic_df, spark_info):
         FOR (A, B) IN ((1, 4) as col1, (2, 15) as col2)
     )
     """
+    # set check_dtype=False because of int64 vs Int64 difference
     check_query(
-        query, basic_df, spark_info, convert_float_nan=True, is_out_distributed=False
+        query,
+        basic_df,
+        spark_info,
+        convert_float_nan=True,
+        is_out_distributed=False,
+        check_dtype=False,
     )
