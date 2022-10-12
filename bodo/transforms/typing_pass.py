@@ -1832,6 +1832,7 @@ class TypingTransforms:
             (2, "conn_str"),
             (3, "reorder_io"),
             (4, "db_schema"),
+            (5, "bodo_read_as_dict"),
         ]
         nodes += self._replace_arg_with_literal(
             "bodosql.TablePath", rhs, func_args, label

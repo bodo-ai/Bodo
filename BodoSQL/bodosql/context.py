@@ -374,17 +374,23 @@ def _generate_table_read(
     if isinstance(bodo_type, TablePathType):
         file_type = bodo_type._file_type
         file_path = bodo_type._file_path
+
+        read_dict_list = (
+            ""
+            if bodo_type._bodo_read_as_dict is None
+            else f"_bodo_read_as_dict={bodo_type._bodo_read_as_dict}"
+        )
         if file_type == "pq":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
-            read_line = f"pd.read_parquet('{file_path}')"
+            read_line = f"pd.read_parquet('{file_path}', {read_dict_list})\n"
         elif file_type == "sql":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
             conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(conn_str)
             if db_type == "iceberg":
-                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}')\n"
+                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list})\n"
             else:
                 read_line = f"pd.read_sql('select * from {file_path}', '{conn_str}')\n"
         else:

@@ -117,7 +117,6 @@ for i, m in enumerate(modules):
         # rename coverage file and move aside to avoid conflicts with pytest-cov
         os.rename(".coverage", "./cov_files/.coverage." + str(i))
 
-
 if tests_failed:
     exit(1)
 
