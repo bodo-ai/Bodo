@@ -2,6 +2,8 @@
 """Tests for user facing BodoSQL APIs.
 """
 
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -14,20 +16,27 @@ from bodo.utils.typing import BodoError
 
 @pytest.fixture(
     params=[
-        (
-            SnowflakeCatalog(
-                "myusername",
-                "mypassword",
-                "myaccount",
-                "mywarehouse",
-                "mydatabase",
+        pytest.param(
+            (
+                SnowflakeCatalog(
+                    os.environ.get("SF_USER", ""),
+                    os.environ.get("SF_PASSWORD", ""),
+                    "bodopartner.us-east-1",
+                    "DEMO_WH",
+                    "TEST_DB",
+                    connection_params={"schema": "PUBLIC"},
+                ),
+                SnowflakeCatalog(
+                    os.environ.get("SF_USER", ""),
+                    os.environ.get("SF_PASSWORD", ""),
+                    "bodopartner.us-east-1",
+                    "DEMO_WH",
+                    "SNOWFLAKE_SAMPLE_DATA",
+                    connection_params={"schema": "PUBLIC"},
+                ),
             ),
-            SnowflakeCatalog(
-                "myusername2",
-                "mypassword2",
-                "myaccount",
-                "mywarehouse",
-                "mydatabase",
+            marks=pytest.mark.skipif(
+                "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
             ),
         )
     ]
@@ -156,14 +165,18 @@ def test_remove_view(memory_leak_check):
                     ),
                 },
                 SnowflakeCatalog(
-                    "myusername",
-                    "mypassword",
-                    "myaccount",
-                    "mywarehouse",
-                    "mydatabase",
+                    os.environ.get("SF_USER", ""),
+                    os.environ.get("SF_PASSWORD", ""),
+                    "bodopartner.us-east-1",
+                    "DEMO_WH",
+                    "TEST_DB",
+                    connection_params={"schema": "PUBLIC"},
                 ),
             ),
             id="snowflake-catalog",
+            marks=pytest.mark.skipif(
+                "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
+            ),
         ),
     ],
 )
@@ -201,20 +214,24 @@ def test_bodosql_context_boxing(bc, memory_leak_check):
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                 },
                 SnowflakeCatalog(
-                    "myusername",
-                    "mypassword",
-                    "myaccount",
-                    "mywarehouse",
-                    "mydatabase",
+                    os.environ.get("SF_USER", ""),
+                    os.environ.get("SF_PASSWORD", ""),
+                    "bodopartner.us-east-1",
+                    "DEMO_WH",
+                    "TEST_DB",
+                    connection_params={"schema": "PUBLIC"},
                 ),
             ),
             id="snowflake-catalog",
+            marks=pytest.mark.skipif(
+                "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
+            ),
         ),
     ],
 )
 def test_bodosql_context_boxed_sql(bc, memory_leak_check):
     """
-    Tests boxing and unboxing with a BodoSQL context.
+    Tests unboxing with a BodoSQL context and executing a query.
     """
 
     def impl(bc):

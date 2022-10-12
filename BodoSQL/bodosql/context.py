@@ -828,7 +828,28 @@ class BodoSQLContext:
             bc_keys = set(bc.tables.keys())
             if curr_keys == bc_keys:
                 for key in curr_keys:
-                    if not self.tables[key].equals(bc.tables[key]):  # pragma: no cover
+                    if isinstance(self.tables[key], TablePath) and isinstance(
+                        bc.tables[key], TablePath
+                    ):
+                        if not self.tables[key].equals(
+                            bc.tables[key]
+                        ):  # pragma: no cover
+                            return False
+                    elif isinstance(self.tables[key], pd.DataFrame) and isinstance(
+                        bc.tables[key], pd.DataFrame
+                    ):  # pragma: no cover
+                        # DataFrames may not have exactly the same dtypes becasue of flags inside boxing (e.g. object -> string)
+                        # As a result we determine equality using assert_frame_equals
+                        try:
+                            pd.testing.assert_frame_equal(
+                                self.tables[key],
+                                bc.tables[key],
+                                check_dtype=False,
+                                check_index_type=False,
+                            )
+                        except AssertionError:
+                            return False
+                    else:
                         return False
                 return self.catalog == bc.catalog
         return False  # pragma: no cover
