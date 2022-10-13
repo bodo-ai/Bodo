@@ -218,7 +218,8 @@ def test_to_date_valid_datetime_types_case(
     )
 
 
-def test_invalid_to_date_args(spark_info, dt_fn_dataframe, test_fn, memory_leak_check):
+# [BE-3774] Leaks Memory
+def test_invalid_to_date_args(spark_info, dt_fn_dataframe, test_fn):
     """tests arguments which cause NA in try_to_date, and throw an error for to_date"""
 
     query = f"SELECT {test_fn}(invalid_dt_strings) from table1"

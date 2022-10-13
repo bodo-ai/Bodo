@@ -13,8 +13,10 @@ from bodo.tests.caching_tests.caching_tests_common import (  # noqa
     fn_distribution,
 )
 from bodo.tests.utils import check_caching
+import pytest
 
 
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_snowflake_catalog_caching(fn_distribution, is_cached):
     def impl(bc):
         return bc.sql("SELECT r_name FROM TPCH_SF1.REGION ORDER BY r_name")
@@ -39,4 +41,4 @@ def test_snowflake_catalog_caching(fn_distribution, is_cached):
         (bc,),
         check_cache,
         input_dist=fn_distribution,
-    )
+)

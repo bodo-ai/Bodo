@@ -8,7 +8,7 @@ from bodosql.tests.utils import check_query
 
 @pytest.fixture(
     params=[
-        "Select B as X, C as Y,D as Z from (Select A, B, C from table1 where table1.A = 1) as t2 where t2.B = 2",
+        "Select A as X, B as Y, C as Z from (Select A, B, C from table1 where table1.A = 1) as t2 where t2.B = 2",
         pytest.param(
             "Select X as U, Y as W, Z as Q from (Select A as X, B as Y, C as Z from table1 where table1.B = 3) as t2 where t2.Z = 3",
             marks=pytest.mark.slow,

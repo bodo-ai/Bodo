@@ -55,4 +55,5 @@ def test_aggregate_join_transpose(
         aggregate_join_transpose_queries,
         simple_join_fixture,
         spark_info,
+        check_dtype=False
     )

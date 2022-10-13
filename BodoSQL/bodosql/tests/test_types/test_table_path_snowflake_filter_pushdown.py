@@ -92,6 +92,10 @@ def test_simple_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
 def test_zero_columns_pruning(memory_leak_check):
     """
     Test loading just a length from a Snowflake table.
@@ -125,6 +129,10 @@ def test_zero_columns_pruning(memory_leak_check):
     )
 
 
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
 def test_snowflake_limit_pushdown(memory_leak_check):
     """
     Test limit pushdown with loading from a Snowflake table.

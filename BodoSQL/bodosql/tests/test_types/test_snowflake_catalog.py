@@ -485,6 +485,10 @@ def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
         assert_tables_equal(output_df, result_df)
 
 
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
 def test_delete_named_param(test_db_snowflake_catalog):
     """
     Tests submitting a delete query with a named param. Since we just
@@ -517,6 +521,10 @@ def test_delete_named_param(test_db_snowflake_catalog):
             impl(query, bc, 1)
 
 
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
 def test_delete_bodosql_syntax(test_db_snowflake_catalog):
     """
     Tests submitting a delete query with SQL that does not match
