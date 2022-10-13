@@ -140,6 +140,9 @@ def test_unsupported_types(memory_leak_check):
 
     def impl(df):
         bc = bodosql.BodoSQLContext({"table1": df})
+        # Bodo updates/finalizes schema types in between parsing and validation, which doesn't happen
+        # unless we have a query
+        return bc.sql("SELECT A from table1")
 
     df = pd.DataFrame({"A": [1, 2, 3, 4], "B": [Decimal(1.2)] * 4})
     if bodo.get_rank() == 0:
