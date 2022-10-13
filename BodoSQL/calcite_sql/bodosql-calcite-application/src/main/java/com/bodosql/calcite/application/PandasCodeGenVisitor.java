@@ -524,7 +524,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
            * alias from table1 group by D" Calcite generates a plan like:
            * LogicalProject(alias2=[$1], alias=[$1]) LogicalAggregate(group=[{0}], alias=[SUM($1)])
            * In this case, we can't use loc, as it would lead to duplicate column names in the
-           * output dataframe See test_repeat_columns in bodosql/tests/test_agg_groupby.py
+           * output dataframe See test_repeat_columns in BodoSQL/bodosql/tests/test_agg_groupby.py
            */
           useLoc = false;
           break;

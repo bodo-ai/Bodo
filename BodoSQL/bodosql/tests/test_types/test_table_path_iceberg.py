@@ -78,7 +78,7 @@ def test_simple_table_read(
         # Bodo outputs binary data as bytes while Spark does bytearray (which Bodo doesn't support),
         # so we convert Spark output.
         # This has been copied from BodoSQL. See `convert_spark_bytearray`
-        # in `bodosql/tests/utils.py`.
+        # in `BodoSQL/bodosql/tests/utils.py`.
         py_out[["C"]] = py_out[["C"]].apply(
             lambda x: [bytes(y) if isinstance(y, bytearray) else y for y in x],
             axis=1,

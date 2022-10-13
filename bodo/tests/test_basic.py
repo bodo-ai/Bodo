@@ -1313,7 +1313,7 @@ def test_int_scalar_to_array(memory_leak_check):
 @pytest.mark.slow
 def test_parfor_empty_entry_block(memory_leak_check):
     """make sure CFG simplification can handle empty entry block corner case properly.
-    See bodosql/tests/test_named_param_df_apply.py::test_case
+    See BodoSQL/bodosql/tests/test_named_param_df_apply.py::test_case
     """
     out_arr_type = bodo.boolean_array
 

@@ -25,7 +25,7 @@ from bodo.tests.utils import (
 
 
 @pytest.mark.slow
-def test_table_path_filter_pushdown(memory_leak_check):
+def test_table_path_filter_pushdown(datapath, memory_leak_check):
     """
     Tests basic filter pushdown support.
     """
@@ -62,7 +62,7 @@ def test_table_path_filter_pushdown(memory_leak_check):
         )
         return bc.sql("Select A + 1 from table1 where part = 'b' and part is not null")
 
-    filename = "bodosql/tests/data/sample-parquet-data/partitioned"
+    filename = datapath("sample-parquet-data/partitioned")
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
@@ -109,7 +109,7 @@ def test_table_path_filter_pushdown(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_table_path_filter_pushdown_multitable(memory_leak_check):
+def test_table_path_filter_pushdown_multitable(datapath, memory_leak_check):
     """
     Tests basic filter with multiple tables.
     """
@@ -125,7 +125,7 @@ def test_table_path_filter_pushdown_multitable(memory_leak_check):
             "Select table1.A as a1, table1.B as b1, table2.A as a2, table2.B as b2 from table1, table2 where table1.part = 'b' and table2.part = 'a' and table1.c = table2.c"
         )
 
-    filename = "bodosql/tests/data/sample-parquet-data/partitioned"
+    filename = datapath("sample-parquet-data/partitioned")
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
@@ -156,7 +156,7 @@ def test_table_path_filter_pushdown_multitable(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_table_path_no_filter_pushdown(memory_leak_check):
+def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
     """
     Tests when filter pushdown should be rejected because a table is reused.
     """
@@ -171,7 +171,7 @@ def test_table_path_no_filter_pushdown(memory_leak_check):
             "Select t1.A as a1 from table1 as t1 inner join table1 on table1.c = t1.c where t1.part = 'a'"
         )
 
-    filename = "bodosql/tests/data/sample-parquet-data/partitioned"
+    filename = datapath("sample-parquet-data/partitioned")
 
     # Compare entirely to Pandas output to simplify the process.
     # Load the data once and then filter for each query.
@@ -202,6 +202,7 @@ def test_table_path_no_filter_pushdown(memory_leak_check):
 
 @pytest.mark.slow
 def test_table_path_col_pruning_and_filter_pushdown_implicite_casting(
+    datapath,
     memory_leak_check,
 ):
     """
@@ -213,7 +214,7 @@ def test_table_path_col_pruning_and_filter_pushdown_implicite_casting(
     # B -> categorial strings, C -> Datetype, D -> int E -> partition column of string
     # A, B, and C will be implictly by bodosql in visitTableScan
     # Note, that
-    filename = "bodosql/tests/data/sample-parquet-data/needs_implicit_typ_conversion.pq"
+    filename = datapath("sample-parquet-data/needs_implicit_typ_conversion.pq")
 
     # tests filters/column pruning works on partitions
     def impl_simple_no_join_filter_partition(f1):
@@ -377,7 +378,7 @@ def test_table_path_col_pruning_and_filter_pushdown_implicite_casting(
 
 
 @pytest.mark.slow
-def test_table_path_col_pruning_simple(memory_leak_check):
+def test_table_path_col_pruning_simple(datapath, memory_leak_check):
     """
     Tests that column pruning is correctly applied in the case that we perform implicit casting of the
     input dataframe types (done in visitTableScan)
@@ -386,7 +387,7 @@ def test_table_path_col_pruning_simple(memory_leak_check):
     # This dataframe has 3 columns, A -> categorical datetime64,
     # B -> categorial strings, C -> Datetype, D -> int E -> partition column of string
     # A, B, and C will be implictly cast by bodosql in visitTableScan
-    filename = "bodosql/tests/data/sample-parquet-data/needs_implicit_typ_conversion.pq"
+    filename = datapath("sample-parquet-data/needs_implicit_typ_conversion.pq")
 
     def impl_simple_only_A(f1):
         bc = bodosql.BodoSQLContext(
@@ -447,7 +448,7 @@ def test_table_path_col_pruning_simple(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_table_path_limit_pushdown(memory_leak_check):
+def test_table_path_limit_pushdown(datapath, memory_leak_check):
     """
     Test basic limit pushdown support.
     """
@@ -471,8 +472,8 @@ def test_table_path_limit_pushdown(memory_leak_check):
         return bc.sql("Select * from table1 limit 5")
 
     # TODO[BE-3581]: support and test limit pushdown for partitioned Parquet datasets
-    # filename = "bodosql/tests/data/sample-parquet-data/partitioned"
-    filename = "bodosql/tests/data/sample-parquet-data/no_index.pq"
+    # filename = "BodoSQL/bodosql/tests/data/sample-parquet-data/partitioned"
+    filename = datapath("sample-parquet-data/no_index.pq")
 
     py_output = pd.read_parquet(filename)[["A", "B"]].head(5)
     check_func(
@@ -504,7 +505,7 @@ def test_named_param_filter_pushdown(memory_leak_check):
     Test that using a Python variable as a filter variable via the named
     parameter supports filter pushdown.
     """
-    filename = "bodosql/tests/data/sample-parquet-data/needs_implicit_typ_conversion.pq"
+    filename = datapath("sample-parquet-data/needs_implicit_typ_conversion.pq")
 
     def impl(f1, val):
         bc = bodosql.BodoSQLContext(
@@ -545,7 +546,7 @@ def test_named_param_filter_pushdown(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_table_path_limit_pushdown_complex(memory_leak_check):
+def test_table_path_limit_pushdown_complex(datapath, memory_leak_check):
     """
     Tests that limit pushdown works with a possible complicated projection.
     """
@@ -560,7 +561,7 @@ def test_table_path_limit_pushdown_complex(memory_leak_check):
             "Select A + 1 as A, B as newCol1, 'my_name' as newCol2 from table1 limit 5"
         )
 
-    filename = "bodosql/tests/data/sample-parquet-data/no_index.pq"
+    filename = datapath("sample-parquet-data/no_index.pq")
     py_output = pd.read_parquet(filename)[["A", "B"]]
     py_output["A"] += 1
     py_output = py_output.rename(columns={"B": "newCol1"}, copy=False)
@@ -579,7 +580,7 @@ def test_table_path_limit_pushdown_complex(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_boolean_logic_filter_pushdown(memory_leak_check):
+def test_boolean_logic_filter_pushdown(datapath, memory_leak_check):
     """
     Tests that filter pushdown works with different boolean logic expressions of conditionals
 
@@ -604,7 +605,7 @@ def test_boolean_logic_filter_pushdown(memory_leak_check):
         )
         return bc.sql(query)
 
-    filename = "bodosql/tests/data/tpch-test-data/parquet/lineitem.parquet"
+    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
     read_df = pd.read_parquet(filename)
 
     expr_a = "L_ORDERKEY > 10"

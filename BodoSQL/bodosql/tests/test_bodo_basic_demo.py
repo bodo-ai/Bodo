@@ -8,7 +8,7 @@ import pandas as pd
 import bodo
 
 
-def test_demo1():
+def test_demo1(datapath):
     """test for demo1.py"""
 
     @bodo.jit
@@ -24,8 +24,8 @@ def test_demo1():
         )
         return count
 
-    ss_file = "bodosql/tests/data/tpcxbb-test-data/store_sales"
-    i_file = "bodosql/tests/data/tpcxbb-test-data/item"
+    ss_file = datapath("tpcxbb-test-data/store_sales")
+    i_file = datapath("tpcxbb-test-data/item")
     S = f(ss_file, i_file)
     # just basic sanity check
     # TODO(ehsan): compare results with SparkSQL?

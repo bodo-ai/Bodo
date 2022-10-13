@@ -10,7 +10,7 @@ import pandas as pd
 from bodo.tests.utils import check_func
 
 
-def test_count_head(memory_leak_check):
+def test_count_head(datapath, memory_leak_check):
     """
     Check that computing an aggregation is compatible with
     a function like head that modify the index.
@@ -24,7 +24,7 @@ def test_count_head(memory_leak_check):
         df = bc.sql("select count(B) as cnt from t1")
         return df.head()
 
-    filename = "bodosql/tests/data/sample-parquet-data/no_index.pq"
+    filename = datapath("sample-parquet-data/no_index.pq")
     read_df = pd.read_parquet(filename)
     count = read_df.B.count()
     expected_output = pd.DataFrame({"cnt": count}, index=pd.Index([0]))

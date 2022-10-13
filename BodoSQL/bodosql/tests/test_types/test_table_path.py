@@ -8,7 +8,11 @@ import os
 import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
+from bodosql.tests.utils import (
+    _check_query_equal,
+    check_num_parquet_readers,
+    datapath,
+)
 
 import bodo
 from bodo.tests.utils import (
@@ -37,9 +41,9 @@ def dummy_table_paths(request):
 
 @pytest.fixture(
     params=[
-        "bodosql/tests/data/sample-parquet-data/no_index.pq",
-        "bodosql/tests/data/sample-parquet-data/numeric_index.pq",
-        "bodosql/tests/data/sample-parquet-data/string_index.pq",
+        datapath("sample-parquet-data/no_index.pq"),
+        datapath("sample-parquet-data/numeric_index.pq"),
+        datapath("sample-parquet-data/string_index.pq"),
     ]
 )
 def parquet_filepaths(request):
@@ -292,8 +296,8 @@ def test_table_path_categorical_unused_table_jit(datapath):
         )
         return bc.sql("select * from parquet_table")
 
-    f1 = "bodosql/tests/data/sample-parquet-data/partitioned"
-    f2 = datapath("tpcxbb-test-data") + "/web_sales"
+    f1 = datapath("sample-parquet-data/partitioned")
+    f2 = datapath("tpcxbb-test-data/web_sales")
 
     py_output = pd.read_parquet(f1)
     py_output["part"] = py_output["part"].astype(str)
@@ -319,7 +323,7 @@ def test_table_path_categorical_unused_table_python(datapath):
         )
         return bc.sql("select * from parquet_table")
 
-    f1 = "bodosql/tests/data/sample-parquet-data/partitioned"
+    f1 = datapath("sample-parquet-data") + "/partitioned"
     f2 = datapath("tpcxbb-test-data") + "/web_sales"
 
     py_output = pd.read_parquet(f1)

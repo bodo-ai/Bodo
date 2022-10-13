@@ -3977,7 +3977,7 @@ def simplify_CFG(blocks):
         block = blocks[label]
         # Bodo change: make sure label is not entry point which shouldn't be removed.
         # see bodo/tests/test_basic.py::test_parfor_empty_entry_block
-        # see bodosql/tests/test_named_param_df_apply.py::test_case
+        # see BodoSQL/bodosql/tests/test_named_param_df_apply.py::test_case
         return (
             len(block.body) == 1
             and isinstance(block.body[0], ir.Branch)

@@ -483,7 +483,7 @@ def test_having_boolean(bodosql_boolean_types, spark_info, memory_leak_check):
     )
 
 
-def test_agg_replicated(memory_leak_check):
+def test_agg_replicated(datapath, memory_leak_check):
     """
     Tests that an aggregation query produces a
     replicated output.
@@ -493,7 +493,7 @@ def test_agg_replicated(memory_leak_check):
         bc = bodosql.BodoSQLContext({"t1": bodosql.TablePath(filename, "parquet")})
         return bc.sql("select count(B) as cnt from t1")
 
-    filename = "bodosql/tests/data/sample-parquet-data/no_index.pq"
+    filename = datapath("sample-parquet-data/no_index.pq")
     read_df = pd.read_parquet(filename)
     count = read_df.B.count()
     expected_output = pd.DataFrame({"cnt": count}, index=pd.Index([0]))

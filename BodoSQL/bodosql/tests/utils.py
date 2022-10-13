@@ -28,6 +28,19 @@ import bodo
 from bodo.tests.utils import _get_dist_arg, reduce_sum
 
 
+def datapath(*args, check_exists=True):
+    """Get the path to a test data file."""
+    """Filepath relative to bodosql/tests/"""
+
+    tests_fpath = os.path.dirname(__file__)
+    BASE_PATH = os.path.join(tests_fpath, "data")
+    path = os.path.join(BASE_PATH, *args)
+    if check_exists and not os.path.exists(path):
+        msg = "Could not find file {}."
+        raise ValueError(msg.format(path))
+    return path
+
+
 class InputDist(Enum):
     """
     Enum used to represent the various

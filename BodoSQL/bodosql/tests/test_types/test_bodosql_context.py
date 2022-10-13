@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
+from bodosql.tests.utils import datapath
 
 import bodo
 from bodo.tests.conftest import (  # pragma: no cover
@@ -151,7 +152,7 @@ def test_remove_view(memory_leak_check):
                     ),
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                     "t3": TablePath(
-                        "bodosql/tests/data/sample-parquet-data/partitioned",
+                        datapath("sample-parquet-data/partitioned"),
                         "parquet",
                     ),
                 },
@@ -166,7 +167,7 @@ def test_remove_view(memory_leak_check):
                     ),
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                     "t3": TablePath(
-                        "bodosql/tests/data/sample-parquet-data/partitioned",
+                        datapath("sample-parquet-data/partitioned"),
                         "parquet",
                     ),
                 },
@@ -318,7 +319,7 @@ def test_remove_view_jit(memory_leak_check):
     check_func(impl2, (bc,), py_output=df1)
 
 
-def test_add_or_replace_view_table_path(memory_leak_check):
+def test_add_or_replace_view_table_path(datapath, memory_leak_check):
     """Tests add_or_replace_view distributed analysis code
     works when introducing a table path value.
     """
@@ -332,7 +333,7 @@ def test_add_or_replace_view_table_path(memory_leak_check):
 
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"C": [1, 2, 3]})
-    path = TablePath("bodosql/tests/data/sample-parquet-data/partitioned", "parquet")
+    path = TablePath(datapath("sample_parquet_data/partitioned"), "parquet")
     bc = BodoSQLContext(
         {
             "t1": df1,
@@ -345,7 +346,7 @@ def test_add_or_replace_view_table_path(memory_leak_check):
     check_func(impl2, (bc,), py_output=df1)
 
 
-def test_remove_view_table_path(memory_leak_check):
+def test_remove_view_table_path(datapath, memory_leak_check):
     """Tests add_or_replace_view distributed analysis code
     works when removing or keeping a TablePath.
     """
@@ -360,7 +361,7 @@ def test_remove_view_table_path(memory_leak_check):
 
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"C": [1, 2, 3]})
-    path = TablePath("bodosql/tests/data/sample-parquet-data/partitioned", "parquet")
+    path = TablePath(datapath("sample_parquet_data/partitioned"), "parquet")
     bc = BodoSQLContext(
         {
             "t1": df1,
@@ -454,7 +455,9 @@ def test_remove_catalog(dummy_snowflake_catalogs, memory_leak_check):
         bc2.remove_catalog()
 
 
-def test_add_or_replace_catalog_jit(dummy_snowflake_catalogs, memory_leak_check):
+def test_add_or_replace_catalog_jit(
+    datapath, dummy_snowflake_catalogs, memory_leak_check
+):
     """
     Verify add_or_replace_catalog properly updates a BodoSQLContext
     with the correct catalog inside JIT. This is tested by comparing
@@ -472,9 +475,7 @@ def test_add_or_replace_catalog_jit(dummy_snowflake_catalogs, memory_leak_check)
 
     local_df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
     # Unused table path for checking typing/distribution info
-    table_path = TablePath(
-        "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
-    )
+    table_path = TablePath(datapath("sample_parquet_data/partitioned"), "parquet")
     # TODO: Update with real catalogs
     catalog1, catalog2 = dummy_snowflake_catalogs
 
@@ -484,7 +485,7 @@ def test_add_or_replace_catalog_jit(dummy_snowflake_catalogs, memory_leak_check)
     check_func(impl, (bc, catalog2))
 
 
-def test_remove_catalog_jit(dummy_snowflake_catalogs, memory_leak_check):
+def test_remove_catalog_jit(datapath, dummy_snowflake_catalogs, memory_leak_check):
     """
     Verify remove_catalog properly updates a BodoSQLContext
     with the correct catalog inside JIT. This is tested by comparing
@@ -502,9 +503,7 @@ def test_remove_catalog_jit(dummy_snowflake_catalogs, memory_leak_check):
 
     local_df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
     # Unused table path for checking typing/distribution info
-    table_path = TablePath(
-        "bodosql/tests/data/sample-parquet-data/partitioned", "parquet"
-    )
+    table_path = TablePath(datapath("sample_parquet_data/partitioned"), "parquet")
     # TODO: Update with a real catalog
     catalog = dummy_snowflake_catalogs[0]
 
