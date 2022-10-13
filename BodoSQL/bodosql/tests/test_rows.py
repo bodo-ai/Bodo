@@ -1561,3 +1561,35 @@ def test_any_value(query, spark_info, memory_leak_check):
         check_names=False,
         equivalent_spark_query=get_equivalent_spark_agg_query(query),
     )
+
+
+def test_row_number_orderby(datapath, memory_leak_check):
+    """Test that row_number properly handles the orderby."""
+    query = "select uuid, ROW_NUMBER() OVER(PARTITION BY store_id, ret_product_id ORDER BY last_seen DESC) as row_num from table1"
+
+    parquet_path = datapath("sample-parquet-data/rphd_sample.pq")
+
+    ctx = {
+        "table1": pd.read_parquet(parquet_path)[
+            ["uuid", "store_id", "ret_product_id", "last_seen"]
+        ]
+    }
+    py_output = pd.DataFrame(
+        {
+            "uuid": [
+                "67cd102b-e12f-49cb-88f5-c71d6be6642f",
+                "ce4d3aa7-476b-4772-94b4-18224490c7a1",
+                "bb9fb6cd-477d-4923-be3b-95615bbec5a5",
+                "2adcb7de-464f-4c60-81a3-58dff3f8b1c9",
+                "465cbfbb-c4c9-4837-83c7-c6be96597ca4",
+                "fd5db816-902e-485b-b52d-a094709439a4",
+            ],
+            "row_num": [3, 5, 1, 6, 4, 2],
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+    )

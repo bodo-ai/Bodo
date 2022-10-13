@@ -1094,31 +1094,24 @@ public class WindowAggCodeGen {
       assert argsListList.get(i).size() == 0;
     }
 
-    if (!sortByCols.equals("")) {
-      funcText
-          .append(indent)
-          .append(indent)
-          // reuse the input dataframe
-          .append(argumentDfName)
-          .append("[\"OUTPUT_COL\"] = np.arange(1, " + argumentDfLen + " + 1)\n");
+    boolean needs_sort = !sortByCols.equals("");
+    if (needs_sort) {
       // Perform the sort
       funcText.append(
           sortLocalDfIfNeeded(
               argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
-      // Extract the value
-      funcText.append(indent).append(indent).append("arr = sorted_df[\"OUTPUT_COL\"]\n");
-    } else {
-      funcText
-          .append(indent)
-          .append(indent)
-          .append("arr = np.arange(1, " + argumentDfLen + " + 1)\n");
     }
+    // Generate the row_numbers.
+    funcText
+        .append(indent)
+        .append(indent)
+        .append("arr = np.arange(1, " + argumentDfLen + " + 1)\n");
 
     List<String> arraysToSort = new ArrayList<>();
     arraysToSort.add("arr");
 
     Pair<String, String> additionalFuncTextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, false);
+        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, needs_sort);
 
     funcText.append(additionalFuncTextAndOutputDfName.getKey());
     String outputDfName = additionalFuncTextAndOutputDfName.getValue();
