@@ -66,7 +66,8 @@ modules = []
 for l in output.decode().split("\n"):
     m = pytest_module_regexp.search(l)
     if m:
-        modules.append(m.group(1))
+        filename = m.group(1).split("/")[-1]
+        modules.append(filename)
 
 # The '--cov-report=' option passed to pytest means that we want pytest-cov to
 # generate coverage files (".coverage" files used by `coverage` to generate

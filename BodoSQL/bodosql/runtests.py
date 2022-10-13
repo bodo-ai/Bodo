@@ -26,13 +26,13 @@ except subprocess.CalledProcessError as e:
 
 # get the list of test modules (test file names) to run
 # excluding the test files located in the caching tests directory
-pytest_module_regexp = re.compile(r"<Module ((?!caching_tests/)\S+.py)>")
+pytest_module_regexp = re.compile(r"<Module ((?!tests/caching_tests/)\S+.py)>")
 modules = []
 for line in output.decode().split("\n"):
     m = pytest_module_regexp.search(line)
     if m:
-        modules.append(m.group(1))
-
+        filename = m.group(1).split("/")[-1]
+        modules.append(filename)
 # run each test module in a separate process to avoid out-of-memory issues
 # due to leaks
 tests_failed = False
