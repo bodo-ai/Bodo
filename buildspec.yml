@@ -11,7 +11,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -20,7 +20,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -29,7 +29,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -38,7 +38,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -47,7 +47,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -56,7 +56,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -65,7 +65,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -74,7 +74,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -83,7 +83,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -92,7 +92,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -101,7 +101,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -110,7 +110,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_SMALL
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 1
         NUMBER_GROUPS_SPLIT: 12
@@ -119,7 +119,7 @@ batch:
   - buildspec: buildscripts/aws/buildspecs/CI_buildspec.yml
     env:
       compute-type: BUILD_GENERAL1_MEDIUM
-      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.15
+      image: 427443013497.dkr.ecr.us-east-2.amazonaws.com/bodo-codebuild:2.16
       variables:
         NP: 2
         NUMBER_GROUPS_SPLIT: 1

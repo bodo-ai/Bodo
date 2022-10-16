@@ -128,7 +128,7 @@ jobs:
       source activate $CONDA_ENV
       mamba install -y -c conda-forge pymysql sqlalchemy snowflake-sqlalchemy
       mamba install -y -c conda-forge snowflake-connector-python --force --no-deps
-    displayName: 'Setup MySQL testing'
+    displayName: 'Setup MySQL + Snowflake Testing'
 
   - script: |
       set -eo pipefail

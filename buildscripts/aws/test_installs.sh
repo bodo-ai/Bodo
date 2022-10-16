@@ -16,7 +16,7 @@ mamba install -y -c conda-forge scikit-learn='1.1.*' gcsfs
 mamba install -y -c conda-forge matplotlib
 mamba install -y -c conda-forge pyspark=3.2 'openjdk=11'
 mamba install -y flake8
-mamba install -y -c conda-forge snowflake-sqlalchemy snowflake-connector-python
+mamba install -y -c conda-forge snowflake-connector-python
 mamba install -y -c conda-forge mmh3=3.0  # Needed for Iceberg testing
 # snowflake connector might upgrade pyarrow, so we revert it back
 mamba install -y -c conda-forge pyarrow=8.0.0

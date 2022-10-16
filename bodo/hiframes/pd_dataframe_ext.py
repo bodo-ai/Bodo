@@ -4238,11 +4238,6 @@ def to_sql_overload(
     from bodo.io.parquet_pio import parquet_write_table_cpp
     from bodo.io.snowflake import snowflake_connector_cursor_python_type  # noqa
 
-    try:
-        from bodo import snowflake_sqlalchemy_compat  # noqa
-    except ImportError:
-        pass
-
     if df.has_runtime_cols:
         # TODO: We can also check the type of runtime column names with
         # df.runtime_colname_typ, to make sure they aren't strings.
