@@ -60,7 +60,7 @@ jobs:
       source activate $CONDA_ENV
       conda install -y -c conda-forge pymysql sqlalchemy snowflake-sqlalchemy
       conda install -y -c conda-forge snowflake-connector-python --force --no-deps
-    displayName: 'Setup MySQL testing'
+    displayName: 'Setup MySQL + Snowflake Testing'
 
   - script: |
       set -eo pipefail

@@ -333,7 +333,7 @@ def test_add_or_replace_view_table_path(datapath, memory_leak_check):
 
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"C": [1, 2, 3]})
-    path = TablePath(datapath("sample_parquet_data/partitioned"), "parquet")
+    path = TablePath(datapath("sample-parquet-data/partitioned"), "parquet")
     bc = BodoSQLContext(
         {
             "t1": df1,
@@ -361,7 +361,7 @@ def test_remove_view_table_path(datapath, memory_leak_check):
 
     df1 = pd.DataFrame({"A": [1, 2, 3]})
     df2 = pd.DataFrame({"C": [1, 2, 3]})
-    path = TablePath(datapath("sample_parquet_data/partitioned"), "parquet")
+    path = TablePath(datapath("sample-parquet-data/partitioned"), "parquet")
     bc = BodoSQLContext(
         {
             "t1": df1,
@@ -475,7 +475,7 @@ def test_add_or_replace_catalog_jit(
 
     local_df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
     # Unused table path for checking typing/distribution info
-    table_path = TablePath(datapath("sample_parquet_data/partitioned"), "parquet")
+    table_path = TablePath(datapath("sample-parquet-data/partitioned"), "parquet")
     # TODO: Update with real catalogs
     catalog1, catalog2 = dummy_snowflake_catalogs
 
@@ -503,7 +503,7 @@ def test_remove_catalog_jit(datapath, dummy_snowflake_catalogs, memory_leak_chec
 
     local_df = pd.DataFrame({"A": np.arange(100), "B": np.arange(100, 200)})
     # Unused table path for checking typing/distribution info
-    table_path = TablePath(datapath("sample_parquet_data/partitioned"), "parquet")
+    table_path = TablePath(datapath("sample-parquet-data/partitioned"), "parquet")
     # TODO: Update with a real catalog
     catalog = dummy_snowflake_catalogs[0]
 

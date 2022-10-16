@@ -65,7 +65,7 @@ jobs:
       ./buildscripts/bodosql/azure/install_bodo_and_bodosql.sh $PLATFORM_DEV_RELEASE
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
-    displayName: 'Install Bodo and BodoSQL from conda'
+    displayName: 'Install Bodo and BodoSQL from Conda'
 
   - script: |
       set -eo pipefail

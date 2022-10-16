@@ -961,13 +961,13 @@ the Snowflake Python connector.
 Install Snowflake Python connector to be able to write to Snowflake from Bodo (installed by default in Bodo Platform). Using Conda:
 
 ``` shell
-conda install -c conda-forge snowflake-connector-python snowflake-sqlalchemy
+conda install -c conda-forge snowflake-connector-python
 ```
 
 If you have installed Bodo using pip, then you can install the packages using pip as well:
 
 ``` shell
-pip install snowflake-connector-python snowflake-sqlalchemy
+pip install snowflake-connector-python
 ```
 
 ### Usage

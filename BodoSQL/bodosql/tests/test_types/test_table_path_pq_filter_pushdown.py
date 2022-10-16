@@ -500,7 +500,7 @@ def test_table_path_limit_pushdown(datapath, memory_leak_check):
     assert fir.meta_head_only_info[0] is not None
 
 
-def test_named_param_filter_pushdown(memory_leak_check):
+def test_named_param_filter_pushdown(datapath, memory_leak_check):
     """
     Test that using a Python variable as a filter variable via the named
     parameter supports filter pushdown.
