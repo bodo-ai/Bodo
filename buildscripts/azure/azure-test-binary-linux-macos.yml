@@ -36,6 +36,9 @@ jobs:
       export PATH=$HOME/miniconda3/bin:${PATH}
       conda create -y -n $CONDA_ENV python=$PYTHON_VERSION mamba -c conda-forge
       source activate $CONDA_ENV
+    env:
+      CONDA_ENV:  ${{ parameters.CONDA_ENV }}
+      PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
     displayName: 'Download miniconda and create conda env'
 
   - script: |
@@ -43,7 +46,7 @@ jobs:
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate $CONDA_ENV
       if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
-        mamba install -y numba -c numba/label/dev
+        mamba install -y numba -c numba/label/dev -c conda-forge
         echo "Using Numba-Dev"
       else
         echo "Skipping..."
@@ -148,7 +151,7 @@ jobs:
         echo "Skipping..."
       fi
     displayName: 'Download Hadoop for ADLS testing (only linux)'
-  
+
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
@@ -161,7 +164,7 @@ jobs:
         echo "Skipping..."
       fi
     displayName: "Setup Snowflake ADLS Testing (only Linux)"
-  
+
   - script: |
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
