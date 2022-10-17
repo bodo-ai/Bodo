@@ -9,6 +9,7 @@ then
   # Reference:
   # https://github.com/numba/numba/blob/master/buildscripts/incremental/install_miniconda.sh
   unamestr=`uname`
+  uname_mach_str=`uname -m`
   # For M1, we need to use miniforge to enable cross compilation
   if [[ "$TARGET_NAME" == 'macOS_ARM' ]]; then
     export MINIFORGE_URL="https://github.com/conda-forge/miniforge/releases/latest/download"
@@ -29,6 +30,22 @@ then
     export PATH=$HOME/miniconda3/bin:$PATH
   fi
   conda create -n $CONDA_ENV -q -y -c conda-forge python=$PYTHON_VERSION mamba
+else 
+  if [[ "$uname_mach_str" == 'arm64' ]] || [[ "$uname_mach_str" == 'aarch64' ]]; then
+    export MINIFORGE_URL="https://github.com/conda-forge/miniforge/releases/latest/download"
+    if [[ "$unamestr" == 'Linux' ]]; then
+      export MINIFORGE_FILE="Miniforge3-Linux-aarch64.sh"
+    elif [[ "$unamestr" == 'Darwin' ]]; then
+      export MINIFORGE_FILE="Miniforge3-MacOSX-arm64.sh"
+    else
+      echo Error
+    fi
+    curl -L -O "${MINIFORGE_URL}/${MINIFORGE_FILE}"
+    bash $MINIFORGE_FILE -b -p $HOME/miniforge3
+    export PATH=$HOME/miniforge3/bin:$PATH
+  else
+    export PATH=$HOME/miniconda3/bin:$PATH
+  fi
 fi
 
 
