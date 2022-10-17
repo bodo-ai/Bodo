@@ -21,13 +21,11 @@ def run_ci():
             # We should run BodoSQL CI if there's been changes in Bodo
             # or in the BodoSQL sub module
             "/" not in filename
-
             # BodoSQL changes
             or filename.startswith("BodoSQL/bodosql/")
             or filename.startswith("BodoSQL/buildscripts/")
             or filename.startswith("BodoSQL/calcite_sql/")
             or filename.startswith("BodoSQL/e2e-tests/")
-
             # Bodo and/or Iceberg changes
             or filename.startswith("aws_scripts/")
             or filename.startswith("bodo/")
