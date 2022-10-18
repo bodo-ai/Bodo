@@ -152,6 +152,27 @@ def test_dict_other_string_kernels(args):
     [
         pytest.param(
             (
+                "rtrimmed_length",
+                (
+                    pa.array(
+                        [
+                            "   a   ",
+                            "   a",
+                            None,
+                            "a   ",
+                            None,
+                            "     ",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                ),
+                pd.array([4, 4, None, 1, None, 0] * 2, dtype="Int32"),
+            ),
+            id="rtrimmed_length",
+        ),
+        pytest.param(
+            (
                 "editdistance_no_max",
                 (
                     pa.array(
@@ -263,6 +284,9 @@ def test_dict_other_string_kernels(args):
     ],
 )
 def test_dict_str2int(args):
+    def impl0(s):
+        return bodo.libs.bodosql_array_kernels.rtrimmed_length(s)
+
     def impl1(s, t):
         return bodo.libs.bodosql_array_kernels.editdistance_no_max(s, t)
 
@@ -280,6 +304,7 @@ def test_dict_str2int(args):
 
     func, args, answer = args
     impl = {
+        "rtrimmed_length": impl0,
         "editdistance_no_max": impl1,
         "editdistance_with_max": impl2,
         "instr": impl3,

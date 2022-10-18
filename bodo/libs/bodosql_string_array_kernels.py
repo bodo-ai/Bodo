@@ -316,6 +316,21 @@ def overload_rpad(arr, length, padstr):
 
 
 @numba.generated_jit(nopython=True)
+def rtrimmed_length(arr):
+    """Handles cases where RTRIMED_LENGTH receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.rtrimmed_length_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return rtrimmed_length_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def space(n_chars):
     """Handles cases where SPACE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -1024,6 +1039,34 @@ def reverse_util(arr):
 
     out_dtype = bodo.string_array_type
     out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def rtrimmed_length_util(arr):
+    """A dedicated kernel for the SQL function RTRIMMED_LENGTH which takes in a
+       string (or string column) and returns the number of characters after
+       trailing whitespace has been removed
+
+
+    Args:
+        arr (string array/series/scalar): the strings(s) to have their
+        post-trimming lengths calculated
+
+    Returns:
+        integer array/scalar: the number of characters in the string(s) after
+        trailing whitespaces are removed
+    """
+
+    verify_string_arg(arr, "RTRIMMED_LENGTH", "arr")
+
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    scalar_text = "res[i] = len(arg0.rstrip(' '))"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 

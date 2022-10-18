@@ -151,6 +151,7 @@ public class ExprTypeVisitor {
           "ROUND",
           "RPAD",
           "RTRIM",
+          "RTRIMMED_LENGTH",
           "SPLIT_PART",
           "STRCMP",
           "STRTOK",

@@ -70,6 +70,8 @@ public class StringFnCodeGen {
     equivalentFnMapBroadcast.put("REPEAT", "bodo.libs.bodosql_array_kernels.repeat");
     equivalentFnMapBroadcast.put("REVERSE", "bodo.libs.bodosql_array_kernels.reverse");
     equivalentFnMapBroadcast.put("REPLACE", "bodo.libs.bodosql_array_kernels.replace");
+    equivalentFnMapBroadcast.put(
+        "RTRIMMED_LENGTH", "bodo.libs.bodosql_array_kernels.rtrimmed_length");
     equivalentFnMapBroadcast.put("SPACE", "bodo.libs.bodosql_array_kernels.space");
     equivalentFnMapBroadcast.put("STRCMP", "bodo.libs.bodosql_array_kernels.strcmp");
     equivalentFnMapBroadcast.put("INSTR", "bodo.libs.bodosql_array_kernels.instr");

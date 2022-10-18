@@ -1097,6 +1097,36 @@ def test_reverse(strings_binary, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "strings, answer",
+    [
+        pytest.param(
+            pd.Series(
+                ["   ", None, "dog", "", None, "alphabet soup   ", "   alphabet soup"]
+            ),
+            pd.Series([0, None, 3, 0, None, 13, 16], dtype=pd.Int32Dtype()),
+            id="vector",
+        ),
+        pytest.param(" The quick fox jumped over the lazy dog. \n   ", 42, id="scalar"),
+    ],
+)
+def test_rtrimmed_length(strings, answer, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.rtrimmed_length(arr))
+
+    # avoid Series conversion for scalar output
+    if not isinstance(strings, (pd.Series, np.ndarray)):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.rtrimmed_length(arr)
+
+    check_func(
+        impl,
+        (strings,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
     "numbers",
     [
         pytest.param(

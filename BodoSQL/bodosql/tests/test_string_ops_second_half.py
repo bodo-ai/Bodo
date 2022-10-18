@@ -463,6 +463,65 @@ def test_strcmp(args, spark_info, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param(
+            ("SELECT RTRIMMED_LENGTH((A)) FROM table1"),
+            id="vector-no_case",
+        ),
+        pytest.param(
+            ("SELECT CASE WHEN RTRIMMED_LENGTH((A)) > 0 THEN 1 ELSE 0 END FROM table1"),
+            id="vector-case",
+        ),
+        pytest.param(
+            (
+                "SELECT RTRIMMED_LENGTH(('   Alphabet  Soup Is Delicious   ')) FROM table1"
+            ),
+            id="scalar-no_case",
+        ),
+        pytest.param(
+            (
+                "SELECT CASE WHEN RTRIMMED_LENGTH(('   Alphabet  Soup Is \\tDelicious   ')) > 0 THEN 1 ELSE 0 END FROM table1"
+            ),
+            id="scalar-case",
+        ),
+    ],
+)
+def test_rtrimmed_length(query, spark_info, memory_leak_check):
+    whitespace = " " * 8
+    chars = "a\tcdef\nh"
+    # Generate a column of strings with every combination of 8 characters
+    # being space vs non-space
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": [
+                    "".join(
+                        whitespace[j] if (i >> j) % 2 else chars[j]
+                        for j in range(len(chars))
+                    )
+                    for i in range(256)
+                ]
+                + [None]
+            }
+        )
+    }
+
+    spark_query = query.replace("RTRIMMED_LENGTH(", "LENGTH(RTRIM")
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        convert_nullable_bodosql=False,
+        sort_output=False,
+        equivalent_spark_query=spark_query,
+    )
+
+
+@pytest.mark.parametrize(
     "args",
     [
         pytest.param(
