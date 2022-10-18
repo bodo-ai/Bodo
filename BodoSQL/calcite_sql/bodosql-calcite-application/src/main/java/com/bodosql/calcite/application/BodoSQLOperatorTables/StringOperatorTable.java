@@ -355,6 +355,22 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction RTRIMMED_LENGTH =
+      new SqlFunction(
+          "RTRIMMED_LENGTH",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.INTEGER_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.CHARACTER,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.STRING);
+
   public static final SqlFunction SPACE =
       new SqlFunction(
           "SPACE",
@@ -539,6 +555,7 @@ public final class StringOperatorTable implements SqlOperatorTable {
           ORD,
           CHR,
           CHAR,
+          RTRIMMED_LENGTH,
           SPACE,
           SPLIT_PART,
           STRTOK,

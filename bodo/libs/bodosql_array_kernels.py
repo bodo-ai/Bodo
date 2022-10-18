@@ -90,6 +90,7 @@ broadcasted_fixed_arg_functions = {
     "right",
     "round",
     "rpad",
+    "rtrimmed_length",
     "second_timestamp",
     "sign",
     "sin",

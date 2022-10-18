@@ -2528,7 +2528,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "LCASE":
           case "UCASE":
           case "SPACE":
-            assert operandsInfo.size() == 1;
+          case "RTRIMMED_LENGTH":
+            if (operandsInfo.size() != 1) {
+              throw new BodoSQLCodegenException(fnName + " requires providing only 1 argument");
+            }
             return getSingleArgStringFnInfo(
                 fnName,
                 operandsInfo.get(0).getExprCode(),
@@ -2545,7 +2548,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "LEFT":
           case "CONTAINS":
           case "INSTR":
-            assert operandsInfo.size() == 2;
+            if (operandsInfo.size() != 2) {
+              throw new BodoSQLCodegenException(fnName + " requires providing only 2 arguments");
+            }
             return getTwoArgStringFnInfo(
                 fnName, inputVar, operandsInfo.get(0), operandsInfo.get(1));
           case "RPAD":
@@ -2556,7 +2561,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "SUBSTR":
           case "SUBSTRING_INDEX":
           case "TRANSLATE3":
-            assert operandsInfo.size() == 3;
+            if (operandsInfo.size() != 3) {
+              throw new BodoSQLCodegenException(fnName + " requires providing only 3 argument");
+            }
             return getThreeArgStringFnInfo(
                 fnName, operandsInfo.get(0), operandsInfo.get(1), operandsInfo.get(2));
           case "STRTOK":
