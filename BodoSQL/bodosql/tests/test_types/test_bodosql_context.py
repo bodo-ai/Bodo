@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import pytest
 from bodosql import BodoSQLContext, SnowflakeCatalog, TablePath
-from bodosql.tests.utils import datapath
 
 import bodo
 from bodo.tests.conftest import (  # pragma: no cover
@@ -152,7 +151,7 @@ def test_remove_view(memory_leak_check):
                     ),
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                     "t3": TablePath(
-                        datapath("sample-parquet-data/partitioned"),
+                        "bodosql/tests/data/sample-parquet-data/partitioned",
                         "parquet",
                     ),
                 },
@@ -167,7 +166,7 @@ def test_remove_view(memory_leak_check):
                     ),
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                     "t3": TablePath(
-                        datapath("sample-parquet-data/partitioned"),
+                        "bodosql/tests/data/sample-parquet-data/partitioned",
                         "parquet",
                     ),
                 },

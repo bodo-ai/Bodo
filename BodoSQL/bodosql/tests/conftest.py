@@ -1566,6 +1566,7 @@ def pytest_collection_modifyitems(items):
             # Gives filename + function name
             testname = item.module.__name__.split(".")[-1] + ".py" + "::" + item.name
             group_marker = group_from_hash(testname, num_groups)
+            # TODO: we should register these markers to avoid warnings in AWS logs
             item.add_marker(getattr(pytest.mark, group_marker))
 
 

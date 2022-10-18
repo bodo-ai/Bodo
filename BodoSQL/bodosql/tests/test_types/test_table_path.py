@@ -8,11 +8,7 @@ import os
 import bodosql
 import pandas as pd
 import pytest
-from bodosql.tests.utils import (
-    _check_query_equal,
-    check_num_parquet_readers,
-    datapath,
-)
+from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 
 import bodo
 from bodo.tests.utils import (
@@ -41,9 +37,9 @@ def dummy_table_paths(request):
 
 @pytest.fixture(
     params=[
-        datapath("sample-parquet-data/no_index.pq"),
-        datapath("sample-parquet-data/numeric_index.pq"),
-        datapath("sample-parquet-data/string_index.pq"),
+        "bodosql/tests/data/sample-parquet-data/no_index.pq",
+        "bodosql/tests/data/sample-parquet-data/numeric_index.pq",
+        "bodosql/tests/data/sample-parquet-data/string_index.pq",
     ]
 )
 def parquet_filepaths(request):
