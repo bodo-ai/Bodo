@@ -783,7 +783,7 @@ def _test_equal(
     try:
         from scipy.sparse import csr_matrix
     except ImportError:
-        csr_matrix = None
+        csr_matrix = type(None)
 
     # Bodo converts lists to array in array(item) array cases
     if isinstance(py_out, list) and isinstance(bodo_out, np.ndarray):
