@@ -9,12 +9,13 @@
 
   <name>iceberg-java</name>
   <!-- FIXME change it to the project's website -->
-  <url>http://www.example.com</url>
+  <url>https://www.bodo.ai</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <maven.compiler.source>1.8</maven.compiler.source>
-    <maven.compiler.target>1.8</maven.compiler.target>
+    <java.version>11</java.version>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
   </properties>
 
   <dependencies>
@@ -28,74 +29,89 @@
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-api</artifactId>
-      <version>0.13.1</version>
+      <version>1.0.0</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-core -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-core</artifactId>
-      <version>0.13.1</version>
+      <version>1.0.0</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-parquet -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-parquet</artifactId>
-      <version>0.13.1</version>
+      <version>1.0.0</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-common -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-common</artifactId>
-      <version>0.13.1</version>
+      <version>1.0.0</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-arrow -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-arrow</artifactId>
-      <version>0.13.1</version>
+      <version>1.0.0</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-hive-metastore -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-hive-metastore</artifactId>
-      <version>0.13.1</version>
+      <version>1.0.0</version>
     </dependency>
-    <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-hive-runtime -->
-    <dependency>
-      <groupId>org.apache.iceberg</groupId>
-      <artifactId>iceberg-hive-runtime</artifactId>
-      <version>0.13.1</version>
-    </dependency>
+<!--    &lt;!&ndash; https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-hive-runtime &ndash;&gt;-->
+<!--    <dependency>-->
+<!--      <groupId>org.apache.iceberg</groupId>-->
+<!--      <artifactId>iceberg-hive-runtime</artifactId>-->
+<!--      <version>0.14.1</version>-->
+<!--    </dependency>-->
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-aws -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-aws</artifactId>
-      <version>0.13.1</version>
+      <version>1.0.0</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-bundled-guava -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-bundled-guava</artifactId>
-      <version>0.13.1</version>
+      <version>1.0.0</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-nessie -->
     <dependency>
       <groupId>org.apache.iceberg</groupId>
       <artifactId>iceberg-nessie</artifactId>
-      <version>0.13.1</version>
+      <version>1.0.0</version>
     </dependency>
     
     <dependency>
       <groupId>org.apache.arrow</groupId>
       <artifactId>arrow-vector</artifactId>
-      <version>6.0.0</version>
+      <version>9.0.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-standalone-metastore</artifactId>
+      <version>3.1.3</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive</groupId>
+      <artifactId>hive-common</artifactId>
+      <version>3.1.3</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.thrift</groupId>
+      <artifactId>libthrift</artifactId>
+      <version>0.9.3</version>
     </dependency>
 
     <!-- https://mvnrepository.com/artifact/org.apache.httpcomponents.core5/httpcore5 -->
     <dependency>
       <groupId>org.apache.httpcomponents.core5</groupId>
       <artifactId>httpcore5</artifactId>
-      <version>5.1.3</version>
+      <version>5.1.4</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-common -->
     <dependency>
@@ -138,41 +154,41 @@
     <dependency>
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-core</artifactId>
-      <version>1.11.1026</version>
+      <version>1.12.315</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-s3 -->
     <dependency>
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-s3</artifactId>
-      <version>1.11.1026</version>
+      <version>1.12.315</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-sts -->
     <dependency>
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-sts</artifactId>
-      <version>1.11.1026</version>
+      <version>1.12.315</version>
     </dependency>
     <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-dynamodb -->
     <dependency>
       <groupId>com.amazonaws</groupId>
       <artifactId>aws-java-sdk-dynamodb</artifactId>
-      <version>1.11.1026</version>
+      <version>1.12.315</version>
     </dependency>
 
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>glue</artifactId>
-      <version>2.17.229</version>
+      <version>2.17.285</version>
     </dependency>
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>s3</artifactId>
-      <version>2.17.229</version>
+      <version>2.17.285</version>
     </dependency>
     <dependency>
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>url-connection-client</artifactId>
-      <version>2.17.229</version>
+      <version>2.17.285</version>
     </dependency>
   </dependencies>
 
@@ -192,7 +208,7 @@
         </plugin>
         <plugin>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.0</version>
+          <version>3.8.1</version>
         </plugin>
         <plugin>
           <artifactId>maven-surefire-plugin</artifactId>
@@ -226,8 +242,8 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <configuration>
-          <source>1.8</source>
-          <target>1.8</target>
+          <source>${java.version}</source>
+          <target>${java.version}</target>
         </configuration>
       </plugin>
 
