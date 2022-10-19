@@ -19,6 +19,7 @@ bodo/utils/__pycache__
 demo/__pycache__
 iceberg/**/__pycache__
 BodoSql/**/__pycache__
+e2e-tests/**/__pycache__
 
 # Python egg metadata, regenerated from source files by setuptools.
 **/*.egg-info
@@ -63,6 +64,7 @@ bodo/utils/tracing.c
 # Iceberg Connector
 iceberg_db
 iceberg/bodo_iceberg_connector/iceberg-java/target
+iceberg/bodo_iceberg_connector/iceberg-java/*.iml
 iceberg/bodo_iceberg_connector/jars
 
 # Bodo AzureFS Sas Token Provider
