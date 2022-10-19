@@ -81,6 +81,8 @@
 				</configuration>
 			</plugin>
 			<!-- Apache Calcite -->
+			<!-- Add generated Calcite sources to Eclipse source code model -->
+			<!-- You need to install install Eclipse Apt M2E Connector -->
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>build-helper-maven-plugin</artifactId>
@@ -95,27 +97,6 @@
 						<configuration>
 							<sources>
 								<source>${project.build.directory}/generated-sources</source>
-							</sources>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
-			<!-- Add generated Calcite sources to Eclipse source code model -->
-			<!-- You need to install install Eclipse Apt M2E Connector -->
-			<plugin>
-				<groupId>org.codehaus.mojo</groupId>
-				<artifactId>build-helper-maven-plugin</artifactId>
-				<version>3.3.0</version>
-				<executions>
-					<execution>
-						<id>add-source</id>
-						<phase>generate-sources</phase>
-						<goals>
-							<goal>add-source</goal>
-						</goals>
-						<configuration>
-							<sources>
-								<source>${project.build.directory}/generated-sources/</source>
 							</sources>
 						</configuration>
 					</execution>
