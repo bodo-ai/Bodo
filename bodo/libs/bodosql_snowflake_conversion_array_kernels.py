@@ -87,8 +87,9 @@ def to_boolean_util(arr, _try=False):
         prefix_code += "false_vals = {'false', 'f', 'no', 'n', 'off', '0'}"
     if is_string:
         scalar_text = "s = arg0.lower()\n"
-        scalar_text += f"res[i] = s in true_vals\n"
-        scalar_text += f"if not res[i] and s not in false_vals:\n"
+        scalar_text += f"is_true_val = s in true_vals\n"
+        scalar_text += f"res[i] = is_true_val\n"
+        scalar_text += f"if not (is_true_val or s in false_vals):\n"
         scalar_text += f"  {on_fail}\n"
     elif is_float:
         # TODO: fix this for float case (see above)
@@ -151,100 +152,6 @@ def to_date(conversionVal, optionalConversionFormatString):
         )
 
     return impl
-
-
-@numba.generated_jit(nopython=True)
-def try_to_boolean(arr):
-    """Handles cases where TO_BOOLEAN receives optional arguments and forwards
-    to the appropriate version of the real implementation"""
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument("bodo.libs.bodosql_array_kernels.to_boolean", ["arr"], 0)
-
-    def impl(arr):
-        return to_boolean_util(arr, numba.literally(True))
-
-    return impl
-
-
-@numba.generated_jit(nopython=True)
-def to_boolean(arr):
-    """Handles cases where TO_BOOLEAN receives optional arguments and forwards
-    to the appropriate version of the real implementation"""
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument("bodo.libs.bodosql_array_kernels.to_boolean", ["arr"], 0)
-
-    def impl(arr):
-        return to_boolean_util(arr, numba.literally(False))
-
-    return impl
-
-
-@numba.generated_jit(nopython=True)
-def to_boolean_util(arr, _try=False):
-    """A dedicated kernel for the SQL function TO_BOOLEAN which takes in a
-    number (or column) and returns True if it is not zero and not null,
-    False if it is zero, and NULL otherwise.
-
-
-    Args:
-        arr (numerical array/series/scalar): the number(s) being operated on
-        _try (bool): whether to return NULL (iff true) on error or raise an exception
-
-    Returns:
-        boolean series/scalar: the boolean value of the number(s) with the
-        specified null handling rules
-    """
-    verify_string_numeric_arg(arr, "TO_BOOLEAN", "arr")
-    is_string = is_valid_string_arg(arr)
-    is_float = is_valid_float_arg(arr)
-    _try = get_overload_const_bool(_try)
-
-    if _try:
-        on_fail = "bodo.libs.array_kernels.setna(res, i)\n"
-    else:
-        if is_string:
-            err_msg = "string must be one of {'true', 't', 'yes', 'y', 'on', '1'} or {'false', 'f', 'no', 'n', 'off', '0'}"
-        else:
-            err_msg = "value must be a valid numeric expression"
-        on_fail = (
-            f"""raise ValueError("invalid value for boolean conversion: {err_msg}")"""
-        )
-
-    arg_names = ["arr", "_try"]
-    arg_types = [arr, _try]
-    # TODO: fix this for float case
-    propagate_null = [True, False]
-
-    prefix_code = None
-    if is_string:
-        prefix_code = "true_vals = {'true', 't', 'yes', 'y', 'on', '1'}\n"
-        prefix_code += "false_vals = {'false', 'f', 'no', 'n', 'off', '0'}"
-    if is_string:
-        scalar_text = "s = arg0.lower()\n"
-        scalar_text += f"res[i] = s in true_vals\n"
-        scalar_text += f"if not res[i] and s not in false_vals:\n"
-        scalar_text += f"  {on_fail}\n"
-    elif is_float:
-        # TODO: fix this for float case (see above)
-        # np.isnan should error here, but it will not reach because
-        # NaNs will be caught since propogate_null[0] is True
-        scalar_text = "if np.isinf(arg0) or np.isnan(arg0):\n"
-        scalar_text += f"  {on_fail}\n"
-        scalar_text += "else:\n"
-        scalar_text += f"  res[i] = bool(arg0)\n"
-    else:
-        scalar_text = f"res[i] = bool(arg0)"
-
-    out_dtype = bodo.libs.bool_arr_ext.boolean_array
-
-    return gen_vectorized(
-        arg_names,
-        arg_types,
-        propagate_null,
-        scalar_text,
-        out_dtype,
-        prefix_code=prefix_code,
-    )
 
 
 @numba.generated_jit(nopython=True)
