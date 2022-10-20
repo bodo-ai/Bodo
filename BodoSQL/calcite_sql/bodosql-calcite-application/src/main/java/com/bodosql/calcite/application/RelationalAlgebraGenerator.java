@@ -1,8 +1,8 @@
 package com.bodosql.calcite.application;
 
 import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
-import com.bodosql.calcite.application.BodoSQLRules.*;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
+import com.bodosql.calcite.application.bodo_sql_rules.*;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;

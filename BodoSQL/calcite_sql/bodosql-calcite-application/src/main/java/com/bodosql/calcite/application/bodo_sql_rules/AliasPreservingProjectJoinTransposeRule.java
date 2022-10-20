@@ -1,11 +1,10 @@
-package com.bodosql.calcite.application.BodoSQLRules;
+package com.bodosql.calcite.application.bodo_sql_rules;
 
 import static java.util.Objects.requireNonNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
 import org.apache.calcite.plan.*;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
@@ -35,8 +34,10 @@ import org.immutables.value.Value;
  *     However, the original rule does not preserve aliases in some conditions
  */
 
-// This style ensures that the get/set methods match the naming conventions of those in the calcite application
-// In calcite, the style is applied globally. I'm uncertain of how they did this, so for now, I'm going to manually
+// This style ensures that the get/set methods match the naming conventions of those in the calcite
+// application
+// In calcite, the style is applied globally. I'm uncertain of how they did this, so for now, I'm
+// going to manually
 // add this annotation to ensure that the style is applied
 @BodoSQLStyleImmutable
 @Value.Enclosing
@@ -177,7 +178,8 @@ public class AliasPreservingProjectJoinTransposeRule
   /** Rule configuration. */
   @Value.Immutable(singleton = false)
   public interface Config extends RelRule.Config {
-    Config DEFAULT = ImmutableAliasPreservingProjectJoinTransposeRule.Config.builder()
+    Config DEFAULT =
+        ImmutableAliasPreservingProjectJoinTransposeRule.Config.builder()
             .withPreserveExprCondition(expr -> !(expr instanceof RexOver))
             .build()
             .withOperandFor(LogicalProject.class, LogicalJoin.class);
