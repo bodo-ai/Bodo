@@ -61,6 +61,7 @@ public class PandasGenTest {
     String optimizedPlanStr = generator.getRelationalAlgebraString(sql, true);
     System.out.println("Optimized plan:");
     System.out.println(optimizedPlanStr + "\n");
+
     String pandasStr = generator.getPandasString(sql);
     System.out.println("Generated code:");
     System.out.println(pandasStr + "\n");

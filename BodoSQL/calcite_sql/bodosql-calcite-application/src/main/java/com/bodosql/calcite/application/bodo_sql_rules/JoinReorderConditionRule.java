@@ -1,7 +1,7 @@
-package com.bodosql.calcite.application.BodoSQLRules;
+package com.bodosql.calcite.application.bodo_sql_rules;
 
-import static com.bodosql.calcite.application.BodoSQLRules.FilterRulesCommon.filterContainsOr;
-import static com.bodosql.calcite.application.BodoSQLRules.FilterRulesCommon.updateConditionsExtractCommon;
+import static com.bodosql.calcite.application.bodo_sql_rules.FilterRulesCommon.filterContainsOr;
+import static com.bodosql.calcite.application.bodo_sql_rules.FilterRulesCommon.updateConditionsExtractCommon;
 
 import java.util.HashSet;
 import org.apache.calcite.plan.RelOptRuleCall;

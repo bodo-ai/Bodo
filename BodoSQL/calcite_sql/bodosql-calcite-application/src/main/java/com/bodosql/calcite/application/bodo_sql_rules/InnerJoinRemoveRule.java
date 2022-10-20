@@ -1,4 +1,4 @@
-package com.bodosql.calcite.application.BodoSQLRules;
+package com.bodosql.calcite.application.bodo_sql_rules;
 
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
