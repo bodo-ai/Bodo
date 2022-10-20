@@ -15,11 +15,18 @@ if not os.path.samefile(cwd, setup_py_dir_path):
     )
 
 
-def build_libs(obj):
+def build_libs(obj, dev_mode=False):
     """Build maven and then calls the original run command"""
     try:
         pom_dir = os.path.join("bodo_azurefs_sas_token_provider", "pom.xml")
         cmd_list = ["mvn", "clean", "install"]
+
+        # Batch Mode (--batch-mode or -B) will assume your running in CI
+        # --no-transfer-progress or -ntp will suppress additional download messages
+        # Both significantly reduce output
+        if not dev_mode:
+            cmd_list += ["--batch-mode", "--no-transfer-progress"]
+
         cmd_list += [
             "-Dmaven.test.skip=true",
             "-f",
@@ -51,7 +58,7 @@ class CustomDevelopCommand(develop):
     """Custom command to build the jars with python setup.py develop"""
 
     def run(self):
-        build_libs(self)
+        build_libs(self, dev_mode=True)
         super().run()
 
 
