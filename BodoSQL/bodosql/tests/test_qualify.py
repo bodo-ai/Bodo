@@ -8,14 +8,14 @@ import os
 import numpy as np
 import pandas as pd
 import pytest
+from bodosql.tests.test_window.test_lead_lag import lead_or_lag  # noqa
 
 # pragma is needed in order to import fixtures
-from bodosql.tests.test_rows import (  # noqa
+from bodosql.tests.test_window.test_rows import (  # noqa
     non_numeric_agg_funcs_subset,
     numeric_agg_funcs_subset,
     over_clause_bounds,
 )
-from bodosql.tests.test_window.test_lead_lag import lead_or_lag  # noqa
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 import bodo

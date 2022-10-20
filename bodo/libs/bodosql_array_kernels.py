@@ -5,6 +5,7 @@ Equivalent of __init__.py for all BodoSQL array kernel files
 
 from bodo.libs.bodosql_array_kernel_utils import *  # noqa
 from bodo.libs.bodosql_datetime_array_kernels import *  # noqa
+from bodo.libs.bodosql_json_array_kernels import *  # noqa
 from bodo.libs.bodosql_numeric_array_kernels import *  # noqa
 from bodo.libs.bodosql_other_array_kernels import *  # noqa
 from bodo.libs.bodosql_regexp_array_kernels import *  # noqa
@@ -74,6 +75,7 @@ broadcasted_fixed_arg_functions = {
     "next_day",
     "nullif",
     "ord_ascii",
+    "parse_json",
     "power",
     "previous_day",
     "radians",

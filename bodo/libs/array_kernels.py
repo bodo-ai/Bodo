@@ -126,6 +126,12 @@ def overload_isna(arr, i):
             bodo.libs.array_item_arr_ext.get_null_bitmap(arr), i
         )  # pragma: no cover
 
+    # map array
+    if isinstance(arr, bodo.libs.map_arr_ext.MapArrayType):
+        return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
+            bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), i
+        )  # pragma: no cover
+
     # struct array
     if isinstance(arr, StructArrayType):
         return lambda arr, i: not bodo.libs.int_arr_ext.get_bit_bitmap_arr(
@@ -272,6 +278,19 @@ def setna_overload(arr, ind, int_nan_const=0):
             # set NA bitmask
             bodo.libs.int_arr_ext.set_bit_to_arr(
                 bodo.libs.array_item_arr_ext.get_null_bitmap(arr), ind, 0
+            )
+
+        return impl_arr_item
+
+    if isinstance(arr, bodo.libs.map_arr_ext.MapArrayType):
+
+        def impl_arr_item(arr, ind, int_nan_const=0):  # pragma: no cover
+            # set offset
+            offsets = bodo.libs.array_item_arr_ext.get_offsets(arr._data)
+            offsets[ind + 1] = offsets[ind]
+            # set NA bitmask
+            bodo.libs.int_arr_ext.set_bit_to_arr(
+                bodo.libs.array_item_arr_ext.get_null_bitmap(arr._data), ind, 0
             )
 
         return impl_arr_item

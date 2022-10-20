@@ -231,6 +231,7 @@ import bodo.libs.bodosql_variadic_array_kernels
 import bodo.libs.bodosql_other_array_kernels
 import bodo.libs.bodosql_trig_array_kernels
 import bodo.libs.bodosql_window_agg_array_kernels
+import bodo.libs.bodosql_json_array_kernels
 import bodo.libs.bodosql_array_kernels
 from bodo.hiframes.pd_index_ext import (
     DatetimeIndexType,

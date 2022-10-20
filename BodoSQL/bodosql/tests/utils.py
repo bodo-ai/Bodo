@@ -1274,6 +1274,12 @@ def get_equivalent_spark_agg_query(query):
     spark_query = re.sub(
         "MEDIAN\\(([a-zA-Z0-9-_]+)\\)", "APPROX_PERCENTILE(\\1, .5)", spark_query
     )
+    spark_query = re.sub(
+        "VARIANCE_POP\\(([a-zA-Z0-9-_]+)\\)", "VAR_POP(\\1)", spark_query
+    )
+    spark_query = re.sub(
+        "VARIANCE_SAMP\\(([a-zA-Z0-9-_]+)\\)", "VAR_SAMP(\\1)", spark_query
+    )
 
     return spark_query
     # TODO (allai5): BY CUBE, BY ROLLUP
