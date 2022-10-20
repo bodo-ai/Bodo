@@ -5,7 +5,7 @@ export PATH=$HOME/miniconda3/bin:$PATH
 
 
 # ---- Create Conda Env ----
-CONDA_INSTALL="conda install -q -y"
+MAMBA_INSTALL="mamba install -q -y"
 # Deactivate if another script has already activated the env
 source deactivate || true
 
@@ -15,7 +15,7 @@ conda config --set remote_backoff_factor 60
 source activate $CONDA_ENV
 
 # Setup Hadoop
-$CONDA_INSTALL -c conda-forge 'openjdk=11' maven
+$MAMBA_INSTALL -c conda-forge 'openjdk=11' maven
 wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | tar -xzf - -C /opt
 export HADOOP_HOME=/opt/hadoop-3.3.2
 export HADOOP_INSTALL=$HADOOP_HOME
@@ -30,5 +30,5 @@ export ARROW_LIBHDFS_DIR=$HADOOP_HOME/lib/native
 export CLASSPATH=`$HADOOP_HOME/bin/hdfs classpath --glob`
 
 cd azurefs-sas-token-provider
-python setup.py develop
+pip install -v .
 cd ..

@@ -11,7 +11,9 @@ cwd = os.getcwd()
 setup_py_dir_path = os.path.dirname(os.path.realpath(__file__))
 # despite the name, this also works for directories
 if not os.path.samefile(cwd, setup_py_dir_path):
-    raise Exception("setup.py should only be invoked if the current working directory is in the same directory as Setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules.")
+    raise Exception(
+        "setup.py should only be invoked if the current working directory is in the same directory as Setup.py.\nThis is to prevent having with conflicting .egg-info in the same directory when building Bodo's submodules."
+    )
 
 # --------- Trick to pass the Bodo Version in CI ---------
 # During CI, conda copies and isolates the iceberg subfolder from the monorep
@@ -27,16 +29,21 @@ else:
     version = get_version()
     version += "alpha"
 
-
-# Automatically Build Java Project on `python setup.py develop`
 development_mode = "develop" in sys.argv
 
 
-def build_libs(obj):
+def build_libs(obj, dev_mode=False):
     """Build maven and then calls the original run command"""
     try:
         pom_dir = os.path.join("bodo_iceberg_connector", "iceberg-java", "pom.xml")
         cmd_list = ["mvn", "clean", "install"]
+
+        # Batch Mode (--batch-mode or -B) will assume your running in CI
+        # --no-transfer-progress or -ntp will suppress additional download messages
+        # Both significantly reduce output
+        if not dev_mode:
+            cmd_list += ["--batch-mode", "--no-transfer-progress"]
+
         cmd_list += [
             "-Dmaven.test.skip=true",
             "-f",
@@ -67,7 +74,7 @@ class CustomDevelopCommand(develop):
     """Custom command to build the jars with python setup.py develop"""
 
     def run(self):
-        build_libs(self)
+        build_libs(self, dev_mode=True)
         super().run()
 
 
