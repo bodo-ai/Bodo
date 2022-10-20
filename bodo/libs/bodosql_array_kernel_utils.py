@@ -41,6 +41,8 @@ def gen_vectorized(
     support_dict_encoding=True,
     may_cause_duplicate_dict_array_values=False,
     prefix_code=None,
+    suffix_code=None,
+    res_list=False,
     extra_globals=None,
 ):
     """Creates an impl for a column compute function that has several inputs
@@ -73,6 +75,11 @@ def gen_vectorized(
             is also true.
         prefix_code (optional string): if provided, embedes the code string
             right before the loop begins.
+        suffix_code (optional string): if provided, embedes the code string
+            after the loop before the function ends (not used if there is no loop)
+        res_list (optional boolean): if provided, sets up res as a list instead
+            of an array, and does not use a prange. Not compatible with
+            support_dict_encoding.
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -127,6 +134,10 @@ def gen_vectorized(
         involved).
     - Nulls are never converted to non-null values.
     """
+    assert not (
+        res_list and support_dict_encoding
+    ), "Cannot use res_list with support_dict_encoding"
+
     are_arrays = [bodo.utils.utils.is_array_typ(typ, True) for typ in arg_types]
     all_scalar = not any(are_arrays)
     out_null = any(
@@ -165,7 +176,7 @@ def gen_vectorized(
         )
     )
 
-    # Calculate the indentation of the scalar_text so that it can be removed
+    # Calculate the indentation of the prefix_code so that it can be removed
     if prefix_code is not None:
         prefix_line = prefix_code.splitlines()[0]
         prefix_indentation = len(prefix_line) - len(prefix_line.lstrip())
@@ -173,6 +184,11 @@ def gen_vectorized(
     # Calculate the indentation of the scalar_text so that it can be removed
     first_line = scalar_text.splitlines()[0]
     base_indentation = len(first_line) - len(first_line.lstrip())
+
+    # Calculate the indentation of the suffix_code so that it can be removed
+    if suffix_code is not None:
+        suffix_line = suffix_code.splitlines()[0]
+        suffix_indentation = len(suffix_line) - len(suffix_line.lstrip())
 
     if arg_string is None:
         arg_string = ", ".join(arg_names)
@@ -186,18 +202,16 @@ def gen_vectorized(
         for argument, source in arg_sources.items():
             func_text += f"   {argument} = {source}\n"
 
-    # If prefix_text was provided, embed it before the loop (unless the output
-    # is all-null)
-    if prefix_code is not None and not out_null:
-        for line in prefix_code.splitlines():
-            func_text += " " * 3 + line[prefix_indentation:] + "\n"
-
     # If all the inputs are scalar, either output None immediately or
     # compute a single scalar computation without the loop
     if all_scalar and array_override == None:
         if out_null:
             func_text += "   return None"
         else:
+            if prefix_code is not None:
+                for line in prefix_code.splitlines():
+                    func_text += " " * 3 + line[prefix_indentation:] + "\n"
+
             for i in range(len(arg_names)):
                 func_text += f"   arg{i} = {arg_names[i]}\n"
             for line in scalar_text.splitlines():
@@ -268,8 +282,21 @@ def gen_vectorized(
         # same because isna checks the data & indices, and scalar_text uses the
         # arguments extracted by getitem.
         func_text += f"   n = {size_text}\n"
+
+        # If prefix_code was provided, embed it before the loop (unless the output
+        # is all-null)
+        if prefix_code is not None and not out_null:
+            for line in prefix_code.splitlines():
+                func_text += " " * 3 + line[prefix_indentation:] + "\n"
+
+        # If dictionary encoded outputs are not being used, then the output is
+        # still bodo.string_array_type, the number of loop iterations is still the
+        # length of the indices, and scalar_text/propagate_null should work the
+        # same because isna checks the data & indices, and scalar_text uses the
+        # arguments extracted by getitem.
         if use_dict_encoding:
-            # add a null value at the end of the dictionary and compute the scalar
+
+            # Add a null value at the end of the dictionary and compute the scalar
             # kernel output for null values if we are not just propagating input nulls
             # to output array.
             # See test_bool.py::test_equal_null[vector_scalar_string]
@@ -284,9 +311,15 @@ def gen_vectorized(
                 func_text += f"   res = bodo.utils.utils.alloc_type({dict_len}, out_dtype, (-1,))\n"
             func_text += f"   for i in range({dict_len}):\n"
         else:
-            func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
-            func_text += "   numba.parfors.parfor.init_prange()\n"
-            func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
+            if res_list:
+                func_text += "   res = []\n"
+                func_text += "   for i in range(n):\n"
+            else:
+                func_text += (
+                    "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
+                )
+                func_text += "   numba.parfors.parfor.init_prange()\n"
+                func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
 
         # If the argument types imply that every row is null, then just set each
         # row of the output array to null
@@ -300,7 +333,12 @@ def gen_vectorized(
                 if are_arrays[i]:
                     if propagate_null[i]:
                         func_text += f"      if bodo.libs.array_kernels.isna({arg_names[i]}, i):\n"
-                        func_text += "         bodo.libs.array_kernels.setna(res, i)\n"
+                        if res_list:
+                            func_text += "         res.append(None)\n"
+                        else:
+                            func_text += (
+                                "         bodo.libs.array_kernels.setna(res, i)\n"
+                            )
                         func_text += "         continue\n"
 
             # Add the local variables that the scalar computation will use
@@ -355,6 +393,11 @@ def gen_vectorized(
                 func_text += "      else:\n"
                 func_text += "         res2[i] = res[loc]\n"
                 func_text += "   res = res2\n"
+
+        # If prefix_text was provided, embed it after the loop
+        if suffix_code is not None:
+            for line in suffix_code.splitlines():
+                func_text += " " * 3 + line[suffix_indentation:] + "\n"
 
         func_text += "   return res"
     loc_vars = {}
