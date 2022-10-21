@@ -109,6 +109,23 @@ def editdistance_with_max(s, t, maxDistance):
 
 
 @numba.generated_jit(nopython=True)
+def endswith(source, suffix):
+    """Handles cases where ENDSWITH receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [source, suffix]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.endswith", ["source", "suffix"], i
+            )
+
+    def impl(source, suffix):  # pragma: no cover
+        return endswith_util(source, suffix)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
 def format(arr, places):
     """Handles cases where FORMAT recieves optional arguments and forwards
     to args appropriate version of the real implementation"""
@@ -140,6 +157,25 @@ def initcap(arr, delim):
 
     def impl(arr, delim):  # pragma: no cover
         return initcap_util(arr, delim)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def insert(source, pos, length, inject):
+    """Handles cases where INSERT receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [source, pos, length, inject]
+    for i in range(4):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.insert",
+                ["source", "pos", "length", "inject"],
+                i,
+            )
+
+    def impl(source, pos, length, inject):  # pragma: no cover
+        return insert_util(source, pos, length, inject)
 
     return impl
 
@@ -216,6 +252,25 @@ def ord_ascii(arr):
 
     def impl(arr):  # pragma: no cover
         return ord_ascii_util(arr)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def position(substr, source, start):
+    """Handles cases where POSITION receives optional arguments and forwards
+    to args appropriate version of the real implementation"""
+    args = [substr, source, start]
+    for i in range(3):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.position",
+                ["substr", "source", "start"],
+                i,
+            )
+
+    def impl(substr, source, start):  # pragma: no cover
+        return position_util(substr, source, start)
 
     return impl
 
@@ -360,6 +415,23 @@ def split_part(source, delim, part):
 
     def impl(source, delim, part):  # pragma: no cover
         return split_part_util(source, delim, part)
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def startswith(source, prefix):
+    """Handles cases where STARTSWITH receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [source, prefix]
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.startswith", ["source", "prefix"], i
+            )
+
+    def impl(source, prefix):  # pragma: no cover
+        return startswith_util(source, prefix)
 
     return impl
 
@@ -736,6 +808,44 @@ def editdistance_with_max_util(s, t, maxDistance):
 
 
 @numba.generated_jit(nopython=True)
+def endswith_util(source, suffix):
+    """A dedicated kernel for the SQL function ENDSWITH which takes in 2 strings
+    (or string columns) and whether or not the first string ends with the second
+
+
+    Args:
+        source (string array/series/scalar): the string(s) being searched in
+        suffix (string array/series/scalar): the string(s) being searched for
+
+    Returns:
+        booleam series/scalar: whether or not the source contains the suffix
+    """
+
+    arr_is_string = verify_string_binary_arg(source, "endswith", "source")
+    if arr_is_string != verify_string_binary_arg(
+        suffix, "endswith", "suffix"
+    ):  # pragma: no cover
+        raise bodo.utils.typing.BodoError(
+            "String and suffix must both be strings or both binary"
+        )
+
+    arg_names = ["source", "suffix"]
+    arg_types = [source, suffix]
+    propagate_null = [True] * 2
+    scalar_text = "res[i] = arg0.endswith(arg1)"
+
+    out_dtype = bodo.boolean_array
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+@numba.generated_jit(nopython=True)
 def format_util(arr, places):
     """A dedicated kernel for the SQL function FORMAT which takes in two
     integers (or columns) and formats the former with commas at every
@@ -762,6 +872,57 @@ def format_util(arr, places):
     out_dtype = bodo.string_array_type
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+# TODO: alter to handle negatives the same way Snowflake does ([BE-3719])
+@numba.generated_jit(nopython=True)
+def insert_util(arr, pos, length, inject):
+    """A dedicated kernel for the SQL function INSERT which takes in two strings
+       and two integers (either of which can be a column) and inserts the second
+       string inside the first, starting at the index of the first integer
+       and replacing the number of characters from the second integer.
+
+       Currently diverges from the Snowflake API when pos/length are negative.
+       The Snowflake behavior for these cases seems hard to define, so for
+       now this kernel treats negatives like zero.
+
+
+    Args:
+        arr (string array/series/scalar): the string(s) being inserted into
+        pos (integer array/series/scalar): where the insert(s) begin (1 indexed)
+        length (integer array/series/scalar): how many characters from arr get deleted
+        inject (string array/series/scalar): the string(s) being inserted
+
+    Returns:
+        string array/scalar: the injected string(s)
+    """
+    arr_is_string = verify_string_binary_arg(arr, "INSERT", "arr")
+    verify_int_arg(pos, "INSERT", "pos")
+    verify_int_arg(length, "INSERT", "length")
+    if arr_is_string != verify_string_binary_arg(
+        inject, "INSERT", "inject"
+    ):  # pragma: no cover
+        raise bodo.utils.typing.BodoError(
+            "String and injected value must both be strings or both binary"
+        )
+
+    arg_names = ["arr", "pos", "length", "inject"]
+    arg_types = [arr, pos, length, inject]
+    propagate_null = [True] * 4
+    scalar_text = "prefixIndex = max(arg1-1, 0)\n"
+    scalar_text += "suffixIndex = prefixIndex + max(arg2, 0)\n"
+    scalar_text += "res[i] = arg0[:prefixIndex] + arg3 + arg0[suffixIndex:]"
+
+    out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        may_cause_duplicate_dict_array_values=True,
+    )
 
 
 def left_util(arr, n_chars):  # pragma: no cover
@@ -932,6 +1093,45 @@ def ord_ascii_util(arr):
     scalar_text += "   bodo.libs.array_kernels.setna(res, i)\n"
     scalar_text += "else:\n"
     scalar_text += "   res[i] = ord(arg0[0])"
+
+    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+@numba.generated_jit(nopython=True)
+def position_util(substr, source, start):
+    """A dedicated kernel for the SQL function POSITION which takes in two strings
+    (or columns) and returns the locaiton of the first string within the second
+    (1-indexed), with an optional starting location. If no match is found,
+    zero is returned. The actual function can take in 2 or 3 arguments, but
+    this kernel assumes that the 3rd argument is always provided.
+
+
+    Args:
+        substr (string array/series/scalar): the string(s) that are being searched for
+        source (string array/series/scalar): the string(s) that are being searched in
+        start (int array/series/scalar): the start location(s) for the search
+
+    Returns:
+        integer series/scalar: the ord value of the first character(s)
+    """
+
+    is_str = verify_string_binary_arg(substr, "POSITION", "substr")
+    if is_str != verify_string_binary_arg(
+        source, "POSITION", "source"
+    ):  # pragma: no cover
+        raise bodo.utils.typing.BodoError(
+            "Substring and source must be both strings or both binary"
+        )
+    verify_int_arg(start, "POSITION", "start")
+
+    assert (is_str, "[BE-3717] Support binary find with 3 args")
+
+    arg_names = ["substr", "source", "start"]
+    arg_types = [substr, source, start]
+    propagate_null = [True] * 3
+    scalar_text = "res[i] = arg1.find(arg0, arg2 - 1) + 1"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
@@ -1145,6 +1345,44 @@ def split_part_util(source, delim, part):
         scalar_text,
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
+    )
+
+
+@numba.generated_jit(nopython=True)
+def startswith_util(source, prefix):
+    """A dedicated kernel for the SQL function STARTSWITH which takes in 2 strings
+    (or string columns) and whether or not the first string starts with the second
+
+
+    Args:
+        source (string array/series/scalar): the string(s) being searched in
+        prefix (string array/series/scalar): the string(s) being searched for
+
+    Returns:
+        booleam series/scalar: whether or not the source contains the prefix
+    """
+
+    arr_is_string = verify_string_binary_arg(source, "startswith", "source")
+    if arr_is_string != verify_string_binary_arg(
+        prefix, "startswith", "prefix"
+    ):  # pragma: no cover
+        raise bodo.utils.typing.BodoError(
+            "String and prefix must both be strings or both binary"
+        )
+
+    arg_names = ["source", "prefix"]
+    arg_types = [source, prefix]
+    propagate_null = [True] * 2
+    scalar_text = "res[i] = arg0.startswith(arg1)"
+
+    out_dtype = bodo.boolean_array
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
     )
 
 

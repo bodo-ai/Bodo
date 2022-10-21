@@ -387,6 +387,55 @@ public final class StringOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.STRING);
 
+  public static final SqlFunction STARTSWITH =
+      new SqlFunction(
+          "STARTSWITH",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN_NULLABLE,
+          null,
+          OperandTypes.STRING_STRING,
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction ENDSWITH =
+      new SqlFunction(
+          "ENDSWITH",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.BOOLEAN_NULLABLE,
+          null,
+          OperandTypes.STRING_STRING,
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction INSERT =
+      new SqlFunction(
+          "INSERT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.ARG0_NULLABLE,
+          null,
+          OperandTypes.family(
+              SqlTypeFamily.STRING,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.INTEGER,
+              SqlTypeFamily.STRING),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction CHARINDEX =
+      new SqlFunction(
+          "CHARINDEX",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER_NULLABLE,
+          null,
+          argumentRange(2, SqlTypeFamily.STRING, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.STRING);
+
+  public static final SqlFunction POSITION =
+      new SqlFunction(
+          "POSITION",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER_NULLABLE,
+          null,
+          argumentRange(2, SqlTypeFamily.STRING, SqlTypeFamily.STRING, SqlTypeFamily.INTEGER),
+          SqlFunctionCategory.STRING);
+
   public static final SqlFunction SPLIT_PART =
       new SqlFunction(
           "SPLIT_PART",
@@ -557,6 +606,11 @@ public final class StringOperatorTable implements SqlOperatorTable {
           CHAR,
           RTRIMMED_LENGTH,
           SPACE,
+          STARTSWITH,
+          ENDSWITH,
+          INSERT,
+          POSITION,
+          CHARINDEX,
           SPLIT_PART,
           STRTOK,
           SUBSTRING_INDEX,
