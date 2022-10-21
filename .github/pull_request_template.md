@@ -1,4 +1,4 @@
-- [ ] Pipelines passed before requesting review.
+- [ ] Pipelines passed before requesting review. To run CI you must include `[run CI]` in your commit message.
 - [ ] Added docstrings and comments to new code.
 
 - Python code checklist:
