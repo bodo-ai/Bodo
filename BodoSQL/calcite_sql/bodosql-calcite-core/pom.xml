@@ -56,7 +56,7 @@
 			<groupId>com.github.Bodo-inc.calcite</groupId>
 			<artifactId>calcite-core</artifactId>
 			<!-- Test here by changing the branch version -->
-			<version>bodo-calcite-${org.apache.calcite-version}-dev-SNAPSHOT</version>
+			<version>bodo-calcite-tmp-dev-SNAPSHOT</version>
 		</dependency>
 		<dependency>
 			<groupId>com.google.guava</groupId>

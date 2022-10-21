@@ -564,17 +564,28 @@ public class RelationalAlgebraGenerator {
     return response;
   }
 
-  public String getPandasString(String sql) throws Exception {
+  public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
     RelNode optimizedPlan = getRelationalAlgebra(sql, true);
-    return getPandasStringFromPlan(optimizedPlan, sql);
+    return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
   }
 
-  public String getPandasStringUnoptimized(String sql) throws Exception {
+  //Default debugDeltaTable to false
+  public String getPandasString(String sql) throws Exception {
+    return getPandasString(sql, false);
+  }
+
+  public String getPandasStringUnoptimized(String sql, boolean debugDeltaTable) throws Exception {
     RelNode unOptimizedPlan = getNonOptimizedRelationalAlgebra(sql, true);
-    return getPandasStringFromPlan(unOptimizedPlan, sql);
+    return getPandasStringFromPlan(unOptimizedPlan, sql, debugDeltaTable);
   }
 
-  private String getPandasStringFromPlan(RelNode plan, String originalSQL) throws Exception {
+  //default debugDeltaTable to false
+  public String getPandasStringUnoptimized(String sql) throws Exception {
+    return getPandasStringUnoptimized(sql, false);
+  }
+
+
+  private String getPandasStringFromPlan(RelNode plan, String originalSQL, boolean debugDeltaTable) throws Exception {
     /**
      * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
      * this, we use two components. First, each RelNode comes with a unique id, which This is used
@@ -586,7 +597,7 @@ public class RelationalAlgebraGenerator {
     ExprTypeVisitor.determineRelNodeExprType(plan, exprTypes, searchMap);
     this.loweredGlobalVariables = new HashMap<>();
     PandasCodeGenVisitor codegen =
-        new PandasCodeGenVisitor(exprTypes, searchMap, this.loweredGlobalVariables, originalSQL);
+        new PandasCodeGenVisitor(exprTypes, searchMap, this.loweredGlobalVariables, originalSQL, debugDeltaTable);
     codegen.go(plan);
     String pandas_code = codegen.getGeneratedCode();
     return pandas_code;
