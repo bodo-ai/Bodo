@@ -130,17 +130,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // pushed into a remote db (e.g. Snowflake)
   private String originalSQLQuery;
 
+  // Debug flag set for certain tests in our test suite. Causes the codegen to return simply return the delta table
+  // when encountering a merge into operation
+  private boolean debuggingDeltaTable;
+
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
       HashMap<String, RexNode> searchMap,
       HashMap<String, String> loweredGlobalVariablesMap,
-      String originalSQLQuery) {
+      String originalSQLQuery,
+      boolean debuggingDeltaTable) {
     super();
     this.exprTypesMap = exprTypesMap;
     this.searchMap = searchMap;
     this.varCache = new HashMap<Integer, Pair<String, List<String>>>();
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
+    this.debuggingDeltaTable = debuggingDeltaTable;
   }
 
   /**
@@ -654,6 +660,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       case INSERT:
         this.visitInsertInto(node);
         break;
+      case MERGE:
+        this.visitMergeInto(node);
+        break;
       case DELETE:
         this.visitDelete(node);
         break;
@@ -661,6 +670,37 @@ public class PandasCodeGenVisitor extends RelVisitor {
         throw new BodoSQLCodegenException(
             "Internal Error: Encountered Unsupported Calcite Modify operation "
                 + node.getOperation().toString());
+    }
+  }
+
+  /**
+   * Visitor for MERGE INTO operation for SQL write. Currently, it just returns the
+   * delta table, for testing purposes.
+   *
+   * @param node
+   */
+  public void visitMergeInto(LogicalTableModify node) {
+    if (this.debuggingDeltaTable) {
+      // If this environment variable is set, we're only testing the generation of the delta table.
+      // Just return the delta table.
+      this.visit(node.getInput(0), 0, node);
+      String outVar = this.varGenStack.pop();
+      List<String> colNames = this.columnNamesStack.pop();
+      // We drop no-ops from the delta table, as a few Calcite Optimizations can result in their
+      // being removed from the table, and their presence/lack thereof shouldn't impact anything in
+      // the
+      // final implementation, but it can cause issues when testing the delta table
+      this.generatedCode
+          .append(getBodoIndent())
+          .append(outVar)
+          .append(" = ")
+          .append(outVar)
+          .append(".dropna(subset=[")
+          .append(makeQuoted(colNames.get(colNames.size() - 1)))
+          .append("])\n");
+      this.generatedCode.append(getBodoIndent()).append("return " + outVar);
+    } else {
+      throw new BodoSQLCodegenException("MERGE INTO not yet implemented.");
     }
   }
 

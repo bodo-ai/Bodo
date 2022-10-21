@@ -3075,7 +3075,7 @@ def overload_dataframe_replace(
 def _is_col_access(expr_node):
     """return True if the expression is a column access"""
     expr_str = str(expr_node)
-    return expr_str.startswith("left.") or expr_str.startswith("right.")
+    return expr_str.startswith("(left.") or expr_str.startswith("(right.")
 
 
 def _insert_NA_cond(expr_node, left_columns, left_data, right_columns, right_data):
@@ -3209,17 +3209,18 @@ def _extract_equal_conds(expr_node):
         r_str = str(expr_node.rhs)
 
         # if both refer to the same table (strange corner case)
-        if (l_str.startswith("left.") and r_str.startswith("left.")) or (
-            l_str.startswith("right.") and r_str.startswith("right.")
+        if (l_str.startswith("(left.") and r_str.startswith("(left.")) or (
+            l_str.startswith("(right.") and r_str.startswith("(right.")
         ):
             return [], [], expr_node
 
         # remove "left." and "right."
-        left_on = [l_str.split(".")[1]]
-        right_on = [r_str.split(".")[1]]
+        # and the trailing ")"
+        left_on = [l_str.split(".")[1][:-1]]
+        right_on = [r_str.split(".")[1][:-1]]
 
         # reverse order
-        if l_str.startswith("right."):
+        if l_str.startswith("(right."):
             return right_on, left_on, None
 
         return left_on, right_on, None
@@ -6161,7 +6162,10 @@ def _parse_query_expr(
 
         # __repr__ is needed if this attr node is not called, e.g. A.dt.year
         def __repr__(self):
-            return pd.io.formats.printing.pprint_thing(self.name)
+            # _replace_column_accesses expects column access to be wraped in parenthesis,
+            # so we wrap everything in parenthesis when converting to string,
+            # since we can't distinguish a column access from any other type of expression
+            return pd.io.formats.printing.pprint_thing("(" + self.name + ")")
 
     def visit_Attribute(self, node, **kwargs):
         """handles value.attr cases such as C.str.contains()

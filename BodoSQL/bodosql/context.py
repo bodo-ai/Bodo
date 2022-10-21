@@ -1,3 +1,4 @@
+import os
 import re
 import warnings
 from enum import Enum
@@ -492,18 +493,30 @@ class BodoSQLContext:
     def convert_to_pandas(self, sql, params_dict=None):
         """converts SQL code to Pandas"""
         pd_code, lowered_globals = self._convert_to_pandas(sql, True, params_dict)
-        # Replace the global variable with the actual constant value, for better readability
+        # Add the global variable definitions at the begining of the fn,
+        # for better readability
+        added_defs = ""
         for varname, glbl in lowered_globals.items():
-            pd_code = pd_code.replace(varname, str(glbl))
-        return pd_code
+            added_defs += varname + " = " + repr(glbl) + "\n"
+        return added_defs + pd_code
 
-    def _convert_to_pandas_unoptimized(self, sql, params_dict=None):
+    def _convert_to_pandas_unoptimized(
+        self,
+        sql,
+        params_dict=None,
+    ):
         """convert SQL code to Pandas"""
-        pd_code, lowered_globals = self._convert_to_pandas(sql, False, params_dict)
-        # Replace the global variable with the actual constant value, for better readability
+        pd_code, lowered_globals = self._convert_to_pandas(
+            sql,
+            False,
+            params_dict,
+        )
+        # Add the global variable definitions at the begining of the fn,
+        # for better readability
+        added_defs = ""
         for varname, glbl in lowered_globals.items():
-            pd_code = pd_code.replace(varname, str(glbl))
-        return pd_code
+            added_defs += varname + " = " + repr(glbl) + "\n"
+        return added_defs + pd_code
 
     def _setup_named_params(self, params_dict):
 
@@ -685,6 +698,10 @@ class BodoSQLContext:
 
     def _get_pandas_code(self, sql, optimized):
         # Construct the relational algebra generator
+
+        debugDeltaTable = bool(
+            os.environ.get("__BODO_TESTING_DEBUG_DELTA_TABLE", False)
+        )
         if sql.strip() == "":
             bodo.utils.typing.raise_bodo_error(
                 "BodoSQLContext passed empty query string"
@@ -700,7 +717,7 @@ class BodoSQLContext:
 
         if optimized:
             try:
-                pd_code = str(generator.getPandasString(sql))
+                pd_code = str(generator.getPandasString(sql, debugDeltaTable))
                 failed = False
             except Exception as e:
                 message = java_error_to_msg(e)
@@ -712,7 +729,9 @@ class BodoSQLContext:
                 )
         else:
             try:
-                pd_code = str(generator.getPandasStringUnoptimized(sql))
+                pd_code = str(
+                    generator.getPandasStringUnoptimized(sql, debugDeltaTable)
+                )
                 failed = False
             except Exception as e:
                 message = java_error_to_msg(e)

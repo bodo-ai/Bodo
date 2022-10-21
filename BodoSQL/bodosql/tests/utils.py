@@ -393,7 +393,6 @@ def check_query(
             result["output_df"] = bc.sql(query, named_params)
         else:
             result["output_df"] = bc._test_sql_unoptimized(query, named_params)
-
     return result
 
 
