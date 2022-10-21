@@ -191,7 +191,22 @@ class DataFrameType(types.ArrayCompatible):  # TODO: IterableType over column na
             columns_str = (
                 f"('{self.columns[0]}', '{self.columns[1]}', ..., '{self.columns[-1]}')"
             )
-            return f"dataframe({data_str}, {self.index}, {columns_str}, {self.dist}, {self.is_table_format}, {self.has_runtime_cols})"
+
+            # Note: We include this hash in the string to ensure that __str__ returns a unique string
+            # for each dataframe type, to avoid issues with Numba caching. Numba caching isn't an issue
+            # for dataframe type itself (as dataframeType has a defined key fn), but it can be an issue
+            # for types that contain one or more dataframe's (Loc, Iloc, .dt, .str, etc.), as the
+            # default key for a given type is the __str__ method of that type, and the default __str__
+            # implementation will call __str__ on all
+            # the components. Therefore, we need this __str__ method to still return a unique str
+            # per each DataFrameType.
+            # Technically, it's possible for two hash's from two different dataframe types to be
+            # identical, but it's so unlikely (especially since we're only using this path as a fallback)
+            # that we're not considering it.
+
+            key_hash_val = str(hash(super().__str__()))
+            return f"dataframe({data_str}, {self.index}, {columns_str}, {self.dist}, {self.is_table_format}, {self.has_runtime_cols}, key_hash={key_hash_val})"
+
         return super().__str__()
 
     def copy(
