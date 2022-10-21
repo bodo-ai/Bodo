@@ -513,6 +513,120 @@ def test_initcap(args):
     )
 
 
+# TODO: test with negatives once that behavior is properly defined ([BE-3719])
+@pytest.mark.parametrize(
+    "args, answer",
+    [
+        pytest.param(
+            (
+                pd.Series(["alphabet"] * 4 + ["soup"] * 4),
+                pd.Series([1, 2, 3, 4] * 2, dtype=pd.Int32Dtype()),
+                pd.Series([0, 2, 0, 3] * 2, dtype=pd.Int32Dtype()),
+                pd.Series(["X", "X", "****", "****"] * 2),
+            ),
+            pd.Series(
+                [
+                    "Xalphabet",
+                    "aXhabet",
+                    "al****phabet",
+                    "alp****et",
+                    "Xsoup",
+                    "sXp",
+                    "so****up",
+                    "sou****",
+                ]
+            ),
+            id="all_vector_string",
+        ),
+        pytest.param(
+            (
+                pd.Series([b"the quick fox"] * 5),
+                pd.Series([5, 5, None, 5, 5], dtype=pd.Int32Dtype()),
+                pd.Series([6, 6, 6, 0, 0], dtype=pd.Int32Dtype()),
+                pd.Series([b"fast ", b"fast and ", b"fast", b"fast and ", b"fast"]),
+            ),
+            pd.Series(
+                [
+                    b"the fast fox",
+                    b"the fast and fox",
+                    None,
+                    b"the fast and quick fox",
+                    b"the fastquick fox",
+                ]
+            ),
+            id="all_vector_binary",
+        ),
+        pytest.param(
+            (
+                "123456789",
+                pd.Series([1, 3, 5, 7, 9, None] * 2, dtype=pd.Int32Dtype()),
+                pd.Series([0, 1, 2, 3] * 3, dtype=pd.Int32Dtype()),
+                "",
+            ),
+            pd.Series(
+                [
+                    "123456789",
+                    "12456789",
+                    "1234789",
+                    "123456",
+                    "123456789",
+                    None,
+                    "3456789",
+                    "126789",
+                    "123456789",
+                    "12345689",
+                    "12345678",
+                    None,
+                ]
+            ),
+            id="scalar_vector_vector_scalar_string",
+        ),
+        pytest.param(
+            (
+                b"The quick brown fox jumps over the lazy dog",
+                11,
+                5,
+                pd.Series([b"red", b"orange", b"yellow", b"green", b"blue", None]),
+            ),
+            pd.Series(
+                [
+                    b"The quick red fox jumps over the lazy dog",
+                    b"The quick orange fox jumps over the lazy dog",
+                    b"The quick yellow fox jumps over the lazy dog",
+                    b"The quick green fox jumps over the lazy dog",
+                    b"The quick blue fox jumps over the lazy dog",
+                    None,
+                ]
+            ),
+            id="scalar_scalar_scalar_vector_binary",
+        ),
+        pytest.param(
+            ("alphabet", 10, 5, " soup"), "alphabet soup", id="all_scalar_string"
+        ),
+        pytest.param((b"bar", 1, 0, b"foo"), b"foobar", id="all_scalar_binary"),
+    ],
+)
+def test_insert(args, answer):
+    def impl(source, pos, len, inject):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.insert(source, pos, len, inject)
+        )
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda source, pos, len, inject: bodo.libs.bodosql_array_kernels.insert(
+            source, pos, len, inject
+        )
+
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -915,6 +1029,79 @@ def test_ord_ascii(s):
 
 
 @pytest.mark.parametrize(
+    "args, answer",
+    [
+        pytest.param(
+            (
+                pd.Series(["a", None, "l", "a", "D", "e"]),
+                pd.Series(["alpha", "beta", None, "gamma", "delta", "epsilon"]),
+                pd.Series([1, 1, 1, 3, 1, None], dtype=pd.Int32Dtype()),
+            ),
+            pd.Series([1, None, None, 5, 0, None], dtype=pd.Int32Dtype()),
+            id="all_vector_string",
+        ),
+        pytest.param(
+            (
+                pd.Series([b"ab", None, b"is", b"vo", b"i", b"", b"!"]),
+                pd.Series(
+                    [b"alphabet", b"soup", b"is", b"very", b"delicious", None, b"yum!"]
+                ),
+                pd.Series([5, None, 1, 0, 6, 1, 4], dtype=pd.Int32Dtype()),
+            ),
+            pd.Series([1, None, 1, 1, 6, None, 1], dtype=pd.Int32Dtype()),
+            id="all_vector_binary",
+            marks=pytest.mark.skip("[BE-3717] Support binary find with 3 args"),
+        ),
+        pytest.param(
+            (
+                " ",
+                "alphabet soup is very delicious",
+                pd.Series([1, 5, 10, None, 15, 20, 25], dtype=pd.Int32Dtype()),
+            ),
+            pd.Series([9, 9, 14, None, 17, 22, 0], dtype=pd.Int32Dtype()),
+            id="scalar_scalar_vector_string",
+        ),
+        pytest.param(
+            (
+                pd.Series([b" ", b"so", b"very", None, b"!"]),
+                b"alphabet soup is so very very delicious!",
+                1,
+            ),
+            pd.Series([9, 10, 21, None, 40], dtype=pd.Int32Dtype()),
+            id="vector_scalar_scalar_binary",
+            marks=pytest.mark.skip("[BE-3717] Support binary find with 3 args"),
+        ),
+        pytest.param(("a", "darkness and light", 5), 10, id="all_scalar_string"),
+        pytest.param(
+            (b"i", b"rainbow", 1),
+            3,
+            id="all_scalar_binary",
+            marks=pytest.mark.skip("[BE-3717] Support binary find with 3 args"),
+        ),
+    ],
+)
+def test_position(args, answer):
+    def impl(substr, source, start):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.position(substr, source, start)
+        )
+
+    # avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        impl = lambda substr, source, start: bodo.libs.bodosql_array_kernels.position(
+            substr, source, start
+        )
+
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
     "args",
     [
         pytest.param(
@@ -1278,6 +1465,153 @@ def test_split_part(args):
         )
 
     args, answer = args
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(
+                    pd.array(
+                        ["alphabet soup is delicious", "", "alpha", "beta", "usa", None]
+                        * 6
+                    )
+                ),
+                pd.Series(pd.array(["alphabet", "a", "", "bet", "us", None])).repeat(6),
+            ),
+            id="all_vector_string",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    pd.array(
+                        [
+                            b"12345",
+                            b"",
+                            b"123",
+                            b"345",
+                            b"35",
+                            b"54321",
+                            b"45123",
+                            b" ",
+                            b"1",
+                            None,
+                        ]
+                        * 10
+                    )
+                ),
+                pd.Series(
+                    pd.array(
+                        [
+                            b"1",
+                            b"12",
+                            b"123",
+                            b"1234",
+                            b"12345",
+                            b"2345",
+                            b"345",
+                            b"45",
+                            b"5",
+                            None,
+                        ]
+                    )
+                ).repeat(10),
+            ),
+            id="all_vector_binary",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    pd.array(
+                        [
+                            "the quick fox",
+                            "The party",
+                            "dropped the ball",
+                            None,
+                            "the hero",
+                            "make the",
+                        ]
+                    )
+                ),
+                "the",
+            ),
+            id="vector_scalar_string",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            (
+                b"the quick fox",
+                pd.Series(
+                    pd.array(
+                        [b"the quick fox", b"the", b" ", b"The", None, b"xof", b"quick"]
+                    )
+                ),
+            ),
+            id="scalar_vector_binary",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(("12-345", "1"), id="all_scalar_good_string"),
+        pytest.param(
+            ("12-345", "45"), id="all_scalar_bad_string", marks=pytest.mark.slow
+        ),
+        pytest.param((b"bookshelf", b"books"), id="all_binary_good_string"),
+        pytest.param(
+            (b"book", b"books"), id="all_binary_bad_string", marks=pytest.mark.slow
+        ),
+    ],
+)
+@pytest.mark.parametrize("startswith", [True, False])
+def test_startswith_endswith(args, startswith):
+    def startswith_impl(source, prefix):
+        return pd.Series(bodo.libs.bodosql_array_kernels.startswith(source, prefix))
+
+    # Avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        startswith_impl = (
+            lambda source, prefix: bodo.libs.bodosql_array_kernels.startswith(
+                source, prefix
+            )
+        )
+
+    def endswith_impl(source, prefix):
+        return pd.Series(bodo.libs.bodosql_array_kernels.endswith(source, prefix))
+
+    # Avoid Series conversion for scalar output
+    if all(not isinstance(arg, pd.Series) for arg in args):
+        endswith_impl = lambda source, prefix: bodo.libs.bodosql_array_kernels.endswith(
+            source, prefix
+        )
+
+    # Simulates STARTSWITH on a single row
+    def startswith_scalar_fn(source, prefix):
+        if pd.isna(source) or pd.isna(prefix):
+            return None
+        else:
+            return source.startswith(prefix)
+
+    # Simulates ENDSWITH on a single row
+    def endswith_scalar_fn(source, prefix):
+        if pd.isna(source) or pd.isna(prefix):
+            return None
+        else:
+            return source.endswith(prefix)
+
+    if startswith:
+        impl = startswith_impl
+        scalar_fn = startswith_scalar_fn
+    else:
+        impl = endswith_impl
+        scalar_fn = endswith_scalar_fn
+
+    answer = vectorized_sol(args, scalar_fn, pd.BooleanDtype())
     check_func(
         impl,
         args,
@@ -1920,6 +2254,36 @@ def test_option_reverse_repeat_replace_space():
                         py_output=(a0, a1, a2, a3),
                         dist_test=False,
                     )
+
+
+@pytest.mark.slow
+def test_option_startswith_endswith_insert_position():
+    def impl(A, B, C, D, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C
+        arg3 = D
+        return (
+            bodo.libs.bodosql_array_kernels.startswith(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.endswith(arg0, arg1),
+            bodo.libs.bodosql_array_kernels.insert(arg0, arg2, arg3, arg1),
+            bodo.libs.bodosql_array_kernels.position(arg1, arg0, arg2),
+        )
+
+    A, B, C, D = "The night is dark and full of terrors.", "terrors.", 14, 100
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (
+                (False, True, "The night is terrors.", 31)
+                if flag0 and flag1
+                else (None, None, None, None)
+            )
+            check_func(
+                impl,
+                (A, B, C, D, flag0, flag1),
+                py_output=answer,
+                dist_test=False,
+            )
 
 
 @pytest.mark.slow

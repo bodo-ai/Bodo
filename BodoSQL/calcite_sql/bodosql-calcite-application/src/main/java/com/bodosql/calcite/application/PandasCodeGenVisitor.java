@@ -130,7 +130,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // pushed into a remote db (e.g. Snowflake)
   private String originalSQLQuery;
 
-  // Debug flag set for certain tests in our test suite. Causes the codegen to return simply return the delta table
+  // Debug flag set for certain tests in our test suite. Causes the codegen to return simply return
+  // the delta table
   // when encountering a merge into operation
   private boolean debuggingDeltaTable;
 
@@ -674,8 +675,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
   }
 
   /**
-   * Visitor for MERGE INTO operation for SQL write. Currently, it just returns the
-   * delta table, for testing purposes.
+   * Visitor for MERGE INTO operation for SQL write. Currently, it just returns the delta table, for
+   * testing purposes.
    *
    * @param node
    */
@@ -2072,6 +2073,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 + ")";
         return new RexNodeVisitorInfo(outputName, expr);
 
+      case POSITION:
+        return generatePosition(operandsInfo);
+
       case OTHER:
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
@@ -2588,6 +2592,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "LEFT":
           case "CONTAINS":
           case "INSTR":
+          case "STARTSWITH":
+          case "ENDSWITH":
             if (operandsInfo.size() != 2) {
               throw new BodoSQLCodegenException(fnName + " requires providing only 2 arguments");
             }
@@ -2606,6 +2612,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
             }
             return getThreeArgStringFnInfo(
                 fnName, operandsInfo.get(0), operandsInfo.get(1), operandsInfo.get(2));
+          case "INSERT":
+            return generateInsert(operandsInfo);
+          case "POSITION":
+          case "CHARINDEX":
+            return generatePosition(operandsInfo);
           case "STRTOK":
             return generateStrtok(operandsInfo);
           case "EDITDISTANCE":

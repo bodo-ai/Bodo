@@ -83,6 +83,8 @@ public class StringFnCodeGen {
     equivalentFnMapBroadcast.put("TRANSLATE3", "bodo.libs.bodosql_array_kernels.translate");
     equivalentFnMapBroadcast.put("SPLIT_PART", "bodo.libs.bodosql_array_kernels.split_part");
     equivalentFnMapBroadcast.put("STRTOK", "bodo.libs.bodosql_array_kernels.strtok");
+    equivalentFnMapBroadcast.put("STARTSWITH", "bodo.libs.bodosql_array_kernels.startswith");
+    equivalentFnMapBroadcast.put("ENDSWITH", "bodo.libs.bodosql_array_kernels.endswith");
   }
 
   /**
@@ -305,6 +307,7 @@ public class StringFnCodeGen {
     expr_code.append(")");
     return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
   }
+
   /*
    * Function that returns the rexInfo for an STRTOK Function Call.
    *
@@ -392,6 +395,81 @@ public class StringFnCodeGen {
       throw new BodoSQLCodegenException(
           "Error, invalid number of arguments passed to EDITDISTANCE");
     }
+    name.append(")");
+    expr_code.append(")");
+    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+  }
+
+  /*
+   * Function that returns the rexInfo for an INSERT Function Call.
+   *
+   * @param operandsInfo the information about the 4 arguments
+   * @return The RexNodeVisitorInfo corresponding to the function call
+   */
+  public static RexNodeVisitorInfo generateInsert(List<RexNodeVisitorInfo> operandsInfo) {
+    int argCount = operandsInfo.size();
+
+    if (argCount != 4) {
+      throw new BodoSQLCodegenException("Error, invalid number of arguments passed to INSERT");
+    }
+
+    StringBuilder name = new StringBuilder();
+    StringBuilder expr_code = new StringBuilder();
+
+    name.append("INSERT(");
+    expr_code.append("bodo.libs.bodosql_array_kernels.insert(");
+
+    for (int i = 0; i < 4; i++) {
+      name.append(operandsInfo.get(i).getName());
+      expr_code.append(operandsInfo.get(i).getExprCode());
+      if (i < 3) {
+        name.append(", ");
+        expr_code.append(", ");
+      }
+    }
+
+    name.append(")");
+    expr_code.append(")");
+    return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
+  }
+
+  /**
+   * Function that returns the rexInfo for a POSITION/CHARINDEX Function Call.
+   *
+   * @param operandsInfo the information about the two/three arguments
+   * @return The RexNodeVisitorInfo corresponding to the function call
+   */
+  public static RexNodeVisitorInfo generatePosition(List<RexNodeVisitorInfo> operandsInfo) {
+
+    if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 3)) {
+      throw new BodoSQLCodegenException("Error, invalid number of arguments passed to POSITION");
+    }
+
+    StringBuilder name = new StringBuilder();
+    StringBuilder expr_code = new StringBuilder();
+
+    name.append("POSITION(");
+    name.append(operandsInfo.get(0).getName());
+    name.append(", ");
+    name.append(operandsInfo.get(1).getName());
+    name.append(", ");
+    expr_code.append("bodo.libs.bodosql_array_kernels.position(");
+    expr_code.append(operandsInfo.get(0).getExprCode());
+    expr_code.append(", ");
+    expr_code.append(operandsInfo.get(1).getExprCode());
+    expr_code.append(", ");
+
+    if (operandsInfo.size() == 3) {
+      name.append(operandsInfo.get(2).getName());
+      expr_code.append(operandsInfo.get(2).getExprCode());
+
+      // If 2 arguments are provided, the default value for the start position
+      // is 1
+    } else {
+      name.append("1");
+      expr_code.append("1");
+    }
+
     name.append(")");
     expr_code.append(")");
     return new RexNodeVisitorInfo(name.toString(), expr_code.toString());

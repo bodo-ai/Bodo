@@ -877,3 +877,336 @@ def test_lpad_rpad_binary(bodosql_binary_types, spark_info, memory_leak_check):
         sort_output=False,
         expected_output=expected_output2,
     )
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(True, id="CASE", marks=pytest.mark.slow),
+        pytest.param(False, id="NO_CASE"),
+    ],
+)
+@pytest.mark.parametrize(
+    "startswith, table, answer",
+    [
+        pytest.param(
+            True,
+            "str_table",
+            pd.DataFrame({0: [False] * 3 + [True] * 6}),
+            id="startswith-strings",
+        ),
+        pytest.param(
+            True,
+            "bin_table",
+            pd.DataFrame({0: [False] * 3 + [True] * 6}),
+            id="startswith-binary",
+        ),
+        pytest.param(
+            False,
+            "str_table",
+            pd.DataFrame(
+                {0: [False, True, False, True, False, True, True, False, False]}
+            ),
+            id="endswith-strings",
+        ),
+        pytest.param(
+            False,
+            "bin_table",
+            pd.DataFrame(
+                {0: [False, True, False, True, False, True, True, False, False]}
+            ),
+            id="endswith-binary",
+        ),
+    ],
+)
+def test_startswith_endswith(
+    startswith, table, answer, use_case, spark_info, memory_leak_check
+):
+    if use_case:
+        query = f"SELECT CASE WHEN {'STARTSWITH' if startswith else 'ENDSWITH'}(A, B) THEN 1 ELSE 0 END FROM {table}"
+        answer = pd.DataFrame({0: [int(b) for b in answer[0]]})
+    else:
+        query = (
+            f"SELECT {'STARTSWITH' if startswith else 'ENDSWITH'}(A, B) FROM {table}"
+        )
+    ctx = {
+        "str_table": pd.DataFrame(
+            {
+                "A": ["alpha", "alphabet", "alpha beta"] * 3,
+                "B": ["bet"] * 3 + ["a"] * 3 + ["alpha"] * 3,
+            }
+        ),
+        "bin_table": pd.DataFrame(
+            {
+                "A": [b"alpha", b"alphabet", b"alpha beta"] * 3,
+                "B": [b"bet"] * 3 + [b"a"] * 3 + [b"alpha"] * 3,
+            }
+        ),
+    }
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=answer,
+    )
+
+
+# TODO: test with negatives once that behavior is properly defined ([BE-3719])
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(True, id="CASE", marks=pytest.mark.slow),
+        pytest.param(False, id="NO_CASE"),
+    ],
+)
+@pytest.mark.parametrize(
+    "calculation, table, answer",
+    [
+        pytest.param(
+            "INSERT(A, B, C, D)",
+            "str_table",
+            pd.DataFrame(
+                {
+                    0: [
+                        "the orange fox",
+                        "the yellow fox",
+                        "the green fox",
+                        "the red and blue fox",
+                        "the purple and red fox",
+                    ]
+                    * 2
+                }
+            ),
+            id="replace-strings",
+        ),
+        pytest.param(
+            "INSERT(A, E, F, G)",
+            "str_table",
+            pd.DataFrame(
+                {
+                    0: [
+                        "the ",
+                        None,
+                        "the spotted red fox",
+                        "the red fox jumped",
+                        None,
+                        "I saw the red fox",
+                        "red fox",
+                        "the fox",
+                        None,
+                        "the red dog",
+                    ],
+                }
+            ),
+            id="inject_delete-strings",
+        ),
+        pytest.param(
+            "INSERT(A, B, C, D)",
+            "bin_table",
+            pd.DataFrame(
+                {
+                    0: [
+                        b"the orange fox",
+                        b"the yellow fox",
+                        b"the green fox",
+                        b"the red and blue fox",
+                        b"the purple and red fox",
+                    ]
+                    * 2
+                }
+            ),
+            id="replace-binary",
+        ),
+        pytest.param(
+            "INSERT(A, E, F, G)",
+            "bin_table",
+            pd.DataFrame(
+                {
+                    0: [
+                        b"the ",
+                        None,
+                        b"the spotted red fox",
+                        b"the red fox jumped",
+                        None,
+                        b"I saw the red fox",
+                        b"red fox",
+                        b"the fox",
+                        None,
+                        b"the red dog",
+                    ],
+                }
+            ),
+            id="inject_delete-binary",
+        ),
+    ],
+)
+def test_insert(calculation, table, answer, case, spark_info, memory_leak_check):
+    if case:
+        query = f"SELECT CASE WHEN {calculation} IS NULL THEN -1 ELSE LENGTH({calculation}) END FROM {table}"
+        answer = pd.DataFrame(
+            {0: [-1 if pd.isna(res) else len(res) for res in answer[0]]}
+        )
+    else:
+        query = f"SELECT {calculation} FROM {table}"
+    ctx = {
+        "str_table": pd.DataFrame(
+            {
+                "A": ["the red fox"] * 10,
+                "B": [5, 5, 5, 9, 5] * 2,
+                "C": [3, 3, 3, 0, 0] * 2,
+                "D": ["orange", "yellow", "green", "and blue ", "purple and "] * 2,
+                "E": pd.Series(
+                    [5, 5, 5, 30, None, 1, 1, 4, 8, 9], dtype=pd.Int32Dtype()
+                ),
+                "F": pd.Series(
+                    [100, None, 0, 0, 1, 0, 4, 4, 5, 3], dtype=pd.Int32Dtype()
+                ),
+                "G": [
+                    "",
+                    "yay",
+                    "spotted ",
+                    " jumped",
+                    "foo",
+                    "I saw ",
+                    "",
+                    "",
+                    None,
+                    "dog",
+                ],
+            }
+        ),
+        "bin_table": pd.DataFrame(
+            {
+                "A": [b"the red fox"] * 10,
+                "B": [5, 5, 5, 9, 5] * 2,
+                "C": [3, 3, 3, 0, 0] * 2,
+                "D": [b"orange", b"yellow", b"green", b"and blue ", b"purple and "] * 2,
+                "E": pd.Series(
+                    [5, 5, 5, 30, None, 1, 1, 4, 8, 9], dtype=pd.Int32Dtype()
+                ),
+                "F": pd.Series(
+                    [100, None, 0, 0, 1, 0, 4, 4, 5, 3], dtype=pd.Int32Dtype()
+                ),
+                "G": [
+                    b"",
+                    b"yay",
+                    b"spotted ",
+                    b" jumped",
+                    b"foo",
+                    b"I saw ",
+                    b"",
+                    b"",
+                    None,
+                    b"dog",
+                ],
+            }
+        ),
+    }
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        expected_output=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(False, id="NO_CASE"),
+        pytest.param(True, id="CASE", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "table",
+    [
+        pytest.param("str_table", id="strings"),
+        pytest.param(
+            "bin_table",
+            id="binary",
+            marks=pytest.mark.skip("[BE-3717] Support binary find with 3 args"),
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "calculation",
+    [
+        pytest.param(
+            "POSITION(A, B)",
+            id="position_normal-2_args",
+            marks=pytest.mark.skip("[BE-3718] Support POSITION without 'IN' syntax"),
+        ),
+        pytest.param(
+            "POSITION(A IN B)",
+            id="position_in-2_args",
+        ),
+        pytest.param(
+            "POSITION(A, B, C)",
+            id="position_normal-3_args",
+            marks=pytest.mark.skip("[BE-3718] Support POSITION without 'IN' syntax"),
+        ),
+        pytest.param(
+            "CHARINDEX(A, B)",
+            id="charindex-2_args",
+        ),
+        pytest.param(
+            "CHARINDEX(A, B, C)",
+            id="charindex-3_args",
+        ),
+    ],
+)
+def test_position(calculation, table, case, spark_info, memory_leak_check):
+    if case:
+        query = f"SELECT CASE WHEN {calculation} IS NULL THEN -1 ELSE {calculation} END FROM {table}"
+    else:
+        query = f"SELECT {calculation} FROM {table}"
+
+    # Spark has POSITION but not CHARINDEX, so change the function name for it
+    spark_query = query
+    spark_query = spark_query.replace("CHARINDEX", "POSITION")
+
+    # For some reason, Spark's POSITION handles nulls weirdly when there are 3
+    # arguments so manually outputing null is required
+    spark_query = spark_query.replace(
+        "POSITION(A, B, C)",
+        "CASE WHEN A IS NULL OR B IS NULL OR C IS NULL THEN NULL ELSE POSITION(A, B, C) END",
+    )
+
+    ctx = {
+        "str_table": pd.DataFrame(
+            {
+                "A": [None] + (["a "] * 3 + [" "] * 3 + ["t"] * 3) * 3,
+                "B": [None]
+                + ["alphabet"] * 9
+                + ["alpha beta gamma delta"] * 9
+                + ["the quick fox jumped over the lazy dog"] * 9,
+                "C": pd.Series([None] + [1, 5, 9] * 9, dtype=pd.Int32Dtype()),
+            }
+        ),
+        "bin_table": pd.DataFrame(
+            {
+                "A": [None] + ([b"a "] * 3 + [b" "] * 3 + [b"t"] * 3) * 3,
+                "B": [None]
+                + [b"alphabet"] * 9
+                + [b"alpha beta gamma delta"] * 9
+                + [b"the quick fox jumped over the lazy dog"] * 9,
+                "C": pd.Series([None] + [1, 5, 9] * 9, dtype=pd.Int32Dtype()),
+            }
+        ),
+    }
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        sort_output=False,
+        equivalent_spark_query=spark_query,
+    )

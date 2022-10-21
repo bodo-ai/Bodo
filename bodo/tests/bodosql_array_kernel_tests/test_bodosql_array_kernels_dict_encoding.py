@@ -281,6 +281,54 @@ def test_dict_other_string_kernels(args):
             ),
             id="ord_ascii",
         ),
+        pytest.param(
+            (
+                "position",
+                (
+                    " ",
+                    pa.array(
+                        [
+                            "alphabet soup is delicious",
+                            "the quick fox jumped",
+                            None,
+                            "over the lazy dog",
+                            None,
+                            "the quick fox jumped",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    1,
+                ),
+                pd.array([9, 4, None, 5, None, 4] * 2, dtype="Int32"),
+            ),
+            id="position_scalar_vector_scalar",
+        ),
+        pytest.param(
+            (
+                "position",
+                (
+                    " ",
+                    pa.array(
+                        [
+                            "alphabet soup is delicious",
+                            "the quick fox jumped",
+                            None,
+                            "over the lazy dog",
+                            None,
+                            "the quick fox jumped",
+                        ]
+                        * 2,
+                        type=pa.dictionary(pa.int32(), pa.string()),
+                    ),
+                    pd.array([1] * 6 + [10] * 6),
+                ),
+                pd.array(
+                    [9, 4, None, 5, None, 4, 14, 10, None, 14, None, 10], dtype="Int32"
+                ),
+            ),
+            id="position_scalar_vector_vector",
+        ),
     ],
 )
 def test_dict_str2int(args):
@@ -302,6 +350,9 @@ def test_dict_str2int(args):
     def impl5(s):
         return bodo.libs.bodosql_array_kernels.ord_ascii(s)
 
+    def impl6(s, t, n):
+        return bodo.libs.bodosql_array_kernels.position(s, t, n)
+
     func, args, answer = args
     impl = {
         "rtrimmed_length": impl0,
@@ -310,6 +361,7 @@ def test_dict_str2int(args):
         "instr": impl3,
         "strcmp": impl4,
         "ord_ascii": impl5,
+        "position": impl6,
     }[func]
     check_func(
         impl,
@@ -1271,84 +1323,206 @@ def test_dict_initcap(args):
     verify_dictionary_optimization(impl, args, "str_strip", output_encoded)
 
 
+@pytest.mark.parametrize("func", ["equal_null", "startswith", "endswith"])
+@pytest.mark.parametrize(
+    "args, answers",
+    [
+        pytest.param(
+            (
+                pa.array(
+                    [
+                        "wonderlust",
+                        "wonder",
+                        None,
+                        "terrible",
+                        None,
+                        "wendigo",
+                    ]
+                    * 2,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                ),
+                "wonder",
+            ),
+            {
+                "equal_null": np.array([False, True, False, False, False, False] * 2),
+                "startswith": pd.Series(
+                    [True, True, None, False, None, False] * 2, dtype=pd.BooleanDtype()
+                ),
+                "endswith": pd.Series(
+                    [False, True, None, False, None, False] * 2, dtype=pd.BooleanDtype()
+                ),
+            },
+            id="scalar_string",
+        ),
+        pytest.param(
+            (
+                pa.array(
+                    [
+                        "wonderlust",
+                        "wonder",
+                        None,
+                        "terrible",
+                        None,
+                        "wendigo",
+                    ]
+                    * 2,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                ),
+                None,
+            ),
+            {
+                "equal_null": np.array([False, False, True, False, True, False] * 2),
+            },
+            id="scalar_null",
+        ),
+        pytest.param(
+            (
+                pa.array(
+                    [
+                        "wonderlust",
+                        "wonder",
+                        None,
+                        "terrible",
+                        None,
+                        "wendigo",
+                    ]
+                    * 2,
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                ),
+                pd.Series(["wonderlust", "wonder"] * 3 + [None] * 6),
+            ),
+            {
+                "equal_null": np.array([True, True] + [False] * 6 + [True, False] * 2),
+                "startswith": pd.Series(
+                    [True, True, None, False, None, False] + [None] * 6,
+                    dtype=pd.BooleanDtype(),
+                ),
+                "endswith": pd.Series(
+                    [True, True, None, False, None, False] + [None] * 6,
+                    dtype=pd.BooleanDtype(),
+                ),
+            },
+            id="vector",
+        ),
+    ],
+)
+def test_dict_str2bool(args, answers, func):
+    def impl1(s, t):
+        return bodo.libs.bodosql_array_kernels.equal_null(s, t)
+
+    def impl2(s, t):
+        return pd.Series(bodo.libs.bodosql_array_kernels.startswith(s, t))
+
+    def impl3(s, t):
+        return pd.Series(bodo.libs.bodosql_array_kernels.endswith(s, t))
+
+    if func not in answers:
+        pytest.skip("ignore this comibnation of arguments")
+
+    impl = {
+        "equal_null": impl1,
+        "startswith": impl2,
+        "endswith": impl3,
+    }[func]
+
+    check_func(
+        impl,
+        args,
+        py_output=answers[func],
+        check_dtype=False,
+        only_seq=True,
+    )
+
+
 @pytest.mark.parametrize(
     "args",
     [
         pytest.param(
             (
                 (
+                    "The quick fox jumped over the lazy dog.",
+                    5,
+                    5,
                     pa.array(
                         [
-                            "wonderlust",
-                            "wonder",
+                            "fast",
+                            "speedy",
+                            "swift",
+                            "rapid",
                             None,
-                            "terrible",
-                            None,
-                            "wendigo",
                         ]
                         * 2,
                         type=pa.dictionary(pa.int32(), pa.string()),
                     ),
-                    "wonder",
                 ),
-                np.array([False, True, False, False, False, False] * 2),
+                pd.Series(
+                    [
+                        "The fast fox jumped over the lazy dog.",
+                        "The speedy fox jumped over the lazy dog.",
+                        "The swift fox jumped over the lazy dog.",
+                        "The rapid fox jumped over the lazy dog.",
+                        None,
+                    ]
+                    * 2
+                ),
+                True,
             ),
-            id="equal_null_scalar_string",
+            id="scalar_scalar_scalar_dict",
         ),
         pytest.param(
             (
                 (
+                    "The quick fox jumped over the lazy dog.",
+                    5,
+                    pd.Series([5] * 5 + [30] * 5),
                     pa.array(
                         [
-                            "wonderlust",
-                            "wonder",
+                            "fast",
+                            "speedy",
+                            "swift",
+                            "rapid",
                             None,
-                            "terrible",
-                            None,
-                            "wendigo",
                         ]
                         * 2,
                         type=pa.dictionary(pa.int32(), pa.string()),
                     ),
-                    None,
                 ),
-                np.array([False, False, True, False, True, False] * 2),
-            ),
-            id="equal_null_scalar_null",
-        ),
-        pytest.param(
-            (
-                (
-                    pa.array(
-                        [
-                            "wonderlust",
-                            "wonder",
-                            None,
-                            "terrible",
-                            None,
-                            "wendigo",
-                        ]
-                        * 2,
-                        type=pa.dictionary(pa.int32(), pa.string()),
-                    ),
-                    pd.Series(["wonderlust", "wonder"] * 3 + [None] * 6),
+                pd.Series(
+                    [
+                        "The fast fox jumped over the lazy dog.",
+                        "The speedy fox jumped over the lazy dog.",
+                        "The swift fox jumped over the lazy dog.",
+                        "The rapid fox jumped over the lazy dog.",
+                        None,
+                        "The fast dog.",
+                        "The speedy dog.",
+                        "The swift dog.",
+                        "The rapid dog.",
+                        None,
+                    ]
                 ),
-                np.array([True, True] + [False] * 6 + [True, False] * 2),
+                False,
             ),
-            id="equal_null_vector",
+            id="scalar_scalar_dict_dict",
+            marks=pytest.mark.slow,
         ),
     ],
 )
-def test_dict_str2bool(args):
-    def impl(s, t):
-        return bodo.libs.bodosql_array_kernels.equal_null(s, t)
+def test_dict_insert(args):
+    def impl(source, pos, len, inject):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.insert(source, pos, len, inject)
+        ).str.capitalize()
 
-    args, answer = args
+    args, answer, output_encoded = args
 
     check_func(
         impl,
         args,
         py_output=answer,
         check_dtype=False,
-        only_seq=True,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
+
+    verify_dictionary_optimization(impl, args, "str_capitalize", output_encoded)
