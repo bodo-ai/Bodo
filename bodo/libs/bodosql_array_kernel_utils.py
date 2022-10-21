@@ -1030,7 +1030,7 @@ def gen_windowed(
     func_text = "def impl(S, lower_bound, upper_bound):\n"
     func_text += "   n = len(S)\n"
     func_text += "   arr = bodo.utils.conversion.coerce_to_array(S)\n"
-    func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, -1)\n"
+    func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
     func_text += "   if upper_bound < lower_bound:\n"
     func_text += "      for i in range(n):\n"
     func_text += "         bodo.libs.array_kernels.setna(res, i)\n"

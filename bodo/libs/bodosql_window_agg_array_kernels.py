@@ -219,3 +219,36 @@ def windowed_median(S, lower_bound, upper_bound):
         enter_block=enter_block,
         exit_block=exit_block,
     )
+
+
+@numba.generated_jit(nopython=True)
+def windowed_mode(S, lower_bound, upper_bound):
+    if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
+        raise_bodo_error("Input must be an array type")
+    if isinstance(S, bodo.SeriesType):  # pragma: no cover
+        out_dtype = S.data
+    else:
+        out_dtype = S
+
+    calculate_block = "bestVal, bestCount = None, 0\n"
+    calculate_block += "for key in counts:\n"
+    calculate_block += "   if counts[key] > bestCount:\n"
+    calculate_block += "      bestVal, bestCount = key, counts[key]\n"
+    calculate_block += "res[i] = bestVal"
+    constant_block = "counts = {arr[0]: 0}\n"
+    constant_block += "for i in range(len(S)):\n"
+    constant_block += "   if not bodo.libs.array_kernels.isna(arr, i):\n"
+    constant_block += "      counts[arr[i]] = counts.get(arr[i], 0) + 1\n"
+    constant_block += calculate_block.replace("res[i]", "constant_value")
+    setup_block = "counts = {arr[0]: 0}"
+    enter_block = "counts[elem] = counts.get(elem, 0) + 1"
+    exit_block = "counts[elem] = counts.get(elem, 0) - 1"
+
+    return gen_windowed(
+        calculate_block,
+        constant_block,
+        out_dtype,
+        setup_block=setup_block,
+        enter_block=enter_block,
+        exit_block=exit_block,
+    )

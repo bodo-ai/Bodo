@@ -154,9 +154,42 @@ def test_change_event(args):
         check_dtype=False,
         reset_index=True,
         # For now, only works sequentially because it can only be used inside
-        # of a Window funciton with a partition
-        dist_test=False,
+        # of a Window function with a partition
+        only_seq=True,
     )
+
+
+def window_refsol(S, lower, upper, func):
+    L = []
+    for i in range(len(S)):
+        if upper < lower:
+            result = None
+        else:
+            # Extract the window frame of elements by slicing about the current
+            # index using the lower/upper bounds (without going out of bounds)
+            elems = [
+                elem
+                for elem in S.iloc[
+                    min(max(0, i + lower), len(S)) : min(max(0, i + upper + 1), len(S))
+                ]
+                if not pd.isna(elem)
+            ]
+            if func == "sum":
+                result = None if len(elems) == 0 else sum(elems)
+            elif func == "count":
+                result = len(elems)
+            elif func == "avg":
+                result = None if len(elems) == 0 else sum(elems) / len(elems)
+            elif func == "median":
+                result = None if len(elems) == 0 else np.median(elems)
+        L.append(result)
+    out_dtype = {
+        "sum": pd.Int64Dtype() if S.dtype.kind == "i" else np.float64,
+        "count": pd.Int64Dtype(),
+        "avg": np.float64,
+        "median": np.float64,
+    }[func]
+    return pd.Series(L, dtype=out_dtype)
 
 
 @pytest.mark.parametrize(
@@ -230,11 +263,111 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
             bodo.libs.bodosql_array_kernels.windowed_median(S, lower, upper)
         )
 
-    def test_answer(S, lower, upper, func):
+    impl = {
+        "sum": impl1,
+        "count": impl2,
+        "avg": impl3,
+        "median": impl4,
+    }[func]
+    check_func(
+        impl,
+        (S, lower_bound, upper_bound),
+        py_output=window_refsol(S, lower_bound, upper_bound, func),
+        check_dtype=False,
+        reset_index=True,
+        # For now, only works sequentially because it can only be used inside
+        # of a Window function with a partition
+        only_seq=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(
+            pd.Series(
+                [None if "0" in str(i) else (i**2) % 17 for i in range(500)],
+                dtype=pd.UInt8Dtype(),
+            ),
+            id="uint8",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    None if "11" in str(i) else (((13 + i) ** 2) % 41) ** 0.4
+                    for i in range(500)
+                ]
+            ),
+            id="float",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                [chr(65 + (i**2) % 5) if i % 7 < 6 else None for i in range(250)]
+            ),
+            id="string",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    None
+                    if "1" in str(i) and "2" in str(i)
+                    else bytes(bin((i**2) % 47), encoding="utf-8")
+                    for i in range(450)
+                ]
+            ),
+            id="binary",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    None if year is None else pd.datetime(2000 + year, 1, 1)
+                    for tup in zip(
+                        [i for i in range(50)],
+                        [((i + 3) ** 2) % 22 for i in range(50)],
+                        [None] * 50,
+                        [((i + 4) ** 3) % 22 for i in range(50)],
+                        [((i + 5) ** 4) % 22 for i in range(50)],
+                        [((i + 6) ** 5) % 22 for i in range(50)],
+                    )
+                    for year in tup
+                ]
+            ),
+            id="datetime",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    ["lower_bound", "upper_bound"],
+    [
+        pytest.param(-1000, 0, id="prefix"),
+        pytest.param(0, 1, id="suffix"),
+        pytest.param(-1000, -1, id="prefix_exclusive", marks=pytest.mark.slow),
+        pytest.param(1, 1000, id="suffix_exclusive"),
+        pytest.param(-1000, 1000, id="entire_window"),
+        pytest.param(0, 0, id="current"),
+        pytest.param(-20, 20, id="rolling_41"),
+        pytest.param(-1, 1, id="rolling_3", marks=pytest.mark.slow),
+        pytest.param(1, 3, id="leading_3", marks=pytest.mark.slow),
+        pytest.param(-1000, -700, id="too_small"),
+        pytest.param(3, -3, id="backward", marks=pytest.mark.slow),
+    ],
+)
+def test_windowed_mode(data, lower_bound, upper_bound, memory_leak_check):
+    def impl(S, lower, upper):
+        return pd.Series(bodo.libs.bodosql_array_kernels.windowed_mode(S, lower, upper))
+
+    if bodo.get_size() > 1:
+        pytest.skip("These kernels are only sequential")
+
+    # Calculates the window function for each row, breaking ties by finding
+    # the element that appeared first in the sequence chronologically
+    def generate_answers(S, lower, upper):
         L = []
         for i in range(len(S)):
             if upper < lower:
-                result = None
+                L.append(None)
             else:
                 elems = [
                     elem
@@ -245,36 +378,27 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
                     ]
                     if not pd.isna(elem)
                 ]
-                if func == "sum":
-                    result = None if len(elems) == 0 else sum(elems)
-                elif func == "count":
-                    result = len(elems)
-                elif func == "avg":
-                    result = None if len(elems) == 0 else sum(elems) / len(elems)
-                elif func == "median":
-                    result = None if len(elems) == 0 else np.median(elems)
-            L.append(result)
-        out_dtype = {
-            "sum": pd.Int64Dtype() if "int" in S.dtype.name else np.float64,
-            "count": pd.Int64Dtype(),
-            "avg": np.float64,
-            "median": np.float64,
-        }[func]
-        return pd.Series(L, dtype=out_dtype)
+                counts = {}
+                bestVal = None
+                bestCount = 0
+                for elem in elems:
+                    counts[elem] = counts.get(elem, 0) + 1
+                    if counts[elem] > bestCount or (
+                        counts[elem] == bestCount
+                        and S[S == elem].index[0] < S[S == bestVal].index[0]
+                    ):
+                        bestCount = counts[elem]
+                        bestVal = elem
+                L.append(bestVal)
+        return pd.Series(L, dtype=S.dtype)
 
-    impl = {
-        "sum": impl1,
-        "count": impl2,
-        "avg": impl3,
-        "median": impl4,
-    }[func]
     check_func(
         impl,
-        (S, lower_bound, upper_bound),
-        py_output=test_answer(S, lower_bound, upper_bound, func),
+        (data, lower_bound, upper_bound),
+        py_output=generate_answers(data, lower_bound, upper_bound),
         check_dtype=False,
         reset_index=True,
         # For now, only works sequentially because it can only be used inside
-        # of a Window funciton with a partition
-        dist_test=False,
+        # of a Window function with a partition
+        only_seq=True,
     )
