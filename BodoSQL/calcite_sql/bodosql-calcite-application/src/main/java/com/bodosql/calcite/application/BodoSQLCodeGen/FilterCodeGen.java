@@ -27,11 +27,11 @@ public class FilterCodeGen {
     // If we have a scalar we need to convert the filter to an array
     if (filterExprType == BodoSQLExprType.ExprType.SCALAR) {
       filterBuilder
-          .append("pd.Series(np.full(len(")
+          .append("np.full(len(")
           .append(inVar)
           .append("), np.bool_(")
           .append(filterCode)
-          .append("), np.bool_))");
+          .append("), np.bool_)");
     } else {
       filterBuilder.append(filterCode);
     }
