@@ -781,9 +781,6 @@ def test_nth_value_boolean(
     )
 
 
-pytest.mark.slow
-
-
 @pytest.mark.slow
 def test_first_last_value_binary(
     bodosql_binary_types,
@@ -1560,6 +1557,109 @@ def test_any_value(query, spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
         equivalent_spark_query=get_equivalent_spark_agg_query(query),
+    )
+
+
+# In cases with multiple correct answers, the chosen answer is the one that
+# was encountered first in the overall array
+@pytest.mark.parametrize(
+    "data_col, bounds, answer",
+    [
+        pytest.param(
+            pd.Series([0, 1, 1, 2, 2, 2, 3, 3, 3, 3], dtype=pd.Int32Dtype()),
+            ("UNBOUNDED PRECEDING", "CURRENT ROW"),
+            pd.DataFrame(
+                {0: pd.Series([0, 0, 1, 1, 1, 2, 2, 3, 3, 3], dtype=pd.Int32Dtype())}
+            ),
+            id="int32-prefix",
+        ),
+        pytest.param(
+            pd.Series(
+                [100, 1, 1, 100, None, None, 2, 2, 100, 2],
+                dtype=pd.UInt8Dtype(),
+            ),
+            ("5 PRECEDING", "1 PRECEDING"),
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [None, 100, 100, 1, 100, None, None, 2, 2, 2],
+                        dtype=pd.UInt8Dtype(),
+                    )
+                }
+            ),
+            id="uint8-before3",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(list("abbaabacbb")),
+            None,
+            pd.DataFrame({0: pd.Series(["a"] * 5 + ["b"] * 5)}),
+            id="string-noframe",
+        ),
+        pytest.param(
+            pd.Series([b"X", b"Y", b"X", b"Y", b"X", b"X", b"Y", b"Y", None, None]),
+            ("1 PRECEDING", "1 FOLLOWING"),
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [b"X", b"X", b"Y", b"X", b"X", b"X", b"Y", b"Y", b"Y", None]
+                    )
+                }
+            ),
+            id="binary-rolling3",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series(
+                [True, True, None, None, None, True, False, False, False, True],
+                dtype=pd.BooleanDtype(),
+            ),
+            ("1 FOLLOWING", "UNBOUNDED FOLLOWING"),
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [True, None, None, None, None, False, False, True, True, None],
+                        dtype=pd.BooleanDtype(),
+                    )
+                }
+            ),
+            id="boolean-exclusive_suffix",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            pd.Series([1.0, 2.0, 3.0, 1.0, 1.0, 3.0, 2.0, 1.0, 2.0, 3.0]),
+            ("UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
+            pd.DataFrame({0: [1.0] * 5 + [3.0] * 5}),
+            id="float-entire",
+        ),
+    ],
+)
+def test_mode(data_col, bounds, answer, spark_info, memory_leak_check):
+
+    if bounds == None:
+        query = "select MODE(A) OVER (PARTITION BY B) from table1"
+    else:
+        query = f"select MODE(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN {bounds[0]} AND {bounds[1]}) from table1"
+
+    assert len(data_col) == 10
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": data_col,
+                "B": ["A"] * 5 + ["B"] * 5,
+                "C": list(range(10)),
+            }
+        )
+    }
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        sort_output=False,
+        expected_output=answer,
     )
 
 

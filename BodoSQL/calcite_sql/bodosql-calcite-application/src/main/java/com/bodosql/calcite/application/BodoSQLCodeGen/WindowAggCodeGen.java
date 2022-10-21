@@ -44,6 +44,7 @@ public class WindowAggCodeGen {
     windowOptimizedKernels.put(SqlKind.COUNT, "bodo.libs.bodosql_array_kernels.windowed_count");
     windowOptimizedKernels.put(SqlKind.AVG, "bodo.libs.bodosql_array_kernels.windowed_avg");
     windowOptimizedKernels.put(SqlKind.MEDIAN, "bodo.libs.bodosql_array_kernels.windowed_median");
+    windowOptimizedKernels.put(SqlKind.MODE, "bodo.libs.bodosql_array_kernels.windowed_mode");
   }
 
   /**
@@ -1327,7 +1328,7 @@ public class WindowAggCodeGen {
   }
 
   /**
-   * Helper function that handles window frmae-optimized window aggregation. Should only be called
+   * Helper function that handles window frame-optimized window aggregation. Should only be called
    * from generateWindowedAggFn, after performing the column filtering, and the definitions for
    * argumentDfOriginalIndex, and argumentDfLen.
    *
