@@ -2,6 +2,7 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import json
 import os
+import subprocess
 from tempfile import NamedTemporaryFile
 from typing import Any, Dict, List
 
@@ -20,6 +21,15 @@ class TracingContextManager:
     def __init__(self):
         self._tracing_events = list()
         self._old_trace_dev = os.environ.get("BODO_TRACE_DEV", None)
+        # If we run on Azure nightly we need to decrypt the output of
+        # any tracing. AGENT_NAME distinguishes Azure from AWS
+        self._needs_decryption = "AGENT_NAME" in os.environ
+        # If we need to decrypt the data we run the decryption script
+        # at /obfuscation/decompress_traces.py. To avoid errors with packages
+        # we pass this is as an environment variable, BODO_TRACING_DECRYPTION_FILE_PATH.
+        self._decryption_path = os.environ.get(
+            "BODO_TRACING_DECRYPTION_FILE_PATH", None
+        )
 
     def __enter__(self):
         # Enable tracing
@@ -33,6 +43,25 @@ class TracingContextManager:
             # Write the tracing result to the file.
             tracing.dump(f.name)
             tracing_events = None
+            if self._needs_decryption:
+                decryption_error = None
+                if bodo.get_rank() == 0:
+                    try:
+                        if self._decryption_path is None:
+                            raise EnvironmentError(
+                                "Current testing setup requires decrypting traces but no tracing file is found. Please set the absolute path for decompress_traces.py with the environment variable BODO_TRACING_DECRYPTION_FILE_PATH"
+                            )
+                        # Replace the file with the decrypted result.
+                        ret = subprocess.run(
+                            ["python", self._decryption_path, f.name, f.name]
+                        )
+                        # Throw an exception if the file doesn't exist.
+                        ret.check_returncode()
+                    except Exception as e:
+                        decryption_error = e
+                decryption_error = comm.bcast(decryption_error)
+                if isinstance(decryption_error, Exception):
+                    raise decryption_error
             if bodo.get_rank() == 0:
                 with open(f.name, "r") as g:
                     # Reload the file and decode the data.
