@@ -258,6 +258,9 @@ jobs:
 
       cd $HOME/bodo-inc
       cp `python -c "import bodo; print(bodo.__file__[:-11])"`pytest.ini .
+      # For caching tests we need to update the location of the decryption file.
+      # We set the absolute path as an environment variable.
+      export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/obfuscation/decompress_traces.py"`
       if [[ "${{ parameters.caching_test }}" == "true" ]]; then
         python -m bodo.runtests_caching "$NP" bodo/tests/caching_tests
       else
