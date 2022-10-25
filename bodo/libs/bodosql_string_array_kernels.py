@@ -1126,7 +1126,7 @@ def position_util(substr, source, start):
         )
     verify_int_arg(start, "POSITION", "start")
 
-    assert (is_str, "[BE-3717] Support binary find with 3 args")
+    assert is_str, "[BE-3717] Support binary find with 3 args"
 
     arg_names = ["substr", "source", "start"]
     arg_types = [substr, source, start]
