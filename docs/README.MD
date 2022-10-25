@@ -18,7 +18,7 @@
 **note** This process is a bit hacky and manual at the moment, but will improve with time. 
 
 - To install our small custom markdown api extension: `python setup.py develop`
-- To generate the formatted API files : `python apigen.py`
+- To generate the formatted API files : `make gen_api`
  
 ## Editing diagrams: 
 

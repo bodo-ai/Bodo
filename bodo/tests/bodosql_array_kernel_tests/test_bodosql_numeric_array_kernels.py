@@ -1081,7 +1081,7 @@ single_arg_np_map = {
 }
 single_arg_np_list = list(single_arg_np_map.keys())
 double_arg_np_map = {
-    "mod": "(lambda a, b: np.mod(a, b) + (np.sign(a) * b) if np.mod(a, b) != 0 and np.sign(np.mod(a, b)) != np.sign(a) else np.mod(a, b))",
+    "mod": "(lambda a, b: np.fmod(a, b) if b != 0 else np.nan)",
     "power": "(lambda a, b: np.power(np.float64(a), b))",
     "round": "np.round",
     "trunc": "(lambda a, b: np.trunc(a * (10 ** b)) * (10 ** -b) if int(b) == b else np.nan)",
@@ -1185,8 +1185,12 @@ def test_numeric_double_arg_funcs(arr0, arr1, func):
     exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
 
     # Simulates numeric func on a single row
+    # Mod with divisor of 0 returns None in Bodo, but vanilla np.mod or % will throw an error.
     scalar_impl = "def impl(elem0, elem1):\n"
-    scalar_impl += f"    return {double_arg_np_map[func]}(elem0, elem1) if not pd.isna(elem0) and not pd.isna(elem1) else None"
+    scalar_impl += f"    if pd.isna(elem0) or pd.isna(elem1):\n"
+    scalar_impl += f"        return None\n"
+    scalar_impl += f"    else:\n"
+    scalar_impl += f"        return {double_arg_np_map[func]}(elem0, elem1)"
     scalar_vars = {}
     exec(scalar_impl, {"np": np, "pd": pd}, scalar_vars)
 

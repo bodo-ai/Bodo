@@ -1064,7 +1064,7 @@ Bodo SQL Currently supports the following Numeric Functions:
 #### MOD
 -   `MOD(A,B)`
 
-    Computes A modulo B.
+    Computes A modulo B (behavior analogous to the C library function `fmod`). Returns NaN if B is 0 or if A is inf.
 
 #### CONV
 -   `CONV(X, current_base, new_base)`

@@ -361,24 +361,22 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
             ]
             arg_types = [arr0, arr1]
             propagate_null = [True, True]
+            # we calculate out_dtype beforehand for determining if we can use
+            # a more efficient MOD implementation
+            out_dtype = _get_numeric_output_dtype(func_name, arr0, arr1)
             scalar_text = ""
             # we select the appropriate scalar text based on the function name
             if func_name == "MOD":
                 # There is a discrepancy between numpy and SQL mod, whereby SQL mod returns the sign
-                # of the divisor, whereas numpy mod returns the sign of the dividend.
+                # of the divisor, whereas numpy mod and Python's returns the sign of the dividend,
+                # so we need to use the equivalent of np.fmod / C equivalent to match SQL's behavior.
+                # np.fmod is currently broken in numba [BE-3184] so we use an equivalent implementation.
                 scalar_text += "if arg1 == 0:\n"
                 scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
-                scalar_text += "val = np.mod(arg0, arg1)\n"
-                # if the dividend is negative and the divisor is positive, we need to add the divisor
-                # so that the result is positive (within {0, 1, 2, ..., arg1 - 1}).
-                scalar_text += "if val < 0 and arg0 > 0:\n"
-                scalar_text += "  res[i] = val + arg1\n"
-                # if the dividend is positive and the divisor is negative, we need to subtract the divisor
-                # so that the result is negative (within {0, -1, -2, ..., - (arg1 - 1)}).
-                scalar_text += "elif val > 0 and arg0 < 0:\n"
-                scalar_text += "  res[i] = val - arg1\n"
                 scalar_text += "else:\n"
-                scalar_text += "  res[i] = val"
+                scalar_text += (
+                    "  res[i] = np.sign(arg0) * np.mod(np.abs(arg0), np.abs(arg1))"
+                )
             elif func_name == "POWER":
                 scalar_text += "res[i] = np.power(np.float64(arg0), arg1)"
             elif func_name == "ROUND":
@@ -394,8 +392,6 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
                 scalar_text += "  bodo.libs.array_kernels.setna(res, i)"
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
-
-            out_dtype = _get_numeric_output_dtype(func_name, arr0, arr1)
 
             return gen_vectorized(
                 arg_names, arg_types, propagate_null, scalar_text, out_dtype
