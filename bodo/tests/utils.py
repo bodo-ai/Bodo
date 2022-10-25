@@ -304,9 +304,10 @@ def check_func(
 
         if is_out_distributed is None:
             # assume all distributable output is distributed if not specified
+            py_out_typ = _typeof(py_output)
             is_out_distributed = is_distributable_typ(
-                _typeof(py_output)
-            ) or is_distributable_tuple_typ(_typeof(py_output))
+                py_out_typ
+            ) or is_distributable_tuple_typ(py_out_typ)
 
         # skip 1D distributed and 1D distributed variable length tests
         # if no parallelism is found
@@ -1796,7 +1797,7 @@ def gen_nonascii_list(num_strings):
         "₧",
         "₢",
         "∞",
-    ]
+    ] * 2
 
     return list_non_ascii_strings[0:num_strings]
 

@@ -809,7 +809,6 @@ def overload_const_index_series_getitem(S, idx):
         # TODO(ehsan): support non-constant idx (rare but possible)
         if is_literal_type(idx):
             idx_val = get_literal_value(idx)
-
             if idx_val not in indices:  # pragma: no cover
                 raise_bodo_error(
                     f"Series label-based getitem: '{idx_val}' not in {indices}"

@@ -1600,6 +1600,29 @@ class DistributedAnalysis:
                 self._meet_several_array_dists(arrays, array_dists)
             return
 
+        # I've confirmed that this actually runs on currently nightly, but we never hit it since
+        # we don't include bodosql tests in the coverage, and all the tests for this function
+        # are on the bodosql side
+        if fdef == (
+            "merge_sorted_dataframes",
+            "bodosql.libs.iceberg_merge_into",
+        ):  # pragma: no cover
+            # If any of the inputs are replicated, then all of the inputs/outputs must be replicated
+            # _set_REP
+            if is_REP(array_dists.get(rhs.args[0].name, None)) or is_REP(
+                array_dists.get(rhs.args[1].name, None)
+            ):
+                self._set_REP([lhs, rhs.args[0].name, rhs.args[1].name], array_dists)
+                return
+            # If rhs.args[1].name and rhs.args[0].name are both distributed,
+            # they do not affect the others distribution
+
+            # Output distribution if not replicated should always be 1D_VAR,
+            # due to the possibility of deleting
+            # varying numbers of rows on each rank at runtime
+            self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
+            return
+
         if fdef == ("first_last_valid_index", "bodo.libs.array_kernels"):
             # doesn't affect distribution of either input or output
             return

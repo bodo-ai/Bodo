@@ -14,7 +14,7 @@ import bodo
 @bodo.jit(distributed=False)
 def ntile_helper(df_len, num_bins):
     """
-    this should only be used from groupby apply, hence distributed = False
+    This should only be used from groupby apply, hence distributed = False
     """
     remainder = df_len % num_bins
     num_items_in_larger_bin = np.int64(np.ceil(df_len / num_bins))
