@@ -1264,9 +1264,15 @@ def get_const_func_output_type(
             calltypes,
             {},
         )
-        series_pass.run()
-        series_pass.run()
-        series_pass.run()
+
+        changed = series_pass.run()
+        # Needed, as series pass always causes changes for current
+        # PR CI
+        if changed:  # pragma: no cover
+            changed = series_pass.run()
+            if changed:
+                series_pass.run()
+
         cfg = compute_cfg_from_blocks(f_ir.blocks)
         # get const info from all exit points and make sure they are consistent
         # checking for ir.Return since exit point could be for exception

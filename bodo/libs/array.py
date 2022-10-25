@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 from llvmlite import ir as lir
 from numba.core import cgutils, types
+from numba.core.imputils import lower_cast
 from numba.core.typing.templates import signature
 from numba.cpython.listobj import ListInstance
 from numba.extending import intrinsic, models, register_model
@@ -134,6 +135,11 @@ class TableTypeCPP(types.Type):
 
 table_type = TableTypeCPP()
 register_model(TableTypeCPP)(models.OpaqueModel)
+
+
+@lower_cast(table_type, types.voidptr)
+def lower_table_type(context, builder, fromty, toty, val):  # pragma: no cover
+    return val
 
 
 @intrinsic
@@ -2399,7 +2405,7 @@ def sort_values_table(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
                 lir.IntType(8).as_pointer(),
-                context.get_value_type(bounds_t),
+                lir.IntType(8).as_pointer(),
                 lir.IntType(1),
             ],
         )
@@ -2420,7 +2426,7 @@ def sort_values_table(
             types.voidptr,
             types.voidptr,
             types.voidptr,
-            bounds_t,
+            types.voidptr,
             types.boolean,
         ),
         codegen,
