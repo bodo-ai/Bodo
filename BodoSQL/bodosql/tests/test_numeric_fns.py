@@ -32,6 +32,8 @@ def bodosql_negative_numeric_types(request):
 
     numeric_data = {
         "positive_ints": pd.Series([1, 2, 3, 4, 5, 6] * 2, dtype=int_dtype),
+        "unsigned_int32s": pd.Series([1, 3, 7, 14, 0, 11] * 2, dtype=np.uint32),
+        "unsigned_int64s": pd.Series([12, 2**50, 0, 78, 390] * 2, dtype=np.uint64),
         "mixed_ints": pd.Series([-7, 8, -9, 10, -11, 12] * 2, dtype=int_dtype),
         "negative_ints": pd.Series([-13, -14, -15] * 4, dtype=int_dtype),
         "positive_floats": pd.Series(
@@ -104,6 +106,9 @@ def single_op_numeric_fn_info(request):
 @pytest.fixture(
     params=[
         ("MOD", "MOD", "mixed_floats", "mixed_floats"),
+        ("MOD", "MOD", "mixed_ints", "mixed_ints"),
+        ("MOD", "MOD", "mixed_ints", "mixed_floats"),
+        ("MOD", "MOD", "unsigned_int64s", "unsigned_int32s"),
         ("TRUNCATE", "ROUND", "mixed_floats", "3"),
         ("TRUNC", "ROUND", "mixed_floats", "3"),
     ]
@@ -468,13 +473,13 @@ def test_single_op_numeric_fns_scalars(
         if arg1[-5:] == "_ints" and any(
             bodosql_negative_numeric_types["table1"].dtypes == np.int8
         ):
-            spark_query = f"SELECT CASE when CAST({spark_fn_name}({arg1}, 2) AS TINYINT) = 0 then 1 ELSE CAST({spark_fn_name}({arg1}, 2)  AS TINYINT) END from table1"
+            spark_query = f"SELECT CASE WHEN CAST({spark_fn_name}({arg1}, 2) AS TINYINT) = 0 THEN 1 ELSE CAST({spark_fn_name}({arg1}, 2)  AS TINYINT) END FROM table1"
         else:
-            spark_query = f"SELECT CASE when {spark_fn_name}({arg1}, 2) = 0 then 1 ELSE {spark_fn_name}({arg1}, 2) END from table1"
+            spark_query = f"SELECT CASE WHEN {spark_fn_name}({arg1}, 2) = 0 THEN 1 ELSE {spark_fn_name}({arg1}, 2) END FROM table1"
     else:
-        spark_query = f"SELECT CASE when {spark_fn_name}({arg1}) = 0 then 1 ELSE {spark_fn_name}({arg1}) END from table1"
+        spark_query = f"SELECT CASE WHEN {spark_fn_name}({arg1}) = 0 THEN 1 ELSE {spark_fn_name}({arg1}) END FROM table1"
 
-    query = f"SELECT CASE when {fn_name}({arg1}) = 0 then 1 ELSE {fn_name}({arg1}) END from table1"
+    query = f"SELECT CASE WHEN {fn_name}({arg1}) = 0 THEN 1 ELSE {fn_name}({arg1}) END FROM table1"
     check_query(
         query,
         bodosql_negative_numeric_types,
@@ -497,16 +502,14 @@ def test_double_op_numeric_fns_scalars(
     spark_fn_name = double_op_numeric_fn_info[1]
     arg1 = double_op_numeric_fn_info[2]
     arg2 = double_op_numeric_fn_info[3]
-    query = f"SELECT CASE when {fn_name}({arg1}, {arg2}) = 0 then 1 ELSE {fn_name}({arg1}, {arg2}) END from table1"
-    spark_query = f"SELECT CASE when {spark_fn_name}({arg1}, {arg2}) = 0 then 1 ELSE {spark_fn_name}({arg1}, {arg2}) END from table1"
+    query = f"SELECT CASE WHEN {fn_name}({arg1}, {arg2}) = 0 THEN -1 ELSE {fn_name}({arg1}, {arg2}) END FROM table1"
+    spark_query = f"SELECT CASE when {spark_fn_name}({arg1}, {arg2}) = 0 THEN -1 ELSE {spark_fn_name}({arg1}, {arg2}) END from table1"
     if fn_name == "TRUNC" or fn_name == "TRUNCATE":
         inner_case = f"(CASE WHEN {arg1} > 0 THEN FLOOR({arg1} * POW(10, {arg2})) / POW(10, {arg2}) ELSE CEIL({arg1} * POW(10, {arg2})) / POW(10, {arg2}) END)"
-        spark_query = f"SELECT CASE when {inner_case} = 0 then 1 ELSE {inner_case} END from table1"
+        spark_query = f"SELECT CASE when {inner_case} = 0 THEN -1 ELSE {inner_case} END FROM table1"
     elif fn_name == "MOD":
-        # for now we skip mod tests due to [BE-3533] due to issues casting optional types
-        # (mod will return an optional type since we may receive a value of 0
-        # for the second arg and MOD(x, 0) is None)
-        return
+        # MOD may return null depending on value passed, so EQUAL_NULL should be used, which properly handles null values, unlike '='.
+        query = f"SELECT CASE WHEN EQUAL_NULL(MOD({arg1}, {arg2}), 0) THEN -1 ELSE {fn_name}({arg1}, {arg2}) END FROM table1"
     check_query(
         query,
         bodosql_negative_numeric_types,
