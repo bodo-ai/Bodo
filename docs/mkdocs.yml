@@ -161,6 +161,7 @@ nav:
       - Scalable Data I/O: file_io.md
       - Using Regular Python inside Bodo (Object Mode): objmode.md
   - Bodo in your Pipeline:
+      - Bodo Platform SDK: integrating_bodo/platform_sdk.md
       - Migration from Spark:
           - Spark Examples: integrating_bodo/spark.md
           - Bodo Spark Cheatsheet: integrating_bodo/sparkcheatsheet.md
