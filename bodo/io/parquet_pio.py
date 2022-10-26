@@ -139,11 +139,13 @@ class ParquetFileInfo(FileInfo):
         storage_options=None,
         input_file_name_col=None,
         read_as_dict_cols=None,
+        use_hive=True,
     ):
         self.columns = columns  # columns to select from parquet dataset
         self.storage_options = storage_options
         self.input_file_name_col = input_file_name_col
         self.read_as_dict_cols = read_as_dict_cols
+        self.use_hive = use_hive
         super().__init__()
 
     def _get_schema(self, fname):
@@ -154,6 +156,7 @@ class ParquetFileInfo(FileInfo):
                 storage_options=self.storage_options,
                 input_file_name_col=self.input_file_name_col,
                 read_as_dict_cols=self.read_as_dict_cols,
+                use_hive=self.use_hive,
             )
         except OSError as e:
             if "non-file path" in str(e):
@@ -178,6 +181,7 @@ class ParquetHandler:
         storage_options=None,
         input_file_name_col=None,
         read_as_dict_cols=None,
+        use_hive=True,
     ):
         scope = lhs.scope
         loc = lhs.loc
@@ -210,6 +214,7 @@ class ParquetHandler:
                     storage_options=storage_options,
                     input_file_name_col=input_file_name_col,
                     read_as_dict_cols=read_as_dict_cols,
+                    use_hive=use_hive,
                 ),
             )
 
@@ -245,6 +250,7 @@ class ParquetHandler:
                     storage_options=storage_options,
                     input_file_name_col=input_file_name_col,
                     read_as_dict_cols=read_as_dict_cols,
+                    use_hive=use_hive,
                 )
         else:
             col_names_total = list(table_types.keys())
@@ -306,6 +312,7 @@ class ParquetHandler:
                 input_file_name_col,
                 unsupported_columns,
                 unsupported_arrow_types,
+                use_hive,
             )
         ]
 
@@ -430,6 +437,7 @@ def pq_distributed_run(
         pq_node.index_column_type,
         pq_node.input_file_name_col,
         not pq_node.is_live_table,
+        pq_node.use_hive,
     )
     # First arg is the path to the parquet dataset, and can be a string or a list
     # of strings
@@ -524,6 +532,7 @@ def _gen_pq_reader_py(
     index_column_type,
     input_file_name_col,
     is_dead_table,
+    use_hive,
 ):
 
     # a unique int used to create global variables with unique names
@@ -679,6 +688,7 @@ def _gen_pq_reader_py(
     func_text += f"        total_rows_np.ctypes,\n"
     # The C++ code only needs a flag
     func_text += f"        {input_file_name_col is not None},\n"
+    func_text += f"        {use_hive},\n"
     func_text += f"    )\n"
     func_text += f"    check_and_propagate_cpp_exception()\n"
 
@@ -776,7 +786,6 @@ def _gen_pq_reader_py(
         "get_node_portion": bodo.libs.distributed_api.get_node_portion,
         "set_table_len": bodo.hiframes.table.set_table_len,
     }
-
     exec(func_text, glbs, loc_vars)
     pq_reader_py = loc_vars["pq_reader_py"]
 
@@ -984,6 +993,7 @@ def get_parquet_dataset(
     read_categories=False,
     is_parallel=False,  # only used with get_row_counts=True
     tot_rows_to_read=None,
+    use_hive=True,
     typing_pa_schema=None,
     partitioning="hive",
 ):
@@ -1005,6 +1015,9 @@ def get_parquet_dataset(
     of iceberg, but should be expanded to all use cases.
     https://bodo.atlassian.net/browse/BE-2787
     """
+
+    if not use_hive:
+        partitioning = None
 
     # NOTE: This function obtains the metadata for a parquet dataset and works
     # in the same way regardless of whether the read is going to be parallel or
@@ -1799,6 +1812,7 @@ def parquet_file_schema(
     storage_options=None,
     input_file_name_col=None,
     read_as_dict_cols=None,
+    use_hive=True,
 ):
     """get parquet schema from file using Parquet dataset and Arrow APIs"""
     col_names = []
@@ -1812,6 +1826,7 @@ def parquet_file_schema(
         get_row_counts=False,
         storage_options=storage_options,
         read_categories=True,
+        use_hive=use_hive,
     )
 
     partition_names = pq_dataset.partition_names
@@ -1975,6 +1990,7 @@ _pq_read = types.ExternalFunction(
         types.int32,
         types.voidptr,
         types.boolean,
+        types.boolean,  # use_hive
     ),
 )
 

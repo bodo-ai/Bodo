@@ -32,6 +32,7 @@ class ParquetReader(ir.Stmt):
         input_file_name_col,
         unsupported_columns,
         unsupported_arrow_types,
+        use_hive,
     ):
         self.connector_typ = "parquet"
         self.file_name = file_name
@@ -74,6 +75,7 @@ class ParquetReader(ir.Stmt):
         # Is the variable currently alive. This should be replaced with more
         # robust handling in connectors.
         self.is_live_table = True
+        self.use_hive = use_hive
 
     def __repr__(self):  # pragma: no cover
         # TODO

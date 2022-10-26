@@ -14,7 +14,7 @@ table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
                     int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
                     int32_t num_partition_cols, int32_t* str_as_dict_cols,
                     int32_t num_str_as_dict_cols, int64_t* total_rows_out,
-                    bool input_file_name_col);
+                    bool input_file_name_col, bool use_hive);
 
 // --------- functions defined in iceberg_parquet_reader.cpp --------
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,

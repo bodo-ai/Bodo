@@ -146,9 +146,9 @@ PyObject* ParquetReader::get_dataset() {
     // ds = bodo.io.parquet_pio.get_parquet_dataset(path, true, filters,
     // storage_options)
     PyObject* ds = PyObject_CallMethod(
-        pq_mod, "get_parquet_dataset", "OOOOOOOL", path, Py_True, dnf_filters,
+        pq_mod, "get_parquet_dataset", "OOOOOOOLO", path, Py_True, dnf_filters,
         expr_filters, storage_options, Py_False, PyBool_FromLong(parallel),
-        tot_rows_to_read);
+        tot_rows_to_read, this->use_hive ? Py_True : Py_False);
     if (ds == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
@@ -397,12 +397,12 @@ table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
                     int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
                     int32_t num_partition_cols, int32_t* str_as_dict_cols,
                     int32_t num_str_as_dict_cols, int64_t* total_rows_out,
-                    bool input_file_name_col) {
+                    bool input_file_name_col, bool use_hive) {
     try {
         ParquetReader reader(path, parallel, dnf_filters, expr_filters,
                              storage_options, tot_rows_to_read, selected_fields,
                              num_selected_fields, is_nullable,
-                             input_file_name_col);
+                             input_file_name_col, use_hive);
         // initialize reader
         reader.init_pq_reader(str_as_dict_cols, num_str_as_dict_cols,
                               part_cols_cat_dtype, selected_part_cols,

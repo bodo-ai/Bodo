@@ -296,6 +296,26 @@ def test_read_parquet_invalid_path_const(memory_leak_check):
         bodo.jit(test_impl)()
 
 
+@pytest.mark.slow
+def test_read_parquet_path_hive_naming(datapath):
+    """
+    Test error raise when parquet file path provided as constant but is invalid
+    because the path uses the hive naming convention which leads to incorrectly
+    inferred schema. In this case we use _bodo_use_hive=False to disable reading
+    with the hive naming convention.
+    """
+    filepath = os.path.join(os.path.dirname(__file__), "data/hive-part-sample-pq/data/")
+
+    def test_impl():
+        return pd.read_parquet(filepath, _bodo_use_hive=True)
+
+    with pytest.raises(
+        BodoError,
+        match="error from pyarrow: ArrowInvalid: Unable to merge: Field test_date has incompatible types:",
+    ):
+        bodo.jit(test_impl)()
+
+
 # TODO(Nick): Add a test for Parallel version with both offset and count.
 @pytest.mark.slow
 def test_np_io_sep_unsupported(datapath, memory_leak_check):
