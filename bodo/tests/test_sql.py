@@ -1,7 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import io
 import os
-import random
 import re
 import string
 import traceback
@@ -34,10 +33,7 @@ from bodo.utils.testing import (
 from bodo.utils.typing import BodoWarning
 
 
-@pytest.mark.parametrize(
-    "chunksize",
-    [None, 4],
-)
+@pytest.mark.parametrize("chunksize", [None, 4])
 def test_write_sql_aws(chunksize, memory_leak_check):
     """This test for a write down on a SQL database"""
 
@@ -45,43 +41,43 @@ def test_write_sql_aws(chunksize, memory_leak_check):
         df.to_sql(table_name, conn, if_exists="replace", chunksize=chunksize)
 
     def test_specific_dataframe(test_impl, is_distributed, df_in, chunksize):
-        table_name = "test_table_ABCD"
         conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-        bodo_impl = bodo.jit(all_args_distributed_block=is_distributed)(test_impl)
-        if is_distributed:
-            start, end = get_start_end(len(df_in))
-            df_input = df_in.iloc[start:end]
-        else:
-            df_input = df_in
-        bodo_impl(df_input, table_name, conn, chunksize)
-        bodo.barrier()
-        passed = 1
-        npes = bodo.get_size()
-        if bodo.get_rank() == 0:
-            try:
-                df_load = pd.read_sql("select * from " + table_name, conn)
-                # The writing does not preserve the order a priori
-                l_cols = df_in.columns.to_list()
-                df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
-                df_load_sort = (
-                    df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
-                )
-                pd.testing.assert_frame_equal(
-                    df_load_sort, df_in_sort, check_column_type=False
-                )
-            except Exception as e:
-                print("".join(traceback.format_exception(None, e, e.__traceback__)))
-                passed = 0
-        n_passed = reduce_sum(passed)
-        n_pes = bodo.get_size()
-        assert n_passed == n_pes, "test_write_sql_aws failed"
-        bodo.barrier()
 
-    np.random.seed(5)
-    random.seed(5)
+        with ensure_clean_mysql_psql_table(conn, "test_table_ABCD") as table_name:
+            bodo_impl = bodo.jit(all_args_distributed_block=is_distributed)(test_impl)
+            if is_distributed:
+                start, end = get_start_end(len(df_in))
+                df_input = df_in.iloc[start:end]
+            else:
+                df_input = df_in
+            bodo_impl(df_input, table_name, conn, chunksize)
+            bodo.barrier()
+            passed = 1
+            npes = bodo.get_size()
+            if bodo.get_rank() == 0:
+                try:
+                    df_load = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+                    # The writing does not preserve the order a priori
+                    l_cols = df_in.columns.to_list()
+                    df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
+                    df_load_sort = (
+                        df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
+                    )
+                    pd.testing.assert_frame_equal(
+                        df_load_sort, df_in_sort, check_column_type=False
+                    )
+                except Exception as e:
+                    print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                    passed = 0
+            n_passed = reduce_sum(passed)
+            n_pes = bodo.get_size()
+            assert n_passed == n_pes, "test_write_sql_aws failed"
+            bodo.barrier()
+
+    rng = np.random.default_rng(5)
     len_list = 20
-    list_int = list(np.random.choice(10, len_list))
-    list_double = list(np.random.choice([4.0, np.nan], len_list))
+    list_int = rng.choice(10, len_list)
+    list_double = rng.choice([4.0, np.nan], len_list)
     list_datetime = pd.date_range("2001-01-01", periods=len_list)
     df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
     test_specific_dataframe(test_impl_write_sql, False, df1, chunksize)
@@ -90,29 +86,33 @@ def test_write_sql_aws(chunksize, memory_leak_check):
 
 # TODO: Add memory_leak_check when bug is resolved.
 def test_sql_if_exists_fail_errorchecking():
-    """This test with the option if_exists="fail" (which is the default)
-    The database must alredy exist (which should be ok if above test is done)
-    It will fail because the database is already present."""
-
-    def test_impl_fails(df, table_name, conn):
-        df.to_sql(table_name, conn)
-
-    np.random.seed(5)
-    random.seed(5)
-    n_pes = bodo.libs.distributed_api.get_size()
-    len_list = 20
-    list_int = list(np.random.randint(1, 10, len_list))
-    list_double = [
-        4.0 if random.randint(1, 3) == 1 else np.nan for _ in range(len_list)
-    ]
-    list_datetime = pd.date_range("2001-01-01", periods=len_list)
-    df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
-    table_name = "test_table_ABCD"
+    """
+    This test with the option if_exists="fail" (which is the default)
+    It will fail because the database is already present.
+    """
+    # Create the Table
     conn = "mysql+pymysql://" + sql_user_pass_and_hostname + "/employees"
-    bodo_impl = bodo.jit(all_args_distributed_block=True)(test_impl_fails)
-    #    with pytest.raises(ValueError, match="Table .* already exists"):
-    with pytest.raises(ValueError, match="error in to_sql.* operation"):
-        bodo_impl(df1, table_name, conn)
+    with ensure_clean_mysql_psql_table(conn, "test_table_already_exists") as table_name:
+        # Initialize Table with Empty Columns
+        if bodo.get_rank() == 0:
+            df_empty = pd.DataFrame({"A": [], "B": [], "C": []})
+            df_empty.to_sql(table_name, conn)
+        bodo.barrier()
+
+        def test_impl_fails(df, table_name, conn):
+            df.to_sql(table_name, conn)
+
+        rng = np.random.default_rng(5)
+        len_list = 20
+        list_int = rng.integers(1, 10, len_list)
+        list_double = rng.choice([4.0, np.nan], len_list, p=[0.33, 0.67])
+        list_datetime = pd.date_range("2001-01-01", periods=len_list)
+        df1 = pd.DataFrame({"A": list_int, "B": list_double, "C": list_datetime})
+
+        bodo_impl = bodo.jit(all_args_distributed_block=True)(test_impl_fails)
+        #    with pytest.raises(ValueError, match="Table .* already exists"):
+        with pytest.raises(ValueError, match="error in to_sql.* operation"):
+            bodo_impl(df1, table_name, conn)
 
 
 def test_sql_hardcoded_aws(memory_leak_check):
@@ -463,13 +463,13 @@ def test_write_sql_oracle(is_distributed, memory_leak_check):
     def test_impl_write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, if_exists="replace")
 
-    np.random.seed(5)
-    random.seed(5)
+    rng = np.random.default_rng(5)
     len_list = 20
-    list_int = list(np.random.choice(10, len_list))
-    list_double = list(np.random.choice([4.0, np.nan], len_list))
+    list_int = rng.integers(1, 10, len_list)
+    list_double = rng.choice([4.0, np.nan], len_list, p=[0.33, 0.67])
     list_datetime = pd.date_range("2001-01-01", periods=len_list)
     df_in = pd.DataFrame({"a": list_int, "b": list_double, "c": list_datetime})
+
     table_name = "to_sql_table"
     if is_distributed:
         start, end = get_start_end(len(df_in))
@@ -565,17 +565,14 @@ def test_to_sql_snowflake(
     old_sf_write_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
     bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
 
-    np.random.seed(5)
-    random.seed(5)
+    rng = np.random.default_rng(5)
+    letters = np.array(list(string.ascii_letters))
     py_output = pd.DataFrame(
         {
             "a": np.arange(df_size),
             "b": np.arange(df_size).astype(np.float64),
             "c": [
-                "".join(
-                    random.choice(string.ascii_letters)
-                    for i in range(random.randrange(10, 100))
-                )
+                "".join(rng.choice(letters, size=rng.integers(10, 100)))
                 for _ in range(df_size)
             ],
             "d": pd.date_range("2001-01-01", periods=df_size),
@@ -664,18 +661,16 @@ def test_to_sql_snowflake_user2(memory_leak_check):
     # User 2 has @ character in the password
     conn = get_snowflake_connection_string(db, schema, user=2)
 
-    np.random.seed(5)
-    random.seed(5)
+    rng = np.random.default_rng(5)
+    len_list = 1000
+    letters = np.array(list(string.ascii_letters))
     df = pd.DataFrame(
         {
-            "a": np.random.randint(0, 500, 1000),
-            "b": np.random.randint(0, 500, 1000),
+            "a": rng.choice(500, size=len_list),
+            "b": rng.choice(500, size=len_list),
             "c": [
-                "".join(
-                    random.choice(string.ascii_letters)
-                    for i in range(random.randrange(10, 100))
-                )
-                for _ in range(1000)
+                "".join(rng.choice(letters, size=rng.integers(10, 100)))
+                for _ in range(len_list)
             ],
             "d": pd.date_range("2002-01-01", periods=1000),
             "e": pd.date_range("2002-01-01", periods=1000).date,
@@ -716,8 +711,7 @@ def test_to_sql_colname_case(memory_leak_check):
 
     # Setting all data to be int as we don't care about values in this test.
     # We're just ensuring that column names match with different cases.
-    np.random.seed(5)
-    random.seed(5)
+    rng = np.random.default_rng(5)
     # NOTE: We're testing the to_sql is writing columns correctly.
     # For read: all uppercase column names will fail if compared
     # to actual dataframe. This is because we match Pandas Behavior where
@@ -725,23 +719,23 @@ def test_to_sql_colname_case(memory_leak_check):
     df = pd.DataFrame(
         {
             # all lower
-            "aaa": np.random.randint(0, 500, 10),
+            "aaa": rng.integers(0, 500, 10),
             # all upper
-            "BBB": np.random.randint(0, 500, 10),
+            "BBB": rng.integers(0, 500, 10),
             # mix
-            "CdEd": np.random.randint(0, 500, 10),
+            "CdEd": rng.integers(0, 500, 10),
             # lower with special char.
-            "d_e_$": np.random.randint(0, 500, 10),
+            "d_e_$": rng.integers(0, 500, 10),
             # upper with special char.
-            "F_G_$": np.random.randint(0, 500, 10),
+            "F_G_$": rng.integers(0, 500, 10),
             # no letters
-            "_123$": np.random.randint(0, 500, 10),
+            "_123$": rng.integers(0, 500, 10),
             # special character only
-            "_$": np.random.randint(0, 500, 10),
+            "_$": rng.integers(0, 500, 10),
             # lower with number
-            "a12": np.random.randint(0, 500, 10),
+            "a12": rng.integers(0, 500, 10),
             # upper with number
-            "B12C": np.random.randint(0, 500, 10),
+            "B12C": rng.integers(0, 500, 10),
         }
     )
 
@@ -1004,52 +998,57 @@ def test_postgres_read_sql_having(memory_leak_check):
 @pytest.mark.slow
 @pytest.mark.parametrize("is_distributed", [True, False])
 def test_to_sql_postgres(is_distributed, memory_leak_check):
-    """Test to_sql with PostgreSQL database
+    """
+    Test to_sql with PostgreSQL database
     Data is compared vs. original DF
     """
 
     def test_impl_write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, if_exists="replace")
 
-    np.random.seed(5)
-    random.seed(5)
-    len_list = 20
-    list_int = list(np.random.choice(10, len_list))
-    list_double = list(np.random.choice([4.0, np.nan], len_list))
-    list_datetime = pd.date_range("2001-01-01", periods=len_list)
-    df_in = pd.DataFrame({"a": list_int, "b": list_double, "c": list_datetime})
-    table_name = "to_sql_table"
-    if is_distributed:
-        start, end = get_start_end(len(df_in))
-        df_input = df_in.iloc[start:end]
-    else:
-        df_input = df_in
+    # Gen Unique Table Name and Reset Table
     conn = "postgresql+psycopg2://" + postgres_user_pass_and_hostname + "/TEST_DB"
-    bodo.jit(all_args_distributed_block=is_distributed)(test_impl_write_sql)(
-        df_input, table_name, conn
-    )
-    bodo.barrier()
-    passed = 1
-    if bodo.get_rank() == 0:
-        try:
-            # to_sql adds index column by default. Setting it here explicitly.
-            df_load = pd.read_sql(
-                "select * from " + table_name, conn, index_col="index"
-            )
-            # The writing does not preserve the order a priori
-            l_cols = df_in.columns.to_list()
-            df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
-            df_load_sort = df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
-            pd.testing.assert_frame_equal(
-                df_load_sort, df_in_sort, check_column_type=False
-            )
-        except Exception as e:
-            print("".join(traceback.format_exception(None, e, e.__traceback__)))
-            passed = 0
-    n_passed = reduce_sum(passed)
-    n_pes = bodo.get_size()
-    assert n_passed == n_pes, "test_to_sql_postgres failed"
-    bodo.barrier()
+    with ensure_clean_mysql_psql_table(conn, "to_sql_table") as table_name:
+        # Gen Random DF
+        rng = np.random.default_rng(5)
+        len_list = 20
+        list_int = rng.choice(10, len_list)
+        list_double = rng.choice([4.0, np.nan], len_list)
+        list_datetime = pd.date_range("2001-01-01", periods=len_list)
+        df_in = pd.DataFrame({"a": list_int, "b": list_double, "c": list_datetime})
+        if is_distributed:
+            start, end = get_start_end(len(df_in))
+            df_input = df_in.iloc[start:end]
+        else:
+            df_input = df_in
+
+        bodo.jit(all_args_distributed_block=is_distributed)(test_impl_write_sql)(
+            df_input, table_name, conn
+        )
+        bodo.barrier()
+        passed = 1
+        if bodo.get_rank() == 0:
+            try:
+                # to_sql adds index column by default. Setting it here explicitly.
+                df_load = pd.read_sql(
+                    "select * from " + table_name, conn, index_col="index"
+                )
+                # The writing does not preserve the order a priori
+                l_cols = df_in.columns.to_list()
+                df_in_sort = df_in.sort_values(l_cols).reset_index(drop=True)
+                df_load_sort = (
+                    df_load[l_cols].sort_values(l_cols).reset_index(drop=True)
+                )
+                pd.testing.assert_frame_equal(
+                    df_load_sort, df_in_sort, check_column_type=False
+                )
+            except Exception as e:
+                print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                passed = 0
+        n_passed = reduce_sum(passed)
+        n_pes = bodo.get_size()
+        assert n_passed == n_pes, "test_to_sql_postgres failed"
+        bodo.barrier()
 
 
 # @pytest.mark.slow
@@ -1062,15 +1061,14 @@ def test_to_sql_oracle(is_distributed, memory_leak_check):
     def test_impl_write_sql(df, table_name, conn):
         df.to_sql(table_name, conn, index=False, if_exists="replace")
 
-    np.random.seed(5)
-    random.seed(5)
+    rng = np.random.default_rng(5)
     # To ensure we're above rank 0 100 row limit
     len_list = 330
-    list_int = list(np.random.choice(10, len_list))
-    list_double = list(np.random.choice([4.0, np.nan], len_list))
-    letters = string.ascii_letters
+    list_int = rng.choice(10, len_list)
+    list_double = rng.choice([4.0, np.nan], len_list)
+    letters = np.array(list(string.ascii_letters))
     list_string = [
-        "".join(random.choice(letters) for i in range(random.randrange(10, 100)))
+        "".join(rng.choice(letters, size=rng.integers(10, 100)))
         for _ in range(len_list)
     ]
     list_datetime = pd.date_range("2001-01-01", periods=len_list)

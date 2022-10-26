@@ -103,7 +103,8 @@ def ensure_clean_mysql_psql_table(conn, table_name_prefix="test_small_table"):
             # Add a uuid to avoid potential conflict as this may be running in
             # several different CI sessions at once. This may be the source of
             # sporadic failures (although this is uncertain).
-            table_name = f"{table_name_prefix}_{uuid.uuid4()}"
+            # We do `.hex` since we don't want `-`s in the name.
+            table_name = f"{table_name_prefix}_{uuid.uuid4().hex}"
         table_name = comm.bcast(table_name)
         yield table_name
     finally:
@@ -115,7 +116,7 @@ def ensure_clean_mysql_psql_table(conn, table_name_prefix="test_small_table"):
             try:
                 engine = create_engine(conn)
                 connection = engine.connect()
-                connection.execute(f"drop table if exists `{table_name}`")
+                connection.execute(f"drop table if exists {table_name}")
             except Exception as e:
                 drop_err = e
         drop_err = comm.bcast(drop_err)
