@@ -30,33 +30,37 @@ def get_spark_iceberg(nessie_token):
         SparkSession.builder.appName("Iceberg with Spark")
         .config(
             "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:0.14.1,software.amazon.awssdk:bundle:2.15.40,software.amazon.awssdk:url-connection-client:2.15.40,org.apache.hadoop:hadoop-aws:3.2.0,org.projectnessie:nessie-spark-3.2-extensions:0.30.0",
+            "org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:0.14.1,"
+            "software.amazon.awssdk:bundle:2.15.40,"
+            "software.amazon.awssdk:url-connection-client:2.15.40,"
+            "org.projectnessie:nessie-spark-3.2-extensions:0.44.0",
         )
-        .config("spark.sql.catalog.nessie", "org.apache.iceberg.spark.SparkCatalog")
         .config(
-            "spark.sql.catalog.nessie.catalog-impl",
+            "spark.sql.catalog.nessie_catalog", "org.apache.iceberg.spark.SparkCatalog"
+        )
+        .config(
+            "spark.sql.catalog.nessie_catalog.catalog-impl",
             "org.apache.iceberg.nessie.NessieCatalog",
         )
         .config(
-            "spark.sql.catalog.nessie.uri",
-            "https://nessie.dremio.cloud/v1/projects/50824e14-fd95-434c-a0cb-cc988e57969f",
+            "spark.sql.catalog.nessie_catalog.uri",
+            "https://nessie.dremio.cloud/v1/repositories/e83a2cde-4a47-4522-82c0-4aa5f358e1bf",
         )
         .config(
-            "spark.sql.catalog.nessie.warehouse", "s3a://bodo-iceberg-test2/arctic_test"
+            "spark.sql.catalog.nessie_catalog.warehouse", f"s3://{BUCKET_NAME}/nessie"
         )
         .config("spark.sql.catalog.nessie.ref", "main")
-        .config("spark.sql.catalog.nessie.authentication.type", "BEARER")
+        .config("spark.sql.catalog.nessie_catalog.authentication.type", "BEARER")
+        .config("spark.sql.catalog.nessie_catalog.authentication.token", nessie_token)
+        .config("spark.sql.catalog.nessie_catalog.cache-enabled", "false")
         .config(
-            "spark.sql.catalog.nessie.authentication.token",
-            nessie_token,
-        )
-        .config("spark.sql.catalog.nessie.cache-enabled", "false")
-        .config(
-            "spark.sql.catalog.nessie.io-impl", "org.apache.iceberg.aws.s3.S3FileIO"
+            "spark.sql.catalog.nessie_catalog.io-impl",
+            "org.apache.iceberg.aws.s3.S3FileIO",
         )
         .config(
             "spark.sql.extensions",
-            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,org.projectnessie.spark.extensions.NessieSpark32SessionExtensions",
+            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,"
+            "org.projectnessie.spark.extensions.NessieSpark32SessionExtensions",
         )
         .getOrCreate()
     )
@@ -66,9 +70,9 @@ def get_spark_iceberg(nessie_token):
 # ------------------------ Cleanup Code ------------------------
 def cleanup_nessie(nessie_token: str, table_name: str):
     spark = get_spark_iceberg(nessie_token)
-    spark.sql(f"DROP TABLE nessie.e2e.{table_name}")
+    spark.sql(f"DROP TABLE nessie_catalog.{table_name}")
     fs = pafs.S3FileSystem(region="us-east-1")
-    fs.delete_dir_contents(f"bodo-iceberg-test2/arctic_test/e2e")
+    fs.delete_dir_contents(f"{BUCKET_NAME}/nessie")
 
 
 def cleanup_glue(table_name: str):
@@ -81,13 +85,6 @@ def cleanup_glue(table_name: str):
 def cleanup_hadoop():
     fs = pafs.S3FileSystem(region="us-east-1")
     fs.delete_dir_contents(f"{BUCKET_NAME}/hadoop")
-
-
-CLEANUP = {
-    "Nessie": cleanup_nessie,
-    "Glue": cleanup_glue,
-    "S3": cleanup_hadoop,
-}
 
 
 # ------------------------ Test Code ------------------------
@@ -109,12 +106,12 @@ def test_builder(
 
 
 nessie_tests = lambda nessie_token, table_name: test_builder(
-    "iceberg+https://nessie.dremio.cloud/v1/projects/"
-    "50824e14-fd95-434c-a0cb-cc988e57969f"
+    "iceberg+https://nessie.dremio.cloud/v1/repositories/"
+    "e83a2cde-4a47-4522-82c0-4aa5f358e1bf"
     "?type=nessie&authentication.type=BEARER"
     f"&authentication.token={nessie_token}"
-    f"&warehouse=s3://bodo-iceberg-test2/arctic_test",
-    "e2e",
+    f"&warehouse=s3://{BUCKET_NAME}/nessie",
+    "",
     table_name,
 )
 
@@ -201,17 +198,17 @@ if __name__ == "__main__":
     cleanup_failed = False
     if bodo.get_rank() == 0:
         try:
-            print("Starting cleanup...")
-            print("Cleaning up hadoop...")
+            print("Starting Cleanup...")
+            print("Cleaning up Hadoop...")
             cleanup_hadoop()
-            print("Cleaning up glue...")
+            print("Cleaning up Glue...")
             cleanup_glue(table_name)
-            print("Cleaning up nessie...")
+            print("Cleaning up Nessie...")
             cleanup_nessie(nessie_token, table_name)
-            print("Successfully finished cleanup...")
+            print("Successfully Finished Cleanup...")
         except Exception as e:
             cleanup_failed = True
-            print(f"Failed during cleanup ...\n{e}", file=sys.stderr)
+            print(f"Failed During Cleanup...\n{e}", file=sys.stderr)
 
     cleanup_failed = comm.bcast(cleanup_failed)
     if cleanup_failed:
