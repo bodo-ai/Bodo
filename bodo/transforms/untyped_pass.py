@@ -973,7 +973,11 @@ class UntypedPass:
                 has_side_effects,
                 index_col_name,
                 index_arr_typ,
-                None,
+                None,  # database_schema
+                None,  # pyarrow_table_schema
+                False,  # is_merge_into
+                types.none,  # file_list_type
+                types.none,  # snapshot_id_type
             )
         ]
 

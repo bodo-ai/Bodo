@@ -43,7 +43,14 @@ def connector_array_analysis(node, equiv_set, typemap, array_analysis):
         if typ == types.none:
             continue
         # If the table variable is dead don't generate the shape call.
-        if i != 0 or node.connector_typ not in ("parquet", "sql") or node.is_live_table:
+        is_dead_table = (
+            i == 0
+            and node.connector_typ in ("parquet", "sql")
+            and not node.is_live_table
+        )
+        # If its the file_list or snapshot ID don't generate the shape
+        is_non_array = node.connector_typ == "sql" and i > 1
+        if not (is_dead_table or is_non_array):
             shape = array_analysis._gen_shape_call(
                 equiv_set, col_var, typ.ndim, None, post
             )
@@ -119,6 +126,16 @@ def connector_typeinfer(node, typeinferer):
         typeinferer.lock_type(
             node.out_vars[1].name, node.index_column_type, loc=node.loc
         )
+        if node.connector_typ == "sql":
+            if len(node.out_vars) > 2:
+                typeinferer.lock_type(
+                    node.out_vars[2].name, node.file_list_type, loc=node.loc
+                )
+            if len(node.out_vars) > 3:
+                typeinferer.lock_type(
+                    node.out_vars[3].name, node.snapshot_id_type, loc=node.loc
+                )
+
         return
 
     for col_var, typ in zip(node.out_vars, node.out_types):
@@ -339,8 +356,6 @@ def base_connector_remove_dead_columns(
 
     This is mapped to the used columns during distributed pass.
     """
-    # The function assumes nodes have exactly 2 vars
-    assert len(node.out_vars) == 2, f"invalid {nodename} node"
     table_var_name = node.out_vars[0].name
     assert isinstance(
         typemap[table_var_name], TableType

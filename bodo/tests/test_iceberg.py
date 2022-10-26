@@ -19,6 +19,7 @@ import pyspark.sql.types as spark_types
 import pytest
 import pytz
 from mpi4py import MPI
+from numba.core import types
 
 import bodo
 from bodo.tests.iceberg_database_helpers import spark_reader
@@ -666,6 +667,38 @@ def test_no_files_after_filter_pushdown(iceberg_database, iceberg_table_conn):
     check_func(impl, (table_name, conn, db_schema), py_output=py_out)
 
 
+def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
+    """
+    Test that the bodo_iceberg_connector correctly loads the latest snapshot id.
+    """
+    import bodo_iceberg_connector
+
+    comm = MPI.COMM_WORLD
+    table_name = "simple_numeric_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+    # Format the connection string since we don't go through pd.read_sql_table
+    conn = bodo.io.iceberg.format_iceberg_conn(conn)
+    spark = get_spark()
+    snapshot_id = None
+    spark_snapshot_id = None
+    if bodo.get_rank() == 0:
+        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
+            conn, db_schema, table_name
+        )
+        py_out = spark.sql(
+            f"""
+        select snapshot_id from hadoop_prod.{db_schema}.{table_name}.history order by made_current_at DESC
+        """
+        )
+        py_out = py_out.toPandas()
+        spark_snapshot_id = py_out.iloc[0, 0]
+    snapshot_id, spark_snapshot_id = comm.bcast((snapshot_id, spark_snapshot_id))
+    assert (
+        snapshot_id == spark_snapshot_id
+    ), "Bodo loaded snapshot id doesn't match spark"
+
+
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
 def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
     """
@@ -747,33 +780,54 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
 
-    def impl(table_name, conn, db_schema):
-        df = pd.read_sql_table(table_name, conn, db_schema, _bodo_merge_into=True)
+    def f(df, file_list):
+        # Sort the filenames so the order is consistent with Spark
+        return sorted(file_list)
+
+    def impl1(table_name, conn, db_schema):
+        # Just return df because sort_output, reset_index don't work when
+        # returning tuples.
+        df, _, _ = pd.read_sql_table(table_name, conn, db_schema, _bodo_merge_into=True)
         df = df[df.B == 2]
         return df
 
+    file_list_type = types.List(types.unicode_type)
+
+    def impl2(table_name, conn, db_schema):
+        df, file_list, snapshot_id = pd.read_sql_table(
+            table_name, conn, db_schema, _bodo_merge_into=True
+        )
+        df = df[df.B == 2]
+        # Force use of df since we won't return it and still need
+        # to load data.
+        with bodo.objmode(sort_list=file_list_type):
+            sort_list = f(df, file_list)
+        return (sort_list, snapshot_id)
+
     spark = get_spark()
-    py_out = spark.sql(
+    # Load the table output
+    table_output = spark.sql(
         f"""
     select * from hadoop_prod.{db_schema}.{table_name}
     WHERE B = 2
     """
     )
-    py_out = py_out.toPandas()
+    table_output = table_output.toPandas()
     check_func(
-        impl,
+        impl1,
         (table_name, conn, db_schema),
-        py_output=py_out,
+        py_output=table_output,
         sort_output=True,
         reset_index=True,
         check_dtype=False,
     )
+    # Check filter pushdown
     tracing_info = TracingContextManager()
     with tracing_info:
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            bodo.jit(impl)(table_name, conn, db_schema)
+            bodo.jit(impl1)(table_name, conn, db_schema)
             check_logger_msg(stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F']")
             check_logger_msg(stream, "Filter pushdown successfully performed")
     # Load the tracing results
@@ -785,6 +839,34 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
     assert dnf_filters != "None", "No DNF filters were pushed"
     # Verify we don't have expr filters
     assert expr_filters == "None", "Expr filters were pushed unexpectedly"
+    # Check the files list + snapshot id
+    # Load the file list
+    files_frame = spark.sql(
+        f"""
+        select file_path from hadoop_prod.{db_schema}.{table_name}.files
+        """
+    )
+    files_frame = files_frame.toPandas()
+    # Convert to a set because Bodo will only return unique file names
+    files_set = set(files_frame["file_path"])
+    # We use a sorted list for easier comparison
+    files_set = sorted(list(files_set))
+    # Load the snapshot id
+    snapshot_frame = spark.sql(
+        f"""
+        select snapshot_id from hadoop_prod.{db_schema}.{table_name}.history where parent_id is NULL
+        """
+    )
+    snapshot_frame = snapshot_frame.toPandas()
+    spark_snapshot_id = snapshot_frame.iloc[0, 0]
+    check_func(
+        impl2,
+        (table_name, conn, db_schema),
+        py_output=(files_set, spark_snapshot_id),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
 
 
 def _check_for_sql_read_head_only(bodo_func, head_size):

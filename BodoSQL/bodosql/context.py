@@ -438,9 +438,9 @@ def add_param_table(table_name, schema, param_keys, param_values):
 class BodoSQLContext:
     def __init__(self, tables=None, catalog=None):
         # We only need to initialize the tables values on all ranks, since that is needed for
-        # creating the JIT function on all ranks for bc.sql calls. We also intialize df_types on all ranks,
+        # creating the JIT function on all ranks for bc.sql calls. We also initialize df_types on all ranks,
         # for consistency. All the other attributes
-        # are only used for generating the functext, which is only done on rank 0.
+        # are only used for generating the func text, which is only done on rank 0.
         if tables is None:
             tables = {}
 

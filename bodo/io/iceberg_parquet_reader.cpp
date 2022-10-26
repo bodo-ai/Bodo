@@ -32,13 +32,21 @@ class IcebergParquetReader : public ParquetReader {
           table_name(_table_name),
           is_merge_into_cow(_is_merge_into_cow) {}
 
-    virtual ~IcebergParquetReader() {}
+    virtual ~IcebergParquetReader() { Py_DECREF(this->file_list); }
 
     void init_iceberg_reader(int32_t* str_as_dict_cols,
                              int32_t num_str_as_dict_cols) {
         ParquetReader::init_pq_reader(str_as_dict_cols, num_str_as_dict_cols,
                                       nullptr, nullptr, 0);
     }
+
+    // Return and incref the file list.
+    PyObject* get_file_list() {
+        Py_INCREF(this->file_list);
+        return this->file_list;
+    }
+
+    int64_t get_snapshot_id() { return this->snapshot_id; }
 
    protected:
     // We don't need a special implementation yet and can re-use
@@ -79,6 +87,12 @@ class IcebergParquetReader : public ParquetReader {
         Py_DECREF(iceberg_mod);
 
         this->filesystem = PyObject_GetAttrString(ds, "filesystem");
+        // Save the file list and snapshot id for use later
+        this->file_list = PyObject_GetAttrString(ds, "file_list");
+        PyObject* py_snapshot_id = PyObject_GetAttrString(ds, "snapshot_id");
+        // The snapshot Id is just an integer so store in native code.
+        this->snapshot_id = PyLong_AsLong(py_snapshot_id);
+        Py_DECREF(py_snapshot_id);
 
         return ds;
     }
@@ -103,6 +117,15 @@ class IcebergParquetReader : public ParquetReader {
     const char* table_name;
     // Is this a target table for merge into with cow?
     bool is_merge_into_cow;
+    // List of the original Iceberg file names as relative paths.
+    // For example if the absolute path was
+    // /Users/bodo/iceberg_db/my_table/part01.pq and the iceberg directory is
+    // iceberg_db, then the path in the list would be
+    // iceberg_db/my_table/part01.pq. These are used by merge/delete and are not
+    // the same as the files we read, which are absolute paths.
+    PyObject* file_list;
+    // Iceberg snapshot id for read.
+    int64_t snapshot_id;
 };
 
 /**
@@ -140,7 +163,9 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             PyObject* pyarrow_table_schema,
                             int32_t* str_as_dict_cols,
                             int32_t num_str_as_dict_cols,
-                            int64_t* total_rows_out, bool is_merge_into_cow) {
+                            bool is_merge_into_cow, int64_t* total_rows_out,
+                            PyObject** file_list_ptr,
+                            int64_t* snapshot_id_ptr) {
     try {
         if (is_merge_into_cow) {
             // If is_merge_into=True then we don't want to use any expr_filters
@@ -154,8 +179,18 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
             is_nullable, pyarrow_table_schema, is_merge_into_cow);
         // initialize reader
         reader.init_iceberg_reader(str_as_dict_cols, num_str_as_dict_cols);
+        PyObject* file_list = Py_None;
+        int64_t snapshot_id = -1;
+        if (is_merge_into_cow) {
+            file_list = reader.get_file_list();
+            snapshot_id = reader.get_snapshot_id();
+        }
+        *file_list_ptr = file_list;
+        *snapshot_id_ptr = snapshot_id;
         *total_rows_out = reader.get_total_rows();
-        return reader.read();
+        table_info* read_output = reader.read();
+        return read_output;
+
     } catch (const std::exception& e) {
         // if the error string is "python" this means the C++ exception is
         // a result of a Python exception, so we don't call PyErr_SetString

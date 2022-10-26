@@ -123,4 +123,9 @@ public class BodoIcebergHandler {
 
     append.commit();
   }
+
+  /** Fetch the snapshot id for a table */
+  public long getSnapshotId() {
+    return catalog.loadTable(id).currentSnapshot().snapshotId();
+  }
 }

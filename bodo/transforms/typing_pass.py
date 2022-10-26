@@ -8,6 +8,7 @@ import operator
 import types as pytypes
 import warnings
 from collections import defaultdict
+from typing import Dict, Set, Tuple
 
 import numba
 import numpy as np
@@ -593,7 +594,7 @@ class TypingTransforms:
             or self._is_isin_filter_pushdown_func(index_def, index_call_name)
             or self._starts_ends_with_filter_pushdown_func(index_def, index_call_name)
         ):
-            value_def, used_dfs = self._iterate_over_column_filters(
+            value_def, used_dfs, skipped_vars = self._follow_patterns_to_init_dataframe(
                 assign, self.func_ir
             )
             call_name = guard(find_callname, self.func_ir, value_def)
@@ -605,6 +606,7 @@ class TypingTransforms:
                     self.func_ir,
                     value_def,
                     used_dfs,
+                    skipped_vars,
                     index_def,
                 )
                 # If this function returns a list we have updated the working body.
@@ -616,16 +618,45 @@ class TypingTransforms:
         nodes.append(assign)
         return nodes
 
-    def _iterate_over_column_filters(self, assign, func_ir):
+    def _follow_patterns_to_init_dataframe(
+        self, assign: ir.Assign, func_ir: ir.FunctionIR
+    ) -> Tuple[ir.Inst, Dict[str, ir.Inst], Set[str]]:
         """
-        Iterate over calls that only filter the columns of a dataframe, raising a guard if it encounters an
-        non column filter, maintaining a list of used dataframes.
+        Takes an ir.Assign that creates a DataFrame used in filter pushdown and converts it to the
+        "Expression" that defined the DataFrame. A DataFrame that can be used in filter pushdown is required
+        to be an ir.Expr that is a call to "init_dataframe".
+
+        However, in some code patterns BodoSQL may generate additional code beyond the init_dataframe that
+        is otherwise unused. For example, BodoSQL handles unsupported types that can be cast to supported
+        types with `__bodosql_replace_columns_dummy`. To handle these patterns this function traverses the IR
+        looking for specific layouts in the IR. When these are met we continue to travel up the IR back to the original
+        init_dataframe.
+
+        To support this case we create a dictionary, `used_dfs`. These represent the uses of the DataFrame that would typically
+        prevent filter pushdown but are accepted as allowed uses of the original DataFrame. In addition, to avoid dangerous
+        false positives due to similar looking user code, we check these DataFrames for usage so we do not illicitly perform
+        filter pushdown.
+
+        Since some specific patterns can be complicated but include strong guarantees, we have a third dictionary
+        called skipped_vars. These are variables that can be explicitly skipped because we know some strong invariant.
+
+        Args:
+            assign (ir.Assign): _description_
+            func_ir (ir.FunctionIR): _description_
+
+        Returns:
+            Tuple[ir.Inst, Dict[str, ir.Inst], Set[str]]: Tuple of values collected. These are:
+                - ir instruction that should match creating the DataFrame
+                - ir Variables that need to be tracked and the original definition
+                - ir Variables to skip. These require a VERY specific pattern.
         """
+        # TODO(Nick): Refactor the code in this function with clearer variable names and explicit IR examples.
         rhs = assign.value
         value_def = get_definition(func_ir, rhs.value)
         # Intermediate DataFrames that need to be checked.
         # Maps dataframe names to their definitions
         used_dfs = {rhs.value.name: value_def}
+        skipped_vars = set()
 
         # If we have any df.loc calls that load all rows, they will appear
         # before the init_dataframe. We can find all rows with a
@@ -661,19 +692,53 @@ class TypingTransforms:
             # Add this to the intermediate DataFrames
             used_dfs[used_name] = value_def
 
+        # Passing _bodo_merge_into=True with Iceberg generates a tuple. As a result
+        # we will need to traverse this tuple to the original SQLNode if it exists.
+        if is_expr(value_def, "static_getitem"):
+            # at this stage the IR looks like:
+            # $actual_val = call init_dataframe ...
+            # $tuple = build_tuple(items=[$actual_val, ...])
+            # $alias = $tuple
+            # $iterator = exhaust_iter($alias)
+            # $orig_val = static_getitem($iterator, index=0)
+            # Note we could still have __bodosql_replace_columns_dummy after
+            # init_dataframe (TODO(Nick): Remove)
+            tuple_index = value_def.index
+            exhaust_iter_def = get_definition(func_ir, value_def.value)
+            require(is_expr(exhaust_iter_def, "exhaust_iter"))
+            # An exhaust iter can be used only once since we are tracking the usage
+            # of the variable output we skip this variable to avoid issues with the
+            # other members of the tuple.
+            used_name = value_def.value.name
+            skipped_vars.add(used_name)
+            # Find the build tuple
+            tuple_def = get_definition(func_ir, exhaust_iter_def.value)
+            require(is_expr(tuple_def, "build_tuple"))
+            # Add the build tuple to tracking
+            used_name = exhaust_iter_def.value.name
+            used_dfs[used_name] = tuple_def
+            value_def = get_definition(func_ir, tuple_def.items[tuple_index])
+            # Add the original DF to tracking
+            used_name = tuple_def.items[tuple_index].name
+            used_dfs[used_name] = value_def
+
         if is_call(value_def) and guard(find_callname, func_ir, value_def) == (
             "__bodosql_replace_columns_dummy",
             "bodo.hiframes.dataframe_impl",
         ):  # pragma: no cover
             # This is the new BodoSQL path.
             # args of __bodosql_replace_columns_dummy are (df, col_names_to_replace, cols_to_replace_with)
-            # the dataframe argument is always intialized by a call to init_dataframe
-            # This is init dataframe call is what we want to back to _try_filter_pushdown
+            # the dataframe argument is always initialized by a call to init_dataframe
+            # This is init dataframe call is what we want to back to _try_filter_pushdown.
+            # NOTE: We skip the old value_def because this will break filter pushdown. The reason is
+            # that the existing implementation will use the Series values before the filter to enable type
+            # casting. However this function call never uses the data, so we do not track it. This function
+            # is required to be generated ONLY by BodoSQL, which is why we are okay with this assumption.
+            used_name = value_def.args[0].name
+            skipped_vars.add(used_name)
+            value_def = get_definition(func_ir, value_def.args[0])
 
-            init_df_call = get_definition(func_ir, value_def.args[0])
-            value_def = init_df_call
-
-        return value_def, used_dfs
+        return value_def, used_dfs, skipped_vars
 
     def _try_filter_pushdown(
         self,
@@ -681,17 +746,20 @@ class TypingTransforms:
         working_body,
         func_ir,
         value_def,
-        used_dfs,
+        used_dfs: Dict[str, ir.Inst],
+        skipped_vars: Set[str],
         index_def,
     ):
         """detect filter pushdown and add filters to ParquetReader or SQLReader IR nodes if possible.
 
-        working_body is in the inprogress list of statements that should be updated with any filter reordering.
+        working_body is in the in progress list of statements that should be updated with any filter reordering.
         A new working_body is returned if this is successful. func_ir is FunctionIR object containing the blocks
         with all relevant code.
 
-        used_dfs is a dictionary of intermediate dataframes -> initialization that should be tracked
+        used_dfs is a dictionary of intermediate DataFrames -> initialization that should be tracked
         to ensure they aren't reused
+
+        skipped_vars is a set of IR variables that can be skipped in reordering
 
         Throws GuardException if not possible.
         """
@@ -738,7 +806,7 @@ class TypingTransforms:
         )
         self._check_non_filter_df_use(set(used_dfs.keys()), assign, func_ir)
         new_working_body = self._reorder_filter_nodes(
-            read_node, index_def, used_dfs, filters, working_body, func_ir
+            read_node, index_def, used_dfs, skipped_vars, filters, working_body, func_ir
         )
         old_filters = read_node.filters
         # If there are existing filters then we need to merge them together because this is
@@ -801,7 +869,14 @@ class TypingTransforms:
                 require(all(v.name not in df_names for v in stmt.list_vars()))
 
     def _reorder_filter_nodes(
-        self, read_node, index_def, used_dfs, filters, working_body, func_ir
+        self,
+        read_node,
+        index_def,
+        used_dfs,
+        skipped_vars,
+        filters,
+        working_body,
+        func_ir,
     ):
         """reorder nodes that are used for Parquet/SQL partition filtering to be before the
         Reader node (to be accessible when the Reader is run).
@@ -862,7 +937,21 @@ class TypingTransforms:
                     or stmt.value is used_dfs[stmt.target.name]
                 )
             ):
+                if isinstance(stmt.value, ir.Var):
+                    # If we have an IR variable update df_names and used_dfs
+                    # to match the target. This is necessary because there could
+                    # be intermediate assignments between the lhs given in used_dfs
+                    df_names.add(stmt.value.name)
+                    used_dfs[stmt.value.name] = used_dfs[stmt.target.name]
                 continue
+            # Ignore variables whose creation we are directly skipping.
+            if is_assign(stmt):
+                if stmt.target.name in skipped_vars:
+                    continue
+                # For direct assignments (a = b), update the skipped vars
+                elif isinstance(stmt.value, ir.Var) and stmt.value.name in skipped_vars:
+                    skipped_vars.add(stmt.target.name)
+                    continue
 
             # avoid nodes before the reader
             if stmt is read_node:
@@ -2620,9 +2709,22 @@ class TypingTransforms:
             # Note index_col will always be dead since we don't support
             # index_col yet.
             ir.Var(lhs.scope, mk_unique_var("index_col"), lhs.loc),
+            ir.Var(lhs.scope, mk_unique_var("file_list"), lhs.loc),
+            ir.Var(lhs.scope, mk_unique_var("snapshot_id"), lhs.loc),
         ]
+
         self.typemap[data_arrs[0].name] = df_type.table_type
         self.typemap[data_arrs[1].name] = types.none
+        file_list_type = types.pyobject_of_list_type
+        snapshot_id_type = types.int64
+        # If we have a merge into we will return a list of original iceberg files
+        # + the snapshot id.
+        if _bodo_merge_into:
+            self.typemap[data_arrs[2].name] = file_list_type
+            self.typemap[data_arrs[3].name] = snapshot_id_type
+        else:
+            self.typemap[data_arrs[2].name] = types.none
+            self.typemap[data_arrs[3].name] = types.none
         nodes = [
             bodo.ir.sql_ext.SqlReader(
                 table_name,
@@ -2643,13 +2745,21 @@ class TypingTransforms:
                 database_schema,  # database_schema
                 pyarrow_table_schema,  # pyarrow_table_schema
                 _bodo_merge_into,  # is_merge_into
+                file_list_type,  # file_list_type
+                snapshot_id_type,  # snapshot_id_type
             )
         ]
-        data_args = ["table_val", "idx_arr_val"]
+        data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]
         # Create the index + dataframe
         index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len({data_args[0]}), 1, None)"
-        func_text = f"def _init_df({data_args[0]}, {data_args[1]}):\n"
-        func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)\n"
+        func_text = f"def _init_df({data_args[0]}, {data_args[1]}, {data_args[2]}, {data_args[3]}):\n"
+        df_value = f"bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_args[0]},), {index_arg}, __col_name_meta_value_read_sql_table)"
+        if _bodo_merge_into:
+            # If merge_into we return a tuple of values
+            func_text += f"  return ({df_value}, {data_args[2]}, {data_args[3]})\n"
+        else:
+            # Otherwise just return the DataFrame
+            func_text += f"  return {df_value}\n"
         loc_vars = {}
         exec(
             func_text,

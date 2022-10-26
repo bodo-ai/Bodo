@@ -3,7 +3,7 @@ API used to translate Java BodoParquetInfo objects into
 Python Objects usable inside Bodo.
 """
 from collections import namedtuple
-from typing import List
+from typing import List, Tuple
 from urllib.parse import urlparse
 
 from bodo_iceberg_connector.catalog_conn import _remove_prefix, parse_conn_str
@@ -19,23 +19,40 @@ BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start le
 
 def bodo_connector_get_parquet_file_list(
     conn_str: str, db_name: str, table: str, filters
-) -> List[str]:
+) -> Tuple[List[str], List[str]]:
     """
     Gets the list of files for use by Bodo. The port value here
     is set and controlled by a default value for the bodo_iceberg_connector
     package.
+
+    Here we return two lists:
+        List 1: The Iceberg paths that have been cleaned up. Here we standardize the s3
+        filepath and remove any "file:" header. In addition we convert files not on s3
+        to their absolute path
+
+        List 2: The Iceberg paths exactly as given. These may have various headers and
+        are generally relative paths.
+
+        For example if the absolute path was /Users/bodo/iceberg_db/my_table/part01.pq
+        and the iceberg directory is iceberg_db, then the path in list 1 would be
+        /Users/bodo/iceberg_db/my_table/part01.pq and the path in list 2 would be
+        iceberg_db/my_table/part01.pq.
     """
     pq_infos = get_bodo_parquet_info(DEFAULT_PORT, conn_str, db_name, table, filters)
 
     # filepath is a URI (file:///User/sw/...) or a relative path that needs converted to
     # a full path
     # Replace Hadoop S3A URI scheme with regular S3 Scheme
-    return [
-        _remove_prefix(x.filepath.replace("s3a://", "s3://"), "file:")
-        if _has_uri_scheme(x.filepath)
-        else f"{_remove_prefix(conn_str, 'file:')}/{x.filepath}"
-        for x in pq_infos
-    ]
+    file_paths = [x.filepath for x in pq_infos]
+    return (
+        [
+            _remove_prefix(path.replace("s3a://", "s3://"), "file:")
+            if _has_uri_scheme(path)
+            else f"{_remove_prefix(conn_str, 'file:')}/{path}"
+            for path in file_paths
+        ],
+        file_paths,
+    )
 
 
 def bodo_connector_get_parquet_info(warehouse, schema, table, filters):
@@ -55,7 +72,7 @@ def get_bodo_parquet_info(port, conn_str: str, db_name: str, table: str, filters
     """
 
     try:
-        catalog_type, warehouse = parse_conn_str(conn_str)
+        catalog_type, _ = parse_conn_str(conn_str)
 
         bodo_iceberg_table_reader = get_java_table_handler(
             conn_str,
