@@ -2273,6 +2273,7 @@ class UntypedPass:
         storage_options=None,
         input_file_name_col=None,
         read_as_dict_cols=None,
+        use_hive=True,
     ):
         # make sure pyarrow is available
         if not bodo.utils.utils.has_pyarrow():
@@ -2292,6 +2293,7 @@ class UntypedPass:
             storage_options=storage_options,
             input_file_name_col=input_file_name_col,
             read_as_dict_cols=read_as_dict_cols,
+            use_hive=use_hive,
         )
         n_cols = len(columns)
 
@@ -2389,6 +2391,17 @@ class UntypedPass:
             default=None,
         )
 
+        _bodo_use_hive = self._get_const_arg(
+            "read_parquet",
+            rhs.args,
+            kws,
+            10e4,
+            "_bodo_use_hive",
+            rhs.loc,
+            use_default=True,
+            default=True,
+        )
+
         # check unsupported arguments
         supported_args = (
             "path",
@@ -2397,6 +2410,7 @@ class UntypedPass:
             "storage_options",
             "_bodo_input_file_name_col",
             "_bodo_read_as_dict",
+            "_bodo_use_hive",
         )
         unsupported_args = set(kws.keys()) - set(supported_args)
         if unsupported_args:
@@ -2418,6 +2432,7 @@ class UntypedPass:
             storage_options,
             _bodo_input_file_name_col,
             _bodo_read_as_dict,
+            use_hive=_bodo_use_hive,
         )
 
     def _handle_np_fromfile(self, assign, lhs, rhs):

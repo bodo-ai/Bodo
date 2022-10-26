@@ -506,6 +506,66 @@ def test_pq_processes_greater_than_string_rows(datapath):
     check_func(f, [datapath("small_strings.pq")])
 
 
+def test_read_parquet_path_hive_naming(memory_leak_check):
+    filepath = os.path.join(os.path.dirname(__file__), "data/hive-part-sample-pq/data/")
+
+    def test_impl():
+        return pd.read_parquet(filepath, _bodo_use_hive=False).count()
+
+    exp_output = pd.Series(
+        {
+            "unit_serial_number": 200,
+            "product_code": 200,
+            "station_type": 200,
+            "uut_start": 200,
+            "test_case_key": 200,
+            "received_date": 200,
+            "ingest_date": 0,
+            "ingest_timestamp": 200,
+            "override": 0,
+            "test_result": 200,
+            "uut_stop": 200,
+            "fixture_id": 0,
+            "head_id": 0,
+            "limits_version": 200,
+            "software_name": 200,
+            "software_version": 200,
+            "station_id": 200,
+            "site_name": 200,
+            "lower_limit": 200,
+            "message": 0,
+            "parametric_key": 200,
+            "priority": 200,
+            "result": 200,
+            "sub_sub_test": 0,
+            "sub_test": 200,
+            "test": 200,
+            "test_type": 0,
+            "units": 200,
+            "upper_limit": 200,
+            "value": 200,
+            "audit_test": 200,
+            "config_code": 200,
+            "line_name": 200,
+            "wom": 200,
+            "uut_start_original": 200,
+            "uut_stop_original": 200,
+            "effective_test_date": 200,
+            "effective_test_timestamp": 200,
+            "test_date": 200,
+            "site_group": 200,
+            "station_group": 200,
+        }
+    )
+
+    check_func(
+        test_impl,
+        (),
+        py_output=exp_output,
+        is_out_distributed=False,
+    )
+
+
 @pytest.mark.slow
 def test_csv_infer_type_error(datapath):
     ints = [0] * 1000

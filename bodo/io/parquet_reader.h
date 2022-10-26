@@ -17,14 +17,15 @@ class ParquetReader : public ArrowDataframeReader {
                   PyObject* _expr_filters, PyObject* _storage_options,
                   int64_t _tot_rows_to_read, int32_t* _selected_fields,
                   int32_t num_selected_fields, int32_t* is_nullable,
-                  bool _input_file_name_col)
+                  bool _input_file_name_col, bool _use_hive = true)
         : ArrowDataframeReader(_parallel, _tot_rows_to_read, _selected_fields,
                                num_selected_fields, is_nullable),
           dnf_filters(_dnf_filters),
           expr_filters(_expr_filters),
           path(_path),
           storage_options(_storage_options),
-          input_file_name_col(_input_file_name_col) {
+          input_file_name_col(_input_file_name_col),
+          use_hive(_use_hive) {
         if (storage_options == Py_None)
             throw std::runtime_error("ParquetReader: storage_options is None");
 
@@ -112,6 +113,7 @@ class ParquetReader : public ArrowDataframeReader {
     PyObject* storage_options;
     PyObject* selected_fields_py;
     bool input_file_name_col;
+    bool use_hive;
 
     std::vector<int64_t> pieces_nrows;
     double avg_num_pieces = 0;
