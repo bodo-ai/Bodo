@@ -35,6 +35,7 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
+from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, raise_bodo_error
 
 
@@ -212,7 +213,7 @@ def get_iceberg_file_list(
     ), "get_iceberg_file_list should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
 
     try:
-        lst = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+        res = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
             conn, database_schema, table_name, filters
         )
     except bodo_iceberg_connector.IcebergError as e:
@@ -225,7 +226,45 @@ def get_iceberg_file_list(
             raise BodoError(f"{e.message}:\n{e.java_error}")
         else:
             raise BodoError(e.message)
-    return lst
+    return res
+
+
+def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str):
+    """
+    Fetch the current snapshot id for an Iceberg table.
+
+    Args:
+        table_name (str): Iceberg Table Name
+        conn (str): Iceberg connection string
+        database_schema (str): Iceberg schema.
+
+    Returns:
+        int: Snapshot Id for the current version of the Iceberg table.
+    """
+    import bodo_iceberg_connector
+    import numba.core
+
+    assert (
+        bodo.get_rank() == 0
+    ), "get_iceberg_snapshot_id should only ever be called on rank 0, as the operation requires access to the py4j server, which is only available on rank 0"
+
+    try:
+        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
+            conn,
+            database_schema,
+            table_name,
+        )
+    except bodo_iceberg_connector.IcebergError as e:
+        # Only include Java error info in dev mode because it contains at lot of
+        # unnecessary info about internal packages and dependencies.
+        if (
+            isinstance(e, bodo_iceberg_connector.IcebergJavaError)
+            and numba.core.config.DEVELOPER_MODE  # type: ignore
+        ):  # pragma: no cover
+            raise BodoError(f"{e.message}:\n{e.java_error}")
+        else:
+            raise BodoError(e.message)
+    return snapshot_id
 
 
 class IcebergParquetDataset:
@@ -253,6 +292,8 @@ class IcebergParquetDataset:
         database_schema,
         table_name,
         pa_table_schema,
+        pq_file_list,
+        snapshot_id,
         pq_dataset=None,
     ):
         self.pq_dataset = pq_dataset
@@ -260,6 +301,15 @@ class IcebergParquetDataset:
         self.database_schema = database_schema
         self.table_name = table_name
         self.schema = pa_table_schema
+        # List of files exactly as given by Iceberg. This is used for operations like delete/merge.
+        # There files are likely the relative paths to the Iceberg table for local files.
+        #
+        # For example if the absolute path was /Users/bodo/iceberg_db/my_table/part01.pq
+        # and the iceberg directory is iceberg_db, then the path in the list would be
+        # iceberg_db/my_table/part01.pq.
+        self.file_list = pq_file_list
+        # Snapshot id. This is used for operations like delete/merge.
+        self.snapshot_id = snapshot_id
 
         # For the 0-file case, i.e. pq_dataset is None
         self.pieces = []
@@ -308,7 +358,9 @@ def get_iceberg_pq_dataset(
 
     comm = MPI.COMM_WORLD
 
-    pq_file_list_or_e = None
+    pq_abs_path_file_list_or_e = None
+    snapshot_id_or_e = None
+    iceberg_relative_path_file_list = None
     # Get the list on just one rank to reduce JVM overheads
     # and general traffic to table for when there are
     # catalogs in the future.
@@ -320,37 +372,70 @@ def get_iceberg_pq_dataset(
         ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
         ev_iceberg_fl.add_attribute("g_dnf_filter", str(dnf_filters))
         try:
-            pq_file_list_or_e = get_iceberg_file_list(
-                table_name, conn, database_schema, dnf_filters
-            )
+            # We return two list of Iceberg files. pq_abs_path_file_list_or_e contains the full
+            # paths that can be used to read individual files. iceberg_relative_path_file_list contains
+            # the path as given exactly by Iceberg, which may be a relative path for local files.
+            #
+            # For example if the absolute path was /Users/bodo/iceberg_db/my_table/part01.pq
+            # and the iceberg directory is iceberg_db, then the path in pq_abs_path_file_list_or_e would be
+            # /Users/bodo/iceberg_db/my_table/part01.pq and the path in iceberg_relative_path_file_list
+            # would be iceberg_db/my_table/part01.pq.
+            (
+                pq_abs_path_file_list_or_e,
+                iceberg_relative_path_file_list,
+            ) = get_iceberg_file_list(table_name, conn, database_schema, dnf_filters)
             if tracing.is_tracing():  # pragma: no cover
                 ICEBERG_TRACING_NUM_FILES_TO_LOG = int(
                     os.environ.get("BODO_ICEBERG_TRACING_NUM_FILES_TO_LOG", "50")
                 )
-                ev_iceberg_fl.add_attribute("num_files", len(pq_file_list_or_e))
+                ev_iceberg_fl.add_attribute(
+                    "num_files", len(pq_abs_path_file_list_or_e)
+                )
                 ev_iceberg_fl.add_attribute(
                     f"first_{ICEBERG_TRACING_NUM_FILES_TO_LOG}_files",
-                    ", ".join(pq_file_list_or_e[:ICEBERG_TRACING_NUM_FILES_TO_LOG]),
+                    ", ".join(
+                        pq_abs_path_file_list_or_e[:ICEBERG_TRACING_NUM_FILES_TO_LOG]
+                    ),
                 )
         except Exception as e:  # pragma: no cover
-            pq_file_list_or_e = e
+            pq_abs_path_file_list_or_e = e
         ev_iceberg_fl.finalize()
+        ev_iceberg_snapshot = tracing.Event("get_snapshot_id", is_parallel=False)
+        try:
+            snapshot_id_or_e = get_iceberg_snapshot_id(
+                table_name, conn, database_schema
+            )
+        except Exception as e:  # pragma: no cover
+            snapshot_id_or_e = e
+        ev_iceberg_snapshot.finalize()
 
     # Send list to all ranks
-    pq_file_list_or_e = comm.bcast(pq_file_list_or_e)
+    (
+        pq_abs_path_file_list_or_e,
+        snapshot_id_or_e,
+        iceberg_relative_path_file_list,
+    ) = comm.bcast(
+        (pq_abs_path_file_list_or_e, snapshot_id_or_e, iceberg_relative_path_file_list)
+    )
 
     # raise error on all processors if found (not just rank 0 which would cause hangs)
-    if isinstance(pq_file_list_or_e, Exception):
-        error = pq_file_list_or_e
+    if isinstance(pq_abs_path_file_list_or_e, Exception):
+        error = pq_abs_path_file_list_or_e
+        raise BodoError(
+            f"Error reading Iceberg Table: {type(error).__name__}: {str(error)}\n"
+        )
+    if isinstance(snapshot_id_or_e, Exception):
+        error = snapshot_id_or_e
         raise BodoError(
             f"Error reading Iceberg Table: {type(error).__name__}: {str(error)}\n"
         )
 
-    pq_file_list: List[str] = pq_file_list_or_e
+    pq_abs_path_file_list: List[str] = pq_abs_path_file_list_or_e
+    snapshot_id: int = snapshot_id_or_e
 
-    if len(pq_file_list) == 0:
-        # In case all files were filered out by Iceberg, we need to
-        # build an empty dataframe, but with the right schema.
+    if len(pq_abs_path_file_list) == 0:
+        # In case all files were filtered out by Iceberg, we need to
+        # build an empty DataFrame, but with the right schema.
         # get_parquet_dataset doesn't handle the case where
         # no files are available, so we just create a dummy object
         # with the schema known from compile time.
@@ -363,7 +448,7 @@ def get_iceberg_pq_dataset(
             # We assume that `get_parquet_dataset` will raise the error
             # uniformly and reliably on all ranks.
             pq_dataset = bodo.io.parquet_pio.get_parquet_dataset(
-                pq_file_list,
+                pq_abs_path_file_list,
                 get_row_counts=get_row_counts,
                 # dnf_filters were already handled by Iceberg
                 # We only pass expr_filters if we don't need to load the whole file.
@@ -387,7 +472,13 @@ def get_iceberg_pq_dataset(
             else:
                 raise
     iceberg_pq_dataset = IcebergParquetDataset(
-        conn, database_schema, table_name, typing_pa_table_schema, pq_dataset
+        conn,
+        database_schema,
+        table_name,
+        typing_pa_table_schema,
+        iceberg_relative_path_file_list,
+        snapshot_id,
+        pq_dataset,
     )
     ev.finalize()
 
@@ -719,6 +810,17 @@ def box_python_list_of_heterogeneous_tuples_type(typ, val, c):
     # just return the Python object pointer
     c.pyapi.incref(val)
     return val
+
+
+# Class for a PyObject that is a list.
+this_module = sys.modules[__name__]
+PyObjectOfList = install_py_obj_class(
+    types_name="pyobject_of_list_type",
+    python_type=None,
+    module=this_module,
+    class_name="PyObjectOfListType",
+    model_name="PyObjectOfListModel",
+)
 
 
 @numba.njit()

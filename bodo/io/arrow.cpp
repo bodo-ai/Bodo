@@ -25,7 +25,8 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             PyObject* pyarrow_table_schema,
                             int32_t* str_as_dict_cols,
                             int32_t num_str_as_dict_cols,
-                            int64_t* total_rows_out, bool is_merge_into_cow);
+                            bool is_merge_into_cow, int64_t* total_rows_out,
+                            PyObject** file_list_ptr, int64_t* snapshot_id_ptr);
 
 // --------- functions defined in parquet_write.cpp ---------
 int64_t pq_write_py_entry(const char* filename, const table_info* table,

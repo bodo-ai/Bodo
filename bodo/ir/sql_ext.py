@@ -11,12 +11,14 @@ from urllib.parse import urlparse
 import numba
 import numpy as np
 import pandas as pd
-from numba.core import ir, ir_utils, typeinfer, types
+from llvmlite import ir as lir
+from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
     next_label,
     replace_arg_nodes,
 )
+from numba.extending import intrinsic
 
 import bodo
 import bodo.ir.connector
@@ -42,6 +44,14 @@ from bodo.transforms.table_column_del_pass import (
 from bodo.utils.typing import BodoError
 from bodo.utils.utils import check_and_propagate_cpp_exception
 
+if bodo.utils.utils.has_pyarrow():
+    import llvmlite.binding as ll
+
+    from bodo.io import arrow_cpp
+
+    ll.add_symbol("snowflake_read", arrow_cpp.snowflake_read)
+    ll.add_symbol("iceberg_pq_read", arrow_cpp.iceberg_pq_read)
+
 MPI_ROOT = 0
 
 
@@ -66,8 +76,10 @@ class SqlReader(ir.Stmt):
         database_schema,
         # Only relevant for Iceberg at the moment,
         # but potentially for Snowflake in the future
-        pyarrow_table_schema=None,
-        is_merge_into=False,
+        pyarrow_table_schema,
+        is_merge_into,
+        file_list_type,
+        snapshot_id_type,
     ):
         self.connector_typ = "sql"
         self.sql_request = sql_request
@@ -118,6 +130,15 @@ class SqlReader(ir.Stmt):
         # Is the variable currently alive. This should be replaced with more
         # robust handling in connectors.
         self.is_live_table = True
+        # Set if we are loading the file list and snapshot_id for iceberg.
+        self.file_list_live = is_merge_into
+        self.snapshot_id_live = is_merge_into
+        if is_merge_into:
+            self.file_list_type = file_list_type
+            self.snapshot_id_type = snapshot_id_type
+        else:
+            self.file_list_type = types.none
+            self.snapshot_id_type = types.none
 
     def __repr__(self):  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
@@ -193,10 +214,14 @@ def remove_dead_sql(
     """
     table_var = sql_node.out_vars[0].name
     index_var = sql_node.out_vars[1].name
+    file_list_var = sql_node.out_vars[2].name if len(sql_node.out_vars) > 2 else None
+    snapshot_id_var = sql_node.out_vars[3].name if len(sql_node.out_vars) > 3 else None
     if (
         not sql_node.has_side_effects
         and table_var not in lives
         and index_var not in lives
+        and file_list_var not in lives
+        and snapshot_id_var not in lives
     ):
         # If neither the table or index is live and it has
         # no side effects, remove the node.
@@ -215,6 +240,14 @@ def remove_dead_sql(
         # To do this we mark the index_column_name as None
         sql_node.index_column_name = None
         sql_node.index_arr_typ = types.none
+
+    if file_list_var not in lives:
+        sql_node.file_list_live = False
+        sql_node.file_list_type = types.none
+
+    if snapshot_id_var not in lives:
+        sql_node.snapshot_id_live = False
+        sql_node.snapshot_id_type = types.none
     return sql_node
 
 
@@ -372,7 +405,7 @@ def sql_distributed_run(
         filter_args = extra_args
 
     # total_rows is used for setting total size variable below
-    func_text += f"    (total_rows, table_var, index_var) = _sql_reader_py(sql_request, conn, database_schema, {filter_args})\n"
+    func_text += f"    (total_rows, table_var, index_var, file_list, snapshot_id) = _sql_reader_py(sql_request, conn, database_schema, {filter_args})\n"
 
     loc_vars = {}
     exec(func_text, {}, loc_vars)
@@ -457,12 +490,12 @@ def sql_distributed_run(
     # Set total size variable if necessary (for limit pushdown, iceberg specific)
     # value comes from 'total_rows' output of '_sql_reader_py' above
     if meta_head_only_info:
-        nodes[-3].target = meta_head_only_info[1]
+        nodes[-5].target = meta_head_only_info[1]
 
     # assign output table
-    nodes[-2].target = sql_node.out_vars[0]
+    nodes[-4].target = sql_node.out_vars[0]
     # assign output index array
-    nodes[-1].target = sql_node.out_vars[1]
+    nodes[-3].target = sql_node.out_vars[1]
     # At most one of the table and the index
     # can be dead because otherwise the whole
     # node should have already been removed.
@@ -471,10 +504,21 @@ def sql_distributed_run(
     ), "At most one of table and index should be dead if the SQL IR node is live and has no side effects"
     if sql_node.index_column_name is None:
         # If the index_col is dead, remove the node.
-        nodes.pop(-1)
+        nodes.pop(-3)
     elif not sql_node.is_live_table:
         # If the table is dead, remove the node
+        nodes.pop(-4)
+
+    # Do we load the file_list
+    if sql_node.file_list_live:
+        nodes[-2].target = sql_node.out_vars[2]
+    else:
         nodes.pop(-2)
+    # Do we load the snapshot_id
+    if sql_node.snapshot_id_live:
+        nodes[-1].target = sql_node.out_vars[3]
+    else:
+        nodes.pop(-1)
 
     return nodes
 
@@ -909,9 +953,8 @@ def _gen_sql_reader_py(
         func_text += (
             f"  ev = bodo.utils.tracing.Event('read_iceberg', {parallel})\n"
             f'  dnf_filters, expr_filters = get_filters_pyobject("{dnf_filter_str}", "{expr_filter_str}", ({filter_args}{comma}))\n'
-            f"  total_rows_np = np.array([0], dtype=np.int64)\n"
             # Iceberg C++ Parquet Reader
-            f"  out_table = iceberg_read(\n"
+            f"  out_table, total_rows, file_list, snapshot_id = iceberg_read(\n"
             f"    unicode_to_utf8(conn),\n"
             f"    unicode_to_utf8(database_schema),\n"
             f"    unicode_to_utf8(sql_request),\n"
@@ -926,17 +969,14 @@ def _gen_sql_reader_py(
             f"    nullable_cols_arr_{call_id}.ctypes,\n"
             f"    pyarrow_table_schema_{call_id},\n"
             f"    {dict_str_cols_str},\n"
-            f"    total_rows_np.ctypes,\n"
             f"    {is_merge_into},\n"
             f"  )\n"
-            f"  check_and_propagate_cpp_exception()\n"
         )
 
         # Mostly copied over from _gen_pq_reader_py
         # TODO XXX Refactor?
 
         # Compute number of rows stored on rank for head optimization. See _gen_pq_reader_py
-        func_text += f"  total_rows = total_rows_np[0]\n"
         if parallel:
             func_text += f"  local_rows = get_node_portion(total_rows, bodo.get_size(), bodo.get_rank())\n"
         else:
@@ -991,7 +1031,9 @@ def _gen_sql_reader_py(
 
         func_text += f"  delete_table(out_table)\n"
         func_text += f"  ev.finalize()\n"
-        func_text += "  return (total_rows, table_var, index_var)\n"
+        func_text += (
+            "  return (total_rows, table_var, index_var, file_list, snapshot_id)\n"
+        )
 
     elif db_type == "snowflake":
         col_indices_map = {c: i for i, c in enumerate(out_used_cols)}
@@ -1054,7 +1096,7 @@ def _gen_sql_reader_py(
             func_text += "  table_var = None\n"
         func_text += "  delete_table(out_table)\n"
         func_text += f"  ev.finalize()\n"
-        func_text += "  return (total_rows, table_var, index_var)\n"
+        func_text += "  return (total_rows, table_var, index_var, None, None)\n"
 
     else:
         if not is_dead_table:
@@ -1120,7 +1162,7 @@ def _gen_sql_reader_py(
         else:
             # Dead Table
             func_text += "    table_var = None\n"
-        func_text += "  return (-1, table_var, index_var)\n"
+        func_text += "  return (-1, table_var, index_var, None, None)\n"
 
     glbls = globals()  # TODO: fix globals after Numba's #3355 is resolved
     glbls.update(
@@ -1156,7 +1198,7 @@ def _gen_sql_reader_py(
                 f"py_table_type_{call_id}": py_table_type,
                 f"pyarrow_table_schema_{call_id}": pyarrow_table_schema,
                 "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
-                "iceberg_read": _iceberg_read,
+                "iceberg_read": _iceberg_pq_read,
             }
         )
     elif db_type == "snowflake":
@@ -1216,9 +1258,121 @@ _snowflake_read = types.ExternalFunction(
 
 parquet_predicate_type = ParquetPredicateType()
 pyarrow_table_schema_type = PyArrowTableSchemaType()
-_iceberg_read = types.ExternalFunction(
-    "iceberg_pq_read",
-    table_type(
+
+
+@intrinsic
+def _iceberg_pq_read(
+    typingctx,
+    conn_str,
+    db_schema,
+    sql_request_str,
+    parallel,
+    limit,
+    dnf_filters,
+    expr_filters,
+    selected_cols,
+    num_selected_cols,
+    nullable_cols,
+    pyarrow_schema,
+    dict_encoded_cols,
+    num_dict_encoded_cols,
+    is_merge_into_cow,
+):
+    """Perform a read from an Iceberg Table using a the C++
+    iceberg_pq_read function. That function returns a C++ Table
+    and updates 3 pointers:
+        - The number of rows read
+        - A PyObject which is a list of relative paths to file names (used in merge).
+          If unused this will be None.
+        - An int64 for the snapshot id (used in merge). If unused this will be -1.
+
+    The llvm code then packs these results into an Output tuple with the following types
+        (C++Table, int64, pyobject_of_list_type, int64)
+
+    pyobject_of_list_type is a wrapper type around a Pyobject that enables reference counting
+    to avoid memory leaks.
+
+    Args:
+        typingctx (Context): Context used for typing
+        conn_str (types.voidptr): C string for the connection
+        db_schema (types.voidptr): C string for the db_schema
+        sql_request_str (types.voidptr): C string for sql request
+        parallel (types.boolean): Is the read in parallel
+        limit (types.int64): Max number of rows to read. -1 if all rows
+        dnf_filters (parquet_predicate_type): PyObject for DNF filters.
+        expr_filters (parquet_predicate_type): PyObject for Expr filters
+        selected_cols (types.voidptr): C pointers of integers for selected columns
+        num_selected_cols (types.int64): Length of selected_cols
+        nullable_cols (types.voidptr): C pointers of 0 or 1 for if each selected column is nullable
+        pyarrow_schema (pyarrow_table_schema_type): Pyobject with the pyarrow schema for the output.
+        dict_encoded_cols (types.voidptr): Array fo column numbers that are dictionary encoded.
+        num_dict_encoded_cols (_type_): Length of dict_encoded_cols
+        is_merge_into_cow (bool): Are we doing a merge?
+    """
+
+    def codegen(context, builder, signature, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),  # void*
+                lir.IntType(8).as_pointer(),  # void*
+                lir.IntType(8).as_pointer(),  # void*
+                lir.IntType(1),  # bool
+                lir.IntType(64),  # int64
+                lir.IntType(8).as_pointer(),  # void*
+                lir.IntType(8).as_pointer(),  # void*
+                lir.IntType(8).as_pointer(),  # void*
+                lir.IntType(32),  # int32
+                lir.IntType(8).as_pointer(),  # void*
+                lir.IntType(8).as_pointer(),  # void*
+                lir.IntType(8).as_pointer(),  # void*
+                lir.IntType(32),  # int32
+                lir.IntType(1),  # bool
+                lir.IntType(64).as_pointer(),  # int64_t*
+                lir.IntType(8).as_pointer().as_pointer(),  # PyObject**
+                lir.IntType(64).as_pointer(),  # int64_t*
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="iceberg_pq_read"
+        )
+        # Allocate the pointers to update
+        num_rows_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        file_list_ptr = cgutils.alloca_once(builder, lir.IntType(8).as_pointer())
+        snapshot_id_ptr = cgutils.alloca_once(builder, lir.IntType(64))
+        total_args = args + (num_rows_ptr, file_list_ptr, snapshot_id_ptr)
+        table = builder.call(fn_tp, total_args)
+        # Check for C++ errors
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        # Convert the file_list to underlying struct
+        file_list_pyobj = builder.load(file_list_ptr)
+        file_list_struct = cgutils.create_struct_proxy(types.pyobject_of_list_type)(
+            context, builder
+        )
+        pyapi = context.get_python_api(builder)
+        # borrows and manages a reference for obj (see comments in py_objs.py)
+        file_list_struct.meminfo = pyapi.nrt_meminfo_new_from_pyobject(
+            context.get_constant_null(types.voidptr), file_list_pyobj
+        )
+        file_list_struct.pyobj = file_list_pyobj
+        # `nrt_meminfo_new_from_pyobject` increfs the object (holds a reference)
+        # so need to decref since the object is not live anywhere else.
+        pyapi.decref(file_list_pyobj)
+
+        # Fetch the underlying data from the pointers.
+        items = [
+            table,
+            builder.load(num_rows_ptr),
+            file_list_struct._getvalue(),
+            builder.load(snapshot_id_ptr),
+        ]
+        # Return the tuple
+        return context.make_tuple(builder, ret_type, items)
+
+    ret_type = types.Tuple(
+        [table_type, types.int64, types.pyobject_of_list_type, types.int64]
+    )
+    sig = ret_type(
         types.voidptr,
         types.voidptr,
         types.voidptr,
@@ -1232,14 +1386,6 @@ _iceberg_read = types.ExternalFunction(
         pyarrow_table_schema_type,
         types.voidptr,
         types.int32,
-        types.voidptr,
         types.boolean,
-    ),
-)
-
-import llvmlite.binding as ll
-
-from bodo.io import arrow_cpp
-
-ll.add_symbol("snowflake_read", arrow_cpp.snowflake_read)
-ll.add_symbol("iceberg_pq_read", arrow_cpp.iceberg_pq_read)
+    )
+    return sig, codegen
