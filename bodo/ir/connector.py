@@ -619,7 +619,7 @@ def determine_filter_cast(
     should be cast. However, if we have a partition column, we always cast the
     partition column either to its original type or the new type.
 
-    This is because of an issue in arrow where if a partion has a mix of integer
+    This is because of an issue in arrow where if a partition has a mix of integer
     and string names it won't look at the global types when Bodo processes per
     file (see test_read_partitions_string_int for an example).
 

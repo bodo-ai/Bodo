@@ -351,46 +351,54 @@ def sql_distributed_run(
     func_text = f"def sql_impl(sql_request, conn, database_schema, {extra_args}):\n"
     # If we are doing regular SQL, filters are embedded into the query.
     # Iceberg passes these to parquet instead.
-    if (
-        sql_node.is_select_query and sql_node.filters and sql_node.db_type != "iceberg"
-    ):  # pragma: no cover
-        # This path is only taken on Azure because snowflake
-        # is not tested on AWS.
+    if sql_node.is_select_query and sql_node.db_type != "iceberg":
+        if sql_node.filters:  # pragma: no cover
+            # This path is only taken on Azure because snowflake
+            # is not tested on AWS.
 
-        # If a predicate should be and together, they will be multiple tuples within the same list.
-        # If predicates should be or together, they will be within separate lists.
-        # i.e.
-        # [[('l_linestatus', '<>', var1), ('l_shipmode', '=', var2))]]
-        # -> -> (l_linestatus <> var1) AND (l_shipmode = var2)
-        # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
-        # -> (l_linestatus <> var1) OR (l_shipmode = var2)
-        # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
-        or_conds = []
-        for and_list in sql_node.filters:
-            and_conds = []
-            for p in and_list:
-                # If p[2] is a constant that isn't in the IR (i.e. NULL)
-                # just load the value directly, otherwise load the variable
-                # at runtime.
-                scalar_filter = (
-                    ("{" + filter_map[p[2].name] + "}")
-                    if isinstance(p[2], ir.Var)
-                    else p[2]
-                )
-                if p[1] in ("startswith", "endswith"):
-                    # This path should only be taken with Snowflake
-                    single_filter = ["(", p[1], "(", p[0], ",", scalar_filter, ")", ")"]
-                else:
-                    single_filter = ["(", p[0], p[1], scalar_filter, ")"]
+            # If a predicate should be and together, they will be multiple tuples within the same list.
+            # If predicates should be or together, they will be within separate lists.
+            # i.e.
+            # [[('l_linestatus', '<>', var1), ('l_shipmode', '=', var2))]]
+            # -> -> (l_linestatus <> var1) AND (l_shipmode = var2)
+            # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
+            # -> (l_linestatus <> var1) OR (l_shipmode = var2)
+            # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
+            or_conds = []
+            for and_list in sql_node.filters:
+                and_conds = []
+                for p in and_list:
+                    # If p[2] is a constant that isn't in the IR (i.e. NULL)
+                    # just load the value directly, otherwise load the variable
+                    # at runtime.
+                    scalar_filter = (
+                        ("{" + filter_map[p[2].name] + "}")
+                        if isinstance(p[2], ir.Var)
+                        else p[2]
+                    )
+                    if p[1] in ("startswith", "endswith"):
+                        # This path should only be taken with Snowflake
+                        single_filter = [
+                            "(",
+                            p[1],
+                            "(",
+                            p[0],
+                            ",",
+                            scalar_filter,
+                            ")",
+                            ")",
+                        ]
+                    else:
+                        single_filter = ["(", p[0], p[1], scalar_filter, ")"]
 
-                and_conds.append(" ".join(single_filter))
-            or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
-        where_cond = " WHERE " + " OR ".join(or_conds)
-        for i, arg in enumerate(filter_map.values()):
-            func_text += f"    {arg} = get_sql_literal({arg})\n"
-        # Append filters via a format string. This format string is created and populated
-        # at runtime because filter variables aren't necessarily constants (but they are scalars).
-        func_text += f'    sql_request = f"{{sql_request}} {where_cond}"\n'
+                    and_conds.append(" ".join(single_filter))
+                or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
+            where_cond = " WHERE " + " OR ".join(or_conds)
+            for i, arg in enumerate(filter_map.values()):
+                func_text += f"    {arg} = get_sql_literal({arg})\n"
+            # Append filters via a format string. This format string is created and populated
+            # at runtime because filter variables aren't necessarily constants (but they are scalars).
+            func_text += f'    sql_request = f"{{sql_request}} {where_cond}"\n'
         # sql_node.limit is the limit value already found in the original sql_request
         # if sql_node.limit == limit then 1 of two things must be True:
         # 1. The limit pushdown value is None. We do not add a limit to the query.

@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Array implementation for string objects, which are usually immutable.
-The characters are stored in a contingous data array, and an offsets array marks the
+The characters are stored in a contiguous data array, and an offsets array marks the
 the individual strings. For example:
 value:             ['a', 'bc', '', 'abc', None, 'bb']
 data:              [a, b, c, a, b, c, b, b]
