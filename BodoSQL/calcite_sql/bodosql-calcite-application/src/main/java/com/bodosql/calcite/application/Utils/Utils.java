@@ -240,22 +240,18 @@ public class Utils {
         }
         break;
       case FLOAT:
-        if (outputScalar) {
-          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float32";
-        } else if (outputArrayType) {
+        if (outputArrayType) {
           return "bodo.float32[::1]";
         } else {
-          dtype = "np.float32";
+          dtype = "bodo.libs.bodosql_array_kernels.cast_float32";
         }
         break;
       case DOUBLE:
       case DECIMAL:
-        if (outputScalar) {
-          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float64";
-        } else if (outputArrayType) {
+        if (outputArrayType) {
           return "bodo.float64[::1]";
         } else {
-          dtype = "np.float64";
+          dtype = "bodo.libs.bodosql_array_kernels.cast_float64";
         }
         break;
       case DATE:
