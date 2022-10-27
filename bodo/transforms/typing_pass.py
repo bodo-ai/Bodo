@@ -594,26 +594,28 @@ class TypingTransforms:
             or self._is_isin_filter_pushdown_func(index_def, index_call_name)
             or self._starts_ends_with_filter_pushdown_func(index_def, index_call_name)
         ):
-            value_def, used_dfs, skipped_vars = self._follow_patterns_to_init_dataframe(
-                assign, self.func_ir
+            pushdown_results = guard(
+                self._follow_patterns_to_init_dataframe, assign, self.func_ir
             )
-            call_name = guard(find_callname, self.func_ir, value_def)
-            if call_name == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
-                working_body = guard(
-                    self._try_filter_pushdown,
-                    assign,
-                    self._working_body,
-                    self.func_ir,
-                    value_def,
-                    used_dfs,
-                    skipped_vars,
-                    index_def,
-                )
-                # If this function returns a list we have updated the working body.
-                # This is done to enable updating a single block that is not yet being processed
-                # in the working body.
-                if working_body is not None:
-                    self._working_body = working_body
+            if pushdown_results is not None:
+                value_def, used_dfs, skipped_vars = pushdown_results
+                call_name = guard(find_callname, self.func_ir, value_def)
+                if call_name == ("init_dataframe", "bodo.hiframes.pd_dataframe_ext"):
+                    working_body = guard(
+                        self._try_filter_pushdown,
+                        assign,
+                        self._working_body,
+                        self.func_ir,
+                        value_def,
+                        used_dfs,
+                        skipped_vars,
+                        index_def,
+                    )
+                    # If this function returns a list we have updated the working body.
+                    # This is done to enable updating a single block that is not yet being processed
+                    # in the working body.
+                    if working_body is not None:
+                        self._working_body = working_body
 
         nodes.append(assign)
         return nodes
