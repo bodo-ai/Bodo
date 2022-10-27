@@ -125,6 +125,43 @@ def test_snowflake_catalog_zero_columns_pruning(memory_leak_check):
     "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
+def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
+    """
+    Test limit pushdown with loading from a table from a Snowflake catalog.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(
+        catalog=bodosql.SnowflakeCatalog(
+            os.environ["SF_USER"],
+            os.environ["SF_PASSWORD"],
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            "TEST_DB",
+        )
+    )
+
+    query = "select mycol from PUBLIC.BODOSQL_ALL_SUPPORTED LIMIT 5"
+
+    # make sure limit pushdown worked. Note we don't test correctness because it
+    # is undefined.
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+        bodo_func(bc, query)
+        fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
+        assert hasattr(fir, "meta_head_only_info")
+        assert fir.meta_head_only_info[0] is not None
+        check_logger_msg(stream, "Columns loaded ['mycol']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
 def test_snowflake_catalog_limit_pushdown(memory_leak_check):
     """
     Test limit pushdown with loading from a table from a Snowflake catalog.
