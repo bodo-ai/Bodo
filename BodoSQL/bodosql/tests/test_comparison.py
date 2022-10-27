@@ -22,7 +22,7 @@ def test_comparison_operators_numeric_within_table(
     bodosql_numeric_types,
     comparison_ops,
     spark_info,
-    # seems to be leaking memory sporatically
+    # seems to be leaking memory sporadically
     # memory_leak_check
 ):
     """
