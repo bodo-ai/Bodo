@@ -28,7 +28,7 @@ public class LogicalValuesCodeGen {
     if (argExprs.size() == 0) {
       for (int i = 0; i < columnNames.size(); i++) {
         SqlTypeName typeName = rowType.getFieldList().get(i).getValue().getSqlTypeName();
-        String dType = sqlTypenameToPandasTypename(typeName, false, false);
+        String dType = sqlTypenameToPandasTypename(typeName, false, false, false);
         outputStr
             .append(makeQuoted(rowType.getFieldList().get(i).getKey()))
             .append(": pd.Series(dtype=")
