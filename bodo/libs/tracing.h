@@ -85,11 +85,10 @@ class Event {
                                 value);
     }
 
-    void finalize(bool aggregate = true, bool sync = true) {
-        // call event_py.finalize(aggregate=aggregate, sync=sync)
+    void finalize(bool aggregate = true) {
+        // call event_py.finalize(aggregate=aggregate)
         if (event_py)
-            PyObject_CallMethod(event_py, "finalize", "ii", int(sync),
-                                int(aggregate));
+            PyObject_CallMethod(event_py, "finalize", "i", int(aggregate));
         finalized = true;
     }
 

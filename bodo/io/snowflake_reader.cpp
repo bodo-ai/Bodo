@@ -3,6 +3,7 @@
 // Implementation of SnowflakeReader (subclass of ArrowDataFrameReader) with
 // functionality that is specific to reading from Snowflake
 
+#include <chrono>
 #include "arrow_reader.h"
 
 // -------- SnowflakeReader --------
@@ -84,9 +85,18 @@ class SnowflakeReader : public ArrowDataframeReader {
     }
 
     virtual void read_all(TableBuilder& builder) {
-        for (size_t piece_idx = 0; piece_idx < get_num_pieces(); piece_idx++) {
+        tracing::Event ev("reader::read_all", parallel);
+        size_t num_pieces = get_num_pieces();
+        int64_t to_arrow_time = 0;
+        int64_t append_time = 0;
+
+        ev.add_attribute("num_pieces", num_pieces);
+        for (size_t piece_idx = 0; piece_idx < num_pieces; piece_idx++) {
             int64_t offset = 0;
-            if (piece_idx == 0) offset = start_row_first_piece;
+            if (piece_idx == 0) {
+                offset = start_row_first_piece;
+            }
+            auto t1 = std::chrono::steady_clock::now();
             PyObject* batch = batches[piece_idx];
             PyObject* arrow_table_py =
                 PyObject_CallMethod(batch, "to_arrow", "O", sf_conn);
@@ -94,6 +104,10 @@ class SnowflakeReader : public ArrowDataframeReader {
                 throw std::runtime_error("python");
             }
             auto table = arrow::py::unwrap_table(arrow_table_py).ValueOrDie();
+            auto t2 = std::chrono::steady_clock::now();
+            to_arrow_time +=
+                std::chrono::duration_cast<std::chrono::microseconds>((t2 - t1))
+                    .count();
             int64_t length = std::min(rows_left, table->num_rows() - offset);
             // pass zero-copy slice to TableBuilder to append to read data
             builder.append(table->Slice(offset, length));
@@ -101,7 +115,14 @@ class SnowflakeReader : public ArrowDataframeReader {
             // releasing reference to batch since it's not needed anymore
             Py_DECREF(batch);
             Py_DECREF(arrow_table_py);
+            auto t3 = std::chrono::steady_clock::now();
+            append_time +=
+                std::chrono::duration_cast<std::chrono::microseconds>((t3 - t2))
+                    .count();
         }
+        ev.add_attribute("total_to_arrow_time_micro", to_arrow_time);
+        ev.add_attribute("total_append_time_micro", append_time);
+        ev.finalize();
     }
 
    private:
