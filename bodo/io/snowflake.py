@@ -162,8 +162,8 @@ SF_AZURE_WRITE_HDFS_CORE_SITE = """<configuration>
     <name>fs.azure.sas.token.provider.type</name>
     <value>org.bodo.azurefs.sas.BodoSASTokenProvider</value>
   </property>
-  <property>      
-    <name>fs.abfs.impl</name>      
+  <property>
+    <name>fs.abfs.impl</name>
     <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
   </property>
 </configuration>
@@ -260,7 +260,7 @@ class SnowflakeDataset(object):
 
     def __init__(self, batches, schema, conn):
         # pieces, _bodo_total_rows and _bodo_total_rows are the attributes
-        # expected by ArrowDataframeReader, schema is for SnowflakeReader.
+        # expected by ArrowDataFrameReader, schema is for SnowflakeReader.
         # NOTE: getting this information from the batches is very cheap and
         # doesn't involve pulling data from Snowflake
         self.pieces = batches

@@ -29,9 +29,9 @@ def test_tracing():
 
             if rank == 0:
                 ev1 = tracing.Event("event1", is_parallel=False, sync=False)
-                ev1.finalize(sync=False)
+                ev1.finalize()
             ev2 = tracing.Event("event2", sync=False)
-            ev2.finalize(sync=False)
+            ev2.finalize()
             tracing.dump(f"{tempdir}/bodo_trace.json")
 
     impl1()
@@ -43,9 +43,9 @@ def test_tracing():
 
             if rank == 0:
                 ev1 = tracing.Event("event1", sync=False)
-                ev1.finalize(sync=False)
+                ev1.finalize()
             ev2 = tracing.Event("event2", sync=False)
-            ev2.finalize(sync=False)
+            ev2.finalize()
             tracing.dump(f"{tempdir}/bodo_trace.json")
 
     if bodo.get_size() == 1:

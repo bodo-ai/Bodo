@@ -362,7 +362,7 @@ void ParquetReader::get_partition_info(PyObject* piece) {
  *
  * @param path : path to parquet dataset (can be a Python string -single path-
  * or a Python list of strings -multiple files constituting a single dataset-).
- * The PyObject is passed throught to parquet_pio.py::get_parquet_dataset
+ * The PyObject is passed through to parquet_pio.py::get_parquet_dataset
  * @param parallel: true if reading in parallel
  * @param filters : PyObject passed to pyarrow.parquet.ParquetDataset filters
  * argument to remove rows from scanned data
@@ -375,7 +375,7 @@ void ParquetReader::get_partition_info(PyObject* piece) {
  * partition columns (which are not part of the parquet files)
  * NOTE: selected_fields must be sorted
  * @param num_selected_fields : length of selected_fields array
- * @param is_nullable : array of bools that indicates which of the
+ * @param is_nullable : array of booleans that indicates which of the
  * selected fields is nullable. Same length and order as selected_fields.
  * @param selected_part_cols : Partition columns to select, in the order
  * and index used by pyarrow.parquet.ParquetDataset (e.g. 0 is the first

@@ -67,7 +67,7 @@ static void get_date_from_days(int64_t days, int64_t* date_year,
  *
  * @param out_data output data
  * @param buff date32 value buffer from Arrow
- * @param rows_to_skip number of items to skipp in buff
+ * @param rows_to_skip number of items to skip in buff
  * @param rows_to_read number of items to read after skipping
  */
 inline void copy_data_dt32(uint64_t* out_data, const int32_t* buff,
@@ -412,7 +412,7 @@ class StringBuilder : public TableBuilder::BuilderColumn {
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // XXX hopefully keeping the string arrays around doesn't prevent other
-        // intermediate Arow arrays and tables from being deleted when not
+        // intermediate Arrow arrays and tables from being deleted when not
         // needed anymore
         arrays.insert(arrays.end(), chunked_arr->chunks().begin(),
                       chunked_arr->chunks().end());
@@ -656,7 +656,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
             }
         }
         // XXX hopefully keeping the string arrays around doesn't prevent other
-        // intermediate Arow arrays and tables from being deleted when not
+        // intermediate Arrow arrays and tables from being deleted when not
         // needed anymore
     }
 

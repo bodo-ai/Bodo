@@ -275,6 +275,7 @@ cdef aggregate_events():
 cdef class Event:
 
     cdef bint is_parallel  # True if refers to parallel event, False if replicated
+    cdef bint sync # Should we sync the event
     cdef dict trace  # dictionary with event data
 
     def __cinit__(self, name not None, bint is_parallel=1, bint sync=1):
@@ -298,6 +299,7 @@ cdef class Event:
             "args": {},
         }
         self.is_parallel = is_parallel
+        self.sync = sync
 
     def add_attribute(self, str name not None, value):
         """Add attribute 'name' with value 'value' to event"""
@@ -308,15 +310,14 @@ cdef class Event:
         # add attributes always to avoid overhead of checking
         self.trace["args"][name] = value
 
-    def finalize(self, bint sync=True, bint aggregate=True):
+    def finalize(self, bint aggregate=True):
         """ Finalize event
-            If sync=True do a barrier after getting the duration on this rank.
             If aggregate=True, aggregate the info of the event across all ranks
         """
         if TRACING == 0:
             return  # nop
         self.trace["dur"] = get_timestamp() - self.trace["ts"]
-        if sync and self.is_parallel:
+        if self.sync and self.is_parallel:
             # wait for all processes to finish event
             MPI_Barrier(MPI_COMM_WORLD)
         if aggregate and self.is_parallel:
