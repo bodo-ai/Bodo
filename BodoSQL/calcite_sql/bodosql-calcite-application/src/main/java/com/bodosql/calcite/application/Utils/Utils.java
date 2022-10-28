@@ -205,39 +205,39 @@ public class Utils {
         }
         break;
       case TINYINT:
-        if (outputScalar) {
-          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int8";
-        } else if (outputArrayType) {
+        if (outputArrayType) {
           return "bodo.IntegerArrayType(bodo.int8)";
+        } else if (outputCast) {
+          return "bodo.libs.bodosql_array_kernels.cast_int8";
         } else {
-          dtype = "pd.Int8Dtype()";
+          dtype = "np.int8";
         }
         break;
       case SMALLINT:
-        if (outputScalar) {
-          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int16";
-        } else if (outputArrayType) {
+        if (outputArrayType) {
           return "bodo.IntegerArrayType(bodo.int16)";
+        } else if (outputCast) {
+          return "bodo.libs.bodosql_array_kernels.cast_int16";
         } else {
-          dtype = "pd.Int16Dtype()";
+          dtype = "np.int16";
         }
         break;
       case INTEGER:
-        if (outputScalar) {
-          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int32";
-        } else if (outputArrayType) {
+        if (outputArrayType) {
           return "bodo.IntegerArrayType(bodo.int32)";
+        } else if (outputCast) {
+          return "bodo.libs.bodosql_array_kernels.cast_int32";
         } else {
-          dtype = "pd.Int32Dtype()";
+          dtype = "np.int32";
         }
         break;
       case BIGINT:
-        if (outputScalar) {
-          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int64";
-        } else if (outputArrayType) {
+        if (outputArrayType) {
           return "bodo.IntegerArrayType(bodo.int64)";
+        } else if (outputCast) {
+          return "bodo.libs.bodosql_array_kernels.cast_int64";
         } else {
-          dtype = "pd.Int64Dtype()";
+          dtype = "np.int64";
         }
         break;
       case FLOAT:

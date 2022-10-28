@@ -13,7 +13,7 @@ public class PandasGenTest {
 
   public static void main(String[] args) throws Exception {
 
-    String sql = "select a from __bodolocal__.table1 limit @cwsfe_21";
+    String sql = "SELECT CAST('-8454757700450211157' AS INTEGER)";
 
     LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
