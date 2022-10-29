@@ -13,7 +13,7 @@ phases:
     install:
         commands:
         - echo Entered the install phase...
-        - buildscripts/aws/merge_with_master.sh
+        - buildscripts/aws/merge_with_develop.sh
     build:
         commands:
         - echo Entered the build phase...

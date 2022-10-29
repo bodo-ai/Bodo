@@ -5,10 +5,10 @@ pr: none
 
 schedules:
 - cron: "0 5 * * MON-FRI"
-  displayName: 'Daily midnight build'
+  displayName: 'Weekdays Daily midnight build'
   branches:
     include:
-    - master
+    - develop
 
 stages:
 - stage: Build_Bodo_BodoSQL_Binary

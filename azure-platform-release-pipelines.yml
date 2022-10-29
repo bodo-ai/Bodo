@@ -6,7 +6,7 @@ schedules:
   displayName: 'Weekly Platform Build'
   branches:
     include:
-    - master
+    - main
 
 pr: none
 
