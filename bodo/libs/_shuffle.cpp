@@ -2085,7 +2085,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
         int64_t n_sub_sub_elems = arr_bcast[4];
         int64_t num_categories = arr_bcast[5];
         //
-        array_info* out_arr;
+        array_info* out_arr = nullptr;
         if (arr_type == bodo_array_type::ARROW) {
             std::shared_ptr<arrow::Array> ref_array =
                 ref_table->columns[i_col]->array;

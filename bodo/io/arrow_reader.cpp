@@ -615,6 +615,42 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
     arrow::ArrayVector all_chunks;
 };
 
+/// \brief Get binary value as a string_view
+// A version of Arrow's GetView() that returns std::string_view directly.
+// Arrow < 10.0 versions return arrow::util::string_view which is a vendored
+// version that doesn't work in containers (see string_hash below).
+// TODO: replace with Arrow's GetView after upgrade to Arrow 10
+// https://github.com/apache/arrow/blob/a2881a124339d7d50088c5b9778c725316a7003e/cpp/src/arrow/array/array_binary.h#L70
+///
+/// \param i the value index
+/// \return the view over the selected value
+template <typename ARROW_ARRAY_TYPE>
+std::string_view ArrowStrArrGetView(std::shared_ptr<ARROW_ARRAY_TYPE> str_arr,
+                                    int64_t i) {
+    auto raw_value_offsets = str_arr->raw_value_offsets();
+
+    auto pos = raw_value_offsets[i];
+    return std::string_view(
+        reinterpret_cast<const char*>(str_arr->raw_data() + pos),
+        raw_value_offsets[i + 1] - pos);
+}
+
+// C++20 magic to support "heterogeneous" access to unordered containers
+// makes the key "transparent", allowing std::string_view to be used similar to
+// std::string https://www.cppstories.com/2021/heterogeneous-access-cpp20/
+struct string_hash {
+    using is_transparent = void;
+    [[nodiscard]] size_t operator()(const char* txt) const {
+        return std::hash<std::string_view>{}(txt);
+    }
+    [[nodiscard]] size_t operator()(std::string_view txt) const {
+        return std::hash<std::string_view>{}(txt);
+    }
+    [[nodiscard]] size_t operator()(const std::string& txt) const {
+        return std::hash<std::string>{}(txt);
+    }
+};
+
 /// Column builder for constructing dictionary-encoded string arrays from string
 /// arrays
 class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
@@ -708,17 +744,19 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
             indices_arr->set_null_bit(n_strings_copied + i, true);
             const uint64_t length = in_offsets[str_start_offset + i + 1] -
                                     in_offsets[str_start_offset + i];
-            std::string val = str_arr->GetString(i);
+            std::string_view val =
+                ArrowStrArrGetView<ARROW_ARRAY_TYPE>(str_arr, i);
             if (!str_to_ind.contains(val)) {
                 indices_arr->at<int32_t>(n_strings_copied + i) = count;
                 std::pair<int32_t, uint64_t> ind_offset_len =
                     std::make_pair(count++, total_distinct_chars);
-                str_to_ind[val] = ind_offset_len;
+                // TODO: remove std::string() after upgrade to C++23
+                str_to_ind[std::string(val)] = ind_offset_len;
                 total_distinct_chars += length;
                 total_distinct_strings += 1;
             } else {
                 indices_arr->at<int32_t>(n_strings_copied + i) =
-                    str_to_ind[val].first;
+                    str_to_ind.find(val)->second.first;
             }
         }
         n_strings_copied += n_strings;
@@ -729,7 +767,10 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
     array_info* indices_arr;
     // str_to_ind maps string to its new index, new offset in the new
     // dictionary array. the 0th offset maps to 0.
-    UNORD_MAP_CONTAINER<std::string, std::pair<int32_t, uint64_t>> str_to_ind;
+    // Supports access with string_view. See comments for string_hash.
+    UNORD_MAP_CONTAINER<std::string, std::pair<int32_t, uint64_t>, string_hash,
+                        std::equal_to<>>
+        str_to_ind;
     int64_t count = 0;  // cumulative counter, used for reindexing the unique
                         // strings in the inner dict array
     int64_t n_strings_copied =

@@ -106,22 +106,22 @@ extra_hash_ind2 = ["bodo/libs/HashLibs/TSL/robin-map"]
 extra_hash_ind3 = ["bodo/libs/HashLibs/TSL/sparse-map"]
 extra_hash_ind = extra_hash_ind1 + extra_hash_ind2 + extra_hash_ind3
 lid = [PREFIX_DIR + "/lib"]
-# eca = ["-std=c++17", "-fsanitize=address"]
-# ela = ["-std=c++17", "-fsanitize=address"]
+# eca = ["-std=c++20", "-fsanitize=address"]
+# ela = ["-std=c++20", "-fsanitize=address"]
 if is_win:
-    eca = ["/std:c++17", "/O2"]
+    eca = ["/std:c++20", "/O2"]
     eca_c = ["/O2"]
-    ela = ["/std:c++17"]
+    ela = ["/std:c++20"]
 else:
     if is_mac:
         # Mac on CI can't support AVX2
-        eca = ["-std=c++17", "-g0", "-O3"]
+        eca = ["-std=c++20", "-g0", "-O3"]
     else:
         # -march=haswell is used to enable AVX2 support (required by SIMD bloom
         # filter implementation)
-        eca = ["-std=c++17", "-g0", "-O3", "-march=haswell"]
+        eca = ["-std=c++20", "-g0", "-O3", "-march=haswell"]
     eca_c = ["-g0", "-O3"]
-    ela = ["-std=c++17"]
+    ela = ["-std=c++20"]
 
 if development_mode:
     eca.append("-Werror")
