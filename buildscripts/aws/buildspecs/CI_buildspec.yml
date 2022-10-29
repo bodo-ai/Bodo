@@ -20,8 +20,8 @@ phases:
   # but we don't need to run Bodo ci unless Bodo itself has been changed
   install:
     commands:
-      - echo merging with master
-      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/aws/merge_with_master.sh
+      - echo merging with develop
+      - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/aws/merge_with_develop.sh
       - echo Entered the install phase...
       - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/setup_conda.sh
       - ./buildscripts/bodosql/aws/CI_if_changes.sh buildscripts/aws/test_installs.sh

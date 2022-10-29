@@ -4,11 +4,11 @@ trigger:
 pr: none
 
 schedules:
-- cron: "0 5 * * FRI"
+- cron: "0 15 * * WED"
   displayName: 'Weekly np3 build'
   branches:
     include:
-    - master
+    - main
 
 # Note: we only build the packages that we need for testing on the weekly pipeline (no PiP or ARM)
 stages:
