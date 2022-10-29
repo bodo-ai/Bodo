@@ -6226,7 +6226,7 @@ class GroupbyPipeline {
         int64_t key_row = 0;
         for (int64_t i = 0; i < num_keys; i++) {
             array_info* key_col = (*from_tables[0])[i];
-            array_info* new_key_col;
+            array_info* new_key_col = nullptr;
             if (key_col->arr_type == bodo_array_type::NUMPY ||
                 key_col->arr_type == bodo_array_type::CATEGORICAL ||
                 key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
