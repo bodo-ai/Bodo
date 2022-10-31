@@ -2766,6 +2766,41 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
 
         return cat_getitem_impl
 
+    if isinstance(arr, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType):
+        tz_val = arr.tz
+
+        def tz_aware_getitem_impl(
+            arr, ind, arr_start, total_len, is_1D
+        ):  # pragma: no cover
+
+            if ind >= total_len:
+                raise IndexError("index out of bounds")
+
+            # normalize negative slice
+            ind = ind % total_len
+            # TODO: avoid sending to root in case of 1D since position can be
+            # calculated
+
+            # send data to rank 0 and broadcast
+            root = np.int32(0)
+            tag = np.int32(11)
+            send_arr = np.zeros(1, np.int64)
+            if arr_start <= ind < (arr_start + len(arr)):
+                data = arr[ind - arr_start].value
+                send_arr = np.full(1, data)
+                isend(send_arr, np.int32(1), root, tag, True)
+
+            rank = bodo.libs.distributed_api.get_rank()
+            val = 0  # TODO: better way to get zero of type
+            if rank == root:
+                val = recv(np.int64, ANY_SOURCE, tag)
+
+            dummy_use(send_arr)
+            val = bcast_scalar(val)
+            return bodo.hiframes.pd_timestamp_ext.convert_val_to_timestamp(val, tz_val)
+
+        return tz_aware_getitem_impl
+
     np_dtype = arr.dtype
 
     def getitem_impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
