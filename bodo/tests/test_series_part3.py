@@ -1204,3 +1204,23 @@ def test_np_mod(numeric_series_val):
 
     check_func(impl, (numeric_series_val, numeric_series_val), check_dtype=False)
     check_func(impl, (10, numeric_series_val), check_dtype=False)
+
+
+def test_tz_aware_series_getitem(memory_leak_check):
+    def impl_iat(S):
+        return S.iat[2]
+
+    def impl_iloc(S):
+        return S.iloc[2]
+
+    def impl_loc(S):
+        return S.loc[2]
+
+    def impl_regular(S):
+        return S[2]
+
+    S = pd.Series(pd.array([pd.Timestamp("2000-01-01", tz="US/Pacific")] * 10))
+    check_func(impl_iat, (S,))
+    check_func(impl_iloc, (S,))
+    check_func(impl_loc, (S,))
+    check_func(impl_regular, (S,))
