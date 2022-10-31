@@ -93,11 +93,10 @@ stages:
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.10
 
-- stage: Test_Bodo_and_BodoSQL_Binary
-  displayName: Test Bodo and BodoSQL Binary
+- stage: Test_Bodo_Binary
+  displayName: Test Bodo Binary
+  dependsOn: Build_Bodo_BodoSQL_Binary
   jobs:
-
-  # Bodo tests:
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
@@ -178,7 +177,11 @@ stages:
           CONDA_ENV: 'bodo'
           PYTEST_MARKER: ""
 
-  # BodoSQL tests
+
+- stage: Test_BodoSQL_Binary
+  displayName: Test BodoSQL Binary
+  dependsOn: Build_Bodo_BodoSQL_Binary
+  jobs:
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
