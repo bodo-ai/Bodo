@@ -35,16 +35,17 @@ public class WindowAggCodeGen {
 
   private static final String indent = getBodoIndent();
 
-  static HashMap<SqlKind, String> windowOptimizedKernels;
+  static HashMap<String, String> windowOptimizedKernels;
 
   static {
-    windowOptimizedKernels = new HashMap<SqlKind, String>();
-    windowOptimizedKernels.put(SqlKind.SUM, "bodo.libs.bodosql_array_kernels.windowed_sum");
-    windowOptimizedKernels.put(SqlKind.SUM0, "bodo.libs.bodosql_array_kernels.windowed_sum");
-    windowOptimizedKernels.put(SqlKind.COUNT, "bodo.libs.bodosql_array_kernels.windowed_count");
-    windowOptimizedKernels.put(SqlKind.AVG, "bodo.libs.bodosql_array_kernels.windowed_avg");
-    windowOptimizedKernels.put(SqlKind.MEDIAN, "bodo.libs.bodosql_array_kernels.windowed_median");
-    windowOptimizedKernels.put(SqlKind.MODE, "bodo.libs.bodosql_array_kernels.windowed_mode");
+    windowOptimizedKernels = new HashMap<String, String>();
+    windowOptimizedKernels.put("SUM", "sum");
+    windowOptimizedKernels.put("SUM0", "sum");
+    windowOptimizedKernels.put("COUNT", "count");
+    windowOptimizedKernels.put("AVG", "avg");
+    windowOptimizedKernels.put("MEDIAN", "median");
+    windowOptimizedKernels.put("MODE", "mode");
+    windowOptimizedKernels.put("RATIO_TO_REPORT", "ratio_to_report");
   }
 
   /**
@@ -567,7 +568,7 @@ public class WindowAggCodeGen {
               lower_bounded,
               lower_bound_expr),
           returnedDfOutputCols);
-    } else if (windowOptimizedKernels.containsKey(agg)) {
+    } else if (windowOptimizedKernels.containsKey(aggName)) {
       // These functions have special window-optimized kernels
       assert argsListList.size() == 1;
       WindowedAggregationArgument arg0 = argsListList.get(0).get(0);
@@ -585,7 +586,7 @@ public class WindowAggCodeGen {
           generateWindowOptimizedFn(
               funcText,
               arg0ColName,
-              windowOptimizedKernels.get(agg),
+              windowOptimizedKernels.get(aggName),
               returnedDfOutputCols,
               sortByCols,
               ascendingList,
@@ -1365,7 +1366,7 @@ public class WindowAggCodeGen {
         .append(indent)
         .append(indent)
         .append(
-            "arr = "
+            "arr = bodo.libs.bodosql_array_kernels.windowed_"
                 + kernelName
                 + "("
                 + "sorted_df["

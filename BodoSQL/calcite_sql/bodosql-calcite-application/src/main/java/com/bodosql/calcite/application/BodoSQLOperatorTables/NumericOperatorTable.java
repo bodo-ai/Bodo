@@ -303,6 +303,13 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           .withGroupOrder(Optionality.FORBIDDEN)
           .withFunctionType(SqlFunctionCategory.SYSTEM);
 
+  public static final SqlAggFunction RATIO_TO_REPORT =
+      SqlBasicAggFunction.create(
+          "RATIO_TO_REPORT",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.DOUBLE_NULLABLE,
+          OperandTypes.NUMERIC);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           ACOSH,
@@ -324,6 +331,7 @@ public final class NumericOperatorTable implements SqlOperatorTable {
           LOG,
           LOG2,
           MEDIAN,
+          RATIO_TO_REPORT,
           POW,
           CONV,
           FACTORIAL,

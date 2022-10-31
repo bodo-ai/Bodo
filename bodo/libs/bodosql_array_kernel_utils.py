@@ -914,7 +914,8 @@ def gen_windowed(
 
     Args:
         constant_block (string): what should happen if the output value will
-        always be the same due to the window size being so big.
+        always be the same due to the window size being so big. If None,
+        this means that there is no such case.
         calculate_block (string): how should the current array value be
         calculated in terms of the up-to-date accumulators
         out_dtype (dtype): what is the dtype of the output data.
@@ -1002,9 +1003,10 @@ def gen_windowed(
     calculate_lines = calculate_block.splitlines()
     calculate_indentation = len(calculate_lines[0]) - len(calculate_lines[0].lstrip())
 
-    # Calculate the indentation of the constant_block so that it can be removed
-    constant_lines = constant_block.splitlines()
-    constant_indentation = len(constant_lines[0]) - len(constant_lines[0].lstrip())
+    if constant_block != None:
+        # Calculate the indentation of the constant_block so that it can be removed
+        constant_lines = constant_block.splitlines()
+        constant_indentation = len(constant_lines[0]) - len(constant_lines[0].lstrip())
 
     if setup_block != None:
         # Calculate the indentation of the setup_block so that it can be removed
@@ -1034,13 +1036,16 @@ def gen_windowed(
     func_text += "   if upper_bound < lower_bound:\n"
     func_text += "      for i in range(n):\n"
     func_text += "         bodo.libs.array_kernels.setna(res, i)\n"
-    func_text += "   elif lower_bound <= -n+1 and n-1 <= upper_bound:\n"
-    func_text += (
-        "\n".join([" " * 6 + line[constant_indentation:] for line in constant_lines])
-        + "\n"
-    )
-    func_text += "      for i in range(n):\n"
-    func_text += "         res[i] = constant_value\n"
+    if constant_block != None:
+        func_text += "   elif lower_bound <= -n+1 and n-1 <= upper_bound:\n"
+        func_text += (
+            "\n".join(
+                [" " * 6 + line[constant_indentation:] for line in constant_lines]
+            )
+            + "\n"
+        )
+        func_text += "      for i in range(n):\n"
+        func_text += "         res[i] = constant_value\n"
     func_text += "   else:\n"
     func_text += "      exiting = lower_bound\n"
     func_text += "      entering = upper_bound\n"
