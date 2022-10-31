@@ -724,3 +724,22 @@ def test_snowflake_write_join_all_threads(memory_leak_check):
     err_msg = f"rank0_thread0"
     with pytest.raises(ValueError, match=err_msg):
         test_join_all_threads_impl_3()
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_to_sql_wrong_password():
+    """
+    Tests that df.to_sql produces a reasonable exception if
+    a user provides the wrong password but the connection string
+    still has the correct format.
+    """
+
+    @bodo.jit
+    def impl(conn_str):
+        df = pd.DataFrame({"A": np.arange(100)})
+        df.to_sql("table", conn_str, schema="Public", index=False, if_exists="append")
+
+    with pytest.raises(RuntimeError, match="Failed to connect to DB"):
+        impl(
+            "snowflake://SF_USERNAME:SF_PASSWORD@sf_account/database/PUBLIC?warehouse=warehouse"
+        )

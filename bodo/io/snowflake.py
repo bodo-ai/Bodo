@@ -239,6 +239,9 @@ def snowflake_connect(conn_str, is_parallel=False):  # pragma: no cover
                 params[key] = json.loads(val)
     # pass Bodo identifier to Snowflake
     params["application"] = "bodo"
+    # Set a short login timeout so people don't have to wait the default
+    # 60 seconds to find out they added the wrong credentials.
+    params["login_timeout"] = 5
 
     try:
         import snowflake.connector
@@ -924,8 +927,6 @@ def connect_and_get_upload_info(conn):
 
                     # Also check for environment variables such as HADOOP_HOME, ARROW_LIBHDFS_DIR
                     # and CLASSPATH, since if those are not set, the pq_write would fail anyway.
-                    import os
-
                     hadoop_env_vars_set = (
                         (len(os.environ.get("HADOOP_HOME", "")) > 0)
                         and (len(os.environ.get("ARROW_LIBHDFS_DIR", "")) > 0)
@@ -1008,7 +1009,7 @@ def connect_and_get_upload_info(conn):
                     stage_name = create_internal_stage(cursor, is_temporary=False)
 
         except Exception as e:
-            err = e
+            err = RuntimeError(str(e))
             if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
                 print("".join(traceback.format_exception(None, e, e.__traceback__)))
 
@@ -1162,7 +1163,7 @@ def create_table_copy_into(
             cursor.close()
 
         except Exception as e:
-            err = e
+            err = RuntimeError(str(e))
             if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
                 print("".join(traceback.format_exception(None, e, e.__traceback__)))
 
