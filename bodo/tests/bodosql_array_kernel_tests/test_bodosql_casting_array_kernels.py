@@ -6,16 +6,20 @@
 import numpy as np
 import pandas as pd
 import pytest
+from pandas.api.types import is_float_dtype, is_string_dtype
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
+from bodo.tests.bodosql_array_kernel_tests.test_bodosql_snowflake_conversion_array_kernels import (
+    str_to_bool,
+)
 from bodo.tests.utils import check_func
 
 
 @pytest.fixture(
     params=[
         pytest.param(
-            (pd.Series([1, 2, 3, 4, 5]),),
+            (pd.Series([1, 2, 0, 4, 5]),),
             id="int_array",
         ),
         pytest.param(
@@ -340,6 +344,36 @@ def test_cast_int8(numeric_arrays):
     )
 
 
+def test_cast_boolean(numeric_arrays):
+    args = numeric_arrays
+
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.cast_boolean(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(args[0], (int, float, str)):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.cast_boolean(arr)
+
+    # Simulates casting to float64 on a single row
+    if is_string_dtype(args[0]) or isinstance(args[0], str):
+        to_bool_scalar_fn = (
+            lambda x: None if pd.isna(str_to_bool(x)) else str_to_bool(x)
+        )
+    elif is_float_dtype(args[0]) or isinstance(args[0], float):
+        to_bool_scalar_fn = lambda x: None if np.isnan(x) or np.isinf(x) else bool(x)
+    else:
+        to_bool_scalar_fn = lambda x: None if pd.isna(x) else bool(x)
+
+    answer = vectorized_sol(args, to_bool_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.slow
 def test_cast_float_opt():
     def impl(a, b, flag0, flag1):
@@ -392,3 +426,23 @@ def test_cast_int_opt():
                         (-120, 12, 141, 12, flag0, flag1, flag2, flag3),
                         py_output=answer,
                     )
+
+
+@pytest.mark.slow
+def test_cast_boolean_opt():
+    def impl(a, b, flag0, flag1):
+        arg0 = a if flag0 else None
+        arg1 = b if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.cast_boolean(arg0),
+            bodo.libs.bodosql_array_kernels.cast_boolean(arg1),
+        )
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (True if flag0 else None, False if flag1 else None)
+            check_func(
+                impl,
+                ("t", 0, flag0, flag1),
+                py_output=answer,
+            )

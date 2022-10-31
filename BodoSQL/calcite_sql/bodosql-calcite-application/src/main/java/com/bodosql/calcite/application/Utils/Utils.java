@@ -196,10 +196,10 @@ public class Utils {
         : "at most one of outputScalar, outputArrayType, outputCast may be true";
     switch (typeName) {
       case BOOLEAN:
-        if (outputScalar) {
-          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_bool";
-        } else if (outputArrayType) {
+        if (outputArrayType) {
           return "bodo.boolean_array";
+        } else if (outputCast) {
+          return "bodo.libs.bodosql_array_kernels.cast_boolean";
         } else {
           dtype = makeQuoted("boolean");
         }
