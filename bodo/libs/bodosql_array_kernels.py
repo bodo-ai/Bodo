@@ -36,6 +36,7 @@ broadcasted_fixed_arg_functions = {
     "boolnot",
     "boolor",
     "boolxor",
+    "cast_boolean",
     "cast_float32",
     "cast_float64",
     "cast_int8",
