@@ -60,6 +60,7 @@ public class DataFileInfo {
   public DataFile toDataFile(PartitionSpec spec, SortOrder order, boolean isPartitionedPath) {
     DataFiles.Builder builder =
         DataFiles.builder(spec)
+            .withFormat(FileFormat.PARQUET)
             .withPath(getPath())
             .withFileSizeInBytes(getSize())
             .withRecordCount(getRecordCount())
