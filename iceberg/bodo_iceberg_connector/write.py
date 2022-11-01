@@ -12,6 +12,47 @@ from bodo_iceberg_connector.schema_helper import arrow_to_iceberg_schema
 from py4j.protocol import Py4JJavaError
 
 
+def process_file_infos(
+    fnames: List[str],
+    all_metrics: Dict[str, Any],
+    catalog_type,
+    table_loc,
+    db_name,
+    table_name,
+):
+    """
+    Cleanup and process file name and metric info to Java types
+    before calling the Java commit functions
+
+    Args:
+        fnames: List of file paths (possibly relative or absolute)
+        all_metrics: Metrics about written data to include in commit
+        catalog_type: Type of catalog the Iceberg table is in
+        table_loc: Warehouse location of data/ path (and files)
+        db_name: Namespace / Database schema containing Iceberg table
+        table_name: Name of Iceberg table
+
+    Returns:
+        fnames_java: Java list of strings representing file names
+        size_metric: Java list of longs representing file sizes in bytes
+        count_metric: Java list of longs representing row/record count per file
+    """
+
+    fnames = [
+        gen_file_loc(catalog_type, table_loc, db_name, table_name, name)
+        for name in fnames
+    ]
+    fnames_java = convert_list_to_java(fnames)
+    size_metric = convert_list_to_java(
+        [TypeInt(x, JavaType.PRIMITIVE_LONG) for x in all_metrics["size"]]
+    )
+    count_metric = convert_list_to_java(
+        [TypeInt(x, JavaType.PRIMITIVE_LONG) for x in all_metrics["record_count"]]
+    )
+
+    return fnames_java, size_metric, count_metric
+
+
 def commit_write(
     conn_str: str,
     db_name: str,
@@ -28,7 +69,7 @@ def commit_write(
     """
     Register a write action in an Iceberg catalog
 
-    Parameters:
+    Args:
         conn_str: Connection string to catalog
         db_name: Namespace containing the table written to
         table_name: Name of table written to
@@ -44,18 +85,9 @@ def commit_write(
         bool: Whether the action was successfully commited or not
     """
     catalog_type, _ = parse_conn_str(conn_str)
-    fnames = [
-        gen_file_loc(catalog_type, table_loc, db_name, table_name, name)
-        for name in fnames
-    ]
-
     handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
-    fnames_java = convert_list_to_java(fnames)
-    size_metric = convert_list_to_java(
-        [TypeInt(x, JavaType.PRIMITIVE_LONG) for x in all_metrics["size"]]
-    )
-    count_metric = convert_list_to_java(
-        [TypeInt(x, JavaType.PRIMITIVE_LONG) for x in all_metrics["record_count"]]
+    fnames_java, size_metric, count_metric = process_file_infos(
+        fnames, all_metrics, catalog_type, table_loc, db_name, table_name
     )
 
     if mode == "create":
@@ -100,5 +132,51 @@ def commit_write(
         except Py4JJavaError as e:
             print("Error during Iceberg table append: ", e)
             return False
+
+    return True
+
+
+def commit_merge_cow(
+    conn_str: str,
+    db_name: str,
+    table_name: str,
+    table_loc: str,
+    old_fnames: List[str],
+    new_fnames: List[str],
+    all_metrics: Dict[str, List[Any]],
+    snapshot_id: int,
+):
+    """
+    Commit the write step of MERGE INTO using copy-on-write rules
+
+    Args:
+        conn_str: Connection string to Iceberg catalog
+        db_name: Namespace / Database schema of table
+        table_name: Name of Iceberg table to write to
+        table_loc: Warehouse location of data/ folder for Iceberg table
+        old_fnames: List of old file paths to invalidate in commit
+        new_fnames: List of written files to replace old_fnames
+        all_metrics: Iceberg metrics for new_fnames
+        snapshot_id: Expected current snapshot ID
+
+    Returns:
+        True if commit suceeded, False otherwise
+    """
+
+    catalog_type, _ = parse_conn_str(conn_str)
+    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
+
+    old_fnames_java = convert_list_to_java(old_fnames)
+    new_fnames_java, size_metric, count_metric = process_file_infos(
+        new_fnames, all_metrics, catalog_type, table_loc, db_name, table_name
+    )
+
+    try:
+        handler.mergeCOWTable(
+            old_fnames_java, new_fnames_java, size_metric, count_metric, snapshot_id
+        )
+    except Py4JJavaError as e:
+        print("Error during Iceberg MERGE INTO COW:", e)
+        return False
 
     return True

@@ -671,8 +671,6 @@ def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
     """
     Test that the bodo_iceberg_connector correctly loads the latest snapshot id.
     """
-    import bodo_iceberg_connector
-
     comm = MPI.COMM_WORLD
     table_name = "simple_numeric_table"
     db_schema, warehouse_loc = iceberg_database
@@ -1949,3 +1947,151 @@ def test_write_part_sort_return_orig(
 
     passed = comm.bcast(passed)
     assert passed == 1, "Bodo function output doesn't match expected output"
+
+
+def test_merge_into_cow_write_api(
+    iceberg_database,
+    iceberg_table_conn,
+):
+    comm = MPI.COMM_WORLD
+    bodo.barrier()
+
+    # Should always only run this test on rank O
+    if bodo.get_rank() != 0:
+        passed = comm.bcast(False)
+        if not passed:
+            raise Exception("Exception on Rank 0")
+        return
+
+    passed = True
+    try:
+        # Create a table to work off of
+        table_name = "merge_into_cow_write_api"
+        if bodo.get_rank() == 0:
+            df = pd.DataFrame({"A": [1, 2, 3, 4]})
+            create_iceberg_table(df, [("A", "long", True)], table_name)
+
+        db_schema, warehouse_loc = iceberg_database
+        conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+        conn = bodo.io.iceberg.format_iceberg_conn(conn)
+
+        # Get relavent read info from connector
+        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
+            conn, db_schema, table_name
+        )
+        old_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+            conn,
+            db_schema,
+            table_name,
+            None,
+        )[1]
+
+        # Write new file into warehouse location
+        new_fname = "new_file.parquet"
+        df_new = pd.DataFrame({"A": [5, 6, 7, 8]})
+        df_new.to_parquet(
+            os.path.join(warehouse_loc, db_schema, table_name, "data", new_fname)
+        )
+
+        # Commit the MERGE INTO COW operation
+        success = bodo_iceberg_connector.commit_merge_cow(
+            conn,
+            db_schema,
+            table_name,
+            warehouse_loc,
+            old_fnames,
+            [new_fname],
+            {"record_count": [4], "size": [0]},
+            snapshot_id,
+        )
+        assert success, "MERGE INTO Commit Operation Failed"
+
+        # See if the reported files to read is only the new file
+        new_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+            conn,
+            db_schema,
+            table_name,
+            None,
+        )[1]
+
+        assert len(new_fnames) == 1 and new_fnames[0] == os.path.join(
+            db_schema, table_name, "data", new_fname
+        )
+
+    except Exception as e:
+        passed = False
+        raise e
+    finally:
+        passed = comm.bcast(passed)
+
+
+def test_merge_into_cow_write_api_snapshot_check(
+    iceberg_database,
+    iceberg_table_conn,
+):
+    comm = MPI.COMM_WORLD
+    bodo.barrier()
+
+    # Should always only run this test on rank O
+    if bodo.get_rank() != 0:
+        passed = comm.bcast(False)
+        if not passed:
+            raise Exception("Exception on Rank 0")
+        return
+
+    passed = True
+    try:
+        # Create a table to work off of
+        table_name = "merge_into_cow_write_api_snapshot_check"
+        df = pd.DataFrame({"A": [1, 2, 3, 4]})
+        create_iceberg_table(df, [("A", "long", True)], table_name)
+
+        # Note that for the connector, conn_str and warehouse_loc are the same
+        db_schema, warehouse_loc = iceberg_database
+        conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+        # Format the connection string since we don't go through pd.read_sql_table
+        conn = bodo.io.iceberg.format_iceberg_conn(conn)
+
+        # Get relavent read info from connector
+        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
+            conn, db_schema, table_name
+        )
+        old_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+            conn,
+            db_schema,
+            table_name,
+            None,
+        )[1]
+
+        # Write new file into warehouse location
+        new_fname = "new_file.parquet"
+        df_new = pd.DataFrame({"A": [5, 6, 7, 8]})
+        df_new.to_parquet(
+            os.path.join(warehouse_loc, db_schema, table_name, "data", new_fname)
+        )
+
+        # Update the current snapshot ID by appending data to the table
+        spark = get_spark()
+        spark.sql(
+            f"INSERT INTO hadoop_prod.{db_schema}.{table_name} VALUES (10), (11), (12), (13)"
+        )
+
+        # Attempt to commit a MERGE INTO operation with the old snapshot id
+        # Expect it return False (and prints error)
+        success = bodo_iceberg_connector.commit_merge_cow(
+            conn,
+            db_schema,
+            table_name,
+            warehouse_loc,
+            old_fnames,
+            [new_fname],
+            {"record_count": [4], "size": [0]},
+            snapshot_id,
+        )
+        assert not success, "MERGE INTO Commit Operation should not have succeeded"
+
+    except Exception as e:
+        passed = False
+        raise e
+    finally:
+        passed = comm.bcast(passed)

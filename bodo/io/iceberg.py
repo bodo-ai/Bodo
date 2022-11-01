@@ -7,7 +7,7 @@ main IR transformation.
 import os
 import re
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from urllib.parse import urlparse
 
 import numba
@@ -196,14 +196,20 @@ def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
 
 def get_iceberg_file_list(
     table_name: str, conn: str, database_schema: str, filters
-) -> List[str]:
+) -> Tuple[List[str], List[str]]:
     """
-    Gets the list of parquet data files that need to be read
-    from an Iceberg table by calling objmode. We also pass
-    filters, which is in DNF format and the output of filter
+    Gets the list of parquet data files that need to be read from an Iceberg table.
+
+    We also pass filters, which is in DNF format and the output of filter
     pushdown to Iceberg. Iceberg will use this information to
     prune any files that it can from just metadata, so this
     is an "inclusive" projection.
+
+    Returns:
+        - List of file paths from Iceberg sanitized to be used by Bodo
+            - Convert S3A paths to S3 paths
+            - Convert relative paths to absolute paths
+        - List of original file paths directly from Iceberg
     """
     import bodo_iceberg_connector
     import numba.core
@@ -317,8 +323,7 @@ class IcebergParquetDataset:
         self._prefix = ""
         self.filesystem = None
 
-        # If pq_dataset is provided, get these properties
-        # from it
+        # If pq_dataset is provided, get these properties from it
         if pq_dataset is not None:
             self.pieces = pq_dataset.pieces
             self._bodo_total_rows = pq_dataset._bodo_total_rows
@@ -592,8 +597,6 @@ def pyarrow_schema(df: DataFrameType) -> pa.Schema:
 
 
 # ----------------------------- Iceberg Write -----------------------------#
-
-
 def get_table_details_before_write(
     table_name: str,
     conn: str,
@@ -728,6 +731,48 @@ def get_table_details_before_write(
     )
 
 
+def collect_file_info(iceberg_files_info) -> Tuple[List[str], List[int], List[int]]:
+    """
+    Collect C++ Iceberg File Info to a single rank
+    and process before handing off to the connector / commiting functions
+    """
+    from mpi4py import MPI
+
+    comm = MPI.COMM_WORLD
+
+    # Metrics to provide to Iceberg:
+    # Required:
+    # 1. record_count -- Number of records/rows in this file
+    # 2. file_size_in_bytes -- Total file size in bytes
+
+    # TODO [BE-3099] Metrics currently not provided:
+    # Optional:
+    # 3. column_sizes
+    # 4. value_counts
+    # 5. null_value_counts
+    # 6. nan_value_counts
+    # 7. distinct_counts
+    # 8. lower_bounds
+    # 9. upper_bounds
+
+    # Collect the file names
+    fnames_local = [x[0] for x in iceberg_files_info]
+    fnames_lists = comm.gather(fnames_local)
+
+    # Flatten the list of lists
+    fnames = (
+        [item for sub in fnames_lists for item in sub] if comm.Get_rank() == 0 else None
+    )
+
+    # Collect the metrics
+    record_counts_local = np.array([x[1] for x in iceberg_files_info], dtype=np.int64)
+    file_sizes_local = np.array([x[2] for x in iceberg_files_info], dtype=np.int64)
+    record_counts = bodo.gatherv(record_counts_local).tolist()
+    file_sizes = bodo.gatherv(file_sizes_local).tolist()
+
+    return fnames, record_counts, file_sizes  # type: ignore
+
+
 def register_table_write(
     conn_str: str,
     db_name: str,
@@ -774,6 +819,44 @@ def register_table_write(
     return success
 
 
+def register_table_merge_cow(
+    conn_str: str,
+    db_name: str,
+    table_name: str,
+    table_loc: str,
+    old_fnames: List[str],
+    new_fnames: List[str],
+    all_metrics: Dict[str, List[Any]],  # TODO: Explain?
+    snapshot_id: int,
+):  # pragma: no cover
+    """
+    Wrapper around bodo_iceberg_connector.commit_merge_cow to run on
+    a single rank and broadcast the result
+    """
+    ev = tracing.Event("iceberg_register_table_merge_cow")
+
+    import bodo_iceberg_connector
+
+    comm = MPI.COMM_WORLD
+
+    success = False
+    if comm.Get_rank() == 0:
+        success = bodo_iceberg_connector.commit_merge_cow(
+            conn_str,
+            db_name,
+            table_name,
+            table_loc,
+            old_fnames,
+            new_fnames,
+            all_metrics,
+            snapshot_id,
+        )
+
+    success: bool = comm.bcast(success)
+    ev.finalize()
+    return success
+
+
 from numba.extending import NativeValue, box, models, register_model, unbox
 
 
@@ -792,7 +875,7 @@ class PythonListOfHeterogeneousTuples(types.Opaque):
 
 
 python_list_of_heterogeneous_tuples_type = PythonListOfHeterogeneousTuples()
-types.python_list_of_heterogeneous_tuples_type = (
+types.python_list_of_heterogeneous_tuples_type = (  # type: ignore
     python_list_of_heterogeneous_tuples_type
 )
 register_model(PythonListOfHeterogeneousTuples)(models.OpaqueModel)
@@ -824,6 +907,63 @@ PyObjectOfList = install_py_obj_class(
 
 
 @numba.njit()
+def iceberg_pq_write(
+    table_loc,
+    bodo_table,
+    col_names,
+    partition_spec,
+    sort_order,
+    iceberg_schema_str,
+    is_parallel,
+):  # pragma: no cover
+    """
+    Writes a table to Parquet files in an Iceberg table's data warehouse
+    following Iceberg rules and semantics.
+    Args:
+        table_loc (str): Location of the data/ folder in the warehouse
+        bodo_table: Table object to pass to C++
+        col_names: Array object containing column names (passed to C++)
+        partition_spec: Array of Tuples containing Partition Spec for Iceberg Table (passed to C++)
+        sort_order: Array of Tuples containing Sort Order for Iceberg Table (passed to C++)
+        iceberg_schema_str (str): JSON Encoding of Iceberg Schema to include in Parquet metadata
+        is_parallel (bool): Whether the write is occuring on a distributed dataframe
+
+    Returns:
+        Distributed list of written file info needed by Iceberg for commiting
+        1) file_path (after the table_loc prefix)
+        2) record_count / Number of rows
+        3) File size in bytes
+        4) *partition-values
+    """
+
+    bucket_region = get_s3_bucket_region_njit(table_loc, is_parallel)
+    # TODO [BE-3248] compression and row-group-size (and other properties)
+    # should be taken from table properties
+    # https://iceberg.apache.org/docs/latest/configuration/#write-properties
+    # Using snappy and our row group size default for now
+    compression = "snappy"
+    rg_size = -1
+
+    # Call the C++ function to write the parquet files.
+    # Information about them will be returned as a list of tuples
+    # See docstring for format
+    iceberg_files_info = iceberg_pq_write_table_cpp(
+        unicode_to_utf8(table_loc),
+        bodo_table,
+        col_names,
+        partition_spec,
+        sort_order,
+        unicode_to_utf8(compression),
+        is_parallel,
+        unicode_to_utf8(bucket_region),
+        rg_size,
+        unicode_to_utf8(iceberg_schema_str),
+    )  # type: ignore  Due to additional first argument typingctx
+
+    return iceberg_files_info
+
+
+@numba.njit()
 def iceberg_write(
     table_name,
     conn,
@@ -845,9 +985,6 @@ def iceberg_write(
         bodo_table : table object to pass to c++
         col_names : array object containing column names (passed to c++)
         col_names_py (string array): array of column names
-        index_col : array object containing table index (passed to c++)
-        write_index (bool): whether or not to write the index
-        index_name_ptr (str): name of index column
         if_exists (str): behavior when table exists. must be one of ['fail', 'append', 'replace']
         is_parallel (bool): whether the write is occuring on a distributed dataframe
         df_pyarrow_schema (pyarrow.Schema): pyarrow schema of the dataframe being written
@@ -896,70 +1033,18 @@ def iceberg_write(
     else:
         mode = "create"
 
-    bucket_region = get_s3_bucket_region_njit(table_loc, is_parallel)
-    # TODO [BE-3248] compression and row-group-size (and other properties)
-    # should be taken from table properties
-    # https://iceberg.apache.org/docs/latest/configuration/#write-properties
-    # Using snappy and our row group size default for now
-    compression = "snappy"
-    rg_size = -1
-
-    # Call the C++ function to write the parquet files.
-    # Information about them will be returned as a list as tuples
-    # (iceberg_files_info) of the form
-    # (
-    #   file-path (after the table_loc prefix),
-    #   record-count,
-    #   file size in bytes,
-    #   *partition-values
-    # )
-    iceberg_files_info = iceberg_pq_write_table_cpp(
-        unicode_to_utf8(table_loc),
+    iceberg_files_info = iceberg_pq_write(
+        table_loc,
         bodo_table,
         col_names,
         partition_spec,
         sort_order,
-        unicode_to_utf8(compression),
+        iceberg_schema_str,
         is_parallel,
-        unicode_to_utf8(bucket_region),
-        rg_size,
-        unicode_to_utf8(iceberg_schema_str),
-    )  # type: ignore  Due to additional first argument typingctx
-
-    # Metrics to provide to Iceberg:
-    # Required:
-    # 1. record_count -- Number of records/rows in this file
-    # 2. file_size_in_bytes -- Total file size in bytes
-
-    # TODO [BE-3099]
-    # Optional:
-    # 3. column_sizes
-    # 4. value_counts
-    # 5. null_value_counts
-    # 6. nan_value_counts
-    # 7. distinct_counts
-    # 8. lower_bounds
-    # 9. upper_bounds
+    )
 
     with numba.objmode(success="bool_"):
-        # Collect the file names
-        comm = MPI.COMM_WORLD
-        fnames_local = [x[0] for x in iceberg_files_info]
-        fnames_lists = comm.gather(fnames_local)
-
-        if comm.Get_rank() != 0:
-            fnames = None
-        else:
-            # Flatten the list of lists
-            fnames = [item for sublist in fnames_lists for item in sublist]
-
-        # Collect the metrics
-        record_counts_local = np.array(
-            [x[1] for x in iceberg_files_info], dtype=np.int64
-        )
-        file_sizes_local = np.array([x[2] for x in iceberg_files_info], dtype=np.int64)
-        record_counts = bodo.gatherv(record_counts_local).tolist()
-        file_sizes = bodo.gatherv(file_sizes_local).tolist()
+        fnames, record_counts, file_sizes = collect_file_info(iceberg_files_info)
 
         # Send file names, metrics and schema to Iceberg connector
         success = register_table_write(
@@ -981,6 +1066,84 @@ def iceberg_write(
         # Note that this might not always be possible since
         # we might not have DeleteObject permissions, for instance.
         raise BodoError("Iceberg write failed.")
+
+    ev.finalize()
+
+
+@numba.njit()
+def iceberg_merge_cow_py(
+    table_name,
+    conn,
+    database_schema,
+    bodo_table,
+    snapshot_id,
+    old_fnames,
+    col_names,
+    col_names_py,
+    df_pyarrow_schema,
+    is_parallel,
+):  # pragma: no cover
+    ev = tracing.Event("iceberg_merge_cow_py", is_parallel)
+    # Supporting REPL requires some refactor in the parquet write infrastructure,
+    # so we're not implementing it for now. It will be added in a following PR.
+    assert is_parallel, "Iceberg Write only supported for distributed dataframes"
+
+    with numba.objmode(
+        already_exists="bool_",
+        table_loc="unicode_type",
+        partition_spec="python_list_of_heterogeneous_tuples_type",
+        sort_order="python_list_of_heterogeneous_tuples_type",
+        iceberg_schema_str="unicode_type",
+    ):
+        (
+            already_exists,
+            table_loc,
+            _,
+            partition_spec,
+            sort_order,
+            iceberg_schema_str,
+        ) = get_table_details_before_write(
+            table_name,
+            conn,
+            database_schema,
+            df_pyarrow_schema,
+            "append",
+            col_names_py.tolist(),
+        )
+
+    if not already_exists:
+        raise ValueError(f"Iceberg MERGE INTO: Table does not exist at write")
+
+    iceberg_files_info = iceberg_pq_write(
+        table_loc,
+        bodo_table,
+        col_names,
+        partition_spec,
+        sort_order,
+        iceberg_schema_str,
+        is_parallel,
+    )
+
+    with numba.objmode(success="bool_"):
+        fnames, record_counts, file_sizes = collect_file_info(iceberg_files_info)
+
+        # Send file names, metrics and schema to Iceberg connector
+        success = register_table_merge_cow(
+            conn,
+            database_schema,
+            table_name,
+            table_loc,
+            old_fnames,
+            fnames,
+            {"size": file_sizes, "record_count": record_counts},
+            snapshot_id,
+        )
+
+    if not success:
+        # TODO [BE-3249] If it fails due to snapshot changing, then delete the files.
+        # Note that this might not always be possible since
+        # we might not have DeleteObject permissions, for instance.
+        raise BodoError("Iceberg MERGE INTO: write failed")
 
     ev.finalize()
 

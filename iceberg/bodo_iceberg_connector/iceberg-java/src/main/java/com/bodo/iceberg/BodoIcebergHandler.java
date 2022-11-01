@@ -96,32 +96,72 @@ public class BodoIcebergHandler {
     txn.commitTransaction();
   }
 
-  /** Appends data into preexisting table */
+  /** Appends Rows into a Pre-existing Table */
   public void appendTable(
       List<String> fileNames, List<Long> fileSizes, List<Long> fileRecords, int schemaID) {
-    List<DataFileInfo> fileInfos = DataFileInfo.fromLists(fileNames, fileSizes, fileRecords);
 
+    // Remove the Table instance associated with `id` from the cache
+    // So that the next load gets the current instance from the underlying catalog
+    catalog.invalidateTable(id);
     Table table = catalog.loadTable(id);
     if (table.schema().schemaId() != schemaID)
       throw new IllegalStateException("Iceberg Table has updated its schema");
 
+    List<DataFileInfo> fileInfos = DataFileInfo.fromLists(fileNames, fileSizes, fileRecords);
     this.addData(table.newAppend(), table.spec(), table.sortOrder(), fileInfos);
+  }
+
+  /** Merge Rows into Pre-existing Table by Copy-on-Write Rules */
+  public void mergeCOWTable(
+      List<String> oldFileNames,
+      List<String> newFileNames,
+      List<Long> fileSizes,
+      List<Long> fileRecords,
+      long snapshotID) {
+
+    // Remove the Table instance associated with `id` from the cache
+    // So that the next load gets the current instance from the underlying catalog
+    catalog.invalidateTable(id);
+    Table table = catalog.loadTable(id);
+    if (table.currentSnapshot().snapshotId() != snapshotID)
+      throw new IllegalStateException(
+          "Iceberg Table has been updated since reading. Can not complete MERGE INTO");
+
+    List<DataFileInfo> fileInfos = DataFileInfo.fromLists(newFileNames, fileSizes, fileRecords);
+
+    this.overwriteData(
+        table.newOverwrite(), table.spec(), table.sortOrder(), oldFileNames, fileInfos);
   }
 
   /** Insert data files into the table */
   public void addData(
-      AppendFiles append,
-      PartitionSpec currSpec,
-      SortOrder currOrder,
-      List<DataFileInfo> fileInfos) {
-    boolean isPartitionedPaths = currSpec.isPartitioned();
+      AppendFiles action, PartitionSpec spec, SortOrder order, List<DataFileInfo> fileInfos) {
+    boolean isPartitionedPaths = spec.isPartitioned();
 
     for (DataFileInfo info : fileInfos) {
-      DataFile dataFile = info.toDataFile(currSpec, currOrder, isPartitionedPaths);
-      append.appendFile(dataFile);
+      DataFile dataFile = info.toDataFile(spec, order, isPartitionedPaths);
+      action.appendFile(dataFile);
     }
 
-    append.commit();
+    action.commit();
+  }
+
+  /** Overwrite Data Files with New Modified Versions */
+  public void overwriteData(
+      OverwriteFiles action,
+      PartitionSpec spec,
+      SortOrder order,
+      List<String> oldFileNames,
+      List<DataFileInfo> newFiles) {
+    boolean isPartitionedPaths = spec.isPartitioned();
+
+    // Data Files should be uniquely identified by path only. Other values should not matter
+    for (String oldFileName : oldFileNames)
+      action.deleteFile(new DataFileInfo(oldFileName, 0, 0).toDataFile(spec, order, false));
+    for (DataFileInfo newFile : newFiles)
+      action.addFile(newFile.toDataFile(spec, order, isPartitionedPaths));
+
+    action.commit();
   }
 
   /** Fetch the snapshot id for a table */
