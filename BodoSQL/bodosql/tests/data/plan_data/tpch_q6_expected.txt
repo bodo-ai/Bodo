@@ -1,0 +1,4 @@
+LogicalAggregate(group=[{}], revenue=[SUM($0)])
+  LogicalProject($f0=[*($5, $6)])
+    LogicalFilter(condition=[AND(>=($10, CAST('1994-01-01'):TIMESTAMP(0) NOT NULL), <($10, CAST('1995-01-01'):TIMESTAMP(0) NOT NULL), SEARCH($6, Sarg[[0.05:DECIMAL(3, 2)..0.07:DECIMAL(3, 2)]]:DECIMAL(3, 2)), <($4, 24))])
+      LogicalTableScan(table=[[__bodolocal__, lineitem]])
