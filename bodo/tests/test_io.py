@@ -506,10 +506,10 @@ def test_pq_processes_greater_than_string_rows(datapath):
     check_func(f, [datapath("small_strings.pq")])
 
 
-def test_read_parquet_path_hive_naming(memory_leak_check):
-    filepath = os.path.join(os.path.dirname(__file__), "data/hive-part-sample-pq/data/")
+def test_read_parquet_path_hive_naming(datapath, memory_leak_check):
+    filepath = datapath(os.path.join("hive-part-sample-pq", "data"))
 
-    def test_impl():
+    def test_impl(filepath):
         return pd.read_parquet(filepath, _bodo_use_hive=False).count()
 
     exp_output = pd.Series(
@@ -560,7 +560,7 @@ def test_read_parquet_path_hive_naming(memory_leak_check):
 
     check_func(
         test_impl,
-        (),
+        (filepath,),
         py_output=exp_output,
         is_out_distributed=False,
     )
