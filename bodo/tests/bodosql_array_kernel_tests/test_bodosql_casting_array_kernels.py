@@ -121,6 +121,34 @@ def numeric_arrays(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (pd.Series(pd.date_range("01-01-2020", "01-01-2022", 10, None)),),
+            id="dt_array",
+        ),
+        pytest.param(
+            (pd.Series(pd.timedelta_range("1 day", "10 day", 10, None)),),
+            id="td_array",
+        ),
+        pytest.param(
+            (pd.to_datetime(2**60),),
+            id="dt_scalar",
+        ),
+        pytest.param(
+            (pd.to_timedelta(2**50),),
+            id="td_scalar",
+        ),
+        pytest.param(
+            (pd.to_timedelta(-(2**40)),),
+            id="neg_td_scalar",
+        ),
+    ]
+)
+def time_arrays(request):
+    return request.param
+
+
 def test_cast_float64(numeric_arrays):
     args = numeric_arrays
 
@@ -334,7 +362,6 @@ def test_cast_int8(numeric_arrays):
     answer = vectorized_sol(args, int8_scalar_fn, None)
     if isinstance(answer, pd.Series):
         answer = answer.astype("Int8")
-    # breakpoint()
     check_func(
         impl,
         args,
@@ -365,6 +392,118 @@ def test_cast_boolean(numeric_arrays):
         to_bool_scalar_fn = lambda x: None if pd.isna(x) else bool(x)
 
     answer = vectorized_sol(args, to_bool_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        bodo.Time(1, 2, 3, 4, 5, 6),
+                        bodo.Time(1, 52, 33, 443, 534, 632),
+                        None,
+                    ]
+                ),
+            ),
+            id="Time",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        bytes.fromhex("a3b2"),
+                        bytes.fromhex("deadbeef"),
+                        bytes(0),
+                        None,
+                    ]
+                ),
+            ),
+            id="Bytes",
+        ),
+    ],
+)
+def test_cast_char_other(args):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.cast_char(arr))
+
+    def char_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        elif isinstance(elem, (bodo.Time, bodo.TimeType)):
+            return str(pd.Timestamp(elem.value)).split(" ")[1]
+        elif isinstance(elem, bytes):
+            return elem.hex()
+        else:
+            return str(elem)
+
+    answer = vectorized_sol(args, char_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_cast_char_nums(numeric_arrays):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.cast_char(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(numeric_arrays[0], (int, float, str)):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.cast_char(arr)
+
+    # Simulates casting to string on a single row
+    def to_char_scalar_fn(x):
+        if pd.isna(x):
+            return None
+        elif isinstance(x, float):
+            return "{:f}".format(x)
+        elif isinstance(x, (bool, np.bool_)):
+            return str(x).lower()
+        else:
+            return str(x)
+
+    answer = vectorized_sol(numeric_arrays, to_char_scalar_fn, None)
+    check_func(
+        impl,
+        numeric_arrays,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_cast_char_times(time_arrays):
+    args = time_arrays
+
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.cast_char(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(args[0], (pd.Timestamp, pd.Timedelta)):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.cast_char(arr)
+
+    # Simulates casting to float64 on a single row
+    def to_char_scalar_fn(x):
+        if pd.isna(x):
+            return None
+        elif isinstance(x, pd.Timedelta):
+            return str(np.timedelta64(x.value, "ns"))
+        else:
+            return str(x)
+
+    answer = vectorized_sol(args, to_char_scalar_fn, None)
     check_func(
         impl,
         args,
@@ -446,3 +585,44 @@ def test_cast_boolean_opt():
                 ("t", 0, flag0, flag1),
                 py_output=answer,
             )
+
+
+@pytest.mark.slow
+def test_cast_char_opt():
+    def impl(a, b, c, d, flag0, flag1, flag2, flag3):
+        arg0 = a if flag0 else None
+        arg1 = b if flag1 else None
+        arg2 = c if flag2 else None
+        arg3 = d if flag3 else None
+
+        return (
+            bodo.libs.bodosql_array_kernels.cast_char(arg0),
+            bodo.libs.bodosql_array_kernels.cast_char(arg1),
+            bodo.libs.bodosql_array_kernels.cast_char(arg2),
+            bodo.libs.bodosql_array_kernels.cast_char(arg3),
+        )
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                for flag3 in [True, False]:
+                    answer = (
+                        "12" if flag0 else None,
+                        "false" if flag1 else None,
+                        "deadbeef" if flag2 else None,
+                        "22.500000" if flag3 else None,
+                    )
+                    check_func(
+                        impl,
+                        (
+                            12,
+                            False,
+                            bytes.fromhex("deadbeef"),
+                            22.5,
+                            flag0,
+                            flag1,
+                            flag2,
+                            flag3,
+                        ),
+                        py_output=answer,
+                    )

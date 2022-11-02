@@ -4,6 +4,7 @@ Implements a number of array kernels that handling casting functions for BodoSQL
 """
 
 import numba
+import numpy as np
 import pandas as pd
 from numba.core import types
 from numba.extending import register_jitable
@@ -11,7 +12,6 @@ from numba.extending import register_jitable
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
-    BodoError,
     dtype_to_array_type,
     get_overload_const_bool,
     is_overload_none,
@@ -186,9 +186,39 @@ def to_char_util(arr):
 
     # TODO [BE-2744]: support binary data for to_char
     if is_valid_binary_arg(arr):
-        raise BodoError("to_char(): binary input currently unsupported")
-
-    if is_valid_datetime_or_date_arg(arr):
+        # currently only support hex encoding
+        scalar_text = "with bodo.objmode(r=bodo.string_type):\n"
+        scalar_text += "  r = arg0.hex()\n"
+        scalar_text += "res[i] = r"
+    elif isinstance(arr, bodo.TimeType) or (
+        bodo.utils.utils.is_array_typ(arr) and isinstance(arr.dtype, bodo.TimeType)
+    ):
+        scalar_text = (
+            "h_str = str(arg0.hour) if arg0.hour > 10 else '0' + str(arg0.hour)\n"
+        )
+        scalar_text += (
+            "m_str = str(arg0.minute) if arg0.minute > 10 else '0' + str(arg0.minute)\n"
+        )
+        scalar_text += (
+            "s_str = str(arg0.second) if arg0.second > 10 else '0' + str(arg0.second)\n"
+        )
+        scalar_text += "ms_str = str(arg0.millisecond) if arg0.millisecond > 100 else ('0' + str(arg0.millisecond) if arg0.millisecond > 10 else '00' + str(arg0.millisecond))\n"
+        scalar_text += "us_str = str(arg0.microsecond) if arg0.microsecond > 100 else ('0' + str(arg0.microsecond) if arg0.microsecond > 10 else '00' + str(arg0.microsecond))\n"
+        scalar_text += "ns_str = str(arg0.nanosecond) if arg0.nanosecond > 100 else ('0' + str(arg0.nanosecond) if arg0.nanosecond > 10 else '00' + str(arg0.nanosecond))\n"
+        scalar_text += "part_str = h_str + ':' + m_str + ':' + s_str\n"
+        scalar_text += "if arg0.nanosecond > 0:\n"
+        scalar_text += "  part_str = part_str + '.' + ms_str + us_str + ns_str\n"
+        scalar_text += "elif arg0.microsecond > 0:\n"
+        scalar_text += "  part_str = part_str + '.' + ms_str + us_str\n"
+        scalar_text += "elif arg0.millisecond > 0:\n"
+        scalar_text += "  part_str = part_str + '.' + ms_str\n"
+        scalar_text += "res[i] = part_str"
+    elif is_valid_timedelta_arg(arr):
+        scalar_text = "v = bodo.utils.conversion.unbox_if_timestamp(arg0)\n"
+        scalar_text += "with bodo.objmode(r=bodo.string_type):\n"
+        scalar_text += "    r = str(v)\n"
+        scalar_text += "res[i] = r"
+    elif is_valid_datetime_or_date_arg(arr):
         scalar_text = "res[i] = pd.Timestamp(arg0).isoformat(' ')"
     elif is_valid_float_arg(arr):
         scalar_text = "if np.isinf(arg0):\n"
@@ -203,7 +233,23 @@ def to_char_util(arr):
     elif is_valid_boolean_arg(arr):
         scalar_text = "res[i] = 'true' if arg0 else 'false'"
     else:
-        scalar_text = "res[i] = str(arg0)"
+        int_types = {
+            8: np.int8,
+            16: np.int16,
+            32: np.int32,
+            64: np.int64,
+        }
+        if is_valid_int_arg(arr):
+            if hasattr(arr, "dtype"):
+                bw = arr.dtype.bitwidth
+            else:
+                bw = arr.bitwidth
+            scalar_text = f"if arg0 == {np.iinfo(int_types[bw]).min}:\n"
+            scalar_text += f"  res[i] = '{np.iinfo(int_types[bw]).min}'\n"
+            scalar_text += "else:\n"
+            scalar_text += "  res[i] = str(arg0)"
+        else:
+            scalar_text = "res[i] = str(arg0)"
 
     out_dtype = bodo.string_array_type
 

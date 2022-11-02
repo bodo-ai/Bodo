@@ -2,9 +2,12 @@
 """
 Test correctness of SQL cast queries on BodoSQL
 """
+import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
+
+import bodo
 
 
 @pytest.fixture(
@@ -332,3 +335,194 @@ def test_timestamp_col_to_str(bodosql_datetime_types, spark_info):
         check_names=False,
         check_dtype=False,
     )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            pd.Series([0, None, 42, 127, 255], dtype=pd.UInt8Dtype()), id="uint8"
+        ),
+        pytest.param(
+            pd.Series([-1, None, 64, 127, -128], dtype=pd.Int8Dtype()), id="int8"
+        ),
+        pytest.param(
+            pd.Series([0, None, 64, 4096, 65535], dtype=pd.UInt16Dtype()), id="uint16"
+        ),
+        pytest.param(
+            pd.Series([100, None, -12345, -32768, 32767], dtype=pd.Int16Dtype()),
+            id="int16",
+        ),
+        pytest.param(
+            pd.Series([25, None, 625, 15625, 4294967295], dtype=pd.UInt32Dtype()),
+            id="uint32",
+        ),
+        pytest.param(
+            pd.Series(
+                [1234567890, None, -7, -2147483648, 2147483647], dtype=pd.Int32Dtype()
+            ),
+            id="int32",
+        ),
+        pytest.param(
+            pd.Series(
+                [149162536496481100, None, 0, 2048, 8446744073709551615],
+                dtype=pd.UInt64Dtype(),
+            ),
+            id="uint64",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    -2344264343534706688,
+                    None,
+                    1154048505100107776,
+                    -9223372036854775808,
+                    9223372036854775807,
+                ],
+                dtype=pd.Int64Dtype(),
+            ),
+            id="int64",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    0,
+                    None,
+                    4611686018427387903,
+                    -102030405060.708090102030,
+                    3.14159265358979323,
+                ],
+                dtype=np.float32,
+            ),
+            id="float32",
+            marks=pytest.mark.skip(
+                "we do not support displaying varying precision floats as strings"
+            ),
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    0,
+                    None,
+                    4611686018427387903,
+                    -102030405060.708090102030,
+                    3.14159265358979323,
+                ],
+                dtype=np.float64,
+            ),
+            id="float64",
+            marks=pytest.mark.skip(
+                "we do not support displaying varying precision floats as strings"
+            ),
+        ),
+        pytest.param(pd.Series([True, None, True, False, True]), id="bool"),
+        pytest.param(
+            pd.Series(
+                [
+                    bytes.fromhex("a2b3"),
+                    None,
+                    bytes(0),
+                    bytes.fromhex("deadbeef"),
+                    bytes.fromhex("cafe"),
+                ]
+            ),
+            id="binary",
+        ),
+        pytest.param(
+            pd.Series(
+                [pd.Timestamp(2018, 1, 1), None]
+                + list(pd.date_range("2015", "2018", 3))
+            ),
+            id="datetime",
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timedelta(400, "days"),
+                    None,
+                    pd.Timedelta(12345, "minutes"),
+                    pd.Timedelta(42, "hours"),
+                    pd.Timedelta(14916253649, "nanoseconds"),
+                ]
+            ),
+            id="timedelta",
+            marks=pytest.mark.skip(
+                "skip until we have parity with Snowflake intervals"
+            ),
+        ),
+        pytest.param(
+            pd.Series(
+                [
+                    bodo.Time(10, 0, 0),
+                    None,
+                    bodo.Time(13, 45, 0, 500),
+                    bodo.Time(20, 0, 30, 100, 625),
+                    bodo.Time(23, 59, 59, 999, 999, 999),
+                ]
+            ),
+            id="time",
+            marks=pytest.mark.skip(reason="Time type producing typing issues"),
+        ),
+    ]
+)
+def type_to_string(request):
+    return request.param
+
+
+def test_casting_to_string_cols(type_to_string, spark_info):
+    """Tests multiple vector type cases for casting to a string"""
+    query = "SELECT CAST(A AS VARCHAR) FROM table1"
+    spark_query = "SELECT CAST(A AS STRING) FROM table1"
+    ctx = {"table1": pd.DataFrame({"A": type_to_string})}
+    if isinstance(type_to_string[0], bytes):
+        check_query(
+            query,
+            ctx,
+            spark_info,
+            expected_output=pd.DataFrame(
+                {"A": [a.hex() if not pd.isna(a) else None for a in type_to_string]}
+            ),
+            check_names=False,
+            check_dtype=False,
+            sort_output=False,
+        )
+    else:
+        check_query(
+            query,
+            ctx,
+            spark_info,
+            equivalent_spark_query=spark_query,
+            check_names=False,
+            check_dtype=False,
+        )
+
+
+def test_casting_to_string_scalar(type_to_string, spark_info):
+    """Tests multiple scalar (non literal) type cases for casting to a string"""
+    query = (
+        "SELECT CASE WHEN A IS NULL THEN NULL ELSE CAST(A AS VARCHAR) END  FROM table1"
+    )
+    spark_query = (
+        "SELECT CASE WHEN A IS NULL THEN NULL ELSE CAST(A AS STRING) END FROM table1"
+    )
+    ctx = {"table1": pd.DataFrame({"A": type_to_string})}
+    if isinstance(type_to_string[0], bytes):
+        check_query(
+            query,
+            ctx,
+            spark_info,
+            expected_output=pd.DataFrame(
+                {"A": [a.hex() if not pd.isna(a) else None for a in type_to_string]}
+            ),
+            check_names=False,
+            check_dtype=False,
+            sort_output=False,
+        )
+    else:
+        check_query(
+            query,
+            ctx,
+            spark_info,
+            equivalent_spark_query=spark_query,
+            check_names=False,
+            check_dtype=False,
+        )
