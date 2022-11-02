@@ -4,12 +4,19 @@ at BodoSQL/bodosql/libs/merge_into.py
 """
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+import io
 import random
 
 import pytest
-from bodosql.libs.iceberg_merge_into import *  # noqa
-from bodosql.tests.named_params_common import *  # noqa
+from bodosql.libs.iceberg_merge_into import *
+from bodosql.tests.named_params_common import *
 
+from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
     check_func,
     gen_nonascii_list,
@@ -420,3 +427,39 @@ def test_do_delta_merge_disallow_multiple_delete():
         match="Error in MERGE INTO: Found multiple actions to apply to the same row in the target table",
     ):
         do_delta_merge_with_target(target_df, delta_df)
+
+
+def test_do_delta_merge_with_target_filter_pushdown_simple(
+    iceberg_database, iceberg_table_conn
+):
+    """
+    Tests that do_delta_merge_with_target doesn't 'use' target_df, for purposes of filter
+    pushdown.
+    #TODO: Add a more extensive E2E test consisting of actual BodoSQL IR once we have codegen working
+    """
+
+    table_name = "simple_numeric_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        orig_df, _, _ = pd.read_sql_table(
+            table_name, conn, db_schema, _bodo_merge_into=True
+        )
+        # Normally, this section would be a join on some secondary source table to
+        # produce a delta table
+        # For now, we're just deleting columns where B = 2 using do_delta_merge_with_target
+        filtered_orig_df = orig_df[orig_df.B == 2]
+        filtered_orig_df[ROW_ID_COL_NAME] = np.arange(len(filtered_orig_df))
+
+        delta_table = filtered_orig_df
+        delta_table[MERGE_ACTION_ENUM_COL_NAME] = 0
+        output_df = do_delta_merge_with_target(filtered_orig_df, delta_table)
+        return output_df
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        out = bodo.jit(impl)(table_name, conn, db_schema)
+    check_logger_msg(stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F']")
+    check_logger_msg(stream, "Filter pushdown successfully performed")

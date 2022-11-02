@@ -1620,6 +1620,7 @@ class DistributedAnalysis:
             # Output distribution if not replicated should always be 1D_VAR,
             # due to the possibility of deleting
             # varying numbers of rows on each rank at runtime
+
             self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             return
 
