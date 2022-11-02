@@ -868,7 +868,52 @@ class TypingTransforms:
                 # ignore code before the filtering node in the same basic block
                 if stmt is assign:
                     break
-                require(all(v.name not in df_names for v in stmt.list_vars()))
+
+                require(self._is_not_filter_df_use(df_names, stmt))
+
+    def _is_not_filter_df_use(self, df_names, stmt):
+        """Helper function for _check_non_filter_df_use, that checks a particular
+        statement doesn't use any of the dataframes in df_names, for purposes of
+        performing filter pushdown.
+
+        Args:
+            df_names (set(String)): Set of dataframes that can't be used
+            stmt (IR.Stmt): statement to check for usage
+
+        Returns:
+            True/False
+        """
+
+        """In BodoSQL, when doing a MERGE INTO operation with iceberg,
+        we generate code that looks something like:
+
+            dest_df = pd.read_sql(*args*, _bodo_with_orig_file_metadata=True)
+            _____
+            (Some code that does a bunch of joins with the dest_df,
+            and creates the delta table)
+            _____
+            writeback_df = do_delta_merge_with_target(dest_df, delta_df)
+
+        The issue is that, we don't want do_delta_merge_with_target to count
+        as a use of dest_df, since we want it to be fully filtered at the
+        input to do_delta_merge_with_target.
+
+        Since we don't use this function for any other purpose,
+        we can completely ignore the use of the dest_df in the function,
+        for determining what filters can be applied.
+        (no columns should be pruned, as we'll need to write back every column)"""
+        if isinstance(stmt, ir.Assign):
+            call_name = guard(find_callname, self.func_ir, stmt.value, self.typemap)
+            if call_name == (
+                "do_delta_merge_with_target",
+                "bodosql.libs.iceberg_merge_into",
+            ):
+                # Only need to check if the delta table is in df names.
+                # To be totally correct, we could check for uses of the delta table argument,
+                # but we don't need to since it will never be used after
+                # do_delta_merge_with_target
+                return True
+        return all(v.name not in df_names for v in stmt.list_vars())
 
     def _reorder_filter_nodes(
         self,
@@ -2262,7 +2307,7 @@ class TypingTransforms:
                 # handles lambda fns, and passed JIT functions
                 # put the setitem value is as the output of an apply on the current dataframe
 
-                # assign the apply functon to a variable
+                # assign the apply function to a variable
                 apply_fn_var = ir.Var(
                     assign.target.scope, mk_unique_var("df_apply_fn"), rhs.loc
                 )
