@@ -454,6 +454,16 @@ the kernel to apply the changes.
 
 ![Update-Hostfile](../platform2-gifs/update-hostfile.gif#center)
 
+### File Save Error
+
+![File-Save-Error](../platform2-screenshots/file_save_error.png#center)
+
+If you get a file save error with message `invalid response: 413`
+make sure your notebook (`.ipynb`) file is less than 16MB in size. Bodo Platform
+does not support notebook files larger than 16MB in size.
+To reduce file size don't print large sections of text and clear output
+cells by clicking `Edit` > `Clear All Outputs` in the notebook interface.
+
 For AWS troubleshooting, refer to this [guide](bodo_platform_aws.md).
 
 For Azure troubleshooting, refer to this [guide](bodo_platform_azure.md).
