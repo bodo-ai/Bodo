@@ -782,6 +782,247 @@ provides default behaviors for the HDFS client used by Bodo.
 Inconsistent configurations (e.g. `dfs.replication`) could potentially
 cause errors in Bodo programs.
 
+
+#### Setting up HDFS/ADLS Credentials
+***Setting up HDFS/ADLS Credentials***
+
+Hadoop Filesystem sources its credentials from the first available
+`core-site.xml` file on the `CLASSPATH`. When Hadoop is set up (including
+on Bodo Platform), this file is usually created at 
+`$HADOOP_HOME/etc/hadoop/core-site.xml` automatically.
+You can edit this file and set credentials appropriately.
+
+You can also write the core-site configuration to `bodo.HDFS_CORE_SITE_LOC`,
+which is a temporary file Bodo adds to the `CLASSPATH` when it is initialized:
+
+```py
+import bodo
+
+# Initialize the temporary directory where the core-site file
+# will be written
+bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+# Define the core-site for your regular ADLS/HDFS read/write
+# operations
+CORE_SITE_SPEC = """
+<configuration>
+...
+</configuration>
+"""
+
+# Write it to the temporary core-site file.
+# Do it on one rank on every node to avoid filesystem conflicts.
+if bodo.get_rank() in bodo.get_nodes_first_ranks():
+    with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+        f.write(CORE_SITE_SPEC)
+
+
+@bodo.jit
+def etl_job():
+    df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+    # ..
+    # .. Some ETL Processing
+    # ..
+    df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+    return
+
+
+etl_job()
+```
+
+
+There are several authorization methods for reading from or writing to ADLS Storage Containers, all of which
+require slightly different core-site configurations. Here are some examples:
+
+- Using an ADLS Access Key
+
+    ```py
+    import bodo
+    import pandas as pd
+
+    # Initialize the temporary directory where the core-site file
+    # will be written
+    bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+
+    # Define the core-site for your regular ADLS/HDFS read/write
+    # operations
+    CORE_SITE_SPEC = """<configuration>
+    <property>
+        <name>fs.abfs.impl</name>
+        <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
+    </property>
+    <property>
+        <name>fs.azure.account.auth.type.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+        <value>SharedKey</value>
+    </property>
+    <property>
+        <name>fs.azure.account.key.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+        <value>{ADLS_SECRET}</value>
+        <description> The ADLS storage account access key itself.</description>
+    </property>
+    </configuration>
+    """
+
+    # Write it to the temporary core-site file.
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+            f.write(CORE_SITE_SPEC)
+
+    # Run your ETL job
+    @bodo.jit
+    def etl_job():
+        df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+        # ..
+        # .. Some ETL Processing
+        # ..
+        df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+        return
+
+
+    etl_job()
+    ```
+
+    
+
+- Using a SAS Token
+
+    To use SAS Tokens, you need to install the `bodo-azurefs-sas-token-provider`
+    package (it can be installed using 
+    `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
+    This is already installed on the Bodo Platform.
+    Then in your program, do the following:
+
+    ```py
+    import bodo
+    # Importing this module adds the required JARs to the CLASSPATH
+    import bodo_azurefs_sas_token_provider
+    import pandas as pd
+    import os
+
+    # Initialize the temporary directory where the core-site file
+    # will be written
+    bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+
+    # Define the core-site for your regular ADLS/HDFS read/write
+    # operations
+    CORE_SITE_SPEC = """<configuration>
+        <property>
+            <name>fs.azure.account.auth.type.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+            <value>SAS</value>
+        </property>
+        <property>
+            <name>fs.azure.sas.token.provider.type.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+            <value>org.bodo.azurefs.sas.BodoSASTokenProvider</value>
+        </property>
+        <property>
+            <name>fs.abfs.impl</name>
+            <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
+        </property>
+    </configuration>
+    """
+
+    # Write it to the temporary core-site file.
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+            f.write(CORE_SITE_SPEC)
+    
+    # Load the SAS token here.
+    SAS_TOKEN = "..."
+
+    # Write SAS Token to a file.
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(os.path.join(bodo.HDFS_CORE_SITE_LOC_DIR.name, "sas_token.txt"), 'w') as f:
+            f.write(SAS_TOKEN)
+
+    # Run your ETL job
+    @bodo.jit
+    def etl_job():
+        df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+        # ..
+        # .. Some ETL Processing
+        # ..
+        df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+        return
+
+
+    etl_job()
+    ```
+
+
+#### Interleaving HDFS/ADLS I/O with Snowflake Write {#interleave-adls-snowflake-write}
+***Interleaving HDFS/ADLS I/O with Snowflake Write***
+
+For writing to an Azure based Snowflake account using the direct upload strategy
+(see [Snowflake Write](#snowflake-write)), Bodo writes the required core-site
+configuration to `bodo.HDFS_CORE_SITE_LOC` automatically. In cases where Snowflake
+write (to an Azure based Snowflake account) needs to be
+done in the same process as a regular HDFS/ADLS read/write operation,
+users need to write credentials for the regular HDFS/ADLS read/write operations
+to the same core-site location (`bodo.HDFS_CORE_SITE_LOC`)
+due to limitations of Arrow and HDFS.
+Bodo will modify the file (temporarily) during the Snowflake write operation(s)
+and then restore the original configuration for the regular HDFS/ADLS
+read/write operations.
+
+Here is an example of how to do so:
+
+```py
+import bodo
+import pandas as pd
+
+# Initialize the temporary directory where the core-site file
+# will be written
+bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+
+# Define the core-site for your regular ADLS/HDFS read/write
+# operations
+CORE_SITE_SPEC = """<configuration>
+...
+</configuration>
+"""
+
+# Write it to the temporary core-site file
+# Do it on one rank on every node to avoid filesystem conflicts.
+if bodo.get_rank() in bodo.get_nodes_first_ranks():
+    with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+        f.write(CORE_SITE_SPEC)
+
+
+# Write the SAS token if required.
+# import bodo_azurefs_sas_token_provider
+# SAS_TOKEN = "..."
+# if bodo.get_rank() in bodo.get_nodes_first_ranks():
+#     with open(os.path.join(bodo.HDFS_CORE_SITE_LOC_DIR.name, "sas_token.txt"), 'w') as f:
+#         f.write(SAS_TOKEN)
+
+
+@bodo.jit
+def etl_job():
+    df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+    # ..
+    # .. Some ETL Processing
+    # ..
+    # Here Bodo will replace the core-site configuration to enable Snowflake write
+    df.to_sql("new_table", "snowflake://user:password@url/{db_name}/schema?warehouse=warehouse_name&role=role_name")
+    # Once done, Bodo will restore the contents of the original file so that your
+    # ADLS operations happen as expected.
+    # ..
+    # .. Some more ETL Processing
+    # ..
+    df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+    return
+
+
+etl_job()
+```
+
+
 Databases {#db}
 ---------
 
@@ -972,7 +1213,8 @@ Direct Upload (preferred) or Put Upload.
         can be installed using 
         `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
         Bodo will fall back to the Put Upload strategy if both these
-        conditions are not met. 
+        conditions are not met. Also see
+        [Interleaving HDFS/ADLS I/O with Snowflake Write](#interleave-adls-snowflake-write).
     
         Note that this is only applicable to
         on-prem use cases since all of this is pre-configured on
