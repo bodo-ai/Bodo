@@ -278,10 +278,10 @@ public class Utils {
             "Internal Error: Calcite Plan Produced an Unsupported TIME Type");
       case VARCHAR:
       case CHAR:
-        if (outputScalar) {
-          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_str";
-        } else if (outputArrayType) {
+        if (outputArrayType) {
           return "bodo.string_array_type";
+        } else if (outputCast) {
+          return "bodo.libs.bodosql_array_kernels.cast_char";
         } else {
           dtype = "str";
         }

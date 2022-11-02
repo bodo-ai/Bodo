@@ -13,8 +13,11 @@ import pyarrow as pa
 from numba.core import types
 
 import bodo
+from bodo.hiframes.datetime_timedelta_ext import PDTimeDeltaType
 from bodo.hiframes.pd_series_ext import (
     is_datetime_date_series_typ,
+    is_timedelta64_series_typ,
+    pd_timedelta_type,
     pd_timestamp_type,
 )
 from bodo.utils.typing import (
@@ -638,6 +641,26 @@ def is_valid_datetime_or_date_arg(arg):
             is_datetime_date_series_typ(arg)
             or isinstance(arg, bodo.DatetimeArrayType)
             or arg.dtype == bodo.datetime64ns
+        )
+    )
+
+
+def is_valid_timedelta_arg(arg):
+    """
+    Args:
+        arg (dtype): the dtype of the argument being checked
+    returns: False if the argument is not timedelta data
+
+    Note: In BodoSQL, scalar timedelta types are both timedelta64ns,
+    and the columnar timedelta types are both .
+    """
+
+    return arg == pd_timedelta_type or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and (
+            is_timedelta64_series_typ(arg)
+            or isinstance(arg, PDTimeDeltaType)
+            or arg.dtype == bodo.timedelta64ns
         )
     )
 

@@ -22,12 +22,16 @@ public class CastCodeGen {
       codeBuilder.append(cast).append("(").append(arg).append(")");
     } else {
       // TODO: replace Series.astype/dt with array operation
-      codeBuilder
-          .append("pd.Series(")
-          .append(arg)
-          .append(").astype(")
-          .append(dtype)
-          .append(", _bodo_nan_to_str=False)");
+      if (typeName == SqlTypeName.CHAR || typeName == SqlTypeName.VARCHAR) {
+        codeBuilder.append("pd.Series(").append(cast).append("(").append(arg).append("))");
+      } else {
+        codeBuilder
+            .append("pd.Series(")
+            .append(arg)
+            .append(").astype(")
+            .append(dtype)
+            .append(", _bodo_nan_to_str=False)");
+      }
     }
     // Date needs special handling to truncate timestamp. We always round down.
     // TODO: Remove once we support Date type natively
