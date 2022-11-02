@@ -63,6 +63,10 @@ def cast_boolean(arr):
     return
 
 
+def cast_char(arr):
+    return
+
+
 # casting functions to be overloaded
 # each tuple is (fn to overload, util to overload, name of fn)
 cast_funcs_utils_names = (
@@ -73,6 +77,7 @@ cast_funcs_utils_names = (
     (cast_int16, cast_int16_util, "int16"),
     (cast_int8, cast_int8_util, "int8"),
     (cast_boolean, None, "boolean"),
+    (cast_char, None, "char"),
 )
 
 # mapping from function name to equivalent numpy function
@@ -106,6 +111,8 @@ def create_cast_func_overload(func_name):
         func_text = "def impl(arr):\n"
         if func_name == "boolean":
             func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_boolean_util(arr, numba.literally(True))\n"
+        elif func_name == "char":
+            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_char_util(arr)\n"
         else:
             func_text += (
                 f"  return bodo.libs.bodosql_array_kernels.cast_{func_name}_util(arr)"
@@ -192,7 +199,7 @@ def create_cast_util_overload(func_name):
 def _install_cast_func_overloads(funcs_utils_names):
     for func, util, name in funcs_utils_names:
         overload(func)(create_cast_func_overload(name))
-        if name != "boolean":
+        if name not in ("boolean", "char"):
             overload(util)(create_cast_util_overload(name))
 
 

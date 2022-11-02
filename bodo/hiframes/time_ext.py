@@ -82,6 +82,9 @@ class Time:
             f"precision={self.precision})"
         )
 
+    def __str__(self):
+        return f"{self.hour}:{self.minute}:{self.second}.{self.microsecond}{self.nanosecond}"
+
     def __eq__(self, other):
         if not isinstance(other, Time):  # pragma: no cover
             return False
