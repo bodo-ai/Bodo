@@ -118,6 +118,9 @@ class BodoTypeInference(PartialTypeInference):
         # flag for when another transformation pass is needed (to avoid break before
         # next transform)
         needs_transform = False
+        # Flag to indicate if some optimizations should be rerun once dead code
+        # elimination has completed for possible further optimization.
+        rerun_after_dce = True
         while True:
             try:
                 # set global partial typing flag, see comment above
@@ -152,6 +155,7 @@ class BodoTypeInference(PartialTypeInference):
             ran_transform = True
             prev_needs_transform = needs_transform
             changed, needs_transform = typing_transforms_pass.run()
+            rerun_after_dce = typing_transforms_pass.rerun_after_dce
             # transform pass has failed if transform was needed but IR is not changed.
             # This avoids infinite loop, see [BE-140]
             if prev_needs_transform and needs_transform and not changed:
@@ -164,7 +168,12 @@ class BodoTypeInference(PartialTypeInference):
         # make sure transformation has run at least once to handle cases that may not
         # throw typing errors like "df.B = v". See test_set_column_setattr
         rerun_typing = False
-        if not ran_transform:
+        # Was there a change after the typing step.
+        changed_after_typing = False
+        # Track if we may need an extra transform to produce
+        # an error message.
+        skipped_transform_in_typing = not ran_transform
+        while rerun_after_dce or not ran_transform:
             typing_transforms_pass = TypingTransforms(
                 state.func_ir,
                 state.typingctx,
@@ -177,26 +186,31 @@ class BodoTypeInference(PartialTypeInference):
                 False,
                 ran_transform,
             )
-            changed, needs_transform = typing_transforms_pass.run()
-            # some cases need a second transform pass to raise the proper error
-            # see test_df_rename::impl4
-            if needs_transform:
-                typing_transforms_pass = TypingTransforms(
-                    state.func_ir,
-                    state.typingctx,
-                    state.targetctx,
-                    state.typemap,
-                    state.calltypes,
-                    state.args,
-                    state.locals,
-                    state.flags,
-                    False,
-                    True,
-                )
-                changed, needs_transform = typing_transforms_pass.run()
+            ran_transform = True
+            local_changed, needs_transform = typing_transforms_pass.run()
+            changed_after_typing = changed_after_typing or local_changed
+            rerun_after_dce = typing_transforms_pass.rerun_after_dce
+        # some cases need a second transform pass to raise the proper error
+        # see test_df_rename::impl4
+        if skipped_transform_in_typing and needs_transform:
+            typing_transforms_pass = TypingTransforms(
+                state.func_ir,
+                state.typingctx,
+                state.targetctx,
+                state.typemap,
+                state.calltypes,
+                state.args,
+                state.locals,
+                state.flags,
+                False,
+                True,
+            )
+            local_changed, needs_transform = typing_transforms_pass.run()
+            changed_after_typing = changed_after_typing or local_changed
+        if skipped_transform_in_typing or changed_after_typing:
             # need to rerun type inference if the IR changed
             # see test_set_column_setattr
-            rerun_typing = changed or needs_transform
+            rerun_typing = changed_after_typing or needs_transform
 
         dprint_func_ir(state.func_ir, "after typing pass")
         self._check_for_errors(state, curr_typing_pass_required or rerun_typing)
@@ -307,7 +321,7 @@ class TypingTransforms:
         # currently use to keep lhs of Arg nodes intact
         self.replace_var_dict = {}
         # labels of rhs of assignments to enable finding nodes that create
-        # dataframes such as Arg(df_type), pd.DataFrame(), df[['A','B']]...
+        # DataFrames such as Arg(df_type), pd.DataFrame(), df[['A','B']]...
         # the use is conservative and doesn't assume complete info
         self.rhs_labels = {}
         # Loc object of current location being translated
@@ -328,6 +342,9 @@ class TypingTransforms:
         self.changed = False
         # whether another transformation pass is needed (see _run_setattr)
         self.needs_transform = False
+        # Flag indicating if we should try rerunning typing pass again after running DCE
+        # to enable further optimizations
+        self.rerun_after_dce = False
 
     def run(self):
         # XXX: the block structure shouldn't change in this pass since labels
@@ -345,7 +362,7 @@ class TypingTransforms:
                 out_nodes = [inst]
                 self.curr_loc = inst.loc
 
-                # handle potential dataframe set column here
+                # handle potential DataFrame set column here
                 # df['col'] = arr
                 if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
                     out_nodes = self._run_setitem(inst, label)
@@ -765,7 +782,6 @@ class TypingTransforms:
 
         Throws GuardException if not possible.
         """
-
         # avoid empty dataframe
         require(len(value_def.args) > 0)
         data_def = get_definition(func_ir, value_def.args[0])
@@ -844,6 +860,7 @@ class TypingTransforms:
         if not keep_filter:
             # remove filtering code since not necessary anymore
             assign.value = assign.value.value
+            self.rerun_after_dce = True
 
         # Mark the IR as changed
         self.changed = True
