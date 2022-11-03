@@ -637,10 +637,7 @@ setup(
     package_data={
         "bodo.tests": [
             "caching_tests/*",
-            "data/*",
-            "data/*/*",
-            "data/*/*/*",
-            "data/*/*/*/*",
+            "data/**",
             "bodosql_array_kernel_tests/*",
         ],
         # on Windows and MacOS we copy libssl and libcrypto DLLs to
