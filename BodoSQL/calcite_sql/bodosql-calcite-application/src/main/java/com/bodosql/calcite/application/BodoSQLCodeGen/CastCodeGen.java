@@ -22,7 +22,10 @@ public class CastCodeGen {
       codeBuilder.append(cast).append("(").append(arg).append(")");
     } else {
       // TODO: replace Series.astype/dt with array operation
-      if (typeName == SqlTypeName.CHAR || typeName == SqlTypeName.VARCHAR) {
+      if (typeName == SqlTypeName.CHAR
+          || typeName == SqlTypeName.VARCHAR
+          || typeName == SqlTypeName.TIMESTAMP
+          || typeName == SqlTypeName.DATE) {
         codeBuilder.append("pd.Series(").append(cast).append("(").append(arg).append("))");
       } else {
         codeBuilder
@@ -33,16 +36,6 @@ public class CastCodeGen {
             .append(", _bodo_nan_to_str=False)");
       }
     }
-    // Date needs special handling to truncate timestamp. We always round down.
-    // TODO: Remove once we support Date type natively
-    if (typeName == SqlTypeName.DATE) {
-      if (outputScalar) {
-        codeBuilder.append(".floor(freq=\"D\")");
-      } else {
-        codeBuilder.append(".dt.floor(freq=\"D\")");
-      }
-    }
-    // make the output array as expected elsewhere
     if (!outputScalar) {
       codeBuilder.append(".values");
     }

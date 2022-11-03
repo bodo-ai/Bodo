@@ -260,14 +260,19 @@ public class Utils {
         }
         break;
       case DATE:
-      case TIMESTAMP:
-        if (outputScalar) {
-          // pd.to_datetime(None) returns None in standard python, but not in Bodo
-          // This should likely be in the engine itself, to match pandas behavior
-          // BE-2882
-          dtype = "pd.to_datetime";
-        } else if (outputArrayType) {
+        if (outputArrayType) {
           return "bodo.datetime64ns[::1]";
+        } else if (outputCast || outputScalar) {
+          return "bodo.libs.bodosql_array_kernels.cast_date";
+        } else {
+          dtype = "np.dtype(\"datetime64[ns]\")";
+        }
+        break;
+      case TIMESTAMP:
+        if (outputArrayType) {
+          return "bodo.datetime64ns[::1]";
+        } else if (outputCast || outputScalar) {
+          return "bodo.libs.bodosql_array_kernels.cast_timestamp";
         } else {
           dtype = "np.dtype(\"datetime64[ns]\")";
         }
@@ -314,6 +319,8 @@ public class Utils {
           dtype = "pd.to_timedelta";
         } else if (outputArrayType) {
           return "bodo.timedelta64ns[::1]";
+        } else if (outputCast) {
+          return "bodo.libs.bodosql_array_kernels.cast_interval";
         } else {
           dtype = "np.dtype(\"timedelta64[ns]\")";
         }

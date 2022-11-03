@@ -59,11 +59,27 @@ def cast_int8_util(arr):  # pragma: no cover
     return
 
 
-def cast_boolean(arr):
+def cast_boolean(arr):  # pragma: no cover
     return
 
 
-def cast_char(arr):
+def cast_char(arr):  # pragma: no cover
+    return
+
+
+def cast_date(arr):  # pragma: no cover
+    return arr
+
+
+def cast_timestamp(arr):  # pragma: no cover
+    return
+
+
+def cast_interval(arr):  # pragma: no cover
+    return
+
+
+def cast_interval_util(arr):  # pragma: no cover
     return
 
 
@@ -78,6 +94,9 @@ cast_funcs_utils_names = (
     (cast_int8, cast_int8_util, "int8"),
     (cast_boolean, None, "boolean"),
     (cast_char, None, "char"),
+    (cast_date, None, "date"),
+    (cast_timestamp, None, "timestamp"),
+    (cast_interval, cast_interval, "interval"),
 )
 
 # mapping from function name to equivalent numpy function
@@ -88,6 +107,7 @@ fname_to_equiv = {
     "int32": "np.int32",
     "int16": "np.int16",
     "int8": "np.int8",
+    "interval": "pd.to_timedelta",
 }
 
 # mapping from function name to desired out_dtype
@@ -98,6 +118,7 @@ fname_to_dtype = {
     "int32": bodo.libs.int_arr_ext.IntegerArrayType(types.int32),
     "int16": bodo.libs.int_arr_ext.IntegerArrayType(types.int16),
     "int8": bodo.libs.int_arr_ext.IntegerArrayType(types.int8),
+    "interval": np.dtype("timedelta64[ns]"),
 }
 
 
@@ -113,6 +134,10 @@ def create_cast_func_overload(func_name):
             func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_boolean_util(arr, numba.literally(True))\n"
         elif func_name == "char":
             func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_char_util(arr)\n"
+        elif func_name == "date":
+            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None, numba.literally(True), numba.literally(False))\n"
+        elif func_name == "timestamp":
+            func_text += f"  return bodo.libs.bodosql_snowflake_conversion_array_kernels.to_date_util(arr, None, numba.literally(False), numba.literally(True))\n"
         else:
             func_text += (
                 f"  return bodo.libs.bodosql_array_kernels.cast_{func_name}_util(arr)"
@@ -132,7 +157,11 @@ def create_cast_util_overload(func_name):
         arg_types = [arr]
         propagate_null = [True]
         scalar_text = ""
-        if func_name[:3] == "int" and not is_valid_boolean_arg(arr):
+        if (
+            func_name[:3] == "int"
+            and func_name != "interval"
+            and not is_valid_boolean_arg(arr)
+        ):
             if is_valid_int_arg(arr):
                 scalar_text += "if arg0 < np.iinfo(np.int64).min or arg0 > np.iinfo(np.int64).max:\n"
                 scalar_text += "  bodo.libs.array_kernels.setna(res, i)\n"
@@ -180,6 +209,13 @@ def create_cast_util_overload(func_name):
                     scalar_text += f"  res[i] = ans\n"
                 else:
                     scalar_text += f"  res[i] = {fname_to_equiv[func_name]}(ans)"
+        elif func_name == "interval":
+            unbox_str = (
+                "bodo.utils.conversion.unbox_if_timestamp"
+                if bodo.utils.utils.is_array_typ(arr, True)
+                else ""
+            )
+            scalar_text += f"res[i] = {unbox_str}(pd.to_timedelta(arg0))"
         else:
             scalar_text += f"res[i] = {fname_to_equiv[func_name]}(arg0)"
 
@@ -199,7 +235,7 @@ def create_cast_util_overload(func_name):
 def _install_cast_func_overloads(funcs_utils_names):
     for func, util, name in funcs_utils_names:
         overload(func)(create_cast_func_overload(name))
-        if name not in ("boolean", "char"):
+        if name not in ("boolean", "char", "date", "timestamp"):
             overload(util)(create_cast_util_overload(name))
 
 
