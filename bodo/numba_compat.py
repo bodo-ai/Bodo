@@ -470,6 +470,21 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
                         # build_tuple doesn't have any side effects
                         if isinstance(rhs, ir.Expr) and rhs.op == "build_tuple":
                             continue
+                        # Binary operators are safe to remove because they don't have any
+                        # side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op == "binop":
+                            continue
+                        # Unary operators are safe to remove because they don't have any
+                        # side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op == "unary":
+                            continue
+                        # Getitem operations are safe to remove because they don't have any
+                        # side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op in (
+                            "static_getitem",
+                            "getitem",
+                        ):
+                            continue
                     if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
                         continue
 
@@ -486,7 +501,14 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
                 else:
                     lives |= {v.name for v in stmt.list_vars()}
                     if isinstance(stmt, ir.Assign):
-                        lives.remove(lhs.name)
+                        # bodo change:
+                        # target variable of assignment is not live anymore only if it is not
+                        # used in right hand side. e.g. A = -A
+                        rhs_vars = set()
+                        if isinstance(rhs, ir.Expr):
+                            rhs_vars = {v.name for v in rhs.list_vars()}
+                        if lhs.name not in rhs_vars:
+                            lives.remove(lhs.name)
 
                 new_body.append(stmt)
             new_body.reverse()
