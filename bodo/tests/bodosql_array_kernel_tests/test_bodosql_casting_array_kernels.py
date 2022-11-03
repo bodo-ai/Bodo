@@ -149,6 +149,44 @@ def time_arrays(request):
     return request.param
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        "2020-01-01",
+                        None,
+                        "02-05-1980 12:20:20",
+                        "08-20-1985",
+                        "08-20-1985 02:02:02.0202",
+                        "20-08-1985",
+                    ]
+                ),
+            ),
+            id="str_date_array",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        7223372036854.775,
+                        722337203.6854775,
+                        922337203654775,
+                        0,
+                        -231902383.23,
+                        None,
+                    ]
+                ),
+            ),
+            id="num_date_array",
+        ),
+    ]
+)
+def dt_arrays(request):
+    return request.param
+
+
 def test_cast_float64(numeric_arrays):
     args = numeric_arrays
 
@@ -513,6 +551,77 @@ def test_cast_char_times(time_arrays):
     )
 
 
+def test_cast_dt64(dt_arrays):
+    args = dt_arrays
+
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.cast_timestamp(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(args[0], (int, float, str)):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.cast_timestamp(arr)
+
+    # Simulates casting to float64 on a single row
+    def to_dt64_scalar_fn(x):
+        if pd.isna(x):
+            return None
+        if isinstance(x, (int, float)):
+            # Snowflake uses the number of milliseconds in a year (31536000000) as the base value
+            # assume whether the input is intended to be seconds, milliseconds, etc.
+            if x < 31536000000:
+                return pd.Timestamp(x, unit="s")
+            elif x < 31536000000000:
+                return pd.Timestamp(x, unit="ms")
+            elif x < 31536000000000000:
+                return pd.Timestamp(x, unit="us")
+            else:
+                return pd.Timestamp(x)
+        else:
+            return pd.Timestamp(x)
+
+    answer = vectorized_sol(args, to_dt64_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(
+            (pd.Series(["1 d", "2 m", "4 ns", "-1 h", None, "0"]),),
+            id="string",
+        ),
+        pytest.param(
+            (pd.Series([1, 102039209310213, 0, -21231123, None]),),
+            id="int",
+        ),
+    ],
+)
+def test_cast_interval(args):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.cast_interval(arr))
+
+    def to_interval_scalar_fn(x):
+        if pd.isna(x):
+            return None
+        else:
+            return pd.Timedelta(x)
+
+    answer = vectorized_sol(args, to_interval_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.slow
 def test_cast_float_opt():
     def impl(a, b, flag0, flag1):
@@ -626,3 +735,47 @@ def test_cast_char_opt():
                         ),
                         py_output=answer,
                     )
+
+
+def test_cast_timestamp_opt():
+    def impl(a, b, flag0, flag1):
+        arg0 = a if flag0 else None
+        arg1 = b if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.cast_timestamp(arg0),
+            bodo.libs.bodosql_array_kernels.cast_timestamp(arg1),
+        )
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (
+                pd.Timestamp("2020-01-01") if flag0 else None,
+                pd.Timestamp(1231231231, unit="s") if flag1 else None,
+            )
+            check_func(
+                impl,
+                ("2020-01-01", 1231231231, flag0, flag1),
+                py_output=answer,
+            )
+
+
+def test_cast_date_opt():
+    def impl(a, b, flag0, flag1):
+        arg0 = a if flag0 else None
+        arg1 = b if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.cast_date(arg0),
+            bodo.libs.bodosql_array_kernels.cast_date(arg1),
+        )
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (
+                pd.Timestamp("2020-01-01").normalize() if flag0 else None,
+                pd.Timestamp(1231231231, unit="s").normalize() if flag1 else None,
+            )
+            check_func(
+                impl,
+                ("2020-01-01", 1231231231, flag0, flag1),
+                py_output=answer,
+            )

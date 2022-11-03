@@ -1940,6 +1940,25 @@ def overload_to_datetime(
 
         return impl_np_datetime
 
+    if is_overload_none(arg_a):  # pragma: no cover
+
+        def impl_np_datetime(
+            arg_a,
+            errors="raise",
+            dayfirst=False,
+            yearfirst=False,
+            utc=None,
+            format=None,
+            exact=True,
+            unit=None,
+            infer_datetime_format=False,
+            origin="unix",
+            cache=True,
+        ):  # pragma: no cover
+            return None
+
+        return impl_np_datetime
+
     # TODO: input Type of a dataframe
     raise_bodo_error(f"pd.to_datetime(): cannot convert date type {arg_a}")
 
@@ -2079,6 +2098,10 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
                 return bodo.hiframes.pd_index_ext.init_timedelta_index(B, None)
 
             return impl_datetime_timedelta
+
+    if is_overload_none(arg_a):  # pragma: no cover
+        # None input
+        return lambda arg_a, unit="ns", errors="raise": None
 
     raise_bodo_error(f"pd.to_timedelta(): cannot convert date type {arg_a.dtype}")
 
