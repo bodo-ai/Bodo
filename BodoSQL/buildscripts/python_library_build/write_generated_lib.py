@@ -185,7 +185,6 @@ def generate_and_write_library():
                 1,
             ),
             # Scalar Conversion functions
-            ("scalar_conv_bool", generate_standard_python_fn_call("np.bool_"), 1),
             ("scalar_conv_str", generate_standard_python_fn_call("str"), 1),
             (
                 "scalar_conv_binary",
@@ -194,7 +193,6 @@ def generate_and_write_library():
                 ),
                 1,
             ),
-            ("scalar_conv_str", generate_standard_python_fn_call("str"), 1),
         ]
     )
 

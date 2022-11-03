@@ -526,3 +526,102 @@ def test_casting_to_string_scalar(type_to_string, spark_info):
             check_names=False,
             check_dtype=False,
         )
+
+
+# Using a fixture with hardcoded answers to prevent Gregorian / Julian error.
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                pd.Series(
+                    [12312435, 0, -2390482093, None, 31537000000000],
+                    dtype=pd.Int64Dtype(),
+                ),
+                pd.Series(
+                    [
+                        12312435000000000,
+                        0,
+                        -2390482093000000000,
+                        -9223372036854775808,
+                        31537000000000000,
+                    ]
+                ).astype(np.dtype("datetime64[ns]")),
+            ),
+            id="int64",
+        ),
+        pytest.param(
+            (
+                pd.Series([-123234234.234, 0.0, 31537000000000.20, None, np.nan]),
+                pd.Series(
+                    [
+                        -123234234233999997,
+                        0,
+                        31537000000000199,
+                        -9223372036854775808,
+                        -9223372036854775808,
+                    ]
+                ).astype(np.dtype("datetime64[ns]")),
+            ),
+            id="float64",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        "2020-01-01",
+                        None,
+                        "02-05-1980 12:20:20",
+                        "08-20-1985",
+                        "08-20-1985 02:02:02.0202",
+                        "20-08-1985",
+                    ]
+                ),
+                pd.Series(
+                    [
+                        1577836800000000000,
+                        -9223372036854775808,
+                        318601220000000000,
+                        493344000000000000,
+                        493351322020200000,
+                        493344000000000000,
+                    ]
+                ).astype(np.dtype("datetime64[ns]")),
+            ),
+            id="strings",
+        ),
+    ],
+)
+def type_to_date_args(request):
+    return request.param
+
+
+def test_casting_to_timestamp_cols(type_to_date_args, spark_info):
+    type_to_date, answer = type_to_date_args
+    """Tests multiple vector type cases for casting to a timestamp"""
+    query = "SELECT CAST(A AS TIMESTAMP) FROM table1"
+    ctx = {"table1": pd.DataFrame({"A": type_to_date})}
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        expected_output=pd.DataFrame({"A": answer}),
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+def test_casting_to_timestamp_scalar(type_to_date_args, spark_info):
+    type_to_date, answer = type_to_date_args
+    """Tests multiple scalar (non literal) type cases for casting to a timestamp"""
+    query = (
+        "SELECT CASE WHEN B = 0 THEN NULL ELSE CAST(A AS TIMESTAMP) END  FROM table1"
+    )
+    ctx = {"table1": pd.DataFrame({"A": type_to_date, "B": [1] * len(type_to_date)})}
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        expected_output=pd.DataFrame({"A": answer}),
+        check_names=False,
+        check_dtype=False,
+    )

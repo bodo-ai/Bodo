@@ -316,6 +316,22 @@ def test_timestamp_to_date(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_to_datetime_none(memory_leak_check):
+    def test_impl(ts_val):
+        return pd.to_datetime(ts_val)
+
+    check_func(test_impl, (None,))
+
+
+@pytest.mark.slow
+def test_to_timedelta_none(memory_leak_check):
+    def test_impl(ts_val):
+        return pd.to_timedelta(ts_val)
+
+    check_func(test_impl, (None,))
+
+
+@pytest.mark.slow
 def test_datetime_date_hash(memory_leak_check):
     date1 = datetime.date(2004, 1, 1)
     date2 = datetime.date(2004, 1, 2)
