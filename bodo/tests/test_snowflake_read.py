@@ -37,6 +37,48 @@ def test_sql_snowflake(memory_leak_check):
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_sql_snowflake_performance_warning(memory_leak_check):
+    """
+    Test that we raise a warning if we detect that the platform is in a different
+    region than the snowflake account.
+    """
+
+    @bodo.jit
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    import os
+
+    old_region_info = os.environ.get("BODO_PLATFORM_WORKSPACE_REGION", None)
+    try:
+        # The snowflake account is in us-east-1. However we use canada
+        # to avoid a potential change breaking tests.
+        os.environ["BODO_PLATFORM_WORKSPACE_REGION"] = "ca-central-1"
+
+        db = "SNOWFLAKE_SAMPLE_DATA"
+        schema = "TPCH_SF1"
+        conn = get_snowflake_connection_string(db, schema)
+        # need to sort the output to make sure pandas and Bodo get the same rows
+        query = "SELECT * FROM LINEITEM LIMIT 10"
+        # We only throw the warning on rank0
+        if bodo.get_rank() == 0:
+            with pytest.warns(
+                BodoWarning,
+                match="The Snowflake warehouse and Bodo platform are in different cloud regions",
+            ):
+                impl(query, conn)
+        else:
+            impl(query, conn)
+    finally:
+        # Restore the region info.
+        if old_region_info is None:
+            del os.environ["BODO_PLATFORM_WORKSPACE_REGION"]
+        else:
+            os.environ["BODO_PLATFORM_WORKSPACE_REGION"] = old_region_info
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
     """
     Test reading string columns as dictionary-encoded from Snowflake
