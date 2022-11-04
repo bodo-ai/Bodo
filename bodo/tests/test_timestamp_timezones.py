@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+import datetime
 import re
 
 import numpy as np
@@ -8,7 +9,8 @@ import pytest
 import pytz
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.timezone_common import sample_tz  # noqa
+from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
 
 
@@ -207,3 +209,96 @@ def test_tz_dataframe_unsupported(memory_leak_check):
         match=".*Timezone-aware columns not yet supported.*",
     ):
         bodo.jit(impl)(tz_df)
+
+
+def test_tz_date_scalar_cmp(sample_tz, cmp_op, memory_leak_check):
+    """Check that scalar comparison operators work between dates and
+    Timestamps
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    d = datetime.date(2022, 4, 4)
+    ts = pd.Timestamp("4/4/2022", tz=sample_tz)
+    # date + Timestamp comparison is deprecated. The current library truncates to date,
+    # but to match SQL expectations we cast the date to the timestamp instead.
+    d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
+    check_func(func, (d, ts), py_output=cmp_op(d_ts, ts))
+    check_func(func, (ts, d), py_output=cmp_op(ts, d_ts))
+    # Check where they aren't equal
+    d = datetime.date(2022, 4, 3)
+    d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
+    check_func(func, (d, ts), py_output=cmp_op(d_ts, ts))
+    check_func(func, (ts, d), py_output=cmp_op(ts, d_ts))
+
+
+def test_date_array_tz_scalar(sample_tz, cmp_op, memory_leak_check):
+    """Check that comparison operators work between an array
+    of dates and a Timestamp
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    arr = (
+        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz=sample_tz)
+        .to_series()
+        .dt.date.values
+    )
+    ts = pd.Timestamp("4/4/2022", tz=sample_tz)
+    check_func(func, (arr, ts))
+    check_func(func, (ts, arr))
+
+
+def test_date_series_tz_scalar(sample_tz, cmp_op, memory_leak_check):
+    """Check that comparison operators work between an Series
+    of dates and a Timestamp
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    S = (
+        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz=sample_tz)
+        .to_series()
+        .dt.date
+    )
+    ts = pd.Timestamp("4/4/2022", tz=sample_tz)
+    check_func(func, (S, ts))
+    check_func(func, (ts, S))
+
+
+def test_tz_tz_scalar_cmp(cmp_op, memory_leak_check):
+    """Check that scalar comparison operators work between
+    Timestamps with the same timezone.
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    timezone = "Poland"
+    ts = pd.Timestamp("4/4/2022", tz=timezone)
+    check_func(func, (ts, ts))
+    check_func(func, (ts, ts))
+    ts2 = pd.Timestamp("1/4/2022", tz=timezone)
+    # Check where they aren't equal
+    d = datetime.date(2022, 4, 3)
+    check_func(func, (ts2, ts))
+    check_func(func, (ts, ts2))
+
+
+def test_different_tz_unsupported(cmp_op):
+    """Check that scalar comparison operators work between
+    Timestamps with different timezone.
+    """
+    func = bodo.jit(generate_comparison_ops_func(cmp_op))
+    ts1 = pd.Timestamp("4/4/2022")
+    ts2 = pd.Timestamp("4/4/2022", tz="Poland")
+    # Check that comparison is not support between tz-aware and naive
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(ts1, ts2)
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(ts2, ts1)
+    # Check different timezones aren't supported
+    ts3 = pd.Timestamp("4/4/2022", tz="US/Pacific")
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(ts3, ts2)
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(ts2, ts3)

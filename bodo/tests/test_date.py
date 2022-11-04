@@ -2,16 +2,14 @@
 
 import calendar
 import datetime
-import operator
 import random
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
 
 
@@ -1806,46 +1804,28 @@ def test_timestamp_unit_constructor_error(memory_leak_check):
         bodo.jit(test_impl)(10210420, unit)
 
 
-@pytest.mark.parametrize(
-    "op",
-    [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le],
-)
-def test_timestamp_dt64_ops(op, memory_leak_check):
+def test_timestamp_dt64_ops(cmp_op, memory_leak_check):
     """
     Tests timestamp equality operators compared to dt64.
     """
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def impl(val1, val2):\n"
-    func_text += "  return val1 {} val2\n".format(op_str)
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
+    func = generate_comparison_ops_func(cmp_op)
     val1 = pd.Timestamp("2021-02-24")
     val2 = pd.Timestamp("2019-11-15")
-    impl = loc_vars["impl"]
-    check_func(impl, (val1, val1.to_numpy()))
-    check_func(impl, (val1.to_numpy(), val2))
-    check_func(impl, (val2, val1.to_numpy()))
+    check_func(func, (val1, val1.to_numpy()))
+    check_func(func, (val1.to_numpy(), val2))
+    check_func(func, (val2, val1.to_numpy()))
 
 
-@pytest.mark.parametrize(
-    "op",
-    [operator.eq, operator.ne, operator.gt, operator.lt, operator.ge, operator.le],
-)
-def test_timedelta_td64_ops(op, memory_leak_check):
+def test_timedelta_td64_ops(cmp_op, memory_leak_check):
     """
     Tests timedelta equality operators compared to td64.
     """
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def impl(val1, val2):\n"
-    func_text += "  return val1 {} val2\n".format(op_str)
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
+    func = generate_comparison_ops_func(cmp_op)
     val1 = pd.Timedelta(days=1, seconds=42)
     val2 = pd.Timedelta(weeks=-2, days=11, microseconds=42)
-    impl = loc_vars["impl"]
-    check_func(impl, (val1, val1.to_numpy()))
-    check_func(impl, (val1.to_numpy(), val2))
-    check_func(impl, (val2, val1.to_numpy()))
+    check_func(func, (val1, val1.to_numpy()))
+    check_func(func, (val1.to_numpy(), val2))
+    check_func(func, (val2, val1.to_numpy()))
 
 
 @pytest.mark.slow

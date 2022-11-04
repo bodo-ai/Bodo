@@ -233,7 +233,7 @@ npy_int64 get_datetimestruct_days(int64_t dt_year, int dt_month, int dt_day) {
     return days;
 }
 
-// copeid from Pandas, but input is changed from npy_datetime to
+// copied from Pandas, but input is changed from npy_datetime to
 // year/month/day/... fields only the ns frequency is used
 // https://github.com/pandas-dev/pandas/blob/b8043724c48890e86fda0265ad5b6ac3d31f1940/pandas/_libs/tslibs/src/datetime/np_datetime.c#L405
 /*
