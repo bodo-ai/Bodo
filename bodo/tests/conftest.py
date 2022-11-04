@@ -6,6 +6,7 @@ import json
 import operator
 import os
 import subprocess
+from typing import Protocol
 
 import pytest
 from mpi4py import MPI
@@ -15,9 +16,14 @@ import bodo
 import bodo.utils.allocation_tracking
 
 
-# similar to Pandas
+# Similar to Pandas
+class DataPath(Protocol):
+    def __call__(self, *args: str, check_exists: bool = True) -> str:
+        ...
+
+
 @pytest.fixture(scope="session")
-def datapath():
+def datapath() -> DataPath:
     """Get the path to a test data file.
 
     Parameters
