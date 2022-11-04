@@ -10,6 +10,7 @@ import urllib
 
 import pandas as pd
 import pytest
+from mpi4py import MPI
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -609,6 +610,211 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
         bodo.jit(impl_mixed)(query, conn, int_val, str_val, date_val, ts_val)
         # Check the columns were pruned
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_ts_col_date_scalar_filter_pushdown(memory_leak_check):
+    """
+    Test filter pushdown when reading from a timestamp column and using a date
+    filter.
+
+    The table used for this was created directly in snowflake and has the schema
+
+    Table: TIMESTAMP_FILTER_TEST
+    Columns:
+        date_col DATE
+        tz_naive_col TIMESTAMP_NTZ
+        tz_aware_col TIMESTAMP_TZ
+    """
+    comm = MPI.COMM_WORLD
+
+    def impl_tz_naive(query, conn, date_val):
+        df = pd.read_sql(query, conn)
+        df = df[df["tz_naive_col"] > date_val]
+        return df["date_col"]
+
+    def impl_tz_aware(query, conn, date_val):
+        df = pd.read_sql(query, conn)
+        df = df[df["tz_aware_col"] > date_val]
+        return df["date_col"]
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    date_val = datetime.date(2022, 4, 7)
+    query = "select * from TIMESTAMP_FILTER_TEST"
+    # Pandas doesn't support the date + timestamp comparison so we must load directly from snowflake
+    py_output1 = None
+    py_output2 = None
+    if bodo.get_rank() == 0:
+        py_output1 = pd.read_sql(
+            "select date_col from TIMESTAMP_FILTER_TEST where tz_naive_col > date '2022-04-07'",
+            conn,
+        )["date_col"]
+        py_output2 = pd.read_sql(
+            "select date_col from TIMESTAMP_FILTER_TEST where tz_aware_col > date '2022-04-07'",
+            conn,
+        )["date_col"]
+    py_output1, py_output2 = comm.bcast((py_output1, py_output2))
+    check_func(
+        impl_tz_naive,
+        (query, conn, date_val),
+        sort_output=True,
+        reset_index=True,
+        py_output=py_output1,
+    )
+    check_func(
+        impl_tz_aware,
+        (query, conn, date_val),
+        sort_output=True,
+        reset_index=True,
+        py_output=py_output2,
+    )
+    # Test for filter pushdown.
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_tz_naive)(query, conn, date_val)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['date_col']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl_tz_aware)(query, conn, date_val)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['date_col']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_tz_aware_filter_pushdown(memory_leak_check):
+    """
+    Test that filter pushdown works with a tz aware timestamp +
+    a tz aware column.
+
+    The table used for this was created directly in snowflake and has the schema
+
+    Table: TIMESTAMP_FILTER_TEST
+    Columns:
+        date_col DATE
+        tz_naive_col TIMESTAMP_NTZ
+        tz_aware_col TIMESTAMP_TZ
+    """
+    comm = MPI.COMM_WORLD
+
+    def impl(query, conn, ts_value):
+        df = pd.read_sql(query, conn)
+        df = df[df["tz_aware_col"] > ts_value]
+        return df["date_col"]
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    query = "select * from TIMESTAMP_FILTER_TEST"
+    # TZ_AWARE is in LA time
+    ts_value = pd.Timestamp("2022-04-06 19:00:00", tz="America/Los_Angeles")
+    py_output = None
+    if bodo.get_rank() == 0:
+        py_output = pd.read_sql(
+            "select date_col from TIMESTAMP_FILTER_TEST where tz_aware_col > '2022-04-06 19:00:00'::TIMESTAMP_TZ",
+            conn,
+        )["date_col"]
+    py_output = comm.bcast(py_output)
+    check_func(
+        impl,
+        (query, conn, ts_value),
+        sort_output=True,
+        reset_index=True,
+        py_output=py_output,
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(query, conn, ts_value)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['date_col']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+def test_date_col_ts_scalar_filter_pushdown(memory_leak_check):
+    """
+    Test that filter pushdown works with a date column and a
+    timezone scalar, both with and without a timezone.
+
+    The table used for this was created directly in snowflake and has the schema
+
+    Table: TIMESTAMP_FILTER_TEST
+    Columns:
+        date_col DATE
+        tz_naive_col TIMESTAMP_NTZ
+        tz_aware_col TIMESTAMP_TZ
+    """
+    comm = MPI.COMM_WORLD
+
+    def impl(query, conn, ts_value):
+        df = pd.read_sql(query, conn)
+        df = df[df["date_col"] > ts_value]
+        return df["tz_naive_col"]
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+    query = "select * from TIMESTAMP_FILTER_TEST"
+    # TZ_AWARE is in LA time
+    ts_value = pd.Timestamp("2022-04-06 19:00:00", tz="America/Los_Angeles")
+    py_output = None
+    if bodo.get_rank() == 0:
+        py_output = pd.read_sql(
+            "select tz_naive_col from TIMESTAMP_FILTER_TEST where date_col > '2022-04-06 19:00:00'::TIMESTAMP_TZ",
+            conn,
+        )["tz_naive_col"]
+    py_output = comm.bcast(py_output)
+    check_func(
+        impl,
+        (query, conn, ts_value),
+        sort_output=True,
+        reset_index=True,
+        py_output=py_output,
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(query, conn, ts_value)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['tz_naive_col']")
+        # Check for filter pushdown
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+
+    # Test with tz-naive
+    ts_value = pd.Timestamp("2022-04-06 19:00:00")
+    py_output = None
+    if bodo.get_rank() == 0:
+        py_output = pd.read_sql(
+            "select tz_naive_col from TIMESTAMP_FILTER_TEST where date_col > '2022-04-06 19:00:00'::TIMESTAMP_NTZ",
+            conn,
+        )["tz_naive_col"]
+    py_output = comm.bcast(py_output)
+    check_func(
+        impl,
+        (query, conn, ts_value),
+        sort_output=True,
+        reset_index=True,
+        py_output=py_output,
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo.jit(impl)(query, conn, ts_value)
+        # Check the columns were pruned
+        check_logger_msg(stream, "Columns loaded ['tz_naive_col']")
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
 

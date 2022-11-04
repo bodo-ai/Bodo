@@ -125,6 +125,8 @@ no_side_effect_call_tuples = {
     (bool,),
     (str,),
     ("ceil", math),
+    # Pandas APIs
+    ("Timestamp", pd),
     # Series
     ("init_series", "pd_series_ext", "hiframes", bodo),
     ("get_series_data", "pd_series_ext", "hiframes", bodo),
