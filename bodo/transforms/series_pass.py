@@ -1254,6 +1254,37 @@ class SeriesPass:
                 self, bodo.libs.array_kernels.arr_contains(typ1, typ2), [arg1, arg2]
             )
 
+        # Inline tz-aware array operations
+        if rhs.fn in cmp_ops and (
+            isinstance(typ1, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType)
+            or isinstance(typ2, bodo.libs.pd_datetime_arr_ext.DatetimeArrayType)
+        ):
+            impl = bodo.libs.pd_datetime_arr_ext.create_cmp_op_overload_arr(rhs.fn)(
+                typ1, typ2
+            )
+            return replace_func(self, impl, [arg1, arg2])
+
+        # Inline tz-naive array + date operations
+        if (
+            rhs.fn in cmp_ops
+            and (
+                isinstance(typ1, types.Array)
+                and typ1.dtype == bodo.datetime64ns
+                and typ2 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
+            )
+            or (
+                typ1 in (bodo.datetime_date_array_type, bodo.datetime_date_type)
+                and isinstance(typ2, types.Array)
+                and typ2.dtype == bodo.datetime64ns
+            )
+        ):
+            impl = bodo.hiframes.datetime_date_ext.create_datetime_array_date_cmp_op_overload(
+                rhs.fn
+            )(
+                typ1, typ2
+            )
+            return replace_func(self, impl, [arg1, arg2])
+
         # datetime_date_array operations
         if rhs.fn in cmp_ops and (
             typ1 == datetime_date_array_type or typ2 == datetime_date_array_type

@@ -2178,3 +2178,21 @@ def drop_snowflake_table(table_name: str, db: str, schema: str):
     drop_err = comm.bcast(drop_err)
     if isinstance(drop_err, Exception):
         raise drop_err
+
+
+def generate_comparison_ops_func(op, check_na=False):
+    """
+    Generates a comparison function. If check_na,
+    then we are being called on a scalar value because Pandas
+    can't handle NA values in the array. If so, we return None
+    if either input is NA.
+    """
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(a, b):\n"
+    if check_na:
+        func_text += f"  if pd.isna(a) or pd.isna(b):\n"
+        func_text += f"    return None\n"
+    func_text += f"  return a {op_str} b\n"
+    loc_vars = {}
+    exec(func_text, {"pd": pd}, loc_vars)
+    return loc_vars["test_impl"]

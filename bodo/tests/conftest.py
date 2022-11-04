@@ -3,6 +3,7 @@ import gc
 import glob
 import hashlib
 import json
+import operator
 import os
 import subprocess
 
@@ -468,3 +469,18 @@ def iceberg_table_conn():
         return f"iceberg://{warehouse_loc}"
 
     return deco
+
+
+@pytest.fixture(
+    params=(
+        operator.eq,
+        operator.ne,
+        operator.ge,
+        operator.gt,
+        operator.le,
+        operator.lt,
+    ),
+    scope="session",
+)
+def cmp_op(request):
+    return request.param
