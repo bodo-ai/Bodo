@@ -3,19 +3,21 @@
 
 import gc
 import glob
-import operator
 import os
 import re
 import unittest
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
 
 import bodo
 from bodo.libs.str_arr_ext import str_arr_from_sequence
-from bodo.tests.utils import check_func, gen_nonascii_list
+from bodo.tests.utils import (
+    check_func,
+    gen_nonascii_list,
+    generate_comparison_ops_func,
+)
 from bodo.utils.typing import BodoError
 
 
@@ -121,22 +123,14 @@ def test_string_base16_cast(memory_leak_check):
     check_func(test_impl, ("a2432c",))
 
 
-@pytest.mark.parametrize(
-    "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
-)
-def test_cmp_binary_op(op, memory_leak_check):
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def test_impl(A, other):\n"
-    func_text += f"  return A {op_str} other\n"
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    test_impl = loc_vars["test_impl"]
+def test_cmp_binary_op(cmp_op, memory_leak_check):
+    func = generate_comparison_ops_func(cmp_op)
 
     A1 = pd.array(["A", np.nan, "CC", "DD", np.nan, "ABC"])
     A2 = pd.array(["A", np.nan, "CCD", "AADD", "DAA", "ABCE"])
-    check_func(test_impl, (A1, A2))
-    check_func(test_impl, (A1, "DD"))
-    check_func(test_impl, ("CCD", A2))
+    check_func(func, (A1, A2))
+    check_func(func, (A1, "DD"))
+    check_func(func, ("CCD", A2))
 
 
 def test_f_strings():
