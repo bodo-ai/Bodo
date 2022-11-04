@@ -583,9 +583,6 @@ def _get_snowflake_sql_literal_scalar(filter_value):
     This is in a separate function to enable recursion.
     """
     filter_type = types.unliteral(filter_value)
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        filter_type, "Filter pushdown"
-    )
     if filter_type == types.unicode_type:
         # Strings require double $$ to avoid escape characters
         # https://docs.snowflake.com/en/sql-reference/data-types-text.html#dollar-quoted-string-constants
@@ -597,7 +594,15 @@ def _get_snowflake_sql_literal_scalar(filter_value):
     ):
         # Numeric and boolean values can just return the string representation
         return lambda filter_value: str(filter_value)  # pragma: no cover
-    elif filter_type == bodo.pd_timestamp_type:
+    elif isinstance(filter_type, bodo.PandasTimestampType):
+        if filter_type.tz is None:
+            tz_str = "TIMESTAMP_NTZ"
+        else:
+            # You cannot specify a specific timestamp so instead we assume
+            # we are using the default timezone. This should be fine since the
+            # data matches.
+            # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#timestamp-ltz-timestamp-ntz-timestamp-tz
+            tz_str = "TIMESTAMP_TZ"
         # Timestamp needs to be converted to a timestamp literal
         def impl(filter_value):  # pragma: no cover
             nanosecond = filter_value.nanosecond
@@ -607,7 +612,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
             elif nanosecond < 100:
                 nanosecond_prepend = "0"
             # TODO: Refactor once strftime support nanoseconds
-            return f"timestamp '{filter_value.strftime('%Y-%m-%d %H:%M:%S.%f')}{nanosecond_prepend}{nanosecond}'"  # pragma: no cover
+            return f"timestamp '{filter_value.strftime('%Y-%m-%d %H:%M:%S.%f')}{nanosecond_prepend}{nanosecond}'::{tz_str}"  # pragma: no cover
 
         return impl
     elif filter_type == bodo.datetime_date_type:
@@ -630,10 +635,9 @@ def _get_snowflake_sql_literal(filter_value):
     returns a string representation of the filter value
     that could be used in a Snowflake SQL query.
     """
-    scalar_isinstance = (types.Integer, types.Float)
+    scalar_isinstance = (types.Integer, types.Float, bodo.PandasTimestampType)
     scalar_equals = (
         bodo.datetime_date_type,
-        bodo.pd_timestamp_type,
         types.unicode_type,
         types.bool_,
     )
