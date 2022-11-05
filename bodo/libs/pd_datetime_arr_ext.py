@@ -33,7 +33,6 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_constant_str,
-    raise_bodo_error,
 )
 
 
@@ -269,7 +268,13 @@ def overload_pd_datetime_arr_nbytes(A):
 @overload_method(DatetimeArrayType, "tz_convert", no_unliteral=True)
 def overload_pd_datetime_tz_convert(A, tz):
     if tz == types.none:
-        raise_bodo_error("tz_convert(): tz must be a string or Fixed Offset")
+        # Note this differs from Pandas in the output type.
+        # Pandas would still have a DatetimeArrayType with no timezone
+        # but we always represent no timezone as datetime64 array.
+        def impl(A, tz):  # pragma: no cover
+            return A._data.copy()
+
+        return impl
 
     else:
 
