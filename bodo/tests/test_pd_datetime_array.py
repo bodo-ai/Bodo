@@ -494,3 +494,17 @@ def test_array_different_tz_unsupported(cmp_op, memory_leak_check):
         BodoError, match="requires both Timestamps share the same timezone"
     ):
         func(arr3, arr1)
+
+
+def test_tz_convert_none(memory_leak_check):
+    """
+    Test tz_convert with argument None on a timezone aware array.
+    """
+
+    def impl(arr):
+        return arr.tz_convert(None)
+
+    arr = pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland").array
+    # Python will have a different output type until we handle no timezone in Datetime array
+    py_output = arr.tz_convert(None)._data
+    check_func(impl, (arr,), py_output=py_output)
