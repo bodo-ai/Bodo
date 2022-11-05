@@ -232,3 +232,17 @@ def test_series_different_tz_unsupported(cmp_op, memory_leak_check):
         BodoError, match="requires both Timestamps share the same timezone"
     ):
         func(S3, S1)
+
+
+def test_dt_tz_convert_none(memory_leak_check):
+    """
+    Test Series.dt.tz_convert with argument None on a timezone aware Series.
+    """
+
+    def impl(S):
+        return S.dt.tz_convert(None)
+
+    S = pd.date_range(
+        start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+    ).to_series()
+    check_func(impl, (S,))
