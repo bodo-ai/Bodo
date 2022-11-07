@@ -370,14 +370,6 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             }
         }
 
-        table_info* local_sort = sort_values_table_local(
-            in_table, n_key_t, vect_ascending, na_position,
-            parallel ? nullptr : dead_keys, parallel);
-
-        if (!parallel) {
-            return local_sort;
-        }
-
         int n_pes, myrank;
         MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
         MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
@@ -387,7 +379,15 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
                       MPI_COMM_WORLD);
 
-        if (n_total == 0) {
+        // Want to keep dead keys only when we will perform a shuffle operation
+        // later in the function
+        table_info* local_sort = sort_values_table_local(
+            in_table, n_key_t, vect_ascending, na_position,
+            (parallel && n_total != 0) ? nullptr : dead_keys, parallel);
+
+        if (!parallel) {
+            return local_sort;
+        } else if (n_total == 0) {
             if (bounds != nullptr) {
                 delete_table_decref_arrays(bounds);
             }
