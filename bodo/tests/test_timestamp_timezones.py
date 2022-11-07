@@ -119,20 +119,33 @@ def test_timestamp_tz_ts_input():
     )
 
 
-def test_tz_timestamp_unsupported():
-    def impl(ts):
-        return max(ts, ts)
+def test_tz_timestamp_max_min():
+    def impl_max(s):
+        return s.max()
 
-    non_tz_ts = pd.Timestamp("2020-01-01")
-    tz_ts = pd.Timestamp("2020-01-01", tz="US/Eastern")
+    def impl_min(s):
+        return s.min()
 
-    check_func(impl, (non_tz_ts,))
+    s1 = pd.Series(
+        [
+            pd.Timestamp("2020-03-15", tz="Europe/Stockholm"),
+            pd.Timestamp("2020-03-16", tz="Europe/Stockholm"),
+            pd.Timestamp("2020-03-17", tz="Europe/Stockholm"),
+        ]
+    )
 
-    with pytest.raises(
-        BodoError,
-        match=".*Timezone-aware timestamp not yet supported.*",
-    ):
-        bodo.jit(impl)(tz_ts)
+    s2 = pd.Series(
+        [
+            pd.Timestamp("1999-10-31 12:23:33", tz="US/Eastern"),
+            pd.Timestamp("2005-01-01 00:00:00", tz="US/Eastern"),
+            pd.Timestamp("2016-02-28 12:23:33", tz="US/Eastern"),
+        ]
+    )
+
+    check_func(impl_max, (s1,))
+    check_func(impl_max, (s2,))
+    check_func(impl_min, (s1,))
+    check_func(impl_min, (s2,))
 
 
 def test_tz_datetime_arr_unsupported():
