@@ -371,10 +371,14 @@ def sql_distributed_run(
                     # If p[2] is a constant that isn't in the IR (i.e. NULL)
                     # just load the value directly, otherwise load the variable
                     # at runtime.
+                    p0, p2 = p[0], p[2]
+
+                    p0 = convert_col_name(p0, sql_node.converted_colnames)
+                    p0 = "\\\"" + p0 + "\\\""
                     scalar_filter = (
                         ("{" + filter_map[p[2].name] + "}")
                         if isinstance(p[2], ir.Var)
-                        else p[2]
+                        else p2
                     )
                     if p[1] in ("startswith", "endswith"):
                         # This path should only be taken with Snowflake
@@ -382,14 +386,14 @@ def sql_distributed_run(
                             "(",
                             p[1],
                             "(",
-                            p[0],
+                            p0,
                             ",",
                             scalar_filter,
                             ")",
                             ")",
                         ]
                     else:
-                        single_filter = ["(", p[0], p[1], scalar_filter, ")"]
+                        single_filter = ["(", p0, p[1], scalar_filter, ")"]
 
                     and_conds.append(" ".join(single_filter))
                 or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
@@ -530,6 +534,10 @@ def sql_distributed_run(
 
     return nodes
 
+def convert_col_name(col_name, converted_colnames):
+    if col_name in converted_colnames:
+        return col_name.upper()
+    return col_name
 
 def escape_column_names(col_names, db_type, converted_colnames):
     """
@@ -546,9 +554,11 @@ def escape_column_names(col_names, db_type, converted_colnames):
     # conversions in the output as needed.
     if db_type in ("snowflake", "oracle"):
         # Snowflake/Oracle needs to convert all lower case strings back to uppercase
-        used_col_names = [
-            x.upper() if x in converted_colnames else x for x in col_names
-        ]
+
+        used_col_names = []
+        for x in col_names:
+            used_col_names.append(convert_col_name(x, converted_colnames))
+        
         col_str = ", ".join([f'"{x}"' for x in used_col_names])
 
     # MySQL uses tilda as an escape character by default, not quotations
