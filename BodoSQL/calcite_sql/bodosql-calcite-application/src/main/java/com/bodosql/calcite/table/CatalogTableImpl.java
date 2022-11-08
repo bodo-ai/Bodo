@@ -88,4 +88,15 @@ public class CatalogTableImpl extends BodoSqlTable {
   public String generateRemoteQuery(String query) {
     return this.getCatalogSchema().generateRemoteQuery(query);
   }
+
+  /**
+   * Returns if calling `generateReadCode()` for a table will result in an IO operation in the Bodo
+   * generated code.
+   *
+   * @return Does the table require IO?
+   */
+  @Override
+  public boolean readRequiresIO() {
+    return true;
+  }
 }

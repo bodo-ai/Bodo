@@ -28,6 +28,9 @@ public class LocalTableImpl extends BodoSqlTable {
   // name.
   private final String writeCodeFormatString;
 
+  // Will the generated read code result in an IO operation inside Bodo.
+  private final boolean useIORead;
+
   /**
    * Constructor used for a LocalTableImpl. In addition to the normal table components the table is
    * required to provide code need to read/write it. If a table is not writeable then the write code
@@ -40,6 +43,7 @@ public class LocalTableImpl extends BodoSqlTable {
    * @param readCode The generated code to read this table.
    * @param writeCodeFormatString A format string to write a given variable. The format is described
    *     above the class member of the same name. If isWriteable=false this value can be garbage.
+   * @param useIORead Does calling generateReadCode produce codegen that requires IO?
    */
   public LocalTableImpl(
       String name,
@@ -47,7 +51,8 @@ public class LocalTableImpl extends BodoSqlTable {
       List<BodoSQLColumn> columns,
       boolean isWriteable,
       String readCode,
-      String writeCodeFormatString) {
+      String writeCodeFormatString,
+      boolean useIORead) {
     super(name, schema, columns);
     if (!(schema instanceof LocalSchemaImpl)) {
       throw new RuntimeException("Local table must be implemented with a Local Schema.");
@@ -55,6 +60,7 @@ public class LocalTableImpl extends BodoSqlTable {
     this.isWriteable = isWriteable;
     this.readCode = readCode;
     this.writeCodeFormatString = writeCodeFormatString;
+    this.useIORead = useIORead;
   }
 
   /**
@@ -101,5 +107,16 @@ public class LocalTableImpl extends BodoSqlTable {
   public String generateRemoteQuery(String query) {
     throw new UnsupportedOperationException(
         "A remote query cannot be submitted with a local table");
+  }
+
+  /**
+   * Returns if calling `generateReadCode()` for a table will result in an IO operation in the Bodo
+   * generated code.
+   *
+   * @return Does the table require IO?
+   */
+  @Override
+  public boolean readRequiresIO() {
+    return useIORead;
   }
 }
