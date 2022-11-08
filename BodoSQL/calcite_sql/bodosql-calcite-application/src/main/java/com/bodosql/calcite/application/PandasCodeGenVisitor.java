@@ -451,7 +451,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           && (typeName != SqlTypeName.BIGINT)) {
         throw new BodoSQLCodegenException(
             "Limit value must be an integer, value is of type: "
-                + sqlTypenameToPandasTypename(typeName, true, false, false));
+                + sqlTypenameToPandasTypename(typeName, true, false));
       }
 
       // fetch is either a named Parameter or a literal from parsing.
@@ -472,7 +472,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           && (typeName != SqlTypeName.BIGINT)) {
         throw new BodoSQLCodegenException(
             "Offset value must be an integer, value is of type: "
-                + sqlTypenameToPandasTypename(typeName, true, false, false));
+                + sqlTypenameToPandasTypename(typeName, true, false));
       }
 
       // Offset is either a named Parameter or a literal from parsing.
