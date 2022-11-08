@@ -3,6 +3,7 @@
 Tests various components of the TablePath type both inside and outside a
 direct BodoSQLContext.
 """
+import io
 import os
 
 import bodosql
@@ -11,6 +12,11 @@ import pytest
 from bodosql.tests.utils import _check_query_equal, check_num_parquet_readers
 
 import bodo
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
     TypeInferenceTestPipeline,
     check_func,
@@ -277,10 +283,9 @@ def test_table_path_avoid_unused_table_python(
 
 
 @pytest.mark.slow
-def test_table_path_categorical_unused_table_jit(datapath):
-    # TODO: Add memory leak check
+def test_table_path_categorical_unused_table_jit(datapath, memory_leak_check):
     """
-    Tests loading a paritioned parquet table in JIT.
+    Tests loading a partitioned parquet table in JIT.
     """
 
     def impl(f1, f2):
@@ -304,10 +309,9 @@ def test_table_path_categorical_unused_table_jit(datapath):
 
 
 @pytest.mark.slow
-def test_table_path_categorical_unused_table_python(datapath):
-    # TODO: Add memory leak check
+def test_table_path_categorical_unused_table_python(datapath, memory_leak_check):
     """
-    Tests loading a paritioned parquet table in Python.
+    Tests loading a partitioned parquet table in Python.
     """
 
     def impl(f1, f2):
@@ -339,4 +343,29 @@ def test_table_path_categorical_unused_table_python(datapath):
     # TODO: Check the IR from Python.
 
 
-# TODO: Add a test with muliple tables to check reorder_io works as expected.
+@pytest.mark.slow
+def test_table_path_timing_debug_message(datapath, memory_leak_check):
+    """
+    Tests that loading a table using TablePath with bodo.set_verbose_level(1)
+    automatically adds a debug message about IO.
+    """
+
+    @bodo.jit
+    def impl(f1):
+        bc = bodosql.BodoSQLContext(
+            {
+                "parquet_table": bodosql.TablePath(f1, "parquet"),
+            }
+        )
+        return bc.sql("select * from parquet_table")
+
+    f1 = datapath("sample-parquet-data/partitioned")
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        impl(f1)
+        check_logger_msg(stream, "Finished reading table parquet_table")
+
+
+# TODO: Add a test with multiple tables to check reorder_io works as expected.

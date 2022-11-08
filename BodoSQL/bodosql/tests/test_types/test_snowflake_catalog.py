@@ -4,6 +4,7 @@ Tests various components of the SnowflakeCatalog type both inside and outside a
 direct BodoSQLContext.
 """
 
+import io
 import os
 
 import bodosql
@@ -13,6 +14,11 @@ import pytest
 from mpi4py import MPI
 
 import bodo
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 from bodo.tests.utils import (
     check_func,
     create_snowflake_table,
@@ -434,6 +440,32 @@ def test_snowflake_catalog_read_tpch(
     "AGENT_NAME" not in os.environ,
     reason="requires Azure Pipelines",
 )
+def test_read_timing_debug_message(
+    snowflake_sample_data_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that loading a table using a SnowflakeCatalog with bodo.set_verbose_level(1)
+    automatically adds a debug message about IO.
+    """
+
+    @bodo.jit
+    def impl(bc):
+        # Load with snowflake or local default
+        return bc.sql("SELECT r_name FROM REGION ORDER BY r_name")
+
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        impl(bc)
+        check_logger_msg(stream, "Finished reading table REGION")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
 def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests a simple delete clause inside of Snowflake.
@@ -562,8 +594,8 @@ def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame):
     for ordering or index.
 
     Args:
-        df1 (pd.DataFrame): First dataframe.
-        df2 (pd.DataFrame): Second dataframe.
+        df1 (pd.DataFrame): First DataFrame.
+        df2 (pd.DataFrame): Second DataFrame.
     """
     # Output ordering is not defined so we sort.
     df1 = df1.sort_values(by=[col for col in df1.columns])

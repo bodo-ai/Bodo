@@ -26,7 +26,7 @@ public class PandasGenTest {
     BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType);
     arr.add(column3);
 
-    BodoSqlTable table = new LocalTableImpl("table1", schema, arr, false, "table1", "");
+    BodoSqlTable table = new LocalTableImpl("table1", schema, arr, false, "table1", "", false);
     schema.addTable(table);
 
     arr = new ArrayList();
@@ -35,9 +35,9 @@ public class PandasGenTest {
     arr.add(column4);
     BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataType);
     arr.add(column5);
-    BodoSqlTable table2 = new LocalTableImpl("table2", schema, arr, false, "table2", "");
+    BodoSqlTable table2 = new LocalTableImpl("table2", schema, arr, false, "table2", "", false);
     schema.addTable(table2);
-    BodoSqlTable table3 = new LocalTableImpl("table3", schema, arr, false, "table3", "");
+    BodoSqlTable table3 = new LocalTableImpl("table3", schema, arr, false, "table3", "", false);
     schema.addTable(table3);
 
     // Define the Parameter table
@@ -49,10 +49,11 @@ public class PandasGenTest {
     BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType);
     arr.add(param2);
     BodoSqlTable paramTable =
-        new LocalTableImpl(paramTableName, schema, arr, false, paramTableName, "");
+        new LocalTableImpl(paramTableName, schema, arr, false, paramTableName, "", false);
     schema.addTable(paramTable);
 
-    RelationalAlgebraGenerator generator = new RelationalAlgebraGenerator(schema, paramTableName);
+    RelationalAlgebraGenerator generator =
+        new RelationalAlgebraGenerator(schema, paramTableName, 0);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);

@@ -78,9 +78,9 @@ import org.apache.calcite.util.Pair;
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
 public class PandasCodeGenVisitor extends RelVisitor {
   /* Stack of generated variables df1, df2 , etc. */
-  private Stack<String> varGenStack = new Stack<>();
+  private final Stack<String> varGenStack = new Stack<>();
   /* Stack of output column names for every node */
-  private Stack<List<String>> columnNamesStack = new Stack<>();
+  private final Stack<List<String>> columnNamesStack = new Stack<>();
   /* Reserved column name for generating dummy columns. */
   // TODO: Add this to the docs as banned
   private StringBuilder generatedCode = new StringBuilder();
@@ -90,14 +90,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private int globalVarId = 1;
 
   // Mapping from a unique key per node to exprTypes
-  private HashMap<String, BodoSQLExprType.ExprType> exprTypesMap;
+  private final HashMap<String, BodoSQLExprType.ExprType> exprTypesMap;
 
   // Mapping from String Key of Search Nodes to the RexNodes expanded
   // TODO: Replace this code with something more with an actual
   // update to the plan.
   // Ideally we can use RexRules when they are available
   // https://issues.apache.org/jira/browse/CALCITE-4559
-  private HashMap<String, RexNode> searchMap;
+  private final HashMap<String, RexNode> searchMap;
 
   // Map of RelNode ID -> <DataFrame variable name, Column Names>
   // Because the logical plan is a tree, Nodes that are at the bottom of
@@ -106,7 +106,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // result, when finding nodes we wish to cache, we log variable names in this
   // map and load them inplace of segments of generated code.
   // This is currently only implemented for a subset of nodes.
-  private HashMap<Integer, Pair<String, List<String>>> varCache;
+  private final HashMap<Integer, Pair<String, List<String>>> varCache;
 
   /*
   Hashmap containing globals that need to be lowered into the output func_text. Used for lowering
@@ -124,23 +124,30 @@ public class PandasCodeGenVisitor extends RelVisitor {
   (Note, we do not actually generate the above func text, we pass the values as globals when calling exec in python. See
    context.py and context_ext.py for more info)
   */
-  private HashMap<String, String> loweredGlobals;
+  private final HashMap<String, String> loweredGlobals;
 
   // The original SQL query. This is used for any operations that must be entirely
   // pushed into a remote db (e.g. Snowflake)
-  private String originalSQLQuery;
+  private final String originalSQLQuery;
 
   // Debug flag set for certain tests in our test suite. Causes the codegen to return simply return
   // the delta table
   // when encountering a merge into operation
-  private boolean debuggingDeltaTable;
+  private final boolean debuggingDeltaTable;
+
+  // Bodo verbose level. This is used to generate code/compiler information
+  // with extra debugging or logging. 0 is the default verbose level which
+  // means no action should be taken. As verboseLevel increases more detailed
+  // information can be shown.
+  private final int verboseLevel;
 
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
       HashMap<String, RexNode> searchMap,
       HashMap<String, String> loweredGlobalVariablesMap,
       String originalSQLQuery,
-      boolean debuggingDeltaTable) {
+      boolean debuggingDeltaTable,
+      int verboseLevel) {
     super();
     this.exprTypesMap = exprTypesMap;
     this.searchMap = searchMap;
@@ -148,6 +155,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
     this.debuggingDeltaTable = debuggingDeltaTable;
+    this.verboseLevel = verboseLevel;
   }
 
   /**
@@ -157,6 +165,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
    */
   private String genDfVar() {
     return "df" + this.dfVarId++;
+  }
+
+  /**
+   * Generate the new temporary variable name for step by step pandas codegen.
+   *
+   * @return variable name
+   */
+  private String genGenericTempVar() {
+    return "_temp" + this.dfVarId++;
   }
 
   /**
@@ -3141,12 +3158,29 @@ public class PandasCodeGenVisitor extends RelVisitor {
       RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
       BodoSqlTable table = (BodoSqlTable) relTable.table();
       String readCode = table.generateReadCode();
-      // Add the table to cached values
-      this.generatedCode.append(String.format("  %s = %s\n", outVar, readCode));
+      String readAssign = String.format("  %s = %s\n", outVar, readCode);
+      boolean readUsesIO = table.readRequiresIO();
+      if (this.verboseLevel >= 1 && readUsesIO) {
+        // If the user has set verbose level >= 1 and there is IO, we generate
+        // timers and print the read time.
+        String timerVar = this.genGenericTempVar();
+        String tableName = table.getName();
+        this.generatedCode.append(String.format("  %s = time.time()\n", timerVar));
+        this.generatedCode.append(readAssign);
+        // Generate the Debug message.
+        this.generatedCode.append(
+            String.format(
+                "  bodo.user_logging.log_message('IO TIMING', f'Finished reading table %s in"
+                    + " {time.time() - %s} seconds')\n",
+                tableName, timerVar));
+      } else {
+        this.generatedCode.append(readAssign);
+      }
       String castExpr = table.generateReadCastCode(outVar);
       if (castExpr != "") {
         this.generatedCode.append(String.format("  %s = %s\n", outVar, castExpr));
       }
+      // Add the table to cached values
       this.varCache.put(node.getId(), new Pair<>(outVar, columnNames));
     }
     columnNamesStack.push(columnNames);
