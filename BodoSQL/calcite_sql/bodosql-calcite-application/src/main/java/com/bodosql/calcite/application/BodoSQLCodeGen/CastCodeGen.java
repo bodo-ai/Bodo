@@ -16,26 +16,28 @@ public class CastCodeGen {
    */
   public static String generateCastCode(String arg, SqlTypeName typeName, boolean outputScalar) {
     StringBuilder codeBuilder = new StringBuilder();
-    String dtype = sqlTypenameToPandasTypename(typeName, outputScalar, false, false);
-    String cast = sqlTypenameToPandasTypename(typeName, false, false, true);
+    String dtype = sqlTypenameToPandasTypename(typeName, outputScalar, false);
     if (outputScalar) {
-      codeBuilder.append(cast).append("(").append(arg).append(")");
+      codeBuilder.append(dtype).append("(").append(arg).append(")");
     } else {
       // TODO: replace Series.astype/dt with array operation
-      if (typeName == SqlTypeName.CHAR
-          || typeName == SqlTypeName.VARCHAR
-          || typeName == SqlTypeName.TIMESTAMP
-          || typeName == SqlTypeName.DATE) {
-        codeBuilder.append("pd.Series(").append(cast).append("(").append(arg).append("))");
+      codeBuilder
+          .append("pd.Series(")
+          .append(arg)
+          .append(").astype(")
+          .append(dtype)
+          .append(", _bodo_nan_to_str=False)");
+    }
+    // Date needs special handling to truncate timestamp. We always round down.
+    // TODO: Remove once we support Date type natively
+    if (typeName == SqlTypeName.DATE) {
+      if (outputScalar) {
+        codeBuilder.append(".floor(freq=\"D\")");
       } else {
-        codeBuilder
-            .append("pd.Series(")
-            .append(arg)
-            .append(").astype(")
-            .append(dtype)
-            .append(", _bodo_nan_to_str=False)");
+        codeBuilder.append(".dt.floor(freq=\"D\")");
       }
     }
+    // make the output array as expected elsewhere
     if (!outputScalar) {
       codeBuilder.append(".values");
     }

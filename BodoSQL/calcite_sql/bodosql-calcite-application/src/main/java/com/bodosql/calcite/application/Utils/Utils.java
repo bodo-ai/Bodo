@@ -190,89 +190,83 @@ public class Utils {
    * @return The pandas type
    */
   public static String sqlTypenameToPandasTypename(
-      SqlTypeName typeName, boolean outputScalar, boolean outputArrayType, boolean outputCast) {
+      SqlTypeName typeName, boolean outputScalar, boolean outputArrayType) {
     String dtype;
-    assert (outputScalar ? 1 : 0) + (outputArrayType ? 1 : 0) + (outputCast ? 1 : 0) <= 1
-        : "at most one of outputScalar, outputArrayType, outputCast may be true";
+    assert !(outputScalar && outputArrayType);
     switch (typeName) {
       case BOOLEAN:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_bool";
+        } else if (outputArrayType) {
           return "bodo.boolean_array";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_boolean";
         } else {
           dtype = makeQuoted("boolean");
         }
         break;
       case TINYINT:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int8";
+        } else if (outputArrayType) {
           return "bodo.IntegerArrayType(bodo.int8)";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_int8";
         } else {
-          dtype = "np.int8";
+          dtype = "pd.Int8Dtype()";
         }
         break;
       case SMALLINT:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int16";
+        } else if (outputArrayType) {
           return "bodo.IntegerArrayType(bodo.int16)";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_int16";
         } else {
-          dtype = "np.int16";
+          dtype = "pd.Int16Dtype()";
         }
         break;
       case INTEGER:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int32";
+        } else if (outputArrayType) {
           return "bodo.IntegerArrayType(bodo.int32)";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_int32";
         } else {
-          dtype = "np.int32";
+          dtype = "pd.Int32Dtype()";
         }
         break;
       case BIGINT:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int64";
+        } else if (outputArrayType) {
           return "bodo.IntegerArrayType(bodo.int64)";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_int64";
         } else {
-          dtype = "np.int64";
+          dtype = "pd.Int64Dtype()";
         }
         break;
       case FLOAT:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float32";
+        } else if (outputArrayType) {
           return "bodo.float32[::1]";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_float32";
         } else {
           dtype = "np.float32";
         }
         break;
       case DOUBLE:
       case DECIMAL:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float64";
+        } else if (outputArrayType) {
           return "bodo.float64[::1]";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_float64";
         } else {
           dtype = "np.float64";
         }
         break;
       case DATE:
-        if (outputArrayType) {
-          return "bodo.datetime64ns[::1]";
-        } else if (outputCast || outputScalar) {
-          return "bodo.libs.bodosql_array_kernels.cast_date";
-        } else {
-          dtype = "np.dtype(\"datetime64[ns]\")";
-        }
-        break;
       case TIMESTAMP:
-        if (outputArrayType) {
+        if (outputScalar) {
+          // pd.to_datetime(None) returns None in standard python, but not in Bodo
+          // This should likely be in the engine itself, to match pandas behavior
+          // BE-2882
+          dtype = "pd.to_datetime";
+        } else if (outputArrayType) {
           return "bodo.datetime64ns[::1]";
-        } else if (outputCast || outputScalar) {
-          return "bodo.libs.bodosql_array_kernels.cast_timestamp";
         } else {
           dtype = "np.dtype(\"datetime64[ns]\")";
         }
@@ -283,10 +277,10 @@ public class Utils {
             "Internal Error: Calcite Plan Produced an Unsupported TIME Type");
       case VARCHAR:
       case CHAR:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_str";
+        } else if (outputArrayType) {
           return "bodo.string_array_type";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_char";
         } else {
           dtype = "str";
         }
@@ -319,8 +313,6 @@ public class Utils {
           dtype = "pd.to_timedelta";
         } else if (outputArrayType) {
           return "bodo.timedelta64ns[::1]";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_interval";
         } else {
           dtype = "np.dtype(\"timedelta64[ns]\")";
         }
@@ -563,7 +555,7 @@ public class Utils {
     // errors later
     String bodyGlobal = pdVisitorClass.lowerAsGlobal("'" + lambdaFnStr + "'");
 
-    String outputArrayType = sqlTypenameToPandasTypename(outputType, false, true, false);
+    String outputArrayType = sqlTypenameToPandasTypename(outputType, false, true);
     String outputArrayTypeGlobal = pdVisitorClass.lowerAsGlobal(outputArrayType);
 
     return String.format(
