@@ -559,3 +559,30 @@ def test_any_value(query, spark_info, memory_leak_check):
         equivalent_spark_query=get_equivalent_spark_agg_query(query),
         is_out_distributed=False,
     )
+
+
+def test_max_min_tz_aware(memory_leak_check):
+    """
+    Test max and min on a tz-aware timestamp column
+    """
+    S = pd.Series(
+        list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
+        + [None] * 4
+    )
+    df = pd.DataFrame(
+        {
+            "A": S,
+        }
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame(
+        {"output1": S.max(), "output2": S.min()}, index=pd.RangeIndex(0, 1, 1)
+    )
+    query = "Select max(A) as output1, min(A) as output2 from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        is_out_distributed=False,
+        expected_output=py_output,
+    )
