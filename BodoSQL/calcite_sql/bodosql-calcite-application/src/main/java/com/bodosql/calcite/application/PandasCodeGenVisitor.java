@@ -2435,6 +2435,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 exprTypes.subList(1, operandsInfo.size()),
                 fnOperation.getOperator(),
                 isSingleRow);
+          case "GETDATE":
+            assert operandsInfo.size() == 0;
+            return new RexNodeVisitorInfo("GETDATE()", "pd.Timestamp.now().normalize()");
           case "CURRENT_TIMESTAMP":
           case "NOW":
           case "LOCALTIMESTAMP":

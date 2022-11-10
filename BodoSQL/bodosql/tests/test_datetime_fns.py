@@ -389,6 +389,48 @@ def now_equivalent_fns(request):
     return request.param
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        pytest.param(
+            "SELECT A, GETDATE() from table1",
+            id="no_case-just_getdate",
+        ),
+        pytest.param(
+            "SELECT A, GETDATE() - interval '6' months from table1",
+            id="no_case-minus_interval",
+        ),
+        pytest.param(
+            "SELECT A, GETDATE() + interval '5' days from table1",
+            id="no_case-plus_interval",
+        ),
+        pytest.param(
+            "SELECT A, CASE WHEN EXTRACT(MONTH from GETDATE()) = A then 'y' ELSE 'n' END from table1",
+            id="case",
+            marks=pytest.mark.skip("[BE-3909] Fix GETDATE inside of CASE"),
+        ),
+    ],
+)
+def test_getdate(query, spark_info, memory_leak_check):
+    """Tests the snowflake GETDATE() function"""
+    spark_query = query.replace("GETDATE()", "CURRENT_DATE()")
+    ctx = {
+        "table1": pd.DataFrame(
+            {"A": pd.Series(list(range(1, 13)), dtype=pd.Int32Dtype())}
+        )
+    }
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        equivalent_spark_query=spark_query,
+        only_jit_1DVar=True,
+    )
+
+
 def test_now_equivalents(basic_df, spark_info, now_equivalent_fns, memory_leak_check):
     """Tests the group of equivalent functions which return the current time as a timestamp
     This one needs special handling, as the timestamps returned by each call will be
