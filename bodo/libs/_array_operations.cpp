@@ -370,14 +370,11 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             }
         }
 
-        int n_pes, myrank;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-
         int64_t n_local = in_table->nrows();
-        int64_t n_total;
-        MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                      MPI_COMM_WORLD);
+        int64_t n_total = n_local;
+        if (parallel)
+            MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
+                          MPI_COMM_WORLD);
 
         // Want to keep dead keys only when we will perform a shuffle operation
         // later in the function
@@ -395,6 +392,10 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         }
 
         tracing::Event ev_sample("sort sampling", parallel);
+
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
         if (bounds == nullptr) {
             bounds = get_parallel_sort_bounds(
