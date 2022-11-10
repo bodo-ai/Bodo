@@ -467,6 +467,16 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction DATE_PART =
+      new SqlFunction(
+          "DATE_PART",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER_NULLABLE,
+          null,
+          OperandTypes.sequence(
+              "DATE_PART(STRING, TIMESTAMP)", OperandTypes.STRING, OperandTypes.TIMESTAMP),
+          SqlFunctionCategory.TIMEDATE);
+
   public static final SqlFunction NEXT_DAY =
       new SqlFunction(
           "NEXT_DAY",
@@ -507,6 +517,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   private List<SqlOperator> functionList =
       Arrays.asList(
+          DATE_PART,
           DATEADD,
           DATE_ADD,
           DATE_SUB,

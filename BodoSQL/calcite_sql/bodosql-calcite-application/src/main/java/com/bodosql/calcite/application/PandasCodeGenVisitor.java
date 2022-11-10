@@ -18,8 +18,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateSubCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.generateExtractName;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.generateFilterCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.generateJoinCode;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LikeCodeGen.*;
@@ -2495,6 +2494,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 operandsInfo.get(1).getExprCode(),
                 operandsInfo.get(1).getName(),
                 exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+          case "DATE_PART":
+            assert operandsInfo.size() == 2;
+            assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
+            return generateDatePart(
+                operandsInfo, exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
           case "TO_DAYS":
             return generateToDaysCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
           case "TO_SECONDS":
