@@ -791,6 +791,77 @@ def test_extract_scalars(
     )
 
 
+@pytest.mark.parametrize(
+    "query_fmt, answer",
+    [
+        pytest.param(
+            "DATE_PART({!r}, col_dt)",
+            pd.DataFrame(
+                {
+                    "YR": [None, 2010, 2011, 2012, 2013],
+                    "QU": [None, 1, 1, 2, 4],
+                    "MO": [None, 1, 2, 5, 10],
+                    "WE": [None, 2, 8, 19, 43],
+                    "DA": [None, 17, 26, 9, 22],
+                    "DW": [None, 1, 7, 4, 3],
+                    "HR": [None, 0, 3, 16, 5],
+                    "MI": [None, 0, 36, 43, 32],
+                    "SE": [None, 0, 1, 16, 21],
+                }
+            ),
+            id="vector-no_case",
+        ),
+        pytest.param(
+            "CASE WHEN EXTRACT(YEAR from col_dt) = 2013 THEN NULL else DATE_PART({!r}, col_dt) END",
+            pd.DataFrame(
+                {
+                    "YR": [None, 2010, 2011, 2012, None],
+                    "QU": [None, 1, 1, 2, None],
+                    "MO": [None, 1, 2, 5, None],
+                    "WE": [None, 2, 8, 19, None],
+                    "DA": [None, 17, 26, 9, None],
+                    "DW": [None, 1, 7, 4, None],
+                    "HR": [None, 0, 3, 16, None],
+                    "MI": [None, 0, 36, 43, None],
+                    "SE": [None, 0, 1, 16, None],
+                }
+            ),
+            id="vector-case",
+        ),
+    ],
+)
+def test_date_part(query_fmt, answer, spark_info, memory_leak_check):
+    selects = []
+    for unit in ["year", "q", "mons", "wk", "dayofmonth", "dow", "hrs", "min", "s"]:
+        selects.append(query_fmt.format(unit))
+    query = f"SELECT {', '.join(selects)} FROM table1"
+
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "col_dt": pd.Series(
+                    [
+                        None,
+                        pd.Timestamp("2010-01-17"),
+                        pd.Timestamp("2011-02-26 03:36:01"),
+                        pd.Timestamp("2012-05-09 16:43:16.123456"),
+                        pd.Timestamp("2013-10-22 05:32:21.987654321"),
+                    ]
+                )
+            }
+        )
+    }
+
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+    )
+
+
 def make_spark_interval(interval_str, value):
     """simple helper function that takes a value and an timeunit str, and returns a spark interval"""
     if interval_str == "MICROSECOND":
