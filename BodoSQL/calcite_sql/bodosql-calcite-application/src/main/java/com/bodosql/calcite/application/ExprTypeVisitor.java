@@ -419,6 +419,7 @@ public class ExprTypeVisitor {
           || fnName.equals("CURRENT_TIMESTAMP")
           || fnName.equals("LOCALTIME")
           || fnName.equals("LOCALTIMESTAMP")
+          || fnName.equals("GETDATE")
           || fnName.equals("NOW")
           || fnName.equals("UTC_TIMESTAMP")
           || fnName.equals("UTC_DATE")
