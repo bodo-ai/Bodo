@@ -21,7 +21,7 @@ import pyarrow as pa
 from mpi4py import MPI
 from numba.core import ir, types
 from numba.core.compiler_machinery import FunctionPass, register_pass
-from numba.core.ir_utils import find_callname, guard
+from numba.core.ir_utils import build_definitions, find_callname, guard
 from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
 
@@ -2196,3 +2196,71 @@ def generate_comparison_ops_func(op, check_na=False):
     loc_vars = {}
     exec(func_text, {"pd": pd}, loc_vars)
     return loc_vars["test_impl"]
+
+
+def find_funcname_in_annotation_ir(annotation, desired_callname):
+    """Finds a function call if it exists in the blocks stored
+    in the annotation. Returns the name of the LHS variable
+    defining the function if it exists and the variables
+    defining the arguments with which the function was called.
+
+    Args:
+        annotation (TypeAnnotation): Dispatcher annotation
+        contain the blocks and typemap.
+
+    Returns:
+        Tuple(Name of the LHS variable, List[Name of argument variables])
+
+    Raises Assertion Error if the desired_callname is not found.
+    """
+    # Generate a dummy IR to enable find_callname
+    f_ir = ir.FunctionIR(
+        annotation.blocks,
+        False,
+        annotation.func_id,
+        ir.Loc("", 0),
+        {},
+        0,
+        [],
+    )
+    # Update the definitions
+    f_ir._definitions = build_definitions(f_ir.blocks)
+    # Iterate over the IR
+    for block in f_ir.blocks.values():
+        for stmt in block.body:
+            if isinstance(stmt, ir.Assign):
+                callname = guard(find_callname, f_ir, stmt.value, annotation.typemap)
+                if callname == desired_callname:
+                    return stmt.value.func.name, [var.name for var in stmt.value.args]
+
+    assert False, f"Did not find function {desired_callname} in the IR"
+
+
+def find_nested_dispatcher_and_args(
+    dispatcher, args, func_name, return_dispatcher=True
+):
+    """Finds a dispatcher in the IR and the arguments with which it was
+    called for the given func_name (which matches the output of find_callname).
+    This dispatcher is assumed to be called
+
+    Args:
+        dispatcher (Dispatch): A numba/bodo dispatcher
+        args (tuple(numba.core.types.Type)): Input tuple of Numba types
+        func_name (Tuple[str, str]): func_name to find.
+        return_dispatcher (bool): Should we find and return the dispatcher + arguments?
+            This is True when we are doing this as part of a multi-step traversal.
+
+    Returns a tuple with the dispatcher and the arguments with which it was called.
+    """
+    sig = types.void(*args)
+    cr = dispatcher.get_compile_result(sig)
+    annotation = cr.type_annotation
+    var_name, arg_names = find_funcname_in_annotation_ir(annotation, func_name)
+    if return_dispatcher:
+        typemap = annotation.typemap
+        arg_types = tuple([typemap[name] for name in arg_names])
+        # Find the coalesce dispatcher in the IR
+        cached_info = typemap[var_name].templates[0]._impl_cache
+        return cached_info[
+            (numba.core.registry.cpu_target.typing_context, arg_types, ())
+        ]

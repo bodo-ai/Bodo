@@ -9,7 +9,7 @@ from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import raise_bodo_error
+from bodo.utils.typing import is_str_arr_type, raise_bodo_error
 
 
 def coalesce(A):  # pragma: no cover
@@ -19,7 +19,7 @@ def coalesce(A):  # pragma: no cover
 
 @overload(coalesce)
 def overload_coalesce(A):
-    """Handles cases where COALESCE recieves optional arguments and forwards
+    """Handles cases where COALESCE receives optional arguments and forwards
     to the appropriate version of the real implementation"""
     if not isinstance(A, (types.Tuple, types.UniTuple)):
         raise_bodo_error("Coalesce argument must be a tuple")
@@ -49,6 +49,9 @@ def overload_coalesce_util(A):
        1+ columns/scalars and returns the first value from each row that is
        not NULL.
 
+       This kernel has optimized implementations for handling strings. If dealing
+       with normal string arrays we avoid any intermediate allocation by using get_str_arr_item_copy.
+
     Args:
         A (any array/scalar tuple): the array of values that are coalesced
         into a single column by choosing the first non-NULL value
@@ -72,11 +75,26 @@ def overload_coalesce_util(A):
             for j in range(i + 1, len(A)):
                 dead_cols.append(j)
                 if bodo.utils.utils.is_array_typ(A[j]):
+                    # Indicate if the output should be an array. This is for the
+                    # rare edge case where a scalar comes before an array so the
+                    # length of the column needs to be determined from a later array.
                     array_override = f"A[{j}]"
             break
 
     arg_names = [f"A{i}" for i in range(len(A)) if i not in dead_cols]
     arg_types = [A[i] for i in range(len(A)) if i not in dead_cols]
+    # Determine if we have string data.
+    is_string_data = False
+    if arg_types:
+        single_arg_typ = arg_types[0]
+        is_string_data = (
+            single_arg_typ == bodo.string_type
+            or is_str_arr_type(single_arg_typ)
+            or (
+                isinstance(single_arg_typ, bodo.SeriesType)
+                and is_str_arr_type(single_arg_typ.data)
+            )
+        )
     propagate_null = [False] * (len(A) - len(dead_cols))
     scalar_text = ""
     first = True
@@ -94,7 +112,14 @@ def overload_coalesce_util(A):
         elif bodo.utils.utils.is_array_typ(A[i]):
             cond = "if" if first else "elif"
             scalar_text += f"{cond} not bodo.libs.array_kernels.isna(A{i}, i):\n"
-            scalar_text += f"   res[i] = arg{i-dead_offset}\n"
+            if is_string_data:
+                # If we have string data directly copy from one array to another without an intermediate
+                # allocation.
+                scalar_text += (
+                    f"   bodo.libs.str_arr_ext.get_str_arr_item_copy(res, i, A{i}, i)\n"
+                )
+            else:
+                scalar_text += f"   res[i] = arg{i-dead_offset}\n"
             first = False
 
         # If A[i] is a non-NULL scalar, then it is the answer and stop searching
@@ -136,6 +161,8 @@ def overload_coalesce_util(A):
         arg_sources,
         array_override,
         support_dict_encoding=False,
+        # If we have a string array avoid any intermediate allocations
+        alloc_array_scalars=not is_string_data,
     )
 
 
