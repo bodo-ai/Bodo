@@ -111,6 +111,7 @@ public class ExprTypeVisitor {
           "CONTAINS",
           "DATE_ADD",
           "DATE_SUB",
+          "DATE_PART",
           "DATEADD",
           "DATEDIFF",
           "DECODE",
