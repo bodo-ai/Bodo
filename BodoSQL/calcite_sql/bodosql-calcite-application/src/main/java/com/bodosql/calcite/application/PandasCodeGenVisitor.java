@@ -2188,6 +2188,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
             }
             return new RexNodeVisitorInfo(outputName, exprLowercase);
           case "DATEADD":
+            // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
+            // Otherwise, fall back to the normal DATEADD.
+            if (operandsInfo.size() == 3) {
+              assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
+              return generateSnowflakeDateAddCode(operandsInfo);
+            }
           case "DATE_ADD":
           case "ADDDATE":
             assert operandsInfo.size() == 2;
