@@ -160,15 +160,17 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
     """
     fname = "time_test.pq"
     fname2 = "time_test_2.pq"
-    with ensure_clean(fname), ensure_clean(fname2):
-        df_orig = pd.DataFrame(
-            {
-                "A": bodo.Time(0, 0, 0, precision=precision),
-                "B": bodo.Time(1, 1, 1, precision=precision),
-                "C": bodo.Time(2, 2, 2, precision=precision),
-            },
-            index=np.arange(3),
-        )
+
+    df_orig = pd.DataFrame(
+        {
+            "A": bodo.Time(0, 0, 0, precision=precision),
+            "B": bodo.Time(1, 1, 1, precision=precision),
+            "C": bodo.Time(2, 2, 2, precision=precision),
+        },
+        index=np.arange(3),
+    )
+
+    if bodo.get_rank() == 0:
         table_orig = pa.Table.from_pandas(
             df_orig,
             schema=pa.schema(
@@ -180,6 +182,10 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
             ),
         )
         pq.write_table(table_orig, fname)
+
+    bodo.barrier()
+
+    with ensure_clean(fname), ensure_clean(fname2):
 
         @bodo.jit(distributed=False)
         def impl():
@@ -198,7 +204,6 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
             return pd.read_parquet(fname2)
 
         df = reader()
-
         assert df.equals(df_orig)
 
 
