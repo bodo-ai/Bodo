@@ -8,7 +8,7 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, find_nested_dispatcher_and_args
 
 
 @pytest.mark.parametrize(
@@ -122,7 +122,7 @@ from bodo.tests.utils import check_func
         ),
     ],
 )
-def test_coalesce(args):
+def test_coalesce(args, memory_leak_check):
     """Test BodoSQL COALESCE kernel"""
     n_args = len(args)
     args_str = ", ".join(f"A{i}" for i in range(n_args))
@@ -148,6 +148,65 @@ def test_coalesce(args):
 
     check_func(
         impl, args, py_output=coalesce_answer, check_dtype=False, reset_index=True
+    )
+
+
+def test_coalesce_str_array_optimized(memory_leak_check):
+    """Test that the BodoSQL COALESCE kernel doesn't produce intermediate allocations
+    when processing string arrays/Series."""
+    S0 = pd.Series(
+        ["afa", "erwoifnewoi", "Rer", pd.NA, "مرحبا, العالم ، هذا هو بودو"] * 5
+    )
+    S1 = pd.Series(["a", "b", "c", "d", pd.NA] + (["a", pd.NA, "a", pd.NA] * 5))
+    scalar = "مرحبا, العالم ، هذا"
+    args = (S0, S1, scalar)
+    args_str = ", ".join(f"A{i}" for i in range(len(args)))
+    test_impl = f"def impl({args_str}):\n"
+    series_str = (
+        "pd.Series"
+        if any(
+            isinstance(a, (pd.Series, pd.core.arrays.base.ExtensionArray)) for a in args
+        )
+        else ""
+    )
+    test_impl += f"  return {series_str}(bodo.libs.bodosql_array_kernels.coalesce(({args_str},)))"
+    impl_vars = {}
+    exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
+    impl = impl_vars["impl"]
+
+    def coalesce_scalar_fn(*args):
+        for arg in args:
+            if not pd.isna(arg):
+                return arg
+
+    coalesce_answer = vectorized_sol(args, coalesce_scalar_fn, None)
+
+    check_func(
+        impl, args, py_output=coalesce_answer, check_dtype=False, reset_index=True
+    )
+
+    # Verify get_str_arr_item_copy is in the IR and there is no intermediate
+    # allocation. This function is not inlined so we must traverse several steps to get to
+    # the actual IR in question.
+    bodo_func = bodo.jit(parallel=True)(impl)
+    # Find the coalesce dispatcher in the IR
+    arg_typs = tuple([bodo.typeof(arg) for arg in args])
+    dispatcher, used_sig = find_nested_dispatcher_and_args(
+        bodo_func, arg_typs, ("coalesce", "bodo.libs.bodosql_array_kernels")
+    )
+    # Find the coalesce_util dispatcher in the IR
+    dispatcher, used_sig = find_nested_dispatcher_and_args(
+        dispatcher,
+        used_sig,
+        ("coalesce_util", "bodo.libs.bodosql_variadic_array_kernels"),
+    )
+    # Verify get_str_arr_item_copy is in the IR. find_nested_dispatcher_and_args
+    # will throw an assertion error if it doesn't exist.
+    find_nested_dispatcher_and_args(
+        dispatcher,
+        used_sig,
+        ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"),
+        return_dispatcher=False,
     )
 
 
@@ -484,7 +543,7 @@ def test_coalesce(args):
         ),
     ],
 )
-def test_decode(args):
+def test_decode(args, memory_leak_check):
     """Test BodoSQL DECODE kernel"""
     # generate test function for the number of args
     n_args = len(args)
@@ -512,8 +571,8 @@ def test_decode(args):
 
 
 @pytest.mark.slow
-def test_option_with_arr_coalesce():
-    """tests coalesce behavior with optionals when suplied an array argument"""
+def test_option_with_arr_coalesce(memory_leak_check):
+    """tests coalesce behavior with optionals when supplied an array argument"""
 
     def impl1(arr, scale1, scale2, flag1, flag2):
         A = scale1 if flag1 else None
@@ -539,8 +598,8 @@ def test_option_with_arr_coalesce():
 
 
 @pytest.mark.slow
-def test_option_no_arr_coalesce():
-    """tests coalesce behavior with optionals when suplied no array argument"""
+def test_option_no_arr_coalesce(memory_leak_check):
+    """tests coalesce behavior with optionals when supplied no array argument"""
 
     def impl1(scale1, scale2, flag1, flag2):
         A = scale1 if flag1 else None
@@ -585,7 +644,7 @@ def test_option_no_arr_coalesce():
         [False, True, False, True, False],
     ],
 )
-def test_option_decode(flags):
+def test_option_decode(flags, memory_leak_check):
     def impl1(A, B, C, D, E, F, flag0, flag1, flag2, flag3, flag4):
         arg0 = B if flag0 else None
         arg1 = C if flag1 else None
