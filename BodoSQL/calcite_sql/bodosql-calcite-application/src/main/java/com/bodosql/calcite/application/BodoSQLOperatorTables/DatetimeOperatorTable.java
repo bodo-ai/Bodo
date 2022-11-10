@@ -33,10 +33,16 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.TIMESTAMP_NULLABLE,
           null,
-          OperandTypes.sequence(
-              "DATEADD(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER)),
+          OperandTypes.or(
+              OperandTypes.sequence(
+                  "DATEADD(UNIT, VALUE, DATETIME)",
+                  OperandTypes.STRING,
+                  OperandTypes.INTEGER,
+                  OperandTypes.DATETIME),
+              OperandTypes.sequence(
+                  "DATEADD(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
+                  OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+                  OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER))),
           SqlFunctionCategory.TIMEDATE);
 
   // TODO: Extend the Library Operator and use the builtin Libraries
