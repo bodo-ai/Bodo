@@ -187,10 +187,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     try {
       DatabaseMetaData metaData = getDataBaseMetaData(shouldRetry);
       // Passing null for tableNamePattern should match all table names. Although
-      // this is not in the public documentation. TABLE refers to the JDBC table
-      // type.
-      ResultSet tableInfo =
-          metaData.getTables(catalogName, schemaName, null, new String[] {"TABLE"});
+      // this is not in the public documentation. Passing null for types ensures we
+      // allow all possible table types, including regular tables and views.
+      ResultSet tableInfo = metaData.getTables(catalogName, schemaName, null, null);
       HashSet<String> tableNames = new HashSet<>();
       while (tableInfo.next()) {
         // Table name is stored in column 3
