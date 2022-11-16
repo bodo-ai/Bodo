@@ -1,15 +1,28 @@
+import json
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional
 
 import pyarrow as pa
 from bodo_iceberg_connector.catalog_conn import gen_file_loc, parse_conn_str
 from bodo_iceberg_connector.py4j_support import (
-    JavaType,
-    TypeInt,
     convert_list_to_java,
     get_java_table_handler,
 )
 from bodo_iceberg_connector.schema_helper import arrow_to_iceberg_schema
 from py4j.protocol import Py4JJavaError
+
+
+@dataclass
+class DataFileInfo:
+    """
+    Python Representation of the DataFileInfo class on Java's side
+    Used for communicating between Python and Java by transforming
+    objects into JSON form
+    """
+
+    path: str
+    size: int
+    record_count: int
 
 
 def process_file_infos(
@@ -21,8 +34,8 @@ def process_file_infos(
     table_name,
 ):
     """
-    Cleanup and process file name and metric info to Java types
-    before calling the Java commit functions
+    Process file name and metrics to a JSON string that can be transmitted
+    and deserialized in the Java side.
 
     Args:
         fnames: List of file paths (possibly relative or absolute)
@@ -33,24 +46,22 @@ def process_file_infos(
         table_name: Name of Iceberg table
 
     Returns:
-        fnames_java: Java list of strings representing file names
-        size_metric: Java list of longs representing file sizes in bytes
-        count_metric: Java list of longs representing row/record count per file
+        JSON String Representing DataFileInfo objects
     """
 
     fnames = [
         gen_file_loc(catalog_type, table_loc, db_name, table_name, name)
         for name in fnames
     ]
-    fnames_java = convert_list_to_java(fnames)
-    size_metric = convert_list_to_java(
-        [TypeInt(x, JavaType.PRIMITIVE_LONG) for x in all_metrics["size"]]
-    )
-    count_metric = convert_list_to_java(
-        [TypeInt(x, JavaType.PRIMITIVE_LONG) for x in all_metrics["record_count"]]
-    )
 
-    return fnames_java, size_metric, count_metric
+    file_infos = [
+        asdict(DataFileInfo(fname, size, count))
+        for fname, size, count in zip(
+            fnames, all_metrics["size"], all_metrics["record_count"]
+        )
+    ]
+
+    return json.dumps(file_infos)
 
 
 def commit_write(
@@ -86,7 +97,7 @@ def commit_write(
     """
     catalog_type, _ = parse_conn_str(conn_str)
     handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
-    fnames_java, size_metric, count_metric = process_file_infos(
+    file_info_str = process_file_infos(
         fnames, all_metrics, catalog_type, table_loc, db_name, table_name
     )
 
@@ -96,9 +107,7 @@ def commit_write(
         ), "bodo_iceberg_connector Internal Error: Should never create existing table"
         try:
             handler.createOrReplaceTable(
-                fnames_java,
-                size_metric,
-                count_metric,
+                file_info_str,
                 arrow_to_iceberg_schema(pa_schema),
                 False,
             )
@@ -109,9 +118,7 @@ def commit_write(
     elif mode == "replace":
         try:
             handler.createOrReplaceTable(
-                fnames_java,
-                size_metric,
-                count_metric,
+                file_info_str,
                 arrow_to_iceberg_schema(pa_schema),
                 True,
             )
@@ -126,9 +133,7 @@ def commit_write(
         assert iceberg_schema_id is not None
 
         try:
-            handler.appendTable(
-                fnames_java, size_metric, count_metric, iceberg_schema_id
-            )
+            handler.appendTable(file_info_str, iceberg_schema_id)
         except Py4JJavaError as e:
             print("Error during Iceberg table append: ", e)
             return False
@@ -167,14 +172,12 @@ def commit_merge_cow(
     handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
 
     old_fnames_java = convert_list_to_java(old_fnames)
-    new_fnames_java, size_metric, count_metric = process_file_infos(
+    new_file_info_str = process_file_infos(
         new_fnames, all_metrics, catalog_type, table_loc, db_name, table_name
     )
 
     try:
-        handler.mergeCOWTable(
-            old_fnames_java, new_fnames_java, size_metric, count_metric, snapshot_id
-        )
+        handler.mergeCOWTable(old_fnames_java, new_file_info_str, snapshot_id)
     except Py4JJavaError as e:
         print("Error during Iceberg MERGE INTO COW:", e)
         return False
