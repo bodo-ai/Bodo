@@ -68,7 +68,7 @@ def test_snowflake_catalog_simple_filter_pushdown(memory_leak_check):
 
     bc = bodosql.BodoSQLContext(
         catalog=bodosql.SnowflakeCatalog(
-            os.environ["SF_USER"],
+            os.environ["SF_USERNAME"],
             os.environ["SF_PASSWORD"],
             "bodopartner.us-east-1",
             "DEMO_WH",
@@ -97,7 +97,7 @@ def test_snowflake_catalog_zero_columns_pruning(memory_leak_check):
 
     bc = bodosql.BodoSQLContext(
         catalog=bodosql.SnowflakeCatalog(
-            os.environ["SF_USER"],
+            os.environ["SF_USERNAME"],
             os.environ["SF_PASSWORD"],
             "bodopartner.us-east-1",
             "DEMO_WH",
@@ -135,7 +135,7 @@ def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
 
     bc = bodosql.BodoSQLContext(
         catalog=bodosql.SnowflakeCatalog(
-            os.environ["SF_USER"],
+            os.environ["SF_USERNAME"],
             os.environ["SF_PASSWORD"],
             "bodopartner.us-east-1",
             "DEMO_WH",
@@ -178,7 +178,7 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
 
     bc = bodosql.BodoSQLContext(
         catalog=bodosql.SnowflakeCatalog(
-            os.environ["SF_USER"],
+            os.environ["SF_USERNAME"],
             os.environ["SF_PASSWORD"],
             "bodopartner.us-east-1",
             "DEMO_WH",

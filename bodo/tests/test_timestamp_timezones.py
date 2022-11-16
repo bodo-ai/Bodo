@@ -37,8 +37,21 @@ def timezone(request):
     return request.param
 
 
-@pytest.fixture(params=pytz.all_timezones)
-def all_tz(request):
+# create a fixture that's representative of all timezones
+@pytest.fixture(
+    params=[
+        "UTC",
+        "US/Pacific",  # timezone behind UTC
+        "Europe/Berlin",  # timezone ahead of UTC
+        "Africa/Casablanca",  # timezone that's ahead of UTC only during DST
+        "Asia/Kolkata",  # timezone that's offset by 30 minutes
+        "Asia/Kathmandu",  # timezone that's offset by 45 minutes
+        "Australia/Lord_Howe",  # timezone that's offset by 30 minutes only during DST
+        "Pacific/Honolulu",  # timezone that has no DST,
+        "Etc/GMT+8",  # timezone that has fixed offset from UTC as opposed to zone
+    ]
+)
+def representative_tz(request):
     return request.param
 
 
@@ -67,7 +80,7 @@ def test_timestamp_timezone_constructor(timestamp_str, timezone, memory_leak_che
     check_func(test_impl, (timestamp_str, timezone))
 
 
-def test_timestamp_tz_convert(all_tz):
+def test_timestamp_tz_convert(representative_tz):
     def test_impl(ts, tz):
         return ts.tz_convert(tz=tz)
 
@@ -76,7 +89,7 @@ def test_timestamp_tz_convert(all_tz):
         test_impl,
         (
             ts,
-            all_tz,
+            representative_tz,
         ),
     )
 
@@ -85,10 +98,10 @@ def test_timestamp_tz_convert(all_tz):
         BodoError,
         match="Cannot convert tz-naive Timestamp, use tz_localize to localize",
     ):
-        bodo.jit(test_impl)(ts, all_tz)
+        bodo.jit(test_impl)(ts, representative_tz)
 
 
-def test_timestamp_tz_localize(all_tz):
+def test_timestamp_tz_localize(representative_tz):
     def test_impl(ts, tz):
         return ts.tz_localize(tz=tz)
 
@@ -97,7 +110,7 @@ def test_timestamp_tz_localize(all_tz):
         test_impl,
         (
             ts,
-            all_tz,
+            representative_tz,
         ),
     )
 

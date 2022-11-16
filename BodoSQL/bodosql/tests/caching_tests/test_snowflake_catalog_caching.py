@@ -28,7 +28,7 @@ def test_snowflake_catalog_caching(fn_distribution, is_cached):
     check_cache = is_cached == "y"
 
     catalog = bodosql.SnowflakeCatalog(
-        os.environ["SF_USER"],
+        os.environ["SF_USERNAME"],
         os.environ["SF_PASSWORD"],
         "bodopartner.us-east-1",
         "DEMO_WH",

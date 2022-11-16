@@ -449,7 +449,7 @@ def test_cast_boolean(numeric_arrays):
                         bodo.Time(1, 2, 3, 4, 5, 6),
                         bodo.Time(1, 52, 33, 443, 534, 632),
                         None,
-                    ]
+                    ] * 4
                 ),
             ),
             id="Time",
@@ -462,7 +462,7 @@ def test_cast_boolean(numeric_arrays):
                         bytes.fromhex("deadbeef"),
                         bytes(0),
                         None,
-                    ]
+                    ] * 4
                 ),
             ),
             id="Bytes",

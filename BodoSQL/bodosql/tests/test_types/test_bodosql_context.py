@@ -23,7 +23,7 @@ from bodo.utils.typing import BodoError
         pytest.param(
             (
                 SnowflakeCatalog(
-                    os.environ.get("SF_USER", ""),
+                    os.environ.get("SF_USERNAME", ""),
                     os.environ.get("SF_PASSWORD", ""),
                     "bodopartner.us-east-1",
                     "DEMO_WH",
@@ -31,7 +31,7 @@ from bodo.utils.typing import BodoError
                     connection_params={"schema": "PUBLIC"},
                 ),
                 SnowflakeCatalog(
-                    os.environ.get("SF_USER", ""),
+                    os.environ.get("SF_USERNAME", ""),
                     os.environ.get("SF_PASSWORD", ""),
                     "bodopartner.us-east-1",
                     "DEMO_WH",
@@ -171,7 +171,7 @@ def test_remove_view(memory_leak_check):
                     ),
                 },
                 SnowflakeCatalog(
-                    os.environ.get("SF_USER", ""),
+                    os.environ.get("SF_USERNAME", ""),
                     os.environ.get("SF_PASSWORD", ""),
                     "bodopartner.us-east-1",
                     "DEMO_WH",
@@ -220,7 +220,7 @@ def test_bodosql_context_boxing(bc, memory_leak_check):
                     "t2": pd.DataFrame({"C": [b"345253"] * 100}),
                 },
                 SnowflakeCatalog(
-                    os.environ.get("SF_USER", ""),
+                    os.environ.get("SF_USERNAME", ""),
                     os.environ.get("SF_PASSWORD", ""),
                     "bodopartner.us-east-1",
                     "DEMO_WH",

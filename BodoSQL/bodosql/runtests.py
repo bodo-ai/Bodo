@@ -58,6 +58,7 @@ for i, m in enumerate(modules):
         "-n",
         str(num_processes),
         "pytest",
+        "-Wignore",
     ] + mod_pytest_args
     print(f"Running: {' '.join(cmd)} with module {m}")
     p = subprocess.Popen(cmd, shell=False)
