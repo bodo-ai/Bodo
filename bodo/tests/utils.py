@@ -2081,7 +2081,7 @@ def get_snowflake_connection_string(db, schema, user=1):
     other details (db and schema) to change.
     """
     if user == 1:
-        username = os.environ["SF_USER"]
+        username = os.environ["SF_USERNAME"]
         password = os.environ["SF_PASSWORD"]
         account = "bodopartner.us-east-1"
     elif user == 2:
@@ -2114,7 +2114,7 @@ def snowflake_cred_env_vars_present(user=1) -> bool:
         bool: Whether env vars are set or not
     """
     if user == 1:
-        return ("SF_USER" in os.environ) and ("SF_PASSWORD" in os.environ)
+        return ("SF_USERNAME" in os.environ) and ("SF_PASSWORD" in os.environ)
     elif user == 2:
         return ("SF_USER2" in os.environ) and ("SF_PASSWORD2" in os.environ)
     elif user == 3:

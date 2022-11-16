@@ -22,7 +22,7 @@ public class SnowflakeGenTest {
     prop.put("queryTimeout", 5);
     BodoSQLCatalog catalog =
         new SnowflakeCatalogImpl(
-            (String) envVars.get("SF_USER"),
+            (String) envVars.get("SF_USERNAME"),
             (String) envVars.get("SF_PASSWORD"),
             (String) envVars.get("SF_ACCOUNT"),
             (String) envVars.get("SF_CATALOG"),

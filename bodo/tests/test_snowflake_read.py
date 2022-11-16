@@ -1059,7 +1059,7 @@ def test_sql_snowflake_json_url(memory_leak_check):
         df = pd.read_sql(query, conn)
         return df
 
-    username = os.environ["SF_USER"]
+    username = os.environ["SF_USERNAME"]
     password = os.environ["SF_PASSWORD"]
     account = "bodopartner.us-east-1"
     db = "SNOWFLAKE_SAMPLE_DATA"

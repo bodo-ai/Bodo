@@ -62,12 +62,39 @@ except subprocess.CalledProcessError as e:
 # get the list of test modules (test file names) to run
 # omit caching tests, as those will be run in a separate pipeline
 pytest_module_regexp = re.compile(r"<Module ((?!tests/caching_tests/)\S+.py)>")
-modules = []
+all_modules = []
 for l in output.decode().split("\n"):
     m = pytest_module_regexp.search(l)
     if m:
         filename = m.group(1).split("/")[-1]
-        modules.append(filename)
+        all_modules.append(filename)
+
+weekly_modules = [
+    "test_pyspark_api.py",
+    "test_csr_matrix.py",
+    "test_dl.py",
+    "test_gcs.py",
+    "test_json.py",
+    "test_matplotlib.py",
+    "test_ml.py",
+    "test_xgb.py",
+    "test_sklearn_part1.py",
+    "test_sklearn_part2.py",
+    "test_sklearn_part3.py",
+    "test_sklearn_part4.py",
+    "test_sklearn_part5.py",
+    "test_sklearn_linear_model.py",
+    "test_sklearn_error_checking.py",
+    "test_sklearn_cluster_ensemble.py",
+    "test_sklearn_feature_extraction_test.py",
+    "test_spark_sql_str.py",
+    "test_spark_sql_array.py",
+    "test_spark_sql_date.py",
+    "test_spark_sql_numeric.py",
+    "test_spark_sql_map.py",
+]
+
+modules = list(set(all_modules) - set(weekly_modules))
 
 # The '--cov-report=' option passed to pytest means that we want pytest-cov to
 # generate coverage files (".coverage" files used by `coverage` to generate
@@ -105,6 +132,7 @@ for i, m in enumerate(modules):
         "-n",
         str(num_processes),
         "pytest",
+        "-Wignore",
     ] + mod_pytest_args
     print("Running", " ".join(cmd))
     p = subprocess.Popen(cmd, shell=False)
