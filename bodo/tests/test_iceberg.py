@@ -7,11 +7,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional
 
-# We need to import the connector first in order to apply our Py4J
-# monkey-patch. Since PySpark uses Py4J, it will load in the functions
-# we want to patch into memory; thus, without this import, those
-# functions will be saved and used before we can change them
-import bodo_iceberg_connector  # noqa
+import bodo_iceberg_connector
 import mmh3
 import numpy as np
 import pandas as pd

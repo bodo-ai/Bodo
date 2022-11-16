@@ -72,12 +72,7 @@ public class BodoIcebergHandler {
   }
 
   /** Create a new table in the DB. */
-  public void createOrReplaceTable(
-      List<String> fileNames,
-      List<Long> fileSizes,
-      List<Long> fileRecords,
-      Schema schema,
-      boolean replace) {
+  public void createOrReplaceTable(String fileInfoJson, Schema schema, boolean replace) {
     Map<String, String> properties = new HashMap<>();
     properties.put(TableProperties.FORMAT_VERSION, "2");
 
@@ -91,15 +86,13 @@ public class BodoIcebergHandler {
       txn =
           catalog.newCreateTableTransaction(id, schema, PartitionSpec.unpartitioned(), properties);
 
-    List<DataFileInfo> fileInfos = DataFileInfo.fromLists(fileNames, fileSizes, fileRecords);
+    List<DataFileInfo> fileInfos = DataFileInfo.fromJson(fileInfoJson);
     this.addData(txn.newAppend(), PartitionSpec.unpartitioned(), SortOrder.unsorted(), fileInfos);
     txn.commitTransaction();
   }
 
   /** Appends Rows into a Pre-existing Table */
-  public void appendTable(
-      List<String> fileNames, List<Long> fileSizes, List<Long> fileRecords, int schemaID) {
-
+  public void appendTable(String fileInfoJson, int schemaID) {
     // Remove the Table instance associated with `id` from the cache
     // So that the next load gets the current instance from the underlying catalog
     catalog.invalidateTable(id);
@@ -107,17 +100,12 @@ public class BodoIcebergHandler {
     if (table.schema().schemaId() != schemaID)
       throw new IllegalStateException("Iceberg Table has updated its schema");
 
-    List<DataFileInfo> fileInfos = DataFileInfo.fromLists(fileNames, fileSizes, fileRecords);
+    List<DataFileInfo> fileInfos = DataFileInfo.fromJson(fileInfoJson);
     this.addData(table.newAppend(), table.spec(), table.sortOrder(), fileInfos);
   }
 
   /** Merge Rows into Pre-existing Table by Copy-on-Write Rules */
-  public void mergeCOWTable(
-      List<String> oldFileNames,
-      List<String> newFileNames,
-      List<Long> fileSizes,
-      List<Long> fileRecords,
-      long snapshotID) {
+  public void mergeCOWTable(List<String> oldFileNames, String newFileInfoJson, long snapshotID) {
 
     // Remove the Table instance associated with `id` from the cache
     // So that the next load gets the current instance from the underlying catalog
@@ -127,7 +115,7 @@ public class BodoIcebergHandler {
       throw new IllegalStateException(
           "Iceberg Table has been updated since reading. Can not complete MERGE INTO");
 
-    List<DataFileInfo> fileInfos = DataFileInfo.fromLists(newFileNames, fileSizes, fileRecords);
+    List<DataFileInfo> fileInfos = DataFileInfo.fromJson(newFileInfoJson);
 
     this.overwriteData(
         table.newOverwrite(), table.spec(), table.sortOrder(), oldFileNames, fileInfos);
