@@ -1,8 +1,13 @@
 import atexit
 import os
 import time
+import warnings
+
 import numpy as np
 from mpi4py.libmpi cimport MPI_COMM_WORLD, MPI_Comm_rank, MPI_Comm_size, MPI_Barrier
+
+from bodo.utils.typing import BodoWarning
+
 
 # We don't want to expose these variables outside this module (cdef
 # variables can't be accessed directly from Python). Also, variables with
@@ -14,6 +19,8 @@ IF BODO_DEV_BUILD:
 ELSE:
     cdef str trace_filename = "bodo_trace.dat"
 cdef object time_start = time.time()  # time at which tracing starts
+
+TRACING_MEM_WARN = "Tracing is still experimental and has been known to have memory related issues. In our testing we have at times seen 1-2 GB be used per rank to support tracing. If you are running out of memory or you are attempted to document the memory footprint for a workload, please disable tracing."
 
 # Events are stored in Google's trace event format:
 # https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/edit?pli=1
@@ -64,6 +71,11 @@ def reset(trace_fname=None):
 
 
 def start(trace_fname=None):
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    if comm.Get_rank() == 0:
+        warnings.warn(TRACING_MEM_WARN, BodoWarning)
+
     reset(trace_fname)
 
 
