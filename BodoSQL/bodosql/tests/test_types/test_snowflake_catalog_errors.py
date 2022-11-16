@@ -56,7 +56,7 @@ def test_snowflake_catalog_data_not_found_err():
 
     bc = bodosql.BodoSQLContext(
         catalog=bodosql.SnowflakeCatalog(
-            os.environ["SF_USER"],
+            os.environ["SF_USERNAME"],
             os.environ["SF_PASSWORD"],
             "bodopartner.us-east-1",
             "DEMO_WH",

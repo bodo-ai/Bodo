@@ -2971,7 +2971,7 @@ def test_df_mem_usage(memory_leak_check):
 from .test_matplotlib import bodo_check_figures_equal
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_simple(fig_test, fig_ref):
     """
@@ -2990,7 +2990,7 @@ def test_df_plot_simple(fig_test, fig_ref):
     bodo.jit(impl)(fig_test, df)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_labels(fig_test, fig_ref):
     """
@@ -3016,7 +3016,7 @@ def test_df_plot_labels(fig_test, fig_ref):
     bodo.jit(impl)(fig_test, df)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_ticks(fig_test, fig_ref):
     """
@@ -3042,7 +3042,7 @@ def test_df_plot_ticks(fig_test, fig_ref):
     bodo.jit(impl)(fig_test, df)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_simple_scatter(fig_test, fig_ref):
     """
@@ -3062,7 +3062,7 @@ def test_df_plot_simple_scatter(fig_test, fig_ref):
     bodo.jit(impl)(fig_test, df)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_labels_scatter(fig_test, fig_ref):
     """
@@ -3090,7 +3090,7 @@ def test_df_plot_labels_scatter(fig_test, fig_ref):
     bodo.jit(impl)(fig_test, df)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_ticks_scatter(fig_test, fig_ref):
     """
@@ -3118,7 +3118,7 @@ def test_df_plot_ticks_scatter(fig_test, fig_ref):
     bodo.jit(impl)(fig_test, df)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_simple_dist(fig_test, fig_ref):
     """
@@ -3139,7 +3139,7 @@ def test_df_plot_simple_dist(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_labels_dist(fig_test, fig_ref):
     """
@@ -3168,7 +3168,7 @@ def test_df_plot_labels_dist(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_ticks_dist(fig_test, fig_ref):
     """
@@ -3197,7 +3197,7 @@ def test_df_plot_ticks_dist(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_simple_scatter_dist(fig_test, fig_ref):
     """
@@ -3219,7 +3219,7 @@ def test_df_plot_simple_scatter_dist(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_labels_scatter_dist(fig_test, fig_ref):
     """
@@ -3249,7 +3249,7 @@ def test_df_plot_labels_scatter_dist(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_ticks_scatter_dist(fig_test, fig_ref):
     """
@@ -3279,7 +3279,7 @@ def test_df_plot_ticks_scatter_dist(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_x_y_none_distributed(fig_test, fig_ref):
     """
@@ -3303,7 +3303,7 @@ def test_df_plot_x_y_none_distributed(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_x_none_distributed(fig_test, fig_ref):
     """
@@ -3326,7 +3326,7 @@ def test_df_plot_x_none_distributed(fig_test, fig_ref):
     bodo.jit(impl)(fig_test)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 @bodo_check_figures_equal(extensions=["png"], tol=0.1)
 def test_df_plot_y_none_distributed(fig_test, fig_ref):
     """

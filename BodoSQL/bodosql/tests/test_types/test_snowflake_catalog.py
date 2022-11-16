@@ -57,7 +57,7 @@ def dummy_snowflake_catalogs(request):
 @pytest.fixture(
     params=[
         bodosql.SnowflakeCatalog(
-            os.environ.get("SF_USER", ""),
+            os.environ.get("SF_USERNAME", ""),
             os.environ.get("SF_PASSWORD", ""),
             "bodopartner.us-east-1",
             "DEMO_WH",
@@ -78,7 +78,7 @@ def test_db_snowflake_catalog(request):
 @pytest.fixture(
     params=[
         bodosql.SnowflakeCatalog(
-            os.environ.get("SF_USER", ""),
+            os.environ.get("SF_USERNAME", ""),
             os.environ.get("SF_PASSWORD", ""),
             "bodopartner.us-east-1",
             "DEMO_WH",
