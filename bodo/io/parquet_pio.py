@@ -1338,12 +1338,18 @@ def get_parquet_dataset(
                     if dataset_schema_names != fileset_schema_names:
                         added_columns = fileset_schema_names - dataset_schema_names
                         missing_columns = dataset_schema_names - fileset_schema_names
+
                         msg = f"Schema in {piece} was different.\n"
-                        if added_columns:
-                            msg += f"File contains column(s) {added_columns} not found in other files in the dataset.\n"
-                        if missing_columns:
-                            msg += f"File missing column(s) {missing_columns} found in other files in the dataset.\n"
-                        raise BodoError(msg)
+                        if typing_pa_schema is not None:
+                            if added_columns:
+                                msg += f"File contains column(s) {added_columns} not found in other files in the dataset.\n"
+                                raise BodoError(msg)
+                        else:
+                            if added_columns:
+                                msg += f"File contains column(s) {added_columns} not found in other files in the dataset.\n"
+                            if missing_columns:
+                                msg += f"File missing column(s) {missing_columns} found in other files in the dataset.\n"
+                            raise BodoError(msg)
                     try:
                         dataset.schema = unify_schemas([dataset.schema, file_schema])
                     except Exception as e:

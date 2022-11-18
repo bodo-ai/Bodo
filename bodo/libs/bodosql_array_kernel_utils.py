@@ -13,8 +13,11 @@ import pyarrow as pa
 from numba.core import types
 
 import bodo
+from bodo.hiframes.datetime_timedelta_ext import PDTimeDeltaType
 from bodo.hiframes.pd_series_ext import (
     is_datetime_date_series_typ,
+    is_timedelta64_series_typ,
+    pd_timedelta_type,
     pd_timestamp_type,
 )
 from bodo.utils.typing import (
@@ -44,6 +47,7 @@ def gen_vectorized(
     suffix_code=None,
     res_list=False,
     extra_globals=None,
+    alloc_array_scalars=True,
 ):
     """Creates an impl for a column compute function that has several inputs
        that could all be scalars, nulls, or arrays by broadcasting appropriately.
@@ -73,13 +77,20 @@ def gen_vectorized(
             given operation may cause duplicate values in the ._data field of a dictionary
             encoded output (slicing, for example). Only has effect if support_dict_encoding
             is also true.
-        prefix_code (optional string): if provided, embedes the code string
+        prefix_code (optional string): if provided, embeds the code string
             right before the loop begins.
-        suffix_code (optional string): if provided, embedes the code string
+        suffix_code (optional string): if provided, embeds the code string
             after the loop before the function ends (not used if there is no loop)
         res_list (optional boolean): if provided, sets up res as a list instead
             of an array, and does not use a prange. Not compatible with
             support_dict_encoding.
+        alloc_array_scalars (boolean): When generating the func_text should array values
+            be unpacked into local variables. This is an optimization that should only be
+            done when the allocation can be expensive (e.g. strings) and there is an optimized
+            way to compute the result without the intermediate allocate (e.g. copying
+            values with get_str_arr_item_copy). If this is False the scalar text should never reference
+            array values using the local variable names and is responsible for directly using the
+            optimized implementation.
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -122,7 +133,7 @@ def gen_vectorized(
 
     NOTE: dictionary encoded outputs operate under the following assumptions:
     - The output will only be dictionary encoded if exactly one of the inputs
-        is dicitonary encoded, and the rest are all scalars, and support_dict_encoding
+        is dictionary encoded, and the rest are all scalars, and support_dict_encoding
         is True.
     - The indices do not change, except for some of them becoming null if the
         string they refer to is also transformed into null
@@ -344,7 +355,8 @@ def gen_vectorized(
             # Add the local variables that the scalar computation will use
             for i in range(len(arg_names)):
                 if are_arrays[i]:
-                    func_text += f"      arg{i} = {arg_names[i]}[i]\n"
+                    if alloc_array_scalars:
+                        func_text += f"      arg{i} = {arg_names[i]}[i]\n"
                 else:
                     func_text += f"      arg{i} = {arg_names[i]}\n"
 
@@ -642,6 +654,26 @@ def is_valid_datetime_or_date_arg(arg):
     )
 
 
+def is_valid_timedelta_arg(arg):
+    """
+    Args:
+        arg (dtype): the dtype of the argument being checked
+    returns: False if the argument is not timedelta data
+
+    Note: In BodoSQL, scalar timedelta types are both timedelta64ns,
+    and the columnar timedelta types are both .
+    """
+
+    return arg == pd_timedelta_type or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and (
+            is_timedelta64_series_typ(arg)
+            or isinstance(arg, PDTimeDeltaType)
+            or arg.dtype == bodo.timedelta64ns
+        )
+    )
+
+
 def is_valid_boolean_arg(arg):  # pragma: no cover
     """
     Args:
@@ -914,7 +946,8 @@ def gen_windowed(
 
     Args:
         constant_block (string): what should happen if the output value will
-        always be the same due to the window size being so big.
+        always be the same due to the window size being so big. If None,
+        this means that there is no such case.
         calculate_block (string): how should the current array value be
         calculated in terms of the up-to-date accumulators
         out_dtype (dtype): what is the dtype of the output data.
@@ -1002,9 +1035,10 @@ def gen_windowed(
     calculate_lines = calculate_block.splitlines()
     calculate_indentation = len(calculate_lines[0]) - len(calculate_lines[0].lstrip())
 
-    # Calculate the indentation of the constant_block so that it can be removed
-    constant_lines = constant_block.splitlines()
-    constant_indentation = len(constant_lines[0]) - len(constant_lines[0].lstrip())
+    if constant_block != None:
+        # Calculate the indentation of the constant_block so that it can be removed
+        constant_lines = constant_block.splitlines()
+        constant_indentation = len(constant_lines[0]) - len(constant_lines[0].lstrip())
 
     if setup_block != None:
         # Calculate the indentation of the setup_block so that it can be removed
@@ -1034,13 +1068,16 @@ def gen_windowed(
     func_text += "   if upper_bound < lower_bound:\n"
     func_text += "      for i in range(n):\n"
     func_text += "         bodo.libs.array_kernels.setna(res, i)\n"
-    func_text += "   elif lower_bound <= -n+1 and n-1 <= upper_bound:\n"
-    func_text += (
-        "\n".join([" " * 6 + line[constant_indentation:] for line in constant_lines])
-        + "\n"
-    )
-    func_text += "      for i in range(n):\n"
-    func_text += "         res[i] = constant_value\n"
+    if constant_block != None:
+        func_text += "   elif lower_bound <= -n+1 and n-1 <= upper_bound:\n"
+        func_text += (
+            "\n".join(
+                [" " * 6 + line[constant_indentation:] for line in constant_lines]
+            )
+            + "\n"
+        )
+        func_text += "      for i in range(n):\n"
+        func_text += "         res[i] = constant_value\n"
     func_text += "   else:\n"
     func_text += "      exiting = lower_bound\n"
     func_text += "      entering = upper_bound\n"

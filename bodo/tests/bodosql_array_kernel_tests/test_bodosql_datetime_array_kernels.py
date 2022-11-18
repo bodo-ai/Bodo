@@ -12,6 +12,329 @@ from bodo.libs.bodosql_array_kernels import *
 from bodo.tests.utils import check_func
 
 
+@pytest.mark.parametrize(
+    "args, answers",
+    [
+        pytest.param(
+            (
+                pd.Series([1, 1, 2, 2, -1, -1, 16, 16, -50, -50]),
+                pd.Series([pd.Timestamp("2018-1-1"), None] * 5),
+            ),
+            {
+                "years": pd.Series(
+                    [
+                        pd.Timestamp("2019-1-1"),
+                        None,
+                        pd.Timestamp("2020-1-1"),
+                        None,
+                        pd.Timestamp("2017-1-1"),
+                        None,
+                        pd.Timestamp("2034-1-1"),
+                        None,
+                        pd.Timestamp("1968-1-1"),
+                        None,
+                    ]
+                ),
+                "months": pd.Series(
+                    [
+                        pd.Timestamp("2018-2-1"),
+                        None,
+                        pd.Timestamp("2018-3-1"),
+                        None,
+                        pd.Timestamp("2017-12-1"),
+                        None,
+                        pd.Timestamp("2019-5-1"),
+                        None,
+                        pd.Timestamp("2013-11-1"),
+                        None,
+                    ]
+                ),
+                "weeks": pd.Series(
+                    [
+                        pd.Timestamp("2018-1-8"),
+                        None,
+                        pd.Timestamp("2018-1-15"),
+                        None,
+                        pd.Timestamp("2017-12-25"),
+                        None,
+                        pd.Timestamp("2018-4-23"),
+                        None,
+                        pd.Timestamp("2017-1-16"),
+                        None,
+                    ]
+                ),
+                "days": pd.Series(
+                    [
+                        pd.Timestamp("2018-1-2"),
+                        None,
+                        pd.Timestamp("2018-1-3"),
+                        None,
+                        pd.Timestamp("2017-12-31"),
+                        None,
+                        pd.Timestamp("2018-1-17"),
+                        None,
+                        pd.Timestamp("2017-11-12"),
+                        None,
+                    ]
+                ),
+            },
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                100,
+                pd.Series(pd.date_range("1999-12-20", "1999-12-30", 11)),
+            ),
+            {
+                "years": pd.Series(pd.date_range("2099-12-20", "2099-12-30", 11)),
+                "months": pd.Series(pd.date_range("2008-04-20", "2008-04-30", 11)),
+                "weeks": pd.Series(pd.date_range("2001-11-19", "2001-11-29", 11)),
+                "days": pd.Series(pd.date_range("2000-03-29", "2000-04-08", 11)),
+            },
+            id="scalar_vector",
+        ),
+        pytest.param(
+            (300, pd.Timestamp("1776-7-4")),
+            {
+                "years": pd.Timestamp("2076-7-4"),
+                "months": pd.Timestamp("1801-7-4"),
+                "weeks": pd.Timestamp("1782-4-4"),
+                "days": pd.Timestamp("1777-4-30"),
+            },
+            id="all_scalar",
+        ),
+        pytest.param(
+            (None, pd.Timestamp("1776-7-4")),
+            {
+                "years": None,
+                "months": None,
+                "weeks": None,
+                "days": None,
+            },
+            id="scalar_null",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "unit",
+    [
+        "years",
+        "months",
+        "weeks",
+        "days",
+    ],
+)
+def test_add_interval_date_units(unit, args, answers):
+    if any(isinstance(arg, pd.Series) for arg in args):
+        fn_str = f"lambda amount, start_dt: pd.Series(bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt))"
+    else:
+        fn_str = f"lambda amount, start_dt: bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt)"
+    impl = eval(fn_str)
+
+    check_func(
+        impl,
+        args,
+        py_output=answers[unit],
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "args, answers",
+    [
+        pytest.param(
+            (
+                pd.Series([1, 30, -10, 42, 1234, -654321]),
+                pd.Series(
+                    [pd.Timestamp("2015-03-14")] * 3
+                    + [None]
+                    + [pd.Timestamp("2015-03-14")] * 2
+                ),
+            ),
+            {
+                "hours": pd.Series(
+                    [
+                        pd.Timestamp("2015-3-14 01:00:00"),
+                        pd.Timestamp("2015-3-15 06:00:00"),
+                        pd.Timestamp("2015-3-13 14:00:00"),
+                        None,
+                        pd.Timestamp("2015-5-4 10:00:00"),
+                        pd.Timestamp("1940-7-21 15:00:00"),
+                    ]
+                ),
+                "minutes": pd.Series(
+                    [
+                        pd.Timestamp("2015-3-14 00:01:00"),
+                        pd.Timestamp("2015-3-14 00:30:00"),
+                        pd.Timestamp("2015-3-13 23:50:00"),
+                        None,
+                        pd.Timestamp("2015-3-14 20:34:00"),
+                        pd.Timestamp("2013-12-14 14:39:00"),
+                    ]
+                ),
+                "seconds": pd.Series(
+                    [
+                        pd.Timestamp("2015-3-14 00:00:01"),
+                        pd.Timestamp("2015-3-14 00:00:30"),
+                        pd.Timestamp("2015-3-13 23:59:50"),
+                        None,
+                        pd.Timestamp("2015-3-14 00:20:34"),
+                        pd.Timestamp("2015-3-6 10:14:39"),
+                    ]
+                ),
+                "milliseconds": pd.Series(
+                    [
+                        pd.Timestamp("2015-3-14 00:00:00.001000"),
+                        pd.Timestamp("2015-3-14 00:00:00.030000"),
+                        pd.Timestamp("2015-03-13 23:59:59.990000"),
+                        None,
+                        pd.Timestamp("2015-3-14 00:00:01.234000"),
+                        pd.Timestamp("2015-03-13 23:49:05.679000"),
+                    ]
+                ),
+                "microseconds": pd.Series(
+                    [
+                        pd.Timestamp("2015-3-14 00:00:00.000001"),
+                        pd.Timestamp("2015-3-14 00:00:00.000030"),
+                        pd.Timestamp("2015-3-13 23:59:59.999990"),
+                        None,
+                        pd.Timestamp("2015-3-14 00:00:00.001234"),
+                        pd.Timestamp("2015-03-13 23:59:59.345679"),
+                    ]
+                ),
+                "nanoseconds": pd.Series(
+                    [
+                        pd.Timestamp("2015-3-14 00:00:00.000000001"),
+                        pd.Timestamp("2015-3-14 00:00:00.000000030"),
+                        pd.Timestamp("2015-03-13 23:59:59.999999990"),
+                        None,
+                        pd.Timestamp("2015-3-14 00:00:00.000001234"),
+                        pd.Timestamp("2015-03-13 23:59:59.999345679"),
+                    ]
+                ),
+            },
+            id="all_vector",
+        ),
+        pytest.param(
+            (
+                pd.Series([16 ** (i + 1) for i in range(5)]),
+                pd.Timestamp("2022-11-9 09:42:30.151121521"),
+            ),
+            {
+                "hours": pd.Series(
+                    [
+                        pd.Timestamp("2022-11-10 01:42:30.151121521"),
+                        pd.Timestamp("2022-11-20 1:42:30.151121521"),
+                        pd.Timestamp("2023-4-29 1:42:30.151121521"),
+                        pd.Timestamp("2030-5-2 1:42:30.151121521"),
+                        pd.Timestamp("2142-6-24 1:42:30.151121521"),
+                    ]
+                ),
+                "minutes": pd.Series(
+                    [
+                        pd.Timestamp("2022-11-09 09:58:30.151121521"),
+                        pd.Timestamp("2022-11-09 13:58:30.151121521"),
+                        pd.Timestamp("2022-11-12 05:58:30.151121521"),
+                        pd.Timestamp("2022-12-24 21:58:30.151121521"),
+                        pd.Timestamp("2024-11-06 13:58:30.151121521"),
+                    ]
+                ),
+                "seconds": pd.Series(
+                    [
+                        pd.Timestamp("2022-11-09 09:42:46.151121521"),
+                        pd.Timestamp("2022-11-09 09:46:46.151121521"),
+                        pd.Timestamp("2022-11-09 10:50:46.151121521"),
+                        pd.Timestamp("2022-11-10 03:54:46.151121521"),
+                        pd.Timestamp("2022-11-21 12:58:46.151121521"),
+                    ]
+                ),
+                "milliseconds": pd.Series(
+                    [
+                        pd.Timestamp("2022-11-09 09:42:30.167121521"),
+                        pd.Timestamp("2022-11-09 09:42:30.407121521"),
+                        pd.Timestamp("2022-11-09 09:42:34.247121521"),
+                        pd.Timestamp("2022-11-09 09:43:35.687121521"),
+                        pd.Timestamp("2022-11-09 09:59:58.727121521"),
+                    ]
+                ),
+                "microseconds": pd.Series(
+                    [
+                        pd.Timestamp("2022-11-09 09:42:30.151137521"),
+                        pd.Timestamp("2022-11-09 09:42:30.151377521"),
+                        pd.Timestamp("2022-11-09 09:42:30.155217521"),
+                        pd.Timestamp("2022-11-09 09:42:30.216657521"),
+                        pd.Timestamp("2022-11-09 09:42:31.199697521"),
+                    ]
+                ),
+                "nanoseconds": pd.Series(
+                    [
+                        pd.Timestamp("2022-11-09 09:42:30.151121537"),
+                        pd.Timestamp("2022-11-09 09:42:30.151121777"),
+                        pd.Timestamp("2022-11-09 09:42:30.151125617"),
+                        pd.Timestamp("2022-11-09 09:42:30.151187057"),
+                        pd.Timestamp("2022-11-09 09:42:30.152170097"),
+                    ]
+                ),
+            },
+            id="vector_scalar",
+        ),
+        pytest.param(
+            (
+                300,
+                pd.Timestamp("1986-2-27 20:10:15.625"),
+            ),
+            {
+                "hours": pd.Timestamp("1986-03-12 08:10:15.625000"),
+                "minutes": pd.Timestamp("1986-02-28 01:10:15.625000"),
+                "seconds": pd.Timestamp("1986-02-27 20:15:15.625000"),
+                "milliseconds": pd.Timestamp("1986-02-27 20:10:15.925000"),
+                "microseconds": pd.Timestamp("1986-02-27 20:10:15.625300"),
+                "nanoseconds": pd.Timestamp("1986-02-27 20:10:15.625000300"),
+            },
+            id="all_scalar",
+        ),
+        pytest.param(
+            (40, None),
+            {
+                "hours": None,
+                "minutes": None,
+                "seconds": None,
+                "milliseconds": None,
+                "microseconds": None,
+                "nanoseconds": None,
+            },
+            id="scalar_null",
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "unit",
+    [
+        "hours",
+        "minutes",
+        "seconds",
+        "milliseconds",
+        "microseconds",
+        "nanoseconds",
+    ],
+)
+def test_add_interval_time_units(unit, args, answers):
+    if any(isinstance(arg, pd.Series) for arg in args):
+        fn_str = f"lambda amount, start_dt: pd.Series(bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt))"
+    else:
+        fn_str = f"lambda amount, start_dt: bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt)"
+    impl = eval(fn_str)
+
+    check_func(
+        impl,
+        args,
+        py_output=answers[unit],
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.fixture(
     params=[
         pytest.param(

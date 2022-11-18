@@ -2044,7 +2044,7 @@ constexpr int64_t REMOTE_FS_READ_ENTIRE_FILE_THRESHOLD = 100 * 1024 * 1024;
  * when requested by Python iterator in stream_reader_update. It uses the stored
  * information to determine next chunk to read and signal to Python's iterator
  * end of read.
- * For more information: see chunksize-iterator desgin in confluence
+ * For more information: see chunksize-iterator design in confluence
  * (Pandas Read CSV Iterator Design)
  * skiprows can be a single element or a list.
  * Single element: means skip n rows from the beginning.

@@ -33,7 +33,6 @@ from bodo.utils.typing import (
     is_list_like_index_type,
     is_overload_constant_int,
     is_overload_constant_str,
-    raise_bodo_error,
 )
 
 
@@ -269,7 +268,13 @@ def overload_pd_datetime_arr_nbytes(A):
 @overload_method(DatetimeArrayType, "tz_convert", no_unliteral=True)
 def overload_pd_datetime_tz_convert(A, tz):
     if tz == types.none:
-        raise_bodo_error("tz_convert(): tz must be a string or Fixed Offset")
+        # Note this differs from Pandas in the output type.
+        # Pandas would still have a DatetimeArrayType with no timezone
+        # but we always represent no timezone as datetime64 array.
+        def impl(A, tz):  # pragma: no cover
+            return A._data.copy()
+
+        return impl
 
     else:
 
@@ -347,3 +352,95 @@ def unwrap_tz_array_equiv(self, scope, equiv_set, loc, args, kws):
 ArrayAnalysis._analyze_op_call_bodo_libs_pd_datetime_arr_ext_unwrap_tz_array = (
     unwrap_tz_array_equiv
 )
+
+
+def create_cmp_op_overload_arr(op):
+    """create overload function for comparison operators with pandas timezone aware datetime array"""
+    # Import within the function to avoid circular imports
+    from bodo.hiframes.pd_timestamp_ext import PandasTimestampType
+
+    def overload_datetime_arr_cmp(lhs, rhs):
+        if not (
+            isinstance(lhs, DatetimeArrayType) or isinstance(rhs, DatetimeArrayType)
+        ):  # pragma: no cover
+            # This implementation only handles at least 1 DatetimeArrayType
+            return
+
+        # DatetimeArrayType + Scalar tz-aware or date
+        if isinstance(lhs, DatetimeArrayType) and (
+            isinstance(rhs, PandasTimestampType) or rhs == bodo.datetime_date_type
+        ):
+            # Note: Checking that tz values match is handled by the scalar comparison.
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(lhs)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(lhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = op(lhs[i], rhs)
+                return out_arr
+
+            return impl
+
+        # Scalar tz-aware or date + DatetimeArrayType.
+        elif (
+            isinstance(lhs, PandasTimestampType) or lhs == bodo.datetime_date_type
+        ) and isinstance(rhs, DatetimeArrayType):
+            # Note: Checking that tz values match is handled by the scalar comparison.
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(rhs)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(rhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = op(lhs, rhs[i])
+                return out_arr
+
+            return impl
+
+        # DatetimeArrayType or date array + DatetimeArrayType or date array
+        elif (
+            isinstance(lhs, DatetimeArrayType) or lhs == bodo.datetime_date_array_type
+        ) and (
+            isinstance(rhs, DatetimeArrayType) or rhs == bodo.datetime_date_array_type
+        ):
+            # Note: Checking that tz values match is handled by the scalar comparison.
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(lhs)
+                out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(
+                        lhs, i
+                    ) or bodo.libs.array_kernels.isna(rhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = op(lhs[i], rhs[i])
+                return out_arr
+
+            return impl
+
+        # Tz-Aware timestamp + Tz-Naive timestamp
+        elif isinstance(lhs, DatetimeArrayType) and (
+            isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns
+        ):
+            raise BodoError(
+                f"{numba.core.utils.OPERATORS_TO_BUILTINS[op]} with two Timestamps requires both Timestamps share the same timezone. "
+                + f"Argument 0 has timezone {lhs.tz} and argument 1 is timezone-naive. "
+                + "To compare these values please convert to timezone naive with ts.tz_convert(None)."
+            )
+        # Tz-Naive timestamp + Tz-Aware timestamp
+        elif (
+            isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns
+        ) and isinstance(rhs, DatetimeArrayType):
+            raise BodoError(
+                f"{numba.core.utils.OPERATORS_TO_BUILTINS[op]} with two Timestamps requires both Timestamps share the same timezone. "
+                + f"Argument 0 is timezone-naive and argument 1 has timezone {rhs.tz}. "
+                + "To compare these values please convert to timezone naive with ts.tz_convert(None)."
+            )
+
+    return overload_datetime_arr_cmp

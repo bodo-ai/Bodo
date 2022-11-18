@@ -22,7 +22,7 @@ public class SnowflakeGenTest {
     prop.put("queryTimeout", 5);
     BodoSQLCatalog catalog =
         new SnowflakeCatalogImpl(
-            (String) envVars.get("SF_USER"),
+            (String) envVars.get("SF_USERNAME"),
             (String) envVars.get("SF_PASSWORD"),
             (String) envVars.get("SF_ACCOUNT"),
             (String) envVars.get("SF_CATALOG"),
@@ -40,11 +40,12 @@ public class SnowflakeGenTest {
     BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType);
     arr.add(column3);
 
-    BodoSqlTable table = new LocalTableImpl("localtable", schema, arr, false, "localtable", "");
+    BodoSqlTable table =
+        new LocalTableImpl("localtable", schema, arr, false, "localtable", "", false);
     schema.addTable(table);
 
     RelationalAlgebraGenerator generator =
-        new RelationalAlgebraGenerator(catalog, schema, "dummy_param_table_name");
+        new RelationalAlgebraGenerator(catalog, schema, "dummy_param_table_name", 0);
     System.out.println("SQL query:");
     System.out.println(sql + "\n");
     String unOptimizedPlanStr = generator.getRelationalAlgebraString(sql, false);

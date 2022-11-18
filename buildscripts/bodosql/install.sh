@@ -50,7 +50,7 @@ fi
 
 
 # ---- Create Conda Env ----
-MAMBA_INSTALL="conda install -q -y"
+MAMBA_INSTALL="mamba install -q -y"
 
 # Deactivate env in case this was called by another file that
 # activated the env. This only happens on AWS and causes errors

@@ -4,11 +4,11 @@ trigger:
 pr: none
 
 schedules:
-- cron: "0 5 * * *"
-  displayName: 'Daily Midnight Build'
+- cron: "0 5 * * MON-FRI" 
+  displayName: 'Weekdays Daily Midnight Build'
   branches:
     include:
-    - master
+    - develop
 
 stages:
 - stage: Build_Iceberg_Connector_Binary

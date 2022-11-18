@@ -371,10 +371,14 @@ def sql_distributed_run(
                     # If p[2] is a constant that isn't in the IR (i.e. NULL)
                     # just load the value directly, otherwise load the variable
                     # at runtime.
+                    p0, p2 = p[0], p[2]
+
+                    p0 = convert_col_name(p0, sql_node.converted_colnames)
+                    p0 = "\\\"" + p0 + "\\\""
                     scalar_filter = (
                         ("{" + filter_map[p[2].name] + "}")
                         if isinstance(p[2], ir.Var)
-                        else p[2]
+                        else p2
                     )
                     if p[1] in ("startswith", "endswith"):
                         # This path should only be taken with Snowflake
@@ -382,14 +386,14 @@ def sql_distributed_run(
                             "(",
                             p[1],
                             "(",
-                            p[0],
+                            p0,
                             ",",
                             scalar_filter,
                             ")",
                             ")",
                         ]
                     else:
-                        single_filter = ["(", p[0], p[1], scalar_filter, ")"]
+                        single_filter = ["(", p0, p[1], scalar_filter, ")"]
 
                     and_conds.append(" ".join(single_filter))
                 or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
@@ -530,6 +534,10 @@ def sql_distributed_run(
 
     return nodes
 
+def convert_col_name(col_name, converted_colnames):
+    if col_name in converted_colnames:
+        return col_name.upper()
+    return col_name
 
 def escape_column_names(col_names, db_type, converted_colnames):
     """
@@ -546,9 +554,11 @@ def escape_column_names(col_names, db_type, converted_colnames):
     # conversions in the output as needed.
     if db_type in ("snowflake", "oracle"):
         # Snowflake/Oracle needs to convert all lower case strings back to uppercase
-        used_col_names = [
-            x.upper() if x in converted_colnames else x for x in col_names
-        ]
+
+        used_col_names = []
+        for x in col_names:
+            used_col_names.append(convert_col_name(x, converted_colnames))
+        
         col_str = ", ".join([f'"{x}"' for x in used_col_names])
 
     # MySQL uses tilda as an escape character by default, not quotations
@@ -583,9 +593,6 @@ def _get_snowflake_sql_literal_scalar(filter_value):
     This is in a separate function to enable recursion.
     """
     filter_type = types.unliteral(filter_value)
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        filter_type, "Filter pushdown"
-    )
     if filter_type == types.unicode_type:
         # Strings require double $$ to avoid escape characters
         # https://docs.snowflake.com/en/sql-reference/data-types-text.html#dollar-quoted-string-constants
@@ -597,7 +604,15 @@ def _get_snowflake_sql_literal_scalar(filter_value):
     ):
         # Numeric and boolean values can just return the string representation
         return lambda filter_value: str(filter_value)  # pragma: no cover
-    elif filter_type == bodo.pd_timestamp_type:
+    elif isinstance(filter_type, bodo.PandasTimestampType):
+        if filter_type.tz is None:
+            tz_str = "TIMESTAMP_NTZ"
+        else:
+            # You cannot specify a specific timestamp so instead we assume
+            # we are using the default timezone. This should be fine since the
+            # data matches.
+            # https://docs.snowflake.com/en/sql-reference/data-types-datetime.html#timestamp-ltz-timestamp-ntz-timestamp-tz
+            tz_str = "TIMESTAMP_TZ"
         # Timestamp needs to be converted to a timestamp literal
         def impl(filter_value):  # pragma: no cover
             nanosecond = filter_value.nanosecond
@@ -607,7 +622,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
             elif nanosecond < 100:
                 nanosecond_prepend = "0"
             # TODO: Refactor once strftime support nanoseconds
-            return f"timestamp '{filter_value.strftime('%Y-%m-%d %H:%M:%S.%f')}{nanosecond_prepend}{nanosecond}'"  # pragma: no cover
+            return f"timestamp '{filter_value.strftime('%Y-%m-%d %H:%M:%S.%f')}{nanosecond_prepend}{nanosecond}'::{tz_str}"  # pragma: no cover
 
         return impl
     elif filter_type == bodo.datetime_date_type:
@@ -630,10 +645,9 @@ def _get_snowflake_sql_literal(filter_value):
     returns a string representation of the filter value
     that could be used in a Snowflake SQL query.
     """
-    scalar_isinstance = (types.Integer, types.Float)
+    scalar_isinstance = (types.Integer, types.Float, bodo.PandasTimestampType)
     scalar_equals = (
         bodo.datetime_date_type,
-        bodo.pd_timestamp_type,
         types.unicode_type,
         types.bool_,
     )

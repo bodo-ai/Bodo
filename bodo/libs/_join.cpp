@@ -193,9 +193,11 @@ table_info* hash_join_table(
                     if ((arr1->arr_type == bodo_array_type::DICT) &&
                         (arr2->arr_type == bodo_array_type::DICT)) {
                         if (!arr1->has_global_dictionary)
-                            convert_local_dictionary_to_global(arr1);
+                            convert_local_dictionary_to_global(arr1,
+                                                               left_parallel);
                         if (!arr2->has_global_dictionary)
-                            convert_local_dictionary_to_global(arr2);
+                            convert_local_dictionary_to_global(arr2,
+                                                               right_parallel);
                         unify_dictionaries(arr1, arr2);
                     }
                 }
@@ -395,15 +397,16 @@ table_info* hash_join_table(
         // that ensures all values are unique. If the dictionary is made global
         // by some other means (e.g. Python), then we assume that is also
         // unique.
+        // TODO: Move to only the parallel case.
         for (size_t i = 0; i < n_key; i++) {
             array_info* arr1 = work_left_table->columns[i];
             array_info* arr2 = work_right_table->columns[i];
             if ((arr1->arr_type == bodo_array_type::DICT) &&
                 (arr2->arr_type == bodo_array_type::DICT)) {
                 if (!arr1->has_global_dictionary)
-                    convert_local_dictionary_to_global(arr1);
+                    convert_local_dictionary_to_global(arr1, left_parallel);
                 if (!arr2->has_global_dictionary)
-                    convert_local_dictionary_to_global(arr2);
+                    convert_local_dictionary_to_global(arr2, right_parallel);
                 unify_dictionaries(arr1, arr2);
             }
         }
@@ -419,24 +422,26 @@ table_info* hash_join_table(
 
         // Non-keys used in cond_func need global dictionaries
         // for hashing, but no unifying is necessary.
+        // TODO: Move to only the parallel case.
         for (size_t i = 0; i < cond_func_left_column_len; i++) {
             uint64_t col_num = cond_func_left_columns[i];
             if (col_num >= n_key) {
                 auto arr = left_table->columns[col_num];
                 if (arr->arr_type == bodo_array_type::DICT) {
                     if (!arr->has_global_dictionary)
-                        convert_local_dictionary_to_global(arr);
+                        convert_local_dictionary_to_global(arr, left_parallel);
                 }
                 left_cond_func_cols_set.insert(col_num);
             }
         }
+        // TODO: Move to only the parallel case.
         for (size_t i = 0; i < cond_func_right_column_len; i++) {
             uint64_t col_num = cond_func_right_columns[i];
             if (col_num >= n_key) {
                 auto arr = right_table->columns[col_num];
                 if (arr->arr_type == bodo_array_type::DICT) {
                     if (!arr->has_global_dictionary)
-                        convert_local_dictionary_to_global(arr);
+                        convert_local_dictionary_to_global(arr, right_parallel);
                 }
                 right_cond_func_cols_set.insert(col_num);
             }

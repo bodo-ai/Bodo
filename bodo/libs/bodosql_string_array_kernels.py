@@ -961,9 +961,9 @@ def create_left_right_util_overload(func_name):  # pragma: no cover
         scalar_text += f"   res[i] = {empty_char}\n"
         scalar_text += "else:\n"
         if func_name == "LEFT":
-            scalar_text += "   res[i] = arg0[:arg1]"
+            scalar_text += "   res[i] = arg0[:arg1]\n"
         elif func_name == "RIGHT":
-            scalar_text += "   res[i] = arg0[-arg1:]"
+            scalar_text += "   res[i] = arg0[-arg1:]\n"
 
         out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 

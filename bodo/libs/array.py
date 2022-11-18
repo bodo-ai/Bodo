@@ -2676,18 +2676,21 @@ def groupby_and_aggregate(
 
 
 _convert_local_dictionary_to_global = types.ExternalFunction(
-    "convert_local_dictionary_to_global", types.void(array_info_type, types.bool_)
+    "convert_local_dictionary_to_global",
+    types.void(array_info_type, types.bool_, types.bool_),
 )
 
 
 @numba.njit(no_cpython_wrapper=True)
-def convert_local_dictionary_to_global(dict_arr, sort_dictionary):  # pragma: no cover
+def convert_local_dictionary_to_global(
+    dict_arr, sort_dictionary, is_parallel=False
+):  # pragma: no cover
     dict_arr_info = array_to_info(dict_arr)
     # In addition to convert the dictionary to global, the call to
     # _convert_local_dictionary_to_global will also remove any duplicate
     # values in the inner dictionary. The operation is done by modifying the
     # existing pointer, which is why we call info_to_array on the original array info
-    _convert_local_dictionary_to_global(dict_arr_info, sort_dictionary)
+    _convert_local_dictionary_to_global(dict_arr_info, is_parallel, sort_dictionary)
     check_and_propagate_cpp_exception()
     out_arr = info_to_array(dict_arr_info, bodo.dict_str_arr_type)
     return out_arr

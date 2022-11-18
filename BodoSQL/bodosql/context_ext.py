@@ -1,8 +1,9 @@
 """Bodo extensions to support BodoSQLContext inside JIT functions.
-Assumes an immutable context where table names and dataframes are not modified inplace,
+Assumes an immutable context where table names and DataFrames are not modified inplace,
 which allows typing and optimization.
 """
 import re
+import time
 
 import numba
 import numpy as np
@@ -14,7 +15,7 @@ from bodosql.context import (
     BodoSQLContext,
     RelationalAlgebraGeneratorClass,
     compute_df_types,
-    intialize_schema,
+    initialize_schema,
     update_schema,
 )
 from bodosql.utils import java_error_to_msg
@@ -360,16 +361,18 @@ def _gen_pd_func_text_and_lowered_globals(
         # So the other ranks don't hang forever if we encounter an unexpected runtime error
         try:
             table_names = bodo_sql_context_type.names
-            schema = intialize_schema((param_keys, param_values))
+            schema = initialize_schema((param_keys, param_values))
+            verbose_level = bodo.user_logging.get_verbose_level()
             if bodo_sql_context_type.catalog_type != types.none:
                 generator = RelationalAlgebraGeneratorClass(
                     bodo_sql_context_type.catalog_type.get_java_object(),
                     schema,
                     NAMED_PARAM_TABLE_NAME,
+                    verbose_level,
                 )
             else:
                 generator = RelationalAlgebraGeneratorClass(
-                    schema, NAMED_PARAM_TABLE_NAME
+                    schema, NAMED_PARAM_TABLE_NAME, verbose_level
                 )
             # Handle the parsing step.
             generator.parseQuery(sql_str)
@@ -418,6 +421,7 @@ def _gen_pd_func_text_and_lowered_globals(
                 "MetaType": bodo.utils.typing.MetaType,
                 "numba": numba,
                 "bodo": bodo,
+                "time": time,
             },
             locs,
         )
@@ -440,7 +444,7 @@ def _gen_pd_func_and_glbls_for_query(
     loc_vars = {}
     exec(
         func_text,
-        {"pd": pd, "np": np, "bodo": bodo, "re": re, "bodosql": bodosql},
+        {"pd": pd, "np": np, "bodo": bodo, "re": re, "bodosql": bodosql, "time": time},
         loc_vars,
     )
     impl = loc_vars["impl"]
@@ -519,7 +523,7 @@ def _gen_pd_func_and_globals_for_unoptimized_query(
     loc_vars = {}
     exec(
         func_text,
-        {"pd": pd, "np": np, "bodo": bodo, "re": re, "bodosql": bodosql},
+        {"pd": pd, "np": np, "bodo": bodo, "re": re, "bodosql": bodosql, "time": time},
         loc_vars,
     )
     impl = loc_vars["impl"]

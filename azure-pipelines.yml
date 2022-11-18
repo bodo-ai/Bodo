@@ -4,10 +4,10 @@
 # https://docs.microsoft.com/azure/devops/pipelines/languages/python
 
 trigger:
-- master
+- develop
 
 pr:
-- master
+- develop
 
 jobs:
 - template: buildscripts/azure/azure-test-build-windows.yml

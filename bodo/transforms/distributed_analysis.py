@@ -1620,6 +1620,7 @@ class DistributedAnalysis:
             # Output distribution if not replicated should always be 1D_VAR,
             # due to the possibility of deleting
             # varying numbers of rows on each rank at runtime
+
             self._set_var_dist(lhs, array_dists, Distribution.OneD_Var)
             return
 
@@ -2305,6 +2306,11 @@ class DistributedAnalysis:
                 "init_dict_arr dictionary array is REP",
                 rhs.loc,
             )
+            return
+
+        if fdef == ("init_pandas_datetime_array", "bodo.libs.pd_datetime_arr_ext"):
+            # lhs and data should have the same distribution
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("init_integer_array", "bodo.libs.int_arr_ext"):

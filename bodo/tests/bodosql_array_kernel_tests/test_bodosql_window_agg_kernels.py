@@ -170,7 +170,7 @@ def window_refsol(S, lower, upper, func):
             elems = [
                 elem
                 for elem in S.iloc[
-                    min(max(0, i + lower), len(S)) : min(max(0, i + upper + 1), len(S))
+                    np.clip(i + lower, 0, len(S)) : np.clip(i + upper + 1, 0, len(S))
                 ]
                 if not pd.isna(elem)
             ]
@@ -182,13 +182,21 @@ def window_refsol(S, lower, upper, func):
                 result = None if len(elems) == 0 else sum(elems) / len(elems)
             elif func == "median":
                 result = None if len(elems) == 0 else np.median(elems)
+            elif func == "ratio_to_report":
+                result = (
+                    None
+                    if len(elems) == 0 or S[i] == None or sum(elems) == 0
+                    else S[i] / sum(elems)
+                )
         L.append(result)
-    out_dtype = {
-        "sum": pd.Int64Dtype() if S.dtype.kind == "i" else np.float64,
+    dtype_map = {
+        "sum": pd.Int64Dtype() if S.dtype.kind == "i" else None,
         "count": pd.Int64Dtype(),
-        "avg": np.float64,
-        "median": np.float64,
-    }[func]
+        "avg": None,
+        "median": None,
+        "ratio_to_report": None,
+    }
+    out_dtype = dtype_map[func]
     return pd.Series(L, dtype=out_dtype)
 
 
@@ -244,6 +252,7 @@ def window_refsol(S, lower, upper, func):
         "sum",
         "count",
         "avg",
+        "ratio_to_report",
     ],
 )
 def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak_check):
@@ -263,12 +272,20 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
             bodo.libs.bodosql_array_kernels.windowed_median(S, lower, upper)
         )
 
-    impl = {
+    def impl5(S, lower, upper):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.windowed_ratio_to_report(S, lower, upper)
+        )
+
+    implementations = {
         "sum": impl1,
         "count": impl2,
         "avg": impl3,
         "median": impl4,
-    }[func]
+        "ratio_to_report": impl5,
+    }
+    impl = implementations[func]
+
     check_func(
         impl,
         (S, lower_bound, upper_bound),
@@ -343,8 +360,8 @@ def test_windowed_kernels_numeric(func, S, lower_bound, upper_bound, memory_leak
     [
         pytest.param(-1000, 0, id="prefix"),
         pytest.param(0, 1, id="suffix"),
-        pytest.param(-1000, -1, id="prefix_exclusive", marks=pytest.mark.slow),
-        pytest.param(1, 1000, id="suffix_exclusive"),
+        pytest.param(-1000, -1, id="prefix_exclusive"),
+        pytest.param(1, 1000, id="suffix_exclusive", marks=pytest.mark.slow),
         pytest.param(-1000, 1000, id="entire_window"),
         pytest.param(0, 0, id="current"),
         pytest.param(-20, 20, id="rolling_41"),
@@ -372,8 +389,8 @@ def test_windowed_mode(data, lower_bound, upper_bound, memory_leak_check):
                 elems = [
                     elem
                     for elem in S.iloc[
-                        min(max(0, i + lower), len(S)) : min(
-                            max(0, i + upper + 1), len(S)
+                        np.clip(i + lower, 0, len(S)) : np.clip(
+                            i + upper + 1, 0, len(S)
                         )
                     ]
                     if not pd.isna(elem)

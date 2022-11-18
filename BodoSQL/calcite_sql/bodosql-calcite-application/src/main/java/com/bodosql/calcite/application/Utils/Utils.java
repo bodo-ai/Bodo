@@ -190,10 +190,9 @@ public class Utils {
    * @return The pandas type
    */
   public static String sqlTypenameToPandasTypename(
-      SqlTypeName typeName, boolean outputScalar, boolean outputArrayType, boolean outputCast) {
+      SqlTypeName typeName, boolean outputScalar, boolean outputArrayType) {
     String dtype;
-    assert (outputScalar ? 1 : 0) + (outputArrayType ? 1 : 0) + (outputCast ? 1 : 0) <= 1
-        : "at most one of outputScalar, outputArrayType, outputCast may be true";
+    assert !(outputScalar && outputArrayType);
     switch (typeName) {
       case BOOLEAN:
         if (outputScalar) {
@@ -241,20 +240,20 @@ public class Utils {
         }
         break;
       case FLOAT:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float32";
+        } else if (outputArrayType) {
           return "bodo.float32[::1]";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_float32";
         } else {
           dtype = "np.float32";
         }
         break;
       case DOUBLE:
       case DECIMAL:
-        if (outputArrayType) {
+        if (outputScalar) {
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float64";
+        } else if (outputArrayType) {
           return "bodo.float64[::1]";
-        } else if (outputCast) {
-          return "bodo.libs.bodosql_array_kernels.cast_float64";
         } else {
           dtype = "np.float64";
         }
@@ -556,7 +555,7 @@ public class Utils {
     // errors later
     String bodyGlobal = pdVisitorClass.lowerAsGlobal("'" + lambdaFnStr + "'");
 
-    String outputArrayType = sqlTypenameToPandasTypename(outputType, false, true, false);
+    String outputArrayType = sqlTypenameToPandasTypename(outputType, false, true);
     String outputArrayTypeGlobal = pdVisitorClass.lowerAsGlobal(outputArrayType);
 
     return String.format(

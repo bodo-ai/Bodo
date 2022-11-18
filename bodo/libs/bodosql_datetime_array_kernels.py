@@ -6,9 +6,50 @@ Implements datetime array kernels that are specific to BodoSQL
 import numba
 import numpy as np
 from numba.core import types
+from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+
+
+def add_interval_years(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_months(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_weeks(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_days(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_hours(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_minutes(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_seconds(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_milliseconds(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_microseconds(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_nanoseconds(amount, start_dt):  # pragma: no cover
+    return
 
 
 @numba.generated_jit(nopython=True)
@@ -203,6 +244,145 @@ def yearofweekiso(arr):
         return yearofweekiso_util(arr)
 
     return impl
+
+
+def add_interval_years_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_months_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_weeks_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_days_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_hours_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_minutes_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_seconds_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_milliseconds_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_microseconds_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def add_interval_nanoseconds_util(amount, start_dt):  # pragma: no cover
+    return
+
+
+def create_add_interval_func_overload(unit):  # pragma: no cover
+    def overload_func(amount, start_dt):
+        """Handles cases where this interval addition function recieves optional
+        arguments and forwards to the appropriate version of the real implementation"""
+        args = [amount, start_dt]
+        for i in range(2):
+            if isinstance(args[i], types.optional):
+                return unopt_argument(
+                    f"bodo.libs.bodosql_array_kernels.add_interval_{unit}",
+                    ["amount", "start_dt"],
+                    i,
+                )
+
+        func_text = "def impl(amount, start_dt):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.add_interval_{unit}_util(amount, start_dt)"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+
+        return loc_vars["impl"]
+
+    return overload_func
+
+
+def create_add_interval_util_overload(unit):  # pragma: no cover
+    """Creates an overload function to support add_interval functions on
+       an integer and a datetime
+
+    Args:
+        unit: what is the unit of the integer argument
+
+    Returns:
+        (function): a utility that takes in an integer amount and a datetime
+        (either can be scalars or vectors) and adds the integer amount (in
+        the unit specified) to the datetime.
+    """
+
+    date_args = {"years", "months", "weeks", "days"}
+    func = "DateOffset" if unit in date_args else "Timedelta"
+
+    def overload_add_datetime_interval_util(amount, start_dt):
+        verify_int_arg(amount, "add_interval_" + unit, "amount")
+        verify_datetime_arg(start_dt, "add_interval_" + unit, "start_dt")
+
+        arg_names = ["amount", "start_dt"]
+        arg_types = [amount, start_dt]
+        propagate_null = [True] * 2
+        # Scalars will return Timestamp values while vectors will remain
+        # in datetime64 format
+        unbox_str = (
+            "bodo.utils.conversion.unbox_if_timestamp"
+            if bodo.utils.utils.is_array_typ(amount, True)
+            or bodo.utils.utils.is_array_typ(start_dt, True)
+            else ""
+        )
+        # pd.Timedelta does not have a nanosecond argument, instead when an
+        # integer is passed in without a keyword-arg it is assumed to be ns
+        if unit == "nanoseconds":
+            expr = "bodo.utils.conversion.box_if_dt64(arg1) + pd.Timedelta(arg0)"
+        else:
+            expr = f"bodo.utils.conversion.box_if_dt64(arg1) + pd.{func}({unit}=arg0)"
+        scalar_text = f"res[i] = {unbox_str}({expr})"
+
+        out_dtype = np.dtype("datetime64[ns]")
+
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+        )
+
+    return overload_add_datetime_interval_util
+
+
+def _install_add_interval_overload():
+    """Creates and installs the overloads for interval addition functions"""
+    funcs_utils_names = [
+        ("years", add_interval_years, add_interval_years_util),
+        ("months", add_interval_months, add_interval_months_util),
+        ("weeks", add_interval_weeks, add_interval_weeks_util),
+        ("days", add_interval_days, add_interval_days_util),
+        ("hours", add_interval_hours, add_interval_hours_util),
+        ("minutes", add_interval_minutes, add_interval_minutes_util),
+        ("seconds", add_interval_seconds, add_interval_seconds_util),
+        ("milliseconds", add_interval_milliseconds, add_interval_milliseconds_util),
+        ("microseconds", add_interval_microseconds, add_interval_microseconds_util),
+        ("nanoseconds", add_interval_nanoseconds, add_interval_nanoseconds_util),
+    ]
+    for unit, func, util in funcs_utils_names:
+        func_overload_impl = create_add_interval_func_overload(unit)
+        overload(func)(func_overload_impl)
+        util_overload_impl = create_add_interval_util_overload(unit)
+        overload(util)(util_overload_impl)
+
+
+_install_add_interval_overload()
 
 
 @numba.generated_jit(nopython=True)

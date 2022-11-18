@@ -1043,6 +1043,45 @@ def test_sort_values_rm_dead(memory_leak_check):
             assert not isinstance(stmt, bodo.ir.sort.Sort)
 
 
+def test_sort_values_empty_df_key_rm_dead(memory_leak_check):
+    """
+    Test if sorting an empty DataFrame where the key is dead.
+    Tests to make sure that we can index and access remaining
+    columns after the sort operation.
+    """
+
+    def impl(df):
+        df = df.sort_values(
+            by="A",
+            ascending=True,
+            na_position="first",
+        )
+
+        return df["B"]
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([], dtype="datetime64[ns]"),
+            "B": pd.Series([], dtype="string[pyarrow]"),
+            "C": pd.Series([], dtype="Int64"),
+        }
+    )
+
+    check_func(impl, (df,))
+
+    # make sure dead keys are detected properly
+    sort_func = numba.njit(pipeline_class=DeadcodeTestPipeline, parallel=True)(impl)
+    sort_func(df)
+    fir = sort_func.overloads[sort_func.signatures[0]].metadata["preserved_ir"]
+
+    for block in fir.blocks.values():
+        for stmt in block.body:
+            if isinstance(stmt, bodo.ir.sort.Sort):
+                # dead column is inside the live table in case of table format
+                assert stmt.dead_var_inds == {2}
+                assert stmt.dead_key_var_inds == {0}
+
+
 def test_sort_values_len_only(memory_leak_check):
     """
     Make sure len() works when all columns are dead

@@ -86,6 +86,9 @@ public class RelationalAlgebraGenerator {
   /** Store the catalog being used to close any connections after processing a query. */
   private BodoSQLCatalog catalog;
 
+  /** The Bodo verbose level. This is used to control code generated and/or compilation info. * */
+  private final int verboseLevel;
+
   /**
    * Helper method for RelationalAlgebraGenerator constructor to create a Connection object so that
    * SQL queries can be executed within its context.
@@ -224,8 +227,10 @@ public class RelationalAlgebraGenerator {
    * @param newSchema This is the schema which we will be using to validate our query against. This
    *     gets stored in the {@link #config}
    */
-  public RelationalAlgebraGenerator(BodoSqlSchema newSchema, String namedParamTableName) {
+  public RelationalAlgebraGenerator(
+      BodoSqlSchema newSchema, String namedParamTableName, int verboseLevel) {
     this.catalog = null;
+    this.verboseLevel = verboseLevel;
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
     List<BodoSqlSchema> newSchemas = new ArrayList<BodoSqlSchema>();
@@ -244,8 +249,12 @@ public class RelationalAlgebraGenerator {
    * #planner} for parsing.
    */
   public RelationalAlgebraGenerator(
-      BodoSQLCatalog catalog, BodoSqlSchema newSchema, String namedParamTableName) {
+      BodoSQLCatalog catalog,
+      BodoSqlSchema newSchema,
+      String namedParamTableName,
+      int verboseLevel) {
     this.catalog = catalog;
+    this.verboseLevel = verboseLevel;
     System.setProperty("calcite.default.charset", "UTF-8");
     CalciteConnection calciteConnection = setupCalciteConnection();
     Set<String> schemaNames = catalog.getSchemaNames();
@@ -461,7 +470,8 @@ public class RelationalAlgebraGenerator {
                * Planner rule that ensures filter is always pushed into join. This is needed
                * for complex queries.
                */
-              .addRuleInstance(FilterProjectTransposeRule.Config.DEFAULT.toRule())
+              // Skip filter project transpose until themarket insights plan is fixed.
+              // .addRuleInstance(FilterProjectTransposeRule.Config.DEFAULT.toRule())
               // Prune trivial cross-joins
               .addRuleInstance(InnerJoinRemoveRule.Config.DEFAULT.toRule())
               // Rewrite filters in either Filter or Join to convert OR with shared subexpression
@@ -569,7 +579,7 @@ public class RelationalAlgebraGenerator {
     return getPandasStringFromPlan(optimizedPlan, sql, debugDeltaTable);
   }
 
-  //Default debugDeltaTable to false
+  // Default debugDeltaTable to false
   public String getPandasString(String sql) throws Exception {
     return getPandasString(sql, false);
   }
@@ -579,13 +589,13 @@ public class RelationalAlgebraGenerator {
     return getPandasStringFromPlan(unOptimizedPlan, sql, debugDeltaTable);
   }
 
-  //default debugDeltaTable to false
+  // Default debugDeltaTable to false
   public String getPandasStringUnoptimized(String sql) throws Exception {
     return getPandasStringUnoptimized(sql, false);
   }
 
-
-  private String getPandasStringFromPlan(RelNode plan, String originalSQL, boolean debugDeltaTable) throws Exception {
+  private String getPandasStringFromPlan(RelNode plan, String originalSQL, boolean debugDeltaTable)
+      throws Exception {
     /**
      * HashMap that maps a Calcite Node using a unique identifier for different "values". To do
      * this, we use two components. First, each RelNode comes with a unique id, which This is used
@@ -597,7 +607,13 @@ public class RelationalAlgebraGenerator {
     ExprTypeVisitor.determineRelNodeExprType(plan, exprTypes, searchMap);
     this.loweredGlobalVariables = new HashMap<>();
     PandasCodeGenVisitor codegen =
-        new PandasCodeGenVisitor(exprTypes, searchMap, this.loweredGlobalVariables, originalSQL, debugDeltaTable);
+        new PandasCodeGenVisitor(
+            exprTypes,
+            searchMap,
+            this.loweredGlobalVariables,
+            originalSQL,
+            debugDeltaTable,
+            this.verboseLevel);
     codegen.go(plan);
     String pandas_code = codegen.getGeneratedCode();
     return pandas_code;

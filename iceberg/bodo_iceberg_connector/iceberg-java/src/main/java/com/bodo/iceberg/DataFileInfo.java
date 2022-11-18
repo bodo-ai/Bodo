@@ -1,13 +1,13 @@
 package com.bodo.iceberg;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import org.apache.avro.util.Utf8;
 import org.apache.iceberg.*;
 import org.apache.iceberg.expressions.Literal;
@@ -28,15 +28,21 @@ public class DataFileInfo {
     this.recordCount = recordCount;
   }
 
-  /** Construct a list of DataFileInfo instances from lists of its components */
-  public static List<DataFileInfo> fromLists(
-      List<String> paths, List<Long> sizes, List<Long> counts) {
-    if (paths.size() != sizes.size() || sizes.size() != counts.size())
-      throw new IllegalArgumentException("List Arguments Must All be the Same Size");
-
-    return IntStream.range(0, paths.size())
-        .mapToObj(i -> new DataFileInfo(paths.get(i), sizes.get(i), counts.get(i)))
-        .collect(Collectors.toList());
+  /**
+   * Construct a list of DataFileInfo instances from a JSON string representation.
+   *
+   * <p>The representation is in the form
+   *
+   * <pre>
+   * [{"path": "...", size: ..., record_count: ...}, {...}, ...]
+   * </pre>
+   *
+   * and gets automatically parsed by looking at the class properties.
+   */
+  public static List<DataFileInfo> fromJson(String infoStr) {
+    Gson gson = new Gson();
+    java.lang.reflect.Type listType = new TypeToken<List<DataFileInfo>>() {}.getType();
+    return gson.fromJson(infoStr, listType);
   }
 
   public String getPath() {
@@ -60,6 +66,7 @@ public class DataFileInfo {
   public DataFile toDataFile(PartitionSpec spec, SortOrder order, boolean isPartitionedPath) {
     DataFiles.Builder builder =
         DataFiles.builder(spec)
+            .withFormat(FileFormat.PARQUET)
             .withPath(getPath())
             .withFileSizeInBytes(getSize())
             .withRecordCount(getRecordCount())
