@@ -234,7 +234,19 @@ inline void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
     }
 }
 
+/**
+ * @brief Update a dictionary encoded array to gather all dictionary values onto
+ * each rank and drop any duplicates. If data is replicated then this just drops
+ * duplicates.
+ *
+ * @param dict_array The dictionary array whose dictionary needs updating.
+ * @param is_parallel Is the input distributed? If so we must gather the
+ * dictionary from all ranks. If not we still define the output as "global" with
+ * the assumption that data is "identical" if replicated.
+ * @param sort_dictionary Should the dictionary be sorted?
+ */
 void convert_local_dictionary_to_global(array_info* dict_array,
+                                        bool is_parallel,
                                         bool sort_dictionary = false);
 
 #endif  // _SHUFFLE_H_INCLUDED

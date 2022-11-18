@@ -466,7 +466,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             for (auto a : partition_cols) {
                 if ((a->arr_type == bodo_array_type::DICT) &&
                     !a->has_global_dictionary) {
-                    convert_local_dictionary_to_global(a);
+                    convert_local_dictionary_to_global(a, is_parallel);
                 }
             }
         }

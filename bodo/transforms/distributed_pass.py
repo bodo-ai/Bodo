@@ -1918,6 +1918,23 @@ class DistributedPass:
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
+        if fdef == ("concat", "bodo.libs.array_kernels"):
+            dist_input = False
+            typ = self.typemap[rhs.args[0].name]
+            if isinstance(typ, types.List) and self._is_1D_or_1D_Var_arr(
+                rhs.args[0].name
+            ):
+                dist_input = True
+            elif isinstance(typ, types.BaseTuple) and (
+                self._is_1D_tup(rhs.args[0].name)
+                or self._is_1D_Var_tup(rhs.args[0].name)
+            ):
+                dist_input = True
+            if dist_input:
+                # Note: We currently require all inputs to share the same distribution.
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
+
         if fdef == (
             "drop_duplicates_array",
             "bodo.libs.array_kernels",

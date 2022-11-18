@@ -230,13 +230,13 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         // `sort_values_table` actually does this as well (call
         // convert_local_dictionary_to_global), but it then doesn't incref the
         // new arrays, so we need to convert them to global dictionaries here,
-        // incref the new global dictionary approriately and then call
+        // incref the new global dictionary appropriately and then call
         // sort_values_table.
         if (is_parallel) {
             for (auto a : new_cols) {
                 if ((a->arr_type == bodo_array_type::DICT) &&
                     !a->has_global_dictionary) {
-                    convert_local_dictionary_to_global(a, true);
+                    convert_local_dictionary_to_global(a, is_parallel, true);
                 }
             }
         }
@@ -381,7 +381,7 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             for (auto a : transform_cols) {
                 if ((a->arr_type == bodo_array_type::DICT) &&
                     !a->has_global_dictionary) {
-                    convert_local_dictionary_to_global(a);
+                    convert_local_dictionary_to_global(a, is_parallel);
                 }
             }
         }

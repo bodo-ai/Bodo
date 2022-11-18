@@ -365,7 +365,7 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             for (array_info* arr : in_table->columns) {
                 if (arr->arr_type == bodo_array_type::DICT) {
                     if (!arr->has_global_dictionary)
-                        convert_local_dictionary_to_global(arr, true);
+                        convert_local_dictionary_to_global(arr, parallel, true);
                 }
             }
         }
@@ -625,8 +625,20 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
     const bool delete_hashes = hashes == nullptr;
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(num_keys);
-    for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
-        key_arrs[iKey] = in_table->columns[iKey];
+    for (size_t iKey = 0; iKey < size_t(num_keys); iKey++) {
+        array_info* key = in_table->columns[iKey];
+        // If we are dropping duplicates dictionary encoding assumes
+        // that the dictionary values are unique.
+        // TODO: Replace convert_local_dictionary_to_global with a
+        // function that drops duplicates on each rank without requiring
+        // a global value and separate `is_global` from `is_unique_local`.
+        if (key->arr_type == bodo_array_type::DICT) {
+            if (!key->has_global_dictionary)
+                convert_local_dictionary_to_global(key, is_parallel);
+            key = key->info2;
+        }
+        key_arrs[iKey] = key;
+    }
 
     uint32_t seed = SEED_HASH_CONTAINER;
     if (hashes == nullptr)
