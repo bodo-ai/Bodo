@@ -1,14 +1,12 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """Test Bodo's binary array data type
 """
-import operator
 
-import numba
 import numpy as np
 import pandas as pd
 import pytest
 
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, generate_comparison_ops_func
 
 
 @pytest.fixture(
@@ -102,33 +100,12 @@ def test_bytes_hash(binary_arr_value, memory_leak_check):
     )
 
 
-def generate_comparison_ops_func(op, check_na=False):
-    """
-    Generates a comparison function. If check_na,
-    then we are being called on a scalar value because Pandas
-    can't handle NA values in the array. If so, we return None
-    if either input is NA.
-    """
-    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
-    func_text = "def test_impl(a, b):\n"
-    if check_na:
-        func_text += f"  if pd.isna(a) or pd.isna(b):\n"
-        func_text += f"    return None\n"
-    func_text += f"  return a {op_str} b\n"
-    loc_vars = {}
-    exec(func_text, {"pd": pd}, loc_vars)
-    return loc_vars["test_impl"]
-
-
 @pytest.mark.slow
-@pytest.mark.parametrize(
-    "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
-)
-def test_bytes_comparison_ops(op, memory_leak_check):
+def test_bytes_comparison_ops(cmp_op, memory_leak_check):
     """
     Test logical comparisons between bytes values.
     """
-    func = generate_comparison_ops_func(op)
+    func = generate_comparison_ops_func(cmp_op)
     arg1 = b"abc"
     arg2 = b"c0e"
     check_func(func, (arg1, arg1))
@@ -137,17 +114,14 @@ def test_bytes_comparison_ops(op, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize(
-    "op", (operator.eq, operator.ne, operator.ge, operator.gt, operator.le, operator.lt)
-)
-def test_binary_bytes_comparison_ops(binary_arr_value, op, memory_leak_check):
+def test_binary_bytes_comparison_ops(binary_arr_value, cmp_op, memory_leak_check):
     """
     Test logical comparisons between bytes and binary array.
     """
-    func = generate_comparison_ops_func(op)
+    func = generate_comparison_ops_func(cmp_op)
     arg1 = b"abc"
     # Generate a py_output value because pandas doesn't handle null
-    pandas_func = generate_comparison_ops_func(op, check_na=True)
+    pandas_func = generate_comparison_ops_func(cmp_op, check_na=True)
     py_output = pd.array([None] * len(binary_arr_value), dtype="boolean")
     # Update py_output
     for i in range(len(binary_arr_value)):
@@ -159,25 +133,14 @@ def test_binary_bytes_comparison_ops(binary_arr_value, op, memory_leak_check):
     check_func(func, (arg1, binary_arr_value), py_output=py_output)
 
 
-@pytest.mark.parametrize(
-    "op",
-    (
-        operator.eq,
-        pytest.param(operator.ne, marks=pytest.mark.slow),
-        pytest.param(operator.ge, marks=pytest.mark.slow),
-        pytest.param(operator.gt, marks=pytest.mark.slow),
-        pytest.param(operator.le, marks=pytest.mark.slow),
-        pytest.param(operator.lt, marks=pytest.mark.slow),
-    ),
-)
-def test_binary_binary_comparison_ops(binary_arr_value, op, memory_leak_check):
+def test_binary_binary_comparison_ops(binary_arr_value, cmp_op, memory_leak_check):
     """
     Test logical comparisons between binary array and binary array.
     """
-    func = generate_comparison_ops_func(op)
+    func = generate_comparison_ops_func(cmp_op)
     arg1 = np.array([b"", b"c", np.nan, bytes(2)] * 4, object)
     # Generate a py_output value because pandas doesn't handle null
-    pandas_func = generate_comparison_ops_func(op, check_na=True)
+    pandas_func = generate_comparison_ops_func(cmp_op, check_na=True)
     py_output = pd.array([None] * len(binary_arr_value), dtype="boolean")
     # Update py_output
     for i in range(len(binary_arr_value)):

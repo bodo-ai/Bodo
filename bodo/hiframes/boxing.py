@@ -1564,7 +1564,6 @@ def _typeof_ndarray(val, c):
 
 
 def _infer_ndarray_obj_dtype(val):
-
     # strings only have object dtype, TODO: support fixed size np strings
     if not val.dtype == np.dtype("O"):  # pragma: no cover
         raise BodoError("Unsupported array dtype: {}".format(val.dtype))

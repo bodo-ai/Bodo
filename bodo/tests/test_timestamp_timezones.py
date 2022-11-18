@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
+import datetime
 import re
 
 import numpy as np
@@ -8,7 +9,8 @@ import pytest
 import pytz
 
 import bodo
-from bodo.tests.utils import check_func
+from bodo.tests.timezone_common import sample_tz  # noqa
+from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
 
 
@@ -35,8 +37,21 @@ def timezone(request):
     return request.param
 
 
-@pytest.fixture(params=pytz.all_timezones)
-def all_tz(request):
+# create a fixture that's representative of all timezones
+@pytest.fixture(
+    params=[
+        "UTC",
+        "US/Pacific",  # timezone behind UTC
+        "Europe/Berlin",  # timezone ahead of UTC
+        "Africa/Casablanca",  # timezone that's ahead of UTC only during DST
+        "Asia/Kolkata",  # timezone that's offset by 30 minutes
+        "Asia/Kathmandu",  # timezone that's offset by 45 minutes
+        "Australia/Lord_Howe",  # timezone that's offset by 30 minutes only during DST
+        "Pacific/Honolulu",  # timezone that has no DST,
+        "Etc/GMT+8",  # timezone that has fixed offset from UTC as opposed to zone
+    ]
+)
+def representative_tz(request):
     return request.param
 
 
@@ -65,7 +80,7 @@ def test_timestamp_timezone_constructor(timestamp_str, timezone, memory_leak_che
     check_func(test_impl, (timestamp_str, timezone))
 
 
-def test_timestamp_tz_convert(all_tz):
+def test_timestamp_tz_convert(representative_tz):
     def test_impl(ts, tz):
         return ts.tz_convert(tz=tz)
 
@@ -74,7 +89,7 @@ def test_timestamp_tz_convert(all_tz):
         test_impl,
         (
             ts,
-            all_tz,
+            representative_tz,
         ),
     )
 
@@ -83,10 +98,10 @@ def test_timestamp_tz_convert(all_tz):
         BodoError,
         match="Cannot convert tz-naive Timestamp, use tz_localize to localize",
     ):
-        bodo.jit(test_impl)(ts, all_tz)
+        bodo.jit(test_impl)(ts, representative_tz)
 
 
-def test_timestamp_tz_localize(all_tz):
+def test_timestamp_tz_localize(representative_tz):
     def test_impl(ts, tz):
         return ts.tz_localize(tz=tz)
 
@@ -95,7 +110,7 @@ def test_timestamp_tz_localize(all_tz):
         test_impl,
         (
             ts,
-            all_tz,
+            representative_tz,
         ),
     )
 
@@ -117,20 +132,33 @@ def test_timestamp_tz_ts_input():
     )
 
 
-def test_tz_timestamp_unsupported():
-    def impl(ts):
-        return max(ts, ts)
+def test_tz_timestamp_max_min():
+    def impl_max(s):
+        return s.max()
 
-    non_tz_ts = pd.Timestamp("2020-01-01")
-    tz_ts = pd.Timestamp("2020-01-01", tz="US/Eastern")
+    def impl_min(s):
+        return s.min()
 
-    check_func(impl, (non_tz_ts,))
+    s1 = pd.Series(
+        [
+            pd.Timestamp("2020-03-15", tz="Europe/Stockholm"),
+            pd.Timestamp("2020-03-16", tz="Europe/Stockholm"),
+            pd.Timestamp("2020-03-17", tz="Europe/Stockholm"),
+        ]
+    )
 
-    with pytest.raises(
-        BodoError,
-        match=".*Timezone-aware timestamp not yet supported.*",
-    ):
-        bodo.jit(impl)(tz_ts)
+    s2 = pd.Series(
+        [
+            pd.Timestamp("1999-10-31 12:23:33", tz="US/Eastern"),
+            pd.Timestamp("2005-01-01 00:00:00", tz="US/Eastern"),
+            pd.Timestamp("2016-02-28 12:23:33", tz="US/Eastern"),
+        ]
+    )
+
+    check_func(impl_max, (s1,))
+    check_func(impl_max, (s2,))
+    check_func(impl_min, (s1,))
+    check_func(impl_min, (s2,))
 
 
 def test_tz_datetime_arr_unsupported():
@@ -207,3 +235,96 @@ def test_tz_dataframe_unsupported(memory_leak_check):
         match=".*Timezone-aware columns not yet supported.*",
     ):
         bodo.jit(impl)(tz_df)
+
+
+def test_tz_date_scalar_cmp(sample_tz, cmp_op, memory_leak_check):
+    """Check that scalar comparison operators work between dates and
+    Timestamps
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    d = datetime.date(2022, 4, 4)
+    ts = pd.Timestamp("4/4/2022", tz=sample_tz)
+    # date + Timestamp comparison is deprecated. The current library truncates to date,
+    # but to match SQL expectations we cast the date to the timestamp instead.
+    d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
+    check_func(func, (d, ts), py_output=cmp_op(d_ts, ts))
+    check_func(func, (ts, d), py_output=cmp_op(ts, d_ts))
+    # Check where they aren't equal
+    d = datetime.date(2022, 4, 3)
+    d_ts = pd.Timestamp(year=d.year, month=d.month, day=d.day, tz=sample_tz)
+    check_func(func, (d, ts), py_output=cmp_op(d_ts, ts))
+    check_func(func, (ts, d), py_output=cmp_op(ts, d_ts))
+
+
+def test_date_array_tz_scalar(sample_tz, cmp_op, memory_leak_check):
+    """Check that comparison operators work between an array
+    of dates and a Timestamp
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    arr = (
+        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz=sample_tz)
+        .to_series()
+        .dt.date.values
+    )
+    ts = pd.Timestamp("4/4/2022", tz=sample_tz)
+    check_func(func, (arr, ts))
+    check_func(func, (ts, arr))
+
+
+def test_date_series_tz_scalar(sample_tz, cmp_op, memory_leak_check):
+    """Check that comparison operators work between an Series
+    of dates and a Timestamp
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    S = (
+        pd.date_range(start="2/1/2022", freq="8D2H30T", periods=30, tz=sample_tz)
+        .to_series()
+        .dt.date
+    )
+    ts = pd.Timestamp("4/4/2022", tz=sample_tz)
+    check_func(func, (S, ts))
+    check_func(func, (ts, S))
+
+
+def test_tz_tz_scalar_cmp(cmp_op, memory_leak_check):
+    """Check that scalar comparison operators work between
+    Timestamps with the same timezone.
+    """
+    func = generate_comparison_ops_func(cmp_op)
+    timezone = "Poland"
+    ts = pd.Timestamp("4/4/2022", tz=timezone)
+    check_func(func, (ts, ts))
+    check_func(func, (ts, ts))
+    ts2 = pd.Timestamp("1/4/2022", tz=timezone)
+    # Check where they aren't equal
+    d = datetime.date(2022, 4, 3)
+    check_func(func, (ts2, ts))
+    check_func(func, (ts, ts2))
+
+
+def test_different_tz_unsupported(cmp_op):
+    """Check that scalar comparison operators work between
+    Timestamps with different timezone.
+    """
+    func = bodo.jit(generate_comparison_ops_func(cmp_op))
+    ts1 = pd.Timestamp("4/4/2022")
+    ts2 = pd.Timestamp("4/4/2022", tz="Poland")
+    # Check that comparison is not support between tz-aware and naive
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(ts1, ts2)
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(ts2, ts1)
+    # Check different timezones aren't supported
+    ts3 = pd.Timestamp("4/4/2022", tz="US/Pacific")
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(ts3, ts2)
+    with pytest.raises(
+        BodoError, match="requires both Timestamps share the same timezone"
+    ):
+        func(ts2, ts3)

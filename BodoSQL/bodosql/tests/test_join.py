@@ -449,3 +449,47 @@ def test_trimmed_multikey_cond_innerjoin(
         check_names=False,
         convert_columns_bytearray=convert_columns_bytearray,
     )
+
+
+def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
+    """
+    Tests using non-ascii in an implicit join via select distinct.
+    """
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "D": pd.Series(list(pd.date_range("2011", "2018", 5)) * 20),
+                "S": pd.Series(
+                    [
+                        None if i % 7 == 0 else chr(65 + (i**2) % 8 + i // 48)
+                        for i in range(100)
+                    ]
+                ),
+            }
+        ),
+        "table2": pd.DataFrame(
+            {
+                "T": pd.Series(
+                    [
+                        a + b + c + d
+                        for a in ["", *"ALPHABETS♫UP"]
+                        for b in ["", *"ÉPSI∫øN"]
+                        for c in ["", *"ZE฿Rä"]
+                        for d in "THETA"
+                    ]
+                )
+            }
+        ),
+    }
+
+    query = """
+    SELECT
+        S,
+        D,
+        COUNT(*)
+    FROM table1
+    WHERE s IN (SELECT DISTINCT LEFT(t, 1) FROM table2)
+    GROUP BY s, d
+    """
+
+    check_query(query, ctx, spark_info, check_names=False, check_dtype=False)

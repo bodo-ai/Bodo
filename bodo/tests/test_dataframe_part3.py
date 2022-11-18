@@ -1718,3 +1718,20 @@ def test_concat_1d_1dvar():
         reset_index=True,
         check_dtype=False,
     )
+
+
+def test_tz_aware_dataframe_getitem(memory_leak_check):
+    def impl_iat(df):
+        return df.iat[2, 0]
+
+    def impl_iloc(df):
+        return df.iloc[2, 0]
+
+    # Note we don't test loc + regular getitem
+    # because they cannot return a scalar
+
+    df = pd.DataFrame(
+        {"colname": pd.array([pd.Timestamp("2000-01-01", tz="US/Pacific")] * 10)}
+    )
+    check_func(impl_iat, (df,))
+    check_func(impl_iloc, (df,))

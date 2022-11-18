@@ -3,59 +3,8 @@ Contains information used to access the Java package via py4j.
 """
 import os
 import sys
-from enum import Enum, auto
-from typing import Any, List, NamedTuple
+from typing import Any, List
 
-import py4j
-import py4j.protocol
-
-# ------------------------------- Monkey Patch -------------------------------
-# Required because by default, Py4J converts Python integers into one of the
-# Java Integer types by looking at the runtime value and if it fits between
-# INT_MIN and INT_MAX. This can cause issues in lists or collections where
-# we need all the numbers to either be ints or longs. This monkey patch
-# essentially implements the recommended fix from this GitHub issue:
-# https://github.com/py4j/py4j/issues/374
-# This code block must run before any use of Py4J, even by another library
-# like PySpark
-# TODO: Look into UnitTest patch to eliminate the order req
-
-
-class JavaType(Enum):
-    PRIMITIVE_INT = auto()
-    PRIMITIVE_LONG = auto()
-
-
-class TypeInt(NamedTuple):
-    value: int
-    java_type: JavaType
-
-
-py4j.protocol.JavaType = JavaType  # type: ignore
-py4j.protocol.TypeInt = TypeInt  # type: ignore
-
-
-get_command_part_old = py4j.protocol.get_command_part
-
-
-def get_command_part(parameter, python_proxy_pool=None):
-    if isinstance(parameter, TypeInt):
-        if parameter.java_type is JavaType.PRIMITIVE_INT:
-            type_key = py4j.protocol.INTEGER_TYPE
-        elif parameter.java_type is JavaType.PRIMITIVE_LONG:
-            type_key = py4j.protocol.LONG_TYPE
-        else:
-            raise ValueError("Invalid Type Hint for Java Integer Type")
-
-        return type_key + py4j.protocol.smart_decode(parameter.value) + "\n"
-    else:
-        return get_command_part_old(parameter, python_proxy_pool)
-
-
-py4j.protocol.get_command_part = get_command_part
-
-
-# ------------------------------- Helper Code -------------------------------
 from mpi4py import MPI
 from py4j.java_collections import ListConverter
 from py4j.java_gateway import GatewayParameters, JavaGateway, launch_gateway

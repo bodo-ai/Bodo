@@ -31,10 +31,10 @@ def tracing_Event_overload(name, is_parallel=True, sync=True):
 
 
 @overload_method(BodoTracingEventType, "finalize", no_unliteral=True)
-def overload_event_finalize(e, sync=True, aggregate=True):
-    def _event_finalize_overload_impl(e, sync=True, aggregate=True):  # pragma: no cover
+def overload_event_finalize(e, aggregate=True):
+    def _event_finalize_overload_impl(e, aggregate=True):  # pragma: no cover
         with numba.objmode:
-            e.finalize(sync=sync, aggregate=aggregate)
+            e.finalize(aggregate=aggregate)
 
     return _event_finalize_overload_impl
 

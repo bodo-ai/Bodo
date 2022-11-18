@@ -4,6 +4,7 @@ Implements a number of array kernels that handling casting functions for BodoSQL
 """
 
 import numba
+import numpy as np
 import pandas as pd
 from numba.core import types
 from numba.extending import register_jitable
@@ -11,7 +12,6 @@ from numba.extending import register_jitable
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
-    BodoError,
     dtype_to_array_type,
     get_overload_const_bool,
     is_overload_none,
@@ -186,9 +186,39 @@ def to_char_util(arr):
 
     # TODO [BE-2744]: support binary data for to_char
     if is_valid_binary_arg(arr):
-        raise BodoError("to_char(): binary input currently unsupported")
-
-    if is_valid_datetime_or_date_arg(arr):
+        # currently only support hex encoding
+        scalar_text = "with bodo.objmode(r=bodo.string_type):\n"
+        scalar_text += "  r = arg0.hex()\n"
+        scalar_text += "res[i] = r"
+    elif isinstance(arr, bodo.TimeType) or (
+        bodo.utils.utils.is_array_typ(arr) and isinstance(arr.dtype, bodo.TimeType)
+    ):
+        scalar_text = (
+            "h_str = str(arg0.hour) if arg0.hour > 10 else '0' + str(arg0.hour)\n"
+        )
+        scalar_text += (
+            "m_str = str(arg0.minute) if arg0.minute > 10 else '0' + str(arg0.minute)\n"
+        )
+        scalar_text += (
+            "s_str = str(arg0.second) if arg0.second > 10 else '0' + str(arg0.second)\n"
+        )
+        scalar_text += "ms_str = str(arg0.millisecond) if arg0.millisecond > 100 else ('0' + str(arg0.millisecond) if arg0.millisecond > 10 else '00' + str(arg0.millisecond))\n"
+        scalar_text += "us_str = str(arg0.microsecond) if arg0.microsecond > 100 else ('0' + str(arg0.microsecond) if arg0.microsecond > 10 else '00' + str(arg0.microsecond))\n"
+        scalar_text += "ns_str = str(arg0.nanosecond) if arg0.nanosecond > 100 else ('0' + str(arg0.nanosecond) if arg0.nanosecond > 10 else '00' + str(arg0.nanosecond))\n"
+        scalar_text += "part_str = h_str + ':' + m_str + ':' + s_str\n"
+        scalar_text += "if arg0.nanosecond > 0:\n"
+        scalar_text += "  part_str = part_str + '.' + ms_str + us_str + ns_str\n"
+        scalar_text += "elif arg0.microsecond > 0:\n"
+        scalar_text += "  part_str = part_str + '.' + ms_str + us_str\n"
+        scalar_text += "elif arg0.millisecond > 0:\n"
+        scalar_text += "  part_str = part_str + '.' + ms_str\n"
+        scalar_text += "res[i] = part_str"
+    elif is_valid_timedelta_arg(arr):
+        scalar_text = "v = bodo.utils.conversion.unbox_if_timestamp(arg0)\n"
+        scalar_text += "with bodo.objmode(r=bodo.string_type):\n"
+        scalar_text += "    r = str(v)\n"
+        scalar_text += "res[i] = r"
+    elif is_valid_datetime_or_date_arg(arr):
         scalar_text = "res[i] = pd.Timestamp(arg0).isoformat(' ')"
     elif is_valid_float_arg(arr):
         scalar_text = "if np.isinf(arg0):\n"
@@ -203,7 +233,23 @@ def to_char_util(arr):
     elif is_valid_boolean_arg(arr):
         scalar_text = "res[i] = 'true' if arg0 else 'false'"
     else:
-        scalar_text = "res[i] = str(arg0)"
+        int_types = {
+            8: np.int8,
+            16: np.int16,
+            32: np.int32,
+            64: np.int64,
+        }
+        if is_valid_int_arg(arr):
+            if hasattr(arr, "dtype"):
+                bw = arr.dtype.bitwidth
+            else:
+                bw = arr.bitwidth
+            scalar_text = f"if arg0 == {np.iinfo(int_types[bw]).min}:\n"
+            scalar_text += f"  res[i] = '{np.iinfo(int_types[bw]).min}'\n"
+            scalar_text += "else:\n"
+            scalar_text += "  res[i] = str(arg0)"
+        else:
+            scalar_text = "res[i] = str(arg0)"
 
     out_dtype = bodo.string_array_type
 
@@ -230,7 +276,7 @@ def convert_sql_date_format_str_to_py_format(val):  # pragma: no cover
     )
 
 
-@register_jitable
+@numba.generated_jit(nopython=True)
 def int_to_datetime(val):
     """Helper fn for the snowflake TO_DATE fns. For this fns, argument is integer.
 
@@ -245,15 +291,49 @@ def int_to_datetime(val):
 
     This function does NOT floor the resulting datetime (relies on calling fn to do so if needed)
     """
-    if val < 31536000000:
-        retval = pd.to_datetime(val, unit="s")
-    elif val < 31536000000000:
-        retval = pd.to_datetime(val, unit="ms")
-    elif val < 31536000000000000:
-        retval = pd.to_datetime(val, unit="us")
-    else:
-        retval = pd.to_datetime(val, unit="ns")
-    return retval
+
+    def impl(val):  # pragma: no cover
+        if val < 31536000000:
+            retval = pd.to_datetime(val, unit="s")
+        elif val < 31536000000000:
+            retval = pd.to_datetime(val, unit="ms")
+        elif val < 31536000000000000:
+            retval = pd.to_datetime(val, unit="us")
+        else:
+            retval = pd.to_datetime(val, unit="ns")
+        return retval
+
+    return impl
+
+
+@numba.generated_jit(nopython=True)
+def float_to_datetime(val):
+    """Helper fn for the snowflake TO_DATE fns. For this fns, argument is integer.
+
+    If the format of the input parameter is a string that contains an integer:
+    After the string is converted to an integer (if needed), the integer is treated as a number of seconds, milliseconds, microseconds, or nanoseconds after the start of the Unix epoch (1970-01-01 00:00:00.000000000 UTC).
+    If the integer is less than 31536000000 (the number of milliseconds in a year), then the value is treated as a number of seconds.
+    If the value is greater than or equal to 31536000000 and less than 31536000000000, then the value is treated as milliseconds.
+    If the value is greater than or equal to 31536000000000 and less than 31536000000000000, then the value is treated as microseconds.
+    If the value is greater than or equal to 31536000000000000, then the value is treated as nanoseconds.
+
+    See https://docs.snowflake.com/en/sql-reference/functions/to_date.html#usage-notes
+
+    This function does NOT floor the resulting datetime (relies on calling fn to do so if needed)
+    """
+
+    def impl(val):  # pragma: no cover
+        if val < 31536000000:
+            retval = pd.Timestamp(val, unit="s")
+        elif val < 31536000000000:
+            retval = pd.Timestamp(val, unit="ms")
+        elif val < 31536000000000000:
+            retval = pd.Timestamp(val, unit="us")
+        else:
+            retval = pd.Timestamp(val, unit="ns")
+        return retval
+
+    return impl
 
 
 @register_jitable
@@ -300,7 +380,9 @@ def pd_to_datetime_error_checked(
 
 
 @numba.generated_jit(nopython=True)
-def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
+def to_date_util(
+    conversionVal, optionalConversionFormatString, errorOnFail, _keep_time=False
+):
     """A dedicated kernel for the SQL function DATE, TO_DATE and TRY_TO_DATE which attempts
     to convert arg0 into a date value. Arg0 can be string, integer, or a datetime type. If
     arg0 is a string, can optionally accept an arg1
@@ -319,11 +401,17 @@ def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
         datetime series/scalar: the converted date values
     """
     errorOnFail = get_overload_const_bool(errorOnFail)
+    _keep_time = get_overload_const_bool(_keep_time)
 
     if errorOnFail:
         errorString = "raise ValueError('Invalid input while converting to date value')"
     else:
         errorString = "bodo.libs.array_kernels.setna(res, i)"
+
+    if _keep_time:
+        floor_str = ""
+    else:
+        floor_str = ".normalize()"
 
     verify_string_arg(
         optionalConversionFormatString,
@@ -346,9 +434,9 @@ def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
         scalar_text = "py_format_str = convert_sql_date_format_str_to_py_format(arg1)\n"
         scalar_text += "was_successful, tmp_val = pd_to_datetime_error_checked(arg0, format=py_format_str)\n"
         scalar_text += "if not was_successful:\n"
-        scalar_text += f"   {errorString}\n"
+        scalar_text += f"  {errorString}\n"
         scalar_text += "else:\n"
-        scalar_text += f"   res[i] = {unbox_str}(tmp_val.floor(freq='D'))\n"
+        scalar_text += f"  res[i] = {unbox_str}(tmp_val{floor_str})\n"
 
     # NOTE: gen_vectorized will automatically map this function over the values dictionary
     # of a dict encoded string array instead of decoding it whenever possible
@@ -363,7 +451,9 @@ def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
         # Conversion needs to be done incase arg0 is unichr array
         scalar_text = "arg0 = str(arg0)\n"
         scalar_text += "if (arg0.isnumeric() or (len(arg0) > 1 and arg0[0] == '-' and arg0[1:].isnumeric())):\n"
-        scalar_text += f'   res[i] = {unbox_str}(int_to_datetime(np.int64(arg0)).floor(freq="D"))\n'
+        scalar_text += (
+            f"   res[i] = {unbox_str}(int_to_datetime(np.int64(arg0)){floor_str})\n"
+        )
 
         scalar_text += "else:\n"
         scalar_text += (
@@ -372,30 +462,36 @@ def to_date_util(conversionVal, optionalConversionFormatString, errorOnFail):
         scalar_text += "   if not was_successful:\n"
         scalar_text += f"      {errorString}\n"
         scalar_text += "   else:\n"
-        scalar_text += f"      res[i] = {unbox_str}(tmp_val.floor(freq='D'))\n"
+        scalar_text += f"      res[i] = {unbox_str}(tmp_val{floor_str})\n"
 
-    elif isinstance(conversionVal, types.Integer) or (
-        bodo.utils.utils.is_array_typ(conversionVal, True)
-        and isinstance(conversionVal.dtype, types.Integer)
-    ):
-        scalar_text = f'res[i] = {unbox_str}(int_to_datetime(arg0).floor(freq="D"))\n'
+    elif is_valid_int_arg(conversionVal):
+        scalar_text = f"res[i] = {unbox_str}(int_to_datetime(arg0){floor_str})\n"
+
+    elif is_valid_float_arg(conversionVal):
+        scalar_text = f"res[i] = {unbox_str}(float_to_datetime(arg0){floor_str})\n"
 
     elif is_valid_datetime_or_date_arg(conversionVal):
-        scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).floor(freq='D'))\n"
+        scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0){floor_str})\n"
     else:
         raise raise_bodo_error(
             f"Internal error: unsupported type passed to to_date_util for argument conversionVal: {conversionVal}"
         )
 
-    arg_names = ["conversionVal", "optionalConversionFormatString", "errorOnFail"]
-    arg_types = [conversionVal, optionalConversionFormatString, errorOnFail]
-    propagate_null = [True, False, False]
+    arg_names = [
+        "conversionVal",
+        "optionalConversionFormatString",
+        "errorOnFail",
+        "_keep_time",
+    ]
+    arg_types = [conversionVal, optionalConversionFormatString, errorOnFail, _keep_time]
+    propagate_null = [True, False, False, False]
 
     out_dtype = to_nullable_type(dtype_to_array_type(bodo.datetime64ns))
 
     extra_globals = {
         "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
         "int_to_datetime": int_to_datetime,
+        "float_to_datetime": float_to_datetime,
         "convert_sql_date_format_str_to_py_format": convert_sql_date_format_str_to_py_format,
         "unbox_if_timestamp": bodo.utils.conversion.unbox_if_timestamp,
     }

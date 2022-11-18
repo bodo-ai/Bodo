@@ -7,6 +7,9 @@
 """
 import logging
 
+from numba import objmode
+from numba.extending import overload
+
 # Create the default logger
 _default_logger = logging.getLogger("Bodo Default Logger")
 _default_logger.setLevel(logging.DEBUG)
@@ -110,3 +113,17 @@ def log_message(header, msg, *args, **kws):
         equal_str = "\n" + ("=" * 80)
         final_msg = "\n".join([equal_str, header.center(80, "-"), msg, equal_str])
         logger.info(final_msg, *args, **kws)
+
+
+@overload(log_message)
+def overload_log_message(header, msg):
+    """
+    Implementation of log_message that can be called from JIT.
+    This implementation doesn't support additional arguments.
+    """
+
+    def impl(header, msg):  # pragma: no cover
+        with objmode():
+            log_message(header, msg)
+
+    return impl

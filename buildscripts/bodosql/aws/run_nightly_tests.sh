@@ -10,6 +10,10 @@ fi
 export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
 
+# ------ Export environment variables for Snowflake tests -----
+export SF_USERNAME=`credstash -r us-east-2 get snowflake.bodopartner.ue1.username`
+export SF_PASSWORD=`credstash -r us-east-2 get snowflake.bodopartner.ue1.password`
+export SF_ACCOUNT=`credstash -r us-east-2 get snowflake.bodopartner.ue1.account`
 
 # ------ Run Tests -----------
 cd ./BodoSQL-Customer-Examples/

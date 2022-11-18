@@ -2,14 +2,10 @@
 import os
 import shutil
 from contextlib import contextmanager
-from pathlib import Path
 
 import pandas as pd
 
 import bodo
-
-cwd = Path(__file__).resolve().parent
-datadir = cwd.parent / "tests" / "data"
 
 
 @bodo.jit

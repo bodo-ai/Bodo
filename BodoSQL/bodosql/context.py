@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import warnings
 from enum import Enum
 from typing import List, Optional, Tuple, Union
@@ -347,6 +348,9 @@ def add_table_type(table_name, schema, df_type, bodo_type, table_num, from_jit):
         is_writeable,
         read_code,
         write_format_code,
+        # TablePath is a wrapper for a file so it results in an IO read.
+        # The only other option is an in memory Pandas DataFrame.
+        isinstance(bodo_type, TablePathType),
     )
     schema.addTable(table)
 
@@ -432,7 +436,9 @@ def add_param_table(table_name, schema, param_keys, param_values):
     # The readCode is unused for named Parameters as they will never reach
     # a table scan. Instead the original Python variable names will always
     # be used.
-    schema.addTable(LocalTableClass(table_name, schema, param_arr, False, "", ""))
+    schema.addTable(
+        LocalTableClass(table_name, schema, param_arr, False, "", "", False)
+    )
 
 
 class BodoSQLContext:
@@ -476,7 +482,7 @@ class BodoSQLContext:
                 names.append(k)
                 dfs.append(v)
             orig_bodo_types, df_types = compute_df_types(dfs, False)
-            schema = intialize_schema(None)
+            schema = initialize_schema(None)
             self.schema = schema
             self.names = names
             self.df_types = df_types
@@ -590,6 +596,7 @@ class BodoSQLContext:
                     "MetaType": bodo.utils.typing.MetaType,
                     "bodo": bodo,
                     "numba": numba,
+                    "time": time,
                 },
                 locs,
             )
@@ -621,6 +628,7 @@ class BodoSQLContext:
             "ColNamesMetaType": bodo.utils.typing.ColNamesMetaType,
             "MetaType": bodo.utils.typing.MetaType,
             "numba": numba,
+            "time": time,
         }
 
         glbls.update(lowered_globals)
@@ -752,11 +760,17 @@ class BodoSQLContext:
         """
         Creates a generator from the given schema
         """
+        verbose_level = bodo.user_logging.get_verbose_level()
         if self.catalog is not None:
             return RelationalAlgebraGeneratorClass(
-                self.catalog.get_java_object(), self.schema, NAMED_PARAM_TABLE_NAME
+                self.catalog.get_java_object(),
+                self.schema,
+                NAMED_PARAM_TABLE_NAME,
+                verbose_level,
             )
-        generator = RelationalAlgebraGeneratorClass(self.schema, NAMED_PARAM_TABLE_NAME)
+        generator = RelationalAlgebraGeneratorClass(
+            self.schema, NAMED_PARAM_TABLE_NAME, verbose_level
+        )
         return generator
 
     def add_or_replace_view(self, name: str, table: Union[pd.DataFrame, TablePath]):
@@ -880,7 +894,7 @@ class BodoSQLContext:
         return False  # pragma: no cover
 
 
-def intialize_schema(
+def initialize_schema(
     param_key_values: Optional[Tuple[List[str], List[str]]] = None,
 ):
     """Create the BodoSQL Schema used to store all local DataFrames

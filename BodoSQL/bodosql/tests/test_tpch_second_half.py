@@ -190,7 +190,7 @@ def test_tpch_q16(tpch_data, spark_info, memory_leak_check):
                        p_partkey = ps_partkey
                        and p_brand <> '{BRAND}'
                        and p_type not like '{TYPE}%'
-                       and p_size in ('{SIZE1}', '{SIZE2}', '{SIZE3}', '{SIZE4}', '{SIZE5}', '{SIZE6}', '{SIZE7}', '{SIZE8}')
+                       and p_size in ({SIZE1}, {SIZE2}, {SIZE3}, {SIZE4}, {SIZE5}, {SIZE6}, {SIZE7}, {SIZE8})
                        and ps_suppkey not in (
                          select
                            s_suppkey
@@ -210,7 +210,7 @@ def test_tpch_q16(tpch_data, spark_info, memory_leak_check):
                        p_size
     """
     bodosql_df_dict, spark_df_dict = tpch_data
-    # We seem to be encountering memory errors on nighly, shrinking the input dataframes
+    # We seem to be encountering memory errors on nightly, shrinking the input DataFrames
     # to see if this fixes the issue.
     bodosql_df_dict = shrink_data(bodosql_df_dict, 1000)
     spark_df_dict = shrink_data(spark_df_dict, 1000)
@@ -413,7 +413,7 @@ def test_tpch_q20(tpch_data, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.slow
+@pytest.mark.skip("Filter needs to pushed past join or we need a proper cross join")
 def test_tpch_q21(tpch_data, spark_info, memory_leak_check):
     NATION = "SAUDI ARABIA"
     tpch_query = f"""select

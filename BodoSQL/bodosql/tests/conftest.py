@@ -945,6 +945,19 @@ def tpch_data(datapath):
     """
     Fixture with TPCH data for BodoSQL Contexts.
     """
+    return tpch_data_helper(datapath, None)
+
+
+@pytest.fixture(scope="module")
+def tpch_data_schema_only(datapath):
+    """
+    Fixture with TPCH data for BodoSQL Contexts, but only feteches 1 row
+    per DataFrame
+    """
+    return tpch_data_helper(datapath, 1)
+
+
+def tpch_data_helper(datapath, rows):
     (
         customer_df,
         orders_df,
@@ -954,7 +967,7 @@ def tpch_data(datapath):
         supplier_df,
         part_df,
         partsupp_df,
-    ) = load_tpch_data(datapath("tpch-test-data/parquet"))
+    ) = load_tpch_data(datapath("tpch-test-data/parquet"), rows)
     # BodoSQL doesn't support Date datatypes yet. Convert the input
     # data to datetime64 for BodoSQL. Spark has correctness issues
     # if this is converted though, so keep Spark data types separate.
@@ -988,9 +1001,11 @@ def tpch_data(datapath):
 
 
 @bodo.jit(returns_maybe_distributed=False, cache=True)
-def load_tpch_data(dir_name):
+def load_tpch_data(dir_name, rows=None):
     """Load the necessary TPCH dataframes given a root directory.
-    We use bodo.jit so we can read easily from a directory."""
+    We use bodo.jit so we can read easily from a directory.
+
+    If rows is not None, only fetches that many rows from each table"""
     customer_df = pd.read_parquet(dir_name + "/customer.parquet/")
     orders_df = pd.read_parquet(dir_name + "/orders.parquet/")
     lineitem_df = pd.read_parquet(dir_name + "/lineitem.parquet/")
@@ -999,6 +1014,15 @@ def load_tpch_data(dir_name):
     supplier_df = pd.read_parquet(dir_name + "/supplier.parquet/")
     part_df = pd.read_parquet(dir_name + "/part.parquet/")
     partsupp_df = pd.read_parquet(dir_name + "/partsupp.parquet/")
+    if rows is not None:
+        customer_df = customer_df.head(rows)
+        orders_df = orders_df.head(rows)
+        lineitem_df = lineitem_df.head(rows)
+        nation_df = nation_df.head(rows)
+        region_df = region_df.head(rows)
+        supplier_df = supplier_df.head(rows)
+        part_df = part_df.head(rows)
+        partsupp_df = partsupp_df.head(rows)
     return (
         customer_df,
         orders_df,
@@ -1531,11 +1555,13 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodosql_4of4,
     ]
     azure_2p_markers = [
-        pytest.mark.bodosql_1of5,
-        pytest.mark.bodosql_2of5,
-        pytest.mark.bodosql_3of5,
-        pytest.mark.bodosql_4of5,
-        pytest.mark.bodosql_5of5,
+        pytest.mark.bodosql_1of7,
+        pytest.mark.bodosql_2of7,
+        pytest.mark.bodosql_3of7,
+        pytest.mark.bodosql_4of7,
+        pytest.mark.bodosql_5of7,
+        pytest.mark.bodosql_6of7,
+        pytest.mark.bodosql_7of7,
     ]
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the

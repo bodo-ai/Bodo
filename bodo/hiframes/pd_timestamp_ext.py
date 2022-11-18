@@ -450,17 +450,7 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-            value = npy_datetimestruct_to_datetime(
-                year,
-                month,
-                day,
-                zero_if_none(hour),
-                zero_if_none(minute),
-                zero_if_none(second),
-                zero_if_none(microsecond),
-            )
-            value += zero_if_none(nanosecond)
-            return init_timestamp(
+            return compute_val_for_timestamp(
                 year,
                 month,
                 day,
@@ -469,7 +459,6 @@ def overload_pd_timestamp(
                 zero_if_none(second),
                 zero_if_none(microsecond),
                 zero_if_none(nanosecond),
-                value,
                 tz,
             )
 
@@ -495,17 +484,7 @@ def overload_pd_timestamp(
             nanosecond=None,
             tzinfo=None,
         ):  # pragma: no cover
-            value = npy_datetimestruct_to_datetime(
-                ts_input,
-                freq,
-                tz,
-                zero_if_none(unit),
-                zero_if_none(year),
-                zero_if_none(month),
-                zero_if_none(day),
-            )
-            value += zero_if_none(hour)
-            return init_timestamp(
+            return compute_val_for_timestamp(
                 ts_input,
                 freq,
                 tz,
@@ -514,7 +493,7 @@ def overload_pd_timestamp(
                 zero_if_none(month),
                 zero_if_none(day),
                 zero_if_none(hour),
-                value,
+                # This result cannot have a timezone because the argument is overloaded.
                 None,
             )
 
@@ -648,18 +627,7 @@ def overload_pd_timestamp(
             minute = ts_input.minute
             second = ts_input.second
             microsecond = ts_input.microsecond
-
-            value = npy_datetimestruct_to_datetime(
-                year,
-                month,
-                day,
-                zero_if_none(hour),
-                zero_if_none(minute),
-                zero_if_none(second),
-                zero_if_none(microsecond),
-            )
-            value += zero_if_none(nanosecond)
-            return init_timestamp(
+            return compute_val_for_timestamp(
                 year,
                 month,
                 day,
@@ -668,7 +636,6 @@ def overload_pd_timestamp(
                 zero_if_none(second),
                 zero_if_none(microsecond),
                 zero_if_none(nanosecond),
-                value,
                 tz,
             )
 
@@ -696,17 +663,7 @@ def overload_pd_timestamp(
             month = ts_input.month
             day = ts_input.day
 
-            value = npy_datetimestruct_to_datetime(
-                year,
-                month,
-                day,
-                zero_if_none(hour),
-                zero_if_none(minute),
-                zero_if_none(second),
-                zero_if_none(microsecond),
-            )
-            value += zero_if_none(nanosecond)
-            return init_timestamp(
+            return compute_val_for_timestamp(
                 year,
                 month,
                 day,
@@ -715,8 +672,7 @@ def overload_pd_timestamp(
                 zero_if_none(second),
                 zero_if_none(microsecond),
                 zero_if_none(nanosecond),
-                value,
-                None,
+                tz,
             )
 
         return impl_date
@@ -743,7 +699,8 @@ def overload_pd_timestamp(
         ):  # pragma: no cover
 
             value = np.int64(ts_input) * nanoseconds
-            return convert_datetime64_to_timestamp(integer_to_dt64(value))
+            # Pandas treats datetime64 as wall clock time
+            return convert_val_to_timestamp(value, tz)
 
         return impl_date
 
@@ -912,8 +869,11 @@ def overload_pd_timestamp_isoformat(ts, sep=None):
     if is_overload_none(sep):
 
         def timestamp_isoformat_impl(ts, sep=None):  # pragma: no cover
-            assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
             _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
+            if ts.microsecond != 0:
+                _time += "." + str_2d(ts.microsecond)
+                if ts.nanosecond != 0:
+                    _time += str_2d(ts.nanosecond)
             res = (
                 str(ts.year)
                 + "-"
@@ -930,8 +890,11 @@ def overload_pd_timestamp_isoformat(ts, sep=None):
     else:
 
         def timestamp_isoformat_impl(ts, sep=None):  # pragma: no cover
-            assert ts.nanosecond == 0  # TODO: handle nanosecond (timestamps.pyx)
             _time = str_2d(ts.hour) + ":" + str_2d(ts.minute) + ":" + str_2d(ts.second)
+            if ts.microsecond != 0:
+                _time += "." + str_2d(ts.microsecond)
+                if ts.nanosecond != 0:
+                    _time += str_2d(ts.nanosecond)
             res = (
                 str(ts.year)
                 + "-"
@@ -1230,6 +1193,133 @@ def is_leap_year(year):  # pragma: no cover
     """returns 1 if leap year 0 otherwise"""
     # copied from https://github.com/pandas-dev/pandas/blob/6b2d0260c818e62052eaf535767f3a8c4b446c69/pandas/_libs/tslibs/ccalendar.pyx#L161
     return (year & 0x3) == 0 and ((year % 100) != 0 or (year % 400) == 0)
+
+
+def localize_objmode(year, month, day, hour, minute, second, microsecond, tz):
+    """
+    Compute the timezone aware datetime and its utc offset for computing the value
+    of a type.
+    """
+    # Compute the datetime value
+    dt = datetime.datetime(year, month, day, hour, minute, second, microsecond)
+    # Compute the timezone.
+    tz_info = pytz.timezone(tz)
+    # Copy pandas implementation
+    try:
+        # datetime.replace with pytz may be incorrect result
+        final_dt = tz_info.localize(dt)
+    except AttributeError:  # pragma: no cover
+        final_dt = dt.replace(tzinfo=tz_info)
+    # Determine the offset for the correct time.
+    offset = final_dt.utcoffset()
+    if offset is None:
+        offset_int = 0
+    else:
+        # Get the offset as an integer. This is the offset from UTC
+        # to get to the local time, so we negate it.
+        offset_int = -(pd.Timedelta(final_dt.utcoffset()).value)
+    return final_dt, offset_int
+
+
+@register_jitable
+def localize_value_timestamp(
+    year, month, day, hour, minute, second, microsecond, nanosecond, tz
+):  # pragma: no cover
+    with numba.objmode(dt_val=bodo.datetime_datetime_type, offset="int64"):
+        dt_val, offset = localize_objmode(
+            year, month, day, hour, minute, second, microsecond, tz
+        )
+
+    # Convert the modified time to an actual timestamp and include nanoseconds.
+    return (
+        npy_datetimestruct_to_datetime(
+            dt_val.year,
+            dt_val.month,
+            dt_val.day,
+            dt_val.hour,
+            dt_val.minute,
+            dt_val.second,
+            dt_val.microsecond,
+        )
+        + offset
+        + nanosecond
+    )
+
+
+@numba.generated_jit(nopython=True)
+def compute_val_for_timestamp(
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    microsecond,
+    nanosecond,
+    tz,
+):
+    """
+    Computes the correct value for the given timezone and outputs the correct Timestamp
+    given the appropriate field values.
+    """
+    use_objmode = False
+    delta_str = "0"
+    if is_overload_constant_str(tz):
+        # Reconstructing the UTC for a local time is very complicated so we defer to objmode.
+        use_objmode = True
+        tz_str = get_overload_const_str(tz)
+        tz_obj = pytz.timezone(tz_str)
+    elif is_overload_constant_int(tz):
+        ns_int = get_overload_const_int(tz)
+        delta_str = str(ns_int)
+    elif not is_overload_none(tz):
+        raise_bodo_error(
+            "compute_val_for_timestamp(): tz value must be a constant string or None"
+        )
+
+    func_text = "def impl(year, month, day, hour, minute, second, microsecond, nanosecond, tz):\n"
+    if use_objmode:
+        func_text += f"  value = localize_value_timestamp(year, month, day, hour, minute, second, microsecond, nanosecond, tz)\n"
+    else:
+        # Subtract the offset
+        func_text += f"  original_value = npy_datetimestruct_to_datetime(year, month, day, hour, minute, second, microsecond) + nanosecond\n"
+        # In this case the delta is a fixed offset in nanoseconds that is the amount to add from utc to the current
+        # timezone. As a result we subtract this value.
+        # Example:
+        # In [1]: import pytz
+        # In [2]: pd.Timestamp('2020-03-15', tz=pytz.FixedOffset(8)).value
+        # Out[2]: 1584229920000000000
+        # In [3]: pd.Timestamp('2020-03-15').value
+        # Out[3]: 1584230400000000000
+        # Here delta would be 480000000000 (to convert from 3 to 2)
+        func_text += f"  value = original_value - {delta_str}\n"
+    func_text += "  return init_timestamp(\n"
+    func_text += "    year=year,\n"
+    func_text += "    month=month,\n"
+    func_text += "    day=day,\n"
+    func_text += "    hour=hour,\n"
+    func_text += "    minute=minute,"
+    func_text += "    second=second,\n"
+    func_text += "    microsecond=microsecond,\n"
+    func_text += "    nanosecond=nanosecond,\n"
+    func_text += f"    value=value,\n"
+    func_text += "    tz=tz,\n"
+    func_text += "  )\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "pd": pd,
+            "init_timestamp": init_timestamp,
+            "npy_datetimestruct_to_datetime": npy_datetimestruct_to_datetime,
+            "localize_value_timestamp": localize_value_timestamp,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+
+    return impl
 
 
 @numba.generated_jit(nopython=True)
@@ -1934,6 +2024,25 @@ def overload_to_datetime(
 
         return impl_np_datetime
 
+    if is_overload_none(arg_a):  # pragma: no cover
+
+        def impl_np_datetime(
+            arg_a,
+            errors="raise",
+            dayfirst=False,
+            yearfirst=False,
+            utc=None,
+            format=None,
+            exact=True,
+            unit=None,
+            infer_datetime_format=False,
+            origin="unix",
+            cache=True,
+        ):  # pragma: no cover
+            return None
+
+        return impl_np_datetime
+
     # TODO: input Type of a dataframe
     raise_bodo_error(f"pd.to_datetime(): cannot convert date type {arg_a}")
 
@@ -2074,6 +2183,10 @@ def overload_to_timedelta(arg_a, unit="ns", errors="raise"):
 
             return impl_datetime_timedelta
 
+    if is_overload_none(arg_a):  # pragma: no cover
+        # None input
+        return lambda arg_a, unit="ns", errors="raise": None
+
     raise_bodo_error(f"pd.to_timedelta(): cannot convert date type {arg_a.dtype}")
 
 
@@ -2111,30 +2224,40 @@ def create_timestamp_cmp_op_overload(op):
     def overload_date_timestamp_cmp(lhs, rhs):
         # Timestamp, datetime.date
         if (
-            lhs == pd_timestamp_type
+            isinstance(lhs, PandasTimestampType)
             and rhs == bodo.hiframes.datetime_date_ext.datetime_date_type
         ):
+            tz_literal = lhs.tz
+            # Compare using date to handle timezones
+
             return lambda lhs, rhs: op(
-                lhs.value,
-                bodo.hiframes.pd_timestamp_ext.npy_datetimestruct_to_datetime(
-                    rhs.year, rhs.month, rhs.day, 0, 0, 0, 0
-                ),
+                lhs,
+                # Convert the date to the same tz timestamp.
+                pd.Timestamp(rhs, tz=tz_literal),
             )
 
         # datetime.date, Timestamp
-        if (
-            lhs == bodo.hiframes.datetime_date_ext.datetime_date_type
-            and rhs == pd_timestamp_type
+        if lhs == bodo.hiframes.datetime_date_ext.datetime_date_type and isinstance(
+            rhs, PandasTimestampType
         ):
+            tz_literal = rhs.tz
             return lambda lhs, rhs: op(
-                bodo.hiframes.pd_timestamp_ext.npy_datetimestruct_to_datetime(
-                    lhs.year, lhs.month, lhs.day, 0, 0, 0, 0
-                ),
-                rhs.value,
+                # Convert the date to the same tz timestamp.
+                pd.Timestamp(lhs, tz=tz_literal),
+                rhs,
             )
 
         # Timestamp/Timestamp
-        if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
+        if isinstance(lhs, PandasTimestampType) and isinstance(
+            rhs, PandasTimestampType
+        ):
+            if lhs.tz != rhs.tz:
+                raise BodoError(
+                    f"{numba.core.utils.OPERATORS_TO_BUILTINS[op]} with two Timestamps requires both Timestamps share the same timezone. "
+                    + f"Argument 0 has timezone {lhs.tz} and argument 1 has timezone {rhs.tz}. "
+                    + "To compare these values please convert to timezone naive with ts.tz_convert(None)."
+                )
+
             return lambda lhs, rhs: op(lhs.value, rhs.value)
 
         # Timestamp/dt64

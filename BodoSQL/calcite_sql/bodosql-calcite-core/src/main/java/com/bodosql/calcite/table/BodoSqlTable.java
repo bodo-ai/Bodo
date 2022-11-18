@@ -243,4 +243,12 @@ public abstract class BodoSqlTable implements Table {
    * @return The generated code.
    */
   public abstract String generateRemoteQuery(String query);
+
+  /**
+   * Returns if calling `generateReadCode()` for a table will result in an IO operation in the Bodo
+   * generated code.
+   *
+   * @return Does the table require IO?
+   */
+  public abstract boolean readRequiresIO();
 }

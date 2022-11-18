@@ -32,7 +32,19 @@ class IcebergParquetReader : public ParquetReader {
           table_name(_table_name),
           is_merge_into_cow(_is_merge_into_cow) {}
 
-    virtual ~IcebergParquetReader() { Py_DECREF(this->file_list); }
+    virtual ~IcebergParquetReader() {
+        // When schema evolution is detected in
+        // `bodo.io.iceberg.get_iceberg_pq_dataset`, a Python exception
+        // is thrown. That exception is detected and converted to a C++
+        // exception in `IcebergParquetReader::get_dataset`. That exception
+        // will be caught in `get_iceberg_pq_dataset` so this class to be
+        // destructed, calling this function aka the destructor.
+
+        // this->file_list will be null if schema evolution is detected
+        // Py_XDECREF checks if the input is null,
+        // while Py_DECREF doesn't and would just segfault
+        Py_XDECREF(this->file_list);
+    }
 
     void init_iceberg_reader(int32_t* str_as_dict_cols,
                              int32_t num_str_as_dict_cols) {
@@ -71,12 +83,12 @@ class IcebergParquetReader : public ParquetReader {
             this->database_schema, this->table_name, this->pyarrow_table_schema,
             this->dnf_filters, this->expr_filters, this->tot_rows_to_read,
             PyBool_FromLong(parallel));
-        this->ds_partitioning = Py_None;
         if (ds == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
 
         // XXX Handle ds_has_partitions?
+        this->ds_partitioning = Py_None;
 
         // prefix = ds._prefix
         PyObject* prefix_py = PyObject_GetAttrString(ds, "_prefix");
@@ -123,7 +135,7 @@ class IcebergParquetReader : public ParquetReader {
     // iceberg_db, then the path in the list would be
     // iceberg_db/my_table/part01.pq. These are used by merge/delete and are not
     // the same as the files we read, which are absolute paths.
-    PyObject* file_list;
+    PyObject* file_list = nullptr;
     // Iceberg snapshot id for read.
     int64_t snapshot_id;
 };

@@ -365,29 +365,26 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             for (array_info* arr : in_table->columns) {
                 if (arr->arr_type == bodo_array_type::DICT) {
                     if (!arr->has_global_dictionary)
-                        convert_local_dictionary_to_global(arr, true);
+                        convert_local_dictionary_to_global(arr, parallel, true);
                 }
             }
         }
 
+        int64_t n_local = in_table->nrows();
+        int64_t n_total = n_local;
+        if (parallel)
+            MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
+                          MPI_COMM_WORLD);
+
+        // Want to keep dead keys only when we will perform a shuffle operation
+        // later in the function
         table_info* local_sort = sort_values_table_local(
             in_table, n_key_t, vect_ascending, na_position,
-            parallel ? nullptr : dead_keys, parallel);
+            (parallel && n_total != 0) ? nullptr : dead_keys, parallel);
 
         if (!parallel) {
             return local_sort;
-        }
-
-        int n_pes, myrank;
-        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
-        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
-
-        int64_t n_local = in_table->nrows();
-        int64_t n_total;
-        MPI_Allreduce(&n_local, &n_total, 1, MPI_LONG_LONG_INT, MPI_SUM,
-                      MPI_COMM_WORLD);
-
-        if (n_total == 0) {
+        } else if (n_total == 0) {
             if (bounds != nullptr) {
                 delete_table_decref_arrays(bounds);
             }
@@ -395,6 +392,10 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
         }
 
         tracing::Event ev_sample("sort sampling", parallel);
+
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 
         if (bounds == nullptr) {
             bounds = get_parallel_sort_bounds(
@@ -624,8 +625,20 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
     const bool delete_hashes = hashes == nullptr;
     size_t n_rows = (size_t)in_table->nrows();
     std::vector<array_info*> key_arrs(num_keys);
-    for (size_t iKey = 0; iKey < size_t(num_keys); iKey++)
-        key_arrs[iKey] = in_table->columns[iKey];
+    for (size_t iKey = 0; iKey < size_t(num_keys); iKey++) {
+        array_info* key = in_table->columns[iKey];
+        // If we are dropping duplicates dictionary encoding assumes
+        // that the dictionary values are unique.
+        // TODO: Replace convert_local_dictionary_to_global with a
+        // function that drops duplicates on each rank without requiring
+        // a global value and separate `is_global` from `is_unique_local`.
+        if (key->arr_type == bodo_array_type::DICT) {
+            if (!key->has_global_dictionary)
+                convert_local_dictionary_to_global(key, is_parallel);
+            key = key->info2;
+        }
+        key_arrs[iKey] = key;
+    }
 
     uint32_t seed = SEED_HASH_CONTAINER;
     if (hashes == nullptr)

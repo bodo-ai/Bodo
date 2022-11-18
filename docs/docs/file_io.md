@@ -758,7 +758,7 @@ Reading and writing [CSV][csv-section], [Parquet][parquet-section], [JSON][json-
 [Numpy binary][numpy-binary-section] files from and to Hadoop Distributed File System (HDFS) is supported.
 Note that Azure Data Lake Storage Gen2 can be accessed through HDFS.
 
-The `openjdk` version 8 package must be available, and the file path
+The `openjdk` version 11 package must be available, and the file path
 should start with `hdfs://` or `abfs[s]://`:
 
 ```py
@@ -782,6 +782,247 @@ provides default behaviors for the HDFS client used by Bodo.
 Inconsistent configurations (e.g. `dfs.replication`) could potentially
 cause errors in Bodo programs.
 
+
+#### Setting up HDFS/ADLS Credentials
+***Setting up HDFS/ADLS Credentials***
+
+Hadoop Filesystem sources its credentials from the first available
+`core-site.xml` file on the `CLASSPATH`. When Hadoop is set up (including
+on Bodo Platform), this file is usually created at 
+`$HADOOP_HOME/etc/hadoop/core-site.xml` automatically.
+You can edit this file and set credentials appropriately.
+
+You can also write the core-site configuration to `bodo.HDFS_CORE_SITE_LOC`,
+which is a temporary file Bodo adds to the `CLASSPATH` when it is initialized:
+
+```py
+import bodo
+
+# Initialize the temporary directory where the core-site file
+# will be written
+bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+# Define the core-site for your regular ADLS/HDFS read/write
+# operations
+CORE_SITE_SPEC = """
+<configuration>
+...
+</configuration>
+"""
+
+# Write it to the temporary core-site file.
+# Do it on one rank on every node to avoid filesystem conflicts.
+if bodo.get_rank() in bodo.get_nodes_first_ranks():
+    with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+        f.write(CORE_SITE_SPEC)
+
+
+@bodo.jit
+def etl_job():
+    df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+    # ..
+    # .. Some ETL Processing
+    # ..
+    df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+    return
+
+
+etl_job()
+```
+
+
+There are several authorization methods for reading from or writing to ADLS Storage Containers, all of which
+require slightly different core-site configurations. Here are some examples:
+
+- Using an ADLS Access Key
+
+    ```py
+    import bodo
+    import pandas as pd
+
+    # Initialize the temporary directory where the core-site file
+    # will be written
+    bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+
+    # Define the core-site for your regular ADLS/HDFS read/write
+    # operations
+    CORE_SITE_SPEC = """<configuration>
+    <property>
+        <name>fs.abfs.impl</name>
+        <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
+    </property>
+    <property>
+        <name>fs.azure.account.auth.type.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+        <value>SharedKey</value>
+    </property>
+    <property>
+        <name>fs.azure.account.key.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+        <value>{ADLS_SECRET}</value>
+        <description> The ADLS storage account access key itself.</description>
+    </property>
+    </configuration>
+    """
+
+    # Write it to the temporary core-site file.
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+            f.write(CORE_SITE_SPEC)
+
+    # Run your ETL job
+    @bodo.jit
+    def etl_job():
+        df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+        # ..
+        # .. Some ETL Processing
+        # ..
+        df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+        return
+
+
+    etl_job()
+    ```
+
+    
+
+- Using a SAS Token
+
+    To use SAS Tokens, you need to install the `bodo-azurefs-sas-token-provider`
+    package (it can be installed using 
+    `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
+    This is already installed on the Bodo Platform.
+    Then in your program, do the following:
+
+    ```py
+    import bodo
+    # Importing this module adds the required JARs to the CLASSPATH
+    import bodo_azurefs_sas_token_provider
+    import pandas as pd
+    import os
+
+    # Initialize the temporary directory where the core-site file
+    # will be written
+    bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+
+    # Define the core-site for your regular ADLS/HDFS read/write
+    # operations
+    CORE_SITE_SPEC = """<configuration>
+        <property>
+            <name>fs.azure.account.auth.type.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+            <value>SAS</value>
+        </property>
+        <property>
+            <name>fs.azure.sas.token.provider.type.{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net</name>
+            <value>org.bodo.azurefs.sas.BodoSASTokenProvider</value>
+        </property>
+        <property>
+            <name>fs.abfs.impl</name>
+            <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
+        </property>
+    </configuration>
+    """
+
+    # Write it to the temporary core-site file.
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+            f.write(CORE_SITE_SPEC)
+    
+    # Load the SAS token here.
+    SAS_TOKEN = "..."
+
+    # Write SAS Token to a file.
+    # Do it on one rank on every node to avoid filesystem conflicts.
+    if bodo.get_rank() in bodo.get_nodes_first_ranks():
+        with open(os.path.join(bodo.HDFS_CORE_SITE_LOC_DIR.name, "sas_token.txt"), 'w') as f:
+            f.write(SAS_TOKEN)
+
+    # Run your ETL job
+    @bodo.jit
+    def etl_job():
+        df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+        # ..
+        # .. Some ETL Processing
+        # ..
+        df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+        return
+
+
+    etl_job()
+    ```
+
+
+#### Interleaving HDFS/ADLS I/O with Snowflake Write {#interleave-adls-snowflake-write}
+***Interleaving HDFS/ADLS I/O with Snowflake Write***
+
+For writing to an Azure based Snowflake account using the direct upload strategy
+(see [Snowflake Write](#snowflake-write)), Bodo writes the required core-site
+configuration to `bodo.HDFS_CORE_SITE_LOC` automatically. In cases where Snowflake
+write (to an Azure based Snowflake account) needs to be
+done in the same process as a regular HDFS/ADLS read/write operation,
+users need to write credentials for the regular HDFS/ADLS read/write operations
+to the same core-site location (`bodo.HDFS_CORE_SITE_LOC`)
+due to limitations of Arrow and HDFS.
+Bodo will modify the file (temporarily) during the Snowflake write operation(s)
+and then restore the original configuration for the regular HDFS/ADLS
+read/write operations.
+
+Here is an example of how to do so:
+
+```py
+import bodo
+import pandas as pd
+
+# Initialize the temporary directory where the core-site file
+# will be written
+bodo.HDFS_CORE_SITE_LOC_DIR.initialize()
+
+
+# Define the core-site for your regular ADLS/HDFS read/write
+# operations
+CORE_SITE_SPEC = """<configuration>
+...
+</configuration>
+"""
+
+# Write it to the temporary core-site file
+# Do it on one rank on every node to avoid filesystem conflicts.
+if bodo.get_rank() in bodo.get_nodes_first_ranks():
+    with open(bodo.HDFS_CORE_SITE_LOC, 'w') as f:
+        f.write(CORE_SITE_SPEC)
+
+
+# Write the SAS token if required.
+# import bodo_azurefs_sas_token_provider
+# SAS_TOKEN = "..."
+# if bodo.get_rank() in bodo.get_nodes_first_ranks():
+#     with open(os.path.join(bodo.HDFS_CORE_SITE_LOC_DIR.name, "sas_token.txt"), 'w') as f:
+#         f.write(SAS_TOKEN)
+
+
+@bodo.jit
+def etl_job():
+    df = pd.read_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/file.pq")
+    # ..
+    # .. Some ETL Processing
+    # ..
+    # Here Bodo will replace the core-site configuration to enable Snowflake write
+    df.to_sql("new_table", "snowflake://user:password@url/{db_name}/schema?warehouse=warehouse_name&role=role_name")
+    # Once done, Bodo will restore the contents of the original file so that your
+    # ADLS operations happen as expected.
+    # ..
+    # .. Some more ETL Processing
+    # ..
+    df.to_parquet("abfs://{CONTAINER_NAME}@{STORAGE_ACCOUNT_NAME}.dfs.core.windows.net/out_file.pq")
+    return
+
+
+etl_job()
+```
+
+
 Databases {#db}
 ---------
 
@@ -791,18 +1032,12 @@ corresponding driver.
 Snowflake {#snowflake-section}
 ---------
 
-## Reading from Snowflake
-
-To read a dataframe from a Snowflake database, users can use
-`pd.read_sql` with their Snowflake username and password:
-`pd.read_sql(query, "snowflake://<username>:<password>@url")`.
-
 ### Prerequisites
 
-In order to be able to query Snowflake from Bodo,
-installing the Snowflake connector is necessary (it is installed by default in Bodo Platform).
-If you are using Bodo in a conda
-environment:
+In order to be able to query Snowflake or write a dataframe to
+Snowflake from Bodo, installing the Snowflake connector is
+necessary (it is installed by default on Bodo Platform).
+If you are using Bodo in a conda environment:
 
 ``` shell
 conda install -c conda-forge snowflake-connector-python
@@ -814,6 +1049,13 @@ connector using pip as well:
 ``` shell
 pip install snowflake-connector-python
 ```
+
+## Reading from Snowflake
+
+To read a dataframe from a Snowflake database, users can use
+`pd.read_sql` with their Snowflake username and password:
+`pd.read_sql(query, "snowflake://<username>:<password>@url")`.
+
 
 ### Usage
 
@@ -847,154 +1089,218 @@ df = read_snowflake(db_name, temp_table_name)
         return df
     ```
 
-## Writing to Snowflake with COPY INTO
+## Writing to Snowflake {#snowflake-write}
 
-For the best performance when writing to Snowflake, we recommend first
-writing to cloud storage using `DataFrame.to_parquet` and then using a
-`COPY INTO` query to move the data from your cloud storage provider to
-your Snowflake table.
-
-Our example uses Amazon S3, but the same approach works for ADLS,
-although you should follow the relevant Azure Snowflake documentation.
+To write a dataframe to Snowflake using Bodo, users can use
+`df.to_sql` with their Snowflake username and password:
+`df.to_sql(table_name, "snowflake://<username>:<password>@url")`.
 
 
-### Usage
+### Usage {#snowflake-write-usage}
 
-To upload your data to Snowflake, you first need to give Snowflake access
-to an S3 storage bucket. Then you can write to this bucket using Bodo.
-Finally, you need to issue a Snowflake query to transfer the data to Snowflake.
 
-To get started you will need an AWS bucket dedicated to the output of your
-Bodo write. Provide Snowflake access to this by executing steps 1-6 in
-[this document](https://docs.snowflake.com/en/user-guide/data-load-s3-config-storage-integration.html).
-When executing step 4, you must make sure you are using the `ACCOUNTADMIN`
-role within Snowflake to properly provide access. In step 6, when creating
-the external stage, you must ensure you have the correct format for
-parquet. Here is an example worksheet format:
+Bodo requires the Snowflake connection string to be passed as an
+argument to the `df.to_sql` function. The complete code looks as
+follows:
 
-``` SQL
-use schema mydb.public;
-
-create stage <stage name>
-  storage_integration = <integration name>
-  url = 's3://<bucket>/<path>/'
-  file_format = (type=parquet compression=auto);
-```
-
-In addition, you also need to confirm that you have created the destination
-
-ensure is used a few times.
-table. If you do not already have a table, you should create one with the
-`create table` command:
-
-``` SQL
-create table <table name> (
-  <table layout>
-)
-```
-
-Here is an example table:
-
-``` SQL
-create table bodo_example (
-  "A" BIGINT,
-  "B" BIGINT
-)
-```
-
-Now write your data to the bucket:
-
-``` py
-
+```py
 import bodo
 import pandas as pd
 
-@bodo.jit
-def write_data(df)
-    df.to_parquet(
-        "s3://bucket-name/example.pq",
-        index=False
-    )
-```
 
-Now you can transfer the data from S3 to Snowflake:
-
-``` SQL
-copy into <table name>
-  from @<stage name>
-  file_format = (type=parquet compression=auto);
-```
-
-We'll explain the struct syntax used by the parquet names use a struct syntax through an
-actual example, in which we write into bodo_example from above
-with parquet.
-
-``` SQL
-copy into copy_example ("A", "B")
-  from (select $1:"A", $1:"B" from @copy_example_stage)
-  file_format = (type=parquet compression=auto);
-```
-
-Each column must be specified with `$1:"COLUMN_NAME"`. These names must
-exactly match the values in the parquet file and are case sensitive.
-
-
-!!! note
-    If you are executing a regularly running job, you may want to consider
-    [Snowpipe](https://docs.snowflake.com/en/user-guide/data-load-snowpipe-intro.html).
-    Snowpipe applies the same `copy into` process, but it executes every
-    time new files are added to the storage bucket, making it ideal for
-    automating the data transfer.
-
-## Writing to Snowflake with DataFrame.to_sql
-
-You can also write to snowflake using `DataFrame.to_sql`, which writes using
-the Snowflake Python connector.
-
-!!! warning
-    Writing to Snowflake using `Dataframe.to_sql` is orders of magnitude
-    slower than using `COPY INTO`.
-
-
-### Prerequisites
-
-Install Snowflake Python connector to be able to write to Snowflake from Bodo (installed by default in Bodo Platform). Using Conda:
-
-``` shell
-conda install -c conda-forge snowflake-connector-python
-```
-
-If you have installed Bodo using pip, then you can install the packages using pip as well:
-
-``` shell
-pip install snowflake-connector-python
-```
-
-### Usage
-
-Make sure the Snowflake connection string is passed to `DataFrame.to_sql` method. For example:
-
-``` py
-import bodo
-import pandas as pd
-
-@bodo.jit
-def write_snowflake(df, table_name, conn_str, schema)
+@bodo.jit(distributed=["df"])
+def write_to_snowflake(df, table_name):
     df.to_sql(
         table_name,
-        conn_str,
-        schema=schema,
-        if_exists="append",
-        index=False
+        "snowflake://user:password@url/db_name/schema?warehouse=warehouse_name&role=role_name",
     )
 
-write_snowflake(df, table_name, f"snowflake://{username}:{password}@url/{db_name}/public?warehouse=XL_WH", schema)
+write_to_snowflake(df, table_name)
 ```
 
+
 !!! note
-    - `index=False` is required as Snowflake does not support Indexes.
-    - `if_exists=append` is needed if the table already exists in Snowflake.
-    - `schema` is recommended to avoid object permission issues.
+    - Writing Pandas Dataframe index to Snowflake is not supported. If `index` and/or `index_label`
+      are provided, they will be ignored.
+    - `if_exists=append` is needed if you want to append to a table that already exists in Snowflake.
+    - `chunksize` argument is supported and used for writing parquet files to Snowflake stage
+      in batches. It is the maximum number of rows to write to any of the intermediate parquet files.
+      When not provided, Bodo will estimate and use a reasonable chunk size.
+    - `dtype` and `method` arguments are not supported and will be ignored if provided.
+
+### Required Snowflake Permissions
+
+#### Creating a new table {#snowflake-write-perms-create}
+***Creating a new table***
+
+To create a new table, the role being used must have the `USAGE` permission
+at the database level. In addition, the following permissions are
+required at the Schema level:
+
+- `USAGE`
+- `CREATE TABLE`
+- `CREATE STAGE`
+- `CREATE FILE FORMAT`
+
+#### Replacing an existing table
+***Replacing an existing table***
+
+To replace an existing table (i.e. when using `if_exists='replace'`), the role
+must be an owner of the table, in addition to having the permissions listed in the
+[create section](#snowflake-write-perms-create) (at the Database and Schema level).
+
+#### Appending to an existing table
+***Appending to an existing table***
+
+To append to an existing table (i.e. when using `if_exists='append'`), the role
+must have the `INSERT` permission at the table level, in addition to the 
+permissions listed in the [create section](#snowflake-write-perms-create)
+(at the Database and Schema level).
+
+#### Verifying your role's permissions in Snowflake
+***Verifying your role's permissions in Snowflake***
+
+You can check the permissions granted to your role in Snowflake
+using the
+[`SHOW GRANTS` command](https://docs.snowflake.com/en/sql-reference/sql/show-grants.html){target=blank}, e.g.:
+
+```sql
+show grants to role test_role
+```
+
+Alternatively, you can check the permissions at the database/schema/table level
+and verify that your role has the required permissions, e.g.:
+
+```sql
+-- Check that your role has the USAGE permission on the database
+show grants on database test_db
+-- Check that your role has the required permissions on the schema
+show grants on schema test_schema
+-- Check that your role has the required permissions on the table
+show grants on table test_schema."TEST_TABLE"
+```
+
+You can also use the
+[Snowsight UI](https://docs.snowflake.com/en/user-guide/ui-snowsight.html){target=blank}
+to check these permissions by navigating to the `Privileges` section of the
+`Details` tab of the database/schema/table.
+
+
+### Advanced Configuration Options
+
+Bodo provides highly performant distributed Snowflake write capability.
+This is done by writing parquet files to a Snowflake stage and then
+using Snowflake's `COPY INTO` to load the data into the Snowflake table.
+Based on the type of your Snowflake account (i.e. whether it is
+an AWS or Azure or GCP based account) and your environment (i.e.
+whether certain packages and modules are installed), Bodo will
+use one of two strategies to write to Snowflake:
+Direct Upload (preferred) or Put Upload.
+
+1.  Direct Upload: In this strategy, Bodo creates a temporary stage
+    and writes parquet files to it directly. Once these files are
+    written, Bodo will automatically execute the `COPY INTO` command
+    to copy the data into Snowflake. This is supported on
+    S3 and ADLS based Snowflake stages (used by AWS and Azure based
+    Snowflake accounts, respectively). Note that Bodo will drop the
+    temporary stage once the data has been written. Temporary stages
+    are also automatically cleaned up by Snowflake after the session ends.
+    
+    !!! note
+        For writing to ADLS based stages, you must have Hadoop setup
+        correctly (see more details [here](#HDFS))
+        and have the `bodo-azurefs-sas-token-provider` package installed (it
+        can be installed using 
+        `conda install bodo-azurefs-sas-token-provider -c bodo.ai -c conda-forge`).
+        Bodo will fall back to the Put Upload strategy if both these
+        conditions are not met. Also see
+        [Interleaving HDFS/ADLS I/O with Snowflake Write](#interleave-adls-snowflake-write).
+    
+        Note that this is only applicable to
+        on-prem use cases since all of this is pre-configured on
+        the Bodo Platform.
+   
+2.  Put Upload: In this strategy, Bodo creates a 'named' stage, writes
+    parquet files to a temporary directory locally and then uses the
+    Snowflake Python Connector to upload these files to this named stage
+    using the `PUT` command. Similar to the Direct Upload strategy,
+    once the files have been transferred, Bodo will automatically
+    execute the `COPY INTO` command to copy the data into Snowflake.
+    This is used for GCS based stages (used by GCP based Snowflake
+    accounts), or when the user environment doesn't have all the
+    required packages and modules to use the Direct Upload strategy.
+   
+    Similar to the Direct Upload strategy, Bodo will drop the named stage
+    after the data has been written to the table.
+    
+    !!! note
+        In some cases, e.g. during abnormal exits, Bodo may not be able
+        to drop these stages, which may require manual cleanup by the
+        user. All stages created by Bodo are of the form
+        "bodo_io_snowflake_{random-uuid}". You can list all stages
+        created by Bodo in Snowflake by executing the
+        [`SHOW STAGES` command](https://docs.snowflake.com/en/sql-reference/sql/show-stages.html){target=blank}:
+        
+        ```sql
+        show stages like 'bodo_io_snowflake_%';
+        ```
+        
+        and then delete them using the
+        [`DROP STAGE` command](https://docs.snowflake.com/en/sql-reference/sql/drop-stage.html){target=blank}, e.g.:
+        
+        ```sql
+        drop stage "bodo_io_snowflake_02ca9beb-eaf6-4957-a6ff-ff426441cd7a";
+        ```
+
+        These operations are not supported in Bodo and must be executed directly
+        through the Snowflake console.
+
+Direct Upload is the preferred strategy and used by default whenever
+possible. When this is not possible, Bodo will show a warning to the
+user. For optimal Snowflake ingestion performance, Bodo writes
+multiple small intermediate parquet files on each rank, instead of a
+single file like it does for regular parquet writes.
+
+Users can set the environment variable `BODO_SF_WRITE_DEBUG` (to any value),
+to get more details during the Snowflake write process. This includes printing
+the raw result of the `COPY INTO` command execution, and printing more
+detailed error messages in case of exceptions.
+
+Bodo exposes the following configuration variables for tuning
+the write process further (for advanced users only):
+
+- `SF_WRITE_UPLOAD_USING_PUT`: This configuration variable can be set to `True`
+  to force Bodo to use the Put Upload strategy. This is `False` by default
+  since Direct Upload is the preferred strategy.
+- `SF_WRITE_PARQUET_COMPRESSION`: This configuration variable can set to
+  specify the compression method used for writing the intermediate
+  Parquet files. Supported values include: `"snappy"`, `"gzip"`
+  and `"zstd"`. Bodo uses `"snappy"` by default since it provided
+  the best overall performance in our benchmarks, however this can vary
+  based on your data.
+- `SF_WRITE_PARQUET_CHUNK_SIZE`: This configuration variable can be
+  used to specify the chunk size to use when writing the dataframe to
+  the intermediate Parquet files. This is measured by the uncompressed
+  memory usage of the dataframe (in bytes). Note that when provided,
+  `df.to_sql`'s `chunksize` parameter (see description in note in
+  the [Usage section](#snowflake-write-usage)) overrides this value.
+- `SF_WRITE_OVERLAP_UPLOAD`: For maximum performance, the Put Upload
+  strategy writes intermediate parquet files to local disk and uploads
+  them to the stage in parallel. To alter this behavior, i.e.
+  write the parquet files and upload them sequentially, this configuration
+  variable can be set to `False`. Note that this is only applicable
+  when using the Put Upload strategy.
+
+
+These can be set as follows:
+```py
+import bodo
+import bodo.io.snowflake
+
+bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = False
+bodo.io.snowflake.SF_WRITE_PARQUET_COMPRESSION = "gzip"
+...
+```
 
 MySQL
 -----
