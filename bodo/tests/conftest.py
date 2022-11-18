@@ -89,14 +89,16 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodo_6of6,
     ]
     azure_2p_markers = [
-        pytest.mark.bodo_1of8,
-        pytest.mark.bodo_2of8,
-        pytest.mark.bodo_3of8,
-        pytest.mark.bodo_4of8,
-        pytest.mark.bodo_5of8,
-        pytest.mark.bodo_6of8,
-        pytest.mark.bodo_7of8,
-        pytest.mark.bodo_8of8,
+        pytest.mark.bodo_1of10,
+        pytest.mark.bodo_2of10,
+        pytest.mark.bodo_3of10,
+        pytest.mark.bodo_4of10,
+        pytest.mark.bodo_5of10,
+        pytest.mark.bodo_6of10,
+        pytest.mark.bodo_7of10,
+        pytest.mark.bodo_8of10,
+        pytest.mark.bodo_9of10,
+        pytest.mark.bodo_10of10,
     ]
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
