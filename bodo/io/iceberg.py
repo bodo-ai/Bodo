@@ -117,20 +117,6 @@ def _clean_schema(schema: pa.Schema) -> pa.Schema:
     return working_schema
 
 
-def _schemas_equal(schema: pa.Schema, other: pa.Schema) -> bool:
-    """
-    Determines if two PyArrow schemas are equal,
-    accounting for Bodo and Iceberg-specific details
-    """
-
-    if schema.equals(other):
-        return True
-
-    schema_filtered = _clean_schema(schema)
-    other_filtered = _clean_schema(other)
-    return schema_filtered.equals(other_filtered)
-
-
 # ----------------------------- Iceberg Read -----------------------------#
 def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
     """
@@ -597,6 +583,42 @@ def pyarrow_schema(df: DataFrameType) -> pa.Schema:
 
 
 # ----------------------------- Iceberg Write -----------------------------#
+
+
+def _assert_schemas_compatible(pa_schema: pa.Schema, df_schema: pa.Schema) -> bool:
+    """Check if df_schema is compatible with pa_schema (schema of the Iceberg table) for append"""
+    # if the schemas are not equal, it is still possible that the dataframe can be
+    # appended iff the dataframe schema is a subset of the iceberg schema and each
+    # missing field is optional
+    clean_pa_schema = _clean_schema(pa_schema)
+    clean_df_schema = _clean_schema(df_schema)
+
+    # create a new "subset" pa schema that only contains the fields that are in the
+    # dataframe schema. This is done so that the `.equals` method can be used to
+    # compare the two schemas
+    subset_pa_schema = pa.schema([])
+    for pa_field in clean_pa_schema:
+        df_field = clean_df_schema.field_by_name(pa_field.name)
+
+        # don't include the field only if it isn't in the dataframe schema
+        # and it is nullable
+        if not (df_field is None and pa_field.nullable):
+            subset_pa_schema = subset_pa_schema.append(pa_field)
+
+    # Check schemas are compatible. This also enforces the ordered subset requirement. 
+    if not subset_pa_schema.equals(clean_df_schema):
+        if numba.core.config.DEVELOPER_MODE:  # type: ignore
+            raise BodoError(
+                f"DataFrame schema needs to be an ordered subset of Iceberg table for append\n\n"
+                f"Iceberg:\n{pa_schema}\n\n"
+                f"DataFrame:\n{df_schema}\n"
+            )
+        else:
+            raise BodoError(
+                "DataFrame schema needs to be an ordered subset of Iceberg table for append"
+            )
+
+
 def get_table_details_before_write(
     table_name: str,
     conn: str,
@@ -610,7 +632,7 @@ def get_table_details_before_write(
     """
     Wrapper around bodo_iceberg_connector.get_typing_info to perform
     dataframe typechecking, collect typing-related information for
-    Iceberg writes, and project across all ranks.
+    Iceberg writes, fill in nulls, and project across all ranks.
     """
 
     ev = tracing.Event("iceberg_get_table_details_before_write")
@@ -666,21 +688,8 @@ def get_table_details_before_write(
                 (col_name_to_idx_map[col_name], *rest) for col_name, *rest in sort_order
             ]
 
-            if (
-                if_exists == "append"
-                and (pa_schema is not None)
-                and not _schemas_equal(pa_schema, df_pyarrow_schema)
-            ):
-                if numba.core.config.DEVELOPER_MODE:  # type: ignore
-                    raise BodoError(
-                        f"Iceberg Table and DataFrame Schemas Need to be Equal for Append\n\n"
-                        f"Iceberg:\n{pa_schema}\n\n"
-                        f"DataFrame:\n{df_pyarrow_schema}\n"
-                    )
-                else:
-                    raise BodoError(
-                        "Iceberg Table and DataFrame Schemas Need to be Equal for Append"
-                    )
+            if if_exists == "append" and (pa_schema is not None):
+                _assert_schemas_compatible(pa_schema, df_pyarrow_schema)
 
             if iceberg_schema_id is None:
                 # When the table doesn't exist, i.e. we're creating a new one,

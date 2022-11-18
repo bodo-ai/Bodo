@@ -1,6 +1,7 @@
 import glob
 import io
 import os
+import re
 import struct
 import traceback
 from datetime import date, datetime
@@ -78,6 +79,7 @@ WRITE_TABLES = [
     "string_table",
     "list_table",
     "struct_table",
+    "optional_table",
     # TODO Needs investigation.
     pytest.param(
         "map_table",
@@ -1316,6 +1318,136 @@ def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn):
         # not for correctness itself, since that is
         # already being tested by the other unit tests.
         bodo.jit(impl)(fname, table_name, conn, db_schema)
+
+
+def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
+    """
+    Test support for adding a dataframe to an iceberg table where the dataframe
+    is missing an optional column.
+    The entire column should be filled with nulls instead of failing.
+    """
+    table_name = "simple_optional_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Test that a dataframe with a missing optional column can be appended
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append", index=False)
+
+    df = pd.DataFrame(
+        {
+            "A": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+        }
+    )
+    bodo.jit(distributed=["df"])(impl)(_get_dist_arg(df), table_name, conn, db_schema)
+
+    # Read the columns with Spark and check that the missing column is filled
+    # with nulls.
+    spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+
+    assert (
+        list(spark_out["B"]).count(None) == 100
+    ), "Missing column not filled with nulls"
+
+    # Read the columns with Bodo and check that the missing column is filled
+    # with NAs.
+    @bodo.jit
+    def read_bodo(table_name, conn, db_schema):
+        return pd.read_sql_table(table_name, conn, db_schema)
+
+    bodo_out = read_bodo(table_name, conn, db_schema)
+    assert (
+        bodo_out["B"].isna().sum() == 100
+    ), "Missing column not filled with nulls"
+
+
+def test_iceberg_missing_optional_column_missing_error(
+    iceberg_database, iceberg_table_conn
+):
+    """
+    Test that the correct error is thrown when a dataframe is missing a required
+    column.
+    """
+    table_name = "simple_optional_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Test that a dataframe with a missing optional column can be appended
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append", index=False)
+
+    df = pd.DataFrame(
+        {
+            "B": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame schema needs to be an ordered subset of Iceberg table for append",
+    ):
+        bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
+
+
+def test_iceberg_missing_optional_column_extra_error(
+    iceberg_database, iceberg_table_conn
+):
+    """
+    Test support for adding a dataframe to an iceberg table where the dataframe
+    has an additional column that is not in the Iceberg table schema.
+    """
+    table_name = "simple_optional_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Test that a dataframe with a missing optional column can be appended
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append", index=False)
+
+    df = pd.DataFrame(
+        {
+            "A": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+            "C": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame schema needs to be an ordered subset of Iceberg table for append"
+        ),
+    ):
+        bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
+
+
+def test_iceberg_missing_optional_column_incorrect_field_order(
+    iceberg_database, iceberg_table_conn
+):
+    """
+    Test that the correct error is thrown when a dataframe columns in incorrect order.
+    """
+    table_name = "simple_optional_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Test that a dataframe with a missing optional column can be appended
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append", index=False)
+
+    df = pd.DataFrame(
+        {
+            "B": np.array(["a", "b", "c", "d"] * 25),
+            "A": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame schema needs to be an ordered subset of Iceberg table for append"
+        ),
+    ):
+        bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
 
 
 def truncate_impl(x: pd.Series, W: int):

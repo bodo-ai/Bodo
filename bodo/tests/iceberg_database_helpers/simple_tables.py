@@ -278,6 +278,16 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ("D", "string", True),
         ],
     ),
+    "optional_table": (
+        {
+            "A": np.array([1, 2] * 25, np.int32),
+            "B": np.array(["a", "b"] * 25),
+        },
+        [
+            ("A", "int", False),
+            ("B", "string", True),
+        ],
+    ),
 }
 
 
