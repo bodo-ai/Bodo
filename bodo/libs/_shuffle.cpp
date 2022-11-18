@@ -486,6 +486,7 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
 }
 
 void convert_local_dictionary_to_global(array_info* dict_array,
+                                        bool is_parallel,
                                         bool sort_dictionary) {
     if (dict_array->has_global_dictionary) return;
     array_info* local_dictionary = dict_array->info1;
@@ -499,16 +500,21 @@ void convert_local_dictionary_to_global(array_info* dict_array,
     // this function)
     incref_array(local_dictionary);
     // TODO dropna? are there NAs in dictionary and how should they be handled
-    table_info* dist_dictionary_table =
-        drop_duplicates_table(in_dictionary_table, true, 1, 0, false, false);
+    table_info* dist_dictionary_table = drop_duplicates_table(
+        in_dictionary_table, is_parallel, 1, 0, false, false);
     delete in_dictionary_table;  // no array decref because
                                  // drop_duplicates_table stole the reference
     // replicate the global dictionary on all ranks
     // allgather
-    table_info* global_dictionary_table =
-        gather_table(dist_dictionary_table, 1, true, true);
-    delete dist_dictionary_table;  // no array decref because gather_table stole
-                                   // the reference
+    table_info* global_dictionary_table;
+    if (is_parallel) {
+        global_dictionary_table =
+            gather_table(dist_dictionary_table, 1, true, is_parallel);
+        delete dist_dictionary_table;  // no array decref because gather_table
+                                       // stole the reference
+    } else {
+        global_dictionary_table = dist_dictionary_table;
+    }
     array_info* global_dictionary = global_dictionary_table->columns[0];
     delete global_dictionary_table;
 
@@ -1676,7 +1682,7 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
             // XXX is the dictionary replaced in Python input array and
             // correctly replaced? Can it be done easily? (this includes
             // has_global_dictionary attribute)
-            convert_local_dictionary_to_global(a);
+            convert_local_dictionary_to_global(a, is_parallel);
         }
     }
 
@@ -1746,7 +1752,8 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
     for (array_info* a : in_table->columns) {
         if ((a->arr_type == bodo_array_type::DICT) &&
             !a->has_global_dictionary) {
-            convert_local_dictionary_to_global(a);
+            // TODO: Can this ever be called on replicated data?
+            convert_local_dictionary_to_global(a, true);
         }
     }
     table_info* revshuf_table = reverse_shuffle_table_kernel(
@@ -1772,7 +1779,9 @@ table_info* coherent_shuffle_table(
     for (array_info* a : in_table->columns) {
         if ((a->arr_type == bodo_array_type::DICT) &&
             !a->has_global_dictionary) {
-            convert_local_dictionary_to_global(a);
+            // coherent_shuffle_table only called in join with parallel options.
+            // is_parallel = true
+            convert_local_dictionary_to_global(a, true);
         }
     }
 
@@ -2531,7 +2540,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
         array_info* in_arr = in_table->columns[i_col];
         if (in_arr->arr_type == bodo_array_type::DICT) {
             if (!in_arr->has_global_dictionary)
-                convert_local_dictionary_to_global(in_arr);
+                convert_local_dictionary_to_global(in_arr, is_parallel);
             in_arr = in_arr->info2;
         }
         int64_t n_rows = in_arr->length;
