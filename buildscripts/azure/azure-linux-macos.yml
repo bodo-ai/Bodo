@@ -88,7 +88,7 @@ jobs:
         python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" bodo/tests/
       fi
     env:
-      SF_USER: $(SNOWFLAKE_USER)
+      SF_USERNAME: $(SNOWFLAKE_USER)
       SF_PASSWORD: $(SNOWFLAKE_PASSWORD)
       SF_USER2: $(SNOWFLAKE_USER2)
       SF_PASSWORD2: $(SNOWFLAKE_PASSWORD2)

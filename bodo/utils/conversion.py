@@ -637,11 +637,28 @@ def overload_coerce_to_array(
 
         return impl_list_timedelta
 
-    if isinstance(data, bodo.hiframes.pd_timestamp_ext.PandasTimestampType):
-        # Currently only support tz naive. Need an allocation function.
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            data, "coerce_to_array()"
-        )
+    # Timestamp with a timezone
+    if (
+        isinstance(data, bodo.hiframes.pd_timestamp_ext.PandasTimestampType)
+        and data.tz is not None
+    ):
+        tz_literal = data.tz
+
+        def impl_timestamp_tz_aware(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+        ):  # pragma: no cover
+            A = np.empty(scalar_to_arr_len, "datetime64[ns]")
+            dt64_val = data.to_datetime64()
+            for i in numba.parfors.parfor.internal_prange(scalar_to_arr_len):
+                A[i] = dt64_val
+            return bodo.libs.pd_datetime_arr_ext.init_pandas_datetime_array(
+                A, tz_literal
+            )
+
+        return impl_timestamp_tz_aware
 
     # Timestamp/Timedelta scalars to array
     if not is_overload_none(scalar_to_arr_len) and data in [

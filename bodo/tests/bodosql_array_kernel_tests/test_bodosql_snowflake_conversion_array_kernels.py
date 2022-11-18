@@ -275,8 +275,9 @@ def test_to_char(args):
             args, lambda x: np.nan if pd.isna(x) else f"{x:.6f}", "string"
         )
     elif pd.api.types.infer_dtype(arr) == "bytes":
-        with pytest.raises(BodoError, match="binary input currently unsupported"):
-            bodo.jit(impl)(arr)
+        py_output = vectorized_sol(
+            args, lambda x: np.nan if pd.isna(x) else x.hex(), "string"
+        )
     elif pd.api.types.is_bool_dtype(arr):
         py_output = vectorized_sol(
             args,

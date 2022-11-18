@@ -4329,7 +4329,7 @@ def to_sql_overload(
         "            warnings.warn('index is not supported for Snowflake tables.')      \n"
         "        if index_label is not None and bodo.get_rank() == 0:\n"
         "            warnings.warn('index_label is not supported for Snowflake tables.')\n"
-        "        ev = tracing.Event('snowflake_write_impl')\n"
+        "        ev = tracing.Event('snowflake_write_impl', sync=False)\n"
     )
 
     # Compute table location, qualified and quoted
@@ -4523,7 +4523,7 @@ def to_sql_overload(
     # atexit without any side effects (will be a NOP).
     func_text += "        if azure_stage_direct_upload:\n"
     func_text += "            bodo.libs.distributed_api.disconnect_hdfs_njit()\n"
-    func_text += "        ev.finalize(sync=False)\n"
+    func_text += "        ev.finalize()\n"
 
     # -------------------------- Default to_sql Impl --------------------------
     func_text += "    else:\n"

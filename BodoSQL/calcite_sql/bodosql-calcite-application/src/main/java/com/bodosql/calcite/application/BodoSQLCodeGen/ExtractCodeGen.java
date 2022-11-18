@@ -3,6 +3,8 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.Utils.Utils.escapePythonQuotes;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
+import com.bodosql.calcite.application.RexNodeVisitorInfo;
+import java.util.List;
 import org.apache.calcite.sql.SqlBinaryOperator;
 import org.apache.calcite.sql.SqlKind;
 
@@ -18,13 +20,14 @@ public class ExtractCodeGen {
   /**
    * Function that return the necessary generated code for an Extract call.
    *
-   * @param datetimeVal The arg expr for selecting which datetime field to extract. This must be a constant
-   *     string.
+   * @param datetimeVal The arg expr for selecting which datetime field to extract. This must be a
+   *     constant string.
    * @param column The column arg expr.
    * @param outputScalar Should the output generate scalar code.
    * @return The code generated that matches the Extract expression.
    */
-  public static String generateExtractCode(String datetimeVal, String column, boolean outputScalar) {
+  public static String generateExtractCode(
+      String datetimeVal, String column, boolean outputScalar) {
     String extractCode;
     switch (datetimeVal) {
       case "NANOSECOND":
@@ -103,5 +106,134 @@ public class ExtractCodeGen {
     StringBuilder nameBuilder = new StringBuilder();
     nameBuilder.append("EXTRACT(").append(datetimeName).append(", ").append(columnName).append(")");
     return escapePythonQuotes(nameBuilder.toString());
+  }
+
+  /**
+   * Returns the RexNodeVisitorInfo for DATE_PART by mapping the string literals to the same code
+   * gen as EXTRACT
+   *
+   * @param operandsInfo The information about the arguments to the call
+   * @param outputScalar Whether the output is a scalar or not
+   * @return The name generated that matches the Extract expression.
+   */
+  public static RexNodeVisitorInfo generateDatePart(
+      List<RexNodeVisitorInfo> operandsInfo, boolean outputScalar) {
+    StringBuilder name = new StringBuilder();
+    name.append("DATE_PART(")
+        .append(operandsInfo.get(0).getName())
+        .append(", ")
+        .append(operandsInfo.get(1).getName())
+        .append(")");
+
+    String unit;
+    switch (operandsInfo.get(0).getExprCode()) {
+      case "\"year\"":
+      case "\"y\"":
+      case "\"yy\"":
+      case "\"yyy\"":
+      case "\"yyyy\"":
+      case "\"yr\"":
+      case "\"years\"":
+      case "\"yrs\"":
+        unit = "YEAR";
+        break;
+
+      case "\"month\"":
+      case "\"mm\"":
+      case "\"mon\"":
+      case "\"mons\"":
+      case "\"months\"":
+        unit = "MONTH";
+        break;
+
+      case "\"day\"":
+      case "\"d\"":
+      case "\"dd\"":
+      case "\"days\"":
+      case "\"dayofmonth\"":
+        unit = "DAY";
+        break;
+
+      case "\"dayofweek\"":
+      case "\"weekday\"":
+      case "\"dow\"":
+      case "\"dw\"":
+        unit = "DAYOFWEEK";
+        break;
+
+      case "\"dayofyear\"":
+      case "\"yearday\"":
+      case "\"doy\"":
+      case "\"dy\"":
+        unit = "DAYOFYEAR";
+        break;
+
+      case "\"week\"":
+      case "\"w\"":
+      case "\"wk\"":
+      case "\"weekofyear\"":
+      case "\"woy\"":
+      case "\"wy\"":
+        unit = "WEEK";
+        break;
+
+      case "\"weekiso\"":
+      case "\"week_iso\"":
+      case "\"weekofyeariso\"":
+      case "\"weekofyear_iso\"":
+        unit = "WEEKISO";
+        break;
+
+      case "\"quarter\"":
+      case "\"q\"":
+      case "\"qtr\"":
+      case "\"qtrs\"":
+      case "\"quarters\"":
+        unit = "QUARTER";
+        break;
+
+      case "\"hour\"":
+      case "\"h\"":
+      case "\"hh\"":
+      case "\"hr\"":
+      case "\"hours\"":
+      case "\"hrs\"":
+        unit = "HOUR";
+        break;
+
+      case "\"minute\"":
+      case "\"m\"":
+      case "\"mi\"":
+      case "\"min\"":
+      case "\"minutes\"":
+      case "\"mins\"":
+        unit = "MINUTE";
+        break;
+
+      case "\"second\"":
+      case "\"s\"":
+      case "\"sec\"":
+      case "\"seconds\"":
+      case "\"secs\"":
+        unit = "SECOND";
+        break;
+
+      case "\"nanosecond\"":
+      case "\"ns\"":
+      case "\"nsec\"":
+      case "\"nanosec\"":
+      case "\"nsecond\"":
+      case "\"nanoseconds\"":
+      case "\"nanosecs\"":
+      case "\"nseconds\"":
+        unit = "NANOSECOND";
+        break;
+
+      default:
+        throw new BodoSQLCodegenException(
+            "Unsupported DATE_PART unit: " + operandsInfo.get(0).getName());
+    }
+    String code = generateExtractCode(unit, operandsInfo.get(1).getExprCode(), outputScalar);
+    return new RexNodeVisitorInfo(name.toString(), code);
   }
 }

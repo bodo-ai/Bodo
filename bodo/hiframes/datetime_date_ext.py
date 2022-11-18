@@ -950,6 +950,104 @@ def create_datetime_date_cmp_op_overload(op):
     return overload_cmp
 
 
+def create_datetime_array_date_cmp_op_overload(op):
+    """create overload function for comparison operators with datetime64ns array
+    and date types."""
+
+    def overload_arr_cmp(lhs, rhs):
+        if isinstance(lhs, types.Array) and lhs.dtype == bodo.datetime64ns:
+            # datetime64 + date scalar
+            if rhs == datetime_date_type:
+
+                def impl(lhs, rhs):  # pragma: no cover
+                    numba.parfors.parfor.init_prange()
+                    n = len(lhs)
+                    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                    for i in numba.parfors.parfor.internal_prange(n):
+                        if bodo.libs.array_kernels.isna(lhs, i):
+                            bodo.libs.array_kernels.setna(out_arr, i)
+                        else:
+                            out_arr[i] = op(
+                                lhs[i],
+                                bodo.utils.conversion.unbox_if_timestamp(
+                                    pd.Timestamp(rhs)
+                                ),
+                            )
+                    return out_arr
+
+                return impl
+
+            # datetime64 + date array
+            elif rhs == datetime_date_array_type:
+
+                def impl(lhs, rhs):  # pragma: no cover
+                    numba.parfors.parfor.init_prange()
+                    n = len(lhs)
+                    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                    for i in numba.parfors.parfor.internal_prange(n):
+                        if bodo.libs.array_kernels.isna(
+                            lhs, i
+                        ) or bodo.libs.array_kernels.isna(rhs, i):
+                            bodo.libs.array_kernels.setna(out_arr, i)
+                        else:
+                            out_arr[i] = op(
+                                lhs[i],
+                                bodo.utils.conversion.unbox_if_timestamp(
+                                    pd.Timestamp(rhs[i])
+                                ),
+                            )
+                    return out_arr
+
+                return impl
+
+        elif isinstance(rhs, types.Array) and rhs.dtype == bodo.datetime64ns:
+            # date scalar + datetime64
+            if lhs == datetime_date_type:
+
+                def impl(lhs, rhs):  # pragma: no cover
+                    numba.parfors.parfor.init_prange()
+                    n = len(rhs)
+                    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                    for i in numba.parfors.parfor.internal_prange(n):
+                        if bodo.libs.array_kernels.isna(rhs, i):
+                            bodo.libs.array_kernels.setna(out_arr, i)
+                        else:
+                            out_arr[i] = op(
+                                bodo.utils.conversion.unbox_if_timestamp(
+                                    pd.Timestamp(lhs)
+                                ),
+                                rhs[i],
+                            )
+                    return out_arr
+
+                return impl
+
+            # date array + datetime64
+            elif lhs == datetime_date_array_type:
+
+                def impl(lhs, rhs):  # pragma: no cover
+                    numba.parfors.parfor.init_prange()
+                    n = len(rhs)
+                    out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
+                    for i in numba.parfors.parfor.internal_prange(n):
+                        if bodo.libs.array_kernels.isna(
+                            lhs, i
+                        ) or bodo.libs.array_kernels.isna(rhs, i):
+                            bodo.libs.array_kernels.setna(out_arr, i)
+                        else:
+                            out_arr[i] = op(
+                                bodo.utils.conversion.unbox_if_timestamp(
+                                    pd.Timestamp(lhs[i])
+                                ),
+                                rhs[i],
+                            )
+                    return out_arr
+
+                return impl
+
+    return overload_arr_cmp
+
+
 def create_cmp_op_overload_arr(op):
     """create overload function for comparison operators with datetime_date_array"""
 

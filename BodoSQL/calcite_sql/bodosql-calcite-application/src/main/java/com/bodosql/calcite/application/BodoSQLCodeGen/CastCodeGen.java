@@ -16,10 +16,9 @@ public class CastCodeGen {
    */
   public static String generateCastCode(String arg, SqlTypeName typeName, boolean outputScalar) {
     StringBuilder codeBuilder = new StringBuilder();
-    String dtype = sqlTypenameToPandasTypename(typeName, outputScalar, false, false);
-    String cast = sqlTypenameToPandasTypename(typeName, false, false, true);
+    String dtype = sqlTypenameToPandasTypename(typeName, outputScalar, false);
     if (outputScalar) {
-      codeBuilder.append(cast).append("(").append(arg).append(")");
+      codeBuilder.append(dtype).append("(").append(arg).append(")");
     } else {
       // TODO: replace Series.astype/dt with array operation
       codeBuilder

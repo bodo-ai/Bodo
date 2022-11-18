@@ -1459,7 +1459,7 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     for (auto a : key_cols) {
         if ((a->arr_type == bodo_array_type::DICT) &&
             !a->has_global_dictionary) {
-            convert_local_dictionary_to_global(a);
+            convert_local_dictionary_to_global(a, is_parallel);
         }
     }
     uint32_t* hashes = hash_keys(key_cols, seed, is_parallel);
@@ -5146,7 +5146,8 @@ void copy_dict_string_values_transform(array_info* update_col,
     *update_col = std::move(*out_col);
     if (!update_col->has_global_dictionary) {
         // reverse_shuffle_table needs the dictionary to be global
-        convert_local_dictionary_to_global(update_col);
+        // copy_dict_string_values_transform is only called on distributed data
+        convert_local_dictionary_to_global(update_col, true);
     }
     delete out_col;
 }
@@ -5543,7 +5544,7 @@ class GroupbyPipeline {
             array_info* a = in_table->columns[icol];
             if ((a->arr_type == bodo_array_type::DICT) &&
                 !a->has_global_dictionary) {
-                convert_local_dictionary_to_global(a);
+                convert_local_dictionary_to_global(a, is_parallel);
             }
         }
 
@@ -6226,7 +6227,7 @@ class GroupbyPipeline {
         int64_t key_row = 0;
         for (int64_t i = 0; i < num_keys; i++) {
             array_info* key_col = (*from_tables[0])[i];
-            array_info* new_key_col;
+            array_info* new_key_col = nullptr;
             if (key_col->arr_type == bodo_array_type::NUMPY ||
                 key_col->arr_type == bodo_array_type::CATEGORICAL ||
                 key_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
@@ -6890,7 +6891,7 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     for (int64_t i_key = 0; i_key < num_keys; i_key++) {
         array_info* a = in_table->columns[i_key];
         if ((a->arr_type == bodo_array_type::DICT) && !a->has_global_dictionary)
-            convert_local_dictionary_to_global(a);
+            convert_local_dictionary_to_global(a, is_parallel);
         incref_array(a);
     }
     table_info* red_table =

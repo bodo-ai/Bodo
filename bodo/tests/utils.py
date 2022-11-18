@@ -21,7 +21,7 @@ import pyarrow as pa
 from mpi4py import MPI
 from numba.core import ir, types
 from numba.core.compiler_machinery import FunctionPass, register_pass
-from numba.core.ir_utils import find_callname, guard
+from numba.core.ir_utils import build_definitions, find_callname, guard
 from numba.core.typed_passes import NopythonRewrites
 from numba.core.untyped_passes import PreserveIR
 
@@ -2081,7 +2081,7 @@ def get_snowflake_connection_string(db, schema, user=1):
     other details (db and schema) to change.
     """
     if user == 1:
-        username = os.environ["SF_USER"]
+        username = os.environ["SF_USERNAME"]
         password = os.environ["SF_PASSWORD"]
         account = "bodopartner.us-east-1"
     elif user == 2:
@@ -2114,7 +2114,7 @@ def snowflake_cred_env_vars_present(user=1) -> bool:
         bool: Whether env vars are set or not
     """
     if user == 1:
-        return ("SF_USER" in os.environ) and ("SF_PASSWORD" in os.environ)
+        return ("SF_USERNAME" in os.environ) and ("SF_PASSWORD" in os.environ)
     elif user == 2:
         return ("SF_USER2" in os.environ) and ("SF_PASSWORD2" in os.environ)
     elif user == 3:
@@ -2178,3 +2178,89 @@ def drop_snowflake_table(table_name: str, db: str, schema: str):
     drop_err = comm.bcast(drop_err)
     if isinstance(drop_err, Exception):
         raise drop_err
+
+
+def generate_comparison_ops_func(op, check_na=False):
+    """
+    Generates a comparison function. If check_na,
+    then we are being called on a scalar value because Pandas
+    can't handle NA values in the array. If so, we return None
+    if either input is NA.
+    """
+    op_str = numba.core.utils.OPERATORS_TO_BUILTINS[op]
+    func_text = "def test_impl(a, b):\n"
+    if check_na:
+        func_text += f"  if pd.isna(a) or pd.isna(b):\n"
+        func_text += f"    return None\n"
+    func_text += f"  return a {op_str} b\n"
+    loc_vars = {}
+    exec(func_text, {"pd": pd}, loc_vars)
+    return loc_vars["test_impl"]
+
+
+def find_funcname_in_annotation_ir(annotation, desired_callname):
+    """Finds a function call if it exists in the blocks stored
+    in the annotation. Returns the name of the LHS variable
+    defining the function if it exists and the variables
+    defining the arguments with which the function was called.
+
+    Args:
+        annotation (TypeAnnotation): Dispatcher annotation
+        contain the blocks and typemap.
+
+    Returns:
+        Tuple(Name of the LHS variable, List[Name of argument variables])
+
+    Raises Assertion Error if the desired_callname is not found.
+    """
+    # Generate a dummy IR to enable find_callname
+    f_ir = ir.FunctionIR(
+        annotation.blocks,
+        False,
+        annotation.func_id,
+        ir.Loc("", 0),
+        {},
+        0,
+        [],
+    )
+    # Update the definitions
+    f_ir._definitions = build_definitions(f_ir.blocks)
+    # Iterate over the IR
+    for block in f_ir.blocks.values():
+        for stmt in block.body:
+            if isinstance(stmt, ir.Assign):
+                callname = guard(find_callname, f_ir, stmt.value, annotation.typemap)
+                if callname == desired_callname:
+                    return stmt.value.func.name, [var.name for var in stmt.value.args]
+
+    assert False, f"Did not find function {desired_callname} in the IR"
+
+
+def find_nested_dispatcher_and_args(
+    dispatcher, args, func_name, return_dispatcher=True
+):
+    """Finds a dispatcher in the IR and the arguments with which it was
+    called for the given func_name (which matches the output of find_callname).
+    This dispatcher is assumed to be called
+
+    Args:
+        dispatcher (Dispatch): A numba/bodo dispatcher
+        args (tuple(numba.core.types.Type)): Input tuple of Numba types
+        func_name (Tuple[str, str]): func_name to find.
+        return_dispatcher (bool): Should we find and return the dispatcher + arguments?
+            This is True when we are doing this as part of a multi-step traversal.
+
+    Returns a tuple with the dispatcher and the arguments with which it was called.
+    """
+    sig = types.void(*args)
+    cr = dispatcher.get_compile_result(sig)
+    annotation = cr.type_annotation
+    var_name, arg_names = find_funcname_in_annotation_ir(annotation, func_name)
+    if return_dispatcher:
+        typemap = annotation.typemap
+        arg_types = tuple([typemap[name] for name in arg_names])
+        # Find the coalesce dispatcher in the IR
+        cached_info = typemap[var_name].templates[0]._impl_cache
+        return cached_info[
+            (numba.core.registry.cpu_target.typing_context, arg_types, ())
+        ]

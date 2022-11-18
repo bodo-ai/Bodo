@@ -1,17 +1,14 @@
 import glob
 import io
 import os
+import re
 import struct
 import traceback
 from datetime import date, datetime
 from pathlib import Path
 from typing import List, Optional
 
-# We need to import the connector first in order to apply our Py4J
-# monkey-patch. Since PySpark uses Py4J, it will load in the functions
-# we want to patch into memory; thus, without this import, those
-# functions will be saved and used before we can change them
-import bodo_iceberg_connector  # noqa
+import bodo_iceberg_connector
 import mmh3
 import numpy as np
 import pandas as pd
@@ -82,6 +79,7 @@ WRITE_TABLES = [
     "string_table",
     "list_table",
     "struct_table",
+    "optional_table",
     # TODO Needs investigation.
     pytest.param(
         "map_table",
@@ -671,8 +669,6 @@ def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
     """
     Test that the bodo_iceberg_connector correctly loads the latest snapshot id.
     """
-    import bodo_iceberg_connector
-
     comm = MPI.COMM_WORLD
     table_name = "simple_numeric_table"
     db_schema, warehouse_loc = iceberg_database
@@ -1324,6 +1320,136 @@ def test_read_pq_write_iceberg(iceberg_database, iceberg_table_conn):
         bodo.jit(impl)(fname, table_name, conn, db_schema)
 
 
+def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
+    """
+    Test support for adding a dataframe to an iceberg table where the dataframe
+    is missing an optional column.
+    The entire column should be filled with nulls instead of failing.
+    """
+    table_name = "simple_optional_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Test that a dataframe with a missing optional column can be appended
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append", index=False)
+
+    df = pd.DataFrame(
+        {
+            "A": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+        }
+    )
+    bodo.jit(distributed=["df"])(impl)(_get_dist_arg(df), table_name, conn, db_schema)
+
+    # Read the columns with Spark and check that the missing column is filled
+    # with nulls.
+    spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+
+    assert (
+        list(spark_out["B"]).count(None) == 100
+    ), "Missing column not filled with nulls"
+
+    # Read the columns with Bodo and check that the missing column is filled
+    # with NAs.
+    @bodo.jit
+    def read_bodo(table_name, conn, db_schema):
+        return pd.read_sql_table(table_name, conn, db_schema)
+
+    bodo_out = read_bodo(table_name, conn, db_schema)
+    assert (
+        bodo_out["B"].isna().sum() == 100
+    ), "Missing column not filled with nulls"
+
+
+def test_iceberg_missing_optional_column_missing_error(
+    iceberg_database, iceberg_table_conn
+):
+    """
+    Test that the correct error is thrown when a dataframe is missing a required
+    column.
+    """
+    table_name = "simple_optional_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Test that a dataframe with a missing optional column can be appended
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append", index=False)
+
+    df = pd.DataFrame(
+        {
+            "B": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame schema needs to be an ordered subset of Iceberg table for append",
+    ):
+        bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
+
+
+def test_iceberg_missing_optional_column_extra_error(
+    iceberg_database, iceberg_table_conn
+):
+    """
+    Test support for adding a dataframe to an iceberg table where the dataframe
+    has an additional column that is not in the Iceberg table schema.
+    """
+    table_name = "simple_optional_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Test that a dataframe with a missing optional column can be appended
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append", index=False)
+
+    df = pd.DataFrame(
+        {
+            "A": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+            "C": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame schema needs to be an ordered subset of Iceberg table for append"
+        ),
+    ):
+        bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
+
+
+def test_iceberg_missing_optional_column_incorrect_field_order(
+    iceberg_database, iceberg_table_conn
+):
+    """
+    Test that the correct error is thrown when a dataframe columns in incorrect order.
+    """
+    table_name = "simple_optional_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Test that a dataframe with a missing optional column can be appended
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append", index=False)
+
+    df = pd.DataFrame(
+        {
+            "B": np.array(["a", "b", "c", "d"] * 25),
+            "A": np.array([1, 2, 3, 4] * 25, dtype=np.int32),
+        }
+    )
+
+    with pytest.raises(
+        BodoError,
+        match=re.escape(
+            "DataFrame schema needs to be an ordered subset of Iceberg table for append"
+        ),
+    ):
+        bodo.jit(distributed=["df"])(impl)(df, table_name, conn, db_schema)
+
+
 def truncate_impl(x: pd.Series, W: int):
     """
     Apply the Iceberg truncate transform on Pandas series x.
@@ -1949,3 +2075,151 @@ def test_write_part_sort_return_orig(
 
     passed = comm.bcast(passed)
     assert passed == 1, "Bodo function output doesn't match expected output"
+
+
+def test_merge_into_cow_write_api(
+    iceberg_database,
+    iceberg_table_conn,
+):
+    comm = MPI.COMM_WORLD
+    bodo.barrier()
+
+    # Should always only run this test on rank O
+    if bodo.get_rank() != 0:
+        passed = comm.bcast(False)
+        if not passed:
+            raise Exception("Exception on Rank 0")
+        return
+
+    passed = True
+    try:
+        # Create a table to work off of
+        table_name = "merge_into_cow_write_api"
+        if bodo.get_rank() == 0:
+            df = pd.DataFrame({"A": [1, 2, 3, 4]})
+            create_iceberg_table(df, [("A", "long", True)], table_name)
+
+        db_schema, warehouse_loc = iceberg_database
+        conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+        conn = bodo.io.iceberg.format_iceberg_conn(conn)
+
+        # Get relavent read info from connector
+        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
+            conn, db_schema, table_name
+        )
+        old_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+            conn,
+            db_schema,
+            table_name,
+            None,
+        )[1]
+
+        # Write new file into warehouse location
+        new_fname = "new_file.parquet"
+        df_new = pd.DataFrame({"A": [5, 6, 7, 8]})
+        df_new.to_parquet(
+            os.path.join(warehouse_loc, db_schema, table_name, "data", new_fname)
+        )
+
+        # Commit the MERGE INTO COW operation
+        success = bodo_iceberg_connector.commit_merge_cow(
+            conn,
+            db_schema,
+            table_name,
+            warehouse_loc,
+            old_fnames,
+            [new_fname],
+            {"record_count": [4], "size": [0]},
+            snapshot_id,
+        )
+        assert success, "MERGE INTO Commit Operation Failed"
+
+        # See if the reported files to read is only the new file
+        new_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+            conn,
+            db_schema,
+            table_name,
+            None,
+        )[1]
+
+        assert len(new_fnames) == 1 and new_fnames[0] == os.path.join(
+            db_schema, table_name, "data", new_fname
+        )
+
+    except Exception as e:
+        passed = False
+        raise e
+    finally:
+        passed = comm.bcast(passed)
+
+
+def test_merge_into_cow_write_api_snapshot_check(
+    iceberg_database,
+    iceberg_table_conn,
+):
+    comm = MPI.COMM_WORLD
+    bodo.barrier()
+
+    # Should always only run this test on rank O
+    if bodo.get_rank() != 0:
+        passed = comm.bcast(False)
+        if not passed:
+            raise Exception("Exception on Rank 0")
+        return
+
+    passed = True
+    try:
+        # Create a table to work off of
+        table_name = "merge_into_cow_write_api_snapshot_check"
+        df = pd.DataFrame({"A": [1, 2, 3, 4]})
+        create_iceberg_table(df, [("A", "long", True)], table_name)
+
+        # Note that for the connector, conn_str and warehouse_loc are the same
+        db_schema, warehouse_loc = iceberg_database
+        conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+        # Format the connection string since we don't go through pd.read_sql_table
+        conn = bodo.io.iceberg.format_iceberg_conn(conn)
+
+        # Get relavent read info from connector
+        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
+            conn, db_schema, table_name
+        )
+        old_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+            conn,
+            db_schema,
+            table_name,
+            None,
+        )[1]
+
+        # Write new file into warehouse location
+        new_fname = "new_file.parquet"
+        df_new = pd.DataFrame({"A": [5, 6, 7, 8]})
+        df_new.to_parquet(
+            os.path.join(warehouse_loc, db_schema, table_name, "data", new_fname)
+        )
+
+        # Update the current snapshot ID by appending data to the table
+        spark = get_spark()
+        spark.sql(
+            f"INSERT INTO hadoop_prod.{db_schema}.{table_name} VALUES (10), (11), (12), (13)"
+        )
+
+        # Attempt to commit a MERGE INTO operation with the old snapshot id
+        # Expect it return False (and prints error)
+        success = bodo_iceberg_connector.commit_merge_cow(
+            conn,
+            db_schema,
+            table_name,
+            warehouse_loc,
+            old_fnames,
+            [new_fname],
+            {"record_count": [4], "size": [0]},
+            snapshot_id,
+        )
+        assert not success, "MERGE INTO Commit Operation should not have succeeded"
+
+    except Exception as e:
+        passed = False
+        raise e
+    finally:
+        passed = comm.bcast(passed)

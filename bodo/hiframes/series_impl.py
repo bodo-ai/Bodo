@@ -36,6 +36,7 @@ from bodo.hiframes.pd_series_ext import (
 )
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
+    convert_val_to_timestamp,
     pd_timestamp_type,
 )
 from bodo.hiframes.rolling import is_supported_shift_array_type
@@ -48,6 +49,7 @@ from bodo.libs.binary_arr_ext import (
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.pd_datetime_arr_ext import unwrap_tz_array
 from bodo.libs.str_arr_ext import StringArrayType
 from bodo.libs.str_ext import string_type
 from bodo.utils.transform import is_var_size_item_array_type
@@ -115,7 +117,6 @@ def overload_series_dtype(s):
         raise BodoError("Series.dtype not supported for string Series yet")
 
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(s, "Series.dtype")
-
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(
         s
     ).dtype  # pragma: no cover
@@ -1259,7 +1260,18 @@ def overload_series_min(S, axis=None, skipna=None, level=None, numeric_only=None
             raise BodoError("Series.min(): only ordered categoricals are possible")
 
     # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.min()")
+
+    if isinstance(S.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        tz = S.dtype.tz
+
+        def impl(
+            S, axis=None, skipna=None, level=None, numeric_only=None
+        ):  # pragma: no cover
+            arr = unwrap_tz_array(bodo.hiframes.pd_series_ext.get_series_data(S))
+            min_val = bodo.libs.array_ops.array_op_min(arr)
+            return convert_val_to_timestamp(min_val.value, tz=tz)
+
+        return impl
 
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None
@@ -1333,7 +1345,18 @@ def overload_series_max(S, axis=None, skipna=None, level=None, numeric_only=None
             raise BodoError("Series.max(): only ordered categoricals are possible")
 
     # TODO [BE-2453]: Better errorchecking in general?
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.max()")
+
+    if isinstance(S.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+        tz = S.dtype.tz
+
+        def impl(
+            S, axis=None, skipna=None, level=None, numeric_only=None
+        ):  # pragma: no cover
+            arr = unwrap_tz_array(bodo.hiframes.pd_series_ext.get_series_data(S))
+            max_val = bodo.libs.array_ops.array_op_max(arr)
+            return convert_val_to_timestamp(max_val.value, tz=tz)
+
+        return impl
 
     def impl(
         S, axis=None, skipna=None, level=None, numeric_only=None

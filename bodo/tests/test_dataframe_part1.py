@@ -61,7 +61,7 @@ def test_df_to_string():
     check_func(test_impl, (df,), only_seq=True)
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 def test_df_select_dtypes_str_include(select_dtypes_df):
     df = select_dtypes_df
 
@@ -75,7 +75,7 @@ def test_df_select_dtypes_str_include(select_dtypes_df):
     check_func(test_impl2, (df,))
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 def test_df_select_dtypes_include():
     """Make sure non-nullable array types are selected properly in df.select_dtypes()."""
 
@@ -130,7 +130,7 @@ def test_df_filter_cols(memory_leak_check):
     check_func(test_items_with_axis_int, (df,))
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 def test_df_select_dtypes_str_exclude(select_dtypes_df):
     df = select_dtypes_df
 
@@ -154,7 +154,7 @@ def test_df_select_dtypes_str_include_exclude(select_dtypes_df):
     check_func(test_impl, (df,))
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 def test_df_select_dtypes_type_include(select_dtypes_df):
     df = select_dtypes_df
 
@@ -168,7 +168,7 @@ def test_df_select_dtypes_type_include(select_dtypes_df):
     check_func(test_impl2, (df,))
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 def test_df_select_dtypes_type_exclude(select_dtypes_df):
     df = select_dtypes_df
 
@@ -239,7 +239,7 @@ def test_df_select_dtypes_list_one_elem_include(select_dtypes_df):
     check_func(test_impl2, (df,))
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 def test_df_select_dtypes_list_multi_elem_include(select_dtypes_df):
     df = select_dtypes_df
 
@@ -277,7 +277,7 @@ def test_df_select_dtypes_list_one_elem_exclude(select_dtypes_df):
     check_func(test_impl2, (df,))
 
 
-@pytest.mark.slow
+@pytest.mark.weekly
 def test_df_select_dtypes_list_multi_elem_exclude(select_dtypes_df):
     df = select_dtypes_df
 

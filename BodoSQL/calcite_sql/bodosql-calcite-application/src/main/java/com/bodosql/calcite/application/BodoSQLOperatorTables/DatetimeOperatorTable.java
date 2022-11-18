@@ -33,10 +33,16 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           SqlKind.OTHER_FUNCTION,
           ReturnTypes.TIMESTAMP_NULLABLE,
           null,
-          OperandTypes.sequence(
-              "DATEADD(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
-              OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
-              OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER)),
+          OperandTypes.or(
+              OperandTypes.sequence(
+                  "DATEADD(UNIT, VALUE, DATETIME)",
+                  OperandTypes.STRING,
+                  OperandTypes.INTEGER,
+                  OperandTypes.DATETIME),
+              OperandTypes.sequence(
+                  "DATEADD(DATETIME_OR_DATETIME_STRING, INTERVAL_OR_INTEGER)",
+                  OperandTypes.or(OperandTypes.DATETIME, OperandTypes.STRING),
+                  OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER))),
           SqlFunctionCategory.TIMEDATE);
 
   // TODO: Extend the Library Operator and use the builtin Libraries
@@ -209,6 +215,22 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               "STR_TO_DATE(STRING, STRING_LITERAL)",
               OperandTypes.STRING,
               OperandTypes.and(OperandTypes.STRING, OperandTypes.LITERAL)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction GETDATE =
+      new SqlFunction(
+          "GETDATE",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.TIMESTAMP,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.NILADIC,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -451,6 +473,16 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction DATE_PART =
+      new SqlFunction(
+          "DATE_PART",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.INTEGER_NULLABLE,
+          null,
+          OperandTypes.sequence(
+              "DATE_PART(STRING, TIMESTAMP)", OperandTypes.STRING, OperandTypes.TIMESTAMP),
+          SqlFunctionCategory.TIMEDATE);
+
   public static final SqlFunction NEXT_DAY =
       new SqlFunction(
           "NEXT_DAY",
@@ -491,12 +523,14 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
 
   private List<SqlOperator> functionList =
       Arrays.asList(
+          DATE_PART,
           DATEADD,
           DATE_ADD,
           DATE_SUB,
           DATEDIFF,
           STR_TO_DATE,
           LOCALTIMESTAMP,
+          GETDATE,
           NOW,
           UTC_TIMESTAMP,
           UTC_DATE,

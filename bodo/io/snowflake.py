@@ -162,8 +162,8 @@ SF_AZURE_WRITE_HDFS_CORE_SITE = """<configuration>
     <name>fs.azure.sas.token.provider.type</name>
     <value>org.bodo.azurefs.sas.BodoSASTokenProvider</value>
   </property>
-  <property>      
-    <name>fs.abfs.impl</name>      
+  <property>
+    <name>fs.abfs.impl</name>
     <value>org.apache.hadoop.fs.azurebfs.AzureBlobFileSystem</value>
   </property>
 </configuration>
@@ -239,6 +239,9 @@ def snowflake_connect(conn_str, is_parallel=False):  # pragma: no cover
                 params[key] = json.loads(val)
     # pass Bodo identifier to Snowflake
     params["application"] = "bodo"
+    # Set a short login timeout so people don't have to wait the default
+    # 60 seconds to find out they added the wrong credentials.
+    params["login_timeout"] = 5
 
     try:
         import snowflake.connector
@@ -250,7 +253,43 @@ def snowflake_connect(conn_str, is_parallel=False):  # pragma: no cover
             "or 'pip install snowflake-connector-python'."
         )
     conn = snowflake.connector.connect(**params)
-
+    platform_region_str = os.environ.get("BODO_PLATFORM_WORKSPACE_REGION", None)
+    if platform_region_str and bodo.get_rank() == 0:
+        # Normalize to all lower case
+        platform_region_str = platform_region_str.lower()
+        platform_cloud_provider = os.environ.get("BODO_PLATFORM_CLOUD_PROVIDER", None)
+        if platform_cloud_provider is not None:
+            platform_cloud_provider = platform_cloud_provider.lower()
+        cur = conn.cursor()
+        # This query is very fast, taking at most .1 seconds in testing including
+        # loading the data.
+        cur.execute("select current_region()")
+        arrow_data = cur.fetch_arrow_all()
+        sf_region_str = arrow_data[0][0].as_py()
+        cur.close()
+        # Parse the snowflake output
+        region_parts = sf_region_str.split("_")
+        # AWS and Azure use - instead of _. Otherwise all
+        # of the region strings should match once we normalize
+        # to all lower case. Snowflake also appends the cloud provider
+        # to the front of the output.
+        # https://docs.snowflake.com/en/user-guide/admin-account-identifier.html#region-ids
+        sf_cloud_provider = region_parts[0].lower()
+        sf_cloud_region = "-".join(region_parts[1:]).lower()
+        if platform_cloud_provider and platform_cloud_provider != sf_cloud_provider:
+            warning = BodoWarning(
+                f"Performance Warning: The Snowflake warehouse and Bodo platform are on different cloud providers. "
+                + f"The Snowflake warehouse is located on {sf_cloud_provider}, but the Bodo cluster is located on {platform_cloud_provider}. "
+                + "For best performance we recommend using your cluster and Snowflake account in the same region with the same cloud provider."
+            )
+            warnings.warn(warning)
+        elif platform_region_str != sf_cloud_region:
+            warning = BodoWarning(
+                f"Performance Warning: The Snowflake warehouse and Bodo platform are in different cloud regions. "
+                + f"The Snowflake warehouse is located in {sf_cloud_region}, but the Bodo cluster is located in {platform_region_str}. "
+                + "For best performance we recommend using your cluster and Snowflake account in the same region with the same cloud provider."
+            )
+            warnings.warn(warning)
     ev.finalize()
     return conn
 
@@ -260,7 +299,7 @@ class SnowflakeDataset(object):
 
     def __init__(self, batches, schema, conn):
         # pieces, _bodo_total_rows and _bodo_total_rows are the attributes
-        # expected by ArrowDataframeReader, schema is for SnowflakeReader.
+        # expected by ArrowDataFrameReader, schema is for SnowflakeReader.
         # NOTE: getting this information from the batches is very cheap and
         # doesn't involve pulling data from Snowflake
         self.pieces = batches
@@ -377,6 +416,7 @@ def get_dataset(
             arrow_data = cur.fetch_arrow_all()
             num_rows = arrow_data[0][0].as_py()
             num_rows = comm.bcast(num_rows)
+            cur.close()
             ev_query.finalize()
         else:
             num_rows = comm.bcast(None)
@@ -439,6 +479,7 @@ def get_dataset(
                     raise BodoError(
                         f"Batches returns from Snowflake don't match the expected format. Expected Arrow batches but got {type(batches[0])}"
                     )
+            cur.close()
             comm.bcast((num_rows, batches, schema))
         else:
             num_rows, batches, schema = comm.bcast(None)
@@ -924,8 +965,6 @@ def connect_and_get_upload_info(conn):
 
                     # Also check for environment variables such as HADOOP_HOME, ARROW_LIBHDFS_DIR
                     # and CLASSPATH, since if those are not set, the pq_write would fail anyway.
-                    import os
-
                     hadoop_env_vars_set = (
                         (len(os.environ.get("HADOOP_HOME", "")) > 0)
                         and (len(os.environ.get("ARROW_LIBHDFS_DIR", "")) > 0)
@@ -1008,7 +1047,7 @@ def connect_and_get_upload_info(conn):
                     stage_name = create_internal_stage(cursor, is_temporary=False)
 
         except Exception as e:
-            err = e
+            err = RuntimeError(str(e))
             if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
                 print("".join(traceback.format_exception(None, e, e.__traceback__)))
 
@@ -1162,7 +1201,7 @@ def create_table_copy_into(
             cursor.close()
 
         except Exception as e:
-            err = e
+            err = RuntimeError(str(e))
             if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
                 print("".join(traceback.format_exception(None, e, e.__traceback__)))
 

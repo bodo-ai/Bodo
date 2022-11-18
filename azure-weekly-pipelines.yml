@@ -4,11 +4,11 @@ trigger:
 pr: none
 
 schedules:
-- cron: "0 5 * * FRI"
+- cron: "0 15 * * WED"
   displayName: 'Weekly np3 build'
   branches:
     include:
-    - master
+    - main
 
 # Note: we only build the packages that we need for testing on the weekly pipeline (no PiP or ARM)
 stages:
@@ -91,38 +91,42 @@ stages:
       useNumbaDev: false
       caching_test: false
       matrix:
-        BODO_3P_1_OF_8:
+        BODO_3P_1_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1_of_8
-        BODO_3P_2_OF_8:
+          PYTEST_MARKER: bodo_1_of_9
+        BODO_3P_2_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2_of_8
-        BODO_3P_3_OF_8:
+          PYTEST_MARKER: bodo_2_of_9
+        BODO_3P_3_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3_of_8
-        BODO_3P_4_OF_8:
+          PYTEST_MARKER: bodo_3_of_9
+        BODO_3P_4_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4_of_8
-        BODO_3P_5_OF_8:
+          PYTEST_MARKER: bodo_4_of_9
+        BODO_3P_5_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5_of_8
-        BODO_3P_6_OF_8:
+          PYTEST_MARKER: bodo_5_of_9
+        BODO_3P_6_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6_of_8
-        BODO_3P_7_OF_8:
+          PYTEST_MARKER: bodo_6_of_9
+        BODO_3P_7_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_7_of_8
-        BODO_3P_8_OF_8:
+          PYTEST_MARKER: bodo_7_of_9
+        BODO_3P_8_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_8_of_8
+          PYTEST_MARKER: bodo_8_of_9
+        BODO_3P_9_OF_9:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_9_of_9
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
@@ -131,38 +135,42 @@ stages:
       useNumbaDev: false
       caching_test: false
       matrix:
-        BODO_3P_1_OF_8:
+        BODO_3P_1_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1_of_8
-        BODO_3P_2_OF_8:
+          PYTEST_MARKER: bodo_1_of_9
+        BODO_3P_2_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2_of_8
-        BODO_3P_3_OF_8:
+          PYTEST_MARKER: bodo_2_of_9
+        BODO_3P_3_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3_of_8
-        BODO_3P_4_OF_8:
+          PYTEST_MARKER: bodo_3_of_9
+        BODO_3P_4_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4_of_8
-        BODO_3P_5_OF_8:
+          PYTEST_MARKER: bodo_4_of_9
+        BODO_3P_5_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5_of_8
-        BODO_3P_6_OF_8:
+          PYTEST_MARKER: bodo_5_of_9
+        BODO_3P_6_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6_of_8
-        BODO_3P_7_OF_8:
+          PYTEST_MARKER: bodo_6_of_9
+        BODO_3P_7_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_7_of_8
-        BODO_3P_8_OF_8:
+          PYTEST_MARKER: bodo_7_of_9
+        BODO_3P_8_OF_9:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_8_of_8
+          PYTEST_MARKER: bodo_8_of_9
+        BODO_3P_9_OF_9:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_9_of_9
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:

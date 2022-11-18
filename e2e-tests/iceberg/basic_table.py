@@ -4,7 +4,6 @@ import sys
 from datetime import datetime
 from typing import Callable, Tuple
 
-import bodo_iceberg_connector  # noqa
 import boto3
 import numba
 import numpy as np

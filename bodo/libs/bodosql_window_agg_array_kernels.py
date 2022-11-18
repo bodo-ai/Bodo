@@ -252,3 +252,29 @@ def windowed_mode(S, lower_bound, upper_bound):
         enter_block=enter_block,
         exit_block=exit_block,
     )
+
+
+@numba.generated_jit(nopython=True)
+def windowed_ratio_to_report(S, lower_bound, upper_bound):
+    verify_int_float_arg(S, "ratio_to_report", S)
+    if not bodo.utils.utils.is_array_typ(S, True):  # pragma: no cover
+        raise_bodo_error("Input must be an array type")
+
+    calculate_block = "if total == 0 or bodo.libs.array_kernels.isna(arr, i):\n"
+    calculate_block += "   bodo.libs.array_kernels.setna(res, i)\n"
+    calculate_block += "else:\n"
+    calculate_block += "   res[i] = arr[i] / total"
+    constant_block = None
+    out_dtype = types.Array(bodo.float64, 1, "C")
+    setup_block = "total = 0"
+    enter_block = "total += elem"
+    exit_block = "total -= elem"
+
+    return gen_windowed(
+        calculate_block,
+        constant_block,
+        out_dtype,
+        setup_block=setup_block,
+        enter_block=enter_block,
+        exit_block=exit_block,
+    )
