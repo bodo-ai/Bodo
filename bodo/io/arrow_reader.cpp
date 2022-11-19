@@ -615,26 +615,6 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
     arrow::ArrayVector all_chunks;
 };
 
-/// \brief Get binary value as a string_view
-// A version of Arrow's GetView() that returns std::string_view directly.
-// Arrow < 10.0 versions return arrow::util::string_view which is a vendored
-// version that doesn't work in containers (see string_hash below).
-// TODO: replace with Arrow's GetView after upgrade to Arrow 10
-// https://github.com/apache/arrow/blob/a2881a124339d7d50088c5b9778c725316a7003e/cpp/src/arrow/array/array_binary.h#L70
-///
-/// \param i the value index
-/// \return the view over the selected value
-template <typename ARROW_ARRAY_TYPE>
-std::string_view ArrowStrArrGetView(std::shared_ptr<ARROW_ARRAY_TYPE> str_arr,
-                                    int64_t i) {
-    auto raw_value_offsets = str_arr->raw_value_offsets();
-
-    auto pos = raw_value_offsets[i];
-    return std::string_view(
-        reinterpret_cast<const char*>(str_arr->raw_data() + pos),
-        raw_value_offsets[i + 1] - pos);
-}
-
 // C++20 magic to support "heterogeneous" access to unordered containers
 // makes the key "transparent", allowing std::string_view to be used similar to
 // std::string https://www.cppstories.com/2021/heterogeneous-access-cpp20/
