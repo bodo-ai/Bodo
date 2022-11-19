@@ -123,8 +123,7 @@ static void combine_hash_array_list_string(uint32_t* out_hashes, char* data,
         offset_t end_index_offset = index_offsets[i + 1];
         offset_t len1 =
             data_offsets[end_index_offset] - data_offsets[start_index_offset];
-        std::string val(&data[data_offsets[start_index_offset]], len1);
-        const char* val_chars1 = val.c_str();
+        const char* val_chars1 = &data[data_offsets[start_index_offset]];
         // Use existing hash as seed for next hashing step, hence
         // "combining" the hashes
         uint32_t seed = out_hashes[i];
@@ -182,8 +181,7 @@ static void hash_array_list_string(
         offset_t end_index_offset = index_offsets[i + 1];
         offset_t len1 =
             data_offsets[end_index_offset] - data_offsets[start_index_offset];
-        std::string val(&data[data_offsets[start_index_offset]], len1);
-        const char* val_chars1 = val.c_str();
+        const char* val_chars1 = &data[data_offsets[start_index_offset]];
         if (use_murmurhash)
             hash_string_murmurhash3_x86_32(val_chars1, (const int)len1, seed,
                                            &hash1);
@@ -261,12 +259,11 @@ static void hash_array_string(uint32_t* out_hashes, char* data,
     for (size_t i = 0; i < n_rows; i++) {
         offset_t end_offset = offsets[i + 1];
         offset_t len = end_offset - start_offset;
-        std::string val(&data[start_offset], len);
         // val is null
         if (is_na(null_bitmask, i)) {
             out_hashes[i] = na_hash;
         } else {
-            const char* val_chars = val.c_str();
+            const char* val_chars = &data[start_offset];
             if (use_murmurhash)
                 hash_string_murmurhash3_x86_32(val_chars, (const int)len, seed,
                                                &out_hashes[i]);
@@ -360,8 +357,8 @@ void apply_arrow_string_hashes(
                 hash_string_32(&val_c, 1, out_hashes[i_row],
                                &out_hashes[i_row]);
             } else {
-                std::string e_str = input_array->GetString(idx);
-                hash_string_32(e_str.c_str(), e_str.size(), out_hashes[i_row],
+                std::string_view e_str = ArrowStrArrGetView(input_array, idx);
+                hash_string_32(e_str.data(), e_str.size(), out_hashes[i_row],
                                &out_hashes[i_row]);
             }
         }
@@ -670,13 +667,12 @@ static void hash_array_combine_string(uint32_t* out_hashes, char* data,
     for (size_t i = 0; i < n_rows; i++) {
         offset_t end_offset = offsets[i + 1];
         offset_t len = end_offset - start_offset;
-        std::string val(&data[start_offset], len);
 
         uint32_t out_hash = 0;
         if (is_na(null_bitmask, i)) {
             out_hash = na_hash;
         } else {
-            const char* val_chars = val.c_str();
+            const char* val_chars = &data[start_offset];
             hash_string_32(val_chars, (const int)len, seed, &out_hash);
         }
         hash_combine_boost(out_hashes[i], out_hash);
