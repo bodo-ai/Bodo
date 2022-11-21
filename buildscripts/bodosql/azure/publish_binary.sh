@@ -22,6 +22,8 @@ ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '
 
 # Get the BodoSQL version
 export BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
+# Get Bodo version up to minor release number
+export BODO_MINOR_VERSION=`python -c "import versioneer; print(versioneer.get_version().split('+')[0])"`
 export IS_RELEASE=`git tag --points-at HEAD`
 
 # We follow the following convention for release:
