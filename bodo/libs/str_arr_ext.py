@@ -402,6 +402,22 @@ def _get_num_total_chars(builder, offsets, num_strings):
     )
 
 
+@numba.njit
+def check_offsets(str_arr):  # pragma: no cover
+    """Debugging function for checking offsets of a string array for out-of-bounds
+    values.
+
+    Args:
+        str_arr (StringArray): input string array
+    """
+    offsets = bodo.libs.array_item_arr_ext.get_offsets(str_arr._data)
+    n_chars = bodo.libs.str_arr_ext.num_total_chars(str_arr)
+    for i in range(bodo.libs.array_item_arr_ext.get_n_arrays(str_arr._data)):
+        if offsets[i] > n_chars or offsets[i + 1] - offsets[i] < 0:
+            print("wrong offset found", i, offsets[i])
+            break
+
+
 @intrinsic
 def num_total_chars(typingctx, in_arr_typ=None):
     # None default to make IntelliSense happy
@@ -1958,8 +1974,11 @@ def str_arr_getitem_int(A, ind):
                     # _str = A[i]
                     # out_arr[str_ind] = _str
                     char_len = get_str_arr_item_length(A, i)
+                    # optimize empty or null string case
+                    if char_len == 0:
+                        pass
                     # optimize single char case since common (~10% faster)
-                    if char_len == 1:
+                    elif char_len == 1:
                         copy_single_char(
                             out_data_ptr,
                             curr_offset,
@@ -1992,16 +2011,59 @@ def str_arr_getitem_int(A, ind):
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
         def str_arr_arr_impl(A, ind):  # pragma: no cover
+            # convert potential Series to array
+            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
             n = len(ind)
-            out_arr = pre_alloc_string_array(n, -1)
-            str_ind = 0
+            n_chars = 0
             for i in range(n):
-                _str = A[ind[i]]
-                out_arr[str_ind] = _str
+                # NOTE: NA values have valid offsets with 0 data length
+                # this is low overhead, no need for optimizing for duplicate values
+                n_chars += get_str_arr_item_length(A, ind[i])
+
+            out_arr = pre_alloc_string_array(n, n_chars)
+            out_data_ptr = get_data_ptr(out_arr).data
+            in_data_ptr = get_data_ptr(A).data
+            curr_offset = 0
+            setitem_str_offset(out_arr, 0, 0)
+            for i in range(n):
+                if bodo.libs.array_kernels.isna(ind, i):
+                    raise ValueError(
+                        "Cannot index with an integer indexer containing NA values"
+                    )
+                arr_ind = ind[i]
+                # copy buffers directly and avoid extra string buffer allocation
+                # which impacts performance significantly (see TPC-H Q1)
+                # _str = A[ind[i]]
+                # out_arr[i] = _str
+                char_len = get_str_arr_item_length(A, arr_ind)
+                # optimize empty or null string case
+                if char_len == 0:
+                    pass
+                # optimize single char case since common (~10% faster)
+                elif char_len == 1:
+                    copy_single_char(
+                        out_data_ptr,
+                        curr_offset,
+                        in_data_ptr,
+                        getitem_str_offset(A, arr_ind),
+                    )
+                else:
+                    memcpy_region(
+                        out_data_ptr,
+                        curr_offset,
+                        in_data_ptr,
+                        getitem_str_offset(A, arr_ind),
+                        char_len,
+                        1,
+                    )
+
+                curr_offset += char_len
+                setitem_str_offset(out_arr, i + 1, curr_offset)
                 # set NA
-                if str_arr_is_na(A, ind[i]):
-                    str_arr_set_na(out_arr, str_ind)
-                str_ind += 1
+                if str_arr_is_na(A, arr_ind):
+                    str_arr_set_na(out_arr, i)
+                else:
+                    str_arr_set_not_na(out_arr, i)
             return out_arr
 
         return str_arr_arr_impl
