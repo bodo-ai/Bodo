@@ -178,6 +178,11 @@ def test_getitem_int_arr(str_arr_value, memory_leak_check):
         check_dtype=False,
         dist_test=False,
     )
+    with pytest.raises(
+        ValueError, match="Cannot index with an integer indexer containing NA values"
+    ):
+        ind = pd.array([0, pd.NA], "Int64")
+        bodo.jit(test_impl)(str_arr_value, ind)
 
 
 @pytest.mark.slow

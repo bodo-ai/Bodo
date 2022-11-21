@@ -2173,12 +2173,18 @@ class DataFramePass:
             )
         for i in range(n_keys):
             key_typ = df.data[df.column_index[grp_typ.keys[i]]]
+            func_text += f"    if bodo.libs.array_kernels.isna(s_key{i}, starts[i]):\n"
             if key_typ == bodo.dict_str_arr_type:
-                func_text += (
-                    f"    dict_key_indices_arrs{i}[i] = s_key{i}._indices[starts[i]]\n"
-                )
+                func_text += f"      bodo.libs.array_kernels.setna(dict_key_indices_arrs{i}, i)\n"
+                func_text += f"    else:\n"
+                func_text += f"      dict_key_indices_arrs{i}[i] = s_key{i}._indices[starts[i]]\n"
             else:
-                func_text += f"    in_key_arrs{i}[i] = s_key{i}[starts[i]]\n"
+                func_text += f"      bodo.libs.array_kernels.setna(in_key_arrs{i}, i)\n"
+                func_text += f"    else:\n"
+                if key_typ == bodo.string_array_type:
+                    func_text += f"      bodo.libs.str_arr_ext.get_str_arr_item_copy(in_key_arrs{i}, i, s_key{i}, starts[i])\n"
+                else:
+                    func_text += f"      in_key_arrs{i}[i] = s_key{i}[starts[i]]\n"
         if not grp_typ.as_index:
             func_text += f"    out_index_arr[i] = n_prev_groups + i\n"
 
