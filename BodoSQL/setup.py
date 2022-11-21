@@ -148,15 +148,16 @@ setup(
     author="Bodo.ai",
     packages=find_packages(),
     package_data={
-        "bodosql.tests": [
-            "*/*"
-        ],
+        "bodosql.tests": ["*/*"],
         "bodosql": ["pytest.ini", "jars/*.jar"],
     },
     # When doing `python setup.py develop`, setuptools will try to install whatever is
     # in `install_requires` after building, so we set it to empty (we don't want to
     # install bodo in development mode, and it will also break CI)
-    install_requires=[] if development_mode else ["bodo==2022.9.*", "py4j"],
+    # match Bodo version to install with BodoSQL version
+    install_requires=[]
+    if development_mode
+    else [f"bodo=={versioneer.get_version().split('+')[0]}", "py4j"],
     python_requires=">=3.8,<3.11",
     # Update the build and develop commands
     cmdclass=cmdclass,
