@@ -12,8 +12,8 @@ schedules:
 
 # Note: we only build the packages that we need for testing on the weekly pipeline (no PiP or ARM)
 stages:
-- stage: Build_Bodo_BodoSQL_Binary
-  displayName: 'Build Bodo and BodoSQL Binary'
+- stage: Build_Bodo_Binary
+  displayName: 'Build Bodo Binary'
   jobs:
   - job: find_suffix
     pool:
@@ -61,6 +61,10 @@ stages:
 # of Bodo, I'm requiring that we update the recipe in buildscripts/bodosql/conda-recipe/meta.yaml,
 # and do a mini-release.
 
+- stage: Build_BodoSQL_Binary
+  displayName: 'Build BodoSQL Binary'
+  dependsOn: Build_Bodo_Binary
+  jobs:
   # BodoSQL build:
   - template: buildscripts/bodosql/azure/azure-build-binary.yml
     parameters:
@@ -78,8 +82,9 @@ stages:
 # NOTE: we don't do any builds here, as we assume the previous nightly run has built the needed
 # packages and put them on conda
 
-- stage: Test_Bodo_and_BodoSQL_Binary
-  displayName: Test Bodo and BodoSQL Binary
+- stage: Test_Bodo_Binary
+  displayName: Test Bodo Binary
+  dependsOn: Build_Bodo_Binary
   jobs:
 
   # Bodo tests:
@@ -199,6 +204,10 @@ stages:
           PYTEST_MARKER: ""
 
   # BodoSQL tests
+- stage: Test_BodoSQL_Binary
+  displayName: 'Test BodoSQL Binary'
+  dependsOn: Build_BodoSQL_Binary
+  jobs:
 
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:
