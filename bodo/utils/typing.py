@@ -993,7 +993,7 @@ def is_list_like_index_type(t):
         or (isinstance(t, types.Array) and t.ndim == 1)
         or isinstance(t, (NumericIndexType, RangeIndexType))
         or isinstance(t, SeriesType)
-        # or isinstance(t, IntegerArrayType)  # TODO: is this necessary?
+        or isinstance(t, bodo.IntegerArrayType)
         or t == boolean_array
     )
 
