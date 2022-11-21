@@ -939,12 +939,14 @@ int ComparisonArrowColumn(std::shared_ptr<arrow::Array> const& arr1,
                 na_position_bis, str_array1, n_pos1_s, str_array2, n_pos2_s);
             if (epair.first != 0) return epair.first;
             if (epair.second) {
-                std::string str1 = str_array1->GetString(pos1_s + idx);
-                std::string str2 = str_array2->GetString(pos2_s + idx);
+                std::string_view str1 =
+                    ArrowStrArrGetView(str_array1, pos1_s + idx);
+                std::string_view str2 =
+                    ArrowStrArrGetView(str_array2, pos2_s + idx);
                 size_t len1 = str1.size();
                 size_t len2 = str2.size();
                 size_t minlen = std::min(len1, len2);
-                int test = std::memcmp(str2.c_str(), str1.c_str(), minlen);
+                int test = std::memcmp(str2.data(), str1.data(), minlen);
                 if (test) return test;
                 // If not, we may be able to conclude via the string length.
                 if (len1 > len2) return -1;

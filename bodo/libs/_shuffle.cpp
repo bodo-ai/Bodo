@@ -966,8 +966,7 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         int node = row_dest[i_row];
         if (node == -1) continue;
-        std::string e_str = string_array->GetString(i_row);
-        int64_t n_char = e_str.size();
+        int64_t n_char = string_array->value_length(i_row);
         send_count_char[node] += n_char;
     }
     MPI_Alltoall(send_count_char.data(), 1, MPI_INT64_T, recv_count_char.data(),
@@ -994,7 +993,7 @@ std::shared_ptr<arrow::Buffer> shuffle_string_buffer(
     for (size_t i_row = 0; i_row < n_rows; i_row++) {
         int node = row_dest[i_row];
         if (node == -1) continue;
-        std::string e_str = string_array->GetString(i_row);
+        std::string_view e_str = ArrowStrArrGetView(string_array, i_row);
         int64_t n_char = e_str.size();
         for (int64_t i_char = 0; i_char < n_char; i_char++) {
             send_char[list_shift[node] + i_char] = e_str.data()[i_char];
