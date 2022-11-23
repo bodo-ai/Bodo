@@ -597,10 +597,10 @@ def overload_pd_timestamp(
         return impl_str
 
     # for pd.Timestamp(), just return input
-    if ts_input == pd_timestamp_type:
+    if isinstance(ts_input, PandasTimestampType):
         return (
             lambda ts_input=_no_input, freq=None, tz=None, unit=None, year=None, month=None, day=None, hour=None, minute=None, second=None, microsecond=None, nanosecond=None, tzinfo=None: ts_input
-        )
+        )  # pragma: no cover
 
     if ts_input == bodo.hiframes.datetime_datetime_ext.datetime_datetime_type:
 
@@ -911,8 +911,10 @@ def overload_pd_timestamp_isoformat(ts, sep=None):
 
 @overload_method(PandasTimestampType, "normalize", no_unliteral=True)
 def overload_pd_timestamp_normalize(ptt):
+    tz_literal = ptt.tz
+
     def impl(ptt):  # pragma: no cover
-        return pd.Timestamp(year=ptt.year, month=ptt.month, day=ptt.day)
+        return pd.Timestamp(year=ptt.year, month=ptt.month, day=ptt.day, tz=tz_literal)
 
     return impl
 
