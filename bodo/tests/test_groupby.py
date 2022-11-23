@@ -6311,3 +6311,143 @@ def test_groupby_num_shuffle_keys(memory_leak_check):
         reset_index=True,
         py_output=df2.groupby(["A", "B"])["C"].nunique(),
     )
+
+
+@pytest.mark.parametrize(
+    "data_col, has_null_group",
+    [
+        # Test on all interger types
+        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="int8"), False),
+        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="uint8"), False),
+        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="int16"), False),
+        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="uint16"), False),
+        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="int32"), False),
+        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="uint32"), False),
+        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="int64"), False),
+        (pd.Series(([0, 1, 2, 0, 4, 5] + [0] * 6), dtype="uint64"), False),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Int8"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="UInt8"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Int16"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="UInt16"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Int32"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="UInt32"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Int64"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="UInt64"), True),
+        # Test on boolean types
+        (
+            pd.Series(
+                ([False, True, True, False, True, True] + [False] * 6), dtype="bool"
+            ),
+            False,
+        ),
+        (
+            pd.Series(
+                ([False, True, True, None, True, True] + [False, None] * 3),
+                dtype="boolean",
+            ),
+            True,
+        ),
+        # Test on float types
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="float32"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="float64"), True),
+        (
+            pd.Series(
+                (
+                    [
+                        Decimal("0.0"),
+                        Decimal("1.6"),
+                        Decimal("2.2"),
+                        None,
+                        Decimal("4.8"),
+                        Decimal("0.05"),
+                    ]
+                    + [Decimal("0.0"), None] * 3
+                )
+            ),
+            True,
+        ),
+    ],
+)
+def test_boolagg_or(data_col, has_null_group, memory_leak_check):
+    """Tests calling a groupby with boolagg_or, a function used by
+    BodoSQL and not part or regular pandas, on all possible datatypes."""
+
+    def impl(df):
+        # Note we choose all of these flag + code format because
+        # these are the generated SQL flags
+        return df.groupby(["key"], as_index=False, dropna=False).agg(
+            data_out=pd.NamedAgg(column="data", aggfunc="boolor_agg"),
+        )
+
+    groups = pd.Series([1, 2, 3, 4, 5, 6] * 2)
+    df = pd.DataFrame(
+        {
+            "key": groups,
+            "data": data_col,
+        }
+    )
+    expected_output = pd.DataFrame(
+        {
+            "key": pd.Series([1, 2, 3, 4, 5, 6]),
+            "data_out": pd.Series(
+                [False, True, True, None if has_null_group else False, True, True],
+                dtype="boolean",
+            ),
+        }
+    )
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        py_output=expected_output,
+    )
+
+
+@pytest.mark.parametrize(
+    "data_col",
+    [
+        # Note string/binary is not supported inside Snowflake
+        # https://docs.snowflake.com/en/sql-reference/functions/boolor_agg.html#usage-notes
+        pd.Series(["afde", "Rewr"] * 6),
+        # Bytes is unsupported
+        pd.Series([b"afde", b"Rewr"] * 6),
+        # Also the types require the ability to cast to boolean. Therefore it doesn't support
+        # date (try in snowflake: select date_from_parts(2000, 1, 1)::boolean)
+        pd.Series([datetime.date(2022, 10, 10), datetime.date(2022, 11, 10)] * 6),
+        # time (try in snowflake: select time_from_parts(12, 55, 55)::boolean)
+        pd.Series(
+            [bodo.Time(12, 34, 56, precision=0), bodo.Time(12, 46, 56, precision=0)] * 6
+        ),
+        # timestamp (try in snowflake: select timestamp_from_parts(2000, 1, 1, 1, 1, 1)::boolean)
+        pd.Series([pd.Timestamp(2022, 10, 10), pd.Timestamp(2022, 11, 10)] * 6),
+        # timedelta isn't a proper type inside snowflake
+        pd.Series([pd.Timedelta(1), pd.Timedelta(2)] * 6),
+        # Categorical string
+        pd.Series(pd.Categorical(["afde", "Rewr"] * 6)),
+    ],
+)
+def test_boolagg_or_invalid(data_col, memory_leak_check):
+    """Tests calling a groupby with boolagg_or, a function used by
+    BodoSQL and not part or regular pandas, on unsupported datatypes."""
+
+    @bodo.jit
+    def impl(df):
+        # Note we choose all of these flag + code format because
+        # these are the generated SQL flags
+        return df.groupby(["key"], as_index=False, dropna=False).agg(
+            data_out=pd.NamedAgg(column="data", aggfunc="boolor_agg"),
+        )
+
+    groups = pd.Series([1, 2, 3, 4, 5, 6] * 2)
+    df = pd.DataFrame(
+        {
+            "key": groups,
+            "data": data_col,
+        }
+    )
+    with pytest.raises(
+        BodoError,
+        match="boolor_agg, only columns of type integer, float, Decimal, or boolean type are allowed",
+    ):
+        impl(df)

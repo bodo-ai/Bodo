@@ -762,3 +762,145 @@ def test_any_value(args, spark_info, memory_leak_check):
         # TODO[BE-3456]: enable dict-encoded string test when segfault is fixed
         use_dict_encoded_strings=False,
     )
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        (
+            """SELECT boolor_agg(A) as agg_A, boolor_agg(C) as agg_C FROM table1 GROUP BY B""",
+            {
+                "table1": pd.DataFrame(
+                    {
+                        "A": pd.Series(
+                            [
+                                None,
+                                None,
+                                None,
+                                None,
+                                0,
+                                0,
+                                0,
+                                0,
+                                -1,
+                                0,
+                                0,
+                                0,
+                                None,
+                                1,
+                                None,
+                                0,
+                                1234,
+                                None,
+                                -1232,
+                                None,
+                            ],
+                            dtype=pd.Int64Dtype,
+                        ),
+                        "C": pd.Series(
+                            [
+                                np.NaN,
+                                np.NaN,
+                                np.NaN,
+                                np.NaN,
+                                0.0,
+                                0.0,
+                                0.0,
+                                0.0,
+                                -0.00001,
+                                0,
+                                0,
+                                0,
+                                np.NaN,
+                                112312.0,
+                                np.NaN,
+                                0,
+                                1237891.4,
+                                np.NaN,
+                                -523.32,
+                                np.NaN,
+                            ],
+                            dtype=float,
+                        ),
+                        "B": [0] * 4 + [1] * 4 + [2] * 4 + [3] * 4 + [None] * 4,
+                    }
+                )
+            },
+            pd.DataFrame(
+                {
+                    "agg_A": pd.Series(
+                        [None, False, True, True, True], dtype="boolean"
+                    ),
+                    "agg_C": pd.Series(
+                        [None, False, True, True, True], dtype="boolean"
+                    ),
+                }
+            ),
+        ),
+    ],
+)
+def test_boolor_agg(args, memory_leak_check):
+    """Tests boolor_agg. This is done separately from existing aggregation tests, as
+    we need specific inputs to stress this function"""
+
+    query, ctx, expected_output = args
+
+    check_query(
+        query,
+        ctx,
+        None,  # Spark info
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
+def test_boolor_agg_output_type(memory_leak_check):
+    """Test boolor_agg to verify the output type is boolean"""
+    query = """WITH TEMP AS(SELECT boolor_agg(A) as agg_A, B FROM table1 GROUP BY B)
+        SELECT COUNT (DISTINCT CASE WHEN agg_A then B end) as totals
+        from TEMP"""
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [
+                        None,
+                        None,
+                        None,
+                        None,
+                        0,
+                        0,
+                        0,
+                        0,
+                        -1,
+                        0,
+                        0,
+                        0,
+                        None,
+                        1,
+                        None,
+                        0,
+                        1234,
+                        None,
+                        -1232,
+                        None,
+                    ],
+                    dtype=pd.Int64Dtype,
+                ),
+                "B": [0] * 4 + [1] * 4 + [2] * 4 + [3] * 4 + [None] * 4,
+            }
+        )
+    }
+    expected_output = pd.DataFrame(
+        {
+            "totals": pd.Series([2], dtype="Int64"),
+        }
+    )
+    check_query(
+        query,
+        ctx,
+        None,  # Spark info
+        check_dtype=False,
+        expected_output=expected_output,
+        is_out_distributed=False,
+    )

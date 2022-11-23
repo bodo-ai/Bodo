@@ -1304,6 +1304,13 @@ numeric types
 
     Compute the variance for a column with N degrees of freedom.
 
+#### BOOLOR_AGG
+-   `BOOLOR_AGG`
+
+    Compute the logical OR of the boolean value of every input
+    in a group. This is supported for numeric and boolean types.
+    Currently this requires a GROUP BY clause.
+
 All aggregate functions have the syntax:
 
 ```sql
@@ -2446,7 +2453,7 @@ Currently BodoSQL supports the following Window functions:
     time the value inside the window changes. `NULL` does not count as a new/changed value.
     `ORDER BY` is required for this function.
 
-  
+
 ### Casting / Conversion Functions
 
 BodoSQL currently supports the following casting/conversion functions:
@@ -2456,10 +2463,10 @@ BodoSQL currently supports the following casting/conversion functions:
 
     Casts the input to a boolean value. If the input is a string, it will be cast to `true` if it is
     `'true'`, `'t'`, `'yes'`, `'y'`, `'1'`, cast to `false` if it is `'false'`, `'f'`, `'no'`, `'n'`, `'0'`,
-    and throw an error otherwise. 
-    If the input is an integer, it will be cast to `true` if it is non-zero and `false` if it is zero. 
+    and throw an error otherwise.
+    If the input is an integer, it will be cast to `true` if it is non-zero and `false` if it is zero.
     If the input is a float, it will be cast to `true` if it is non-zero, `false` if it is zero, and throw an error on other inputs (e.g. `inf`) input. If the input is `NULL`, the output will be `NULL`.
-    
+
     _Example:_
 
     We are given `table1` with columns `a` and `b` and `c`
@@ -2485,7 +2492,7 @@ BodoSQL currently supports the following casting/conversion functions:
     1  False  False   True
     2   True   True  False
     ```
-    Upon query 
+    Upon query
     ```sql
     SELECT TO_BOOLEAN('other')
     ```
@@ -2501,9 +2508,9 @@ BodoSQL currently supports the following casting/conversion functions:
 -  `TRY_TO_BOOLEAN(COLUMN_EXPRESSION)`
 
     This is similar to `TO_BOOLEAN` except that it will return `NULL` instead of throwing an error invalid inputs.
-    
+
     _Example:_
-    
+
     We are given `table1` with columns `a` and `b` and `c`
     ```python
     table1 = pd.DataFrame({
@@ -2533,7 +2540,7 @@ BodoSQL currently supports the following casting/conversion functions:
 -  `TO_CHAR(COLUMN_EXPRESSION)`
 
     Casts the input to a string value. If the input is a boolean, it will be cast to `'true'` if it is `true` and `'false'` if it is `false`. If the input is `NULL`, the output will be `NULL`.
-    
+
     _Example:_
 
     We are given `table1` with columns `a` and `b` and `c`
