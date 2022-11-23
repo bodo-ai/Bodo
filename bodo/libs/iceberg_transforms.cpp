@@ -774,8 +774,8 @@ PyObject* iceberg_transformed_val_to_py(array_info* arr, size_t idx) {
 
         default: {
             std::vector<char> error_msg(100);
-            sprintf(
-                error_msg.data(),
+            snprintf(
+                error_msg.data(), error_msg.size(),
                 "iceberg_transformed_val_to_py not implemented for dtype %d",
                 arr->dtype);
             throw std::runtime_error(error_msg.data());

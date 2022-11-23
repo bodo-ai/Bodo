@@ -362,8 +362,8 @@ struct array_info {
                 return "False";
             default: {
                 std::vector<char> error_msg(100);
-                sprintf(error_msg.data(),
-                        "val_to_str not implemented for dtype %d", dtype);
+                snprintf(error_msg.data(), error_msg.size(),
+                         "val_to_str not implemented for dtype %d", dtype);
                 throw std::runtime_error(error_msg.data());
             }
         }
