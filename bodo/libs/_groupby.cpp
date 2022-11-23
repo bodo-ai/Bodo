@@ -48,23 +48,25 @@ struct Bodo_FTypes {
         idxmax = 21,
         var = 22,
         std = 23,
-        udf = 24,
-        gen_udf = 25,
-        num_funcs = 26,  // num_funcs is used to know how many functions up to
+        boolor_agg = 24,
+        udf = 25,
+        gen_udf = 26,
+        num_funcs = 27,  // num_funcs is used to know how many functions up to
                          // this point. Below this point are functions that are
                          // defined in the C++ code but not the Python enum.
-        mean_eval = 27,
-        var_eval = 28,
-        std_eval = 29
+        mean_eval = 28,
+        var_eval = 29,
+        std_eval = 30
     };
 };
 
 const char* Bodo_FTypes_names[] = {
-    "no_op",  "ngroup",  "head",      "transform", "size",     "shift",
-    "sum",    "count",   "nunique",   "median",    "cumsum",   "cumprod",
-    "cummin", "cummax",  "mean",      "min",       "max",      "prod",
-    "first",  "last",    "idxmin",    "idxmax",    "var",      "std",
-    "udf",    "gen_udf", "num_funcs", "mean_eval", "var_eval", "std_eval"};
+    "no_op",      "ngroup", "head",    "transform", "size",      "shift",
+    "sum",        "count",  "nunique", "median",    "cumsum",    "cumprod",
+    "cummin",     "cummax", "mean",    "min",       "max",       "prod",
+    "first",      "last",   "idxmin",  "idxmax",    "var",       "std",
+    "boolor_agg", "udf",    "gen_udf", "num_funcs", "mean_eval", "var_eval",
+    "std_eval"};
 
 const char* get_name_for_Bodo_FTypes(int enumVal) {
     return Bodo_FTypes_names[enumVal];
@@ -95,6 +97,7 @@ void groupby_init() {
     combine_funcs[Bodo_FTypes::last] = Bodo_FTypes::last;
     combine_funcs[Bodo_FTypes::nunique] =
         Bodo_FTypes::sum;  // used in nunique_mode = 2
+    combine_funcs[Bodo_FTypes::boolor_agg] = Bodo_FTypes::boolor_agg;
 }
 
 /**
@@ -457,6 +460,49 @@ struct idxmax_agg<
                 index_pos = i;
             }
         }
+    }
+};
+
+/**
+ * This template is used for functions that take an input value and
+ * reduce its result to a boolean output.
+ */
+template <typename T, int dtype, int ftype, typename Enable = void>
+struct bool_aggfunc {
+    /**
+     * Apply the function.
+     * @param[in,out] current aggregate value, holds the result
+     * @param[in] other input value.
+     */
+    static void apply(bool& v1, T& v2);
+};
+
+template <typename T, int dtype>
+struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
+                    typename std::enable_if<!is_decimal<dtype>::value>::type> {
+    /**
+     * Aggregation function for boolor_agg. Note this implementation
+     * handles both integer and floating point data.
+     *
+     * @param[in,out] current aggregate value, holds the result
+     * @param other input value.
+     */
+    static void apply(bool& v1, T& v2) { v1 = v1 || (v2 != 0); }
+};
+
+template <typename T, int dtype>
+struct bool_aggfunc<T, dtype, Bodo_FTypes::boolor_agg,
+                    typename std::enable_if<is_decimal<dtype>::value>::type> {
+    /**
+     * Aggregation function for boolor_agg. Note this implementation
+     * handles both integer and floating point data.
+     *
+     * @param[in,out] current aggregate value, holds the result
+     * @param other input value.
+     */
+    // TODO: Compare decimal directly?
+    static void apply(bool& v1, T& v2) {
+        v1 = v1 || ((decimal_to_double(v2)) != 0.0);
     }
 };
 
@@ -3005,6 +3051,19 @@ void apply_to_column_F(array_info* in_col, array_info* out_col,
                             getv<uint64_t>(index_pos, i_grp), i);
                     }
                 }
+            } else if (ftype == Bodo_FTypes::boolor_agg) {
+                for (size_t i = 0; i < in_col->length; i++) {
+                    int64_t i_grp = f(i);
+                    if ((i_grp != -1)) {
+                        T val2 = getv<T>(in_col, i);
+                        // Skip NA values
+                        if (!isnan_alltype<T, dtype>(val2)) {
+                            bool_aggfunc<T, dtype, ftype>::apply(
+                                getv<bool>(out_col, i_grp), val2);
+                            out_col->set_null_bit(i_grp, true);
+                        }
+                    }
+                }
             } else {
                 for (size_t i = 0; i < in_col->length; i++) {
                     int64_t i_grp = f(i);
@@ -3156,6 +3215,16 @@ void apply_to_column_F(array_info* in_col, array_info* out_col,
                             idxmin_agg<T, dtype>::apply(
                                 getv<T>(out_col, i_grp), getv<T>(in_col, i),
                                 getv<uint64_t>(aux_cols[0], i_grp), i);
+                        }
+                    }
+                    return;
+                case Bodo_FTypes::boolor_agg:
+                    for (size_t i = 0; i < in_col->length; i++) {
+                        int64_t i_grp = f(i);
+                        if ((i_grp != -1) && in_col->get_null_bit(i)) {
+                            bool_aggfunc<T, dtype, ftype>::apply(
+                                getv<bool>(out_col, i_grp), getv<T>(in_col, i));
+                            out_col->set_null_bit(i_grp, true);
                         }
                     }
                     return;
@@ -3315,6 +3384,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<bool, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::_BOOL>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<bool, Bodo_FTypes::boolor_agg,
+                                           Bodo_CTypes::_BOOL>(
+                        in_col, out_col, aux_cols, grp_info);
                 default:
                     Bodo_PyErr_SetString(
                         PyExc_RuntimeError,
@@ -3364,6 +3437,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int8_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT8>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<int8_t, Bodo_FTypes::boolor_agg,
+                                           Bodo_CTypes::INT8>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT8:
             switch (ftype) {
@@ -3407,6 +3484,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<uint8_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::UINT8>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<uint8_t, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::UINT8>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -3453,6 +3534,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int16_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT16>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<int16_t, Bodo_FTypes::boolor_agg,
+                                           Bodo_CTypes::INT16>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT16:
             switch (ftype) {
@@ -3495,6 +3580,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<uint16_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::UINT16>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<uint16_t, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::UINT16>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -3541,6 +3630,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int32_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT32>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<int32_t, Bodo_FTypes::boolor_agg,
+                                           Bodo_CTypes::INT32>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT32:
             switch (ftype) {
@@ -3583,6 +3676,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<uint32_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::UINT32>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<uint32_t, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::UINT32>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -3629,6 +3726,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<int64_t, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::INT64>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<int64_t, Bodo_FTypes::boolor_agg,
+                                           Bodo_CTypes::INT64>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::UINT64:
             switch (ftype) {
@@ -3671,6 +3772,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
                 case Bodo_FTypes::idxmax:
                     return apply_to_column<uint64_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::UINT64>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<uint64_t, Bodo_FTypes::boolor_agg,
                                            Bodo_CTypes::UINT64>(
                         in_col, out_col, aux_cols, grp_info);
             }
@@ -3861,6 +3966,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<float, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::FLOAT32>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<float, Bodo_FTypes::boolor_agg,
+                                           Bodo_CTypes::FLOAT32>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::FLOAT64:
             switch (ftype) {
@@ -3917,6 +4026,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                     return apply_to_column<double, Bodo_FTypes::idxmax,
                                            Bodo_CTypes::FLOAT64>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<double, Bodo_FTypes::boolor_agg,
+                                           Bodo_CTypes::FLOAT64>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         case Bodo_CTypes::DECIMAL:
             switch (ftype) {
@@ -3971,6 +4084,11 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                                            Bodo_FTypes::idxmax,
                                            Bodo_CTypes::DECIMAL>(
                         in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::boolor_agg:
+                    return apply_to_column<decimal_value_cpp,
+                                           Bodo_FTypes::boolor_agg,
+                                           Bodo_CTypes::DECIMAL>(
+                        in_col, out_col, aux_cols, grp_info);
             }
         default:
             std::cerr << "do_apply_to_column: invalid array dtype" << std::endl;
@@ -3990,8 +4108,7 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
  * @param output column
  * @param function identifier
  */
-void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
-                                      bool is_groupby) {
+void aggfunc_output_initialize_kernel(array_info* out_col, int ftype) {
     // Generate an error message for unsupported paths that includes the name
     // of the function and the dtype.
     std::string error_msg =
@@ -4002,14 +4119,11 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
     if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         bool init_val;
         if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
-            ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last) {
-            // if input is all nulls, max, min, first and last output will be
-            // null
-            if (is_groupby) {
-                init_val = false;
-            } else {
-                init_val = true;
-            }
+            ftype == Bodo_FTypes::first || ftype == Bodo_FTypes::last ||
+            ftype == Bodo_FTypes::boolor_agg) {
+            // if input is all nulls, max, min, first, last, and boolor_agg
+            // output will be null
+            init_val = false;
         } else {
             init_val = true;
         }
@@ -4317,8 +4431,7 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype,
 }
 
 void aggfunc_output_initialize(array_info* out_col, int ftype) {
-    bool is_groupby = true;
-    aggfunc_output_initialize_kernel(out_col, ftype, is_groupby);
+    aggfunc_output_initialize_kernel(out_col, ftype);
 }
 
 /**
@@ -4365,6 +4478,10 @@ void get_groupby_output_dtype(int ftype,
             if (dtype == Bodo_CTypes::STRING) {
                 array_type = bodo_array_type::STRING;
             }
+            return;
+        case Bodo_FTypes::boolor_agg:
+            array_type = bodo_array_type::NULLABLE_INT_BOOL;
+            dtype = Bodo_CTypes::_BOOL;
             return;
         default:
             return;

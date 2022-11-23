@@ -24,10 +24,13 @@ public class AggCodeGen {
 
   static HashMap<String, String> equivalentPandasNameMethodMap;
 
+  static HashMap<String, String> equivalentHelperFnMap;
+
   static {
     equivalentPandasMethodMap = new HashMap<>();
     equivalentNumpyFuncMap = new HashMap<>();
     equivalentPandasNameMethodMap = new HashMap<>();
+    equivalentHelperFnMap = new HashMap<>();
 
     equivalentPandasMethodMap.put(SqlKind.SUM, "sum");
     equivalentPandasMethodMap.put(SqlKind.SUM0, "sum");
@@ -48,6 +51,7 @@ public class AggCodeGen {
     equivalentPandasNameMethodMap.put("COUNT_IF", "sum");
     equivalentPandasNameMethodMap.put("VARIANCE_POP", "var_pop");
     equivalentPandasNameMethodMap.put("VARIANCE_SAMP", "var");
+    equivalentHelperFnMap.put("BOOLOR_AGG", "boolor_agg");
   }
 
   /**
@@ -426,6 +430,8 @@ public class AggCodeGen {
       return new Pair<>(equivalentNumpyFuncMap.get(kind), false);
     } else if (equivalentPandasNameMethodMap.containsKey(name)) {
       return new Pair<>(equivalentPandasNameMethodMap.get(name), true);
+    } else if (equivalentHelperFnMap.containsKey(name)) {
+      return new Pair<>(equivalentHelperFnMap.get(name), false);
     } else {
       throw new BodoSQLCodegenException(
           "Unsupported Aggregate Function, "

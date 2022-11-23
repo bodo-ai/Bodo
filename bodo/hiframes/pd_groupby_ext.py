@@ -331,7 +331,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         )
     # [BE-416] Support with list
     # [BE-433] Support with tuples
-    if (
+    elif (
         func_name
         in ("first", "last", "sum", "prod", "min", "max", "count", "nunique", "head")
     ) and (isinstance(arr_type, (TupleArrayType, ArrayItemArrayType))):
@@ -340,10 +340,20 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             f"column type of list/tuple of {in_dtype} is not supported in groupby built-in function {func_name}",
         )
 
-    if (func_name in {"median", "mean", "var", "std"}) and isinstance(
+    elif (func_name in {"median", "mean", "var", "std"}) and isinstance(
         in_dtype, (Decimal128Type, types.Integer, types.Float)
     ):
         return dtype_to_array_type(types.float64), "ok"
+    elif func_name == "boolor_agg":
+        if isinstance(
+            in_dtype, (Decimal128Type, types.Integer, types.Float, types.Boolean)
+        ):
+            return bodo.boolean_array, "ok"
+        return (
+            None,
+            f"For boolor_agg, only columns of type integer, float, Decimal, or boolean type are allowed",
+        )
+
     if not isinstance(in_dtype, (types.Integer, types.Float, types.Boolean)):
         if is_list_string or in_dtype == types.unicode_type:
             if func_name not in {
@@ -394,7 +404,7 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
             None,
             f"groupby built-in functions {func_name} does not support boolean column",
         )
-    if func_name in {"idxmin", "idxmax"}:
+    elif func_name in {"idxmin", "idxmax"}:
         return dtype_to_array_type(get_index_data_arr_types(index_type)[0].dtype), "ok"
     elif func_name in {"count", "nunique"}:
         return dtype_to_array_type(types.int64), "ok"
@@ -464,7 +474,14 @@ def get_keys_not_as_index(
 
 
 def get_agg_typ(
-    grp, args, func_name, typing_context, target_context, func=None, kws=None
+    grp,
+    args,
+    func_name,
+    typing_context,
+    target_context,
+    func=None,
+    kws=None,
+    raise_on_any_error=False,
 ):
     """Get output signature for a groupby function"""
     # grp: DataFrameGroupByType instance
@@ -701,7 +718,12 @@ def get_agg_typ(
                     gb_info[(c, func_name)] = c
                 out_column_type.append(e_column_type)
             else:
-                list_err_msg.append(err_msg)
+                if raise_on_any_error:
+                    raise BodoError(
+                        f"Groupby with function {func_name} not supported. Error message: {err_msg}"
+                    )
+                else:
+                    list_err_msg.append(err_msg)
 
     if func_name == "sum":
         has_numeric = any(
@@ -760,7 +782,9 @@ def get_agg_typ(
     return signature(out_res, *args), gb_info
 
 
-def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context):
+def get_agg_funcname_and_outtyp(
+    grp, col, f_val, typing_context, target_context, raise_on_any_error
+):
     """Get function name and output type for a function used in
     groupby.agg(), given by f_val (can be a string constant or
     user-defined function) applied to column col"""
@@ -790,9 +814,14 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context)
             True,
             _num_shuffle_keys=grp._num_shuffle_keys,
         )
-        out_tp = get_agg_typ(ret_grp, (), f_name, typing_context, target_context)[
-            0
-        ].return_type
+        out_tp = get_agg_typ(
+            ret_grp,
+            (),
+            f_name,
+            typing_context,
+            target_context,
+            raise_on_any_error=raise_on_any_error,
+        )[0].return_type
     else:
         # assume udf
         if is_expr(f_val, "make_function"):
@@ -815,9 +844,15 @@ def get_agg_funcname_and_outtyp(grp, col, f_val, typing_context, target_context)
             _num_shuffle_keys=grp._num_shuffle_keys,
         )
         # out_tp is series because we are passing only one input column
-        out_tp = get_agg_typ(ret_grp, (), "agg", typing_context, target_context, f)[
-            0
-        ].return_type
+        out_tp = get_agg_typ(
+            ret_grp,
+            (),
+            "agg",
+            typing_context,
+            target_context,
+            f,
+            raise_on_any_error=raise_on_any_error,
+        )[0].return_type
     return f_name, out_tp
 
 
@@ -833,6 +868,9 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
     relabeling = kws and all(
         isinstance(v, types.Tuple) and len(v) == 2 for v in kws.values()
     )
+    # Should we raise an immediate exception when a particular column cannot be
+    # used in an aggregation. If a column is explicitly selected then yes.
+    raise_on_any_error = relabeling
 
     if is_overload_none(func) and not relabeling:
         raise_bodo_error("Groupby.agg()/aggregate(): Must provide 'func'")
@@ -906,7 +944,12 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                 lambda_count = 0
                 for f in f_val:
                     f_name, out_tp = get_agg_funcname_and_outtyp(
-                        grp, col_name, f, typing_context, target_context
+                        grp,
+                        col_name,
+                        f,
+                        typing_context,
+                        target_context,
+                        raise_on_any_error,
                     )
                     has_cumulative_ops = f_name in list_cumulative
                     if f_name == "<lambda>" and len(f_val) > 1:
@@ -920,7 +963,12 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
                     _append_out_type(grp, out_data, out_tp)
             else:
                 f_name, out_tp = get_agg_funcname_and_outtyp(
-                    grp, col_name, f_val, typing_context, target_context
+                    grp,
+                    col_name,
+                    f_val,
+                    typing_context,
+                    target_context,
+                    raise_on_any_error,
                 )
                 has_cumulative_ops = f_name in list_cumulative
                 if multi_level_names:
@@ -980,7 +1028,12 @@ def resolve_agg(grp, args, kws, typing_context, target_context):
         in_col_name = grp.selection[0]
         for f_val in func_vals:
             f_name, out_tp = get_agg_funcname_and_outtyp(
-                grp, in_col_name, f_val, typing_context, target_context
+                grp,
+                in_col_name,
+                f_val,
+                typing_context,
+                target_context,
+                raise_on_any_error,
             )
             has_cumulative_ops = f_name in list_cumulative
             # if tuple has lambdas they will be named <lambda_0>,
