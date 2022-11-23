@@ -489,9 +489,15 @@ int64_t str_to_int64_base(char* data, int64_t length, int64_t base) {
     return l;
 }
 
-void str_from_float32(char* s, float in) { sprintf(s, "%f", in); }
+void str_from_float32(char* s, float in) {
+    // Use 1024 as arbitrary buffer size to make compiler happy
+    snprintf(s, 1024, "%f", in);
+}
 
-void str_from_float64(char* s, double in) { sprintf(s, "%f", in); }
+void str_from_float64(char* s, double in) {
+    // Use 1024 as arbitrary buffer size to make compiler happy
+    snprintf(s, 1024, "%f", in);
+}
 
 /**
  * @brief convert int64 value to string and write to string pointer

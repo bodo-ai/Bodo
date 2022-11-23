@@ -180,12 +180,12 @@ int64_t pq_write(
     std::vector<char> new_metadata;
     if (write_rangeindex_to_metadata) {
         new_metadata.resize((strlen(metadata) + strlen(idx_name) + 50));
-        check = sprintf(new_metadata.data(), metadata, idx_name, ri_start,
-                        ri_stop, ri_step);
+        check = snprintf(new_metadata.data(), new_metadata.size(), metadata,
+                         idx_name, ri_start, ri_stop, ri_step);
     } else {
         new_metadata.resize((strlen(metadata) + 1 + (strlen(idx_name) * 4)));
-        check = sprintf(new_metadata.data(), metadata, idx_name, idx_name,
-                        idx_name, idx_name);
+        check = snprintf(new_metadata.data(), new_metadata.size(), metadata,
+                         idx_name, idx_name, idx_name, idx_name);
     }
     if (size_t(check + 1) > new_metadata.size())
         throw std::runtime_error(
