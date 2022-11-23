@@ -509,7 +509,7 @@ def float_to_str_overload(s, v):
 
 @overload(str)
 def float_str_overload(v):
-    """support str(float) by preallocating the output string and calling sprintf() in C"""
+    """support str(float) by preallocating the output string and calling snprintf() in C"""
     # TODO(ehsan): handle in Numba similar to str(int)
     if isinstance(v, types.Float):
         kind = numba.cpython.unicode.PY_UNICODE_1BYTE_KIND

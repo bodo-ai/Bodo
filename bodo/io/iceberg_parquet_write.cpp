@@ -26,8 +26,8 @@ std::string generate_iceberg_file_name() {
     fname.resize(20 + uuid.length());
     // The file name format is based on Spark (hence the double usage of rank in
     // the name)
-    check =
-        sprintf(fname.data(), "%05d-%d-%s.parquet", rank, rank, uuid.c_str());
+    check = snprintf(fname.data(), fname.size(), "%05d-%d-%s.parquet", rank,
+                     rank, uuid.c_str());
     if (size_t(check + 1) > fname.size())
         throw std::runtime_error(
             "Fatal error: number of written char for iceberg file name is "
