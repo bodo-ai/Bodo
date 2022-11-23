@@ -2223,7 +2223,7 @@ def determine_table_cast_map(
     # Check the keys for casts.
     n_keys = len(matched_key_types)
     for i in range(n_keys):
-        # Determine if the column is liveå
+        # Determine if the column is live
         if used_key_nums is None or i in used_key_nums:
             # Astype is needed when the key had to be cast for the join
             # (e.g. left=int64 and right=float64 casts the left to float64)
@@ -2232,7 +2232,7 @@ def determine_table_cast_map(
                 convert_dict_col or key_types[i] != bodo.dict_str_arr_type
             ):
                 # This maps the key number to the actual column number
-                # TODO [BE-3552]: Ensure the cast are compatable.
+                # TODO [BE-3552]: Ensure the cast are compatible.
                 idx = output_map[i]
                 cast_map[idx] = matched_key_types[i]
 

@@ -4,6 +4,7 @@
 import operator
 
 import numba
+import numpy as np
 import pandas as pd
 import pytz
 from llvmlite import ir as lir
@@ -240,6 +241,26 @@ def init_pandas_datetime_array(typingctx, data, tz):
     return sig, codegen
 
 
+# high-level allocation function for tz-aware arrays arrays
+@numba.njit(no_cpython_wrapper=True)
+def alloc_pd_datetime_array(n, tz):  # pragma: no cover
+    data_arr = np.empty(n, dtype="datetime64[ns]")
+    return init_pandas_datetime_array(data_arr, tz)
+
+
+def alloc_pd_datetime_array_equiv(self, scope, equiv_set, loc, args, kws):
+    """Array analysis function for alloc_pd_datetime_array() passed to Numba's array analysis
+    extension. Assigns output array's size as equivalent to the input size variable.
+    """
+    assert len(args) == 1 and not kws
+    return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
+
+
+ArrayAnalysis._analyze_op_call_bodo_libs_pd_datetime_arr_ext_alloc_pd_datetime_array = (
+    alloc_pd_datetime_array_equiv
+)
+
+
 @overload(len, no_unliteral=True)
 def overload_pd_datetime_arr_len(A):
     if isinstance(A, DatetimeArrayType):
@@ -330,6 +351,31 @@ def overload_getitem(A, ind):
 
     raise BodoError(
         "operator.getitem with DatetimeArrayType is only supported with an integer index, boolean array, or slice."
+    )
+
+
+@overload(operator.setitem, no_unliteral=True)
+def overload_getitem(A, ind, val):
+    if not isinstance(A, DatetimeArrayType):
+        return
+    tz = A.tz
+    if isinstance(ind, types.Integer):
+        if not isinstance(val, bodo.PandasTimestampType):  # pragma: no cover
+            raise BodoError(
+                "operator.setitem with DatetimeArrayType requires a Timestamp value"
+            )
+        if val.tz != tz:
+            raise BodoError(
+                "operator.setitem with DatetimeArrayType requires the Timestamp value to share the same timezone"
+            )
+
+        def impl(A, ind, val):  # pragma: no cover
+            A._data[ind] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(val.value)
+
+        return impl
+
+    raise BodoError(
+        "operator.setitem with DatetimeArrayType is only supported with an integer index"
     )
 
 

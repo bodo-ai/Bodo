@@ -12,11 +12,9 @@ from numba.extending import register_jitable
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
-    dtype_to_array_type,
     get_overload_const_bool,
     is_overload_none,
     raise_bodo_error,
-    to_nullable_type,
 )
 
 
@@ -486,7 +484,15 @@ def to_date_util(
     arg_types = [conversionVal, optionalConversionFormatString, errorOnFail, _keep_time]
     propagate_null = [True, False, False, False]
 
-    out_dtype = to_nullable_type(dtype_to_array_type(bodo.datetime64ns))
+    # Determine the output dtype. If the input is a tz-aware Timestamp
+    # then we have a tz-aware output. Otherwise we output datetime64ns.
+    if isinstance(conversionVal, bodo.DatetimeArrayType) or (
+        isinstance(conversionVal, bodo.PandasTimestampType)
+        and conversionVal.tz is not None
+    ):
+        out_dtype = bodo.DatetimeArrayType(conversionVal.tz)
+    else:
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
     extra_globals = {
         "pd_to_datetime_error_checked": pd_to_datetime_error_checked,
