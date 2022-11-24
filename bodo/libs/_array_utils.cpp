@@ -337,7 +337,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
             bodo_array_type::DICT, in_arr->dtype, out_indices->length, -1, -1,
             NULL, NULL, NULL, out_indices->null_bitmask, NULL, NULL, NULL, NULL,
             0, 0, 0, in_arr->has_global_dictionary,
-            in_arr->has_sorted_dictionary, in_arr->info1, out_indices);
+            in_arr->has_deduped_local_dictionary, in_arr->has_sorted_dictionary,
+            in_arr->info1, out_indices);
         // input and output share the same dictionary array
         incref_array(in_arr->info1);
     }
@@ -667,6 +668,7 @@ array_info* RetrieveArray_TwoColumns(
             bodo_array_type::DICT, ref_column->dtype, out_indices->length, -1,
             -1, NULL, NULL, NULL, out_indices->null_bitmask, NULL, NULL, NULL,
             NULL, 0, 0, 0, ref_column->has_global_dictionary,
+            ref_column->has_deduped_local_dictionary,
             ref_column->has_sorted_dictionary, ref_column->info1, out_indices);
         incref_array(ref_column->info1);
     }

@@ -92,6 +92,67 @@ table_info* hash_join_table(
             ev.add_attribute("g_is_right", is_right);
             ev.add_attribute("g_extra_data_col", extra_data_col);
         }
+        // Unify dictionaries of DICT key columns (required for key comparison)
+        // IMPORTANT: need to do this before computing the hashes
+        //
+        // This implementation of hashing dictionary encoded data is based on
+        // the values in the indices array. To do this, we make and enforce
+        // a few assumptions
+        //
+        // 1. Both arrays are dictionary encoded. This is enforced in join.py
+        // where determine_table_cast_map requires either both inputs to be
+        // dictionary encoded or neither.
+        //
+        // 2. Both arrays share the exact same dictionary. This occurs in
+        // unify_dictionaries.
+        //
+        // 3. The dictionary does not contain any duplicate values. This is
+        // enforced by drop_duplicates_local_dictionary. In particular,
+        // drop_duplicates_local_dictionary contains a drop duplicates step
+        // that ensures all values are unique. If the dictionary is not global
+        // then convert_local_dictionary_to_global will also drop duplicate and
+        // drop_duplicates_local_dictionary will be a no-op.
+        for (size_t i = 0; i < n_key; i++) {
+            array_info* arr1 = left_table->columns[i];
+            array_info* arr2 = right_table->columns[i];
+            if ((arr1->arr_type == bodo_array_type::DICT) &&
+                (arr2->arr_type == bodo_array_type::DICT)) {
+                make_dictionary_global_and_unique(arr1, left_parallel);
+                make_dictionary_global_and_unique(arr2, right_parallel);
+                unify_dictionaries(arr1, arr2, left_parallel, right_parallel);
+            }
+        }
+        // Create sets for cond func columns. These columns act
+        // like key columns and are contained inside of key_in_output,
+        // so we need an efficient lookup.
+        UNORD_SET_CONTAINER<int64_t> left_cond_func_cols_set;
+        left_cond_func_cols_set.reserve(cond_func_left_column_len);
+
+        UNORD_SET_CONTAINER<int64_t> right_cond_func_cols_set;
+        right_cond_func_cols_set.reserve(cond_func_right_column_len);
+
+        // Non-keys used in cond_func need global + unique dictionaries
+        // for hashing, but no unifying is necessary.
+        for (size_t i = 0; i < cond_func_left_column_len; i++) {
+            uint64_t col_num = cond_func_left_columns[i];
+            if (col_num >= n_key) {
+                auto arr = left_table->columns[col_num];
+                if (arr->arr_type == bodo_array_type::DICT) {
+                    make_dictionary_global_and_unique(arr, left_parallel);
+                }
+                left_cond_func_cols_set.insert(col_num);
+            }
+        }
+        for (size_t i = 0; i < cond_func_right_column_len; i++) {
+            uint64_t col_num = cond_func_right_columns[i];
+            if (col_num >= n_key) {
+                auto arr = right_table->columns[col_num];
+                if (arr->arr_type == bodo_array_type::DICT) {
+                    make_dictionary_global_and_unique(arr, right_parallel);
+                }
+                right_cond_func_cols_set.insert(col_num);
+            }
+        }
 
         // Now deciding how we handle the parallelization of the tables
         // and doing the allgather/shuffle exchanges as needed.
@@ -118,6 +179,7 @@ table_info* hash_join_table(
         // are updated if we broadcast a table.
         bool left_replicated = !left_parallel,
              right_replicated = !right_parallel;
+
         if (left_parallel && right_parallel) {
             // If both tables are parallel then we need to decide between
             // shuffle and broadcast join.
@@ -125,7 +187,7 @@ table_info* hash_join_table(
             // Determine the memory size of each table
             int64_t left_total_memory = table_global_memory_size(left_table);
             int64_t right_total_memory = table_global_memory_size(right_table);
-            // Determine the threshold for brodcast join. We default to 10MB,
+            // Determine the threshold for broadcast join. We default to 10MB,
             // which matches Spark, unless to user specifies a specific
             // threshold for their infrastructure.
             int CritMemorySize = 10 * 1024 * 1024;  // in bytes
@@ -184,24 +246,6 @@ table_info* hash_join_table(
                 // a hash table (ensuring that comparable
                 // types hash to the same values).
 
-                // for shuffling of dictionary-encoded arrays we need the
-                // dictionaries to be global, and for coherent hashing between
-                // left and right tables we need dictionaries to be unified
-                for (size_t i = 0; i < n_key; i++) {
-                    array_info* arr1 = left_table->columns[i];
-                    array_info* arr2 = right_table->columns[i];
-                    if ((arr1->arr_type == bodo_array_type::DICT) &&
-                        (arr2->arr_type == bodo_array_type::DICT)) {
-                        if (!arr1->has_global_dictionary)
-                            convert_local_dictionary_to_global(arr1,
-                                                               left_parallel);
-                        if (!arr2->has_global_dictionary)
-                            convert_local_dictionary_to_global(arr2,
-                                                               right_parallel);
-                        unify_dictionaries(arr1, arr2);
-                    }
-                }
-
                 // only do filters for inner join for now
                 BloomFilter* bloom_left = nullptr;
                 BloomFilter* bloom_right = nullptr;
@@ -210,10 +254,12 @@ table_info* hash_join_table(
                 if (bloom_filter_supported() && !is_left && !is_right) {
                     bool make_bloom_left = true;
                     bool make_bloom_right = true;
-                    hashes_left = coherent_hash_keys_table(
-                        left_table, right_table, n_key, SEED_HASH_PARTITION);
-                    hashes_right = coherent_hash_keys_table(
-                        right_table, left_table, n_key, SEED_HASH_PARTITION);
+                    hashes_left =
+                        coherent_hash_keys_table(left_table, right_table, n_key,
+                                                 SEED_HASH_PARTITION, true);
+                    hashes_right =
+                        coherent_hash_keys_table(right_table, left_table, n_key,
+                                                 SEED_HASH_PARTITION, true);
                     const int64_t left_table_nrows = left_table->nrows();
                     const int64_t right_table_nrows = right_table->nrows();
                     int64_t left_table_global_nrows;
@@ -376,78 +422,6 @@ table_info* hash_join_table(
                 static_cast<void*>(work_right_table->columns[i]->null_bitmask);
         }
 
-        // Unify dictionaries of DICT key columns (required for key comparison)
-        // IMPORTANT: need to do this before computing the hashes
-        //
-        // This implementation of hashing dictionary encoded data is based on
-        // the values in the indices array. To do this, we make and enforce
-        // a few assumptions
-        //
-        // 1. Both arrays are dictionary encoded. This is enforced in join.py
-        // where determine_table_cast_map requires either both inputs to be
-        // dictionary encoded or neither.
-        //
-        // 2. Both arrays share the exact same dictionary. This occurs in
-        // unify_dictionaries and is checked above.
-        //
-        // 3. The dictionary does not contain any duplicate values. This is
-        // enforced by the has_global_dictionary check in unify_dictionaries
-        // and is updated by convert_local_dictionary_to_global. In particular,
-        // convert_local_dictionary_to_global contains a drop duplicates step
-        // that ensures all values are unique. If the dictionary is made global
-        // by some other means (e.g. Python), then we assume that is also
-        // unique.
-        // TODO: Move to only the parallel case.
-        for (size_t i = 0; i < n_key; i++) {
-            array_info* arr1 = work_left_table->columns[i];
-            array_info* arr2 = work_right_table->columns[i];
-            if ((arr1->arr_type == bodo_array_type::DICT) &&
-                (arr2->arr_type == bodo_array_type::DICT)) {
-                if (!arr1->has_global_dictionary)
-                    convert_local_dictionary_to_global(arr1, left_parallel);
-                if (!arr2->has_global_dictionary)
-                    convert_local_dictionary_to_global(arr2, right_parallel);
-                unify_dictionaries(arr1, arr2);
-            }
-        }
-
-        // Create sets for cond func columns. These columns act
-        // like key columns and are contained inside of key_in_output,
-        // so we need an efficient lookup.
-        UNORD_SET_CONTAINER<int64_t> left_cond_func_cols_set;
-        left_cond_func_cols_set.reserve(cond_func_left_column_len);
-
-        UNORD_SET_CONTAINER<int64_t> right_cond_func_cols_set;
-        right_cond_func_cols_set.reserve(cond_func_right_column_len);
-
-        // Non-keys used in cond_func need global dictionaries
-        // for hashing, but no unifying is necessary.
-        // TODO: Move to only the parallel case.
-        for (size_t i = 0; i < cond_func_left_column_len; i++) {
-            uint64_t col_num = cond_func_left_columns[i];
-            if (col_num >= n_key) {
-                auto arr = left_table->columns[col_num];
-                if (arr->arr_type == bodo_array_type::DICT) {
-                    if (!arr->has_global_dictionary)
-                        convert_local_dictionary_to_global(arr, left_parallel);
-                }
-                left_cond_func_cols_set.insert(col_num);
-            }
-        }
-        // TODO: Move to only the parallel case.
-        for (size_t i = 0; i < cond_func_right_column_len; i++) {
-            uint64_t col_num = cond_func_right_columns[i];
-            if (col_num >= n_key) {
-                auto arr = right_table->columns[col_num];
-                if (arr->arr_type == bodo_array_type::DICT) {
-                    if (!arr->has_global_dictionary)
-                        convert_local_dictionary_to_global(arr, right_parallel);
-                }
-                right_cond_func_cols_set.insert(col_num);
-            }
-        }
-
-        //
         // Now computing the hashes that will be used in the hash map
         // or compared to the hash map.
         //

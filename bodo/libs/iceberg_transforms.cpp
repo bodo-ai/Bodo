@@ -448,7 +448,8 @@ array_info* array_transform_truncate_W(array_info* in_arr, int64_t width,
         out_arr = new array_info(
             bodo_array_type::DICT, in_arr->dtype, in_arr->length, -1, -1, NULL,
             NULL, NULL, indices_copy->null_bitmask, NULL, NULL, NULL, NULL, 0,
-            0, 0, in_arr->has_global_dictionary, in_arr->has_sorted_dictionary,
+            0, 0, in_arr->has_global_dictionary,
+            in_arr->has_deduped_local_dictionary, in_arr->has_sorted_dictionary,
             trunc_dict_data_arr, indices_copy);
         return out_arr;
     }
