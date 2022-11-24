@@ -885,7 +885,6 @@ class TypingTransforms:
             if flag:
                 df = ....
         """
-
         for block in func_ir.blocks.values():
             for stmt in reversed(block.body):
                 # ignore code before the filtering node in the same basic block

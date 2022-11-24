@@ -4,7 +4,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
-from bodo.libs.array import convert_local_dictionary_to_global
+from bodo.libs.array import drop_duplicates_local_dictionary
 from bodo.tests.utils import check_func
 
 data = []
@@ -85,14 +85,15 @@ strip_array = pa.array(data, type=pa.dictionary(pa.int32(), pa.string()))
 @pytest.mark.slow
 def test_dict_enc_ops_set_global_dict_flag(args, memory_leak_check):
     """tests Series.str.x functions that can result in output dictionaries with duplicate
-    values in the data array correctly set _has_global_dictionary"""
+    values in the data array correctly set _has_deduped_local_dictionary=False
+    and keeps _has_global_dictionary=True"""
     fn_name, fn_args, named_params, input_arr = args
     args_str = ", ".join([repr(x) for x in fn_args] + [x for x in named_params])
     func_text = (
         "def bodo_impl(A):\n"
-        "  global_A = convert_local_dictionary_to_global(A, False)\n"
+        "  global_A = drop_duplicates_local_dictionary(A, False)\n"
         f"  output_series = pd.Series(global_A).str.{fn_name}({args_str})\n"
-        "  return output_series.values._has_global_dictionary, output_series\n"
+        "  return output_series.values._has_deduped_local_dictionary, output_series\n"
     )
     func_text += (
         "def py_impl(A):\n" f"  return pd.Series(A).str.{fn_name}({args_str})\n"
@@ -100,7 +101,7 @@ def test_dict_enc_ops_set_global_dict_flag(args, memory_leak_check):
     loc_vars = {}
     global_vars = {
         "pd": pd,
-        "convert_local_dictionary_to_global": convert_local_dictionary_to_global,
+        "drop_duplicates_local_dictionary": drop_duplicates_local_dictionary,
     }
     exec(func_text, global_vars, loc_vars)
     py_impl = loc_vars["py_impl"]
@@ -110,67 +111,68 @@ def test_dict_enc_ops_set_global_dict_flag(args, memory_leak_check):
         bodo_impl,
         (input_arr,),
         py_output=(False, py_impl(pd.Series(input_arr))),
+        # drop_duplicates_local_dictionary doesn't have dist support in the main IR
         only_seq=True,
     )
 
 
 @pytest.mark.slow
 def test_str_extractall_sets_global_dict_flag(memory_leak_check):
-    """tests Series.str.extractall() correctly sets _has_global_dicitonary for dict array
+    """tests Series.str.extractall() correctly sets _has_global_dictionary for dict array
     inputs/outputs.
     """
 
     # non-string index, single group
     def impl1(A):
-        global_A = convert_local_dictionary_to_global(A, False)
+        global_A = drop_duplicates_local_dictionary(A, False)
         output_df = pd.Series(global_A, name="AA").str.extractall(r"(?P<BBB>[abd]+)\d+")
-        all_cols_not_global_dict = True
+        all_cols_not_unique = True
         for col in output_df.columns:
-            all_cols_not_global_dict = (
-                all_cols_not_global_dict
-                and not output_df[col].values._has_global_dictionary
+            all_cols_not_unique = (
+                all_cols_not_unique
+                and not output_df[col].values._has_deduped_local_dictionary
             )
-        return all_cols_not_global_dict, output_df
+        return all_cols_not_unique, output_df
 
     # non-string index, multiple groups
     def impl2(A):
-        global_A = convert_local_dictionary_to_global(A, False)
+        global_A = drop_duplicates_local_dictionary(A, False)
         output_df = pd.Series(global_A).str.extractall(r"([чен]+)\d+([ст]+)\d+")
-        all_cols_not_global_dict = True
+        all_cols_not_unique = True
         for col in output_df.columns:
-            all_cols_not_global_dict = (
-                all_cols_not_global_dict
-                and not output_df[col].values._has_global_dictionary
+            all_cols_not_unique = (
+                all_cols_not_unique
+                and not output_df[col].values._has_deduped_local_dictionary
             )
-        return all_cols_not_global_dict, output_df
+        return all_cols_not_unique, output_df
 
     # string index, single group
     def impl3(A, I):
-        global_A = convert_local_dictionary_to_global(A, False)
+        global_A = drop_duplicates_local_dictionary(A, False)
         output_df = pd.Series(data=global_A, index=I).str.extractall(
             r"(?P<BBB>[abd]+)\d+"
         )
-        all_cols_not_global_dict = True
+        all_cols_not_unique = True
         for col in output_df.columns:
-            all_cols_not_global_dict = (
-                all_cols_not_global_dict
-                and not output_df[col].values._has_global_dictionary
+            all_cols_not_unique = (
+                all_cols_not_unique
+                and not output_df[col].values._has_deduped_local_dictionary
             )
-        return all_cols_not_global_dict, output_df
+        return all_cols_not_unique, output_df
 
     # string index, multiple groups
     def impl4(A, I):
-        global_A = convert_local_dictionary_to_global(A, False)
+        global_A = drop_duplicates_local_dictionary(A, False)
         output_df = pd.Series(data=global_A, index=I).str.extractall(
             r"([чен]+)\d+([ст]+)\d+"
         )
-        all_cols_not_global_dict = True
+        all_cols_not_unique = True
         for col in output_df.columns:
-            all_cols_not_global_dict = (
-                all_cols_not_global_dict
-                and not output_df[col].values._has_global_dictionary
+            all_cols_not_unique = (
+                all_cols_not_unique
+                and not output_df[col].values._has_deduped_local_dictionary
             )
-        return all_cols_not_global_dict, output_df
+        return all_cols_not_unique, output_df
 
     S1 = pd.Series(
         ["a1b1", "b1", np.nan, "a2", "c2", "ddd", "dd4d1", "d22c2"],
@@ -194,12 +196,14 @@ def test_str_extractall_sets_global_dict_flag(memory_leak_check):
             True,
             pd.Series(A1, name="AA").str.extractall(r"(?P<BBB>[abd]+)\d+"),
         ),
+        # drop_duplicates_local_dictionary doesn't have dist support in the main IR
         only_seq=True,
     )
     check_func(
         impl2,
         (A2,),
         py_output=(True, pd.Series(A2).str.extractall(r"([чен]+)\d+([ст]+)\d+")),
+        # drop_duplicates_local_dictionary doesn't have dist support in the main IR
         only_seq=True,
     )
 
@@ -212,6 +216,7 @@ def test_str_extractall_sets_global_dict_flag(memory_leak_check):
                 data=A1, index=["a", "b", "e", "好", "e2", "yun", "c", "dd"]
             ).str.extractall(r"(?P<BBB>[abd]+)\d+"),
         ),
+        # drop_duplicates_local_dictionary doesn't have dist support in the main IR
         only_seq=True,
     )
     check_func(
@@ -223,6 +228,7 @@ def test_str_extractall_sets_global_dict_flag(memory_leak_check):
                 data=A2, index=["е3", "не3", "н2с2", "AA", "C"] * 2
             ).str.extractall(r"([чен]+)\d+([ст]+)\d+"),
         ),
+        # drop_duplicates_local_dictionary doesn't have dist support in the main IR
         only_seq=True,
     )
     # make sure IR has the optimized function
@@ -347,16 +353,16 @@ translate_data = pd.Series(string_vals * 4)
 )
 @pytest.mark.slow
 def test_bodosql_array_kernels(args, memory_leak_check):
-    """tests that the bodosql array kernels correctly set _has_global_dicitonary for dict array
+    """tests that the bodosql array kernels correctly set _has_deduped_local_dictionary for dict array
     inputs/outputs.
     """
     fn_name, fn_args, named_params, input_arr = args
     args_str = ", ".join([repr(x) for x in fn_args] + [x for x in named_params])
     func_text = (
         "def bodo_impl(A):\n"
-        "  global_A = convert_local_dictionary_to_global(A.values, False)\n"
+        "  global_A = drop_duplicates_local_dictionary(A.values, False)\n"
         f"  out_array = bodo.libs.bodosql_array_kernels.{fn_name}(global_A, {args_str})\n"
-        "  return out_array._has_global_dictionary, pd.Series(out_array)\n"
+        "  return out_array._has_deduped_local_dictionary, pd.Series(out_array)\n"
     )
     func_text += (
         "def py_impl(A):\n"
@@ -366,7 +372,7 @@ def test_bodosql_array_kernels(args, memory_leak_check):
     global_vars = {
         "pd": pd,
         "bodo": bodo,
-        "convert_local_dictionary_to_global": convert_local_dictionary_to_global,
+        "drop_duplicates_local_dictionary": drop_duplicates_local_dictionary,
     }
     exec(func_text, global_vars, loc_vars)
     py_impl = bodo.jit(loc_vars["py_impl"])
@@ -376,9 +382,7 @@ def test_bodosql_array_kernels(args, memory_leak_check):
         bodo_impl,
         (input_arr,),
         py_output=(False, py_impl(pd.Series(input_arr))),
-        # convert_local_dictionary_to_global doesn't have explcite distribution handling,
-        # and bugs with _has_global_dictionary show up in sequential code, so we just
-        # test on sequential only
-        only_seq=True,
         use_dict_encoded_strings=True,
+        # drop_duplicates_local_dictionary doesn't have dist support in the main IR
+        only_seq=True,
     )

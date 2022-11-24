@@ -461,13 +461,12 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
                 new_table->columns.push_back(table->columns[i]);
         }
         // Convert all local dictionaries to global for dict columns.
-        // to enable hashing.
-        if (is_parallel) {
-            for (auto a : partition_cols) {
-                if ((a->arr_type == bodo_array_type::DICT) &&
-                    !a->has_global_dictionary) {
-                    convert_local_dictionary_to_global(a, is_parallel);
-                }
+        // to enable hashing. Here we need a global dictionary with
+        // unique values.
+        // TODO: Does parquet actually require global values
+        for (auto a : partition_cols) {
+            if (a->arr_type == bodo_array_type::DICT) {
+                make_dictionary_global_and_unique(a, is_parallel);
             }
         }
 
@@ -484,7 +483,7 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
 
         new_table->num_keys = num_partition_cols;
         for (uint64_t i = 0; i < new_table->nrows(); i++) {
-            multi_col_key key(hashes[i], new_table, i);
+            multi_col_key key(hashes[i], new_table, i, is_parallel);
             partition_write_info &p = key_to_partition[key];
             if (p.rows.size() == 0) {
                 // generate output file name

@@ -1001,7 +1001,7 @@ array_info* create_dict_string_array(array_info* dict_arr,
     array_info* out_col = new array_info(
         bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1, -1,
         NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
-        0, 0, false, false, dict_arr, indices_arr);
+        0, 0, false, false, false, dict_arr, indices_arr);
     return out_col;
 }
 
@@ -1503,9 +1503,9 @@ int64_t get_groupby_labels(table_info* table, int64_t* out_labels,
     std::vector<array_info*> key_cols = table->columns;
     uint32_t seed = SEED_HASH_GROUPBY_SHUFFLE;
     for (auto a : key_cols) {
-        if ((a->arr_type == bodo_array_type::DICT) &&
-            !a->has_global_dictionary) {
-            convert_local_dictionary_to_global(a, is_parallel);
+        if (a->arr_type == bodo_array_type::DICT) {
+            // We need dictionaries to be global and unique for hashing.
+            make_dictionary_global_and_unique(a, is_parallel);
         }
     }
     uint32_t* hashes = hash_keys(key_cols, seed, is_parallel);
@@ -1604,7 +1604,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
                 continue;
             }
         }
-        multi_col_key key(hashes[i], table, i);
+        multi_col_key key(hashes[i], table, i, is_parallel);
         int64_t& group = key_to_group[key];  // this inserts 0 into the map if
                                              // key doesn't exist
         if (group == 0) {
@@ -1646,7 +1646,7 @@ void get_group_info_iterate(std::vector<table_info*>& tables, uint32_t*& hashes,
                     continue;
                 }
             }
-            multi_col_key key(hashes[i], table, i);
+            multi_col_key key(hashes[i], table, i, is_parallel);
             int64_t& group = key_to_group[key];  // this inserts 0 into the map
                                                  // if key doesn't exist
             if ((group == 0) ||
@@ -5261,11 +5261,11 @@ void copy_dict_string_values_transform(array_info* update_col,
     array_info* out_col =
         create_dict_string_array(tmp_col->info1, indices_arr, length);
     *update_col = std::move(*out_col);
-    if (!update_col->has_global_dictionary) {
-        // reverse_shuffle_table needs the dictionary to be global
-        // copy_dict_string_values_transform is only called on distributed data
-        convert_local_dictionary_to_global(update_col, true);
-    }
+    // reverse_shuffle_table needs the dictionary to be global
+    // copy_dict_string_values_transform is only called on distributed data
+    // Does this implementation require the dictionary is sorted.
+    // Similarly does it require that there are no duplicates.
+    make_dictionary_global_and_unique(update_col, true);
     delete out_col;
 }
 
@@ -5659,9 +5659,9 @@ class GroupbyPipeline {
         for (uint64_t icol = 0; icol < in_table->ncols() - index_i - head_i;
              icol++) {
             array_info* a = in_table->columns[icol];
-            if ((a->arr_type == bodo_array_type::DICT) &&
-                !a->has_global_dictionary) {
-                convert_local_dictionary_to_global(a, is_parallel);
+            if (a->arr_type == bodo_array_type::DICT) {
+                // Convert the local dictionary to global for hashing purposes
+                make_dictionary_global_and_unique(a, is_parallel);
             }
         }
 
@@ -6228,7 +6228,7 @@ class GroupbyPipeline {
             // array to avoid memcpy?
             hash_array_combine(key_value_hashes, tmp->columns[num_keys], n_rows,
                                SEED_HASH_PARTITION,
-                               /*global_dict_needed=*/true);
+                               /*global_dict_needed=*/true, is_parallel);
 
             // Compute the local fraction of unique hashes
             size_t nunique_keyval_hashes =
@@ -6387,6 +6387,7 @@ class GroupbyPipeline {
                     new_key_indices->length, -1, -1, NULL, NULL, NULL,
                     new_key_indices->null_bitmask, NULL, NULL, NULL, NULL, 0, 0,
                     0, key_col->has_global_dictionary,
+                    key_col->has_deduped_local_dictionary,
                     key_col->has_sorted_dictionary, key_col->info1,
                     new_key_indices);
                 // incref because they share the same dictionary array
@@ -7007,8 +7008,9 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     // computation of red_table.
     for (int64_t i_key = 0; i_key < num_keys; i_key++) {
         array_info* a = in_table->columns[i_key];
-        if ((a->arr_type == bodo_array_type::DICT) && !a->has_global_dictionary)
-            convert_local_dictionary_to_global(a, is_parallel);
+        if (a->arr_type == bodo_array_type::DICT) {
+            make_dictionary_global_and_unique(a, is_parallel);
+        }
         incref_array(a);
     }
     table_info* red_table =
@@ -7032,9 +7034,13 @@ array_info* compute_categorical_index(table_info* in_table, int64_t num_keys,
     }
     // We are below threshold. Now doing an allgather for determining the keys.
     bool all_gather = true;
-    table_info* full_table =
-        gather_table(red_table, num_keys, all_gather, is_parallel);
-    delete_table(red_table);
+    table_info* full_table;
+    if (is_parallel) {
+        full_table = gather_table(red_table, num_keys, all_gather, is_parallel);
+        delete_table(red_table);
+    } else {
+        full_table = red_table;
+    }
     // Now building the map_container.
     uint32_t* hashes_full =
         hash_keys_table(full_table, num_keys, SEED_HASH_MULTIKEY, is_parallel);

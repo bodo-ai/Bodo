@@ -114,6 +114,10 @@ class DictionaryArrayModel(models.StructModel):
             # to avoid extra communication. This may be false after parquet read but
             # set to true after other operations like shuffle
             ("has_global_dictionary", types.bool_),
+            # flag to indicate whether the dictionary has unique values on this rank.
+            # This is used to support optimized implementations where decisions can be
+            # made just based on indices.
+            ("has_deduped_local_dictionary", types.bool_),
         ]
         models.StructModel.__init__(self, dmm, fe_type, members)
 
@@ -123,24 +127,28 @@ make_attribute_wrapper(DictionaryArrayType, "indices", "_indices")
 make_attribute_wrapper(
     DictionaryArrayType, "has_global_dictionary", "_has_global_dictionary"
 )
+make_attribute_wrapper(
+    DictionaryArrayType, "has_deduped_local_dictionary", "_has_deduped_local_dictionary"
+)
 
 
 lower_builtin("getiter", dict_str_arr_type)(numba.np.arrayobj.getiter_array)
 
 
 @intrinsic
-def init_dict_arr(typingctx, data_t, indices_t, glob_dict_t=None):
+def init_dict_arr(typingctx, data_t, indices_t, glob_dict_t, unique_dict_t):
     """Create a dictionary-encoded array with provided index and data values."""
 
     assert indices_t == dict_indices_arr_type, "invalid indices type for dict array"
 
     def codegen(context, builder, signature, args):
-        data, indices, glob_dict = args
+        data, indices, glob_dict, unique_dict = args
         # create dict arr struct and store values
         dict_arr = cgutils.create_struct_proxy(signature.return_type)(context, builder)
         dict_arr.data = data
         dict_arr.indices = indices
         dict_arr.has_global_dictionary = glob_dict
+        dict_arr.has_deduped_local_dictionary = unique_dict
 
         # increase refcount of stored values
         context.nrt.incref(builder, signature.args[0], data)
@@ -149,7 +157,7 @@ def init_dict_arr(typingctx, data_t, indices_t, glob_dict_t=None):
         return dict_arr._getvalue()
 
     ret_typ = DictionaryArrayType(data_t)
-    sig = ret_typ(data_t, indices_t, types.bool_)
+    sig = ret_typ(data_t, indices_t, types.bool_, types.bool_)
     return sig, codegen
 
 
@@ -219,8 +227,10 @@ def unbox_dict_arr(typ, val, c):
         pd_class_obj, "array", (indices_obj, int32_str_obj)
     )
     dict_arr.indices = c.unbox(dict_indices_arr_type, pd_int_arr_obj).value
-    # assume dictionarys are not the same across all ranks to be conservative
+    # assume dictionaries are not the same across all ranks to be conservative
     dict_arr.has_global_dictionary = c.context.get_constant(types.bool_, False)
+    # assume dictionaries are not unique to be conservative
+    dict_arr.has_deduped_local_dictionary = c.context.get_constant(types.bool_, False)
 
     c.pyapi.decref(data_obj)
     c.pyapi.decref(false_obj)
@@ -368,7 +378,10 @@ overload_method(DictionaryArrayType, "astype", no_unliteral=True)(
 def overload_dict_arr_copy(A):
     def copy_impl(A):  # pragma: no cover
         return init_dict_arr(
-            A._data.copy(), A._indices.copy(), A._has_global_dictionary
+            A._data.copy(),
+            A._indices.copy(),
+            A._has_global_dictionary,
+            A._has_deduped_local_dictionary,
         )
 
     return copy_impl
@@ -402,8 +415,10 @@ def lower_constant_dict_arr(context, builder, typ, pyval):
     )
 
     has_global_dictionary = context.get_constant(types.bool_, False)
+    has_deduped_local_dictionary = context.get_constant(types.bool_, False)
+
     dic_array = lir.Constant.literal_struct(
-        [data_arr, indices_arr, has_global_dictionary]
+        [data_arr, indices_arr, has_global_dictionary, has_deduped_local_dictionary]
     )
     return dic_array
 
@@ -428,7 +443,10 @@ def dict_arr_getitem(A, ind):
     # we could also trim down the dictionary in some cases to save memory but doesn't
     # seem to be worth it
     return lambda A, ind: init_dict_arr(
-        A._data, A._indices[ind], A._has_global_dictionary
+        A._data,
+        A._indices[ind],
+        A._has_global_dictionary,
+        A._has_deduped_local_dictionary,
     )  # pragma: no cover
 
 
@@ -518,9 +536,7 @@ def find_dict_ind_non_unique(arr, val):  # pragma: no cover
 def dict_arr_eq(arr, val):  # pragma: no cover
     """implements equality comparison between a dictionary array and a scalar value"""
     n = len(arr)
-    if arr._has_global_dictionary:
-        # In bodo, if we have a global dictionary, then we know that
-        # the values in the dictionary are unique.
+    if arr._has_deduped_local_dictionary:
         dict_ind = find_dict_ind_unique(arr, val)
         if dict_ind == -1:
             return init_bool_array(
@@ -528,7 +544,7 @@ def dict_arr_eq(arr, val):  # pragma: no cover
             )
         return arr._indices == dict_ind
     else:
-        # In this case, we may have multiple indicies with a value
+        # In this case, we may have multiple indices with a value
         dict_ind_set = find_dict_ind_non_unique(arr, val)
 
         if len(dict_ind_set) == 0:
@@ -548,7 +564,7 @@ def dict_arr_eq(arr, val):  # pragma: no cover
 def dict_arr_ne(arr, val):  # pragma: no cover
     """implements inequality comparison between a dictionary array and a scalar value"""
     n = len(arr)
-    if arr._has_global_dictionary:
+    if arr._has_deduped_local_dictionary:
         # In bodo, if we have a global dictionary, then we know that
         # the values in the dictionary are unique.
         dict_ind = find_dict_ind_unique(arr, val)
@@ -678,7 +694,7 @@ def cat_dict_str_overload(arrs, sep):
     func_text += (
         "  out_str_arr = bodo.libs.str_arr_ext.str_arr_from_sequence(out_strs)\n"
     )
-    func_text += "  return bodo.libs.dict_arr_ext.init_dict_arr(out_str_arr, out_indices, False)\n"
+    func_text += "  return bodo.libs.dict_arr_ext.init_dict_arr(out_str_arr, out_indices, False, False)\n"
 
     loc_vars = {}
     exec(
@@ -761,9 +777,11 @@ def str_replace(arr, pat, repl, flags, regex):  # pragma: no cover
                 continue
             out_str_arr[i] = data_arr[i].replace(pat, repl)
 
-    # NOTE: this operation may introduce non-unqiue values in the dictionary. Therefore,
-    # We have to set _has_global_dictionary to false
-    return init_dict_arr(out_str_arr, arr._indices.copy(), False)
+    # NOTE: this operation may introduce non-unique values in the dictionary. Therefore,
+    # We have to set _has_deduped_local_dictionary to false
+    return init_dict_arr(
+        out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False
+    )
 
 
 @register_jitable
@@ -945,7 +963,7 @@ def create_simple_str2str_methods(func_name, func_args, can_create_non_unique):
     "func_args" is a tuple whose elements are the arguments that the function
     takes in.
     "can_create_non_unique" is a boolean value which indicates if the function
-    in question can create non-unique values in output the dicitonary array
+    in question can create non-unique values in output the dictionary array
     For example: func_name = "center", func_args = ("arr", "width", "fillchar")
     """
     func_text = (
@@ -961,11 +979,9 @@ def create_simple_str2str_methods(func_name, func_args, can_create_non_unique):
     )
 
     if can_create_non_unique:
-        func_text += (
-            "    return init_dict_arr(out_str_arr, arr._indices.copy(), False)\n"
-        )
+        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False)\n"
     else:
-        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary)\n"
+        func_text += "    return init_dict_arr(out_str_arr, arr._indices.copy(), arr._has_global_dictionary, arr._has_deduped_local_dictionary)\n"
 
     loc_vars = {}
     exec(
@@ -1217,8 +1233,10 @@ def str_slice(arr, start, stop, step):  # pragma: no cover
         out_str_arr[i] = data_arr[i][start:stop:step]
 
     # Slice can result in duplicate values in the data array, so we have to set
-    # _has_global_dictionary to False in the output
-    return init_dict_arr(out_str_arr, arr._indices.copy(), False)
+    # _has_deduped_local_dictionary to False in the output
+    return init_dict_arr(
+        out_str_arr, arr._indices.copy(), arr._has_global_dictionary, False
+    )
 
 
 @register_jitable
@@ -1266,9 +1284,12 @@ def str_repeat_int(arr, repeats):  # pragma: no cover
             continue
         out_str_arr[i] = data_arr[i] * repeats
 
-    # NOTE: this must be false in the case that repeats is 0, as we would generate copies in the data array
+    # NOTE: _has_deduped_local_dictionary must be false in the case that repeats is 0, as we would generate copies in the data array
     return init_dict_arr(
-        out_str_arr, arr._indices.copy(), arr._has_global_dictionary and repeats != 0
+        out_str_arr,
+        arr._indices.copy(),
+        arr._has_global_dictionary,
+        arr._has_deduped_local_dictionary and repeats != 0,
     )
 
 
@@ -1361,8 +1382,13 @@ def str_extract(arr, pat, flags, n_cols):  # pragma: no cover
 
     out_arr_list = [
         # Note: extract can return duplicate values, so we have to
-        # set global dict to false
-        init_dict_arr(out_dict_arr_list[i], out_indices_arr.copy(), False)
+        # set _has_deduped_local_dictionary=False
+        init_dict_arr(
+            out_dict_arr_list[i],
+            out_indices_arr.copy(),
+            arr._has_global_dictionary,
+            False,
+        )
         for i in range(n_cols)
     ]
 
@@ -1447,8 +1473,9 @@ def create_extractall_methods(is_multi_group):
         "            out_match_arr[curr_ind] = k\n"
         "            curr_ind += 1\n"
         "    out_arr_list = [\n"
+        # Note: This operation can produce duplicate values.
         "        init_dict_arr(\n"
-        "            out_dict_arr_list[i], out_indices_arr.copy(), False\n"
+        "            out_dict_arr_list[i], out_indices_arr.copy(), arr._has_global_dictionary, False\n"
         "        )\n"
         "        for i in range(n_cols)\n"
         "    ]\n"

@@ -268,13 +268,14 @@ def gen_vectorized(
                     f"   indices = {arg_names[dict_encoded_arg]}._indices.copy()\n"
                 )
 
-                # In Bodo, if has _has_global_dictionary is True, we assume no duplicate values in the
+                # In Bodo, if has _has_deduped_local_dictionary is True, there are no duplicate values in the
                 # dictionary. Therefore, if we're performing an operation that may create duplicate values,
-                # we need to set the values appropriatly.
+                # we need to set the values appropriately.
+                func_text += f"   has_global = {arg_names[dict_encoded_arg]}._has_global_dictionary\n"
                 if may_cause_duplicate_dict_array_values:
-                    func_text += f"   has_global = False\n"
+                    func_text += f"   is_dict_unique = False\n"
                 else:
-                    func_text += f"   has_global = {arg_names[dict_encoded_arg]}._has_global_dictionary\n"
+                    func_text += f"   is_dict_unique = {arg_names[dict_encoded_arg]}._has_deduped_local_dictionary\n"
 
                 func_text += (
                     f"   {arg_names[i]} = {arg_names[dict_encoded_arg]}._data\n"
@@ -380,7 +381,7 @@ def gen_vectorized(
                 func_text += "            bodo.libs.array_kernels.setna(indices, i)\n"
             # If the output dtype is a string array, create the new dictionary encoded array
             if out_dtype == bodo.string_array_type:
-                func_text += "   res = bodo.libs.dict_arr_ext.init_dict_arr(res, indices, has_global)\n"
+                func_text += "   res = bodo.libs.dict_arr_ext.init_dict_arr(res, indices, has_global, is_dict_unique)\n"
             # Otherwise, use the indices to copy the values from the smaller array
             # into a larger one (flushing nulls along the way)
             else:
