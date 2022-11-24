@@ -1141,13 +1141,19 @@ def join_distributed_run(
     left_key_in_output = []
     right_key_in_output = []
 
-    # Determine the column numbers that are live.
+    # Determine the key numbers that are live.
+    # Note: This is not the same as the column number of the
+    # key and instead is i for join_node.left_keys[i]
     left_used_key_nums = set()
     right_used_key_nums = set()
+    # Determine the key input column numbers that are live.
+    # These are the actual column numbers for the keys
+    left_used_key_col_nums = set()
+    right_used_key_col_nums = set()
 
     # Generate a map for the general_merge_cond. Here we a
     # define a column by two values. The logical index is its
-    # column number in the Pandas DataFrame. In constrast the
+    # column number in the Pandas DataFrame. In contrast the
     # physical index is the actual location in the C++ table.
     # For example if our DataFrame had columns ["A", "B"], but
     # the C++ layout was ["B", "A"], then the columns would be
@@ -1167,7 +1173,7 @@ def join_distributed_run(
     # Extract the left column variables for the keys and determine
     # the physical index for each live column.
     left_key_vars = []
-    for c in join_node.left_keys:
+    for key_num, c in enumerate(join_node.left_keys):
         in_col_num = join_node.left_var_map[c]
         # If the inputs are array we need to collect the used vars
         if not join_node.is_left_table:
@@ -1187,19 +1193,21 @@ def join_distributed_run(
                 and join_node.index_col_num == in_col_num
             ):
                 out_physical_to_logical_list.append(out_col_num)
-                left_used_key_nums.add(in_col_num)
+                left_used_key_nums.add(key_num)
+                left_used_key_col_nums.add(in_col_num)
             else:
                 is_live = 0
         else:
             if out_col_num not in join_node.out_used_cols:
                 is_live = 0
             else:
-                if in_col_num in left_used_key_nums:
+                if in_col_num in left_used_key_col_nums:
                     # If a key is repeated it is only in the output
                     # once.
                     is_live = 0
                 else:
-                    left_used_key_nums.add(in_col_num)
+                    left_used_key_nums.add(key_num)
+                    left_used_key_col_nums.add(in_col_num)
                     out_physical_to_logical_list.append(out_col_num)
         left_physical_to_logical_list.append(in_col_num)
         left_logical_physical_map[in_col_num] = left_physical_index
@@ -1262,12 +1270,12 @@ def join_distributed_run(
     # Extract the right column variables for the keys and determine
     # the physical index for each live column.
     right_key_vars = []
-    for i, c in enumerate(join_node.right_keys):
+    for key_num, c in enumerate(join_node.right_keys):
         in_col_num = join_node.right_var_map[c]
         # If the inputs are array we need to collect the used vars
         if not join_node.is_right_table:
             right_key_vars.append(join_node.right_vars[in_col_num])
-        if not join_node.vect_same_key[i] and not join_node.is_join:
+        if not join_node.vect_same_key[key_num] and not join_node.is_join:
             is_live = 1
             if in_col_num not in join_node.right_to_output_map:
                 # This path is taken if the key is a common key but
@@ -1288,19 +1296,21 @@ def join_distributed_run(
                         and join_node.index_col_num == in_col_num
                     ):
                         out_physical_to_logical_list.append(out_col_num)
-                        right_used_key_nums.add(in_col_num)
+                        right_used_key_nums.add(key_num)
+                        right_used_key_col_nums.add(in_col_num)
                     else:
                         is_live = 0
                 else:
                     if out_col_num not in join_node.out_used_cols:
                         is_live = 0
                     else:
-                        if in_col_num in right_used_key_nums:
+                        if in_col_num in right_used_key_col_nums:
                             # If a key is repeated it is only in the output
                             # once.
                             is_live = 0
                         else:
-                            right_used_key_nums.add(in_col_num)
+                            right_used_key_nums.add(key_num)
+                            right_used_key_col_nums.add(in_col_num)
                             out_physical_to_logical_list.append(out_col_num)
             right_key_in_output.append(is_live)
         right_physical_to_logical_list.append(in_col_num)
@@ -2133,19 +2143,38 @@ def _gen_local_hash_join(
         # Only delete the C++ table if it is not a nullptr (0 output columns returns nullptr)
         func_text += "    delete_table(out_table)\n"
     if out_table_type != types.none:
+        # Create the left map from input key number to output col number
+        left_key_num_to_out_col_num = {}
+        for i, key in enumerate(join_node.left_keys):
+            # If the key is not used then its dead
+            if i in left_used_key_nums:
+                input_col_num = join_node.left_var_map[key]
+                left_key_num_to_out_col_num[i] = join_node.left_to_output_map[
+                    input_col_num
+                ]
         cast_map = determine_table_cast_map(
             matched_key_types,
             left_key_types,
             left_used_key_nums,
-            join_node.left_to_output_map,
+            left_key_num_to_out_col_num,
             False,
         )
+        # Create the right map from input key number to output col number
+        right_key_num_to_out_col_num = {}
+        for i, key in enumerate(join_node.right_keys):
+            # If the key is not used then its dead
+            if i in right_used_key_nums:
+                input_col_num = join_node.right_var_map[key]
+                right_key_num_to_out_col_num[i] = join_node.right_to_output_map[
+                    input_col_num
+                ]
         cast_map.update(
             determine_table_cast_map(
                 matched_key_types,
                 right_key_types,
                 right_used_key_nums,
-                join_node.right_to_output_map,
+                # Create an actual map from input key number to output
+                right_key_num_to_out_col_num,
                 False,
             )
         )
