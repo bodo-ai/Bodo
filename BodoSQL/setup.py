@@ -157,7 +157,7 @@ setup(
     # match Bodo version to install with BodoSQL version
     install_requires=[]
     if development_mode
-    else [f"bodo=={versioneer.get_version().split('+')[0]}", "py4j"],
+    else [f"bodo=={versioneer.get_version()}", "py4j"],
     python_requires=">=3.8,<3.11",
     # Update the build and develop commands
     cmdclass=cmdclass,
