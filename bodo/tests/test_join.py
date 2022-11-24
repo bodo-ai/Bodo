@@ -11,6 +11,7 @@ from decimal import Decimal
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 import bodo
@@ -3837,6 +3838,40 @@ def test_merge_repeat_key_same_frame(memory_leak_check):
     check_func(impl2, (df1, df2), sort_output=True, reset_index=True)
     check_func(impl3, (df1, df2), sort_output=True, reset_index=True)
     check_func(impl4, (df1, df2), sort_output=True, reset_index=True)
+
+
+def test_merge_output_cast_key_order(memory_leak_check):
+    """Test for the issue in [BE-3979], where a key in the output
+    needs to be cast back to a smaller type but the key number and
+    input column numbers differ.
+    """
+
+    def impl(df1, df2):
+        return df1.merge(df2, left_on=["l1", "l0"], right_on=["r0", "r1"], how="outer")
+
+    df1 = pd.DataFrame(
+        {
+            "l0": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["abc", "b", "h", "abc", "h", "b", "cde"],
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+            "l1": pd.Series([1, 2, 3, 4, 5, 6, 7], dtype="Int32"),
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "r0": pd.Series([1, 2, 3, 4, 5, 6, 7], dtype="Int64"),
+            "r1": pd.arrays.ArrowStringArray(
+                pa.array(
+                    ["abc", "b", "h", "abc", "h", "b", "cde"],
+                    type=pa.dictionary(pa.int32(), pa.string()),
+                )
+            ),
+        }
+    )
+    check_func(impl, (df1, df2), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
