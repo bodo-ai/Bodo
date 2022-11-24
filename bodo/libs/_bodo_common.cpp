@@ -132,6 +132,7 @@ array_info& array_info::operator=(array_info&& other) noexcept {
         this->scale = other.scale;
         this->num_categories = other.num_categories;
         this->has_global_dictionary = other.has_global_dictionary;
+        this->has_deduped_local_dictionary = other.has_deduped_local_dictionary;
         this->has_sorted_dictionary = other.has_sorted_dictionary;
         this->info1 = other.info1;
         this->info2 = other.info2;
@@ -243,18 +244,19 @@ array_info* alloc_string_array(int64_t length, int64_t n_chars,
 
 array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
                                     int64_t n_chars_keys,
-                                    bool has_global_dictionary) {
+                                    bool has_global_dictionary,
+                                    bool has_deduped_local_dictionary) {
     // dictionary
     array_info* dict_data_arr = alloc_string_array(n_keys, n_chars_keys, 0);
     // indices
     array_info* indices_data_arr =
         alloc_nullable_array(length, Bodo_CTypes::INT32, 0);
 
-    return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
-                          length, -1, -1, NULL, NULL, NULL,
-                          indices_data_arr->null_bitmask, NULL, NULL, NULL,
-                          NULL, 0, 0, 0, has_global_dictionary, false,
-                          dict_data_arr, indices_data_arr);
+    return new array_info(
+        bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1, -1,
+        NULL, NULL, NULL, indices_data_arr->null_bitmask, NULL, NULL, NULL,
+        NULL, 0, 0, 0, has_global_dictionary, has_deduped_local_dictionary,
+        false, dict_data_arr, indices_data_arr);
 }
 
 /**
@@ -485,7 +487,7 @@ array_info* alloc_array(int64_t length, int64_t n_sub_elems,
 
     if (arr_type == bodo_array_type::DICT)
         return alloc_dict_string_array(length, n_sub_elems, n_sub_sub_elems,
-                                       false);
+                                       false, false);
 
     Bodo_PyErr_SetString(PyExc_RuntimeError, "Type not covered in alloc_array");
     return nullptr;
@@ -596,11 +598,11 @@ array_info* copy_array(array_info* earr) {
     if (earr->arr_type == bodo_array_type::DICT) {
         array_info* dictionary = copy_array(earr->info1);
         array_info* indices = copy_array(earr->info2);
-        farr = new array_info(bodo_array_type::DICT, earr->dtype,
-                              indices->length, -1, -1, NULL, NULL, NULL,
-                              indices->null_bitmask, NULL, NULL, NULL, NULL, 0,
-                              0, 0, earr->has_global_dictionary,
-                              earr->has_sorted_dictionary, dictionary, indices);
+        farr = new array_info(
+            bodo_array_type::DICT, earr->dtype, indices->length, -1, -1, NULL,
+            NULL, NULL, indices->null_bitmask, NULL, NULL, NULL, NULL, 0, 0, 0,
+            earr->has_global_dictionary, earr->has_deduped_local_dictionary,
+            earr->has_sorted_dictionary, dictionary, indices);
     } else {
         farr = alloc_array(earr->length, earr->n_sub_elems,
                            earr->n_sub_sub_elems, earr->arr_type, earr->dtype,

@@ -228,16 +228,15 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         // Convert all local dictionaries to global (and with sorted indices)
         // for all dict columns (not just transformed columns).
         // `sort_values_table` actually does this as well (call
-        // convert_local_dictionary_to_global), but it then doesn't incref the
+        // make_dictionary_global_and_unique), but it then doesn't incref the
         // new arrays, so we need to convert them to global dictionaries here,
         // incref the new global dictionary appropriately and then call
         // sort_values_table.
-        if (is_parallel) {
-            for (auto a : new_cols) {
-                if ((a->arr_type == bodo_array_type::DICT) &&
-                    !a->has_global_dictionary) {
-                    convert_local_dictionary_to_global(a, is_parallel, true);
-                }
+        for (auto a : new_cols) {
+            if (a->arr_type == bodo_array_type::DICT) {
+                // Note: Sorting is an optimization but not required. This
+                // is equivalent to the parquet_write
+                make_dictionary_global_and_unique(a, is_parallel, true);
             }
         }
 
@@ -377,12 +376,9 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         // In case of identity transform, since transformed column is
         // just the original column, the original column will also
         // get a global dictionary.
-        if (is_parallel) {
-            for (auto a : transform_cols) {
-                if ((a->arr_type == bodo_array_type::DICT) &&
-                    !a->has_global_dictionary) {
-                    convert_local_dictionary_to_global(a, is_parallel);
-                }
+        for (auto a : transform_cols) {
+            if (a->arr_type == bodo_array_type::DICT) {
+                make_dictionary_global_and_unique(a, is_parallel);
             }
         }
 
@@ -414,7 +410,7 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
 
         new_table->num_keys = transform_cols.size();
         for (uint64_t i = 0; i < new_table->nrows(); i++) {
-            multi_col_key key(hashes[i], new_table, i);
+            multi_col_key key(hashes[i], new_table, i, is_parallel);
             partition_write_info &p = key_to_partition[key];
             if (p.rows.size() == 0) {
                 // This is the path after the table_loc that will

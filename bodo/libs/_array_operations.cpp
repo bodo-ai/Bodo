@@ -358,15 +358,15 @@ table_info* sort_values_table(table_info* in_table, int64_t n_key_t,
             // distributed source the rows per rank may change.
             *out_n_rows = (int64_t)in_table->nrows();
 
-        if (parallel) {
-            // Convert all local dictionaries to global for dict columns.
-            // Also sort the dictionaries, so the sorting process
-            // is more efficient (we can compare indices directly)
-            for (array_info* arr : in_table->columns) {
-                if (arr->arr_type == bodo_array_type::DICT) {
-                    if (!arr->has_global_dictionary)
-                        convert_local_dictionary_to_global(arr, parallel, true);
-                }
+        // Convert all local dictionaries to global for dict columns.
+        // Also sort the dictionaries, so the sorting process
+        // is more efficient (we can compare indices directly)
+        for (array_info* arr : in_table->columns) {
+            if (arr->arr_type == bodo_array_type::DICT) {
+                // For dictionary encoded arrays we need the data to be unique
+                // and global in case the dictionary is sorted (because we will
+                // compare indices directly)
+                make_dictionary_global_and_unique(arr, parallel, true);
             }
         }
 
@@ -629,21 +629,20 @@ table_info* drop_duplicates_table_inner(table_info* in_table, int64_t num_keys,
         array_info* key = in_table->columns[iKey];
         // If we are dropping duplicates dictionary encoding assumes
         // that the dictionary values are unique.
-        // TODO: Replace convert_local_dictionary_to_global with a
-        // function that drops duplicates on each rank without requiring
-        // a global value and separate `is_global` from `is_unique_local`.
         if (key->arr_type == bodo_array_type::DICT) {
-            if (!key->has_global_dictionary)
-                convert_local_dictionary_to_global(key, is_parallel);
+            // If this is parallel it benefits us to gather the data
+            // as early as possible to remove any possible duplicates.
+            make_dictionary_global_and_unique(key, is_parallel);
             key = key->info2;
         }
         key_arrs[iKey] = key;
     }
 
     uint32_t seed = SEED_HASH_CONTAINER;
-    if (hashes == nullptr)
+    if (hashes == nullptr) {
         hashes = hash_keys(key_arrs, seed, is_parallel,
                            /*global_dict_needed=*/false);
+    }
     HashDropDuplicates hash_fct{hashes};
     KeyEqualDropDuplicates equal_fct{&key_arrs, num_keys};
     UNORD_MAP_CONTAINER<size_t, size_t, HashDropDuplicates,
