@@ -24,7 +24,7 @@ _cov_corr_series = [
         ([np.nan, -2.0, 3.0, 9.1], [np.nan, -2.0, 3.0, 5.0]),
         # TODO(quasilyte): more intricate data for complex-typed series.
         # Some arguments make assert_almost_equal fail.
-        # Functions that yield mismaching results: _column_corr_impl and _column_cov_impl.
+        # Functions that yield mismatching results: _column_corr_impl and _column_cov_impl.
         (
             [complex(-2.0, 1.0), complex(3.0, 1.0)],
             [complex(-3.0, 1.0), complex(2.0, 1.0)],

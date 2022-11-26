@@ -247,7 +247,7 @@ def _gen_df_str(n):
 
 def _gen_df_binary(n, seed=None):
     """
-    helper function that generate dataframe with int and binary columns.
+    helper function that generate DataFrame with int and binary columns.
     Takes an optional seed argument for use with np.random.seed.
     """
     if seed == None:
