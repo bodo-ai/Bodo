@@ -164,6 +164,24 @@ def overload_unicode_to_utf8(s):
     return lambda s: unicode_to_utf8_and_len(s)[0]  # pragma: no cover
 
 
+def unicode_to_utf8_len(s):  # pragma: no cover
+    return s
+
+
+@overload(unicode_to_utf8_len)
+def overload_unicode_to_utf8_len(s):
+    """Obtain the length of a unicode string when encoded in
+    utf8. Currently this requires converting to utf8.
+
+    Args:
+        s (types.unicode_type): String in unicode
+
+    Returns:
+        types.int64: length of the string as a utf8 string.
+    """
+    return lambda s: unicode_to_utf8_and_len(s)[1]  # pragma: no cover
+
+
 @overload(max)
 def overload_builtin_max(lhs, rhs):
     if lhs == types.unicode_type and rhs == types.unicode_type:
