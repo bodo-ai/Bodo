@@ -340,6 +340,16 @@ def overload_getitem(A, ind):
 
         return impl_bool
 
+    # int arr indexing
+    if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+
+        def impl_int_arr(A, ind):  # pragma: no cover
+            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            new_data = ensure_contig_if_np(A._data[ind])
+            return init_pandas_datetime_array(new_data, tz)
+
+        return impl_int_arr
+
     # slice indexing
     if isinstance(ind, types.SliceType):
 
@@ -350,7 +360,7 @@ def overload_getitem(A, ind):
         return impl_slice
 
     raise BodoError(
-        "operator.getitem with DatetimeArrayType is only supported with an integer index, boolean array, or slice."
+        "operator.getitem with DatetimeArrayType is only supported with an integer index, int arr, boolean array, or slice."
     )
 
 

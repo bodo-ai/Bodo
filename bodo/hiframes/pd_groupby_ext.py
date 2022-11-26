@@ -106,10 +106,7 @@ class DataFrameGroupByType(types.Type):  # TODO: IterableType over groups
         series_select=False,
         _num_shuffle_keys=-1,
     ):
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            df_type, "pandas.groupby()"
-        )
-
+        # TODO [BE-3982]: Ensure full groupby support with tz-aware keys and data.
         self.df_type = df_type
         self.keys = keys
         self.selection = selection
