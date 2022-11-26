@@ -1288,7 +1288,7 @@ def set_bitmap_all_NA(typingctx, arr_typ=None):
 def pre_alloc_string_array(n_strs, n_chars):  # pragma: no cover
     """
     Wrapper for String Array Allocation with Pre- and Post- Processing
-    Preprocessing: Convering Inputs to Numpy Types
+    Preprocessing: Converting Inputs to Numpy Types
     Postprocessing: Sets offsets to 0 if n_chars == 0
 
     n_strs: int = Number of Strings in Array
@@ -1313,8 +1313,8 @@ def pre_alloc_string_array(n_strs, n_chars):  # pragma: no cover
 @register_jitable
 def gen_na_str_array_lens(n_strs, total_len, len_arr):
     """
-    Allocates a string array with initally all NA values,
-    but sets the offsets with values based on the cummulative
+    Allocates a string array with initially all NA values,
+    but sets the offsets with values based on the cumulative
     sum of the len_arr.
     """
     str_arr = pre_alloc_string_array(n_strs, total_len)
