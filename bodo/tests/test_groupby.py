@@ -6451,3 +6451,46 @@ def test_boolagg_or_invalid(data_col, memory_leak_check):
         match="boolor_agg, only columns of type integer, float, Decimal, or boolean type are allowed",
     ):
         impl(df)
+
+
+def test_tz_aware_gb_apply(memory_leak_check):
+    """
+    Tests using groupby.apply with a tz-aware column as a data column on a
+    supported operation.
+    """
+
+    def udf(data_df):
+        # Sort by the tz-aware column
+        new_df = data_df.sort_values(
+            by=[
+                "B",
+            ],
+            ascending=[
+                True,
+            ],
+        )
+        # Check the order
+        return new_df["C"].iat[0]
+
+    def impl(df):
+        return df.groupby("A").apply(udf)
+
+    df = pd.DataFrame(
+        {
+            "A": ["A", "B", "C", "D"] * 5,
+            "B": pd.date_range(
+                start="1/1/2022",
+                freq="16D5H",
+                periods=20,
+                tz="Poland",
+            ).to_series(),
+            "C": list("abcdefgABCDEFGhijkML"),
+        }
+    )
+
+    check_func(
+        impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+    )
