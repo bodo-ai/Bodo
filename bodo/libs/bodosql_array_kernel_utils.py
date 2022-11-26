@@ -469,7 +469,7 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
         func_text += f"   if {arg_names[0]}[{i}] is None:\n"
         func_text += f"      return {func_name}(({', '.join(args1)}))\n"
         func_text += f"   else:\n"
-        func_text += f"      return {func_name}(({', '.join(args2)}))"
+        func_text += f"      return {func_name}(({', '.join(args2)}))\n"
     else:
         args1 = [arg_names[j] if j != i else "None" for j in range(len(arg_names))]
         args2 = [
@@ -482,7 +482,7 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
         func_text += f"   if {arg_names[i]} is None:\n"
         func_text += f"      return {func_name}({', '.join(args1)})\n"
         func_text += f"   else:\n"
-        func_text += f"      return {func_name}({', '.join(args2)})"
+        func_text += f"      return {func_name}({', '.join(args2)})\n"
 
     loc_vars = {}
     exec(
@@ -493,7 +493,6 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
         },
         loc_vars,
     )
-
     impl = loc_vars["impl"]
 
     return impl

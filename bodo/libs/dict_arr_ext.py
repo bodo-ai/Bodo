@@ -1041,7 +1041,7 @@ _register_simple_str2str_methods()
 @register_jitable
 def str_index(arr, sub, start, end):  # pragma: no cover
     """Implement optimized string index for dictionary encoded arrays
-    The function will return the index of the first occurence of
+    The function will return the index of the first occurrence of
     sub in arr[start, end) if sub is present and raise ValueError instead of -1
      if the value is not found
 
@@ -1080,7 +1080,7 @@ def str_index(arr, sub, start, end):  # pragma: no cover
 @register_jitable
 def str_rindex(arr, sub, start, end):  # pragma: no cover
     """Implement optimized string rindex for dictionary encoded arrays
-    The function will return the index of the last occurence of
+    The function will return the index of the last occurrence of
     sub in arr[start, end) if sub is present and raise ValueError instead of -1
      if the value is not found
 
@@ -1170,7 +1170,7 @@ _register_find_methods()
 def str_count(arr, pat, flags):  # pragma: no cover
     """
     Implement optimized string count for dictionary array
-    Count the number of occurences of pattern in each string
+    Count the number of occurrences of pattern in each string
     """
     data_arr = arr._data
     indices_arr = arr._indices

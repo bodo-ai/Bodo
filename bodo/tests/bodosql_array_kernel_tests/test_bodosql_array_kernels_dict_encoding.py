@@ -14,7 +14,7 @@ from bodo.tests.utils import SeriesOptTestPipeline, check_func, dist_IR_contains
 
 def verify_dictionary_optimization(func, args, dict_func, output_encoded):
     """Verifies whether or not the output to a function with certain arguments
-    is dictionary encoded by looking for an occurrence of a certain funciton
+    is dictionary encoded by looking for an occurrence of a certain function
     that only operates on dictionary encoded arrays.
 
     Args:
@@ -656,7 +656,7 @@ def test_dict_strtok(args):
                     ),
                     " ",
                 ),
-                False,
+                True,
             ),
             id="dict_scalar",
         ),
