@@ -470,8 +470,8 @@ public class RelationalAlgebraGenerator {
                * Planner rule that ensures filter is always pushed into join. This is needed
                * for complex queries.
                */
-              // Skip filter project transpose until themarket insights plan is fixed.
-              // .addRuleInstance(FilterProjectTransposeRule.Config.DEFAULT.toRule())
+              // Ensure filters always occur before projections.
+              .addRuleInstance(FilterProjectTransposeRule.Config.DEFAULT.toRule())
               // Prune trivial cross-joins
               .addRuleInstance(InnerJoinRemoveRule.Config.DEFAULT.toRule())
               // Rewrite filters in either Filter or Join to convert OR with shared subexpression
