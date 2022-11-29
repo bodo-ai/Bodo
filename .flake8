@@ -1,12 +1,24 @@
 [flake8]
-max-line-length = 80
-select = 
-	B950,	# B950 warning instead of E501 recommended by Black
 
+# Note: Flake8 does not support inline comments, and will sometimes crash after 6.0.0
+# Comments must be on a separate line from now on
+# See https://flake8.pycqa.org/en/latest/user/configuration.html#project-configuration
+
+max-line-length = 80
+
+# Select the following error codes to report:
+# B950: warning instead of E501 recommended by Black
+select = 
+	B950,
+
+# Ignore the following errors:
+# E501: Line too long
+# E203: whitespace before ':' not PEP 8 compliant
+# W503: line break before binary operator not PEP 8 compliant
 ignore = 
-	E501,   # Line too long
-	E203,	# whitespace before ':' not PEP 8 compliant
-	W503,	# line break before binary operator not PEP 8 compliant
+	E501,
+	E203,
+	W503,
 
 exclude =
 	__pycache__
