@@ -210,6 +210,10 @@ def is_alloc_callname(func_name, mod_name):
             and mod_name == "bodo.hiframes.pd_categorical_ext"
         )
         or (func_name == "gen_na_array" and mod_name == "bodo.libs.array_kernels")
+        or (
+            func_name == "alloc_pd_datetime_array"
+            and mod_name == "bodo.libs.pd_datetime_arr_ext"
+        )
     )
 
 
@@ -735,7 +739,6 @@ def overload_alloc_type(n, t, s=None):
     needed for allocation.
     """
     typ = t.instance_type if isinstance(t, types.TypeRef) else t
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(typ, "bodo.alloc_type()")
 
     # NOTE: creating regular string array for dictionary-encoded strings to get existing
     # code that doesn't support dict arr to work
@@ -829,6 +832,14 @@ def overload_alloc_type(n, t, s=None):
         scale = typ.dtype.scale
         return lambda n, t, s=None: bodo.libs.decimal_arr_ext.alloc_decimal_array(
             n, precision, scale
+        )  # pragma: no cover
+
+    if isinstance(typ, bodo.DatetimeArrayType):
+        tz_literal = typ.tz
+        return (
+            lambda n, t, s=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                n, tz_literal
+            )
         )  # pragma: no cover
 
     dtype = numba.np.numpy_support.as_dtype(typ.dtype)

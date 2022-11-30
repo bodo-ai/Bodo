@@ -230,13 +230,14 @@ struct array_info {
     NRT_MemInfo* meminfo;
     NRT_MemInfo* meminfo_bitmask;
     std::shared_ptr<arrow::Array> array;
-    int32_t precision;           // for array of decimals and times
-    int32_t scale;               // for array of decimals
-    uint64_t num_categories;     // for categorical arrays
-    bool has_global_dictionary;  // for dict-encoded arrays
-    bool has_sorted_dictionary;  // for dict-encoded arrays
-    array_info* info1;           // for dict-encoded arrays
-    array_info* info2;           // for dict-encoded arrays
+    int32_t precision;                  // for array of decimals and times
+    int32_t scale;                      // for array of decimals
+    uint64_t num_categories;            // for categorical arrays
+    bool has_global_dictionary;         // for dict-encoded arrays
+    bool has_deduped_local_dictionary;  // for dict-encoded arrays
+    bool has_sorted_dictionary;         // for dict-encoded arrays
+    array_info* info1;                  // for dict-encoded arrays
+    array_info* info2;                  // for dict-encoded arrays
     // TODO: shape/stride for multi-dim arrays
     explicit array_info(bodo_array_type::arr_type_enum _arr_type,
                         Bodo_CTypes::CTypeEnum _dtype, int64_t _length,
@@ -248,6 +249,7 @@ struct array_info {
                         int32_t _precision = 0, int32_t _scale = 0,
                         int64_t _num_categories = 0,
                         bool _has_global_dictionary = false,
+                        bool _has_deduped_local_dictionary = false,
                         bool _has_sorted_dictionary = false,
                         array_info* _info1 = nullptr,
                         array_info* _info2 = nullptr)
@@ -268,6 +270,7 @@ struct array_info {
           scale(_scale),
           num_categories(_num_categories),
           has_global_dictionary(_has_global_dictionary),
+          has_deduped_local_dictionary(_has_deduped_local_dictionary),
           has_sorted_dictionary(_has_sorted_dictionary),
           info1(_info1),
           info2(_info2) {}
@@ -362,8 +365,8 @@ struct array_info {
                 return "False";
             default: {
                 std::vector<char> error_msg(100);
-                sprintf(error_msg.data(),
-                        "val_to_str not implemented for dtype %d", dtype);
+                snprintf(error_msg.data(), error_msg.size(),
+                         "val_to_str not implemented for dtype %d", dtype);
                 throw std::runtime_error(error_msg.data());
             }
         }
@@ -413,7 +416,8 @@ array_info* alloc_list_string_array(int64_t n_lists, int64_t n_strings,
 
 array_info* alloc_dict_string_array(int64_t length, int64_t n_keys,
                                     int64_t n_chars_keys,
-                                    bool has_global_dictionary);
+                                    bool has_global_dictionary,
+                                    bool has_deduped_local_dictionary);
 
 /* The "get-value" functionality for array_info.
    This is the equivalent of at functionality.

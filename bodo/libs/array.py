@@ -78,6 +78,9 @@ ll.add_symbol("string_array_to_info", array_ext.string_array_to_info)
 ll.add_symbol("dict_str_array_to_info", array_ext.dict_str_array_to_info)
 ll.add_symbol("get_nested_info", array_ext.get_nested_info)
 ll.add_symbol("get_has_global_dictionary", array_ext.get_has_global_dictionary)
+ll.add_symbol(
+    "get_has_deduped_local_dictionary", array_ext.get_has_deduped_local_dictionary
+)
 ll.add_symbol("numpy_array_to_info", array_ext.numpy_array_to_info)
 ll.add_symbol("categorical_array_to_info", array_ext.categorical_array_to_info)
 ll.add_symbol("nullable_array_to_info", array_ext.nullable_array_to_info)
@@ -111,6 +114,9 @@ ll.add_symbol("shuffle_renormalization_group", array_ext.shuffle_renormalization
 ll.add_symbol("groupby_and_aggregate", array_ext.groupby_and_aggregate)
 ll.add_symbol(
     "convert_local_dictionary_to_global", array_ext.convert_local_dictionary_to_global
+)
+ll.add_symbol(
+    "drop_duplicates_local_dictionary", array_ext.drop_duplicates_local_dictionary
 )
 ll.add_symbol("get_groupby_labels", array_ext.get_groupby_labels)
 ll.add_symbol("array_isin", array_ext.array_isin)
@@ -524,6 +530,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                 lir.IntType(8).as_pointer(),  # string_array_info
                 lir.IntType(8).as_pointer(),  # indices_arr_info
                 lir.IntType(32),  # has_global_dictionary flag
+                lir.IntType(32),  # has_deduped_local_dictionary flag
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -532,12 +539,16 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
 
         # cast boolean to int32 to avoid potential bool data model mismatch
         has_global_dictionary = builder.zext(arr.has_global_dictionary, lir.IntType(32))
+        has_deduped_local_dictionary = builder.zext(
+            arr.has_deduped_local_dictionary, lir.IntType(32)
+        )
         return builder.call(
             fn_tp,
             [
                 str_arr_info,
                 indices_arr_info,
                 has_global_dictionary,
+                has_deduped_local_dictionary,
             ],
         )
 
@@ -1309,6 +1320,21 @@ def info_to_array_codegen(context, builder, sig, args):
         # cast int32 to bool
         dict_array.has_global_dictionary = builder.trunc(
             has_global_dictionary, cgutils.bool_t
+        )
+
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="get_has_deduped_local_dictionary"
+        )
+        has_deduped_local_dictionary = builder.call(
+            fn_tp,
+            [
+                in_info,
+            ],
+        )
+
+        # cast int32 to bool
+        dict_array.has_deduped_local_dictionary = builder.trunc(
+            has_deduped_local_dictionary, cgutils.bool_t
         )
 
         return dict_array._getvalue()
@@ -2673,6 +2699,23 @@ def groupby_and_aggregate(
         ),
         codegen,
     )
+
+
+_drop_duplicates_local_dictionary = types.ExternalFunction(
+    "drop_duplicates_local_dictionary",
+    types.void(array_info_type, types.bool_),
+)
+
+
+@numba.njit(no_cpython_wrapper=True)
+def drop_duplicates_local_dictionary(dict_arr, sort_dictionary):  # pragma: no cover
+    dict_arr_info = array_to_info(dict_arr)
+    # The _drop_duplicates_local_dictionary operation is done by modifying the
+    # existing pointer, which is why we call info_to_array on the original array info
+    _drop_duplicates_local_dictionary(dict_arr_info, sort_dictionary)
+    check_and_propagate_cpp_exception()
+    out_arr = info_to_array(dict_arr_info, bodo.dict_str_arr_type)
+    return out_arr
 
 
 _convert_local_dictionary_to_global = types.ExternalFunction(

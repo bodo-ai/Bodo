@@ -115,7 +115,7 @@ def change_event(S):
                 starting_index = i
                 break
         # Loop over the remaining values and add 1 to the rolling sum each time
-        # the array's value does not equal the most recent non-null vlaue
+        # the array's value does not equal the most recent non-null value
         if starting_index != -1:
             most_recent = data[starting_index]
             for i in range(starting_index + 1, n):
