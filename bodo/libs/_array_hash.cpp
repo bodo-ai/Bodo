@@ -493,8 +493,9 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
                                  is_parallel, use_murmurhash);
     }
     if (array->arr_type == bodo_array_type::DICT) {
-        if (array->has_global_dictionary || !is_parallel ||
-            !global_dict_needed) {
+        if ((array->has_global_dictionary &&
+             array->has_deduped_local_dictionary) ||
+            !is_parallel || !global_dict_needed) {
             // in this case we can just hash the indices since the dictionary is
             // synchronized across ranks or is only needed for a local
             // operation where hashing based on local dictionary won't affect
@@ -512,8 +513,8 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
             //   if we are going to end up converting to global dictionary as
             //   part of the operation that called hash_array())
             throw std::runtime_error(
-                "hashing dictionary array requires global dictionary in this "
-                "context");
+                "hashing dictionary array requires global dictionary "
+                "with unique values in this context");
         }
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
@@ -682,7 +683,8 @@ static void hash_array_combine_string(uint32_t* out_hashes, char* data,
 
 // See hash_array for documentation of parameters
 void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                        const uint32_t seed, bool global_dict_needed) {
+                        const uint32_t seed, bool global_dict_needed,
+                        bool is_parallel) {
     // dispatch to proper function
     // TODO: general dispatcher
     if (array->arr_type == bodo_array_type::ARROW) {
@@ -696,7 +698,9 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
             (uint8_t*)array->null_bitmask, n_rows, seed);
     }
     if (array->arr_type == bodo_array_type::DICT) {
-        if (array->has_global_dictionary || !global_dict_needed) {
+        if ((array->has_global_dictionary &&
+             array->has_deduped_local_dictionary) ||
+            !global_dict_needed || !is_parallel) {
             // in this case we can just hash the indices since the dictionary is
             // synchronized across ranks or is only needed for a local
             // operation where hashing based on local dictionary won't affect
@@ -714,8 +718,8 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
             //   if we are going to end up converting to global dictionary as
             //   part of the operation that called hash_array())
             throw std::runtime_error(
-                "hashing dictionary array requires global dictionary in this "
-                "context");
+                "hashing dictionary array requires global dictionary "
+                "with unique values in this context");
         }
     }
     if (array->arr_type == bodo_array_type::LIST_STRING) {
@@ -892,12 +896,13 @@ void coherent_hash_array(uint32_t* out_hashes, array_info* array,
         // unify_dictionaries and is checked above.
         //
         // 3. The dictionary does not contain any duplicate values. This is
-        // enforced by the has_global_dictionary check in unify_dictionaries
-        // and is updated by convert_local_dictionary_to_global. In particular,
-        // convert_local_dictionary_to_global contains a drop duplicates step
-        // that ensures all values are unique. If the dictionary is made global
-        // by some other means (e.g. Python), then we assume that is also
-        // unique.
+        // enforced by the has_deduped_local_dictionary check in
+        // unify_dictionaries and is updated by
+        // make_dictionary_global_and_unique. In particular,
+        // make_dictionary_global_and_unique contains a drop duplicates step
+        // that ensures all values are unique. If the dictionary is modified
+        // by some other means (e.g. Python), then we assume that it also
+        // updates the flags appropriately.
         throw std::runtime_error(
             "coherent_hash_array: don't know if arrays have unified "
             "dictionary");
@@ -1076,12 +1081,13 @@ void coherent_hash_array_combine_inner_double(uint32_t* out_hashes,
 
 void coherent_hash_array_combine(uint32_t* out_hashes, array_info* array,
                                  array_info* ref_array, size_t n_rows,
-                                 const uint32_t seed) {
+                                 const uint32_t seed, bool is_parallel) {
     // For those types, no type conversion is ever needed.
     if (array->arr_type == bodo_array_type::ARROW ||
         array->arr_type == bodo_array_type::STRING ||
         array->arr_type == bodo_array_type::LIST_STRING) {
-        return hash_array_combine(out_hashes, array, n_rows, seed, true);
+        return hash_array_combine(out_hashes, array, n_rows, seed, true,
+                                  is_parallel);
     }
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
     // For DATE / DATETIME / TIMEDELTA / DECIMAL no type conversion is allowed
@@ -1090,12 +1096,14 @@ void coherent_hash_array_combine(uint32_t* out_hashes, array_info* array,
         array->dtype == Bodo_CTypes::TIMEDELTA ||
         array->dtype == Bodo_CTypes::DECIMAL ||
         array->dtype == Bodo_CTypes::_BOOL) {
-        return hash_array_combine(out_hashes, array, n_rows, seed, true);
+        return hash_array_combine(out_hashes, array, n_rows, seed, true,
+                                  is_parallel);
     }
     // If we have the same type on left or right then no need
     if (array->arr_type == ref_array->arr_type ||
         array->dtype == ref_array->dtype) {
-        return hash_array_combine(out_hashes, array, n_rows, seed, true);
+        return hash_array_combine(out_hashes, array, n_rows, seed, true,
+                                  is_parallel);
     }
     // If both are unsigned int, we convert to uint64_t
     if (is_unsigned_integer(array->dtype) &&
@@ -1188,17 +1196,19 @@ void coherent_hash_array_combine(uint32_t* out_hashes, array_info* array,
    @param ref_key_arrs: the keys on the other side. Used only for their
    arr_type/dtype
    @param seed: the seed used as input
+   @param is_parallel: Is the input data distributed
    @return returning the list of hashes.
  */
 uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
                              std::vector<array_info*> const& ref_key_arrs,
-                             const uint32_t seed) {
+                             const uint32_t seed, bool is_parallel) {
     size_t n_rows = (size_t)key_arrs[0]->length;
     uint32_t* hashes = new uint32_t[n_rows];
-    coherent_hash_array(hashes, key_arrs[0], ref_key_arrs[0], n_rows, seed);
+    coherent_hash_array(hashes, key_arrs[0], ref_key_arrs[0], n_rows, seed,
+                        is_parallel);
     for (size_t i = 1; i < key_arrs.size(); i++) {
         coherent_hash_array_combine(hashes, key_arrs[i], ref_key_arrs[i],
-                                    n_rows, seed);
+                                    n_rows, seed, is_parallel);
     }
     return hashes;
 }
@@ -1215,20 +1225,33 @@ uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
     // combine other array hashes
     for (size_t i = 1; i < key_arrs.size(); i++) {
         hash_array_combine(hashes, key_arrs[i], n_rows, seed,
-                           global_dict_needed);
+                           global_dict_needed, is_parallel);
     }
     return hashes;
 }
 
-void unify_dictionaries(array_info* arr1, array_info* arr2) {
-    // TODO To simplify things for now we require dictionaries to be global
-    if (!arr1->has_global_dictionary)
+void unify_dictionaries(array_info* arr1, array_info* arr2,
+                        bool arr1_is_parallel, bool arr2_is_parallel) {
+    if (arr1_is_parallel && !arr1->has_global_dictionary) {
         throw std::runtime_error(
             "unify_dictionaries: first array does not have global dictionary");
+    }
+    if (!arr1->has_deduped_local_dictionary) {
+        throw std::runtime_error(
+            "unify_dictionaries: first array's dictionary has duplicate "
+            "values");
+    }
 
-    if (!arr2->has_global_dictionary)
+    if (arr2_is_parallel && !arr2->has_global_dictionary) {
         throw std::runtime_error(
             "unify_dictionaries: second array does not have global dictionary");
+    }
+
+    if (!arr2->has_deduped_local_dictionary) {
+        throw std::runtime_error(
+            "unify_dictionaries: second array's dictionary has duplicate "
+            "values");
+    }
 
     if (arr1->info1 == arr2->info1) return;  // dictionaries are the same
 

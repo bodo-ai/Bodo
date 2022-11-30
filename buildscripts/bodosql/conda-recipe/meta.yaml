@@ -18,12 +18,11 @@ requirements:
         - openjdk >=9.0, <12
         - maven
         - ninja
-        - bodo {{ BODO_MINOR_VERSION }}.*
+        - bodo {{ BODO_VERSION }}
 
     run:
         - openjdk >=9.0
-        # require that the Bodo version at runtime matches the BodoSQL version
-        - bodo {{ BODO_MINOR_VERSION }}.*
+        - bodo {{ BODO_VERSION }}
         - py4j
         - python >=3.8,<3.11
 

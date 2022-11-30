@@ -25,6 +25,10 @@ def overload_coalesce(A):
         raise_bodo_error("Coalesce argument must be a tuple")
     for i in range(len(A)):
         if isinstance(A[i], types.optional):
+            # Note: If we have an optional scalar and its not the last argument,
+            # then the NULL vs non-NULL case can lead to different decisions
+            # about dictionary encoding in the output. This will lead to a memory
+            # leak as the dict-encoding result will be cast to a regular string array.
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.coalesce",
                 ["A"],
@@ -49,8 +53,11 @@ def overload_coalesce_util(A):
        1+ columns/scalars and returns the first value from each row that is
        not NULL.
 
-       This kernel has optimized implementations for handling strings. If dealing
-       with normal string arrays we avoid any intermediate allocation by using get_str_arr_item_copy.
+       This kernel has optimized implementations for handling strings. First, if dealing
+        with normal string arrays we avoid any intermediate allocation by using get_str_arr_item_copy.
+
+        Next, we also keep the output dictionary encoded if all inputs are a dictionary encoded
+        array followed by possibly one scalar value.
 
     Args:
         A (any array/scalar tuple): the array of values that are coalesced
@@ -68,6 +75,7 @@ def overload_coalesce_util(A):
     # Figure out which columns can be ignored (NULLS or after a scalar)
     array_override = None
     dead_cols = []
+    has_array_output = False
     for i in range(len(A)):
         if A[i] == bodo.none:
             dead_cols.append(i)
@@ -79,28 +87,75 @@ def overload_coalesce_util(A):
                     # rare edge case where a scalar comes before an array so the
                     # length of the column needs to be determined from a later array.
                     array_override = f"A[{j}]"
+                    has_array_output = True
             break
+        else:
+            has_array_output = True
 
     arg_names = [f"A{i}" for i in range(len(A)) if i not in dead_cols]
     arg_types = [A[i] for i in range(len(A)) if i not in dead_cols]
-    # Determine if we have string data.
-    is_string_data = False
-    if arg_types:
-        single_arg_typ = arg_types[0]
-        is_string_data = (
-            single_arg_typ == bodo.string_type
-            or is_str_arr_type(single_arg_typ)
-            or (
-                isinstance(single_arg_typ, bodo.SeriesType)
-                and is_str_arr_type(single_arg_typ.data)
-            )
-        )
+    # Determine the output dtype
+    out_dtype = get_common_broadcasted_type(arg_types, "COALESCE")
+    # Determine if we have string data with an array output
+    is_string_data = has_array_output and is_str_arr_type(out_dtype)
     propagate_null = [False] * (len(A) - len(dead_cols))
+
+    dict_encode_data = False
+    # If we have string data determine if we should do dictionary encoding
+    if is_string_data:
+        dict_encode_data = True
+        for j, typ in enumerate(arg_types):
+            # all arrays must be dictionaries or a scalar
+            dict_encode_data = dict_encode_data and (
+                typ == bodo.string_type
+                or typ == bodo.dict_str_arr_type
+                or (
+                    isinstance(typ, bodo.SeriesType)
+                    and typ.data == bodo.dict_str_arr_type
+                )
+            )
+
+    # Track if each individual column is dictionary encoded.
+    # This is only used if the output is dictionary encoded and
+    # is garbage otherwise.
     scalar_text = ""
     first = True
     found_scalar = False
     dead_offset = 0
+    # If we use dictionary encoding we will generate a prefix
+    # to allocate for our custom implementation
+    prefix_code = None
+    if dict_encode_data:
+        # If we are dictionary encoding data then we will generate prefix code to compute new indices
+        # and generate an original dictionary.
+        prefix_code = "num_strings = 0\n"
+        prefix_code += "num_chars = 0\n"
+        prefix_code += "is_dict_global = True\n"
+        for i in range(len(A)):
+            if i in dead_cols:
+                dead_offset += 1
+                continue
+            elif arg_types[i - dead_offset] != bodo.string_type:
+                # Dictionary encoding will directly access the indices and data arrays.
+                prefix_code += f"old_indices{i - dead_offset} = A{i}._indices\n"
+                prefix_code += f"old_data{i - dead_offset} = A{i}._data\n"
+                # Set if the output dict is global based on each dictionary.
+                prefix_code += (
+                    f"is_dict_global = is_dict_global and A{i}._has_global_dictionary\n"
+                )
+                # Determine the offset to add to the index in this array.
+                prefix_code += f"index_offset{i - dead_offset} = num_strings\n"
+                # Update the total number of strings and characters.
+                prefix_code += f"num_strings += len(old_data{i - dead_offset})\n"
+                prefix_code += f"num_chars += bodo.libs.str_arr_ext.num_total_chars(old_data{i - dead_offset})\n"
+            else:
+                prefix_code += f"num_strings += 1\n"
+                # Scalar needs to be utf8 encoded for the number of characters
+                prefix_code += (
+                    f"num_chars += bodo.libs.str_ext.unicode_to_utf8_len(A{i})\n"
+                )
 
+    dead_offset = 0
     for i in range(len(A)):
 
         # If A[i] is NULL or comes after a scalar, it can be skipped
@@ -112,7 +167,10 @@ def overload_coalesce_util(A):
         elif bodo.utils.utils.is_array_typ(A[i]):
             cond = "if" if first else "elif"
             scalar_text += f"{cond} not bodo.libs.array_kernels.isna(A{i}, i):\n"
-            if is_string_data:
+            if dict_encode_data:
+                # If data is dictionary encoded just copy the indices
+                scalar_text += f"   res[i] = old_indices{i-dead_offset}[i] + index_offset{i - dead_offset}\n"
+            elif is_string_data:
                 # If we have string data directly copy from one array to another without an intermediate
                 # allocation.
                 scalar_text += (
@@ -127,11 +185,16 @@ def overload_coalesce_util(A):
             assert (
                 not found_scalar
             ), "should not encounter more than one scalar due to dead column pruning"
-            if first:
-                scalar_text += f"res[i] = arg{i-dead_offset}\n"
-            else:
+            indent = ""
+            if not first:
                 scalar_text += "else:\n"
-                scalar_text += f"   res[i] = arg{i-dead_offset}\n"
+                indent = "   "
+            if dict_encode_data:
+                # If the data is dictionary encoded just copy the index that was allocated in the
+                # dictionary. A scalar must only be the last element so its always index num_strings - 1
+                scalar_text += f"{indent}res[i] = num_strings - 1\n"
+            else:
+                scalar_text += f"{indent}res[i] = arg{i-dead_offset}\n"
             found_scalar = True
             break
 
@@ -144,12 +207,47 @@ def overload_coalesce_util(A):
         else:
             scalar_text += "bodo.libs.array_kernels.setna(res, i)"
 
+    # If we have dictionary encoding we need to allocate a suffix to process the dictionary encoded array.
+    # We allocate the dictionary at the end for cache locality.
+    suffix_code = None
+    if dict_encode_data:
+        dead_offset = 0
+        suffix_code = "dict_data = bodo.libs.str_arr_ext.pre_alloc_string_array(num_strings, num_chars)\n"
+        suffix_code += "curr_index = 0\n"
+        # Track if the output dictionary is global. Even though it is not unique it may
+        # still be the same on all ranks if the component dictionaries were all global.
+        # Note: If there are any scalars they will be the same on all ranks so that is
+        # still global.
+        for i in range(len(A)):
+            if i in dead_cols:
+                dead_offset += 1
+            elif arg_types[i - dead_offset] != bodo.string_type:
+                # Copy the old dictionary into the new dictionary
+                suffix_code += f"section_len = len(old_data{i - dead_offset})\n"
+                # TODO: Add a kernel to copy everything at once?
+                suffix_code += f"for l in range(section_len):\n"
+                suffix_code += f"    bodo.libs.str_arr_ext.get_str_arr_item_copy(dict_data, curr_index + l, old_data{i - dead_offset}, l)\n"
+                suffix_code += f"curr_index += section_len\n"
+            else:
+                # Just store the scalar.
+                suffix_code += f"dict_data[curr_index] = A{i}\n"
+                # This should be unnecessary but update the index
+                suffix_code += f"curr_index += 1\n"
+        # Wrap the output into an actual dictionary encoded array.
+        # Note: We cannot assume it is unique even if each component were unique.
+        suffix_code += "duplicated_res = bodo.libs.dict_arr_ext.init_dict_arr(dict_data, res, is_dict_global, False)\n"
+        # Drop any duplicates and update the dictionary
+        suffix_code += "res = bodo.libs.array.drop_duplicates_local_dictionary(duplicated_res, False)\n"
+
     # Create the mapping from each local variable to the corresponding element in the array
     # of columns/scalars
     arg_string = "A"
     arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A)) if i not in dead_cols}
 
-    out_dtype = get_common_broadcasted_type(arg_types, "COALESCE")
+    if dict_encode_data:
+        # If have we a dictionary encoded output then the main loop is used to compute
+        # the indices.
+        out_dtype = bodo.libs.dict_arr_ext.dict_indices_arr_type
 
     return gen_vectorized(
         arg_names,
@@ -161,6 +259,8 @@ def overload_coalesce_util(A):
         arg_sources,
         array_override,
         support_dict_encoding=False,
+        prefix_code=prefix_code,
+        suffix_code=suffix_code,
         # If we have a string array avoid any intermediate allocations
         alloc_array_scalars=not is_string_data,
     )

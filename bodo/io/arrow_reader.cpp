@@ -548,7 +548,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
 
         if (length == 0) {
             this->out_array = alloc_dict_string_array(
-                0, 0, 0, /*has_global_dictionary=*/false);
+                0, 0, 0, /*has_global_dictionary=*/false,
+                /*has_deduped_local_dictionary=*/false);
             return this->out_array;
         }
 
@@ -604,7 +605,7 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         out_array = new array_info(
             bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
             -1, NULL, NULL, NULL, bodo_indices->null_bitmask, NULL, NULL, NULL,
-            NULL, 0, 0, 0, false, false, bodo_dictionary, bodo_indices);
+            NULL, 0, 0, 0, false, false, false, bodo_dictionary, bodo_indices);
 
         all_chunks.clear();
         return out_array;
@@ -681,7 +682,8 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
 
         if (length == 0) {
             this->out_array = alloc_dict_string_array(
-                0, 0, 0, /*has_global_dictionary=*/false);
+                0, 0, 0, /*has_global_dictionary=*/false,
+                /*has_deduped_local_dictionary=*/false);
             return this->out_array;
         }
         array_info* dict_arr =
@@ -703,7 +705,7 @@ class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
         out_array = new array_info(
             bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING, length, -1,
             -1, NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL,
-            NULL, 0, 0, 0, false, false, dict_arr, indices_arr);
+            NULL, 0, 0, 0, false, false, false, dict_arr, indices_arr);
         return out_array;
     }
 

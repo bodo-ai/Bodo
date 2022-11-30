@@ -589,7 +589,7 @@ def overload_coerce_to_array(
             numba.parfors.parfor.init_prange()
             for i in numba.parfors.parfor.internal_prange(n):
                 indices[i] = 0
-            A = bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True)
+            A = bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True, True)
             return A
 
         return impl_str

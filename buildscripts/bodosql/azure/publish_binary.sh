@@ -9,21 +9,15 @@ conda install -y conda-build anaconda-client conda-verify curl -c conda-forge
 
 BODOSQL_CHANNEL_NAME=${1:-bodo-binary}
 
-# Note: It is difficult to enforce the exact version of bodo to use for the build, outside of
-# modifying the build recipe. Therefore, if we update BodoSQL's build process to require a specific version
-# of Bodo, I'm requiring that we update the recipe in buildscripts/bodosql/conda-recipe/meta.yaml,
-# and do a mini-release.
-BODO_CHANNEL_NAME="bodo.ai"
-
 echo "********** Publishing to Artifactory **********"
 USERNAME=`cat $HOME/secret_file | grep artifactory.ci.username | cut -f 2 -d' '`
 TOKEN=`cat $HOME/secret_file | grep artifactory.ci.token | cut -f 2 -d' '`
 ANACONDA_TOKEN=`cat $HOME/secret_file | grep anaconda.org.token | cut -f 2 -d' '`
 
 # Get the BodoSQL version
+# Since we build BodoSQL after Bodo on Azure, we can tie the BodoSQL and Bodo version together 
 export BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
-# Get Bodo version up to minor release number
-export BODO_MINOR_VERSION=`python -c "import versioneer; print(versioneer.get_version().split('+')[0])"`
+export BODO_VERSION=$BODOSQL_VERSION
 export IS_RELEASE=`git tag --points-at HEAD`
 
 # We follow the following convention for release:
@@ -47,6 +41,9 @@ elif [[ "$BODOSQL_CHANNEL_NAME" == "bodo.ai" ]] && [[ -n "$IS_RELEASE" ]]; then
     # If we have a minor release upload with our dev anaconda label
     label="dev"
 fi
+
+# Since we build BodoSQL after Bodo on Azure, we can tie the BodoSQL and Bodo version & channel together 
+BODO_CHANNEL_NAME=$BODOSQL_CHANNEL_NAME
 
 conda-build buildscripts/bodosql/conda-recipe -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/$BODO_CHANNEL_NAME -c conda-forge --no-test
 

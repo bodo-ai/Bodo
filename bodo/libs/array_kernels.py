@@ -38,10 +38,10 @@ from bodo.libs import quantile_alg
 from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
-    convert_local_dictionary_to_global,
     delete_info_decref_array,
     delete_table,
     delete_table_decref_arrays,
+    drop_duplicates_local_dictionary,
     drop_duplicates_table,
     info_from_table,
     info_to_array,
@@ -1416,12 +1416,12 @@ def _is_same_categorical_array_type(arr_types):
     )
 
 
-def concat(arr_list, is_parallel=False):  # pragma: no cover
+def concat(arr_list):  # pragma: no cover
     pass
 
 
 @overload(concat, no_unliteral=True)
-def concat_overload(arr_list, is_parallel=False):
+def concat_overload(arr_list):
 
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
         arr_list.dtype, "bodo.concat()"
@@ -1429,8 +1429,8 @@ def concat_overload(arr_list, is_parallel=False):
 
     # TODO: Support actually handling the possibles null values
     if isinstance(arr_list, bodo.NullableTupleType):
-        return lambda arr_list, is_parallel=False: bodo.libs.array_kernels.concat(
-            arr_list._data, is_parallel
+        return lambda arr_list: bodo.libs.array_kernels.concat(
+            arr_list._data
         )  # pragma: no cover
 
     # array(item) arrays
@@ -1439,7 +1439,7 @@ def concat_overload(arr_list, is_parallel=False):
     ):
         data_arr_type = arr_list.dtype.dtype
 
-        def array_item_concat_impl(arr_list, is_parallel=False):  # pragma: no cover
+        def array_item_concat_impl(arr_list):  # pragma: no cover
             # preallocate the output
             num_lists = 0
             data_arrs = []
@@ -1450,7 +1450,7 @@ def concat_overload(arr_list, is_parallel=False):
                 data_arrs.append(bodo.libs.array_item_arr_ext.get_data(A))
                 num_lists += n_lists
             out_offsets = np.empty(num_lists + 1, offset_type)
-            out_data = bodo.libs.array_kernels.concat(data_arrs, is_parallel)
+            out_data = bodo.libs.array_kernels.concat(data_arrs)
             out_null_bitmap = np.empty((num_lists + 7) >> 3, np.uint8)
             # copy data to output
             curr_list = 0
@@ -1483,7 +1483,7 @@ def concat_overload(arr_list, is_parallel=False):
         arr_list.dtype, bodo.StructArrayType
     ):
         struct_keys = arr_list.dtype.names
-        func_text = "def struct_array_concat_impl(arr_list, is_parallel=False):\n"
+        func_text = "def struct_array_concat_impl(arr_list):\n"
         func_text += f"    n_all = 0\n"
         for i in range(len(struct_keys)):
             func_text += f"    concat_list{i} = []\n"
@@ -1506,7 +1506,7 @@ def concat_overload(arr_list, is_parallel=False):
         func_text += "    return bodo.libs.struct_arr_ext.init_struct_arr(\n"
         data_val = ", ".join(
             [
-                f"bodo.libs.array_kernels.concat(concat_list{i}, is_parallel)"
+                f"bodo.libs.array_kernels.concat(concat_list{i})"
                 for i in range(len(struct_keys))
             ]
         )
@@ -1531,9 +1531,7 @@ def concat_overload(arr_list, is_parallel=False):
         and arr_list.dtype == datetime_date_array_type
     ):
 
-        def datetime_date_array_concat_impl(
-            arr_list, is_parallel=False
-        ):  # pragma: no cover
+        def datetime_date_array_concat_impl(arr_list):  # pragma: no cover
             tot_len = 0
             for A in arr_list:
                 tot_len += len(A)
@@ -1558,9 +1556,7 @@ def concat_overload(arr_list, is_parallel=False):
         and arr_list.dtype == datetime_timedelta_array_type
     ):
 
-        def datetime_timedelta_array_concat_impl(
-            arr_list, is_parallel=False
-        ):  # pragma: no cover
+        def datetime_timedelta_array_concat_impl(arr_list):  # pragma: no cover
             tot_len = 0
             for A in arr_list:
                 tot_len += len(A)
@@ -1590,7 +1586,7 @@ def concat_overload(arr_list, is_parallel=False):
         precision = arr_list.dtype.precision
         scale = arr_list.dtype.scale
 
-        def decimal_array_concat_impl(arr_list, is_parallel=False):  # pragma: no cover
+        def decimal_array_concat_impl(arr_list):  # pragma: no cover
             tot_len = 0
             for A in arr_list:
                 tot_len += len(A)
@@ -1634,11 +1630,11 @@ def concat_overload(arr_list, is_parallel=False):
 
         if _arr_type == bodo.dict_str_arr_type:
 
-            def impl_dict_arr(arr_list, is_parallel=False):  # pragma: no cover
+            def impl_dict_arr(arr_list):  # pragma: no cover
                 """
                 Combine the dictionaries by stacking the inner dict-array
-                and remap the indices. convert_local_dictionary_to_global is
-                called at the end to remove duplicates and make the dictionary global.
+                and remap the indices. drop_duplicates_local_dictionary is
+                called at the end to remove duplicates.
                 """
                 # allocate the inner dict array
                 num_strs = 0
@@ -1681,18 +1677,15 @@ def concat_overload(arr_list, is_parallel=False):
                     curr_chars_ind += bodo.libs.str_arr_ext.num_total_chars(data_arr)
                     curr_elem_ind += num_elems
 
-                out_arr = init_dict_arr(out_dict_arr, out_ind_arr, False)
-                # convert_local_dictionary_to_global will convert the dictionary
-                # to global and deduplicate the inner dictionary array, potentially
-                # remaping the indices.
-                unique_out_arr = convert_local_dictionary_to_global(
-                    out_arr, False, is_parallel
-                )
+                out_arr = init_dict_arr(out_dict_arr, out_ind_arr, False, False)
+                # drop_duplicates_local_dictionary will drop any local duplicates,
+                # potentially remaping the indices.
+                unique_out_arr = drop_duplicates_local_dictionary(out_arr, False)
                 return unique_out_arr
 
             return impl_dict_arr
 
-        def impl_str(arr_list, is_parallel=False):  # pragma: no cover
+        def impl_str(arr_list):  # pragma: no cover
             # decode_if_dict_array will convert a list or tuple of
             # heterogenous(dict and non-dict) string arrays to a list of regular string arrays
             arr_list = decode_if_dict_array(arr_list)
@@ -1733,14 +1726,14 @@ def concat_overload(arr_list, is_parallel=False):
         )
     ):
 
-        def impl_int_arr_list(arr_list, is_parallel=False):  # pragma: no cover
+        def impl_int_arr_list(arr_list):  # pragma: no cover
             arr_list_converted = convert_to_nullable_tup(arr_list)
             all_data = []
             n_all = 0
             for A in arr_list_converted:
                 all_data.append(A._data)
                 n_all += len(A)
-            out_data = bodo.libs.array_kernels.concat(all_data, is_parallel)
+            out_data = bodo.libs.array_kernels.concat(all_data)
             n_bytes = (n_all + 7) >> 3
             new_mask = np.empty(n_bytes, np.uint8)
             curr_bit = 0
@@ -1768,14 +1761,14 @@ def concat_overload(arr_list, is_parallel=False):
         )
     ):
         # TODO: refactor to avoid duplication with integer array
-        def impl_bool_arr_list(arr_list, is_parallel=False):  # pragma: no cover
+        def impl_bool_arr_list(arr_list):  # pragma: no cover
             arr_list_converted = convert_to_nullable_tup(arr_list)
             all_data = []
             n_all = 0
             for A in arr_list_converted:
                 all_data.append(A._data)
                 n_all += len(A)
-            out_data = bodo.libs.array_kernels.concat(all_data, is_parallel)
+            out_data = bodo.libs.array_kernels.concat(all_data)
             n_bytes = (n_all + 7) >> 3
             new_mask = np.empty(n_bytes, np.uint8)
             curr_bit = 0
@@ -1794,12 +1787,12 @@ def concat_overload(arr_list, is_parallel=False):
         arr_list.dtype, CategoricalArrayType
     ):
 
-        def cat_array_concat_impl(arr_list, is_parallel=False):  # pragma: no cover
+        def cat_array_concat_impl(arr_list):  # pragma: no cover
             new_code_arrs = []
             for A in arr_list:
                 new_code_arrs.append(A.codes)
             return init_categorical_array(
-                bodo.libs.array_kernels.concat(new_code_arrs, is_parallel),
+                bodo.libs.array_kernels.concat(new_code_arrs),
                 arr_list[0].dtype,
             )
 
@@ -1809,8 +1802,8 @@ def concat_overload(arr_list, is_parallel=False):
     # missmatch issues. see test_dataframe_concat[series_val19]
     if _is_same_categorical_array_type(arr_list):
         code_arrs = ", ".join(f"arr_list[{i}].codes" for i in range(len(arr_list)))
-        func_text = "def impl(arr_list, is_parallel=False):\n"
-        func_text += f"    return init_categorical_array(bodo.libs.array_kernels.concat(({code_arrs}, ), is_parallel), arr_list[0].dtype)\n"
+        func_text = "def impl(arr_list):\n"
+        func_text += f"    return init_categorical_array(bodo.libs.array_kernels.concat(({code_arrs}, )), arr_list[0].dtype)\n"
 
         locs = {}
         exec(
@@ -1828,7 +1821,7 @@ def concat_overload(arr_list, is_parallel=False):
     ):
         dtype = arr_list.dtype.dtype
 
-        def impl_np_arr_list(arr_list, is_parallel=False):  # pragma: no cover
+        def impl_np_arr_list(arr_list):  # pragma: no cover
             n_all = 0
             for A in arr_list:
                 n_all += len(A)
@@ -1855,7 +1848,7 @@ def concat_overload(arr_list, is_parallel=False):
             for t in arr_list.types
         )
     ):
-        return lambda arr_list, is_parallel=False: np.concatenate(
+        return lambda arr_list: np.concatenate(
             astype_float_tup(arr_list)
         )  # pragma: no cover
 
@@ -1863,13 +1856,11 @@ def concat_overload(arr_list, is_parallel=False):
         arr_list.dtype, bodo.MapArrayType
     ):
 
-        def impl_map_arr_list(arr_list, is_parallel=False):  # pragma: no cover
+        def impl_map_arr_list(arr_list):  # pragma: no cover
             array_item_list = []
             for A in arr_list:
                 array_item_list.append(A._data)
-            output_arr_item_arr = bodo.libs.array_kernels.concat(
-                array_item_list, is_parallel
-            )
+            output_arr_item_arr = bodo.libs.array_kernels.concat(array_item_list)
             result = bodo.libs.map_arr_ext.init_map_arr(output_arr_item_arr)
             return result
 
@@ -1880,9 +1871,7 @@ def concat_overload(arr_list, is_parallel=False):
             raise_bodo_error(f"concat of array types {arr_list} not supported")
 
     # numpy array input
-    return lambda arr_list, is_parallel=False: np.concatenate(
-        arr_list
-    )  # pragma: no cover
+    return lambda arr_list: np.concatenate(arr_list)  # pragma: no cover
 
 
 def astype_float_tup(arr_tup):
@@ -2332,7 +2321,7 @@ def overload_gen_na_array(n, arr, use_dict_arr=False):
             numba.parfors.parfor.init_prange()
             for i in numba.parfors.parfor.internal_prange(n):
                 setna(indices, i)
-            return bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True)
+            return bodo.libs.dict_arr_ext.init_dict_arr(dict_arr, indices, True, True)
 
         return impl_dict
 
@@ -2805,7 +2794,12 @@ def repeat_kernel_overload(A, repeats):
                             bodo.libs.array_kernels.setna(out_ind_arr, idx + j)
                     else:
                         out_ind_arr[idx : idx + repeats] = indices_arr[i]
-                return init_dict_arr(data_arr, out_ind_arr, A._has_global_dictionary)
+                return init_dict_arr(
+                    data_arr,
+                    out_ind_arr,
+                    A._has_global_dictionary,
+                    A._has_deduped_local_dictionary,
+                )
 
             return impl_dict_int
 
@@ -2842,7 +2836,12 @@ def repeat_kernel_overload(A, repeats):
                 else:
                     out_ind_arr[idx : idx + r] = indices_arr[i]
                 idx += r
-            return init_dict_arr(data_arr, out_ind_arr, A._has_global_dictionary)
+            return init_dict_arr(
+                data_arr,
+                out_ind_arr,
+                A._has_global_dictionary,
+                A._has_deduped_local_dictionary,
+            )
 
         return impl_dict_arr
 

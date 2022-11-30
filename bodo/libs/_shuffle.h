@@ -235,18 +235,44 @@ inline void fill_recv_data_inner(T* recv_buff, T* data, uint32_t* hashes,
 }
 
 /**
+ * @brief Update dictionary encoded array to drop any duplicates in its
+ * local copy of the dictionary. If the dictionary is already global then
+ * this maintains the global dictionary because the operations are
+ * deterministic.
+ *
+ * @param dict_array The dictionary array whose dictionary needs updating.
+ * @param sort_dictionary_if_modified Should the dictionary be sorted if we need
+ * to gather the data? Note: The output should not assume the data is sorted.
+ */
+void drop_duplicates_local_dictionary(array_info* dict_array,
+                                      bool sort_dictionary_if_modified = false);
+
+/**
  * @brief Update a dictionary encoded array to gather all dictionary values onto
- * each rank and drop any duplicates. If data is replicated then this just drops
- * duplicates.
+ * each rank. If the dictionary is updated then we also drop duplicates and may
+ * sort the dictionary.
  *
  * @param dict_array The dictionary array whose dictionary needs updating.
  * @param is_parallel Is the input distributed? If so we must gather the
- * dictionary from all ranks. If not we still define the output as "global" with
- * the assumption that data is "identical" if replicated.
- * @param sort_dictionary Should the dictionary be sorted?
+ * dictionary from all ranks. If not we just mark the dictionary as global.
+ * @param sort_dictionary_if_modified Should the dictionary be sorted if we
+ * modify the dictionary? Note: The output should not assume the data is sorted.
  */
-void convert_local_dictionary_to_global(array_info* dict_array,
-                                        bool is_parallel,
-                                        bool sort_dictionary = false);
+void convert_local_dictionary_to_global(
+    array_info* dict_array, bool is_parallel,
+    bool sort_dictionary_if_modified = false);
+
+/**
+ * @brief Update a dictionary encoded array to gather all dictionary values onto
+ * each rank and then drop any duplicates. If the dictionary is updated then we
+ * may optionally sort the dictionary.
+ *
+ * @param dict_array
+ * @param is_parallel
+ * @param sort_dictionary_if_modified
+ */
+void make_dictionary_global_and_unique(
+    array_info* dict_array, bool is_parallel,
+    bool sort_dictionary_if_modified = false);
 
 #endif  // _SHUFFLE_H_INCLUDED

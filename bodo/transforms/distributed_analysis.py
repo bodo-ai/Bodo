@@ -609,6 +609,11 @@ class DistributedAnalysis:
         # NOTE: assuming getattr doesn't change distribution by default, since almost
         # all attribute accesses are benign (e.g. A.shape). Exceptions should be handled
         # here.
+        try:
+            from bodosql.context_ext import BodoSQLContextType
+        except ImportError:  # pragma: no cover
+            BodoSQLContextType = None
+
         lhs_typ = self.typemap[lhs]
         rhs_typ = self.typemap[rhs.value.name]
         attr = rhs.attr
@@ -671,6 +676,12 @@ class DistributedAnalysis:
             and attr == "_df"
         ):
             # Spark dataframe may be replicated, e.g. sdf.select(F.sum(F.col("A")))
+            self._meet_array_dists(lhs, rhs.value.name, array_dists)
+        elif (
+            BodoSQLContextType is not None
+            and isinstance(rhs_typ, BodoSQLContextType)
+            and attr == "dataframes"
+        ):
             self._meet_array_dists(lhs, rhs.value.name, array_dists)
 
     def _analyze_parfor(self, parfor, array_dists, parfor_dists):
