@@ -25,7 +25,7 @@ mamba install -y -c conda-forge pyarrow=8.0.0
 if [ "$RUN_NIGHTLY" != "yes" ]; then
     mamba install -y -c conda-forge cx_oracle psycopg2
 fi
-mamba install -y -c conda-forge pytest pytest-cov
+mamba install -y -c conda-forge pytest pytest-cov pytest-timeout
 python -m pip install deltalake
 python -m pip install awscli
 
