@@ -50,7 +50,12 @@ public class ExtractCodeGen {
                   + column
                   + ")";
         } else {
-          extractCode = "pd.Series(" + column + ").dt." + datetimeVal.toLowerCase() + ".values";
+          extractCode =
+              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                  + column
+                  + ").dt."
+                  + datetimeVal.toLowerCase()
+                  + ")";
         }
         break;
       case "DAYOFMONTH":

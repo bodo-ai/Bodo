@@ -1670,3 +1670,34 @@ def test_next_previous_day_scalars(
         check_dtype=False,
         expected_output=py_output,
     )
+
+
+def test_tz_aware_month(memory_leak_check):
+    query = "SELECT MONTH(A) as m from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+            ).to_series()
+        }
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame({"m": df.A.dt.month})
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
+def test_tz_aware_month_case(memory_leak_check):
+    query = "SELECT CASE WHEN B THEN MONTH(A) END as m from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+            ).to_series(),
+            "B": [True, False] * 15,
+        }
+    )
+    ctx = {"table1": df}
+    month_series = df.A.dt.month
+    month_series[~df.B] = None
+    py_output = pd.DataFrame({"m": month_series})
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)

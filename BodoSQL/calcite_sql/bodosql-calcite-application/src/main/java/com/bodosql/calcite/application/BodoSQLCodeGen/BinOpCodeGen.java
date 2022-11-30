@@ -212,7 +212,8 @@ public class BinOpCodeGen {
     // (output is Series here since input is converted to Series in generateBinOpCode)
     // The exception is AND that always outputs an array
     if (!isScalar && exprType == BodoSQLExprType.ExprType.COLUMN && binOpKind != SqlKind.AND) {
-      newOp.append(".values");
+      newOp.insert(0, "bodo.hiframes.pd_series_ext.get_series_data(");
+      newOp.append(")");
     }
     return newOp.toString();
   }

@@ -22,6 +22,7 @@ public class CastCodeGen {
     } else {
       // TODO: replace Series.astype/dt with array operation
       codeBuilder
+          .append("bodo.hiframes.pd_series_ext.get_series_data(")
           .append("pd.Series(")
           .append(arg)
           .append(").astype(")
@@ -37,9 +38,9 @@ public class CastCodeGen {
         codeBuilder.append(".dt.floor(freq=\"D\")");
       }
     }
-    // make the output array as expected elsewhere
+    // Add the closing parenthesis the output array as expected elsewhere
     if (!outputScalar) {
-      codeBuilder.append(".values");
+      codeBuilder.append(")");
     }
     return codeBuilder.toString();
   }
