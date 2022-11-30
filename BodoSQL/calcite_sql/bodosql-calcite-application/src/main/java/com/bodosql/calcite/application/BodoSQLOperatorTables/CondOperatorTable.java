@@ -272,6 +272,8 @@ public class CondOperatorTable implements SqlOperatorTable {
     return outputTypes;
   }
 
+  // TODO: Move aggregate function to their own operator table.
+
   public static final SqlBasicAggFunction CONDITIONAL_TRUE_EVENT =
       SqlBasicAggFunction.create(
           "CONDITIONAL_TRUE_EVENT",
@@ -309,8 +311,22 @@ public class CondOperatorTable implements SqlOperatorTable {
       SqlBasicAggFunction.create(
           "COUNT_IF", SqlKind.OTHER_FUNCTION, ReturnTypes.INTEGER, OperandTypes.BOOLEAN);
 
+  //  Returns the logical (boolean) OR value of all non-NULL boolean records in a group.
+  //  BOOLOR_AGG returns ‘true’ if at least one record in the group evaluates to ‘true’.
+  //  Numeric values, Decimal, and floating point values are converted to ‘true’ if they are
+  // different from zero.
+  //  Character/text types are not supported as they cannot be converted to Boolean.
+  public static final SqlAggFunction BOOLOR_AGG =
+      SqlBasicAggFunction.create(
+              "BOOLOR_AGG",
+              SqlKind.OTHER,
+              ReturnTypes.BOOLEAN_NULLABLE,
+              OperandTypes.or(OperandTypes.BOOLEAN, OperandTypes.NUMERIC))
+          .withFunctionType(SqlFunctionCategory.SYSTEM);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
+          BOOLOR_AGG,
           CONDITIONAL_TRUE_EVENT,
           COUNT_IF,
           CONDITIONAL_CHANGE_EVENT,

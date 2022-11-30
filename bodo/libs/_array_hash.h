@@ -14,7 +14,8 @@
 #define SEED_HASH_CONTAINER 0xb0d01284
 
 void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
-                        const uint32_t seed, bool global_dict_needed);
+                        const uint32_t seed, bool global_dict_needed,
+                        bool is_parallel);
 
 /**
  * Function for the computation of hashes for keys
@@ -31,7 +32,7 @@ uint32_t* hash_keys(std::vector<array_info*> const& key_arrs,
 
 uint32_t* coherent_hash_keys(std::vector<array_info*> const& key_arrs,
                              std::vector<array_info*> const& ref_key_arrs,
-                             const uint32_t seed);
+                             const uint32_t seed, bool is_parallel);
 
 void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
                 const uint32_t seed, bool is_parallel, bool global_dict_needed,
@@ -57,26 +58,29 @@ inline uint32_t* hash_keys_table(table_info* in_table, size_t num_keys,
 
 inline uint32_t* coherent_hash_keys_table(table_info* in_table,
                                           table_info* ref_table,
-                                          size_t num_keys, uint32_t seed) {
+                                          size_t num_keys, uint32_t seed,
+                                          bool is_parallel) {
     std::vector<array_info*> key_arrs(in_table->columns.begin(),
                                       in_table->columns.begin() + num_keys);
     std::vector<array_info*> ref_key_arrs(
         ref_table->columns.begin(), ref_table->columns.begin() + num_keys);
-    return coherent_hash_keys(key_arrs, ref_key_arrs, seed);
+    return coherent_hash_keys(key_arrs, ref_key_arrs, seed, is_parallel);
 }
 
 /**
  * Multi column key that can be used to hash the value of multiple columns
- * in a dataframe row in C++ hash tables/sets.
+ * in a DataFrame row in C++ hash tables/sets.
  * NOTE: This assumes the key columns are the first columns in the table.
  */
 struct multi_col_key {
     uint32_t hash;
     table_info* table;
     int64_t row;
+    bool is_parallel;
 
-    multi_col_key(uint32_t _hash, table_info* _table, int64_t _row)
-        : hash(_hash), table(_table), row(_row) {}
+    multi_col_key(uint32_t _hash, table_info* _table, int64_t _row,
+                  bool _is_parallel)
+        : hash(_hash), table(_table), row(_row), is_parallel(_is_parallel) {}
 
     bool operator==(const multi_col_key& other) const {
         for (int64_t i = 0; i < table->num_keys; i++) {
@@ -97,8 +101,12 @@ struct multi_col_key {
                 }
                     continue;
                 case bodo_array_type::DICT: {
-                    if (c1->has_global_dictionary &&
-                        c2->has_global_dictionary) {
+                    // Require the dictionary to always have unique values. If
+                    // the data is distributed it must also be global.
+                    if (c1->has_deduped_local_dictionary &&
+                        c2->has_deduped_local_dictionary &&
+                        (!is_parallel || c1->has_global_dictionary) &&
+                        (!other.is_parallel || c2->has_global_dictionary)) {
                         if (c1->info1 != c2->info1) {
                             throw std::runtime_error(
                                 "multi-key-hashing dictionary the columns are "
@@ -122,7 +130,7 @@ struct multi_col_key {
                     } else {
                         throw std::runtime_error(
                             "multi-key-hashing dictionary array requires "
-                            "global dictionary");
+                            "global dictionary of unique values");
                     }
                 }
                     continue;
@@ -227,7 +235,8 @@ struct multi_col_key_hash {
  * Replaces old dictionary with the new one.
  * Updates the indices to conform to the new dictionary.
  */
-void unify_dictionaries(array_info* arr1, array_info* arr2);
+void unify_dictionaries(array_info* arr1, array_info* arr2,
+                        bool arr1_is_parallel, bool arr2_is_parallel);
 
 // For hashing function involving dictionaries of dictionary-encoded arrays
 struct HashDict {

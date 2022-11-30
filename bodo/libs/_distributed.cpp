@@ -580,8 +580,9 @@ PyMODINIT_FUNC PyInit_hdist(void) {
     MPI_Comm_size(MPI_COMM_WORLD, &num_pes);
     if (num_pes > max_cores) {
         char error_msg[100];
-        sprintf(error_msg, "License is for %d cores. Max core count exceeded.",
-                max_cores);
+        snprintf(error_msg, sizeof(error_msg),
+                 "License is for %d cores. Max core count exceeded.",
+                 max_cores);
         PyErr_SetString(PyExc_RuntimeError, error_msg);
         return NULL;
     }

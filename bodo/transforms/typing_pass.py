@@ -822,7 +822,9 @@ class TypingTransforms:
             # SQL generates different operators than pyarrow
             read_node,
         )
-        self._check_non_filter_df_use(set(used_dfs.keys()), assign, func_ir)
+        self._check_non_filter_df_use_after_filter(
+            set(used_dfs.keys()), assign, func_ir
+        )
         new_working_body = self._reorder_filter_nodes(
             read_node, index_def, used_dfs, skipped_vars, filters, working_body, func_ir
         )
@@ -868,18 +870,21 @@ class TypingTransforms:
         # be in the working body yet.
         return new_working_body
 
-    def _check_non_filter_df_use(self, df_names, assign, func_ir):
-        """make sure the chain of used dataframe variables are not used after filtering in the
+    def _check_non_filter_df_use_after_filter(self, df_names, assign, func_ir):
+        """make sure the chain of used dataframe variables are not used AFTER filtering in the
         program. e.g. df2 = df[...]; A = df.A
         Assumes that Numba renames variables if the same df name is used later. e.g.:
             df2 = df[...]
             df = ....  # numba renames df to df.1
+
+        This DOES NOT detect any extra uses of the DataFrame before the filter. Those will be
+        captured by _reorder_filter_nodes.
+
         TODO(ehsan): use proper liveness analysis to handle cases with control flow:
             df2 = df[...]
             if flag:
                 df = ....
         """
-
         for block in func_ir.blocks.values():
             for stmt in reversed(block.body):
                 # ignore code before the filtering node in the same basic block
@@ -889,12 +894,12 @@ class TypingTransforms:
                 require(self._is_not_filter_df_use(df_names, stmt))
 
     def _is_not_filter_df_use(self, df_names, stmt):
-        """Helper function for _check_non_filter_df_use, that checks a particular
-        statement doesn't use any of the dataframes in df_names, for purposes of
+        """Helper function for _check_non_filter_df_use_after_filter, that checks a particular
+        statement doesn't use any of the DataFrames in df_names, for purposes of
         performing filter pushdown.
 
         Args:
-            df_names (set(String)): Set of dataframes that can't be used
+            df_names (set(String)): Set of DataFrames that can't be used
             stmt (IR.Stmt): statement to check for usage
 
         Returns:

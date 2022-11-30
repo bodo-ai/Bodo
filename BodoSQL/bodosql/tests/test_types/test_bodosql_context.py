@@ -14,7 +14,12 @@ from bodo.tests.conftest import (  # pragma: no cover
     iceberg_database,
     iceberg_table_conn,
 )
-from bodo.tests.utils import check_func
+from bodo.tests.utils import (
+    check_func,
+    count_array_OneD_Vars,
+    count_array_OneDs,
+    count_array_REPs,
+)
 from bodo.utils.typing import BodoError
 
 
@@ -513,3 +518,34 @@ def test_remove_catalog_jit(datapath, dummy_snowflake_catalogs, memory_leak_chec
         BodoError, match="BodoSQLContext must have an existing catalog registered"
     ):
         bodo.jit(impl)(bc)
+
+
+def test_bodosql_context_arg_dist(memory_leak_check):
+    """make sure BodoSQLContext.dataframes is assigned proper distributions if
+    BodoSQLContext is passed as an argument [BE-3968]"""
+
+    @bodo.jit(distributed=["bc"])
+    def run_query2(bc, q):
+        out = bc.sql(q)
+        return out
+
+    outermost_QUERY = """select
+            ac.num_impressions_1w as num_impressions_1w,
+            case when ac.num_clicks_1w >= 100 then ac.num_clicks_1w end as num_clicks_1w
+    from _action_counts ac
+    """
+
+    rank = bodo.get_rank()
+    # it is necessary for ranks to have different data lengths since we are checking
+    # 1D vs. 1D_Var issues
+    n = 25949 if rank == 0 else 26315
+    action_df = pd.DataFrame(
+        {"num_impressions_1w": np.zeros(n), "num_clicks_1w": np.zeros(n)}
+    )
+    bc = BodoSQLContext({"_action_counts": action_df})
+    run_query2(bc, outermost_QUERY)
+
+    # all arrays should be 1D_Var, not 1D
+    assert count_array_REPs() == 0
+    assert count_array_OneDs() == 0
+    assert count_array_OneD_Vars() > 0

@@ -218,6 +218,27 @@ def test_to_date_valid_datetime_types_case(
     )
 
 
+def test_to_date_tz_aware(memory_leak_check):
+    """tests to_date on valid datetime values in a case statment"""
+    df = pd.DataFrame(
+        {
+            "timestamps": pd.date_range(
+                "1/18/2022", periods=20, freq="10D5H", tz="US/PACIFIC"
+            )
+        }
+    )
+    ctx = {"table1": df}
+    query = f"SELECT TO_DATE(timestamps) as timestamps from table1"
+    expected_output = pd.DataFrame({"timestamps": df["timestamps"].dt.normalize()})
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+    )
+
+
 # [BE-3774] Leaks Memory
 def test_invalid_to_date_args(spark_info, dt_fn_dataframe, test_fn):
     """tests arguments which cause NA in try_to_date, and throw an error for to_date"""

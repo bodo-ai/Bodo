@@ -288,13 +288,15 @@ array_info* string_array_to_info(uint64_t n_items, uint64_t n_chars, char* data,
 }
 
 array_info* dict_str_array_to_info(array_info* str_arr, array_info* indices_arr,
-                                   int32_t has_global_dictionary) {
+                                   int32_t has_global_dictionary,
+                                   int32_t has_deduped_local_dictionary) {
     // For now has_sorted_dictionary is only available and exposed in the C++
     // struct, so we set it to false
     return new array_info(
         bodo_array_type::DICT, Bodo_CTypes::STRING, indices_arr->length, -1, -1,
         NULL, NULL, NULL, indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
-        0, 0, bool(has_global_dictionary), false, str_arr, indices_arr);
+        0, 0, bool(has_global_dictionary), bool(has_deduped_local_dictionary),
+        false, str_arr, indices_arr);
 }
 
 array_info* get_nested_info(array_info* dict_arr, int32_t info_no) {
@@ -311,6 +313,10 @@ array_info* get_nested_info(array_info* dict_arr, int32_t info_no) {
 
 int32_t get_has_global_dictionary(array_info* dict_arr) {
     return int32_t(dict_arr->has_global_dictionary);
+}
+
+int32_t get_has_deduped_local_dictionary(array_info* dict_arr) {
+    return int32_t(dict_arr->has_deduped_local_dictionary);
 }
 
 array_info* numpy_array_to_info(uint64_t n_items, char* data, int typ_enum,
@@ -1471,6 +1477,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "get_has_global_dictionary",
         PyLong_FromVoidPtr((void*)(&get_has_global_dictionary)));
+    PyObject_SetAttrString(
+        m, "get_has_deduped_local_dictionary",
+        PyLong_FromVoidPtr((void*)(&get_has_deduped_local_dictionary)));
     // Not covered by error handler
     PyObject_SetAttrString(m, "numpy_array_to_info",
                            PyLong_FromVoidPtr((void*)(&numpy_array_to_info)));
@@ -1556,6 +1565,9 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     PyObject_SetAttrString(
         m, "convert_local_dictionary_to_global",
         PyLong_FromVoidPtr((void*)(&convert_local_dictionary_to_global)));
+    PyObject_SetAttrString(
+        m, "drop_duplicates_local_dictionary",
+        PyLong_FromVoidPtr((void*)(&drop_duplicates_local_dictionary)));
     PyObject_SetAttrString(m, "get_groupby_labels",
                            PyLong_FromVoidPtr((void*)(&get_groupby_labels)));
     PyObject_SetAttrString(m, "array_isin",

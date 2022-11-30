@@ -1357,7 +1357,7 @@ def test_iceberg_missing_optional_column(iceberg_database, iceberg_table_conn):
 
     bodo_out = read_bodo(table_name, conn, db_schema)
     assert (
-        bodo_out["B"].isna().sum() == 100
+        reduce_sum(bodo_out["B"].isna().sum()) == 100
     ), "Missing column not filled with nulls"
 
 

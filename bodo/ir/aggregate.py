@@ -271,6 +271,7 @@ supported_agg_funcs = [
     "idxmax",
     "var",
     "std",
+    "boolor_agg",
     "udf",
     "gen_udf",
 ]
@@ -325,8 +326,8 @@ def get_agg_func(func_ir, func_name, rhs, series_type=None, typemap=None):
         func.ncols_pre_shuffle = 3
         func.ncols_post_shuffle = 4
         return func
-    if func_name in {"first", "last"}:
-        # We don't have a function definition for first/last, and it is not needed
+    if func_name in {"first", "last", "boolor_agg"}:
+        # We don't have a function definition for first/last/boolor_agg, and it is not needed
         # for the groupby C++ codepath, so we just use a dummy object.
         # Also NOTE: Series last and df.groupby.last() are different operations
         func = pytypes.SimpleNamespace()
@@ -1280,7 +1281,7 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
     elif isinstance(t, StringArrayType):
         return "pre_alloc_string_array(1, 1)"
     elif t == bodo.dict_str_arr_type:
-        return "bodo.libs.dict_arr_ext.init_dict_arr(pre_alloc_string_array(1, 1), bodo.libs.int_arr_ext.alloc_int_array(1, np.int32), False)"
+        return "bodo.libs.dict_arr_ext.init_dict_arr(pre_alloc_string_array(1, 1), bodo.libs.int_arr_ext.alloc_int_array(1, np.int32), False, False)"
     elif isinstance(t, BinaryArrayType):
         return "pre_alloc_binary_array(1, 1)"
     elif t == ArrayItemArrayType(string_array_type):

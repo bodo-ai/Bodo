@@ -485,40 +485,57 @@ static void copy_gathered_null_bytes(uint8_t* null_bitmask,
     }
 }
 
-void convert_local_dictionary_to_global(array_info* dict_array,
-                                        bool is_parallel,
-                                        bool sort_dictionary) {
-    if (dict_array->has_global_dictionary) return;
+/**
+ * @brief Updates a dictionary array to drop any duplicates from its dictionary.
+ * If we gather_global_dict then we first unify the dictionaries on all ranks
+ * to become consistent.
+ *
+ * @param dict_array Dictionary array to update.
+ * @param gather_global_dict Should we gather the dictionaries across all ranks?
+ * @param sort_dictionary Should we sort the dictionary?
+ */
+void update_local_dictionary_remove_duplicates(array_info* dict_array,
+                                               bool gather_global_dict,
+                                               bool sort_dictionary) {
     array_info* local_dictionary = dict_array->info1;
+    array_info* global_dictionary;
+    // If we don't have the global dictionary with unique values
+    // then we need to drop duplicates on the local data and then
+    // gather. If we already the global dictionary but there are duplicates
+    // then we can just skip the gather step. Here we assume that
+    // has_global_dictionary will be synchronized across all ranks.
+
     // table containing a single column with the dictionary values (not
     // indices/codes)
     table_info* in_dictionary_table = new table_info();
     in_dictionary_table->columns.push_back(local_dictionary);
     // get distributed global dictionary
     // drop_duplicates_table steals the reference to local_dictionary, but I
-    // need to keep it around until the end of the conversion (decref later in
-    // this function)
+    // need to keep it around until the end of the conversion (decref later
+    // in this function)
     incref_array(local_dictionary);
-    // TODO dropna? are there NAs in dictionary and how should they be handled
+    // TODO dropna? are there NAs in dictionary and how should they be
+    // handled
     table_info* dist_dictionary_table = drop_duplicates_table(
-        in_dictionary_table, is_parallel, 1, 0, false, false);
+        in_dictionary_table, gather_global_dict, 1, 0, false, false);
     delete in_dictionary_table;  // no array decref because
-                                 // drop_duplicates_table stole the reference
+                                 // drop_duplicates_table stole the
+                                 // reference
     // replicate the global dictionary on all ranks
     // allgather
     table_info* global_dictionary_table;
-    if (is_parallel) {
+    if (gather_global_dict) {
         global_dictionary_table =
-            gather_table(dist_dictionary_table, 1, true, is_parallel);
-        delete dist_dictionary_table;  // no array decref because gather_table
-                                       // stole the reference
+            gather_table(dist_dictionary_table, 1, true, gather_global_dict);
+        delete dist_dictionary_table;  // no array decref because
+                                       // gather_table stole the reference
     } else {
         global_dictionary_table = dist_dictionary_table;
     }
-    array_info* global_dictionary = global_dictionary_table->columns[0];
+    global_dictionary = global_dictionary_table->columns[0];
     delete global_dictionary_table;
 
-    // Sort dictionary locally since it's replicated
+    // Sort dictionary locally
     // XXX Should we always sort?
     if (sort_dictionary) {
         // sort_values_array_local deletes the input array_info and returns
@@ -530,7 +547,12 @@ void convert_local_dictionary_to_global(array_info* dict_array,
 
     // XXX this doesn't propagate to Python
     dict_array->info1 = global_dictionary;
-    dict_array->has_global_dictionary = true;
+    if (gather_global_dict) {
+        // If we didn't gather data, then the dictionary can remain
+        // global if it was already global.
+        dict_array->has_global_dictionary = true;
+    }
+    dict_array->has_deduped_local_dictionary = true;
 
     // -------------
     // calculate mapping from old (local) indices to global ones
@@ -607,6 +629,36 @@ void convert_local_dictionary_to_global(array_info* dict_array,
             index = local_to_global_index[index];
         }
     }
+}
+
+void drop_duplicates_local_dictionary(array_info* dict_array,
+                                      bool sort_dictionary_if_modified) {
+    if (dict_array->has_deduped_local_dictionary) {
+        return;
+    }
+    update_local_dictionary_remove_duplicates(dict_array, false,
+                                              sort_dictionary_if_modified);
+}
+
+void convert_local_dictionary_to_global(array_info* dict_array,
+                                        bool is_parallel,
+                                        bool sort_dictionary_if_modified) {
+    if (!is_parallel || dict_array->has_global_dictionary) {
+        // If data is replicated we just return and rely on other kernels
+        // to avoid checking for global. This is because some C++ functions
+        // use is_parallel=False to implement certain steps of the
+        // is_parallel=True implementation.
+        return;
+    }
+    update_local_dictionary_remove_duplicates(dict_array, true,
+                                              sort_dictionary_if_modified);
+}
+
+void make_dictionary_global_and_unique(array_info* dict_array, bool is_parallel,
+                                       bool sort_dictionary_if_modified) {
+    convert_local_dictionary_to_global(dict_array, is_parallel,
+                                       sort_dictionary_if_modified);
+    drop_duplicates_local_dictionary(dict_array, sort_dictionary_if_modified);
 }
 
 // shuffle_array
@@ -1245,8 +1297,8 @@ table_info* shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             array_info* out_dict_arr = new array_info(
                 bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1, -1,
                 NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL, NULL, NULL,
-                0, 0, 0, true, in_arr->has_sorted_dictionary, in_arr->info1,
-                out_arr);
+                0, 0, 0, true, true, in_arr->has_sorted_dictionary,
+                in_arr->info1, out_arr);
             // info1 is dictionary. incref so it doesn't get deleted since
             // it is given to the output array
             incref_array(in_arr->info1);
@@ -1637,8 +1689,8 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
             array_info* out_dict_arr = new array_info(
                 bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1, -1,
                 NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL, NULL, NULL,
-                0, 0, 0, true, in_arr->has_sorted_dictionary, in_arr->info1,
-                out_arr);
+                0, 0, 0, true, true, in_arr->has_sorted_dictionary,
+                in_arr->info1, out_arr);
             // info1 is dictionary. incref so it doesn't get deleted since
             // it is given to the output array
             incref_array(in_arr->info1);
@@ -1676,12 +1728,12 @@ table_info* shuffle_table(table_info* in_table, int64_t n_keys,
     // TODO maybe it's better to do this in hash_keys_table to avoid repeating
     // this code in other operations?
     for (array_info* a : in_table->columns) {
-        if ((a->arr_type == bodo_array_type::DICT) &&
-            !a->has_global_dictionary) {
+        if (a->arr_type == bodo_array_type::DICT) {
             // XXX is the dictionary replaced in Python input array and
             // correctly replaced? Can it be done easily? (this includes
-            // has_global_dictionary attribute)
-            convert_local_dictionary_to_global(a, is_parallel);
+            // has_global_dictionary attribute). We need dictionaries
+            // to be global and unique for hashing.
+            make_dictionary_global_and_unique(a, is_parallel);
         }
     }
 
@@ -1749,10 +1801,10 @@ table_info* reverse_shuffle_table(table_info* in_table, shuffle_info* sh_info) {
     // Ideally the convert should happen at the function that
     // calls the reverse.
     for (array_info* a : in_table->columns) {
-        if ((a->arr_type == bodo_array_type::DICT) &&
-            !a->has_global_dictionary) {
-            // TODO: Can this ever be called on replicated data?
-            convert_local_dictionary_to_global(a, true);
+        if (a->arr_type == bodo_array_type::DICT) {
+            // NOTE: This can never be called on replicated data?
+            // We need dictionaries to be global and unique for hashing.
+            make_dictionary_global_and_unique(a, true);
         }
     }
     table_info* revshuf_table = reverse_shuffle_table_kernel(
@@ -1776,18 +1828,18 @@ table_info* coherent_shuffle_table(
     // dictionaries to global now (since it's needed for the shuffle) and if
     // any of them are key columns, this will allow to simply hash the indices
     for (array_info* a : in_table->columns) {
-        if ((a->arr_type == bodo_array_type::DICT) &&
-            !a->has_global_dictionary) {
+        if (a->arr_type == bodo_array_type::DICT) {
             // coherent_shuffle_table only called in join with parallel options.
             // is_parallel = true
-            convert_local_dictionary_to_global(a, true);
+            // We need dictionaries to be global and unique for hashing.
+            make_dictionary_global_and_unique(a, true);
         }
     }
 
     // computing the hash data structure
     if (hashes == nullptr)
         hashes = coherent_hash_keys_table(in_table, ref_table, n_keys,
-                                          SEED_HASH_PARTITION);
+                                          SEED_HASH_PARTITION, true);
     // coherent_shuffle_table only called in join with parallel options.
     // is_parallel = true
     // Prereq to calling shuffle_table_kernel
@@ -2189,6 +2241,7 @@ table_info* broadcast_table(table_info* ref_table, table_info* in_table,
                 bodo_array_type::DICT, dict_arr->dtype, out_arr->length, -1, -1,
                 NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL, NULL, NULL,
                 0, 0, 0, /*has_global_dictionary=*/true,
+                /*has_deduped_local_dictionary=*/true,
                 ref_table->columns[i_col]->has_sorted_dictionary, dict_arr,
                 out_arr);
             // incref the dictionary so it doesn't get deleted since
@@ -2538,8 +2591,9 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
         int64_t arr_gath_s[3];
         array_info* in_arr = in_table->columns[i_col];
         if (in_arr->arr_type == bodo_array_type::DICT) {
-            if (!in_arr->has_global_dictionary)
-                convert_local_dictionary_to_global(in_arr, is_parallel);
+            // Note: We need to revisit if gather_table should be
+            // a no-op if is_parallel=False
+            make_dictionary_global_and_unique(in_arr, true);
             in_arr = in_arr->info2;
         }
         int64_t n_rows = in_arr->length;
@@ -2814,6 +2868,7 @@ table_info* gather_table(table_info* in_table, int64_t n_cols_i,
                     bodo_array_type::DICT, in_arr->dtype, out_arr->length, -1,
                     -1, NULL, NULL, NULL, out_arr->null_bitmask, NULL, NULL,
                     NULL, NULL, 0, 0, 0, /*has_global_dictionary=*/true,
+                    /*has_deduped_local_dictionary=*/true,
                     in_arr->has_sorted_dictionary, in_arr->info1, out_arr);
                 incref_array(in_arr->info1);
             }  // else out_arr is already NULL, so doesn't need to be handled

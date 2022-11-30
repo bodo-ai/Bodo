@@ -11,6 +11,15 @@ from bodo.libs.bodosql_array_kernels import *
 from bodo.tests.utils import check_func, find_nested_dispatcher_and_args
 
 
+def coalesce_expected_output(args):
+    def coalesce_scalar_fn(*args):
+        for arg in args:
+            if not pd.isna(arg):
+                return arg
+
+    return vectorized_sol(args, coalesce_scalar_fn, None)
+
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -139,12 +148,7 @@ def test_coalesce(args, memory_leak_check):
     exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
     impl = impl_vars["impl"]
 
-    def coalesce_scalar_fn(*args):
-        for arg in args:
-            if not pd.isna(arg):
-                return arg
-
-    coalesce_answer = vectorized_sol(args, coalesce_scalar_fn, None)
+    coalesce_answer = coalesce_expected_output(args)
 
     check_func(
         impl, args, py_output=coalesce_answer, check_dtype=False, reset_index=True
@@ -174,12 +178,7 @@ def test_coalesce_str_array_optimized(memory_leak_check):
     exec(test_impl, {"bodo": bodo, "pd": pd}, impl_vars)
     impl = impl_vars["impl"]
 
-    def coalesce_scalar_fn(*args):
-        for arg in args:
-            if not pd.isna(arg):
-                return arg
-
-    coalesce_answer = vectorized_sol(args, coalesce_scalar_fn, None)
+    coalesce_answer = coalesce_expected_output(args)
 
     check_func(
         impl, args, py_output=coalesce_answer, check_dtype=False, reset_index=True
@@ -570,9 +569,82 @@ def test_decode(args, memory_leak_check):
     check_func(impl, args, py_output=decode_answer, check_dtype=False, reset_index=True)
 
 
+def test_dict_arr_coalesce_null(memory_leak_check):
+    """Test coalesce behavior with dictionary encoded arrays and a scalar NULL."""
+
+    def impl(arr0, arr1, scalar):
+        return pd.Series(bodo.libs.bodosql_array_kernels.coalesce((arr0, arr1, scalar)))
+
+    arr0 = pd.arrays.ArrowStringArray(
+        pa.array(
+            ["afa", "erwoifnewoi", "Rer", None, "مرحبا, العالم ، هذا هو بودو"] * 5,
+            type=pa.dictionary(pa.int32(), pa.string()),
+        )
+    )
+    arr1 = pd.arrays.ArrowStringArray(
+        pa.array(
+            ["a", "b", "c", "d", None] + (["a", None, "a", None] * 5),
+            type=pa.dictionary(pa.int32(), pa.string()),
+        )
+    )
+
+    args = (arr0, arr1, None)
+    coalesce_answer = coalesce_expected_output(args)
+    check_func(
+        impl, args, py_output=coalesce_answer, check_dtype=False, reset_index=True
+    )
+
+
 @pytest.mark.slow
-def test_option_with_arr_coalesce(memory_leak_check):
+def test_dict_arr_coalesce_optional():
+    """Test coalesce behavior with dictionary encoded arrays and various optional types"""
+    # Note: We remove a memory leak check because we leak memory when an optional scalar
+    # is followed by an array that changes the expected output from dict encoding to
+    # regular string array. This occurs because the cast from dict array -> string array
+    # leaks memory.
+
+    def impl(arr, scalar, flag, other):
+        A = scalar if flag else None
+        return pd.Series(bodo.libs.bodosql_array_kernels.coalesce((arr, A, other)))
+
+    main_arr = pd.arrays.ArrowStringArray(
+        pa.array(
+            ["afa", "erwoifnewoi", "Rer", None, "مرحبا, العالم ، هذا هو بودو"] * 5,
+            type=pa.dictionary(pa.int32(), pa.string()),
+        )
+    )
+    main_scalar = "هو بودو"
+    other_dict_arr = pd.arrays.ArrowStringArray(
+        pa.array(
+            ["a", "b", "c", "d", None] + (["a", None, "a", None] * 5),
+            type=pa.dictionary(pa.int32(), pa.string()),
+        )
+    )
+    other_regular_arr = pd.Series(
+        ["a", "b", "c", "d", None] + (["a", None, "a", None] * 5)
+    )
+    other_scalar = "bef"
+    for other in (other_dict_arr, other_regular_arr, other_scalar, None):
+        for flag in [True, False]:
+            args = (main_arr, main_scalar, flag, other)
+            expected_args = (main_arr, main_scalar if flag else None, other)
+            coalesce_answer = coalesce_expected_output(expected_args)
+            check_func(
+                impl,
+                args,
+                py_output=coalesce_answer,
+                check_dtype=False,
+                reset_index=True,
+            )
+
+
+@pytest.mark.slow
+def test_option_with_arr_coalesce():
     """tests coalesce behavior with optionals when supplied an array argument"""
+    # Note: We remove a memory leak check because we leak memory when an optional scalar
+    # is followed by an array that changes the expected output from dict encoding to
+    # regular string array. This occurs because the cast from dict array -> string array
+    # leaks memory.
 
     def impl1(arr, scale1, scale2, flag1, flag2):
         A = scale1 if flag1 else None
