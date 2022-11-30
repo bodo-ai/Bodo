@@ -235,7 +235,7 @@ def test_snowflake_catalog_insert_into(
     ) as table_name:
         # Write to Snowflake
         insert_table = table_name if use_default_schema else f"{schema}.{table_name}"
-        query = f"INSERT INTO {insert_table}(B, C) Select 'literal', A + 1 from table1"
+        query = f"INSERT INTO {insert_table}(B, C) Select 'literal', A + 1 from __bodolocal__.table1"
         # Only test with only_1D=True so we only insert into the table once.
         check_func(impl, (bc, query), only_1D=True, py_output=5)
         output_df = None
@@ -287,7 +287,7 @@ def test_snowflake_catalog_insert_into_read(
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test3", db, schema
     ) as table_name:
-        write_query = f"INSERT INTO {schema}.{table_name}(B, C) Select 'literal', A + 1 from table1"
+        write_query = f"INSERT INTO {schema}.{table_name}(B, C) Select 'literal', A + 1 from __bodolocal__.table1"
         read_query = f"Select * from {schema}.{table_name}"
         # Only test with only_1D=True so we only insert into the table once.
         check_func(
@@ -332,7 +332,7 @@ def test_snowflake_catalog_insert_into_null_literal(
         )
         # Rename columns for comparison
         py_output.columns = ["a", "b", "c"]
-        write_query = f"INSERT INTO {schema}.{table_name}(A, B, C) Select NULL as A, 'literal', A + 1 from table1"
+        write_query = f"INSERT INTO {schema}.{table_name}(A, B, C) Select NULL as A, 'literal', A + 1 from __bodolocal__.table1"
         read_query = f"Select * from {schema}.{table_name}"
         # Only test with only_1D=True so we only insert into the table once.
         check_func(
