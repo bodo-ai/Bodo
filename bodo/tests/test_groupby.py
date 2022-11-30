@@ -2476,6 +2476,9 @@ def test_bool_sum_simple(memory_leak_check):
     check_func(impl, (df,), sort_output=True, reset_index=True)
 
 
+# https://dev.azure.com/bodo-inc/Bodo/_test/analytics?definitionId=5&contextType=build
+# test_groupby_apply on average takes 11.14 min, or 668.4 seconds
+@pytest.mark.timeout(1000)
 def test_groupby_apply(is_slow_run, memory_leak_check):
     """
     Test Groupby.apply() for UDFs that return a dataframes

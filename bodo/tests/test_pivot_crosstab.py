@@ -1521,6 +1521,10 @@ def test_pivot_table_multiple_index(pivot_dataframes, memory_leak_check):
         ),
     ],
 )
+
+# https://dev.azure.com/bodo-inc/Bodo/_test/analytics?definitionId=5&contextType=build
+# test_pivot_index_none[df0] on average takes 13.27 min, or 796.2 seconds
+@pytest.mark.timeout(1000)
 def test_pivot_index_none(df, memory_leak_check):
     """
     Test running DataFrame.pivot() with index=None and values=None.
