@@ -8,27 +8,22 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /root
 #
-# Ubuntu installs and Miniconda
+# Ubuntu installs and Mambaforge
 #
 RUN apt-get update && apt-get install -y wget bzip2 git vim make curl \
-	&& wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh \
-	&& chmod +x miniconda.sh\
-	&& ./miniconda.sh -b
-ENV PATH /root/miniconda3/bin/:${PATH}
+	&& wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh \
+	&& chmod +x mambaforge.sh\
+	&& ./mambaforge.sh -b
+ENV PATH /root/mambaforge/bin/:${PATH}
+
 #
 # Creation of the BODODEV environment
 #
-
-RUN conda create -n BODODEV numpy scipy pandas=${BODO_PD_VERSION:-'1.4.*'} boost-cpp=1.74.0 cmake h5py mpich mpi 'gcc_linux-64>=9' 'gxx_linux-64>=9' python=3.9 -c conda-forge
-RUN conda install -n BODODEV python numba=0.55.2 -c conda-forge
-RUN conda install -n BODODEV 'hdf5=1.12.*=*mpich*' -c conda-forge
-RUN conda install -n BODODEV python pyarrow=8.0.0 fsspec -c conda-forge
-RUN conda install -n BODODEV pytest ipython
-RUN conda install -n BODODEV sqlalchemy pymysql xlrd openpyxl mpi4py cython -c conda-forge
-# RUN conda install -n BODODEV scikit-learn='1.1.*' -c conda-forge
-RUN conda install -n BODODEV openjdk=11
-RUN conda install -n BODODEV hdfs3 -c conda-forge
-RUN conda install -n BODODEV ccache -c conda-forge
+RUN mamba create -n BODODEV -y numpy scipy pandas=${BODO_PD_VERSION:-'1.4.*'} boost-cpp=1.74.0 cmake h5py mpich mpi 'gcc_linux-64>=9' 'gxx_linux-64>=9' python=3.9 -c conda-forge
+RUN mamba install -n BODODEV -y numba=0.55.2 'hdf5=1.12.*=*mpich*' pyarrow=9.0.0 fsspec -c conda-forge
+RUN mamba install -n BODODEV -y sqlalchemy pymysql xlrd openpyxl mpi4py cython hdfs3 ccache -c conda-forge
+RUN mamba install -n BODODEV -y openjdk=11 pytest ipython
+# RUN mamba install -n BODODEV scikit-learn='1.1.*' -c conda-forge
 
 # installing hadoop and libhdfs (JNI)
 ARG hdfs=3.3.2
@@ -55,14 +50,14 @@ RUN chmod 0600 ~/.ssh/authorized_keys
 # set up initial .bashrc for ssh
 #
 
-RUN echo "export PATH=$HOME/miniconda3/bin:$PATH" >> ~/.bashrc
+RUN echo "export PATH=$HOME/mambaforge/bin:$PATH" >> ~/.bashrc
 RUN echo "source activate BODODEV" >> ~/.bashrc
 
 # hadoop related enviroment variables
 RUN echo "export HDFS_NAMENODE_USER=root" >> ~/.bashrc
 RUN echo "export HDFS_DATANODE_USER=root" >> ~/.bashrc
 RUN echo "export HDFS_SECONDARYNAMENODE_USER=root" >> ~/.bashrc
-RUN echo "export JAVA_HOME=/root/miniconda3/envs/BODODEV" >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
+RUN echo "export JAVA_HOME=/root/mambaforge/envs/BODODEV" >> ${HADOOP_HOME}/etc/hadoop/hadoop-env.sh
 
 # build bodo
 RUN echo "cd /Bodo" >> ~/.bashrc
