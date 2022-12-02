@@ -499,12 +499,33 @@ class BodoSQLContext:
     def convert_to_pandas(self, sql, params_dict=None):
         """converts SQL code to Pandas"""
         pd_code, lowered_globals = self._convert_to_pandas(sql, True, params_dict)
-        # Add the global variable definitions at the begining of the fn,
+        # add the imports so someone can directly run the code.
+        imports = [
+            "import numpy as np",
+            "import pandas as pd",
+            "import time",
+            "import numba",
+            "import bodo",
+            "import bodosql",
+            "from bodo.utils.typing import ColNamesMetaType",
+            "from bodo.utils.typing import MetaType",
+        ]
+        added_globals = []
+        # Add a decorator so someone can directly run the code.
+        decorator = "@bodo.jit\n"
+        # Add the global variable definitions at the beginning of the fn,
         # for better readability
-        added_defs = ""
         for varname, glbl in lowered_globals.items():
-            added_defs += varname + " = " + repr(glbl) + "\n"
-        return added_defs + pd_code
+            added_globals.append(varname + " = " + repr(glbl))
+
+        return (
+            "\n".join(imports)
+            + "\n"
+            + "\n".join(added_globals)
+            + "\n"
+            + decorator
+            + pd_code
+        )
 
     def _convert_to_pandas_unoptimized(
         self,

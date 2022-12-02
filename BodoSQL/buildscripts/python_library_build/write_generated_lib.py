@@ -139,7 +139,7 @@ def generate_and_write_library():
             (
                 "re_match_nocase",
                 (
-                    lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}), flags=re.I)"
+                    lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}, flags=re.I))"
                 ),
                 2,
             ),
