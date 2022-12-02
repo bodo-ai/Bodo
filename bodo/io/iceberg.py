@@ -345,7 +345,10 @@ def get_iceberg_pq_dataset(
     'get_row_counts' : flag for getting row counts of Parquet files and validate
         schemas, passed directly to get_parquet_dataset(). only needed during runtime.
     """
-    ev = tracing.Event("get_iceberg_pq_dataset")
+    # Only gather tracing if we are at runtime and tracing is turned on
+    do_tracing = get_row_counts and tracing.is_tracing()
+    if do_tracing:  # pragma: no cover
+        ev = tracing.Event("get_iceberg_pq_dataset")
 
     comm = MPI.COMM_WORLD
 
@@ -360,8 +363,9 @@ def get_iceberg_pq_dataset(
     # to initialize a full JVM + gateway server on every rank.
     # Sonar cube only runs on rank 0, so we add no cover to avoid the warning
     if bodo.get_rank() == 0:  # pragma: no cover
-        ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
-        ev_iceberg_fl.add_attribute("g_dnf_filter", str(dnf_filters))
+        if do_tracing:  # pragma: no cover
+            ev_iceberg_fl = tracing.Event("get_iceberg_file_list", is_parallel=False)
+            ev_iceberg_fl.add_attribute("g_dnf_filter", str(dnf_filters))
         try:
             # We return two list of Iceberg files. pq_abs_path_file_list_or_e contains the full
             # paths that can be used to read individual files. iceberg_relative_path_file_list contains
@@ -375,7 +379,7 @@ def get_iceberg_pq_dataset(
                 pq_abs_path_file_list_or_e,
                 iceberg_relative_path_file_list,
             ) = get_iceberg_file_list(table_name, conn, database_schema, dnf_filters)
-            if tracing.is_tracing():  # pragma: no cover
+            if do_tracing:  # pragma: no cover
                 ICEBERG_TRACING_NUM_FILES_TO_LOG = int(
                     os.environ.get("BODO_ICEBERG_TRACING_NUM_FILES_TO_LOG", "50")
                 )
@@ -390,15 +394,17 @@ def get_iceberg_pq_dataset(
                 )
         except Exception as e:  # pragma: no cover
             pq_abs_path_file_list_or_e = e
-        ev_iceberg_fl.finalize()
-        ev_iceberg_snapshot = tracing.Event("get_snapshot_id", is_parallel=False)
+        if do_tracing:  # pragma: no cover
+            ev_iceberg_fl.finalize()
+            ev_iceberg_snapshot = tracing.Event("get_snapshot_id", is_parallel=False)
         try:
             snapshot_id_or_e = get_iceberg_snapshot_id(
                 table_name, conn, database_schema
             )
         except Exception as e:  # pragma: no cover
             snapshot_id_or_e = e
-        ev_iceberg_snapshot.finalize()
+        if do_tracing:  # pragma: no cover
+            ev_iceberg_snapshot.finalize()
 
     # Send list to all ranks
     (
@@ -471,7 +477,8 @@ def get_iceberg_pq_dataset(
         snapshot_id,
         pq_dataset,
     )
-    ev.finalize()
+    if do_tracing:  # pragma: no cover
+        ev.finalize()
 
     return iceberg_pq_dataset
 
@@ -605,7 +612,7 @@ def _assert_schemas_compatible(pa_schema: pa.Schema, df_schema: pa.Schema) -> bo
         if not (df_field is None and pa_field.nullable):
             subset_pa_schema = subset_pa_schema.append(pa_field)
 
-    # Check schemas are compatible. This also enforces the ordered subset requirement. 
+    # Check schemas are compatible. This also enforces the ordered subset requirement.
     if not subset_pa_schema.equals(clean_df_schema):
         if numba.core.config.DEVELOPER_MODE:  # type: ignore
             raise BodoError(
