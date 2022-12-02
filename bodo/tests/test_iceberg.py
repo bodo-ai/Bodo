@@ -828,9 +828,11 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
             check_logger_msg(stream, "Filter pushdown successfully performed")
     # Load the tracing results
     dnf_filters = tracing_info.get_event_attribute(
-        "get_iceberg_file_list", "g_dnf_filter"
+        "get_iceberg_file_list", "g_dnf_filter", 0
     )
-    expr_filters = tracing_info.get_event_attribute("get_row_counts", "g_expr_filters")
+    expr_filters = tracing_info.get_event_attribute(
+        "get_row_counts", "g_expr_filters", 0
+    )
     # Verify we have dnf filters.
     assert dnf_filters != "None", "No DNF filters were pushed"
     # Verify we don't have expr filters

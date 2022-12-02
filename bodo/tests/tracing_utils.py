@@ -67,9 +67,16 @@ class TracingContextManager:
                     # Reload the file and decode the data.
                     tracing_events = json.load(g)["traceEvents"]
             self._tracing_events = comm.bcast(tracing_events)
-        # Note: Currently this only works with unique events. If you test produces the same
-        # event multiple times you will need to modify this code.
-        self._event_names = {x["name"]: i for i, x in enumerate(self._tracing_events)}
+
+        # Map the event names to tracing locations
+        self._event_names = dict()
+        for i, x in enumerate(self._tracing_events):
+            name = x["name"]
+            if name not in self._event_names:
+                # We use a list to support the same event occurring multiple times
+                self._event_names[name] = []
+            self._event_names[name].append(i)
+
         # Reset tracing
         if self._old_trace_dev is None:
             del os.environ["BODO_TRACE_DEV"]
@@ -85,11 +92,13 @@ class TracingContextManager:
         """
         return self._tracing_events
 
-    def get_event(self, event_name: str) -> Dict[str, Any]:
+    def get_event(self, event_name: str, event_idx: int) -> Dict[str, Any]:
         """Returns the last event with a given name.
 
         Args:
             event_name (str): Name of the event to return.
+            event_idx (int): The index of the event in question. If the same event
+                happens multiple times this indicates which event to look at.
 
         Raises:
             ValueError: Event does not exist
@@ -101,16 +110,20 @@ class TracingContextManager:
             raise ValueError(
                 f"Event {event_name} not found in tracing. Possible events: {self._event_names.keys()}"
             )
-        idx = self._event_names[event_name]
+        idx = self._event_names[event_name][event_idx]
         return self._tracing_events[idx]
 
-    def get_event_attribute(self, event_name: str, attribute_name: str) -> Any:
+    def get_event_attribute(
+        self, event_name: str, attribute_name: str, event_idx: int
+    ) -> Any:
         """Returns the attribute of the given attribute_name in the last
         event with the given event_name
 
         Args:
             event_name (str): Name of the event to search.
-            attribute_name (attribute_name): Name of the event to return.
+            attribute_name (str): Name of the event to return.
+            event_idx (int): The index of the event in question. If the same event
+                happens multiple times this indicates which event to look at.
 
         Raises:
             ValueError: Attribute does not exist in the event.
@@ -118,7 +131,7 @@ class TracingContextManager:
         Returns:
             Any: Attribute in question. Type depends on the attribute.
         """
-        event = self.get_event(event_name)
+        event = self.get_event(event_name, event_idx)
         event_args = event["args"]
         if attribute_name not in event_args:
             raise ValueError(
