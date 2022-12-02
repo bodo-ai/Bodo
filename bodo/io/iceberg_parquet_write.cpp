@@ -6,11 +6,29 @@
 #undef timezone
 #endif
 
+#include <arrow/python/api.h>
 #include <boost/uuid/uuid.hpp>             // uuid class
 #include <boost/uuid/uuid_generators.hpp>  // generators
 #include <boost/uuid/uuid_io.hpp>          // streaming operators etc.
+#include <optional>
 #include "../libs/iceberg_transforms.h"
 #include "parquet_write.h"
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it
+#define CHECK_ARROW(expr, msg)                                              \
+    if (!(expr.ok())) {                                                     \
+        std::string err_msg = std::string("Error in arrow parquet I/O: ") + \
+                              msg + " " + expr.ToString();                  \
+        throw std::runtime_error(err_msg);                                  \
+    }
+
+// if status of arrow::Result is not ok, form an err msg and raise a
+// runtime_error with it. If it is ok, get value using ValueOrDie
+// and assign it to lhs using std::move
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
 
 /**
  * @brief Generate a random file name for Iceberg Table write.
@@ -48,15 +66,17 @@ std::string generate_iceberg_file_name() {
  * @param row_group_size Row group size in number of rows
  * @param iceberg_metadata Iceberg metadata string to be added to the parquet
  * schema's metadata with key 'iceberg.schema'
+ * @param iceberg_arrow_schema Iceberg schema in Arrow format that written
+ * Parquet files should match
  * @param[out] record_count Number of records in this file
  * @param[out] file_size_in_bytes Size of the file in bytes
  */
-void iceberg_pq_write_helper(const char *fpath, const table_info *table,
-                             const array_info *col_names_arr,
-                             const char *compression, bool is_parallel,
-                             const char *bucket_region, int64_t row_group_size,
-                             char *iceberg_metadata, int64_t *record_count,
-                             int64_t *file_size_in_bytes) {
+void iceberg_pq_write_helper(
+    const char *fpath, const table_info *table, const array_info *col_names_arr,
+    const char *compression, bool is_parallel, const char *bucket_region,
+    int64_t row_group_size, char *iceberg_metadata,
+    std::shared_ptr<arrow::Schema> iceberg_arrow_schema, int64_t *record_count,
+    int64_t *file_size_in_bytes) {
     std::unordered_map<std::string, std::string> md = {
         {"iceberg.schema", std::string(iceberg_metadata)}};
 
@@ -75,7 +95,8 @@ void iceberg_pq_write_helper(const char *fpath, const table_info *table,
     *file_size_in_bytes =
         pq_write(fpath, table, col_names_arr, nullptr, false, "", compression,
                  is_parallel, false, 0, 0, 0, "", bucket_region, row_group_size,
-                 "", "UTC", arrow::TimeUnit::MICRO, md, std::string(fpath));
+                 "", "UTC", arrow::TimeUnit::MICRO, md, std::string(fpath),
+                 iceberg_arrow_schema);
     *record_count = table->nrows();
 }
 
@@ -100,25 +121,26 @@ void iceberg_pq_write_helper(const char *fpath, const table_info *table,
  * @param[out] iceberg_files_info_py List of tuples for each of the files
  consisting of (file_name, record_count, file_size, *partition_values). Should
  be passed in as an empty list which will be filled during execution.
+ * @param iceberg_schema Expected Arrow schema of files written to Iceberg
+ table, if given.
  */
 void iceberg_pq_write(const char *table_data_loc, table_info *table,
                       const array_info *col_names_arr, PyObject *partition_spec,
                       PyObject *sort_order, const char *compression,
                       bool is_parallel, const char *bucket_region,
                       int64_t row_group_size, char *iceberg_metadata,
-                      PyObject *iceberg_files_info_py) {
+                      PyObject *iceberg_files_info_py,
+                      std::shared_ptr<arrow::Schema> iceberg_schema) {
     tracing::Event ev("iceberg_pq_write", is_parallel);
     ev.add_attribute("table_data_loc", table_data_loc);
     ev.add_attribute("iceberg_metadata", iceberg_metadata);
     if (!PyList_Check(iceberg_files_info_py)) {
         throw std::runtime_error(
             "IcebergParquetWrite: iceberg_files_info_py is not a list");
-    }
-    if (!PyList_Check(sort_order)) {
+    } else if (!PyList_Check(sort_order)) {
         throw std::runtime_error(
             "IcebergParquetWrite: sort_order is not a list");
-    }
-    if (!PyList_Check(partition_spec)) {
+    } else if (!PyList_Check(partition_spec)) {
         throw std::runtime_error(
             "IcebergParquetWrite: partition_spec is not a list");
     }
@@ -497,10 +519,11 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
             // to the iceberg-file-info tuple for this file.
             // We don't need to check if record count is zero in this case.
             int64_t record_count, file_size_in_bytes;
-            iceberg_pq_write_helper(p.fpath.c_str(), part_table, col_names_arr,
-                                    compression, false, bucket_region,
-                                    row_group_size, iceberg_metadata,
-                                    &record_count, &file_size_in_bytes);
+            iceberg_pq_write_helper(
+                p.fpath.c_str(), part_table, col_names_arr, compression, false,
+                bucket_region, row_group_size, iceberg_metadata, iceberg_schema,
+                &record_count, &file_size_in_bytes);
+
             PyObject *record_count_py = PyLong_FromLongLong(record_count);
             PyObject *file_size_in_bytes_py =
                 PyLong_FromLongLong(file_size_in_bytes);
@@ -536,10 +559,10 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
         // We can't at the moment due to how pq_write works. Once we
         // refactor that a little, we should be able to handle this
         // more elegantly.
-        iceberg_pq_write_helper(fpath.c_str(), working_table, col_names_arr,
-                                compression, false, bucket_region,
-                                row_group_size, iceberg_metadata, &record_count,
-                                &file_size_in_bytes);
+        iceberg_pq_write_helper(
+            fpath.c_str(), working_table, col_names_arr, compression, false,
+            bucket_region, row_group_size, iceberg_metadata, iceberg_schema,
+            &record_count, &file_size_in_bytes);
 
         if (record_count > 0) {
             // Only need to report the file back if we created it
@@ -562,25 +585,58 @@ void iceberg_pq_write(const char *table_data_loc, table_info *table,
 
 /**
  * @brief Python entrypoint for the iceberg write function
- * with error handling.
+ * with error handling. Since write occurs in parallel, exceptions are
+ * captured and propagated to ensure all ranks raise.
  */
 PyObject *iceberg_pq_write_py_entry(
     const char *table_data_loc, table_info *table,
     const array_info *col_names_arr, PyObject *partition_spec,
     PyObject *sort_order, const char *compression, bool is_parallel,
-    const char *bucket_region, int64_t row_group_size, char *iceberg_metadata) {
+    const char *bucket_region, int64_t row_group_size, char *iceberg_metadata,
+    PyObject *iceberg_arrow_schema_py) {
+    // Return value and exception string are captured to force all ranks
+    // to raise an exception.
+    PyObject *ret_val = nullptr;
+    std::optional<const char *> err_str;
+
     try {
         // Python list of tuples describing the data files written.
         // iceberg_pq_write will append to the list and then this will be
         // returned to the Python.
         PyObject *iceberg_files_info_py = PyList_New(0);
+
+        std::shared_ptr<arrow::Schema> iceberg_schema;
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_schema(iceberg_arrow_schema_py),
+            "Iceberg Schema Couldn't Unwrap from Python", iceberg_schema);
+
         iceberg_pq_write(table_data_loc, table, col_names_arr, partition_spec,
                          sort_order, compression, is_parallel, bucket_region,
                          row_group_size, iceberg_metadata,
-                         iceberg_files_info_py);
-        return iceberg_files_info_py;
+                         iceberg_files_info_py, iceberg_schema);
+
+        Py_DECREF(iceberg_arrow_schema_py);
+        ret_val = iceberg_files_info_py;
     } catch (const std::exception &e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
+        err_str = e.what();
+    }
+
+    // Parquet write occurs in parallel without any synchronization. Thus
+    // we need to check if any rank threw an exception, and ensure all ranks
+    // stop. Each rank can fail for unique reasons, so we use a helper
+    // message on ranks that didn't originally throw an exception.
+    // TODO: Move to helper function so this can be used anywhere
+    auto has_err_local = err_str.has_value();
+    auto has_err_global = false;
+    MPI_Allreduce(&has_err_local, &has_err_global, 1, MPI_C_BOOL, MPI_LOR,
+                  MPI_COMM_WORLD);
+
+    // If any rank has an error
+    if (has_err_global) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        err_str.value_or("See other ranks for runtime error"));
         return nullptr;
     }
+
+    return ret_val;
 }

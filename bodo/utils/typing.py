@@ -8,6 +8,7 @@ import operator
 import types as pytypes
 import warnings
 from inspect import getfullargspec
+from typing import Any, Dict, List, Optional, Tuple, TypeGuard, Union
 
 import numba
 import numba.cpython.unicode
@@ -751,7 +752,7 @@ def check_unsupported_args(
         raise BodoError(error_message)
 
 
-def get_overload_const_tuple(val):
+def get_overload_const_tuple(val) -> Optional[Tuple]:
     if isinstance(val, tuple):
         return val
     if isinstance(val, types.Omitted):
@@ -761,7 +762,7 @@ def get_overload_const_tuple(val):
         return tuple(get_overload_const(t) for t in val.types)
 
 
-def get_overload_constant_dict(val):
+def get_overload_constant_dict(val) -> Dict:
     """get constant dict values from literal type (stored as const tuple)"""
     # LiteralStrKeyDict with all const values, e.g. {"A": ["B"]}
     # see test_groupby_agg_const_dict::impl4
@@ -798,7 +799,7 @@ def get_overload_const_str_len(val):
         return len(val.value)
 
 
-def get_overload_const_list(val):
+def get_overload_const_list(val) -> Union[List[Any], Tuple[Any, ...], None]:
     """returns a constant list from type 'val', which could be a single value
     literal, a constant list or a constant tuple.
     """
@@ -821,7 +822,7 @@ def get_overload_const_list(val):
         return tuple(get_literal_value(t) for t in val.types)
 
 
-def get_overload_const_str(val):
+def get_overload_const_str(val) -> str:
     if isinstance(val, str):
         return val
     if isinstance(val, types.Omitted):
@@ -834,7 +835,7 @@ def get_overload_const_str(val):
     raise BodoError("{} not constant string".format(val))
 
 
-def get_overload_const_bytes(val):
+def get_overload_const_bytes(val) -> bytes:
     """Gets the bytes value from the possibly wraped value.
     Val must actually be a constant byte type, or this fn will throw an error
     """
@@ -847,7 +848,7 @@ def get_overload_const_bytes(val):
     raise BodoError("{} not constant binary".format(val))
 
 
-def get_overload_const_int(val):
+def get_overload_const_int(val) -> int:
     if isinstance(val, int):
         return val
     if isinstance(val, types.Omitted):
@@ -860,7 +861,7 @@ def get_overload_const_int(val):
     raise BodoError("{} not constant integer".format(val))
 
 
-def get_overload_const_float(val):
+def get_overload_const_float(val) -> float:
     if isinstance(val, float):
         return val
     if isinstance(val, types.Omitted):
@@ -869,7 +870,7 @@ def get_overload_const_float(val):
     raise BodoError("{} not constant float".format(val))
 
 
-def get_overload_const_bool(val):
+def get_overload_const_bool(val) -> bool:
     if isinstance(val, bool):
         return val
     if isinstance(val, types.Omitted):
@@ -882,7 +883,9 @@ def get_overload_const_bool(val):
     raise BodoError("{} not constant boolean".format(val))
 
 
-def is_const_func_type(t):
+def is_const_func_type(
+    t,
+) -> TypeGuard[Union[types.MakeFunctionLiteral, "FunctionLiteral", types.Dispatcher]]:
     """check if 't' is a constant function type"""
     return isinstance(
         t,
@@ -978,7 +981,19 @@ def parse_dtype(dtype, func_name=None):
         raise BodoError(f"invalid dtype {dtype}")
 
 
-def is_list_like_index_type(t):
+def is_list_like_index_type(
+    t,
+) -> TypeGuard[
+    Union[
+        types.List,
+        types.Array,
+        "NumericIndexType",
+        "RangeIndexType",
+        "SeriesType",
+        "bodo.IntegerArrayType",
+        "bodo.libs.bool_arr_ext.BooleanArrayType",
+    ]
+]:
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.
     """

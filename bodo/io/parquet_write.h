@@ -83,7 +83,8 @@ int64_t pq_write(
     int64_t row_group_size, const char *prefix, std::string tz = "",
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
     std::unordered_map<std::string, std::string> schema_metadata_pairs = {},
-    std::string filename = "");
+    std::string filename = "",
+    std::shared_ptr<arrow::Schema> expected_schema = nullptr);
 
 int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
                           const array_info *col_names_arr,

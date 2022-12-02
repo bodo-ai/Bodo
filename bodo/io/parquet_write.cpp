@@ -7,6 +7,8 @@
 #endif
 
 #include "parquet_write.h"
+#include <arrow/compute/api.h>
+#include <arrow/type.h>
 #include "../libs/_array_hash.h"
 #include "../libs/_bodo_common.h"
 #include "../libs/_bodo_to_arrow.h"
@@ -162,7 +164,7 @@ int64_t pq_write(
     int64_t row_group_size, const char *prefix, std::string tz,
     arrow::TimeUnit::type time_unit,
     std::unordered_map<std::string, std::string> schema_metadata_pairs,
-    std::string filename) {
+    std::string filename, std::shared_ptr<arrow::Schema> expected_schema) {
     tracing::Event ev("pq_write", is_parallel);
     ev.add_attribute("g_path", _path_name);
     ev.add_attribute("g_write_index", write_index);
@@ -174,6 +176,7 @@ int64_t pq_write(
     ev.add_attribute("prefix", prefix);
     ev.add_attribute("tz", tz);
     ev.add_attribute("filename", filename);
+
     // Write actual values of start, stop, step to the metadata which is a
     // string that contains %d
     int check;
@@ -252,21 +255,60 @@ int64_t pq_write(
     // columns
     std::vector<std::shared_ptr<arrow::Field>> schema_vector;
     std::vector<std::shared_ptr<arrow::Field>> schema_for_metadata_vector;
-    std::vector<std::shared_ptr<arrow::ChunkedArray>> columns(
-        table->columns.size());
+    std::vector<std::shared_ptr<arrow::Array>> columns(table->columns.size());
     for (size_t i = 0; i < table->columns.size(); i++) {
         auto col = table->columns[i];
-        bodo_array_to_arrow(pool, col, col_names[i], schema_vector, &columns[i],
-                            tz, time_unit, false);
+        auto nullable = true;
+        auto arrow_type =
+            bodo_array_to_arrow(pool, col, &columns[i], tz, time_unit, false);
+
+        // Cast the Arrow arrays to their expected type and nullability
+        // This is currently only used for enforcing the output of Iceberg
+        // writes
+        if (expected_schema != nullptr) {
+            nullable = expected_schema->field(i)->nullable();
+            if (!nullable && columns[i]->null_count() != 0) {
+                std::string err_msg =
+                    std::string("to_parquet: Column ") + col_names[i] +
+                    " contains nulls but is expected to be non-nullable";
+                throw std::runtime_error(err_msg);
+            }
+
+            auto expected_type = expected_schema->field(i)->type();
+            if (expected_type->id() != arrow::Type::STRING &&
+                expected_type->id() != arrow::Type::LARGE_STRING)
+                arrow_type = expected_type;
+            auto array_type = columns[i]->type();
+
+            // Skip expected string types since they can be dictionary encoded
+            if (!array_type->Equals(arrow_type)) {
+                auto res = arrow::compute::Cast(*columns[i].get(), arrow_type);
+
+                if (!res.ok()) {
+                    std::string err_msg =
+                        std::string("to_parquet: Column ") + col_names[i] +
+                        " is type " + array_type->ToString() +
+                        " but is expected to be type " + arrow_type->ToString();
+                    throw std::runtime_error(err_msg);
+                }
+
+                columns[i] = res.ValueOrDie();
+            }
+        }
+
+        schema_vector.push_back(
+            arrow::field(col_names[i], arrow_type, nullable));
     }
 
     // dictionary-encoded column handling
     // See comments on top of GetSchemaMetadata for why we generate a different
     // schema for the Arrow metadata string
-    if (schema_vector.size() != table->ncols())
+    if (schema_vector.size() != table->ncols()) {
         throw std::runtime_error(
             "to_parquet: number of fields in schema doesn't match number of "
             "columns in Bodo table");
+    }
+
     bool has_dictionary_columns = false;
     std::shared_ptr<arrow::Field> dict_str_field;
     for (size_t i = 0; i < schema_vector.size(); i++) {
@@ -291,14 +333,22 @@ int64_t pq_write(
     if (write_index) {
         // if there is an index, construct ChunkedArray index column and add
         // metadata to the schema
-        std::shared_ptr<arrow::ChunkedArray> chunked_arr;
-        if (strcmp(idx_name, "null") != 0)
-            bodo_array_to_arrow(pool, index, idx_name, schema_vector,
-                                &chunked_arr, tz, time_unit, false);
-        else
-            bodo_array_to_arrow(pool, index, "__index_level_0__", schema_vector,
-                                &chunked_arr, tz, time_unit, false);
-        columns.push_back(chunked_arr);
+        std::shared_ptr<arrow::Array> arr;
+        std::shared_ptr<arrow::Field> index_field;
+
+        if (strcmp(idx_name, "null") != 0) {
+            auto arrow_type =
+                bodo_array_to_arrow(pool, index, &arr, tz, time_unit, false);
+            index_field = arrow::field(idx_name, arrow_type);
+
+        } else {
+            auto arrow_type =
+                bodo_array_to_arrow(pool, index, &arr, tz, time_unit, false);
+            index_field = arrow::field("__index_level_0__", arrow_type);
+        }
+
+        schema_vector.push_back(index_field);
+        columns.push_back(arr);
     }
 
     std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
@@ -309,18 +359,16 @@ int64_t pq_write(
     if (schema_metadata_pairs.size() > 0)
         schema_metadata = ::arrow::key_value_metadata(schema_metadata_pairs);
 
-    // make Arrow Schema object
+    // Make Arrow Schema object
     std::shared_ptr<arrow::Schema> schema =
         std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
     std::shared_ptr<arrow::Schema> schema_for_metadata =
         std::make_shared<arrow::Schema>(schema_for_metadata_vector,
                                         schema_metadata);
 
-    // make Arrow table from Schema and ChunkedArray columns
-    // Since we reuse Bodo buffers, the row group size of the Arrow table
-    // has to be the same as the local number of rows of the Bodo table
+    // Make Arrow table from Schema and Array columns
     std::shared_ptr<arrow::Table> arrow_table =
-        arrow::Table::Make(schema, columns, /*row_group_size=*/table->nrows());
+        arrow::Table::Make(schema, columns, table->nrows());
 
     // set compression option
     ::arrow::Compression::type codec_type;
