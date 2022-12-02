@@ -307,9 +307,12 @@ def create_series_dt_df_output_overload(attr):
         ):  # pragma: no cover
             return
 
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            S_dt, f"Series.dt.{attr}"
-        )
+        has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
+        if attr != "isocalendar":
+            # We only support tz-aware data for isocalendar
+            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+                S_dt, f"Series.dt.{attr}"
+            )
 
         if attr == "components":
             fields = [
@@ -326,7 +329,11 @@ def create_series_dt_df_output_overload(attr):
             attr_call = attr
         elif attr == "isocalendar":
             fields = ["year", "week", "day"]
-            convert = "convert_datetime64_to_timestamp"
+            if has_tz_aware_data:
+                # We only convert tz-naive data
+                convert = None
+            else:
+                convert = "convert_datetime64_to_timestamp"
             int_type = "bodo.libs.int_arr_ext.alloc_int_array(n, np.uint32)"
             attr_call = attr + "()"
 
@@ -346,11 +353,11 @@ def create_series_dt_df_output_overload(attr):
             )
         func_text += "            continue\n"
         tuple_vals = "(" + "[i], ".join(fields) + "[i])"
-        func_text += (
-            "        {} = bodo.hiframes.pd_timestamp_ext.{}(arr[i]).{}\n".format(
-                tuple_vals, convert, attr_call
-            )
-        )
+        if convert:
+            getitem_val = f"bodo.hiframes.pd_timestamp_ext.{convert}(arr[i])"
+        else:
+            getitem_val = "arr[i]"
+        func_text += f"        {tuple_vals} = {getitem_val}.{attr_call}\n"
         arr_args = "(" + ", ".join(fields) + ")"
         func_text += "    return bodo.hiframes.pd_dataframe_ext.init_dataframe({}, index, __col_name_meta_value_series_dt_df_output)\n".format(
             arr_args
