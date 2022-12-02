@@ -646,20 +646,16 @@ void* pd_pyarrow_array_from_string_array(const array_info* str_arr) {
 
     // convert to Arrow array with copy (since passing to Pandas)
     // only str_arr and true arguments are relevant here
-    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
-    std::shared_ptr<arrow::ChunkedArray> arrow_arr;
+    std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(::arrow::default_memory_pool(), str_arr, "_bodo_array",
-                        schema_vector, &arrow_arr, "", time_unit, true);
-
-    // Bodo arrays are single chunk currently
-    CHECK(arrow_arr->num_chunks() == 1, "single chunk Arrow array expected");
+    bodo_array_to_arrow(::arrow::default_memory_pool(), str_arr, &arrow_arr, "",
+                        time_unit, true);
 
     // https://arrow.apache.org/docs/python/integration/extending.html
     CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
 
     // convert Arrow C++ to PyArrow
-    PyObject* pyarrow_arr = arrow::py::wrap_array(arrow_arr->chunk(0));
+    PyObject* pyarrow_arr = arrow::py::wrap_array(arrow_arr);
 
     // call pd.arrays.ArrowStringArray(pyarrow_arr) which avoids copy
     PyObject* pd_mod = PyImport_ImportModule("pandas");

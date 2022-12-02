@@ -53,7 +53,8 @@ PyObject* iceberg_pq_write_py_entry(
     const char* table_data_loc, table_info* table,
     const array_info* col_names_arr, PyObject* partition_spec,
     PyObject* sort_order, const char* compression, bool is_parallel,
-    const char* bucket_region, int64_t row_group_size, char* iceberg_metadata);
+    const char* bucket_region, int64_t row_group_size, char* iceberg_metadata,
+    PyObject* iceberg_arrow_schema_py);
 
 // --------- function defined in snowflake_reader.cpp ---------
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,

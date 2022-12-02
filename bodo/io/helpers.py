@@ -54,7 +54,7 @@ class PyArrowTableSchemaType(types.Opaque):
 
 
 pyarrow_table_schema_type = PyArrowTableSchemaType()
-types.pyarrow_table_schema_type = pyarrow_table_schema_type
+types.pyarrow_table_schema_type = pyarrow_table_schema_type  # type: ignore
 register_model(PyArrowTableSchemaType)(models.OpaqueModel)
 
 

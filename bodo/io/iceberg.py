@@ -25,7 +25,7 @@ from bodo.hiframes.pd_categorical_ext import (
 )
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.io.fs_io import get_s3_bucket_region_njit
-from bodo.io.helpers import is_nullable
+from bodo.io.helpers import is_nullable, pyarrow_table_schema_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
@@ -88,33 +88,6 @@ def format_iceberg_conn_njit(conn_str):  # pragma: no cover
     with numba.objmode(conn_str="unicode_type"):
         conn_str = format_iceberg_conn(conn_str)
     return conn_str
-
-
-def _clean_schema(schema: pa.Schema) -> pa.Schema:
-    """
-    Constructs a new PyArrow schema that Bodo can support while conforming
-    to Iceberg's typing specification
-    - Converts all floating-point and timestamp fields to non-nullable
-      (since Bodo does not have nullable versions of these arrays)
-    - Enforces that list fields are constructed using a field with name
-      'element' (to aid Bodo's read_parquet infrastructure)
-    """
-    working_schema = schema
-
-    for i in range(len(schema)):
-        field = schema.field(i)
-
-        # Set all floating point and timestamp fields to not null by default
-        if pa.types.is_floating(field.type) or pa.types.is_timestamp(field.type):
-            working_schema = working_schema.set(i, field.with_nullable(False))
-        # Set all field names to 'element' so we can compare without worrying about
-        # different names due to pyarrow ('item', 'element', 'field0', etc.) in case of lists.
-        elif pa.types.is_list(field.type):
-            working_schema = working_schema.set(
-                i, field.with_type(pa.list_(pa.field("element", field.type.value_type)))
-            )
-
-    return working_schema
 
 
 # ----------------------------- Iceberg Read -----------------------------#
@@ -213,7 +186,7 @@ def get_iceberg_file_list(
         # unnecessary info about internal packages and dependencies.
         if (
             isinstance(e, bodo_iceberg_connector.IcebergJavaError)
-            and numba.core.config.DEVELOPER_MODE  # type: ignore
+            and numba.core.config.DEVELOPER_MODE
         ):  # pragma: no cover
             raise BodoError(f"{e.message}:\n{e.java_error}")
         else:
@@ -518,13 +491,36 @@ _numba_pyarrow_type_map = {
 }
 
 
+def is_nullable_arrow_out(numba_type: types.ArrayCompatible) -> bool:
+    """
+    Does this Array type produce an Arrow array with nulls when converted to C++
+    This is more expansive than is_nullable since the original array may not have
+    nulls but other values will be translated to nulls when converting to Arrow
+
+    As of now, datetime arrays store NaTs instead of nulls, which are then
+    translated to nulls in our Arrow conversion code
+    """
+
+    return (
+        is_nullable(numba_type)
+        or isinstance(numba_type, bodo.DatetimeArrayType)
+        or (
+            isinstance(numba_type, types.Array)
+            and numba_type.dtype == bodo.datetime64ns
+        )
+    )
+
+
 def _numba_to_pyarrow_type(numba_type: types.ArrayCompatible):
     """
     Convert Numba / Bodo Array Types to Equivalent PyArrow Type
     This is currently only used in Iceberg and thus may conform to Iceberg type requirements
     """
     if isinstance(numba_type, ArrayItemArrayType):
-        dtype = pa.list_(_numba_to_pyarrow_type(numba_type.dtype)[0])  # type: ignore
+        # Set inner field name to 'element' so we can compare without worrying about
+        # different names due to pyarrow ('item', 'element', 'field0', etc.)
+        inner_elem = pa.field("element", _numba_to_pyarrow_type(numba_type.dtype)[0])
+        dtype = pa.list_(inner_elem)
 
     elif isinstance(numba_type, StructArrayType):
         fields = []
@@ -573,11 +569,15 @@ def _numba_to_pyarrow_type(numba_type: types.ArrayCompatible):
             )
         )
 
-    return dtype, is_nullable(numba_type)
+    return dtype, is_nullable_arrow_out(numba_type)
 
 
 def pyarrow_schema(df: DataFrameType) -> pa.Schema:
     """Construct a PyArrow Schema from Bodo's DataFrame Type"""
+    assert not (
+        df.has_runtime_cols or df.columns is None or df.data is None
+    ), "Building a PyArrow Schema from a DataFrame with Runtime Columns is not Supported"
+
     fields = []
     for name, col_type in zip(df.columns, df.data):
         try:
@@ -589,52 +589,95 @@ def pyarrow_schema(df: DataFrameType) -> pa.Schema:
     return pa.schema(fields)
 
 
-# ----------------------------- Iceberg Write -----------------------------#
+# ----------------------------- Iceberg Write ----------------------------- #
+def are_schemas_compatible(
+    pa_schema: pa.Schema, df_schema: pa.Schema, allow_downcasting: bool = False
+) -> bool:
+    """
+    Check if the input Dataframe schema is compatible with the Iceberg table's
+    schema for append-like operations (including MERGE INTO). Compatibility
+    consists of the following:
+    - The df_schema either has the same columns as pa_schema or is only missing
+      optional columns
+    - Every column C from df_schema with a matching column C' from pa_schema is
+      compatible, where compatibility is:
+        - C and C' have the same datatype
+        - C and C' are both nullable or both non-nullable
+        - C is not-nullable and C' is nullable
+        - C is an int64 while C' is an int32 (if allow_downcasting is True)
+        - C is an float64 while C' is an float32 (if allow_downcasting is True)
+        - C is nullable while C' is non-nullable (if allow_downcasting is True)
 
+    Note that allow_downcasting should be used if the output Dataframe df will be
+    casted to fit pa_schema (making sure there are no nulls, downcasting arrays).
+    """
+    if pa_schema.equals(df_schema):
+        return True
 
-def _assert_schemas_compatible(pa_schema: pa.Schema, df_schema: pa.Schema) -> bool:
-    """Check if df_schema is compatible with pa_schema (schema of the Iceberg table) for append"""
-    # if the schemas are not equal, it is still possible that the dataframe can be
-    # appended iff the dataframe schema is a subset of the iceberg schema and each
-    # missing field is optional
-    clean_pa_schema = _clean_schema(pa_schema)
-    clean_df_schema = _clean_schema(df_schema)
+    # If the schemas are not the same size, it is still possible that the dataframe
+    # can be appended iff the dataframe schema is a subset of the iceberg schema and
+    # each missing field is optional
+    if len(df_schema) < len(pa_schema):
+        # Create a new "subset" pa schema that only contains the fields that are
+        # in the dataframe schema
+        subset_fields = []
+        for pa_field in pa_schema:
+            df_field = df_schema.field_by_name(pa_field.name)
 
-    # create a new "subset" pa schema that only contains the fields that are in the
-    # dataframe schema. This is done so that the `.equals` method can be used to
-    # compare the two schemas
-    subset_pa_schema = pa.schema([])
-    for pa_field in clean_pa_schema:
-        df_field = clean_df_schema.field_by_name(pa_field.name)
+            # Don't include the field only if it isn't in the dataframe schema
+            # and it is nullable
+            if not (df_field is None and pa_field.nullable):
+                subset_fields.append(pa_field)
+        pa_schema = pa.schema(subset_fields)
 
-        # don't include the field only if it isn't in the dataframe schema
-        # and it is nullable
-        if not (df_field is None and pa_field.nullable):
-            subset_pa_schema = subset_pa_schema.append(pa_field)
+    if len(pa_schema) != len(df_schema):
+        return False
 
-    # Check schemas are compatible. This also enforces the ordered subset requirement.
-    if not subset_pa_schema.equals(clean_df_schema):
-        if numba.core.config.DEVELOPER_MODE:  # type: ignore
-            raise BodoError(
-                f"DataFrame schema needs to be an ordered subset of Iceberg table for append\n\n"
-                f"Iceberg:\n{pa_schema}\n\n"
-                f"DataFrame:\n{df_schema}\n"
+    # Compare each field individually for "compatibility"
+    # Only the dataframe schema is potentially modified during this step
+    for idx in range(len(df_schema)):
+        df_field = df_schema.field(idx)
+        pa_field = pa_schema.field(idx)
+
+        if df_field.equals(pa_field):
+            continue
+
+        df_type = df_field.type
+        pa_type = pa_field.type
+
+        # df_field can only be downcasted as of now
+        # TODO: Should support upcasting in the future if necessary
+        if (
+            not df_type.equals(pa_type)
+            and allow_downcasting
+            and (
+                (
+                    pa.types.is_signed_integer(df_type)
+                    and pa.types.is_signed_integer(pa_type)
+                )
+                or (pa.types.is_floating(df_type) and pa.types.is_floating(pa_type))
             )
-        else:
-            raise BodoError(
-                "DataFrame schema needs to be an ordered subset of Iceberg table for append"
-            )
+            and df_type.bit_width > pa_type.bit_width
+        ):
+            df_field = df_field.with_type(pa_type)
+
+        if not df_field.nullable and pa_field.nullable:
+            df_field = df_field.with_nullable(True)
+        elif allow_downcasting and df_field.nullable and not pa_field.nullable:
+            df_field = df_field.with_nullable(False)
+
+        df_schema = df_schema.set(idx, df_field)
+
+    return df_schema.equals(pa_schema)
 
 
 def get_table_details_before_write(
     table_name: str,
     conn: str,
     database_schema: str,
-    df_pyarrow_schema,
+    df_schema: pa.Schema,
     if_exists: str,
-    # Ordered list of column names in Bodo table
-    # being written.
-    col_names: List[str],
+    allow_downcasting: bool = False,
 ):
     """
     Wrapper around bodo_iceberg_connector.get_typing_info to perform
@@ -654,8 +697,10 @@ def get_table_details_before_write(
     partition_spec = []
     sort_order = []
     iceberg_schema_str = ""
+    pa_schema = None
+
     # Map column name to index for efficient lookup
-    col_name_to_idx_map = {col: i for (i, col) in enumerate(col_names)}
+    col_name_to_idx_map = {col: i for (i, col) in enumerate(df_schema.names)}
 
     # Communicate with the connector to check if the table exists.
     # It will return the warehouse location, iceberg-schema-id,
@@ -696,15 +741,25 @@ def get_table_details_before_write(
             ]
 
             if if_exists == "append" and (pa_schema is not None):
-                _assert_schemas_compatible(pa_schema, df_pyarrow_schema)
+                if not are_schemas_compatible(pa_schema, df_schema, allow_downcasting):
+                    # TODO: https://bodo.atlassian.net/browse/BE-4019
+                    # for improving docs on Iceberg write support
+                    if numba.core.config.DEVELOPER_MODE:
+                        raise BodoError(
+                            f"DataFrame schema needs to be an ordered subset of Iceberg table for append\n\n"
+                            f"Iceberg:\n{pa_schema}\n\n"
+                            f"DataFrame:\n{df_schema}\n"
+                        )
+                    else:
+                        raise BodoError(
+                            "DataFrame schema needs to be an ordered subset of Iceberg table for append"
+                        )
 
             if iceberg_schema_id is None:
                 # When the table doesn't exist, i.e. we're creating a new one,
                 # `iceberg_schema_str` will be empty, so we need to create it
                 # from the pyarrow schema of the dataframe.
-                iceberg_schema_str = connector.pyarrow_to_iceberg_schema_str(
-                    df_pyarrow_schema
-                )
+                iceberg_schema_str = connector.pyarrow_to_iceberg_schema_str(df_schema)
         except connector.IcebergError as e:
             # Only include Java error info in dev mode because it contains at lot of
             # unnecessary info about internal packages and dependencies.
@@ -728,6 +783,7 @@ def get_table_details_before_write(
     partition_spec = comm.bcast(partition_spec)
     sort_order = comm.bcast(sort_order)
     iceberg_schema_str = comm.bcast(iceberg_schema_str)
+    pa_schema = comm.bcast(pa_schema)
 
     if iceberg_schema_id is None:
         already_exists = False
@@ -744,6 +800,9 @@ def get_table_details_before_write(
         partition_spec,
         sort_order,
         iceberg_schema_str,
+        # We use the expected schema at the parquet write step (in C++)
+        # so we can reuse the df_schema for create and replace cases
+        pa_schema if if_exists == "append" and pa_schema is not None else df_schema,
     )
 
 
@@ -931,6 +990,7 @@ def iceberg_pq_write(
     sort_order,
     iceberg_schema_str,
     is_parallel,
+    expected_schema,
 ):  # pragma: no cover
     """
     Writes a table to Parquet files in an Iceberg table's data warehouse
@@ -943,6 +1003,8 @@ def iceberg_pq_write(
         sort_order: Array of Tuples containing Sort Order for Iceberg Table (passed to C++)
         iceberg_schema_str (str): JSON Encoding of Iceberg Schema to include in Parquet metadata
         is_parallel (bool): Whether the write is occuring on a distributed dataframe
+        expected_schema (pyarrow.Schema): Expected schema of output PyArrow table written
+            to Parquet files in the Iceberg table. None if not necessary
 
     Returns:
         Distributed list of written file info needed by Iceberg for commiting
@@ -974,7 +1036,8 @@ def iceberg_pq_write(
         unicode_to_utf8(bucket_region),
         rg_size,
         unicode_to_utf8(iceberg_schema_str),
-    )  # type: ignore  Due to additional first argument typingctx
+        expected_schema,
+    )
 
     return iceberg_files_info
 
@@ -986,11 +1049,11 @@ def iceberg_write(
     database_schema,
     bodo_table,
     col_names,
-    col_names_py,
     # Same semantics as pandas to_sql for now
     if_exists,
     is_parallel,
     df_pyarrow_schema,  # Additional Param to Compare Compile-Time and Iceberg Schema
+    allow_downcasting=False,
 ):  # pragma: no cover
     """
     Iceberg Basic Write Implementation for parquet based tables.
@@ -1000,10 +1063,11 @@ def iceberg_write(
         database_schema (str): schema in iceberg database
         bodo_table : table object to pass to c++
         col_names : array object containing column names (passed to c++)
-        col_names_py (string array): array of column names
         if_exists (str): behavior when table exists. must be one of ['fail', 'append', 'replace']
         is_parallel (bool): whether the write is occuring on a distributed dataframe
-        df_pyarrow_schema (pyarrow.Schema): pyarrow schema of the dataframe being written
+        df_pyarrow_schema (pyarrow.Schema): PyArrow schema of the dataframe being written
+        allow_downcasting (bool): Perform write downcasting on table columns to fit Iceberg schema
+            This includes both type and nullability downcasting
 
     Raises:
         ValueError, Exception, BodoError
@@ -1020,6 +1084,7 @@ def iceberg_write(
         partition_spec="python_list_of_heterogeneous_tuples_type",
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
+        expected_schema="pyarrow_table_schema_type",
     ):
         (
             already_exists,
@@ -1028,13 +1093,14 @@ def iceberg_write(
             partition_spec,
             sort_order,
             iceberg_schema_str,
+            expected_schema,
         ) = get_table_details_before_write(
             table_name,
             conn,
             database_schema,
             df_pyarrow_schema,
             if_exists,
-            col_names_py.tolist(),
+            allow_downcasting,
         )
 
     if already_exists and if_exists == "fail":
@@ -1057,6 +1123,7 @@ def iceberg_write(
         sort_order,
         iceberg_schema_str,
         is_parallel,
+        expected_schema,
     )
 
     with numba.objmode(success="bool_"):
@@ -1095,7 +1162,6 @@ def iceberg_merge_cow_py(
     snapshot_id,
     old_fnames,
     col_names,
-    col_names_py,
     df_pyarrow_schema,
     is_parallel,
 ):  # pragma: no cover
@@ -1110,6 +1176,7 @@ def iceberg_merge_cow_py(
         partition_spec="python_list_of_heterogeneous_tuples_type",
         sort_order="python_list_of_heterogeneous_tuples_type",
         iceberg_schema_str="unicode_type",
+        expected_schema="pyarrow_table_schema_type",
     ):
         (
             already_exists,
@@ -1118,13 +1185,14 @@ def iceberg_merge_cow_py(
             partition_spec,
             sort_order,
             iceberg_schema_str,
+            expected_schema,
         ) = get_table_details_before_write(
             table_name,
             conn,
             database_schema,
             df_pyarrow_schema,
             "append",
-            col_names_py.tolist(),
+            allow_downcasting=True,
         )
 
     if not already_exists:
@@ -1138,6 +1206,7 @@ def iceberg_merge_cow_py(
         sort_order,
         iceberg_schema_str,
         is_parallel,
+        expected_schema,
     )
 
     with numba.objmode(success="bool_"):
@@ -1187,6 +1256,7 @@ def iceberg_pq_write_table_cpp(
     bucket_region,
     row_group_size,
     iceberg_metadata_t,
+    iceberg_schema_t,
 ):
     """
     Call C++ iceberg parquet write function
@@ -1209,6 +1279,7 @@ def iceberg_pq_write_table_cpp(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
             ],
         )
         fn_tp = cgutils.get_or_insert_function(
@@ -1219,17 +1290,18 @@ def iceberg_pq_write_table_cpp(
         return ret
 
     return (
-        types.python_list_of_heterogeneous_tuples_type(
+        types.python_list_of_heterogeneous_tuples_type(  # type: ignore
             types.voidptr,
             table_t,
             col_names_t,
-            partition_spec_t,
-            sort_order_t,
+            python_list_of_heterogeneous_tuples_type,
+            python_list_of_heterogeneous_tuples_type,
             types.voidptr,
             types.boolean,
             types.voidptr,
             types.int64,
             types.voidptr,
+            pyarrow_table_schema_type,
         ),
         codegen,
     )

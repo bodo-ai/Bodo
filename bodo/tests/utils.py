@@ -11,7 +11,7 @@ import warnings
 from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
-from typing import Dict
+from typing import Dict, TypeVar
 from uuid import uuid4
 
 import numba
@@ -655,7 +655,10 @@ def _get_arg(a, copy=False):
     return a
 
 
-def _get_dist_arg(a, copy=False, var_length=False, check_typing_issues=True):
+T = TypeVar("T", pytypes.FunctionType, pd.Series, pd.DataFrame)
+
+
+def _get_dist_arg(a: T, copy=False, var_length=False, check_typing_issues=True) -> T:
     """get distributed chunk for 'a' on current rank (for input to test functions)"""
     if copy and hasattr(a, "copy"):
         a = a.copy()

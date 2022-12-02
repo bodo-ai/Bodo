@@ -11,9 +11,7 @@
 #undef timezone
 #endif
 
-void bodo_array_to_arrow(
+std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const array_info *array,
-    const std::string &col_name,
-    std::vector<std::shared_ptr<arrow::Field>> &schema_vector,
-    std::shared_ptr<arrow::ChunkedArray> *out, const std::string &tz,
+    std::shared_ptr<arrow::Array> *out, const std::string &tz,
     arrow::TimeUnit::type &time_unit, bool copy);

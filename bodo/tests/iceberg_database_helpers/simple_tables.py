@@ -272,7 +272,7 @@ BASE_MAP: Dict[str, Tuple[Dict, List]] = {
             ),
         },
         [
-            ("A", "timestamp", False),
+            ("A", "timestamp", True),
             ("B", "long", True),
             ("C", "boolean", True),
             ("D", "string", True),
