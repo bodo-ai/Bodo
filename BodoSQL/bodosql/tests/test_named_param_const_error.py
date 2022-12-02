@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
@@ -23,7 +24,7 @@ def test_named_param_extract(bodosql_datetime_types):
         bc = bodosql.BodoSQLContext({"table1": df})
         return bc.sql("select Extract(@a from A) from table1", {"a": a})
 
-    with pytest.raises(bodo.utils.typing.BodoError, match="Unable to parse SQL Query"):
+    with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
         impl(bodosql_datetime_types["table1"], "year")
 
 
@@ -39,7 +40,7 @@ def test_named_param_order_by(basic_df):
         bc = bodosql.BodoSQLContext({"table1": df})
         return bc.sql("select A from table1 order by A @a", {"a": a})
 
-    with pytest.raises(bodo.utils.typing.BodoError, match="Unable to parse SQL Query"):
+    with pytest.raises(BodoError, match="Failure encountered while parsing SQL Query"):
         impl(basic_df["table1"], "ASC")
 
 
@@ -56,7 +57,7 @@ def test_named_param_str_to_date():
         bc = bodosql.BodoSQLContext({"table1": df})
         return bc.sql("select str_to_date(A, @a) from table1", {"a": a})
 
-    with pytest.raises(bodo.utils.typing.BodoError, match="Unable to parse SQL Query"):
+    with pytest.raises(BodoError, match="Failure in compiling or validating SQL Query"):
         impl(pd.DataFrame({"A": ["2017-08-29", "2017-09-29"] * 4}), "%Y-%m-%d")
 
 
@@ -73,5 +74,5 @@ def test_named_param_date_format(bodosql_datetime_types):
         bc = bodosql.BodoSQLContext({"table1": df})
         return bc.sql("select date_format(A, @a) from table1", {"a": a})
 
-    with pytest.raises(bodo.utils.typing.BodoError, match="Unable to parse SQL Query"):
+    with pytest.raises(BodoError, match="Failure in compiling or validating SQL Query"):
         impl(bodosql_datetime_types["table1"], "%Y %m %d")

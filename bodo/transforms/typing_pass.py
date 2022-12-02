@@ -1433,7 +1433,7 @@ class TypingTransforms:
 
     def _remove_series_wrappers_from_def(self, var_def):
         """Returns the definition node of the Series variable in
-        pd.Series()/Series.values/Series.str nodes.
+        pd.Series()/Series.values/Series.str/bodo.pd_hiframes.series_ext.get_series_data nodes.
         This effectively removes the Series wrappers that BodoSQL currently generates to
         convert to/from arrays.
 
@@ -1453,6 +1453,17 @@ class TypingTransforms:
         if (
             is_call(var_def)
             and guard(find_callname, self.func_ir, var_def) == ("Series", "pandas")
+            and (len(var_def.args) == 1)
+            and not var_def.kws
+        ):
+            var_def = guard(get_definition, self.func_ir, var_def.args[0])
+            return self._remove_series_wrappers_from_def(var_def)
+
+        # remove bodo.hiframes.pd_series_ext.get_series_data calls
+        if (
+            is_call(var_def)
+            and guard(find_callname, self.func_ir, var_def)
+            == ("get_series_data", "bodo.hiframes.pd_series_ext")
             and (len(var_def.args) == 1)
             and not var_def.kws
         ):
