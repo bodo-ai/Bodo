@@ -13,6 +13,13 @@ logfile_name = "splitting_logs/logfile-07-18-22.txt"
 
 # If in AWS Codebuild partition tests
 if "CODEBUILD_BUILD_ID" in os.environ:
+    # Make sure buildscripts is in the import path
+    module_dir = os.path.abspath(os.path.join(__file__, os.pardir))
+    repo_dir = os.path.abspath(os.path.join(module_dir, os.pardir))
+    assert module_dir in sys.path
+    if repo_dir not in sys.path:
+        sys.path.append(repo_dir)
+
     import buildscripts.aws.select_timing_from_logs
 
     # Load the logfile for splitting tests

@@ -463,7 +463,7 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
     def impl3(table_name, conn, db_schema):
         df = pd.read_sql_table(
             table_name, conn, db_schema, _bodo_read_as_dict=["C", "E"]
-        )
+        )  # type: ignore
         return df[["B", "C", "D", "E"]]
 
     check_func(impl3, (table_name, conn, db_schema), py_output=df[["B", "C", "D", "E"]])
@@ -478,7 +478,7 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
     with pytest.raises(BodoError, match=r"must be a constant list of column names"):
 
         def impl4(table_name, conn, db_schema):
-            df = pd.read_sql_table(table_name, conn, db_schema, _bodo_read_as_dict=True)
+            df = pd.read_sql_table(table_name, conn, db_schema, _bodo_read_as_dict=True)  # type: ignore
             return df
 
         bodo.jit(impl4)(table_name, conn, db_schema)
@@ -488,7 +488,7 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
         def impl5(table_name, conn, db_schema):
             df = pd.read_sql_table(
                 table_name, conn, db_schema, _bodo_read_as_dict=["H"]
-            )
+            )  # type: ignore
             return df
 
         bodo.jit(impl5)(table_name, conn, db_schema)
@@ -498,7 +498,7 @@ def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):
         def impl6(table_name, conn, db_schema):
             df = pd.read_sql_table(
                 table_name, conn, db_schema, _bodo_read_as_dict=["D"]
-            )
+            )  # type: ignore
             return df
 
         bodo.jit(impl6)(table_name, conn, db_schema)
@@ -1245,6 +1245,424 @@ def test_basic_write_new_append(
     assert spark_n == n_pes
 
 
+def test_basic_write_runtime_cols_fail(
+    iceberg_database,
+    iceberg_table_conn,
+    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+    # memory_leak_check,
+):
+    """
+    Test that Iceberg writes throw an error at compile-time when
+    writing a Dataframe with runtime columns (created using a pivot)
+    """
+
+    table_name = "simple_numeric_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    @bodo.jit
+    def impl(table_name, conn, db_schema):
+        df = pd.read_sql_table(table_name, conn, db_schema)
+        df_piv = pd.pivot_table(
+            df, index=["A"], columns=["B"], values="C", aggfunc="sum"
+        )
+        return df_piv.to_sql(table_name, conn, db_schema, if_exists="replace")
+
+    with pytest.raises(
+        BodoError,
+        match=r"DataFrame\.to_sql\(\) on DataFrames with columns determined at runtime is not yet supported\. Please return the DataFrame to regular Python to update typing information\.",
+    ):
+        impl(table_name, conn, db_schema)
+
+
+def test_basic_write_append_not_null_arrays(
+    iceberg_database,
+    iceberg_table_conn,
+    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+    # memory_leak_check,
+):
+    """
+    Test that Iceberg appends can write non-nullable float and timestamp
+    arrays to nullable float and timestamp columns in Iceberg. This is a
+    special case since Bodo does not have nullable arrays for these types
+    TODO: [BE-41] Update when nullable floating point arrays are supported
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series(
+                [1.0, 2.0, np.nan, 3.0, 4.0, 5.0, None] * 10, dtype="object"
+            ),
+            "B": pd.Series(
+                [1.0, 2.0, np.nan, 3.0, 4.0, 5.0, None] * 10, dtype="object"
+            ),
+            "C": pd.Series(
+                [
+                    pd.NaT,
+                    None,
+                    datetime(2019, 8, 21, 15, 23, 45, 0),
+                    pd.NaT,
+                    None,
+                    datetime(2021, 1, 30, 7, 20, 30, 0),
+                    pd.NaT,
+                ]
+                * 10,
+                dtype="object",
+            ),
+        }
+    )
+
+    sql_schema = [("A", "float", True), ("B", "double", True), ("C", "timestamp", True)]
+
+    table_name = "nullable_table_append_spark"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Write using Spark on rank 0
+    spark = get_spark()
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append")
+
+    # Cast to non-null types
+    bodo_in_df = df.copy()
+    bodo_in_df["A"] = bodo_in_df["A"].astype("float32")
+    bodo_in_df["B"] = bodo_in_df["B"].astype("float64")
+    bodo_in_df["C"] = bodo_in_df["C"].astype("datetime64[ns]")
+
+    # Append using Bodo. Note that we can't check the output since Bodo and
+    # Spark can not return nulls in float or datetime Pandas arrays. Thus,
+    # we can only check that this does not fail.
+    impl(_get_dist_arg(bodo_in_df), table_name, conn, db_schema)
+
+
+@pytest.mark.parametrize(
+    "name,sql_schema,df,df_write",
+    [
+        pytest.param(
+            "null",
+            [("A", "int", True), ("B", "long", True)],
+            pd.DataFrame(
+                {
+                    "A": pd.Series([1, 2, 3, 4, None] * 5, dtype="Int32"),
+                    "B": pd.Series([1, 2, 3, 4, None] * 5, dtype="Int64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([6, 7, 8, 9, 10], dtype="int32"),
+                    "B": pd.Series([6, 7, 8, 9, 10], dtype="int64"),
+                }
+            ),
+            id="null",
+        ),
+    ],
+)
+def test_basic_write_upcasting(
+    iceberg_database,
+    iceberg_table_conn,
+    name,
+    sql_schema,
+    df,
+    df_write,
+    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+    # memory_leak_check,
+):
+    """
+    Test that Bodo is able to perform null upcasting when writing
+    to Iceberg. This means writing non-nullable arrays to nullable columns.
+    Note that we can only test this for ints right now since all other
+    arrays types are nullable by default
+    TODO: [BE-41] Update when nullable floating point arrays are supported
+    """
+
+    comm = MPI.COMM_WORLD
+    n_pes = comm.Get_size()
+
+    table_name = name + "_upcasting_test"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Write using Spark on rank 0
+    spark = get_spark()
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append")
+
+    # Append using Bodo
+    impl(_get_dist_arg(df_write), table_name, conn, db_schema)
+    expected_df = pd.concat([df, df_write])
+
+    # Read using Bodo and then check that it's what's expected
+    bodo_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
+    bodo_out = _gather_output(bodo_out)
+    passed = None
+    if bodo.get_rank() == 0:
+        passed = _test_equal_guard(
+            expected_df,
+            bodo_out,
+            sort_output=True,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+    passed = comm.bcast(passed)
+    assert passed == 1
+
+    # Read using Spark and then check that it's what's expected
+    spark.sql("CLEAR CACHE;")
+    spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
+
+    spark_passed = 1
+    if bodo.get_rank() == 0:
+        spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        spark_passed = _test_equal_guard(
+            expected_df,
+            spark_out,
+            sort_output=True,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+    spark_n = reduce_sum(spark_passed)
+    assert spark_n == n_pes
+
+
+INT_MAX: int = np.iinfo(np.int32).max
+INT_MIN: int = np.iinfo(np.int32).min
+DOUBLE_MAX: float = np.finfo(np.float64).max
+DOUBLE_MIN: float = np.finfo(np.float64).min
+NULL_ERR = "to_parquet: Column A contains nulls but is expected to be non-nullable"
+TYPE_ERR = "to_parquet: Column A is type int64 but is expected to be type int32"
+OTHER_ERR = "See other ranks for runtime error"
+DOWNCAST_INFO = [
+    (
+        "null",
+        [("A", "int", False), ("B", "long", False)],
+        pd.DataFrame(
+            {
+                "A": pd.Series([1, 2, 3, 4, 5] * 5, dtype="int32"),
+                "B": pd.Series([1, 2, 3, 4, 5] * 5, dtype="int64"),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series([6, 7, 8, 9, 10], dtype="Int32"),
+                "B": pd.Series([6, 7, 8, 9, 10], dtype="Int64"),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series([6, None, 8, None, 10], dtype="Int32"),
+                "B": pd.Series([6, None, 8, None, 10], dtype="Int64"),
+            }
+        ),
+        [NULL_ERR, OTHER_ERR],
+    ),
+    (
+        "type",
+        [("A", "int", False), ("B", "float", False)],
+        pd.DataFrame(
+            {
+                "A": pd.Series([1, 2, 3, 4, 5] * 5, dtype="int32"),
+                "B": pd.Series([1, 2, 3, 4, 5] * 5, dtype="float32"),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series([6, 7, 8, 9, 10], dtype="int64"),
+                "B": pd.Series([6, 7, 8, 9, 10], dtype="float64"),
+            }
+        ),
+        pd.DataFrame(
+            {
+                "A": pd.Series([INT_MAX + 1, INT_MIN - 1], dtype="int64"),
+                "B": pd.Series([DOUBLE_MAX, DOUBLE_MIN], dtype="float64"),
+            }
+        ),
+        [TYPE_ERR, OTHER_ERR],
+    ),
+    (
+        "null_and_type",
+        [("A", "int", False)],
+        pd.DataFrame({"A": pd.Series([1, 2, 3, 4, 5] * 5, dtype="int32")}),
+        pd.DataFrame({"A": pd.Series([6, 7, 8, 9, 10], dtype="Int64")}),
+        pd.DataFrame({"A": pd.Series([INT_MAX + 1, None], dtype="Int64")}),
+        [NULL_ERR, TYPE_ERR, OTHER_ERR],
+    ),
+]
+
+
+@pytest.fixture(ids=lambda f: f[0], params=DOWNCAST_INFO)
+def downcasting_table_info(request):
+    return request.param
+
+
+def test_basic_write_downcasting_fail(
+    iceberg_database,
+    iceberg_table_conn,
+    downcasting_table_info,
+    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+    # memory_leak_check,
+):
+    """
+    Test that writing to an Iceberg table with incorrect types
+    that would need to be downcasted fails.
+    """
+
+    id, sql_schema, df, df_write, _, _ = downcasting_table_info
+    table_name = id + "_downcasting_fail_test"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Write using Spark on rank 0
+    spark = get_spark()
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(table_name, conn, db_schema, if_exists="append")
+
+    with pytest.raises(
+        BodoError,
+        match="DataFrame schema needs to be an ordered subset of Iceberg table for append",
+    ):
+        impl(_get_dist_arg(df_write), table_name, conn, db_schema)
+
+
+def test_basic_write_downcasting(
+    iceberg_database,
+    iceberg_table_conn,
+    downcasting_table_info,
+    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+    # memory_leak_check,
+):
+    """
+    Test that writing to an Iceberg table while performing type
+    and null downcasting works. This will test a situation that will
+    succeed and a situation that wont. The failing cases occur when
+    there is a null in the array or an overflow would occur.
+    """
+
+    comm = MPI.COMM_WORLD
+    n_pes = comm.Get_size()
+
+    id, sql_schema, df, df_write, df_fail, err_msgs = downcasting_table_info
+    table_name = id + "_downcasting_test"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Write using Spark on rank 0
+    spark = get_spark()
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(
+            table_name,
+            conn,
+            db_schema,
+            if_exists="append",
+            _bodo_allow_downcasting=True,
+        )
+
+    # Append using Bodo
+    impl(_get_dist_arg(df_write), table_name, conn, db_schema)
+    expected_df = pd.concat([df, df_write])
+
+    # Read using Bodo and then check that it's what's expected
+    bodo_out = bodo.jit()(lambda: pd.read_sql_table(table_name, conn, db_schema))()
+    bodo_out = _gather_output(bodo_out)
+    passed = None
+    if bodo.get_rank() == 0:
+        passed = _test_equal_guard(
+            expected_df,
+            bodo_out,
+            sort_output=True,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+    passed = comm.bcast(passed)
+    assert passed == 1
+
+    # Read using Spark and then check that it's what's expected
+    spark.sql("CLEAR CACHE;")
+    spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
+
+    spark_passed = 1
+    if bodo.get_rank() == 0:
+        spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+        spark_passed = _test_equal_guard(
+            expected_df,
+            spark_out,
+            sort_output=True,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+    spark_n = reduce_sum(spark_passed)
+    assert spark_n == n_pes
+
+    with pytest.raises(RuntimeError) as excinfo:
+        impl(_get_dist_arg(df_fail), table_name, conn, db_schema)
+
+    err_msg: str = excinfo.value.args[0]
+    assert any(err_msg.startswith(msg) for msg in err_msgs)
+
+
+def test_basic_write_downcasting_copy(
+    iceberg_database,
+    iceberg_table_conn,
+    # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+    # memory_leak_check,
+):
+    """
+    Test that downcasting during Iceberg write does not affect the
+    original dataframe by using it after the write step
+    """
+
+    _, sql_schema, df, df_write, _, _ = DOWNCAST_INFO[1]
+    table_name = "downcasting_copy_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc, check_exists=False)
+
+    # Write using Spark on rank 0
+    spark = get_spark()
+    if bodo.get_rank() == 0:
+        create_iceberg_table(df, sql_schema, table_name, spark)
+    bodo.barrier()
+
+    @bodo.jit(distributed=["df"])
+    def impl(df, table_name, conn, db_schema):
+        df.to_sql(
+            table_name,
+            conn,
+            db_schema,
+            if_exists="append",
+            _bodo_allow_downcasting=True,
+        )
+        return df
+
+    # Append using Bodo and Get Output
+    new_df = impl(_get_dist_arg(df_write), table_name, conn, db_schema)
+    comm = MPI.COMM_WORLD
+    passed = _test_equal_guard(_get_dist_arg(df_write), new_df)
+    assert reduce_sum(passed) == comm.Get_size()
+
+
 def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
     """
     Tests for known errors thrown when writing an Iceberg table.
@@ -1262,14 +1680,14 @@ def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
         ValueError,
         match="schema must be provided when writing to an Iceberg table",
     ):
-        bodo.jit(distributed=["df"])(impl1)(df, table_name, conn)  # type: ignore
+        bodo.jit(distributed=["df"])(impl1)(df, table_name, conn)
 
     # Check that error is raised when chunksize is provided
     def impl2(df, table_name, conn, db_schema):
         df.to_sql(table_name, conn, db_schema, chunksize=5)
 
     with pytest.raises(ValueError, match="chunksize not supported for Iceberg tables"):
-        bodo.jit(distributed=["df"])(impl2)(df, table_name, conn, db_schema)  # type: ignore
+        bodo.jit(distributed=["df"])(impl2)(df, table_name, conn, db_schema)
 
     # TODO Remove after adding replicated write support
     # Check that error is raise when trying to write a replicated dataframe
@@ -1280,7 +1698,7 @@ def test_iceberg_write_error_checking(iceberg_database, iceberg_table_conn):
     with pytest.raises(
         AssertionError, match="Iceberg Write only supported for distributed dataframes"
     ):
-        bodo.jit(replicated=["df"])(impl3)(df, table_name, conn, db_schema)  # type: ignore
+        bodo.jit(replicated=["df"])(impl3)(df, table_name, conn, db_schema)
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
