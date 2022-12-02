@@ -11,6 +11,7 @@ from bodosql.tests.named_params_common import *  # noqa
 from bodosql.tests.utils import check_query
 
 import bodo
+from bodo.utils.typing import BodoError
 
 
 @pytest.mark.slow
@@ -24,7 +25,9 @@ def test_string_limit(basic_df, spark_info):
         bc = bodosql.BodoSQLContext({"table1": df})
         return bc.sql("select A from table1 limit @a", {"a": a})
 
-    with pytest.raises(bodo.utils.typing.BodoError, match="Unable to parse SQL Query"):
+    with pytest.raises(
+        BodoError, match=r"Failure in compiling or validating SQL Query"
+    ):
         impl(basic_df["table1"], "no limit")
 
 
@@ -39,7 +42,9 @@ def test_string_offset(basic_df, spark_info):
         bc = bodosql.BodoSQLContext({"table1": df})
         return bc.sql("select A from table1 limit @a, 4", {"a": a})
 
-    with pytest.raises(bodo.utils.typing.BodoError, match="Unable to parse SQL Query"):
+    with pytest.raises(
+        BodoError, match=r"Failure in compiling or validating SQL Query"
+    ):
         impl(basic_df["table1"], "no limit")
 
 

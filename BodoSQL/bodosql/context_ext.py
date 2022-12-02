@@ -356,6 +356,7 @@ def _gen_pd_func_text_and_lowered_globals(
         raise BodoError(
             f"Unable to determine one or more DataFrames in BodoSQL query: {e}"
         )
+    failed = False
     if bodo.get_rank() == 0:
         # This outermost try except should normally never be invoked, but it's here for safety
         # So the other ranks don't hang forever if we encounter an unexpected runtime error
@@ -374,11 +375,22 @@ def _gen_pd_func_text_and_lowered_globals(
                 generator = RelationalAlgebraGeneratorClass(
                     schema, NAMED_PARAM_TABLE_NAME, verbose_level
                 )
-            # Handle the parsing step.
-            generator.parseQuery(sql_str)
-            # Update the schema with types.
-            update_schema(schema, table_names, df_types, orig_bodo_types, True)
+        except Exception as e:
+            # Raise BodoError outside except to avoid stack trace
+            func_text_or_error_msg = f"Unable to initialize BodoSQL Tables when parsing SQL Query. Error message: {java_error_to_msg(e)}"
+            failed = True
+        if not failed:
             try:
+                # Handle the parsing step.
+                generator.parseQuery(sql_str)
+            except Exception as e:
+                # Raise BodoError outside except to avoid stack trace
+                func_text_or_error_msg = f"Failure encountered while parsing SQL Query. Error message: {java_error_to_msg(e)}"
+                failed = True
+        if not failed:
+            try:
+                # Update the schema with types.
+                update_schema(schema, table_names, df_types, orig_bodo_types, True)
                 if is_optimized:
                     pd_code = str(generator.getPandasString(sql_str))
                 else:
@@ -392,17 +404,13 @@ def _gen_pd_func_text_and_lowered_globals(
                 )
             except Exception as e:
                 # Raise BodoError outside except to avoid stack trace
-                func_text_or_error_msg = (
-                    f"Unable to parse SQL Query. Error message: {java_error_to_msg(e)}"
-                )
+                func_text_or_error_msg = f"Failure in compiling or validating SQL Query. Error message: {java_error_to_msg(e)}"
                 failed = True
             if not failed:
                 args = ",".join(("bodo_sql_context",) + param_keys)
                 func_text_or_error_msg = f"def impl({args}):\n"
                 func_text_or_error_msg += f"{pd_code}\n"
-        except Exception as e:
-            func_text_or_error_msg = f"Unable to parse SQL Query due to unexpected runtime error: \n{java_error_to_msg(e)}"
-            failed = True
+
     failed = bcast_scalar(failed)
     func_text_or_error_msg = bcast_scalar(func_text_or_error_msg)
     if failed:

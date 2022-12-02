@@ -16,16 +16,16 @@ mamba install -y -c conda-forge scikit-learn='1.1.*' gcsfs
 mamba install -y -c conda-forge matplotlib
 mamba install -y -c conda-forge pyspark=3.2 'openjdk=11'
 mamba install -y flake8
-mamba install -y -c conda-forge snowflake-connector-python
+mamba install -y -c conda-forge snowflake-connector-python snowflake-sqlalchemy
 mamba install -y -c conda-forge mmh3=3.0  # Needed for Iceberg testing
 # snowflake connector might upgrade pyarrow, so we revert it back
-mamba install -y -c conda-forge pyarrow=8.0.0
+mamba install -y -c conda-forge pyarrow=9.0.0
 # cx_oracle: Oracle Database
 # psycopg2: PostgreSQL
 if [ "$RUN_NIGHTLY" != "yes" ]; then
     mamba install -y -c conda-forge cx_oracle psycopg2
 fi
-mamba install -y -c conda-forge pytest pytest-cov
+mamba install -y -c conda-forge pytest pytest-cov pytest-timeout
 python -m pip install deltalake
 python -m pip install awscli
 

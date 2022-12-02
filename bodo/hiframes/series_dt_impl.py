@@ -98,9 +98,12 @@ def create_date_field_overload(field):
             S_dt.stype.dtype, PandasDatetimeTZDtype
         ):  # pragma: no cover
             return
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            S_dt, f"Series.dt.{field}"
-        )
+        has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
+        if field != "month":
+            # Only month is implemented thus far.
+            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+                S_dt, f"Series.dt.{field}"
+            )
         func_text = "def impl(S_dt):\n"
         func_text += "    S = S_dt._obj\n"
         func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -127,15 +130,18 @@ def create_date_field_overload(field):
         func_text += "        if bodo.libs.array_kernels.isna(arr, i):\n"
         func_text += "            bodo.libs.array_kernels.setna(out_arr, i)\n"
         func_text += "            continue\n"
-        func_text += (
-            "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])\n"
-        )
+        if not has_tz_aware_data:
+            func_text += "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])\n"
         # extract year, month, day faster without conversion to Timestamp
         if field in ("year", "month", "day"):
-            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
-            if field in ("month", "day"):
-                func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
-            func_text += "        out_arr[i] = {}\n".format(field)
+            if has_tz_aware_data:
+                # TZ-Aware data is already unboxed into a timestamp
+                func_text += "        out_arr[i] = arr[i].{}\n".format(field)
+            else:
+                func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
+                if field in ("month", "day"):
+                    func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
+                func_text += "        out_arr[i] = {}\n".format(field)
         elif field in (
             "dayofyear",
             "day_of_year",
