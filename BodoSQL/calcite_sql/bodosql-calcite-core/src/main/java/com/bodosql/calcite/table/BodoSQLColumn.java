@@ -22,7 +22,9 @@ public interface BodoSQLColumn {
 
   BodoSQLColumnDataType getColumnDataType();
 
-  RelDataType convertToSqlType(RelDataTypeFactory typeFactory);
+  boolean isNullable();
+
+  RelDataType convertToSqlType(RelDataTypeFactory typeFactory, boolean nullable);
 
   /**
    * Does reading this column type need to be cast to another Bodo type to match the generated Java
@@ -147,7 +149,7 @@ public interface BodoSQLColumn {
       }
     }
 
-    public RelDataType convertToSqlType(RelDataTypeFactory typeFactory) {
+    public RelDataType convertToSqlType(RelDataTypeFactory typeFactory, boolean nullable) {
       RelDataType temp;
       switch (this) {
         case INT8:
@@ -212,7 +214,7 @@ public interface BodoSQLColumn {
           // If a type is not supported default to unknown
           temp = typeFactory.createSqlType(SqlTypeName.UNKNOWN);
       }
-      return temp;
+      return typeFactory.createTypeWithNullability(temp, nullable);
     }
 
     public boolean requiresReadCast() {

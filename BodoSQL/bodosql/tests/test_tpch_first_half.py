@@ -45,6 +45,9 @@ def test_tpch_q1(tpch_data, spark_info, memory_leak_check):
     )
 
 
+# test_tpch_q2 has timed out at 350 seconds with
+# multiple processes
+@pytest.mark.timeout(500)
 @pytest.mark.slow
 def test_tpch_q2(tpch_data, spark_info, memory_leak_check):
     SIZE = 15
