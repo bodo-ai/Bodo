@@ -243,6 +243,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       while (tableInfo.next()) {
         // Column name is stored in column 4
         // Data type is stored in column 5
+        // NULLABLE is stored in column 11. Note we can only
+        // be certain there are no nulls if we see columnNoNulls
         // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getColumns
         String writeName = tableInfo.getString(4);
         String readName = writeName;
@@ -252,7 +254,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         int dataType = tableInfo.getInt(5);
         BodoSQLColumnDataType type =
             BodoSQLColumnDataType.fromJavaSqlType(JDBCType.valueOf(dataType));
-        columns.add(new BodoSQLColumnImpl(readName, writeName, type));
+        // The column is nullable unless we are certain it has no nulls.
+        boolean nullable = tableInfo.getInt(11) != DatabaseMetaData.columnNoNulls;
+        columns.add(new BodoSQLColumnImpl(readName, writeName, type, nullable));
       }
       return new CatalogTableImpl(tableName, schema, columns);
     } catch (SQLException e) {
