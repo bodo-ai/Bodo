@@ -159,7 +159,12 @@ def get_sql_column_type(arr_type, col_name):
         if elem in _numba_to_sql_column_type_map:
             elem_dtype = ColumnTypeClass.fromTypeId(_numba_to_sql_column_type_map[elem])
         else:
-            raise BodoError(err_msg)
+            # The type is unsupported we raise a warning indicating this is a possible
+            # error but we generate a dummy type because we may be able to support it
+            # if its optimized out.
+            warnings.warn(BodoSQLWarning(warning_msg))
+            col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
+            elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
     elif isinstance(arr_type, bodo.DatetimeArrayType):
         # TODO [BS-641]: Treat TZ-Aware as its own internal type.
         col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Datetime.value)
@@ -171,7 +176,8 @@ def get_sql_column_type(arr_type, col_name):
         warnings.warn(BodoSQLWarning(warning_msg))
         col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
         elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
-    return ColumnClass(col_name, col_dtype, elem_dtype)
+    nullable = bodo.utils.typing.is_nullable_type(arr_type)
+    return ColumnClass(col_name, col_dtype, elem_dtype, nullable)
 
 
 def get_sql_param_type(param_type, param_name):
@@ -186,6 +192,10 @@ def get_sql_param_type(param_type, param_name):
                 ColumnTypeClass.fromTypeId(
                     _numba_to_sql_param_type_map[unliteral_type]
                 ),
+                # The named parameters are always scalars. We don't support
+                # Optional types or None types yet. As a result this is always
+                # non-null.
+                False,
             ),
             is_literal,
         )

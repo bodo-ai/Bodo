@@ -30,43 +30,78 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   /** The name of the column to use for writing. */
   private final String writeName;
 
+  /** Is this column type nullable? */
+  private final boolean nullable;
+
   /**
    * Create a new column from a name and a type.
    *
    * @param name the name that we will give the column
    * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param nullable Is the column type nullable?
    */
-  public BodoSQLColumnImpl(String name, BodoSQLColumnDataType type) {
+  public BodoSQLColumnImpl(String name, BodoSQLColumnDataType type, boolean nullable) {
     this.dataType = type;
     this.readName = name;
     this.writeName = name;
     this.elemType = BodoSQLColumnDataType.EMPTY;
+    this.nullable = nullable;
   }
 
-  public BodoSQLColumnImpl(String readName, String writeName, BodoSQLColumnDataType type) {
+  /**
+   * Create a new column from a name and a type.
+   *
+   * @param readName the name that we will give the column when reading
+   * @param writeName the name that we will give the column when writing
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param nullable Is the column type nullable?
+   */
+  public BodoSQLColumnImpl(
+      String readName, String writeName, BodoSQLColumnDataType type, boolean nullable) {
     this.dataType = type;
     this.readName = readName;
     this.writeName = writeName;
     this.elemType = BodoSQLColumnDataType.EMPTY;
+    this.nullable = nullable;
   }
 
+  /**
+   * Create a new column from a name and a type.
+   *
+   * @param name the name that we will give the column
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param elemType the {@link BodoSQLColumnDataType} for the element in categorical types
+   * @param nullable Is the column type nullable?
+   */
   public BodoSQLColumnImpl(
-      String name, BodoSQLColumnDataType type, BodoSQLColumnDataType elemType) {
+      String name, BodoSQLColumnDataType type, BodoSQLColumnDataType elemType, boolean nullable) {
     this.dataType = type;
     this.readName = name;
     this.writeName = name;
     this.elemType = elemType;
+    this.nullable = nullable;
   }
 
+  /**
+   * Create a new column from a name and a type.
+   *
+   * @param readName the name that we will give the column when reading
+   * @param writeName the name that we will give the column when writing
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param elemType the {@link BodoSQLColumnDataType} for the element in categorical types
+   * @param nullable Is the column type nullable?
+   */
   public BodoSQLColumnImpl(
       String readName,
       String writeName,
       BodoSQLColumnDataType type,
-      BodoSQLColumnDataType elemType) {
+      BodoSQLColumnDataType elemType,
+      boolean nullable) {
     this.dataType = type;
     this.readName = readName;
     this.writeName = writeName;
     this.elemType = elemType;
+    this.nullable = nullable;
   }
 
   @Override
@@ -85,13 +120,13 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   }
 
   @Override
-  public RelDataType convertToSqlType(RelDataTypeFactory typeFactory) {
+  public RelDataType convertToSqlType(RelDataTypeFactory typeFactory, boolean nullable) {
     BodoSQLColumnDataType dtype = this.dataType;
     if (this.dataType == BodoSQLColumnDataType.CATEGORICAL) {
       // Categorical code should be treated as its underlying elemType
       dtype = this.elemType;
     }
-    return dtype.convertToSqlType(typeFactory);
+    return dtype.convertToSqlType(typeFactory, nullable);
   }
 
   @Override
@@ -102,6 +137,11 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   @Override
   public boolean requiresWriteCast() {
     return this.dataType.requiresWriteCast();
+  }
+
+  @Override
+  public boolean isNullable() {
+    return nullable;
   }
 
   /**

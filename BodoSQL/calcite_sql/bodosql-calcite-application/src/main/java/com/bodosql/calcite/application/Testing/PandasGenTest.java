@@ -17,13 +17,13 @@ public class PandasGenTest {
 
     LocalSchemaImpl schema = new LocalSchemaImpl("__bodolocal__");
     ArrayList arr = new ArrayList();
-    BodoSQLColumnDataType dataType = BodoSQLColumnDataType.DATETIME;
+    BodoSQLColumnDataType dataType = BodoSQLColumnDataType.INT64;
     BodoSQLColumnDataType paramType = BodoSQLColumnDataType.INT64;
-    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataType);
+    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataType, true);
     arr.add(column);
-    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataType);
+    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataType, true);
     arr.add(column2);
-    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType);
+    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType, true);
     arr.add(column3);
 
     BodoSqlTable table = new LocalTableImpl("table1", schema, arr, false, "table1", "", false);
@@ -31,9 +31,9 @@ public class PandasGenTest {
 
     arr = new ArrayList();
     arr.add(column);
-    BodoSQLColumnImpl column4 = new BodoSQLColumnImpl("B", dataType);
+    BodoSQLColumnImpl column4 = new BodoSQLColumnImpl("B", dataType, true);
     arr.add(column4);
-    BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataType);
+    BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataType, true);
     arr.add(column5);
     BodoSqlTable table2 = new LocalTableImpl("table2", schema, arr, false, "table2", "", false);
     schema.addTable(table2);
@@ -44,9 +44,9 @@ public class PandasGenTest {
     String paramTableName = "ParamTable";
     arr = new ArrayList();
     arr.add(column);
-    BodoSQLColumnImpl param1 = new BodoSQLColumnImpl("B", paramType);
+    BodoSQLColumnImpl param1 = new BodoSQLColumnImpl("B", paramType, true);
     arr.add(param1);
-    BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType);
+    BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType, true);
     arr.add(param2);
     BodoSqlTable paramTable =
         new LocalTableImpl(paramTableName, schema, arr, false, paramTableName, "", false);
