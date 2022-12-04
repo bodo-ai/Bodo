@@ -825,7 +825,7 @@ class TypingTransforms:
         self._check_non_filter_df_use_after_filter(
             set(used_dfs.keys()), assign, func_ir
         )
-        new_working_body = self._reorder_filter_nodes(
+        new_working_body, is_ir_reordered = self._reorder_filter_nodes(
             read_node, index_def, used_dfs, skipped_vars, filters, working_body, func_ir
         )
         old_filters = read_node.filters
@@ -833,12 +833,50 @@ class TypingTransforms:
         # an implicit AND. We merge by distributed the AND over ORs
         # (A or B) AND (C or D) -> AC or AD or BC or BD
         # See test_read_partitions_implicit_and_detailed for an example usage.
-        if old_filters is not None:
-            new_filters = []
-            for old_or_cond in old_filters:
-                for new_or_cond in filters:
-                    new_filters.append(old_or_cond + new_or_cond)
-            filters = new_filters
+        # We also simplify the filters here to avoid duplicate code in the filter pushdown
+        # stage and avoid edge cases where if a filter can't be deleted with hit an infinite
+        # loop (see test_merge_into_filter_compilation_errors.py::test_requires_transform).
+        # This has two components:
+        #
+        #   1. Simplify AND. We delete any filter repeated in the same AND
+        #   2. Simplify OR. We delete any or statement that is repeated multiple times.
+        #
+        # Other simplification may be possible
+        if old_filters is None:
+            # Initialize the old_filters to AND with nothing
+            old_filters = [[]]
+        filters_changed = False
+        # Use boolean algebra laws to combine old and new filters
+        # and remove duplicates. The old and new filters are essentially
+        # OR expressions that are ANDed together (to apply all filters).
+        # e.g. (A | B) & (C | D) -> (A & C) | (A & D) | (B & C) | (B & D)
+        # Keeping track of duplicates ensures that for (A | B) & (A | B)
+        # then the output is A | AB | B. If we don't delete redundant OR
+        # statements then we can have an infinite loop if we tried to
+        # merge with the same filter repeatedly as we will believe the
+        # filters have changed.
+        new_filter_set = set()
+        for old_or_cond in old_filters:
+            for new_or_cond in filters:
+                # Create a set for fast lookup
+                old_or_set = set(old_or_cond)
+                expr_changed = False
+                for new_and_cond in new_or_cond:
+                    # Add the new filter condition if it doesn't already exist
+                    if new_and_cond not in old_or_set:
+                        # Append to avoid adding the same AND condition multiple times
+                        old_or_set.add(new_and_cond)
+                        expr_changed = True
+                # Sort for the set comparison
+                combined_filters = tuple(sorted(old_or_set))
+                if combined_filters not in new_filter_set:
+                    # Append to avoid adding the same OR condition multiple times
+                    new_filter_set.add(combined_filters)
+                    filters_changed = expr_changed
+        # Convert the output back to list(list(tuple)). Here we
+        # sort to keep everything consistent on all ranks as iterating
+        # through a set depends on a randomized hash seed.
+        filters = sorted([list(x) for x in new_filter_set])
 
         # Update the logs with the successful filter pushdown.
         # (no exception was raise until this end point so filters are valid)
@@ -864,8 +902,11 @@ class TypingTransforms:
             assign.value = assign.value.value
             self.rerun_after_dce = True
 
-        # Mark the IR as changed
-        self.changed = True
+        # Mark the IR as changed if modified the IR or filters at all.
+        # This is important because if we don't delete the filter and an error
+        # in the code requires a transformation we will wrongfully believe the IR
+        # has changed. See test_merge_into_filter_compilation_errors.py::test_requires_transform.
+        self.changed = is_ir_reordered or filters_changed or (not keep_filter)
         # Return the updates to the working body so we can modify blocks that may not
         # be in the working body yet.
         return new_working_body
@@ -1058,8 +1099,16 @@ class TypingTransforms:
             else:
                 non_filter_nodes.append(stmt)
 
+        # Check if the code has changed. There is only 1 change that
+        # can occur, a node is moved from later into the IR earlier
+        # via new body. This changes will be found in location
+        #  new_body[pq_ind: len(new_body)]. As a result we can just
+        # check this code for changes
+        start_idx, end_idx = pq_ind, len(new_body)
+        changed = working_body[start_idx:end_idx] != new_body[start_idx:end_idx]
         # update current basic block with new stmt order
-        return new_body + non_filter_nodes
+        new_working_body = new_body + non_filter_nodes
+        return new_working_body, changed
 
     def _get_filter_nodes(self, index_def, func_ir):
         """find ir.Expr nodes used in filtering output dataframe directly so they can
