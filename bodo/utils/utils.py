@@ -8,7 +8,6 @@ import keyword
 import re
 import warnings
 from enum import Enum
-from typing import TypeGuard
 
 import numba
 import numpy as np
@@ -1069,7 +1068,7 @@ def is_call_assign(stmt):
     )
 
 
-def is_call(expr) -> TypeGuard[ir.Expr]:
+def is_call(expr) -> bool:
     return isinstance(expr, ir.Expr) and expr.op == "call"
 
 
@@ -1077,11 +1076,11 @@ def is_var_assign(inst):
     return isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var)
 
 
-def is_assign(inst) -> TypeGuard[ir.Assign]:
+def is_assign(inst) -> bool:
     return isinstance(inst, ir.Assign)
 
 
-def is_expr(val, op) -> TypeGuard[ir.Expr]:
+def is_expr(val, op) -> bool:
     return isinstance(val, ir.Expr) and val.op == op
 
 
