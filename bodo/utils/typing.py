@@ -8,7 +8,7 @@ import operator
 import types as pytypes
 import warnings
 from inspect import getfullargspec
-from typing import Any, Dict, List, Optional, Tuple, TypeGuard, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numba
 import numba.cpython.unicode
@@ -883,9 +883,7 @@ def get_overload_const_bool(val) -> bool:
     raise BodoError("{} not constant boolean".format(val))
 
 
-def is_const_func_type(
-    t,
-) -> TypeGuard[Union[types.MakeFunctionLiteral, "FunctionLiteral", types.Dispatcher]]:
+def is_const_func_type(t) -> bool:
     """check if 't' is a constant function type"""
     return isinstance(
         t,
@@ -983,17 +981,7 @@ def parse_dtype(dtype, func_name=None):
 
 def is_list_like_index_type(
     t,
-) -> TypeGuard[
-    Union[
-        types.List,
-        types.Array,
-        "NumericIndexType",
-        "RangeIndexType",
-        "SeriesType",
-        "bodo.IntegerArrayType",
-        "bodo.libs.bool_arr_ext.BooleanArrayType",
-    ]
-]:
+) -> bool:
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.
     """
