@@ -33,6 +33,7 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     raise_bodo_error,
 )
+import pandas as pd
 
 # global dtypes to use in allocations throughout this file
 dt64_dtype = np.dtype("datetime64[ns]")
@@ -99,11 +100,15 @@ def create_date_field_overload(field):
         ):  # pragma: no cover
             return
         has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
-        if field != "month":
-            # Only month is implemented thus far.
+
+        # Current list of tested pd.Series.dt fields
+        series_dt_fields = ["year", "month", "hour", "minute", "second"]
+
+        if field not in series_dt_fields:
             bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
                 S_dt, f"Series.dt.{field}"
             )
+
         func_text = "def impl(S_dt):\n"
         func_text += "    S = S_dt._obj\n"
         func_text += "    arr = bodo.hiframes.pd_series_ext.get_series_data(S)\n"
@@ -132,51 +137,14 @@ def create_date_field_overload(field):
         func_text += "            continue\n"
         if not has_tz_aware_data:
             func_text += "        dt64 = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arr[i])\n"
-        # extract year, month, day faster without conversion to Timestamp
-        if field in ("year", "month", "day"):
-            if has_tz_aware_data:
-                # TZ-Aware data is already unboxed into a timestamp
-                func_text += "        out_arr[i] = arr[i].{}\n".format(field)
-            else:
-                func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
-                if field in ("month", "day"):
-                    func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
-                func_text += "        out_arr[i] = {}\n".format(field)
-        elif field in (
-            "dayofyear",
-            "day_of_year",
-            "dayofweek",
-            "day_of_week",
-            "weekday",
-        ):
-            funcdict = {
-                "dayofyear": "get_day_of_year",
-                "day_of_year": "get_day_of_year",
-                "dayofweek": "get_day_of_week",
-                "day_of_week": "get_day_of_week",
-                "weekday": "get_day_of_week",
-            }
-            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
-            func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
-            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.{}(year, month, day)\n".format(
-                funcdict[field]
-            )
-        elif field == "is_leap_year":
-            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
-            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.is_leap_year(year)\n"
-        elif field in ("daysinmonth", "days_in_month"):
-            funcdict = {
-                "days_in_month": "get_days_in_month",
-                "daysinmonth": "get_days_in_month",
-            }
-            func_text += "        dt, year, days = bodo.hiframes.pd_timestamp_ext.extract_year_days(dt64)\n"
-            func_text += "        month, day = bodo.hiframes.pd_timestamp_ext.get_month_day(year, days)\n"
-            func_text += "        out_arr[i] = bodo.hiframes.pd_timestamp_ext.{}(year, month)\n".format(
-                funcdict[field]
-            )
-        else:
             func_text += "        ts = bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(dt64)\n"
-            func_text += "        out_arr[i] = ts." + field + "\n"
+            if field == "weekday":
+                func_text += "        out_arr[i] = ts.weekday()\n"
+            else:
+                func_text += "        out_arr[i] = ts." + field + "\n"
+        else:
+            func_text += "        out_arr[i] = arr[i].{}\n".format(field)
+
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)\n"
         )

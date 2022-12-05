@@ -691,7 +691,7 @@ def test_ts_col_date_scalar_filter_pushdown(memory_leak_check):
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
-
+@pytest.mark.tz_aware
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_tz_aware_filter_pushdown(memory_leak_check):
     """
