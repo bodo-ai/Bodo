@@ -75,6 +75,18 @@ def mysql_interval_str(request):
 def get_format_str(request):
     return request.param
 
+@pytest.fixture
+def tz_aware_df():
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="D", periods=30, tz="Poland"
+            ).to_series()
+        }
+    )
+
+    return {"table1": df}
+
 
 @pytest.fixture
 def dt_fn_dataframe():
@@ -1671,21 +1683,52 @@ def test_next_previous_day_scalars(
         expected_output=py_output,
     )
 
+@pytest.mark.tz_aware
+@pytest.mark.skip("[BE-4001] BodoSQL not support DAY (either tz or non-tz) yet")
+def test_tz_aware_day(tz_aware_df, memory_leak_check):
+    query = "SELECT DAY(A) as m from table1"
+    df = tz_aware_df["table1"]
+    py_output = pd.DataFrame({"m": df.A.dt.day})
+    check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
 
-def test_tz_aware_month(memory_leak_check):
-    query = "SELECT MONTH(A) as m from table1"
-    df = pd.DataFrame(
+@pytest.mark.tz_aware
+def test_tz_aware_extract_yhms(tz_aware_df, memory_leak_check):
+    query = "SELECT EXTRACT(YEAR from A) as my_yr, EXTRACT(HOUR from A) as h, \
+                    EXTRACT(MINUTE from A) as m, EXTRACT(SECOND from A) as s \
+                    from table1"
+    df = tz_aware_df["table1"]
+    py_output = pd.DataFrame(
         {
-            "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
-            ).to_series()
+            "my_yr": df.A.dt.year, 
+            "h": df.A.dt.hour, 
+            "m": df.A.dt.minute, 
+            "s": df.A.dt.second
         }
     )
-    ctx = {"table1": df}
+    check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
+
+@pytest.mark.tz_aware
+def test_tz_aware_year_hr_min_sec(tz_aware_df, memory_leak_check):
+    query = "SELECT YEAR(A) as my_yr, HOUR(A) as h, MINUTE(A) as m, SECOND(A) as s from table1"
+    df = tz_aware_df["table1"]
+    py_output = pd.DataFrame(
+        {
+            "my_yr": df.A.dt.year, 
+            "h": df.A.dt.hour, 
+            "m": df.A.dt.minute, 
+            "s": df.A.dt.second
+        }
+    )
+    check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
+
+@pytest.mark.tz_aware
+def test_tz_aware_month(tz_aware_df, memory_leak_check):
+    query = "SELECT MONTH(A) as m from table1"
+    df = tz_aware_df["table1"]
     py_output = pd.DataFrame({"m": df.A.dt.month})
-    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+    check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
 
-
+@pytest.mark.tz_aware
 def test_tz_aware_month_case(memory_leak_check):
     query = "SELECT CASE WHEN B THEN MONTH(A) END as m from table1"
     df = pd.DataFrame(
