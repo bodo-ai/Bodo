@@ -59,6 +59,10 @@ for i, m in enumerate(modules):
         str(num_processes),
         "pytest",
         "-Wignore",
+        # junitxml generates test report file that can be displayed by CodeBuild website
+        # use PYTEST_MARKER and module name to generate a unique filename for each group of tests as identified
+        # by markers and test filename.
+        f"--junitxml=pytest-report-{m.split('.')[0]}-{os.environ['PYTEST_MARKER'].replace(' ','-')}.xml",
     ] + mod_pytest_args
     print(f"Running: {' '.join(cmd)} with module {m}")
     p = subprocess.Popen(cmd, shell=False)
