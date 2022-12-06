@@ -488,8 +488,13 @@ def bool_arr_getitem(A, ind):
         # XXX: cannot handle NA for scalar getitem since not type stable
         return lambda A, ind: A._data[ind]
 
-    # bool arr indexing
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    # bool arr indexing. Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if (
+        ind != boolean_array
+        and is_list_like_index_type(ind)
+        and ind.dtype == types.bool_
+    ):
 
         def impl_bool(A, ind):  # pragma: no cover
             new_data, new_mask = array_getitem_bool_index(A, ind)
@@ -515,11 +520,13 @@ def bool_arr_getitem(A, ind):
 
         return impl_slice
 
-    # This should be the only BooleanArray implementation.
+    # This should be the only BooleanArray implementation
+    # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more idx options are added.
-    raise BodoError(
-        f"getitem for BooleanArray with indexing type {ind} not supported."
-    )  # pragma: no cover
+    if ind != boolean_array:  # pragma: no cover
+        raise BodoError(
+            f"getitem for BooleanArray with indexing type {ind} not supported."
+        )
 
 
 @overload(operator.setitem, no_unliteral=True)
@@ -882,17 +889,30 @@ def overload_unique(A):
 @overload(operator.getitem, no_unliteral=True)
 def bool_arr_ind_getitem(A, ind):
     # getitem for array indexed by BooleanArray
-    # TODO: other array types for A?
     if ind == boolean_array and (
-        isinstance(A, (types.Array, bodo.libs.int_arr_ext.IntegerArrayType))
-        or isinstance(A, bodo.libs.struct_arr_ext.StructArrayType)
-        or isinstance(A, bodo.libs.array_item_arr_ext.ArrayItemArrayType)
-        or isinstance(A, bodo.libs.map_arr_ext.MapArrayType)
+        isinstance(
+            A,
+            (
+                types.Array,
+                bodo.libs.int_arr_ext.IntegerArrayType,
+                bodo.libs.struct_arr_ext.StructArrayType,
+                bodo.libs.array_item_arr_ext.ArrayItemArrayType,
+                bodo.libs.map_arr_ext.MapArrayType,
+                bodo.libs.tuple_arr_ext.TupleArrayType,
+                bodo.CategoricalArrayType,
+                bodo.TimeArrayType,
+                bodo.DecimalArrayType,
+                bodo.DatetimeArrayType,
+            ),
+        )
         or A
         in (
             string_array_type,
             bodo.hiframes.split_impl.string_array_split_view_type,
             boolean_array,
+            bodo.datetime_date_array_type,
+            bodo.datetime_timedelta_array_type,
+            bodo.binary_array_type,
         )
     ):
 
