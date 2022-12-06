@@ -126,23 +126,6 @@ from bodo.utils.utils import (
 ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
 
 
-_dt_index_binops = (
-    "==",
-    "!=",
-    ">=",
-    ">",
-    "<=",
-    "<",
-    "-",
-    operator.eq,
-    operator.ne,
-    operator.ge,
-    operator.gt,
-    operator.le,
-    operator.lt,
-    operator.sub,
-)
-
 _string_array_comp_ops = (
     operator.eq,
     operator.ne,
@@ -151,35 +134,6 @@ _string_array_comp_ops = (
     operator.le,
     operator.lt,
 )
-
-_binop_to_str = {
-    operator.eq: "==",
-    operator.ne: "!=",
-    operator.ge: ">=",
-    operator.gt: ">",
-    operator.le: "<=",
-    operator.lt: "<",
-    operator.sub: "-",
-    operator.add: "+",
-    operator.mul: "*",
-    operator.truediv: "/",
-    operator.floordiv: "//",
-    operator.mod: "%",
-    operator.pow: "**",
-    "==": "==",
-    "!=": "!=",
-    ">=": ">=",
-    ">": ">",
-    "<=": "<=",
-    "<": "<",
-    "-": "-",
-    "+": "+",
-    "*": "*",
-    "/": "/",
-    "//": "//",
-    "%": "%",
-    "**": "**",
-}
 
 
 class SeriesPass:
