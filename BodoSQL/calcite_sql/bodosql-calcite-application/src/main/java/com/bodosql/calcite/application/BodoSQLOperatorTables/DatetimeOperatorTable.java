@@ -521,6 +521,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction DAY = new SqlDatePartFunction("DAY", TimeUnit.DAY);
+
   private List<SqlOperator> functionList =
       Arrays.asList(
           DATE_PART,
@@ -553,7 +555,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           DATE_TRUNC,
           YEAROFWEEKISO,
           NEXT_DAY,
-          PREVIOUS_DAY);
+          PREVIOUS_DAY,
+          DAY);
 
   @Override
   public void lookupOperatorOverloads(
