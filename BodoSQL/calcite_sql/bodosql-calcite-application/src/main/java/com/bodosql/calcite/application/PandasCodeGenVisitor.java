@@ -2665,6 +2665,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "MICROSECOND":
           case "SECOND":
           case "MINUTE":
+          case "DAY":
           case "DAYOFYEAR":
           case "DAYOFWEEK":
           case "DAYOFMONTH":
