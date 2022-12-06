@@ -1326,13 +1326,11 @@ register_model(ColNamesMetaType)(models.OpaqueModel)
 
 def is_literal_type(t):
     """return True if 't' represents a data type with known compile-time constant value"""
-    # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
-    if isinstance(t, types.TypeRef):
-        t = t.instance_type
     return (
+        isinstance(t, types.TypeRef)
         # LiteralStrKeyDict is not always a literal since its values are not necessarily
         # constant
-        (
+        or (
             isinstance(t, (types.Literal, types.Omitted))
             and not isinstance(t, types.LiteralStrKeyDict)
         )
