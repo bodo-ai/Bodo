@@ -1297,41 +1297,44 @@ def struct_arr_getitem(arr, ind):
 
         return struct_arr_getitem_impl
 
-    # other getitem cases return an array, so just call getitem on underlying arrays
-    n_fields = len(arr.data)
-    func_text = "def impl(arr, ind):\n"
-    func_text += "  data = get_data(arr)\n"
-    func_text += "  null_bitmap = get_null_bitmap(arr)\n"
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
-        func_text += "  out_null_bitmap = get_new_null_mask_bool_index(null_bitmap, ind, len(data[0]))\n"
-    elif is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
-        func_text += "  out_null_bitmap = get_new_null_mask_int_index(null_bitmap, ind, len(data[0]))\n"
-    elif isinstance(ind, types.SliceType):
-        func_text += "  out_null_bitmap = get_new_null_mask_slice_index(null_bitmap, ind, len(data[0]))\n"
-    else:  # pragma: no cover
-        raise BodoError("invalid index {} in struct array indexing".format(ind))
-    func_text += "  return init_struct_arr(({},), out_null_bitmap, ({},))\n".format(
-        ", ".join(
-            "ensure_contig_if_np(data[{}][ind])".format(i) for i in range(n_fields)
-        ),
-        ", ".join("'{}'".format(name) for name in arr.names),
-    )
-    loc_vars = {}
-    exec(
-        func_text,
-        {
-            "init_struct_arr": init_struct_arr,
-            "get_data": get_data,
-            "get_null_bitmap": get_null_bitmap,
-            "ensure_contig_if_np": bodo.utils.conversion.ensure_contig_if_np,
-            "get_new_null_mask_bool_index": bodo.utils.indexing.get_new_null_mask_bool_index,
-            "get_new_null_mask_int_index": bodo.utils.indexing.get_new_null_mask_int_index,
-            "get_new_null_mask_slice_index": bodo.utils.indexing.get_new_null_mask_slice_index,
-        },
-        loc_vars,
-    )
-    impl = loc_vars["impl"]
-    return impl
+    # Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if ind != bodo.boolean_array:
+        # other getitem cases return an array, so just call getitem on underlying arrays
+        n_fields = len(arr.data)
+        func_text = "def impl(arr, ind):\n"
+        func_text += "  data = get_data(arr)\n"
+        func_text += "  null_bitmap = get_null_bitmap(arr)\n"
+        if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+            func_text += "  out_null_bitmap = get_new_null_mask_bool_index(null_bitmap, ind, len(data[0]))\n"
+        elif is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
+            func_text += "  out_null_bitmap = get_new_null_mask_int_index(null_bitmap, ind, len(data[0]))\n"
+        elif isinstance(ind, types.SliceType):
+            func_text += "  out_null_bitmap = get_new_null_mask_slice_index(null_bitmap, ind, len(data[0]))\n"
+        else:  # pragma: no cover
+            raise BodoError("invalid index {} in struct array indexing".format(ind))
+        func_text += "  return init_struct_arr(({},), out_null_bitmap, ({},))\n".format(
+            ", ".join(
+                "ensure_contig_if_np(data[{}][ind])".format(i) for i in range(n_fields)
+            ),
+            ", ".join("'{}'".format(name) for name in arr.names),
+        )
+        loc_vars = {}
+        exec(
+            func_text,
+            {
+                "init_struct_arr": init_struct_arr,
+                "get_data": get_data,
+                "get_null_bitmap": get_null_bitmap,
+                "ensure_contig_if_np": bodo.utils.conversion.ensure_contig_if_np,
+                "get_new_null_mask_bool_index": bodo.utils.indexing.get_new_null_mask_bool_index,
+                "get_new_null_mask_int_index": bodo.utils.indexing.get_new_null_mask_int_index,
+                "get_new_null_mask_slice_index": bodo.utils.indexing.get_new_null_mask_slice_index,
+            },
+            loc_vars,
+        )
+        impl = loc_vars["impl"]
+        return impl
 
 
 @overload(operator.setitem, no_unliteral=True)

@@ -882,8 +882,13 @@ def array_item_arr_getitem_array(arr, ind):
 
         return array_item_arr_getitem_impl
 
-    # bool arr indexing
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    # bool arr indexing. Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if (
+        ind != bodo.boolean_array
+        and is_list_like_index_type(ind)
+        and ind.dtype == types.bool_
+    ):
 
         data_arr_type = arr.dtype
 

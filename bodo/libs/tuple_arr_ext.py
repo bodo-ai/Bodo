@@ -161,11 +161,14 @@ def tuple_arr_getitem(arr, ind):
         impl = loc_vars["impl"]
         return impl
 
-    # other getitem cases return an array, so just call getitem on underlying data array
-    def impl_arr(arr, ind):
-        return init_tuple_arr(arr._data[ind])
+    # Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if ind != bodo.boolean_array:
+        # other getitem cases return an array, so just call getitem on underlying data array
+        def impl_arr(arr, ind):
+            return init_tuple_arr(arr._data[ind])
 
-    return impl_arr
+        return impl_arr
 
 
 @overload(operator.setitem, no_unliteral=True)

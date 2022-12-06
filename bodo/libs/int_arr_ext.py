@@ -496,8 +496,13 @@ def int_arr_getitem(A, ind):
         # XXX: cannot handle NA for scalar getitem since not type stable
         return lambda A, ind: A._data[ind]
 
-    # bool arr indexing
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    # bool arr indexing. Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if (
+        ind != bodo.boolean_array
+        and is_list_like_index_type(ind)
+        and ind.dtype == types.bool_
+    ):
 
         def impl_bool(A, ind):  # pragma: no cover
             new_data, new_mask = array_getitem_bool_index(A, ind)
@@ -523,11 +528,13 @@ def int_arr_getitem(A, ind):
 
         return impl_slice
 
-    # This should be the only IntegerArray implementation.
+    # This should be the only IntegerArray implementation
+    # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more idx options are added.
-    raise BodoError(
-        f"getitem for IntegerArray with indexing type {ind} not supported."
-    )  # pragma: no cover
+    if ind != bodo.boolean_array:  # pragma: no cover
+        raise BodoError(
+            f"getitem for IntegerArray with indexing type {ind} not supported."
+        )
 
 
 @overload(operator.setitem, no_unliteral=True)
