@@ -334,6 +334,7 @@ ORDER BY table2.string_col, table1.datetime_col
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.smoke
 def test_smoke7(smoke_ctx_3, spark_info, memory_leak_check):
     """Tests window functions and QUALIFY"""
@@ -370,6 +371,7 @@ WHERE R % 2 = 0
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.smoke
 def test_smoke8(smoke_ctx_4, spark_info, memory_leak_check):
     """Tests window functions, WHERE, GROUP BY, HAVING and QUALIFY"""

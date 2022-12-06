@@ -47,7 +47,7 @@ def test_tpch_q1(tpch_data, spark_info, memory_leak_check):
 
 # test_tpch_q2 has timed out at 350 seconds with
 # multiple processes
-@pytest.mark.timeout(500)
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_tpch_q2(tpch_data, spark_info, memory_leak_check):
     SIZE = 15
@@ -177,6 +177,7 @@ def test_tpch_q4(tpch_data, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_tpch_q5(tpch_data, spark_info, memory_leak_check):
     tpch_query = """select
@@ -236,6 +237,7 @@ def test_tpch_q6(tpch_data, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_tpch_q7(tpch_data, spark_info, memory_leak_check):
     NATION1 = "FRANCE"
@@ -288,6 +290,7 @@ def test_tpch_q7(tpch_data, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.timeout(600)
 @pytest.mark.slow
 def test_tpch_q8(tpch_data, spark_info, memory_leak_check):
     NATION = "BRAZIL"
