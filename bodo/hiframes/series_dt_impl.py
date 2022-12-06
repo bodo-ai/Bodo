@@ -102,7 +102,7 @@ def create_date_field_overload(field):
         has_tz_aware_data = isinstance(S_dt.stype.dtype, PandasDatetimeTZDtype)
 
         # Current list of tested pd.Series.dt fields
-        series_dt_fields = ["year", "month", "hour", "minute", "second"]
+        series_dt_fields = ["year", "month", "day", "hour", "minute", "second"]
 
         if field not in series_dt_fields:
             bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(

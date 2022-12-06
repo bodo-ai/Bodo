@@ -75,13 +75,44 @@ def mysql_interval_str(request):
 def get_format_str(request):
     return request.param
 
+
 @pytest.fixture
 def tz_aware_df():
+    # Transition to Daylight Savings
+    # "1D2H37T48S" --> 1 day, 2 hours, 37 minutes, 48 seconds
+    to_dst_series = pd.date_range(
+        start="11/3/2021", freq="1D2H37T48S", periods=30, tz="US/Pacific"
+    ).to_series()
+
+    # Transition back from Daylight Savings
+    from_dst_series = pd.date_range(
+        start="03/1/2022", freq="0D12H30T1S", periods=60, tz="US/Pacific"
+    ).to_series()
+
+    # February is weird with leap years
+    feb_leap_year_series = pd.date_range(
+        start="02/20/2020", freq="1D0H30T0S", periods=20, tz="US/Pacific"
+    ).to_series()
+
+    second_quarter_series = pd.date_range(
+        start="05/01/2015", freq="2D0H1T59S", periods=20, tz="US/Pacific"
+    ).to_series()
+
+    third_quarter_series = pd.date_range(
+        start="08/17/2000", freq="10D1H1T10S", periods=20, tz="US/Pacific"
+    ).to_series()
+
     df = pd.DataFrame(
         {
-            "A": pd.date_range(
-                start="1/1/2022", freq="D", periods=30, tz="Poland"
-            ).to_series()
+            "A": pd.concat(
+                [
+                    to_dst_series,
+                    from_dst_series,
+                    feb_leap_year_series,
+                    second_quarter_series,
+                    third_quarter_series,
+                ]
+            )
         }
     )
 
@@ -1683,13 +1714,34 @@ def test_next_previous_day_scalars(
         expected_output=py_output,
     )
 
+
 @pytest.mark.tz_aware
-@pytest.mark.skip("[BE-4001] BodoSQL not support DAY (either tz or non-tz) yet")
 def test_tz_aware_day(tz_aware_df, memory_leak_check):
     query = "SELECT DAY(A) as m from table1"
     df = tz_aware_df["table1"]
     py_output = pd.DataFrame({"m": df.A.dt.day})
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_day_case(memory_leak_check):
+    query = "SELECT CASE WHEN B THEN DAY(A) END as m from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="145D27H37T48S", periods=30, tz="Poland"
+            ).to_series(),
+            "B": [True, False] * 15,
+        }
+    )
+    ctx = {"table1": df}
+
+    day_series = df.A.dt.day
+    day_series[~df.B] = None
+    py_output = pd.DataFrame({"m": day_series})
+
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
 
 @pytest.mark.tz_aware
 def test_tz_aware_extract_yhms(tz_aware_df, memory_leak_check):
@@ -1699,13 +1751,14 @@ def test_tz_aware_extract_yhms(tz_aware_df, memory_leak_check):
     df = tz_aware_df["table1"]
     py_output = pd.DataFrame(
         {
-            "my_yr": df.A.dt.year, 
-            "h": df.A.dt.hour, 
-            "m": df.A.dt.minute, 
-            "s": df.A.dt.second
+            "my_yr": df.A.dt.year,
+            "h": df.A.dt.hour,
+            "m": df.A.dt.minute,
+            "s": df.A.dt.second,
         }
     )
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
+
 
 @pytest.mark.tz_aware
 def test_tz_aware_year_hr_min_sec(tz_aware_df, memory_leak_check):
@@ -1713,13 +1766,14 @@ def test_tz_aware_year_hr_min_sec(tz_aware_df, memory_leak_check):
     df = tz_aware_df["table1"]
     py_output = pd.DataFrame(
         {
-            "my_yr": df.A.dt.year, 
-            "h": df.A.dt.hour, 
-            "m": df.A.dt.minute, 
-            "s": df.A.dt.second
+            "my_yr": df.A.dt.year,
+            "h": df.A.dt.hour,
+            "m": df.A.dt.minute,
+            "s": df.A.dt.second,
         }
     )
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
+
 
 @pytest.mark.tz_aware
 def test_tz_aware_month(tz_aware_df, memory_leak_check):
@@ -1727,6 +1781,7 @@ def test_tz_aware_month(tz_aware_df, memory_leak_check):
     df = tz_aware_df["table1"]
     py_output = pd.DataFrame({"m": df.A.dt.month})
     check_query(query, tz_aware_df, None, expected_output=py_output, check_dtype=False)
+
 
 @pytest.mark.tz_aware
 def test_tz_aware_month_case(memory_leak_check):
