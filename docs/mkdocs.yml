@@ -145,6 +145,7 @@ nav:
         - Bodo Platform Basics: installation_and_setup/bodo_platform.md
         - Bodo Platform on AWS: installation_and_setup/bodo_platform_aws.md
         - Bodo Platform on Azure: installation_and_setup/bodo_platform_azure.md
+        - Bodo Platform SDK: installation_and_setup/platform_sdk.md
       - Bodo On-Prem:
         - Installing Bodo Community Edition: installation_and_setup/install.md
         - Configuring Bodo Enterprise Edition: installation_and_setup/enterprise.md
