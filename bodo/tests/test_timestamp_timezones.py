@@ -6,10 +6,9 @@ import re
 import numpy as np
 import pandas as pd
 import pytest
-import pytz
 
 import bodo
-from bodo.tests.timezone_common import sample_tz  # noqa
+from bodo.tests.timezone_common import representative_tz, sample_tz  # noqa
 from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
 
@@ -36,22 +35,6 @@ def timestamp_str(request):
 def timezone(request):
     return request.param
 
-# create a fixture that's representative of all timezones
-@pytest.fixture(
-    params=[
-        "UTC",
-        "US/Pacific",  # timezone behind UTC
-        "Europe/Berlin",  # timezone ahead of UTC
-        "Africa/Casablanca",  # timezone that's ahead of UTC only during DST
-        "Asia/Kolkata",  # timezone that's offset by 30 minutes
-        "Asia/Kathmandu",  # timezone that's offset by 45 minutes
-        "Australia/Lord_Howe",  # timezone that's offset by 30 minutes only during DST
-        "Pacific/Honolulu",  # timezone that has no DST,
-        "Etc/GMT+8",  # timezone that has fixed offset from UTC as opposed to zone
-    ]
-)
-def representative_tz(request):
-    return request.param
 
 def test_timestamp_timezone_boxing(timestamp_str, timezone, memory_leak_check):
     def test_impl(timestamp):
@@ -326,3 +309,81 @@ def test_different_tz_unsupported(cmp_op):
         BodoError, match="requires both Timestamps share the same timezone"
     ):
         func(ts2, ts3)
+
+
+def test_pd_timedelta_add(representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    ts = pd.Timestamp(
+        year=2022,
+        month=11,
+        day=6,
+        hour=0,
+        minute=36,
+        second=11,
+        microsecond=113,
+        nanosecond=204,
+        tz=representative_tz,
+    )
+    td = pd.Timedelta(hours=2, seconds=11, nanoseconds=45)
+    check_func(test_impl, (td, ts))
+    check_func(test_impl, (ts, td))
+
+
+def test_datetime_timedelta_add(representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    ts = pd.Timestamp(
+        year=2022,
+        month=11,
+        day=6,
+        hour=0,
+        minute=36,
+        second=11,
+        microsecond=113,
+        nanosecond=204,
+        tz=representative_tz,
+    )
+    td = datetime.timedelta(hours=2, seconds=11, microseconds=45)
+    check_func(test_impl, (td, ts))
+    check_func(test_impl, (ts, td))
+
+
+def test_pd_timedelta_sub(representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    ts = pd.Timestamp(
+        year=2022,
+        month=11,
+        day=6,
+        hour=3,
+        minute=36,
+        second=11,
+        microsecond=113,
+        nanosecond=204,
+        tz=representative_tz,
+    )
+    td = pd.Timedelta(hours=2, seconds=11, nanoseconds=45)
+    check_func(test_impl, (ts, td))
+
+
+def test_datetime_timedelta_sub(representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    ts = pd.Timestamp(
+        year=2022,
+        month=11,
+        day=6,
+        hour=3,
+        minute=36,
+        second=11,
+        microsecond=113,
+        nanosecond=204,
+        tz=representative_tz,
+    )
+    td = datetime.timedelta(hours=2, seconds=11, microseconds=45)
+    check_func(test_impl, (ts, td))

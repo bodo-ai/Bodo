@@ -252,7 +252,7 @@ def alloc_pd_datetime_array_equiv(self, scope, equiv_set, loc, args, kws):
     """Array analysis function for alloc_pd_datetime_array() passed to Numba's array analysis
     extension. Assigns output array's size as equivalent to the input size variable.
     """
-    assert len(args) == 1 and not kws
+    assert len(args) == 2 and not kws
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
@@ -508,3 +508,74 @@ def create_cmp_op_overload_arr(op):
             )
 
     return overload_datetime_arr_cmp
+
+
+def overload_add_operator_datetime_arr(lhs, rhs):
+    """
+    Implementation for the supported add operations on Timezone-Aware data.
+    This function is called from an overload, so it returns an overload.
+    This is used for lhs + rhs.
+
+    Either lhs or rhs is assumed to be a DatetimeArrayType based on how this
+    function is used.
+
+    Args:
+        lhs (types.Type): Bodo type to add. Either (DatetimeArrayType or week_type)
+        rhs (types.Type): Bodo type to add. Either (DatetimeArrayType or week_type)
+
+    Raises:
+        BodoError: If operator.add is not supported between DatetimeArrayType and the other type.
+
+    Returns:
+        func: An implementation function that would be returned from an overload
+    """
+    if isinstance(lhs, DatetimeArrayType):
+        # TODO: Support more types
+        if rhs == bodo.week_type:
+            tz_literal = lhs.tz
+
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(lhs)
+                out_arr = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                    n, tz_literal
+                )
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(lhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = lhs[i] + rhs
+                return out_arr
+
+            return impl
+
+        else:
+            raise BodoError(
+                f"add operator not supported between Timezone-aware timestamp and {rhs}. Please convert to timezone naive with ts.tz_convert(None)"
+            )
+    else:
+        # Note this function is only called if at least one input is a DatetimeArrayType
+        # TODO: Support more types
+        if lhs == bodo.week_type:
+
+            tz_literal = rhs.tz
+
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(rhs)
+                out_arr = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                    n, tz_literal
+                )
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(rhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = lhs + rhs[i]
+                return out_arr
+
+            return impl
+
+        else:
+            raise BodoError(
+                f"add operator not supported between {lhs} and Timezone-aware timestamp. Please convert to timezone naive with ts.tz_convert(None)"
+            )

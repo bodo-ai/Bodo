@@ -4,6 +4,7 @@
 import calendar
 import datetime
 import operator
+from typing import Union
 
 import llvmlite.binding as ll
 import numba
@@ -56,6 +57,7 @@ from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils.typing import (
     BodoError,
     check_unsupported_args,
+    get_literal_value,
     get_overload_const_bool,
     get_overload_const_int,
     get_overload_const_str,
@@ -393,6 +395,31 @@ def constant_timestamp(context, builder, ty, pyval):
 
 
 # -------------------------------------------------------------------------------
+
+
+def tz_has_transition_times(tz: Union[str, int, None]):
+    """
+    Return if a tz has different offsets from UTC at different times.
+    This is useful for operations that moved by non-fixed amount (e.g. 1 Day)
+    to determine what is required to compute the computation.
+
+    Args:
+        tz (Union[str, int, None]): Value stored in the tz field of the
+        PandasTimestampType. Str is the name of a zone, int means a fixed
+        offset (so no transition), and None is tz-naive.
+
+    Returns:
+        bool: Does this tz have different offsets from utc at different times.
+    """
+    # All timezones with transition times are strings in types.
+    if isinstance(tz, str):
+        # Compute the timezone.
+        tz_info = pytz.timezone(tz)
+        # timezones that ever transition are all DstTzInfo.
+        # Unfortunately many of these may be very far in the past (e.g. Hawaii),
+        # so there may be False positives for full correctness.
+        return isinstance(tz_info, pytz.tzinfo.DstTzInfo)
+    return False
 
 
 @overload(pd.Timestamp, no_unliteral=True)
@@ -1266,17 +1293,24 @@ def compute_val_for_timestamp(
     """
     use_objmode = False
     delta_str = "0"
-    if is_overload_constant_str(tz):
-        # Reconstructing the UTC for a local time is very complicated so we defer to objmode.
+    tz_value = get_literal_value(tz)
+    if tz_has_transition_times(tz_value):
+        # Reconstructing the UTC for a local time is very complicated with transitions, so we defer to objmode.
+        # TODO [BE-4048]: Move calculation to JIT.
         use_objmode = True
-        tz_str = get_overload_const_str(tz)
-        tz_obj = pytz.timezone(tz_str)
-    elif is_overload_constant_int(tz):
-        ns_int = get_overload_const_int(tz)
-        delta_str = str(ns_int)
-    elif not is_overload_none(tz):
+    elif isinstance(tz_value, str):
+        # Here we are certain there are no transition times so we can compute a fixed offset
+        # from the timezone
+        tz_obj = pytz.timezone(tz_value)
+        # Convert to nanoseconds.
+        delta_str = str(np.int64(tz_obj._utcoffset.total_seconds() * 1_000_000_000))
+        use_objmode = True
+    elif isinstance(tz_value, int):
+        # Integers are always the offset in nanoseconds
+        delta_str = str(tz_value)
+    elif tz_value is not None:
         raise_bodo_error(
-            "compute_val_for_timestamp(): tz value must be a constant string or None"
+            "compute_val_for_timestamp(): tz value must be a constant string, integer or None"
         )
 
     func_text = "def impl(year, month, day, hour, minute, second, microsecond, nanosecond, tz):\n"
@@ -2424,27 +2458,13 @@ def compute_pd_timestamp(totmicrosec, nanosecond):  # pragma: no cover
 
 
 def overload_sub_operator_timestamp(lhs, rhs):
-    if lhs == pd_timestamp_type and rhs == datetime_timedelta_type:
+    if isinstance(lhs, PandasTimestampType) and rhs == datetime_timedelta_type:
+        tz_literal = lhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
-            # The time itself
-            days1 = lhs.toordinal()
-            secs1 = lhs.second + lhs.minute * 60 + lhs.hour * 3600
-            msec1 = lhs.microsecond
-            nanosecond = (
-                lhs.nanosecond
-            )  # That entries remain unchanged because timestamp has no nanosecond
-            # The timedelta
-            days2 = rhs.days
-            secs2 = rhs.seconds
-            msec2 = rhs.microseconds
-            # Computing the difference
-            daysF = days1 - days2
-            secsF = secs1 - secs2
-            msecF = msec1 - msec2
-            # Getting total microsecond
-            totmicrosec = 1000000 * (daysF * 86400 + secsF) + msecF
-            return compute_pd_timestamp(totmicrosec, nanosecond)
+            # Compute total nanoseconds to allow the timestamp constructor
+            rhs_nanoseconds = bodo.hiframes.datetime_timedelta_ext._to_nanoseconds(rhs)
+            return pd.Timestamp(lhs.value - rhs_nanoseconds, tz=tz_literal)
 
         return impl
 
@@ -2455,7 +2475,7 @@ def overload_sub_operator_timestamp(lhs, rhs):
 
         return impl_timestamp
 
-    if lhs == pd_timestamp_type and rhs == pd_timedelta_type:
+    if isinstance(lhs, PandasTimestampType) and rhs == pd_timedelta_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs + -rhs
@@ -2464,54 +2484,28 @@ def overload_sub_operator_timestamp(lhs, rhs):
 
 
 def overload_add_operator_timestamp(lhs, rhs):
-    if lhs == pd_timestamp_type and rhs == datetime_timedelta_type:
+    if isinstance(lhs, PandasTimestampType) and rhs == datetime_timedelta_type:
+        tz_literal = lhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
-            # The time itself
-            days1 = lhs.toordinal()
-            secs1 = lhs.second + lhs.minute * 60 + lhs.hour * 3600
-            msec1 = lhs.microsecond
-            nanosecond = (
-                lhs.nanosecond
-            )  # That entries remain unchanged because timestamp has no nanosecond
-            # The timedelta
-            days2 = rhs.days
-            secs2 = rhs.seconds
-            msec2 = rhs.microseconds
-            # Computing the difference
-            daysF = days1 + days2
-            secsF = secs1 + secs2
-            msecF = msec1 + msec2
-            # Getting total microsecond
-            totmicrosec = 1000000 * (daysF * 86400 + secsF) + msecF
-            return compute_pd_timestamp(totmicrosec, nanosecond)
+            # Compute total nanoseconds to allow the timestamp constructor
+            rhs_nanoseconds = bodo.hiframes.datetime_timedelta_ext._to_nanoseconds(rhs)
+            return pd.Timestamp(lhs.value + rhs_nanoseconds, tz=tz_literal)
 
         return impl
 
-    if lhs == pd_timestamp_type and rhs == pd_timedelta_type:
+    if isinstance(lhs, PandasTimestampType) and rhs == pd_timedelta_type:
+        tz_literal = lhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
-            # The time itself
-            days1 = lhs.toordinal()
-            secs1 = lhs.second + lhs.minute * 60 + lhs.hour * 3600
-            msec1 = lhs.microsecond
-            nanosec1 = lhs.nanosecond
-            # The timedelta
-            msec2 = rhs.value // 1000
-            nanosec2 = rhs.nanoseconds
-            # Computing the difference
-            msecF = msec1 + msec2
-            # Getting total microsecond
-            totmicrosec = 1000000 * (days1 * 86400 + secs1) + msecF
-            # Getting total nano_seconds
-            totnanosec = nanosec1 + nanosec2
-            return compute_pd_timestamp(totmicrosec, totnanosec)
+            # Sum the values and run the Timestamp function.
+            return pd.Timestamp(lhs.value + rhs.value, tz=tz_literal)
 
         return impl
 
     # if lhs and rhs flipped, flip args and call add again
-    if (lhs == pd_timedelta_type and rhs == pd_timestamp_type) or (
-        lhs == datetime_timedelta_type and rhs == pd_timestamp_type
+    if (lhs == pd_timedelta_type and isinstance(rhs, PandasTimestampType)) or (
+        lhs == datetime_timedelta_type and isinstance(rhs, PandasTimestampType)
     ):
 
         def impl(lhs, rhs):  # pragma: no cover
