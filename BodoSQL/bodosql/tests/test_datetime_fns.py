@@ -905,6 +905,45 @@ def test_date_part(query_fmt, answer, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "query_fmt",
+    [
+        pytest.param(
+            "DATE_PART({!r}, A) AS my_{}",
+            id="vector-no_case",
+        ),
+    ],
+)
+@pytest.mark.tz_aware
+def test_tz_aware_date_part(tz_aware_df, query_fmt, spark_info, memory_leak_check):
+    selects = []
+    for unit in ["year", "q", "mons", "wk", "dayofmonth", "hrs", "min", "s"]:
+        selects.append(query_fmt.format(unit, unit))
+    query = f"SELECT {', '.join(selects)} FROM table1"
+    df = tz_aware_df["table1"]
+    py_output = pd.DataFrame(
+        {
+            "my_year": df.A.dt.year,
+            "my_q": df.A.dt.quarter,
+            "my_mons": df.A.dt.month,
+            "my_wk": df.A.dt.weekofyear,
+            "my_dayofmonth": df.A.dt.day,
+            "my_hrs": df.A.dt.hour,
+            "my_min": df.A.dt.minute,
+            "my_s": df.A.dt.second,
+        }
+    )
+
+    check_query(
+        query,
+        tz_aware_df,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=py_output,
+    )
+
+
 def make_spark_interval(interval_str, value):
     """simple helper function that takes a value and an timeunit str, and returns a spark interval"""
     if interval_str == "MICROSECOND":
