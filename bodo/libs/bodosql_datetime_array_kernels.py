@@ -579,13 +579,18 @@ def next_day_util(arr0, arr1):
         datetime series/scalar: the previous day of the week from the input timestamp(s)
     """
 
-    verify_datetime_arg(arr0, "NEXT_DAY", "arr0")
+    verify_datetime_arg_allow_tz(arr0, "NEXT_DAY", "arr0")
     verify_string_arg(arr1, "NEXT_DAY", "arr1")
-    # When returning a scalar we return a pd.Timestamp type.
+    is_input_tz_aware = is_valid_tz_aware_datetime_arg(arr0)
+
+    # When returning a scalar we always return a pd.Timestamp type.
     unbox_str = (
         "bodo.utils.conversion.unbox_if_timestamp"
-        if bodo.utils.utils.is_array_typ(arr0, True)
-        or bodo.utils.utils.is_array_typ(arr1, True)
+        if not is_input_tz_aware
+        and (
+            bodo.utils.utils.is_array_typ(arr0, True)
+            or bodo.utils.utils.is_array_typ(arr1, True)
+        )
         else ""
     )
 
@@ -596,9 +601,19 @@ def next_day_util(arr0, arr1):
     prefix_code = (
         "dow_map = {'mo': 0, 'tu': 1, 'we': 2, 'th': 3, 'fr': 4, 'sa': 5, 'su': 6}"
     )
-    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1]))"
+    # Note: Snowflake removes leading whitespace and ignore any characters aside from the first two
+    # values, case insensitive. https://docs.snowflake.com/en/sql-reference/functions/next_day.html#arguments
+    scalar_text = f"arg1_trimmed = arg1.lstrip()[:2].lower()\n"
+    if is_input_tz_aware:
+        arg0_timestamp = "arg0"
+    else:
+        arg0_timestamp = "bodo.utils.conversion.box_if_dt64(arg0)"
+    scalar_text += f"res[i] = {unbox_str}({arg0_timestamp}.normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed]))\n"
 
-    out_dtype = np.dtype("datetime64[ns]")
+    if is_input_tz_aware:
+        out_dtype = bodo.DatetimeArrayType(arr0.tz)
+    else:
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
     return gen_vectorized(
         arg_names,
@@ -625,13 +640,18 @@ def previous_day_util(arr0, arr1):
         datetime series/scalar: the previous day of the week from the input timestamp(s)
     """
 
-    verify_datetime_arg(arr0, "PREVIOUS_DAY", "arr0")
+    verify_datetime_arg_allow_tz(arr0, "PREVIOUS_DAY", "arr0")
     verify_string_arg(arr1, "PREVIOUS_DAY", "arr1")
-    # When returning a scalar we return a pd.Timestamp type.
+    is_input_tz_aware = is_valid_tz_aware_datetime_arg(arr0)
+
+    # When returning a scalar we always return a pd.Timestamp type.
     unbox_str = (
         "bodo.utils.conversion.unbox_if_timestamp"
-        if bodo.utils.utils.is_array_typ(arr0, True)
-        or bodo.utils.utils.is_array_typ(arr1, True)
+        if not is_input_tz_aware
+        and (
+            bodo.utils.utils.is_array_typ(arr0, True)
+            or bodo.utils.utils.is_array_typ(arr1, True)
+        )
         else ""
     )
 
@@ -642,9 +662,19 @@ def previous_day_util(arr0, arr1):
     prefix_code = (
         "dow_map = {'mo': 0, 'tu': 1, 'we': 2, 'th': 3, 'fr': 4, 'sa': 5, 'su': 6}"
     )
-    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1]))"
+    # Note: Snowflake removes leading whitespace and ignore any characters aside from the first two
+    # values, case insensitive. https://docs.snowflake.com/en/sql-reference/functions/previous_day.html#arguments
+    scalar_text = f"arg1_trimmed = arg1.lstrip()[:2].lower()\n"
+    if is_input_tz_aware:
+        arg0_timestamp = "arg0"
+    else:
+        arg0_timestamp = "bodo.utils.conversion.box_if_dt64(arg0)"
+    scalar_text += f"res[i] = {unbox_str}({arg0_timestamp}.normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed]))\n"
 
-    out_dtype = np.dtype("datetime64[ns]")
+    if is_input_tz_aware:
+        out_dtype = bodo.DatetimeArrayType(arr0.tz)
+    else:
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
     return gen_vectorized(
         arg_names,
@@ -663,8 +693,8 @@ def month_diff_util(arr0, arr1):
 
 
     Args:
-        arr0 (datetime array/series/scalar): the date(s) being subtraced from
-        arr1 (datetime array/series/scalar): the date(s) being subtraced
+        arr0 (datetime array/series/scalar): the date(s) being subtracted from
+        arr1 (datetime array/series/scalar): the date(s) being subtracted
 
     Returns:
         int series/scalar: the difference in months between the two dates

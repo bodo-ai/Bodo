@@ -8,6 +8,8 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+from bodo.tests.timezone_common import representative_tz  # noqa
+
 EQUIVALENT_SPARK_DT_FN_MAP = {
     "WEEK": "WEEKOFYEAR",
     "CURDATE": "CURRENT_DATE",
@@ -1867,5 +1869,97 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
     ctx = {"table1": df}
     week_series = df.A.dt.isocalendar().week
     week_series[~df.B] = None
+    py_output = pd.DataFrame({"m": week_series})
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
+def test_tz_aware_next_day(representative_tz, memory_leak_check):
+    query = "SELECT next_day(A, B) as m from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+            ).to_series(),
+            "B": ["Monday", "Tuesday"] * 15,
+        }
+    )
+    ctx = {"table1": df}
+    out_series = df.apply(
+        lambda row: row["A"].normalize()
+        + pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1),
+        axis=1,
+    )
+    py_output = pd.DataFrame({"m": out_series})
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
+@pytest.mark.skip("[BE-4022] Support tz-aware data as the output of case")
+def test_tz_aware_next_day_case(
+    representative_tz,
+    memory_leak_check,
+):
+    query = "SELECT CASE WHEN C THEN next_day(A, B) END as m from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+            ).to_series(),
+            "B": ["Monday", "Tuesday"] * 15,
+            "C": [True, False, True, True, False] * 6,
+        }
+    )
+    ctx = {"table1": df}
+    week_series = df.apply(
+        lambda row: row["A"].normalize()
+        + pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1),
+        axis=1,
+    )
+    week_series[~df.C] = None
+    py_output = pd.DataFrame({"m": week_series})
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
+def test_tz_aware_previous_day(representative_tz, memory_leak_check):
+    query = "SELECT previous_day(A, B) as m from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
+            ).to_series(),
+            "B": ["Monday", "Tuesday"] * 15,
+        }
+    )
+    ctx = {"table1": df}
+    out_series = df.apply(
+        lambda row: row["A"].normalize()
+        - pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1),
+        axis=1,
+    )
+    py_output = pd.DataFrame({"m": out_series})
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
+@pytest.mark.skip("[BE-4022] Support tz-aware data as the output of case")
+def test_tz_aware_previous_day_case(
+    representative_tz,
+    memory_leak_check,
+):
+    query = "SELECT CASE WHEN C THEN previous_day(A, B) END as m from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+            ).to_series(),
+            "B": ["Monday", "Tuesday"] * 15,
+            "C": [True, False, True, True, False] * 6,
+        }
+    )
+    ctx = {"table1": df}
+    week_series = df.apply(
+        lambda row: row["A"].normalize()
+        - pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1),
+        axis=1,
+    )
+    week_series[~df.C] = None
     py_output = pd.DataFrame({"m": week_series})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)

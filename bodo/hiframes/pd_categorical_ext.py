@@ -581,7 +581,7 @@ def _alloc_categorical_array(n, cat_dtype):
 
 
 def alloc_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
-    """Array analysis function for alloc_int_array() passed to Numba's array analysis
+    """Array analysis function for alloc_categorical_array() passed to Numba's array analysis
     extension. Assigns output array's size as equivalent to the input size variable.
     """
     assert len(args) == 2 and not kws

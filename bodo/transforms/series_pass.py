@@ -1132,6 +1132,16 @@ class SeriesPass:
             impl = bodo.libs.str_arr_ext.overload_add_operator_string_array(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
+        # Add for tz-aware
+        if rhs.fn == operator.add and (
+            isinstance(typ1, bodo.DatetimeArrayType)
+            or isinstance(typ2, bodo.DatetimeArrayType)
+        ):
+            impl = bodo.libs.pd_datetime_arr_ext.overload_add_operator_datetime_arr(
+                typ1, typ2
+            )
+            return replace_func(self, impl, [arg1, arg2])
+
         if rhs.fn == operator.sub and typ2 == datetime_timedelta_type:
             if typ1 == datetime_date_array_type:
                 impl = (
