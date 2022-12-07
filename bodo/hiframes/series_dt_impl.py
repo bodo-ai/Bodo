@@ -33,7 +33,6 @@ from bodo.utils.typing import (
     create_unsupported_overload,
     raise_bodo_error,
 )
-import pandas as pd
 
 # global dtypes to use in allocations throughout this file
 dt64_dtype = np.dtype("datetime64[ns]")
