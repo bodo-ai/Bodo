@@ -1,3 +1,6 @@
+
+# Azure Pipeline that is triggered weekdays at midnight or when a release is tagged.
+
 trigger:
 - refs/tags/*
 
@@ -9,6 +12,16 @@ schedules:
   branches:
     include:
     - develop
+
+
+# NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
+# See get_channel.sh
+# Originally added through Azure Pipeline UI.
+# Azure pipeline UI includes AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+variables:
+  CHECK_LICENSE_EXPIRED: 1
+  CHECK_LICENSE_CORE_COUNT: 1
+  OBFUSCATE: 1
 
 stages:
 - stage: Build_Bodo_Binary
