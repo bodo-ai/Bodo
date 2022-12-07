@@ -107,7 +107,6 @@ static void fill_input_file_name_col_dict(
 }
 
 // -------- ParquetReader --------
-
 void ParquetReader::add_piece(PyObject* piece, int64_t num_rows,
                               int64_t total_rows) {
     // p = piece.path
@@ -148,7 +147,7 @@ PyObject* ParquetReader::get_dataset() {
     PyObject* ds = PyObject_CallMethod(
         pq_mod, "get_parquet_dataset", "OOOOOOOLO", path, Py_True, dnf_filters,
         expr_filters, storage_options, Py_False, PyBool_FromLong(parallel),
-        tot_rows_to_read, this->use_hive ? Py_True : Py_False);
+        tot_rows_to_read, PyBool_FromLong(this->use_hive));
     if (ds == NULL && PyErr_Occurred()) {
         throw std::runtime_error("python");
     }
@@ -331,11 +330,6 @@ void ParquetReader::read_all(TableBuilder& builder) {
     }
 }
 
-/**
- * Get values for all partition columns of a piece of
- * pyarrow.parquet.ParquetDataset and store in part_vals.
- * @param piece : ParquetDataset piece (a single parquet file)
- */
 void ParquetReader::get_partition_info(PyObject* piece) {
     PyObject* partition_keys_py =
         PyObject_GetAttrString(piece, "partition_keys");
@@ -392,17 +386,21 @@ void ParquetReader::get_partition_info(PyObject* piece) {
  */
 table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
                     PyObject* expr_filters, PyObject* storage_options,
-                    int64_t tot_rows_to_read, int32_t* selected_fields,
-                    int32_t num_selected_fields, int32_t* is_nullable,
+                    int64_t tot_rows_to_read, int32_t* _selected_fields,
+                    int32_t num_selected_fields, int32_t* _is_nullable,
                     int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
                     int32_t num_partition_cols, int32_t* str_as_dict_cols,
                     int32_t num_str_as_dict_cols, int64_t* total_rows_out,
                     bool input_file_name_col, bool use_hive) {
     try {
+        std::set<int> selected_fields(
+            {_selected_fields, _selected_fields + num_selected_fields});
+        std::vector<bool> is_nullable(_is_nullable,
+                                      _is_nullable + num_selected_fields);
         ParquetReader reader(path, parallel, dnf_filters, expr_filters,
                              storage_options, tot_rows_to_read, selected_fields,
-                             num_selected_fields, is_nullable,
-                             input_file_name_col, use_hive);
+                             is_nullable, input_file_name_col, use_hive);
+
         // initialize reader
         reader.init_pq_reader(str_as_dict_cols, num_str_as_dict_cols,
                               part_cols_cat_dtype, selected_part_cols,

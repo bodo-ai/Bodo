@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
+// Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 // Implementation of SnowflakeReader (subclass of ArrowDataFrameReader) with
 // functionality that is specific to reading from Snowflake
@@ -15,21 +15,18 @@ class SnowflakeReader : public ArrowDataframeReader {
      * See snowflake_read function below for description of arguments.
      */
     SnowflakeReader(const char* _query, const char* _conn, bool _parallel,
-                    int* selected_fields, int64_t num_selected_fields,
-                    int32_t* is_nullable, int32_t* _str_as_bool_cols,
-                    int32_t num_str_as_dict_cols, int64_t* _total_nrows,
+                    std::set<int> selected_fields,
+                    std::vector<bool> is_nullable,
+                    std::vector<int> str_as_dict_cols, int64_t* _total_nrows,
                     bool _only_length_query, bool _is_select_query)
-        : ArrowDataframeReader(_parallel, -1, selected_fields,
-                               num_selected_fields, is_nullable),
+        : ArrowDataframeReader(_parallel, -1, selected_fields, is_nullable),
           query(_query),
           conn(_conn),
           total_nrows(_total_nrows),
           only_length_query(_only_length_query),
           is_select_query(_is_select_query) {
-        // initialize reader
-        init_arrow_reader(
-            {_str_as_bool_cols, _str_as_bool_cols + num_str_as_dict_cols},
-            true);
+        // Initialize reader
+        init_arrow_reader(str_as_dict_cols, true);
     }
 
     virtual ~SnowflakeReader() { Py_XDECREF(sf_conn); }
@@ -103,6 +100,7 @@ class SnowflakeReader : public ArrowDataframeReader {
             if (arrow_table_py == NULL && PyErr_Occurred()) {
                 throw std::runtime_error("python");
             }
+
             auto table = arrow::py::unwrap_table(arrow_table_py).ValueOrDie();
             auto t2 = std::chrono::steady_clock::now();
             to_arrow_time +=
@@ -160,19 +158,23 @@ class SnowflakeReader : public ArrowDataframeReader {
  * @return table containing all the arrays read
  */
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,
-                           int64_t n_fields, int32_t* is_nullable,
-                           int32_t* str_as_dict_cols,
+                           int64_t n_fields, int32_t* _is_nullable,
+                           int32_t* _str_as_dict_cols,
                            int32_t num_str_as_dict_cols, int64_t* total_nrows,
                            bool _only_length_query, bool _is_select_query) {
     try {
-        std::vector<int> selected_fields(n_fields);
-        for (auto i = 0; i < n_fields; i++)
-            selected_fields[i] = static_cast<int>(i);
-        SnowflakeReader reader(query, conn, parallel, selected_fields.data(),
-                               n_fields, is_nullable, str_as_dict_cols,
-                               num_str_as_dict_cols, total_nrows,
+        std::set<int> selected_fields;
+        for (auto i = 0; i < n_fields; i++) selected_fields.insert(i);
+        std::vector<bool> is_nullable(_is_nullable, _is_nullable + n_fields);
+        std::vector<int> str_as_dict_cols(
+            {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});
+
+        SnowflakeReader reader(query, conn, parallel, selected_fields,
+                               is_nullable, str_as_dict_cols, total_nrows,
                                _only_length_query, _is_select_query);
+
         return reader.read();
+
     } catch (const std::exception& e) {
         // if the error string is "python" this means the C++ exception is
         // a result of a Python exception, so we don't call PyErr_SetString

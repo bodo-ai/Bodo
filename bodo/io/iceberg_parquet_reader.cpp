@@ -17,14 +17,14 @@ class IcebergParquetReader : public ParquetReader {
     IcebergParquetReader(const char* _conn, const char* _database_schema,
                          const char* _table_name, bool _parallel,
                          int64_t tot_rows_to_read, PyObject* _dnf_filters,
-                         PyObject* _expr_filters, int32_t* _selected_fields,
-                         int32_t num_selected_fields, int32_t* is_nullable,
+                         PyObject* _expr_filters,
+                         std::set<int> _selected_fields,
+                         std::vector<bool> is_nullable,
                          PyObject* _pyarrow_table_schema,
                          bool _is_merge_into_cow)
         : ParquetReader(/*path*/ nullptr, _parallel, _dnf_filters,
-                        _expr_filters,
-                        /*storage_options*/ PyDict_New(), tot_rows_to_read,
-                        _selected_fields, num_selected_fields, is_nullable,
+                        _expr_filters, /*storage_options*/ PyDict_New(),
+                        tot_rows_to_read, _selected_fields, is_nullable,
                         /*input_file_name_col*/ false),
           pyarrow_table_schema(_pyarrow_table_schema),
           conn(_conn),
@@ -72,12 +72,12 @@ class IcebergParquetReader : public ParquetReader {
         // import bodo.io.iceberg
         PyObject* iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
         if (PyErr_Occurred()) throw std::runtime_error("python");
+
         // ds = bodo.io.iceberg.get_iceberg_pq_dataset(
         //          conn, database_schema, table_name,
         //          pyarrow_table_schema, dnf_filters,
         //          expr_filters, tot_rows_to_read, parallel
         //      )
-
         PyObject* ds = PyObject_CallMethod(
             iceberg_mod, "get_iceberg_pq_dataset", "sssOOOLO", this->conn,
             this->database_schema, this->table_name, this->pyarrow_table_schema,
@@ -170,8 +170,8 @@ class IcebergParquetReader : public ParquetReader {
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             const char* table_name, bool parallel,
                             int64_t tot_rows_to_read, PyObject* dnf_filters,
-                            PyObject* expr_filters, int32_t* selected_fields,
-                            int32_t num_selected_fields, int32_t* is_nullable,
+                            PyObject* expr_filters, int32_t* _selected_fields,
+                            int32_t num_selected_fields, int32_t* _is_nullable,
                             PyObject* pyarrow_table_schema,
                             int32_t* str_as_dict_cols,
                             int32_t num_str_as_dict_cols,
@@ -185,23 +185,29 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
             Py_DECREF(expr_filters);
             expr_filters = Py_None;
         }
-        IcebergParquetReader reader(
-            conn, database_schema, table_name, parallel, tot_rows_to_read,
-            dnf_filters, expr_filters, selected_fields, num_selected_fields,
-            is_nullable, pyarrow_table_schema, is_merge_into_cow);
-        // initialize reader
+
+        std::set<int> selected_fields(
+            {_selected_fields, _selected_fields + num_selected_fields});
+        std::vector<bool> is_nullable(_is_nullable,
+                                      _is_nullable + num_selected_fields);
+        IcebergParquetReader reader(conn, database_schema, table_name, parallel,
+                                    tot_rows_to_read, dnf_filters, expr_filters,
+                                    selected_fields, is_nullable,
+                                    pyarrow_table_schema, is_merge_into_cow);
+
+        // Initialize reader
         reader.init_iceberg_reader(str_as_dict_cols, num_str_as_dict_cols);
-        PyObject* file_list = Py_None;
-        int64_t snapshot_id = -1;
+
         if (is_merge_into_cow) {
-            file_list = reader.get_file_list();
-            snapshot_id = reader.get_snapshot_id();
+            *file_list_ptr = reader.get_file_list();
+            *snapshot_id_ptr = reader.get_snapshot_id();
+        } else {
+            *file_list_ptr = Py_None;
+            *snapshot_id_ptr = -1;
         }
-        *file_list_ptr = file_list;
-        *snapshot_id_ptr = snapshot_id;
+
         *total_rows_out = reader.get_total_rows();
-        table_info* read_output = reader.read();
-        return read_output;
+        return reader.read();
 
     } catch (const std::exception& e) {
         // if the error string is "python" this means the C++ exception is

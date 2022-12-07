@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
+// Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 // Implementation of ParquetReader (subclass of ArrowDataframeReader) with
 // functionality that is specific to reading parquet datasets
@@ -15,11 +15,11 @@ class ParquetReader : public ArrowDataframeReader {
      */
     ParquetReader(PyObject* _path, bool _parallel, PyObject* _dnf_filters,
                   PyObject* _expr_filters, PyObject* _storage_options,
-                  int64_t _tot_rows_to_read, int32_t* _selected_fields,
-                  int32_t num_selected_fields, int32_t* is_nullable,
-                  bool _input_file_name_col, bool _use_hive = true)
+                  int64_t _tot_rows_to_read, std::set<int> _selected_fields,
+                  std::vector<bool> is_nullable, bool _input_file_name_col,
+                  bool _use_hive = true)
         : ArrowDataframeReader(_parallel, _tot_rows_to_read, _selected_fields,
-                               num_selected_fields, is_nullable),
+                               is_nullable),
           dnf_filters(_dnf_filters),
           expr_filters(_expr_filters),
           path(_path),

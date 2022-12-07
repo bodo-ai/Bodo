@@ -4588,7 +4588,9 @@ def to_sql_overload(
             "parquet_write_table_cpp": parquet_write_table_cpp,
             "py_table_to_cpp_table": py_table_to_cpp_table,
             "py_table_typ": df.table_type,
-            "pyarrow_table_schema": bodo.io.iceberg.pyarrow_schema(df),
+            "pyarrow_table_schema": bodo.io.helpers.numba_to_pyarrow_schema(
+                df, is_iceberg=True
+            ),
             "time": time,
             "to_sql_exception_guard_encaps": to_sql_exception_guard_encaps,
             "tracing": tracing,
