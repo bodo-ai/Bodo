@@ -342,7 +342,6 @@ def check_query(
             )
         if convert_columns_bool:
             expected_output = convert_spark_bool(expected_output, convert_columns_bool)
-
     if run_python:
         check_query_python(
             query,
@@ -596,6 +595,7 @@ def check_query_python(
         bodosql_output = bc.sql(query, named_params)
     else:
         bodosql_output = bc._test_sql_unoptimized(query, named_params)
+
     _check_query_equal(
         bodosql_output,
         expected_output,

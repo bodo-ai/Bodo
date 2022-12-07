@@ -36,7 +36,6 @@ def timestamp_str(request):
 def timezone(request):
     return request.param
 
-
 # create a fixture that's representative of all timezones
 @pytest.fixture(
     params=[
@@ -53,7 +52,6 @@ def timezone(request):
 )
 def representative_tz(request):
     return request.param
-
 
 def test_timestamp_timezone_boxing(timestamp_str, timezone, memory_leak_check):
     def test_impl(timestamp):
