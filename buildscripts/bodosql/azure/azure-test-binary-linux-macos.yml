@@ -28,7 +28,9 @@ jobs:
     displayName: 'Use Python $(python.version)'
 
   - script: |
-      if [[ "${{ parameters.name }}" == "macOS" ]]; then
+      unamestr=`uname`
+      uname_mach_str=`uname -m`
+      if [[ "$unamestr" == 'Darwin' ]] && [[ "$uname_mach_str" == "x86_64" ]]; then
         buildscripts/bodosql/setup_osx_sdk.sh
       fi
     displayName: 'Setup OSX SDK'
@@ -74,7 +76,8 @@ jobs:
       mkdir bodosql
       # Note, I don't think this ever runs? we don't have any tests with the name parameter
       # Equal to Linux for bodosql
-      if [[ "${{ parameters.name }}" == "Linux" ]]; then
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
         cp -avr $(System.DefaultWorkingDirectory)/BodoSQL/bodosql/tests bodosql/
       else
         cp -r $(System.DefaultWorkingDirectory)/BodoSQL/bodosql/tests bodosql

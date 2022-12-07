@@ -1,3 +1,5 @@
+# Azure Pipeline that is triggered weekly or when a release is tagged.
+
 trigger:
 - refs/tags/*
 
@@ -9,6 +11,14 @@ schedules:
   branches:
     include:
     - main
+
+# NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
+# See get_channel.sh
+# Originally added through Azure Pipeline UI.
+variables:
+  CHECK_LICENSE_EXPIRED: 1
+  CHECK_LICENSE_CORE_COUNT: 1
+  OBFUSCATE: 1
 
 # Note: we only build the packages that we need for testing on the weekly pipeline (no PiP or ARM)
 stages:
@@ -72,12 +82,15 @@ stages:
       vmImage: ubuntu-latest
       CONDA_ENV: build_bodo_sql
       PYTHON_VERSION: 3.10
-  - template: buildscripts/bodosql/azure/azure-build-binary-pip.yml
-    parameters:
-      name: BodoSQL_Pip_Build
-      vmImage: ubuntu-latest
-      CONDA_ENV: build_bodo_sql
-      PYTHON_VERSION: 3.10
+      weeklyTest: true
+  # Uncomment when pip is enabled again.
+  # # BodoSQL build:
+  # - template: buildscripts/bodosql/azure/azure-build-binary-pip.yml
+  #   parameters:
+  #     name: BodoSQL_Pip_Build
+  #     vmImage: ubuntu-latest
+  #     CONDA_ENV: build_bodo_sql
+  #     PYTHON_VERSION: 3.10
 
 # NOTE: we don't do any builds here, as we assume the previous nightly run has built the needed
 # packages and put them on conda
@@ -88,6 +101,107 @@ stages:
   jobs:
 
   # Bodo tests:
+
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      name: macOS_38py
+      vmImage: macOS-latest
+      useNumbaDev: false
+      caching_test: false
+      CONDA_ENV: 'bodo'
+      PYTHON_VERSION: 3.8
+      matrix:
+        BODO_3P_1_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_1of10
+        BODO_3P_2_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_2of10
+        BODO_3P_3_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_3of10
+        BODO_3P_4_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_4of10
+        BODO_3P_5_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_5of10
+        BODO_3P_6_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_6of10
+        BODO_3P_7_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_7of10
+        BODO_3P_8_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_8of10
+        BODO_3P_9_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_9of10
+        BODO_3P_10_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_10of10
+
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      name: macOS_39py
+      vmImage: macOS-latest
+      useNumbaDev: false
+      caching_test: false
+      CONDA_ENV: 'bodo'
+      PYTHON_VERSION: 3.9
+      matrix:
+        BODO_3P_1_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_1of10
+        BODO_3P_2_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_2of10
+        BODO_3P_3_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_3of10
+        BODO_3P_4_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_4of10
+        BODO_3P_5_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_5of10
+        BODO_3P_6_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_6of10
+        BODO_3P_7_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_7of10
+        BODO_3P_8_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_8of10
+        BODO_3P_9_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_9of10
+        BODO_3P_10_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_10of10
+
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
@@ -95,43 +209,148 @@ stages:
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: false
+      PYTHON_VERSION: 3.10
       matrix:
-        BODO_3P_1_OF_9:
+        BODO_3P_1_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1_of_9
-        BODO_3P_2_OF_9:
+          PYTEST_MARKER: bodo_1of10
+        BODO_3P_2_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2_of_9
-        BODO_3P_3_OF_9:
+          PYTEST_MARKER: bodo_2of10
+        BODO_3P_3_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3_of_9
-        BODO_3P_4_OF_9:
+          PYTEST_MARKER: bodo_3of10
+        BODO_3P_4_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4_of_9
-        BODO_3P_5_OF_9:
+          PYTEST_MARKER: bodo_4of10
+        BODO_3P_5_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5_of_9
-        BODO_3P_6_OF_9:
+          PYTEST_MARKER: bodo_5of10
+        BODO_3P_6_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6_of_9
-        BODO_3P_7_OF_9:
+          PYTEST_MARKER: bodo_6of10
+        BODO_3P_7_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_7_of_9
-        BODO_3P_8_OF_9:
+          PYTEST_MARKER: bodo_7of10
+        BODO_3P_8_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_8_of_9
-        BODO_3P_9_OF_9:
+          PYTEST_MARKER: bodo_8of10
+        BODO_3P_9_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_9_of_9
+          PYTEST_MARKER: bodo_9of10
+        BODO_3P_10_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_10of10
+
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      name: Linux_38py
+      vmImage: ubuntu-latest
+      useNumbaDev: false
+      caching_test: false
+      CONDA_ENV: 'bodo'
+      PYTHON_VERSION: 3.8
+      matrix:
+        BODO_3P_1_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_1of10
+        BODO_3P_2_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_2of10
+        BODO_3P_3_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_3of10
+        BODO_3P_4_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_4of10
+        BODO_3P_5_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_5of10
+        BODO_3P_6_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_6of10
+        BODO_3P_7_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_7of10
+        BODO_3P_8_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_8of10
+        BODO_3P_9_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_9of10
+        BODO_3P_10_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_10of10
+
+  - template: buildscripts/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      name: Linux_39py
+      vmImage: ubuntu-latest
+      useNumbaDev: false
+      caching_test: false
+      CONDA_ENV: 'bodo'
+      PYTHON_VERSION: 3.9
+      matrix:
+        BODO_3P_1_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_1of10
+        BODO_3P_2_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_2of10
+        BODO_3P_3_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_3of10
+        BODO_3P_4_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_4of10
+        BODO_3P_5_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_5of10
+        BODO_3P_6_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_6of10
+        BODO_3P_7_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_7of10
+        BODO_3P_8_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_8of10
+        BODO_3P_9_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_9of10
+        BODO_3P_10_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_10of10
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: name is used later in the buildscripts to determine which version of conda to install
@@ -139,43 +358,48 @@ stages:
       vmImage: ubuntu-latest
       useNumbaDev: false
       caching_test: false
+      PYTHON_VERSION: 3.10
       matrix:
-        BODO_3P_1_OF_9:
+        BODO_3P_1_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1_of_9
-        BODO_3P_2_OF_9:
+          PYTEST_MARKER: bodo_1of10
+        BODO_3P_2_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2_of_9
-        BODO_3P_3_OF_9:
+          PYTEST_MARKER: bodo_2of10
+        BODO_3P_3_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3_of_9
-        BODO_3P_4_OF_9:
+          PYTEST_MARKER: bodo_3of10
+        BODO_3P_4_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4_of_9
-        BODO_3P_5_OF_9:
+          PYTEST_MARKER: bodo_4of10
+        BODO_3P_5_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5_of_9
-        BODO_3P_6_OF_9:
+          PYTEST_MARKER: bodo_5of10
+        BODO_3P_6_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6_of_9
-        BODO_3P_7_OF_9:
+          PYTEST_MARKER: bodo_6of10
+        BODO_3P_7_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_7_of_9
-        BODO_3P_8_OF_9:
+          PYTEST_MARKER: bodo_7of10
+        BODO_3P_8_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_8_of_9
-        BODO_3P_9_OF_9:
+          PYTEST_MARKER: bodo_8of10
+        BODO_3P_9_OF_10:
           NP: 3
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_9_of_9
+          PYTEST_MARKER: bodo_9of10
+        BODO_3P_10_OF_10:
+          NP: 3
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER:  bodo_10of10
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
     parameters:
@@ -184,6 +408,7 @@ stages:
       vmImage: ubuntu-latest
       useNumbaDev: false
       caching_test: true
+      PYTHON_VERSION: 3.10
       matrix:
         TEST_3P:
           NP: 3
@@ -197,6 +422,7 @@ stages:
       vmImage: macOS-latest
       useNumbaDev: false
       caching_test: true
+      PYTHON_VERSION: 3.10
       matrix:
         TEST_3P:
           NP: 3
@@ -219,9 +445,27 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.8
       matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "slow"
+        BODOSQL_3P_1_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_1of7
+        BODOSQL_3P_2_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_2of7
+        BODOSQL_3P_3_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_3of7
+        BODOSQL_3P_4_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_4of7
+        BODOSQL_3P_5_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_5of7
+        BODOSQL_3P_6_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_6of7
+        BODOSQL_3P_7_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_7of7
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
@@ -232,9 +476,27 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.9
       matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "slow"
+        BODOSQL_3P_1_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_1of7
+        BODOSQL_3P_2_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_2of7
+        BODOSQL_3P_3_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_3of7
+        BODOSQL_3P_4_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_4of7
+        BODOSQL_3P_5_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_5of7
+        BODOSQL_3P_6_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_6of7
+        BODOSQL_3P_7_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_7of7
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
@@ -245,18 +507,27 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
-        BODOSQL_3P_PART_1_OF_4:
+        BODOSQL_3P_1_OF_7:
           NP: 3
-          PYTEST_MARKER: bodosql_1_of_4
-        BODOSQL_3P_PART_2_OF_4:
+          PYTEST_MARKER: bodosql_1of7
+        BODOSQL_3P_2_OF_7:
           NP: 3
-          PYTEST_MARKER: bodosql_2_of_4
-        BODOSQL_3P_PART_3_OF_4:
+          PYTEST_MARKER: bodosql_2of7
+        BODOSQL_3P_3_OF_7:
           NP: 3
-          PYTEST_MARKER: bodosql_3_of_4
-        BODOSQL_3P_PART_4_OF_4:
+          PYTEST_MARKER: bodosql_3of7
+        BODOSQL_3P_4_OF_7:
           NP: 3
-          PYTEST_MARKER: bodosql_4_of_4
+          PYTEST_MARKER: bodosql_4of7
+        BODOSQL_3P_5_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_5of7
+        BODOSQL_3P_6_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_6of7
+        BODOSQL_3P_7_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_7of7
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
@@ -267,22 +538,27 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.8
       matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "slow"
-  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
-    parameters:
-      # Note: this name is not important, as we explicitly check uname to determine the os
-      # for the bodoSQL tests
-      name: BODOSQL_macOS_310py
-      vmImage: macOS-latest
-      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
-      CONDA_ENV: run_bodo_sql
-      PYTHON_VERSION: 3.9
-      matrix:
-        TEST_1P:
-          NP: 1
-          PYTEST_MARKER: "slow"
+        BODOSQL_3P_1_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_1of7
+        BODOSQL_3P_2_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_2of7
+        BODOSQL_3P_3_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_3of7
+        BODOSQL_3P_4_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_4of7
+        BODOSQL_3P_5_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_5of7
+        BODOSQL_3P_6_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_6of7
+        BODOSQL_3P_7_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_7of7
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:
       # Note: this name is not important, as we explicitly check uname to determine the os
@@ -291,20 +567,60 @@ stages:
       vmImage: macOS-latest
       BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
       CONDA_ENV: run_bodo_sql
+      PYTHON_VERSION: 3.9
+      matrix:
+        BODOSQL_3P_1_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_1of7
+        BODOSQL_3P_2_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_2of7
+        BODOSQL_3P_3_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_3of7
+        BODOSQL_3P_4_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_4of7
+        BODOSQL_3P_5_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_5of7
+        BODOSQL_3P_6_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_6of7
+        BODOSQL_3P_7_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_7of7
+  - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
+    parameters:
+      # Note: this name is not important, as we explicitly check uname to determine the os
+      # for the bodoSQL tests
+      name: BODOSQL_macOS_310py
+      vmImage: macOS-latest
+      BODO_CHANNEL_NAME: $(BODO_CHANNEL_NAME)
+      CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
-        BODOSQL_3P_PART_1_OF_4:
+        BODOSQL_3P_1_OF_7:
           NP: 3
-          PYTEST_MARKER: bodosql_1_of_4
-        BODOSQL_3P_PART_2_OF_4:
+          PYTEST_MARKER: bodosql_1of7
+        BODOSQL_3P_2_OF_7:
           NP: 3
-          PYTEST_MARKER: bodosql_2_of_4
-        BODOSQL_3P_PART_3_OF_4:
+          PYTEST_MARKER: bodosql_2of7
+        BODOSQL_3P_3_OF_7:
           NP: 3
-          PYTEST_MARKER: bodosql_3_of_4
-        BODOSQL_3P_PART_4_OF_4:
+          PYTEST_MARKER: bodosql_3of7
+        BODOSQL_3P_4_OF_7:
           NP: 3
-          PYTEST_MARKER: bodosql_4_of_4
+          PYTEST_MARKER: bodosql_4of7
+        BODOSQL_3P_5_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_5of7
+        BODOSQL_3P_6_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_6of7
+        BODOSQL_3P_7_OF_7:
+          NP: 3
+          PYTEST_MARKER:  bodosql_7of7
 
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:

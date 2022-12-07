@@ -26,7 +26,8 @@ jobs:
 
   - script: |
       set -eo pipefail
-      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
         wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
       else
         wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
@@ -90,7 +91,8 @@ jobs:
       mkdir -p $HOME/bodo-inc
       cd $HOME/bodo-inc
       mkdir bodo
-      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
         cp -avr $(System.DefaultWorkingDirectory)/bodo/tests bodo
       else
         cp -r $(System.DefaultWorkingDirectory)/bodo/tests bodo
@@ -145,7 +147,8 @@ jobs:
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
       mamba install -y -c conda-forge openjdk=11
-      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
         wget -q -O - "https://www.apache.org/dyn/mirrors/mirrors.cgi?action=download&filename=hadoop/common/hadoop-3.3.2/hadoop-3.3.2.tar.gz" | tar -xzf - -C /opt
       else
         echo "Skipping..."
@@ -156,7 +159,8 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
-      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
         mamba install -y -c conda-forge 'openjdk=11' maven
         cd azurefs-sas-token-provider
         python setup.py develop
@@ -206,7 +210,8 @@ jobs:
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
       mamba install -y -c conda-forge sqlalchemy cx_oracle unzip
-      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
         mamba install -y -c conda-forge  libaio
         wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
         sudo unzip instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
@@ -230,13 +235,14 @@ jobs:
       export PATH=$HOME/miniconda3/bin:${PATH}
       source activate $CONDA_ENV
       pip install pytest pytest-azurepipelines
-      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
         export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH
       else
         export LD_LIBRARY_PATH=/usr/local/lib/instantclient_19_8:$LD_LIBRARY_PATH
       fi
 
-      if [[ "${{ parameters.name }}" == "Linux" || "${{ parameters.name }}" == "Linux_cache" ]]; then
+      if [[ "$unamestr" == 'Linux' ]]; then
         echo "Setting up Hadoop (and Arrow) environment variables"
         export HADOOP_HOME=/opt/hadoop-3.3.2
         export HADOOP_INSTALL=$HADOOP_HOME
