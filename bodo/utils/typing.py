@@ -50,6 +50,8 @@ INDEX_SENTINEL = "$_bodo_index_"
 
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
+Index = Union[str, Dict, None]
+FileSchema = Tuple[List[str], List, Index, List[int], List, List, List]
 
 
 def is_timedelta_type(in_type):
@@ -275,26 +277,26 @@ class FileInfo:
     def __init__(self):
         # if not None, it is a string that needs to be concatenated to input string in
         # get_schema() to get full path for retrieving schema
-        self._concat_str = None
+        self._concat_str: Optional[str] = None
         # whether _concat_str should be concatenated on the left
-        self._concat_left = None
+        self._concat_left: Optional[str] = None
 
-    def get_schema(self, fname):
-        """get dataset schema from file name"""
+    def get_schema(self, fname: str):
+        """Get dataset schema from file name"""
         full_path = self.get_full_filename(fname)
         return self._get_schema(full_path)
 
     def set_concat(self, concat_str, is_left):
-        """set input string concatenation parameters"""
+        """Set input string concatenation parameters"""
         self._concat_str = concat_str
         self._concat_left = is_left
 
-    def _get_schema(self, fname):
+    def _get_schema(self, fname: str) -> FileSchema:
         # should be implemented in subclasses
         raise NotImplementedError
 
-    def get_full_filename(self, fname):
-        """get full path with concatenation if necessary"""
+    def get_full_filename(self, fname: str):
+        """Get full path with concatenation if necessary"""
         if self._concat_str is None:
             return fname
 
@@ -305,14 +307,16 @@ class FileInfo:
 
 
 class FilenameType(types.Literal):
-    """Arguments of Bodo functions that are a constant literal are
+    """
+    Arguments of Bodo functions that are a constant literal are
     converted to this type instead of plain Literal to allow us
     to reuse the cache for differing file names that have the
     same schema. All FilenameType instances have the same hash
     to allow comparison of different instances. Equality is based
-    on the schema (not the file name)."""
+    on the schema (not the file name).
+    """
 
-    def __init__(self, fname, finfo):
+    def __init__(self, fname, finfo: FileInfo):
         self.fname = fname
         self._schema = finfo.get_schema(fname)
         super(FilenameType, self).__init__(self.fname)
@@ -340,7 +344,7 @@ class FilenameType(types.Literal):
         return copy.deepcopy(self._schema)
 
 
-types.FilenameType = FilenameType
+types.FilenameType = FilenameType  # type: ignore
 
 # Data model, unboxing and lower cast are the same as fname (unicode or list) to
 # allow passing different file names to compiled code (note that if

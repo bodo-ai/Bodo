@@ -19,7 +19,10 @@ from bodo.tests.utils import (
     get_snowflake_connection_string,
     get_start_end,
     reduce_sum,
+    snowflake_cred_env_vars_present,
 )
+from bodo.utils.testing import ensure_clean_snowflake_table
+from bodo.utils.typing import BodoWarning
 
 # ---------------Distributed Snowflake Write Unit Tests ------------------
 
@@ -743,3 +746,118 @@ def test_to_sql_wrong_password():
         impl(
             "snowflake://SF_USERNAME:SF_PASSWORD@sf_account/database/PUBLIC?warehouse=warehouse"
         )
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest.mark.parametrize("df_size", [17000 * 3, 2])
+@pytest.mark.parametrize("sf_write_overlap", [True, False])
+@pytest.mark.parametrize("sf_write_use_put", [True, False])
+@pytest.mark.parametrize("snowflake_user", [1, pytest.param(3, marks=pytest.mark.slow)])
+def test_to_sql_snowflake(
+    df_size, sf_write_overlap, sf_write_use_put, snowflake_user, memory_leak_check
+):
+    """
+    Tests that df.to_sql works as expected. Since Snowflake has a limit of ~16k
+    per insert, we insert 17k rows per rank to emulate a "large" insert.
+    """
+
+    # Skip test if env vars with snowflake creds required for this test are not set.
+    if not snowflake_cred_env_vars_present(snowflake_user):
+        pytest.skip(reason="Required env vars with Snowflake credentials not set")
+
+    if (
+        ("AGENT_NAME" in os.environ)
+        and sf_write_overlap
+        and sf_write_use_put
+        and (snowflake_user == 3)
+    ):
+        pytest.skip(
+            reason="[BE-3758] This test fails on Azure pipelines for a yet to be determined reason."
+        )
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema, user=snowflake_user)
+
+    import platform
+
+    import bodo
+    import bodo.io.snowflake
+
+    # Specify Snowflake write hyperparameters
+    old_sf_write_overlap = bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
+    bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = sf_write_overlap
+    old_sf_write_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
+    bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
+
+    rng = np.random.default_rng(5)
+    letters = np.array(list(string.ascii_letters))
+    py_output = pd.DataFrame(
+        {
+            "a": np.arange(df_size),
+            "b": np.arange(df_size).astype(np.float64),
+            "c": [
+                "".join(rng.choice(letters, size=rng.integers(10, 100)))
+                for _ in range(df_size)
+            ],
+            "d": pd.date_range("2001-01-01", periods=df_size),
+            "e": pd.date_range("2001-01-01", periods=df_size).date,
+        }
+    )
+    start, end = get_start_end(len(py_output))
+    df = py_output.iloc[start:end]
+
+    @bodo.jit(distributed=["df"])
+    def test_write(df, name, conn, schema):
+        df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
+        bodo.barrier()
+
+    try:
+        with ensure_clean_snowflake_table(conn) as name:
+            # If using a Azure Snowflake account, the stage will be ADLS backed, so
+            # when writing to it directly, we need a proper ADLS/Haddop setup
+            # and the bodo_azurefs_sas_token_provider library, both of which are only
+            # done for Linux. So we verify that it shows user the appropriate warning
+            # about falling back to the PUT method.
+            if (
+                snowflake_user == 3
+                and (not sf_write_use_put)
+                and (platform.system() != "Linux")
+            ):
+                if bodo.get_rank() == 0:
+                    # Warning is only raised on rank 0
+                    with pytest.warns(
+                        BodoWarning,
+                        match="Falling back to PUT command for upload for now.",
+                    ):
+                        test_write(df, name, conn, schema)
+                else:
+                    test_write(df, name, conn, schema)
+            else:
+                test_write(df, name, conn, schema)
+
+            bodo.barrier()
+            passed = 1
+            if bodo.get_rank() == 0:
+                try:
+                    output_df = pd.read_sql(f"select * from {name}", conn)
+                    # Row order isn't defined, so sort the data.
+                    output_cols = output_df.columns.to_list()
+                    output_df = output_df.sort_values(output_cols).reset_index(
+                        drop=True
+                    )
+                    py_cols = py_output.columns.to_list()
+                    py_output = py_output.sort_values(py_cols).reset_index(drop=True)
+                    pd.testing.assert_frame_equal(
+                        output_df, py_output, check_dtype=False, check_column_type=False
+                    )
+                except Exception as e:
+                    print("".join(traceback.format_exception(None, e, e.__traceback__)))
+                    passed = 0
+
+            n_passed = reduce_sum(passed)
+            assert n_passed == bodo.get_size()
+            bodo.barrier()
+    finally:
+        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = old_sf_write_overlap
+        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_sf_write_use_put

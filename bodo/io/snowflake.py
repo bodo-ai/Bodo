@@ -3,7 +3,7 @@ import sys
 import traceback
 import warnings
 from tempfile import TemporaryDirectory
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlparse
 from uuid import uuid4
 
@@ -11,21 +11,29 @@ import pyarrow as pa
 from mpi4py import MPI
 
 import bodo
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.io.helpers import (
     ExceptionPropagatingThread,
+    _get_numba_typ_from_pa_typ,
     update_env_vars,
     update_file_contents,
 )
+from bodo.libs.dict_arr_ext import dict_str_arr_type
+from bodo.libs.str_arr_ext import string_array_type
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError, BodoWarning
 
-# Imports for convenience.
-try:
-    from snowflake.connector import JSONResultBatch, SnowflakeConnection
-except ImportError:
-    JSONResultBatch = None
-    SnowflakeConnection = None
+# Imports for typechecking
+if TYPE_CHECKING:  # pragma: no cover  Built-in Python Attribute. False during runtime
+    from snowflake.connector import SnowflakeConnection
+    from snowflake.connector.cursor import SnowflakeCursor
+    from snowflake.connector.result_batch import JSONResultBatch, ResultBatch
+
+# Maximum number of rows to read from Snowflake in the probe query
+# to determine the output PyArrow schema. This is currently only applied
+# to SELECT queries.
+SF_READ_SCHEMA_PROBE_ROW_LIMIT = 100
 
 # Whether to do a probe query to determine whether string columns should be
 # dictionary-encoded. This doesn't effect the _bodo_read_as_dict argument.
@@ -177,11 +185,12 @@ SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION = os.path.join(
 )
 
 
-def snowflake_connect(conn_str, is_parallel=False):  # pragma: no cover
-    """From Snowflake connection URL, connect to Snowflake.
+def snowflake_connect(conn_str: str, is_parallel: bool = False):  # pragma: no cover
+    """
+    From Snowflake connection URL, connect to Snowflake.
 
-    Args
-        conn_str (str): Snowflake connection URL in the following format:
+    Args:
+        conn_str: Snowflake connection URL in the following format:
             snowflake://<user_login_name>:<password>@<account_identifier>/<database_name>/<schema_name>?warehouse=<warehouse_name>&role=<role_name>
             Required arguments include <user_login_name>, <password>, and
             <account_identifier>. Optional arguments include <database_name>,
@@ -190,7 +199,7 @@ def snowflake_connect(conn_str, is_parallel=False):  # pragma: no cover
             your account identifier. Snowflake automatically appends the domain
             name to your account identifier to create the required connection.
             (https://docs.snowflake.com/en/user-guide/sqlalchemy.html#connection-parameters)
-        is_parallel (bool): True if this function being is called from all
+        is_parallel: True if this function being is called from all
             ranks, and False otherwise
 
     Returns
@@ -264,7 +273,7 @@ def snowflake_connect(conn_str, is_parallel=False):  # pragma: no cover
         # This query is very fast, taking at most .1 seconds in testing including
         # loading the data.
         cur.execute("select current_region()")
-        arrow_data = cur.fetch_arrow_all()
+        arrow_data: pa.Table = cur.fetch_arrow_all()  # type: ignore
         sf_region_str = arrow_data[0][0].as_py()
         cur.close()
         # Parse the snowflake output
@@ -294,10 +303,187 @@ def snowflake_connect(conn_str, is_parallel=False):  # pragma: no cover
     return conn
 
 
+def get_schema(
+    conn_str: str,
+    sql_const: str,
+    is_select_query: bool,
+    _bodo_read_as_dict: Optional[List[str]],
+):  # pragma: no cover
+    conn = snowflake_connect(conn_str)
+
+    # Import after snowflake_connect since it should be safe now.
+    import snowflake.connector
+
+    if is_select_query:
+        schema_probe_query = (
+            f"select * from ({sql_const}) x LIMIT {SF_READ_SCHEMA_PROBE_ROW_LIMIT}"
+        )
+    else:
+        schema_probe_query = f"{sql_const}"
+
+    cursor = conn.cursor()
+    described_query = cursor.describe(schema_probe_query)
+    col_names = []
+    is_nullable = []
+    for x in described_query:
+        col_names.append(x.name)
+        is_nullable.append(x.is_nullable)
+    # TODO: Avoid executing the query once its possible to determine
+    # the exact arrow types.
+    if is_select_query:
+        # We can only execute a sample query if we are performing a select.
+        executed_query: "SnowflakeCursor" = cursor.execute(schema_probe_query)  # type: ignore
+        arrow_data: Optional[pa.Table] = executed_query.fetch_arrow_all()
+    else:
+        arrow_data = None
+    if arrow_data is None:
+        # If there is no data to load, construct the types based on the metadata
+        pa_fields = [
+            pa.field(x.name, FIELD_TYPE_TO_PA_TYPE[x.type_code])
+            for x in described_query
+        ]
+    else:
+        pa_fields = [arrow_data.schema.field(i) for i in range(len(col_names))]
+
+    col_types = []
+    unsupported_columns = []
+    unsupported_arrow_types = []
+    for i, _ in enumerate(col_names):
+        field = pa_fields[i]
+        dtype, supported = _get_numba_typ_from_pa_typ(
+            field,
+            False,  # index_col
+            is_nullable[i],  # nullable_from_metadata
+            None,  # category_info
+        )
+        col_types.append(dtype)
+        if not supported:
+            unsupported_columns.append(i)
+            # Store the unsupported arrow type for future
+            # error messages.
+            unsupported_arrow_types.append(field.type)
+
+    str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
+    str_col_name_to_ind = {}
+    for i, t in enumerate(col_types):
+        if t == string_array_type:
+            str_col_name_to_ind[col_names[i]] = i
+
+    # Map the snowflake original column name to the name that
+    # is used from Python. This is used for comparing with
+    # _bodo_read_as_dict which will use Python's convention.
+    snowflake_case_map = {
+        name.lower() if name.isupper() else name: name
+        for name in str_col_name_to_ind.keys()
+    }
+
+    # If user-provided list has any columns that are not string
+    # type, show a warning.
+    non_str_columns_in_read_as_dict_cols = str_as_dict_cols - snowflake_case_map.keys()
+    if len(non_str_columns_in_read_as_dict_cols) > 0:
+        if bodo.get_rank() == 0:
+            warnings.warn(
+                BodoWarning(
+                    f"The following columns are not of datatype string and hence cannot be read with dictionary encoding: {non_str_columns_in_read_as_dict_cols}"
+                )
+            )
+    convert_dict_col_names = snowflake_case_map.keys() & str_as_dict_cols
+    for name in convert_dict_col_names:
+        col_types[str_col_name_to_ind[snowflake_case_map[name]]] = dict_str_arr_type
+
+    query_args, string_col_ind = [], []
+    undetermined_str_cols = snowflake_case_map.keys() - str_as_dict_cols
+    for name in undetermined_str_cols:
+        # Always quote column names for correctness
+        query_args.append(f'count (distinct "{snowflake_case_map[name]}")')
+        string_col_ind.append(str_col_name_to_ind[snowflake_case_map[name]])
+
+    # Determine if the string columns are dictionary encoded
+    dict_encode_timeout_info: Optional[Tuple[int, List[str]]] = None
+
+    if len(query_args) != 0 and SF_READ_AUTO_DICT_ENCODE_ENABLED:
+        # the limit on the number of rows total to read for the probe
+        probe_limit = max(SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT // len(query_args), 1)
+
+        # construct the prediction query script for the string columns
+        # in which we sample 1 percent of the data
+        # upper bound limits the total amount of sampling that will occur
+        # to prevent a hang/timeout
+        predict_cardinality_call = (
+            f"select count(*),{', '.join(query_args)}"
+            f"from ( select * from ({sql_const}) limit {probe_limit} ) SAMPLE (1)"
+        )
+
+        prediction_query_timed_out = False
+        try:
+            prediction_query = cursor.execute(
+                predict_cardinality_call, timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT
+            )
+        except snowflake.connector.errors.ProgrammingError as e:
+            # Catch timeouts
+            if "SQL execution canceled" in str(e):
+                prediction_query_timed_out = True
+            else:
+                raise
+
+        if prediction_query_timed_out:  # pragma: no cover
+            # It is hard to get Snowflake to consistently
+            # and deterministically time out, so this branch
+            # isn't tested in the unit tests.
+
+            dict_encode_timeout_info = (probe_limit, query_args)
+
+            if SF_READ_DICT_ENCODING_IF_TIMEOUT:
+                for i in string_col_ind:
+                    col_types[i] = dict_str_arr_type
+
+        else:
+            cardinality_data: pa.Table = prediction_query.fetch_arrow_all()  # type: ignore
+            # calculate the level of uniqueness for each string column
+            total_rows = cardinality_data[0][0].as_py()
+            uniqueness = [
+                cardinality_data[i][0].as_py() / max(total_rows, 1)
+                for i in range(1, len(query_args) + 1)
+            ]
+            # filter the string col indices based on the criterion
+            col_inds_to_convert = filter(
+                lambda x: x[0] <= SF_READ_DICT_ENCODE_CRITERION,
+                zip(uniqueness, string_col_ind),
+            )
+            for _, ind in col_inds_to_convert:
+                col_types[ind] = dict_str_arr_type
+
+    # Ensure column name case matches Pandas/sqlalchemy. See:
+    # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
+    # If a name is returned as all uppercase by the Snowflake connector
+    # it means it is case insensitive or it was inserted as all
+    # uppercase with double quotes. In both of these situations
+    # pd.read_sql() returns the name with all lower case
+    new_colnames = []
+    converted_colnames = set()
+    for x in col_names:
+        if x.isupper():
+            converted_colnames.add(x.lower())
+            new_colnames.append(x.lower())
+        else:
+            new_colnames.append(x)
+    df_type = DataFrameType(data=tuple(col_types), columns=tuple(new_colnames))
+
+    return (
+        df_type,
+        converted_colnames,
+        unsupported_columns,
+        unsupported_arrow_types,
+        dict_encode_timeout_info,
+    )
+
+
 class SnowflakeDataset(object):
     """Store dataset info in the way expected by Arrow reader in C++."""
 
-    def __init__(self, batches, schema, conn):
+    def __init__(
+        self, batches: List["ResultBatch"], schema, conn: "SnowflakeConnection"
+    ):
         # pieces, _bodo_total_rows and _bodo_total_rows are the attributes
         # expected by ArrowDataFrameReader, schema is for SnowflakeReader.
         # NOTE: getting this information from the batches is very cheap and
@@ -305,10 +491,10 @@ class SnowflakeDataset(object):
         self.pieces = batches
         self._bodo_total_rows = 0
         for b in batches:
-            b._bodo_num_rows = b.rowcount
-            self._bodo_total_rows += b._bodo_num_rows
+            b._bodo_num_rows = b.rowcount  # type: ignore
+            self._bodo_total_rows += b._bodo_num_rows  # type: ignore
         self.schema = schema
-        self.conn = conn  # SnowflakeConnection instance
+        self.conn = conn
 
 
 class FakeArrowJSONResultBatch:
@@ -317,7 +503,7 @@ class FakeArrowJSONResultBatch:
     conforming to the same APIS as ArrowResultBatch
     """
 
-    def __init__(self, json_batch: JSONResultBatch, schema: pa.Schema) -> None:
+    def __init__(self, json_batch: "JSONResultBatch", schema: pa.Schema) -> None:
         self._json_batch = json_batch
         self._schema = schema
 
@@ -325,17 +511,16 @@ class FakeArrowJSONResultBatch:
     def rowcount(self):
         return self._json_batch.rowcount
 
-    def to_arrow(self, conn: Optional[SnowflakeConnection] = None) -> pa.Table:
+    def to_arrow(self, _: Optional["SnowflakeConnection"] = None) -> pa.Table:
         """
         Return the data in arrow format.
 
         Args:
-            conn (Optional[snowflake.connection.SnowflakeConnection]): Connection
-                that is accepted by ArrowResultBatch. We ignore this argument but
-                conform to the same API.
+            conn: Connection that is accepted by ArrowResultBatch. We ignore
+                this argument but conform to the same API.
 
         Returns:
-            pa.Table: The data in arrow format.
+            The data in arrow format
         """
         # Iterate over the data to use the pa.Table.from_pylist
         # constructor
@@ -351,15 +536,15 @@ class FakeArrowJSONResultBatch:
 def get_dataset(
     query: str,
     conn_str: str,
-    only_fetch_length: Optional[bool] = False,
-    is_select_query: Optional[bool] = True,
-) -> Tuple[SnowflakeDataset, int]:
+    only_fetch_length: bool = False,
+    is_select_query: bool = True,
+) -> Tuple[SnowflakeDataset, int]:  # pragma: no cover
     """Get snowflake dataset info required by Arrow reader in C++ and execute
     the Snowflake query
 
     Args:
-        query (str): Query to execute inside Snowflake
-        conn_str (str): Connection string Bodo will parse to connect to Snowflake.
+        query: Query to execute inside Snowflake
+        conn_str: Connection string Bodo will parse to connect to Snowflake.
         only_fetch_length (bool, optional): Is the query just used to fetch rather
             than return a table? If so we just run a COUNT(*) query and broadcast
             the length without any batches.. Defaults to False.
@@ -369,7 +554,7 @@ def get_dataset(
         BodoError: Raises an error if Bodo returns the data in the wrong format.
 
     Returns:
-        Tuple([SnowflakeDataset, int]): Returns a pair of values:
+        Returns a pair of values:
             - The SnowflakeDataset object that holds the information to access
               the actual data results.
             - The number of rows in the output.
@@ -380,7 +565,11 @@ def get_dataset(
 
     # Snowflake import
     try:
-        import snowflake.connector
+        import snowflake.connector  # noqa
+        from snowflake.connector.result_batch import (
+            ArrowResultBatch,
+            JSONResultBatch,
+        )
     except ImportError:
         raise BodoError(
             "Snowflake Python connector packages not found. "
@@ -414,7 +603,7 @@ def get_dataset(
             # We are just loading a single row of data so we can just load
             # all of the data.
             arrow_data = cur.fetch_arrow_all()
-            num_rows = arrow_data[0][0].as_py()
+            num_rows = arrow_data[0][0].as_py()  # type: ignore
             num_rows = comm.bcast(num_rows)
             cur.close()
             ev_query.finalize()
@@ -430,7 +619,7 @@ def get_dataset(
             ev_get_schema = tracing.Event("get_schema", is_parallel=False)
             if is_select_query:
                 query_probe = f"select * from ({query}) x LIMIT {100}"
-                arrow_data = cur.execute(query_probe).fetch_arrow_all()
+                arrow_data: Optional[pa.Table] = cur.execute(query_probe).fetch_arrow_all()  # type: ignore
             else:
                 arrow_data = None
             if arrow_data is None:
@@ -447,24 +636,21 @@ def get_dataset(
 
             ev_get_schema.finalize()
 
-            # execute query
+            # Execute query
             ev_query = tracing.Event("execute_query", is_parallel=False)
             cur.execute(query)
             ev_query.finalize()
+
             # Fetch the total number of rows that will be loaded globally
-            num_rows = cur.rowcount
-            # get the list of result batches (this doesn't load data).
-            # Batch type is snowflake.connector.result_batch.ArrowResultBatch
-            batches = cur.get_result_batches()
-            if len(batches) > 0 and not isinstance(
-                batches[0], snowflake.connector.result_batch.ArrowResultBatch
-            ):
+            num_rows: int = cur.rowcount  # type: ignore
+
+            # Get the list of result batches (this doesn't load data).
+            batches: "List[ResultBatch]" = cur.get_result_batches()  # type: ignore
+            if len(batches) > 0 and not isinstance(batches[0], ArrowResultBatch):
                 if (
                     not is_select_query
                     and len(batches) == 1
-                    and isinstance(
-                        batches[0], snowflake.connector.result_batch.JSONResultBatch
-                    )
+                    and isinstance(batches[0], JSONResultBatch)
                 ):
                     # When executing a non-select query (e.g. DELETE), we may not obtain
                     # the result in Arrow format and instead get a JSONResultBatch. If so
@@ -474,11 +660,12 @@ def get_dataset(
                     # To be conservative against possible performance issues during development, we
                     # only allow a single batch. Every query that is currently supported only returns
                     # a single row.
-                    batches = [FakeArrowJSONResultBatch(x, schema) for x in batches]
+                    batches = [FakeArrowJSONResultBatch(x, schema) for x in batches]  # type: ignore
                 else:
                     raise BodoError(
                         f"Batches returns from Snowflake don't match the expected format. Expected Arrow batches but got {type(batches[0])}"
                     )
+
             cur.close()
             comm.bcast((num_rows, batches, schema))
         else:
@@ -490,13 +677,13 @@ def get_dataset(
 
 
 # --------------------------- snowflake_write helper functions ----------------------------
-def create_internal_stage(cursor, is_temporary=False):
+def create_internal_stage(cursor: "SnowflakeCursor", is_temporary: bool = False) -> str:
     """Create an internal stage within Snowflake. If `is_temporary=False`,
     the named stage must be dropped manualy in `drop_internal_stage()`
 
     Args
-        cursor (snowflake.connector.cursor): Snowflake connection cursor
-        is_temporary (bool): Whether the created stage is temporary.
+        cursor: Snowflake connection cursor
+        is_temporary: Whether the created stage is temporary.
             Named stages are suitable for data loads that could involve multiple users:
             https://docs.snowflake.com/en/user-guide/data-load-local-file-system-create-stage.html#named-stages.
             From experimentation, temporary stages are only accessible to the cursor
@@ -504,7 +691,7 @@ def create_internal_stage(cursor, is_temporary=False):
             multiple simultaneous uploads from different connections.
 
     Returns
-        stage_name (str): Name of created internal stage
+        stage_name: Name of created internal stage
     """
     ev = tracing.Event("create_internal_stage", is_parallel=False)
 
@@ -519,7 +706,7 @@ def create_internal_stage(cursor, is_temporary=False):
             "or 'pip install snowflake-connector-python'."
         )
 
-    stage_name = None  # forward declaration
+    stage_name = ""  # forward declaration
     stage_name_err = None  # forward declaration
 
     # We will quickly generate a stage name that doesn't already exist within Snowflake.
@@ -536,11 +723,11 @@ def create_internal_stage(cursor, is_temporary=False):
                 f'{create_stage_cmd} "{stage_name}" '
                 f"/* Python:bodo.io.snowflake.create_internal_stage() */ "
             )
-            cursor.execute(create_stage_sql, _is_internal=True).fetchall()
+            cursor.execute(create_stage_sql, _is_internal=True).fetchall()  # type: ignore
             break
 
         except snowflake.connector.ProgrammingError as pe:
-            if pe.msg.endswith("already exists."):
+            if pe.msg is not None and pe.msg.endswith("already exists."):
                 continue
             stage_name_err = pe.msg
             break
@@ -552,12 +739,12 @@ def create_internal_stage(cursor, is_temporary=False):
     return stage_name
 
 
-def drop_internal_stage(cursor, stage_name):
+def drop_internal_stage(cursor: "SnowflakeCursor", stage_name: str):
     """Drop an internal stage within Snowflake.
 
     Args
-        cursor (snowflake.connector.cursor): Snowflake connection cursor
-        stage_name (str): Name of internal stage to drop
+        cursor: Snowflake connection cursor
+        stage_name: Name of internal stage to drop
     """
     ev = tracing.Event("drop_internal_stage", is_parallel=False)
 
@@ -571,19 +758,19 @@ def drop_internal_stage(cursor, stage_name):
 
 
 def do_upload_and_cleanup(
-    cursor,
-    chunk_idx,
-    chunk_path,
-    stage_name,
+    cursor: "SnowflakeCursor",
+    chunk_idx: int,
+    chunk_path: str,
+    stage_name: str,
 ):
     """Upload the parquet file at the given file stream or path to Snowflake
     internal stage in a parallel thread, and perform needed cleanup.
 
     Args
-        cursor (snowflake.connector.cursor): Snowflake connection cursor
-        chunk_idx (int): Index of the current parquet chunk
-        chunk_path (str): Path to the file to upload
-        stage_name (str): Snowflake internal stage name to upload files to
+        cursor: Snowflake connection cursor
+        chunk_idx: Index of the current parquet chunk
+        chunk_path: Path to the file to upload
+        stage_name: Snowflake internal stage name to upload files to
 
     Returns
         upload_thread (threading.Thread): Return the upload thread responsible
@@ -604,7 +791,7 @@ def do_upload_and_cleanup(
             f"PUT 'file://{chunk_path}' @\"{stage_name}\" AUTO_COMPRESS=FALSE "
             f"/* Python:bodo.io.snowflake.do_upload_and_cleanup() */"
         )
-        cursor.execute(upload_sql, _is_internal=True).fetchall()
+        cursor.execute(upload_sql, _is_internal=True).fetchall()  # type: ignore
         ev_upload_parquet.finalize()
 
         # Remove chunk file
@@ -623,21 +810,21 @@ def do_upload_and_cleanup(
 
 
 def create_table_handle_exists(
-    cursor,
-    stage_name,
-    location,
+    cursor: "SnowflakeCursor",
+    stage_name: str,
+    location: str,
     df_columns,
-    if_exists,
+    if_exists: str,
 ):
     """Automatically create a new table in Snowflake at the given location if
     it doesn't exist, following the schema of staged files.
 
     Args
-        cursor (snowflake.connector.cursor): Snowflake connection cursor
-        stage_name (str): Name of internal stage containing desired files
-        location (str): Location to create a table
+        cursor: Snowflake connection cursor
+        stage_name: Name of internal stage containing desired files
+        location: Location to create a table
         df_columns (array-like): Array of dataframe column names
-        if_exists (str): Action to take if table already exists:
+        if_exists: Action to take if table already exists:
             "fail": If table exists, raise a ValueError. Create if does not exist
             "replace": If table exists, drop it, recreate it, and insert data.
                 Create if does not exist
@@ -687,7 +874,7 @@ def create_table_handle_exists(
             cursor.execute(file_format_sql, _is_internal=True)
             break
         except snowflake.connector.ProgrammingError as pe:
-            if pe.msg.endswith("already exists."):
+            if pe.msg is not None and pe.msg.endswith("already exists."):
                 continue
             file_format_err = pe.msg
             break
@@ -704,7 +891,7 @@ def create_table_handle_exists(
         f"/* Python:bodo.io.snowflake.create_table_if_not_exists() */"
     )
     column_type_mapping = dict(
-        cursor.execute(infer_schema_sql, _is_internal=True).fetchall()
+        cursor.execute(infer_schema_sql, _is_internal=True).fetchall()  # type: ignore
     )
     ev_infer_schema.finalize()
 
@@ -736,21 +923,21 @@ def create_table_handle_exists(
 
 
 def execute_copy_into(
-    cursor,
-    stage_name,
-    location,
+    cursor: "SnowflakeCursor",
+    stage_name: str,
+    location: str,
     df_columns,
 ):
     """Execute a COPY_INTO command from all files in stage to a table location.
 
     Args
-        cursor (snowflake.connector.cursor): Snowflake connection cursor
-        stage_name (str): Name of internal stage containing desired files
-        location (str): Desired table location
+        cursor: Snowflake connection cursor
+        stage_name: Name of internal stage containing desired files
+        location: Desired table location
         df_columns (array-like): Array of dataframe column names
 
-    Returns (success, num_chunks, num_rows, output) where:
-        success (bool): True if the function successfully wrote the data to the table
+    Returns (nsuccess, num_chunks, num_rows, output) where:
+        nsuccess (int): Number of chunks successfully copied by the function
         num_chunks (int): Number of chunks of data that the function copied
         num_rows (int): Number of rows that the function inserted
         output (str): Output of the `COPY INTO <table>` command
@@ -772,7 +959,7 @@ def execute_copy_into(
         f"PURGE=TRUE ON_ERROR={SF_WRITE_COPY_INTO_ON_ERROR} "
         f"/* Python:bodo.io.snowflake.execute_copy_into() */"
     )
-    copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
+    copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()  # type: ignore
 
     # Compute diagnostic output
     nsuccess = sum(1 if e[1] == "LOADED" else 0 for e in copy_results)
@@ -822,19 +1009,23 @@ TemporaryDirectoryType = install_py_obj_class(
 )
 
 
-def get_snowflake_stage_info(cursor, stage_name, tmp_folder):
+def get_snowflake_stage_info(
+    cursor: "SnowflakeCursor",
+    stage_name: str,
+    tmp_folder: TemporaryDirectory,
+) -> Dict:
     """Get parquet path and credentials for a snowflake internal stage.
     This works by using `_execute_helper` to issue a dummy upload query
 
     Args
-        cursor (snowflake.connector.cursor): Snowflake connection cursor
-        stage_name (str): Stage name to query information about
-        tmp_folder (TemporaryDirectory): A TemporaryDirectory() object
+        cursor: Snowflake connection cursor
+        stage_name: Stage name to query information about
+        tmp_folder: A TemporaryDirectory() object
             representing a temporary directory on disk to store files
             prior to an upload
 
     Returns
-        stage_info (Dict): Dictionary of snowflake stage info
+        stage_info: Dictionary of snowflake stage info
     """
     ev = tracing.Event("get_snowflake_stage_info", is_parallel=False)
 
@@ -857,7 +1048,7 @@ def get_snowflake_stage_info(cursor, stage_name, tmp_folder):
     return stage_info
 
 
-def connect_and_get_upload_info(conn):
+def connect_and_get_upload_info(conn_str: str):
     """On rank 0, connect to Snowflake, create an internal stage, and issue
     an upload command to get parquet path and internal stage credentials.
     If the internal stage type is not supported or SF_WRITE_UPLOAD_USING_PUT
@@ -865,7 +1056,7 @@ def connect_and_get_upload_info(conn):
     This function exists to be executed within objmode from `DataFrame.to_sql()`
 
     Args
-        conn (str): Snowflake connection URL string
+        conn_str: Snowflake connection URL string
 
     Returns: (cursor, tmp_folder, stage_name, parquet_path, upload_using_snowflake_put, old_creds) where
         cursor (snowflake.connector.cursor): Snowflake connection cursor
@@ -919,7 +1110,7 @@ def connect_and_get_upload_info(conn):
     if my_rank == 0:
         try:
             # Connect to snowflake
-            conn = snowflake_connect(conn)
+            conn = snowflake_connect(conn_str)
             cursor = conn.cursor()
             # Avoid creating a temp stage at all in case of SF_WRITE_UPLOAD_USING_PUT
             is_temporary = not SF_WRITE_UPLOAD_USING_PUT
@@ -1068,7 +1259,7 @@ def connect_and_get_upload_info(conn):
         if my_rank != 0:
             # Since we already connected to Snowflake successfully on rank 0,
             # unlikely we'll have an exception here.
-            conn = snowflake_connect(conn)
+            conn = snowflake_connect(conn_str)
             cursor = conn.cursor()
 
     else:
@@ -1116,44 +1307,45 @@ def connect_and_get_upload_info(conn):
 
 
 def create_table_copy_into(
-    cursor,
-    stage_name,
-    location,
+    cursor: "SnowflakeCursor",
+    stage_name: str,
+    location: str,
     df_columns,
-    if_exists,
+    if_exists: str,
     old_creds,
-    tmp_folder,
-    azure_stage_direct_upload,
-    old_core_site,
-    old_sas_token,
+    tmp_folder: TemporaryDirectory,
+    azure_stage_direct_upload: bool,
+    old_core_site: str,
+    old_sas_token: str,
 ):
-    """Auto-create a new table if needed, execute COPY_INTO, and clean up
+    """
+    Auto-create a new table if needed, execute COPY_INTO, and clean up
     created internal stage, and restore old environment variables.
     This function exists to be executed within objmode from `DataFrame.to_sql()`
 
     Args
-        cursor (snowflake.connector.cursor): Snowflake connection cursor
-        stage_name (str): Name of internal stage containing files to copy_into
-        location (str): Destination table location
+        cursor: Snowflake connection cursor
+        stage_name: Name of internal stage containing files to copy_into
+        location: Destination table location
         df_columns (array-like): Array of dataframe column names
-        if_exists (str): Action to take if table already exists:
+        if_exists: Action to take if table already exists:
             "fail": If table exists, raise a ValueError. Create if does not exist
             "replace": If table exists, drop it, recreate it, and insert data.
                 Create if does not exist
             "append": If table exists, insert data. Create if does not exist
         old_creds (Dict(str, str or None)): Old environment variables to restore.
             Previously overwritten to update credentials for uploading to stage
-        tmp_folder (TemporaryDirectory): TemporaryDirectory object to clean up
+        tmp_folder: TemporaryDirectory object to clean up
         azure_stage_direct_upload (boolean): Whether the stage is ADLS backed
             and we wrote parquet files to it directly using our existing
             hdfs and parquet infrastructure.
-        old_core_site (str): In case azure_stage_direct_upload=True, we replaced
+        old_core_site: In case azure_stage_direct_upload=True, we replaced
             bodo.HDFS_CORE_SITE_LOC with a new core-site.xml in
             connect_and_get_upload_info. `old_core_site` contains the original
             contents of the file (or "__none__" if file didn't originally
             exist -- see bodo.io.helpers.update_file_contents
             for more details), which we'll restore in this function.
-        old_sas_token (str): In case azure_stage_direct_upload=True, we replaced
+        old_sas_token: In case azure_stage_direct_upload=True, we replaced
             contents of SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION with a new SAS
             token in connect_and_get_upload_info. `old_sas_token` contains the
             original contents of the file (or "__none__" if file didn't

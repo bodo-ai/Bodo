@@ -446,7 +446,8 @@ array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
  *
  * In the case of NUMPY/CATEGORICAL or NULLABLE_INT_BOOL,
  * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not
- * matter. In the case of STRING:
+ * matter.
+ * In the case of STRING:
  * -- length is the number of rows (= number of strings)
  * -- n_sub_elems is the total number of characters.
  * In the case of LIST_STRING:
