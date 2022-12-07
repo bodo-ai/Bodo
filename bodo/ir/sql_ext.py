@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from llvmlite import ir as lir
 from numba.core import cgutils, ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
@@ -77,7 +78,8 @@ class SqlReader(ir.Stmt):
         # Only relevant for Iceberg at the moment,
         # but potentially for Snowflake in the future
         pyarrow_table_schema,
-        is_merge_into,
+        # Only relevant for Iceberg MERGE INTO COW
+        is_merge_into: bool,
         file_list_type,
         snapshot_id_type,
     ):
@@ -374,7 +376,7 @@ def sql_distributed_run(
                     p0, p2 = p[0], p[2]
 
                     p0 = convert_col_name(p0, sql_node.converted_colnames)
-                    p0 = "\\\"" + p0 + "\\\""
+                    p0 = '\\"' + p0 + '\\"'
                     scalar_filter = (
                         ("{" + filter_map[p[2].name] + "}")
                         if isinstance(p[2], ir.Var)
@@ -534,10 +536,12 @@ def sql_distributed_run(
 
     return nodes
 
+
 def convert_col_name(col_name, converted_colnames):
     if col_name in converted_colnames:
         return col_name.upper()
     return col_name
+
 
 def escape_column_names(col_names, db_type, converted_colnames):
     """
@@ -558,7 +562,7 @@ def escape_column_names(col_names, db_type, converted_colnames):
         used_col_names = []
         for x in col_names:
             used_col_names.append(convert_col_name(x, converted_colnames))
-        
+
         col_str = ", ".join([f'"{x}"' for x in used_col_names])
 
     # MySQL uses tilda as an escape character by default, not quotations
@@ -844,7 +848,7 @@ def _gen_sql_reader_py(
     parallel: bool,
     typemap,
     filters,
-    pyarrow_table_schema: "Optional[pyarrow.Schema]",
+    pyarrow_table_schema: Optional[pa.Schema],
     is_dead_table: bool,
     is_select_query: bool,
     is_merge_into: bool,
@@ -1064,7 +1068,6 @@ def _gen_sql_reader_py(
             for i in out_used_cols
             if col_typs[i] == dict_str_arr_type
         ]
-        func_text += f"  ev = bodo.utils.tracing.Event('read_snowflake', {parallel})\n"
 
         nullable_cols = [int(is_nullable(col_typs[i])) for i in out_used_cols]
         # Handle if we need to append an index
@@ -1074,10 +1077,23 @@ def _gen_sql_reader_py(
         nullable_cols_array = np.array(nullable_cols, dtype=np.int32)
         # Track the total number of rows for loading 0 columns. If we load any
         # data this is garbage.
-        func_text += "  total_rows_np = np.array([0], dtype=np.int64)\n"
-        func_text += f"  out_table = snowflake_read(unicode_to_utf8(sql_request), unicode_to_utf8(conn), {parallel}, {len(nullable_cols_array)}, nullable_cols_array.ctypes,\n"
-        func_text += f"       snowflake_dict_cols_array.ctypes, {len(snowflake_dict_cols_array)}, total_rows_np.ctypes, {is_select_query and len(used_col_names) == 0}, {is_select_query})\n"
-        func_text += "  check_and_propagate_cpp_exception()\n"
+        func_text += (
+            f"  ev = bodo.utils.tracing.Event('read_snowflake', {parallel})\n"
+            f"  total_rows_np = np.array([0], dtype=np.int64)\n"
+            f"  out_table = snowflake_read(\n"
+            f"    unicode_to_utf8(sql_request),\n"
+            f"    unicode_to_utf8(conn),\n"
+            f"    {parallel},\n"
+            f"    {len(nullable_cols_array)},\n"
+            f"    nullable_cols_array.ctypes,\n"
+            f"    snowflake_dict_cols_array.ctypes,\n"
+            f"    {len(snowflake_dict_cols_array)},\n"
+            f"    total_rows_np.ctypes,\n"
+            f"    {is_select_query and len(used_col_names) == 0},\n"
+            f"    {is_select_query},\n"
+            f"  )\n"
+            f"  check_and_propagate_cpp_exception()\n"
+        )
 
         func_text += f"  total_rows = total_rows_np[0]\n"
         if parallel:
@@ -1117,7 +1133,7 @@ def _gen_sql_reader_py(
             # We only load the index as the table is dead.
             func_text += "  table_var = None\n"
         func_text += "  delete_table(out_table)\n"
-        func_text += f"  ev.finalize()\n"
+        func_text += "  ev.finalize()\n"
         func_text += "  return (total_rows, table_var, index_var, None, None)\n"
 
     else:
@@ -1262,22 +1278,6 @@ def _gen_sql_reader_py(
     return jit_func
 
 
-_snowflake_read = types.ExternalFunction(
-    "snowflake_read",
-    table_type(
-        types.voidptr,
-        types.voidptr,
-        types.boolean,
-        types.int64,
-        types.voidptr,
-        types.voidptr,
-        types.int32,
-        types.voidptr,
-        types.boolean,
-        types.boolean,
-    ),
-)
-
 parquet_predicate_type = ParquetPredicateType()
 pyarrow_table_schema_type = PyArrowTableSchemaType()
 
@@ -1411,3 +1411,28 @@ def _iceberg_pq_read(
         types.boolean,
     )
     return sig, codegen
+
+
+_snowflake_read = types.ExternalFunction(
+    "snowflake_read",
+    table_type(
+        types.voidptr,  # query
+        types.voidptr,  # conn_str
+        types.boolean,  # parallel
+        types.int64,  # n_fields
+        types.voidptr,  # _is_nullable
+        types.voidptr,  # _str_as_dict_cols
+        types.int32,  # num_str_as_dict_cols
+        types.voidptr,  # total_rows
+        types.boolean,  # _only_length_query
+        types.boolean,  # _is_select_query
+    ),
+)
+
+
+import llvmlite.binding as ll
+
+from bodo.io import arrow_cpp
+
+ll.add_symbol("snowflake_read", arrow_cpp.snowflake_read)
+ll.add_symbol("iceberg_pq_read", arrow_cpp.iceberg_pq_read)

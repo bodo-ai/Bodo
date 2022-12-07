@@ -18,25 +18,12 @@ from numba.core import types
 from numba.extending import intrinsic
 
 import bodo
-from bodo.hiframes.datetime_date_ext import datetime_date_array_type
-from bodo.hiframes.pd_categorical_ext import (
-    CategoricalArrayType,
-    PDCategoricalDtype,
-)
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.io.fs_io import get_s3_bucket_region_njit
-from bodo.io.helpers import is_nullable, pyarrow_table_schema_type
-from bodo.libs.array_item_arr_ext import ArrayItemArrayType
-from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.decimal_arr_ext import DecimalArrayType
-from bodo.libs.int_arr_ext import IntegerArrayType
-from bodo.libs.str_arr_ext import string_array_type
+from bodo.io.helpers import pyarrow_table_schema_type
 from bodo.libs.str_ext import unicode_to_utf8
-from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
-from bodo.utils.typing import BodoError, raise_bodo_error
+from bodo.utils.typing import BodoError
 
 
 # ----------------------------- Helper Funcs -----------------------------#
@@ -292,10 +279,10 @@ class IcebergParquetDataset:
 
 
 def get_iceberg_pq_dataset(
-    conn,
-    database_schema,
-    table_name,
-    typing_pa_table_schema,
+    conn: str,
+    database_schema: str,
+    table_name: str,
+    typing_pa_table_schema: pa.Schema,
     dnf_filters=None,
     expr_filters=None,
     tot_rows_to_read=None,
@@ -433,14 +420,15 @@ def get_iceberg_pq_dataset(
                 # Iceberg Limit Pushdown
                 tot_rows_to_read=tot_rows_to_read,
             )
-        except BodoError as e:
 
+        except BodoError as e:
             if re.search(r"Schema .* was different", str(e), re.IGNORECASE):
                 raise BodoError(
                     f"Bodo currently doesn't support reading Iceberg tables with schema evolution.\n{e}"
                 )
             else:
                 raise
+
     iceberg_pq_dataset = IcebergParquetDataset(
         conn,
         database_schema,
@@ -454,139 +442,6 @@ def get_iceberg_pq_dataset(
         ev.finalize()
 
     return iceberg_pq_dataset
-
-
-# ---------------------- Iceberg Compile-Time Write ---------------------- #
-# This is only used by iceberg write and has some iceberg specific behavior
-_numba_pyarrow_type_map = {
-    # Signed Int Types
-    types.int8: pa.int8(),
-    types.int16: pa.int16(),
-    types.int32: pa.int32(),
-    types.int64: pa.int64(),
-    # Unsigned Int Types
-    types.uint8: pa.uint8(),
-    types.uint16: pa.uint16(),
-    types.uint32: pa.uint32(),
-    types.uint64: pa.uint64(),
-    # Float Types (TODO: float16?)
-    types.float32: pa.float32(),
-    types.float64: pa.float64(),
-    # Date and Time
-    types.NPDatetime("ns"): pa.date64(),
-    # For Iceberg, all timestamp data needs to be written
-    # as microseconds, so that's the type we
-    # specify. We convert our nanoseconds to
-    # microseconds during write.
-    # See https://iceberg.apache.org/spec/#primitive-types,
-    # https://iceberg.apache.org/spec/#parquet
-    # We've also made the decision to always
-    # write the `timestamptz` type when writing
-    # Iceberg data, similar to Spark.
-    # The underlying already is in UTC already
-    # for timezone aware types, and for timezone
-    # naive, it won't matter.
-    bodo.datetime64ns: pa.timestamp("us", "UTC"),
-    # (TODO: time32, time64, ...)
-}
-
-
-def is_nullable_arrow_out(numba_type: types.ArrayCompatible) -> bool:
-    """
-    Does this Array type produce an Arrow array with nulls when converted to C++
-    This is more expansive than is_nullable since the original array may not have
-    nulls but other values will be translated to nulls when converting to Arrow
-
-    As of now, datetime arrays store NaTs instead of nulls, which are then
-    translated to nulls in our Arrow conversion code
-    """
-
-    return (
-        is_nullable(numba_type)
-        or isinstance(numba_type, bodo.DatetimeArrayType)
-        or (
-            isinstance(numba_type, types.Array)
-            and numba_type.dtype == bodo.datetime64ns
-        )
-    )
-
-
-def _numba_to_pyarrow_type(numba_type: types.ArrayCompatible):
-    """
-    Convert Numba / Bodo Array Types to Equivalent PyArrow Type
-    This is currently only used in Iceberg and thus may conform to Iceberg type requirements
-    """
-    if isinstance(numba_type, ArrayItemArrayType):
-        # Set inner field name to 'element' so we can compare without worrying about
-        # different names due to pyarrow ('item', 'element', 'field0', etc.)
-        inner_elem = pa.field("element", _numba_to_pyarrow_type(numba_type.dtype)[0])
-        dtype = pa.list_(inner_elem)
-
-    elif isinstance(numba_type, StructArrayType):
-        fields = []
-        for name, inner_type in zip(numba_type.names, numba_type.data):
-            pa_type, _ = _numba_to_pyarrow_type(inner_type)
-            # We set nullable as true here to match the schema
-            # written to parquet files, which doesn't contain
-            # nullability info (and hence defaults to nullable).
-            # This should be changed when we implement [BE-3247].
-            fields.append(pa.field(name, pa_type, True))
-        dtype = pa.struct(fields)
-
-    elif isinstance(numba_type, DecimalArrayType):
-        dtype = pa.decimal128(numba_type.precision, numba_type.scale)
-
-    elif isinstance(numba_type, CategoricalArrayType):
-        cat_dtype: PDCategoricalDtype = numba_type.dtype  # type: ignore
-        dtype = pa.dictionary(
-            _numba_to_pyarrow_type(cat_dtype.int_type)[0],
-            _numba_to_pyarrow_type(cat_dtype.elem_type)[0],
-            ordered=False if cat_dtype.ordered is None else cat_dtype.ordered,
-        )
-
-    elif numba_type == boolean_array:
-        dtype = pa.bool_()
-    elif numba_type in (string_array_type, bodo.dict_str_arr_type):
-        dtype = pa.string()
-    elif numba_type == binary_array_type:
-        dtype = pa.binary()
-    elif numba_type == datetime_date_array_type:
-        dtype = pa.date32()
-    elif isinstance(numba_type, bodo.DatetimeArrayType):
-        # See note in _numba_pyarrow_type_map for
-        # bodo.datetime64ns
-        dtype = pa.timestamp("us", "UTC")
-
-    elif (
-        isinstance(numba_type, (types.Array, IntegerArrayType))
-        and numba_type.dtype in _numba_pyarrow_type_map
-    ):
-        dtype = _numba_pyarrow_type_map[numba_type.dtype]  # type: ignore
-    else:
-        raise BodoError(
-            "Conversion from Bodo array type {} to PyArrow type not supported yet".format(
-                numba_type
-            )
-        )
-
-    return dtype, is_nullable_arrow_out(numba_type)
-
-
-def pyarrow_schema(df: DataFrameType) -> pa.Schema:
-    """Construct a PyArrow Schema from Bodo's DataFrame Type"""
-    assert not (
-        df.has_runtime_cols or df.columns is None or df.data is None
-    ), "Building a PyArrow Schema from a DataFrame with Runtime Columns is not Supported"
-
-    fields = []
-    for name, col_type in zip(df.columns, df.data):
-        try:
-            pyarrow_type, nullable = _numba_to_pyarrow_type(col_type)
-        except BodoError as e:
-            raise_bodo_error(e.msg, e.loc)
-
-        fields.append(pa.field(name, pyarrow_type, nullable))
-    return pa.schema(fields)
 
 
 # ----------------------------- Iceberg Write ----------------------------- #

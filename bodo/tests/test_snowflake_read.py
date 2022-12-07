@@ -22,8 +22,12 @@ from bodo.tests.user_logging_utils import (
 from bodo.tests.utils import check_func, get_snowflake_connection_string
 from bodo.utils.typing import BodoWarning
 
+pytest_snowflake = pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
+)
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+
+@pytest_snowflake
 def test_sql_snowflake(memory_leak_check):
     def impl(query, conn):
         df = pd.read_sql(query, conn)
@@ -37,7 +41,7 @@ def test_sql_snowflake(memory_leak_check):
     check_func(impl, (query, conn))
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_performance_warning(memory_leak_check):
     """
     Test that we raise a warning if we detect that the platform is in a different
@@ -79,7 +83,7 @@ def test_sql_snowflake_performance_warning(memory_leak_check):
             os.environ["BODO_PLATFORM_WORKSPACE_REGION"] = old_region_info
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
     """
     Test reading string columns as dictionary-encoded from Snowflake
@@ -91,31 +95,31 @@ def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
 
     @bodo.jit
     def test_impl1(query, conn):
-        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_shipmode"])
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_shipmode"])  # type: ignore
 
     @bodo.jit
     def test_impl2(query, conn):
-        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_shipinstruct"])
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_shipinstruct"])  # type: ignore
 
     @bodo.jit
     def test_impl3(query, conn):
-        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_comment"])
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_comment"])  # type: ignore
 
     @bodo.jit
     def test_impl4(query, conn):
         return pd.read_sql(
             query, conn, _bodo_read_as_dict=["l_shipmode", "l_shipinstruct"]
-        )
+        )  # type: ignore
 
     @bodo.jit
     def test_impl5(query, conn):
         return pd.read_sql(
             query, conn, _bodo_read_as_dict=["l_comment", "l_shipinstruct"]
-        )
+        )  # type: ignore
 
     @bodo.jit
     def test_impl6(query, conn):
-        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_comment", "l_shipmode"])
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_comment", "l_shipmode"])  # type: ignore
 
     @bodo.jit
     def test_impl7(query, conn):
@@ -123,7 +127,7 @@ def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
             query,
             conn,
             _bodo_read_as_dict=["l_shipmode", "l_comment", "l_shipinstruct"],
-        )
+        )  # type: ignore
 
     # 'l_suppkey' shouldn't be read as dictionary encoded since it's not a string column
 
@@ -138,15 +142,15 @@ def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
                 "l_shipinstruct",
                 "l_suppkey",
             ],
-        )
+        )  # type: ignore
 
     @bodo.jit
     def test_impl9(query, conn):
-        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_suppkey"])
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_suppkey"])  # type: ignore
 
     @bodo.jit
     def test_impl10(query, conn):
-        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_suppkey", "l_comment"])
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_suppkey", "l_comment"])  # type: ignore
 
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
@@ -253,7 +257,7 @@ def test_sql_snowflake_bodo_read_as_dict(memory_leak_check):
         )
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requres Azure Pipelines")
+@pytest_snowflake
 @pytest.mark.parametrize("enable_dict_encoding", [True, False])
 def test_sql_snowflake_dict_encoding_enabled(memory_leak_check, enable_dict_encoding):
     """
@@ -276,7 +280,7 @@ def test_sql_snowflake_dict_encoding_enabled(memory_leak_check, enable_dict_enco
 
     @bodo.jit
     def test_impl_with_forced_dict_encode(query, conn):
-        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_comment"])
+        return pd.read_sql(query, conn, _bodo_read_as_dict=["l_comment"])  # type: ignore
 
     db = "SNOWFLAKE_SAMPLE_DATA"
     schema = "TPCH_SF1"
@@ -327,7 +331,7 @@ def test_sql_snowflake_dict_encoding_enabled(memory_leak_check, enable_dict_enco
         )
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_nonascii(memory_leak_check):
     def impl(query, conn):
         df = pd.read_sql(query, conn)
@@ -341,7 +345,7 @@ def test_sql_snowflake_nonascii(memory_leak_check):
     check_func(impl, (query, conn), reset_index=True, sort_output=True)
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_single_column(memory_leak_check):
     """
     Test that loading using a single column from snowflake has a correct result
@@ -367,7 +371,7 @@ def test_sql_snowflake_single_column(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_use_index(memory_leak_check):
     """
     Tests loading using index_col with pd.read_sql from snowflake
@@ -395,7 +399,7 @@ def test_sql_snowflake_use_index(memory_leak_check):
 
 
 # TODO: Re-add this test once [BE-2758] is resolved
-# @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+# @pytest_snowflake
 @pytest.mark.skip(reason="Outdated index returned by pandas")
 def test_sql_snowflake_use_index_dead_table(memory_leak_check):
     """
@@ -423,7 +427,7 @@ def test_sql_snowflake_use_index_dead_table(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['l_partkey']")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_no_index_dead_table(memory_leak_check):
     """
     Tests loading with pd.read_sql from snowflake
@@ -452,7 +456,7 @@ def test_sql_snowflake_no_index_dead_table(memory_leak_check):
         check_logger_msg(stream, "Columns loaded []")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_use_index_dead_index(memory_leak_check):
     """
     Tests loading using index_col with pd.read_sql from snowflake
@@ -479,7 +483,7 @@ def test_sql_snowflake_use_index_dead_index(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_count(memory_leak_check):
     """
     Test that using a sql function without an alias doesn't cause issues with
@@ -502,7 +506,7 @@ def test_sql_snowflake_count(memory_leak_check):
     check_func(impl, (query, conn), check_dtype=False)
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_filter_pushdown(memory_leak_check):
     """
     Test that filter pushdown works properly with a variety of data types.
@@ -614,7 +618,7 @@ def test_sql_snowflake_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_ts_col_date_scalar_filter_pushdown(memory_leak_check):
     """
     Test filter pushdown when reading from a timestamp column and using a date
@@ -691,8 +695,9 @@ def test_ts_col_date_scalar_filter_pushdown(memory_leak_check):
         # Check for filter pushdown
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
+
 @pytest.mark.tz_aware
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_tz_aware_filter_pushdown(memory_leak_check):
     """
     Test that filter pushdown works with a tz aware timestamp +
@@ -743,7 +748,7 @@ def test_tz_aware_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_date_col_ts_scalar_filter_pushdown(memory_leak_check):
     """
     Test that filter pushdown works with a date column and a
@@ -819,7 +824,7 @@ def test_date_col_ts_scalar_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_na_pushdown(memory_leak_check):
     """
     Test that filter pushdown with isna/notna/isnull/notnull works in snowflake.
@@ -907,7 +912,7 @@ def test_sql_snowflake_na_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_isin_pushdown(memory_leak_check):
     """
     Test that filter pushdown with isna/notna/isnull/notnull works in snowflake.
@@ -982,7 +987,7 @@ def test_sql_snowflake_isin_pushdown(memory_leak_check):
         bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION = prev_criterion
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_startswith_endswith_pushdown(memory_leak_check):
     """
     Test that filter pushdown with startswith/endswith works in snowflake.
@@ -1049,7 +1054,7 @@ def test_sql_snowflake_startswith_endswith_pushdown(memory_leak_check):
             check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_sql_snowflake_json_url(memory_leak_check):
     """
     Check running a snowflake query with a dictionary for connection parameters
@@ -1078,7 +1083,7 @@ def test_sql_snowflake_json_url(memory_leak_check):
     check_func(impl, (query, conn), py_output=impl(query, pandas_conn))
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_snowflake_timezones(memory_leak_check):
     """
     Tests trying to read Arrow timestamp columns with
@@ -1123,7 +1128,7 @@ def test_snowflake_timezones(memory_leak_check):
     check_func(test_impl3, (partial_query, conn), check_dtype=False)
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_snowflake_empty_typing(memory_leak_check):
     """
     Tests support for read_sql when typing a query returns an empty DataFrame.
@@ -1139,7 +1144,7 @@ def test_snowflake_empty_typing(memory_leak_check):
     check_func(test_impl, (query, conn))
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_snowflake_empty_filter(memory_leak_check):
     """
     Tests support for read_sql when a query returns an empty DataFrame via filter pushdown.
@@ -1157,7 +1162,7 @@ def test_snowflake_empty_filter(memory_leak_check):
     check_func(test_impl, (query, conn), check_dtype=False)
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_snowflake_dead_node(memory_leak_check):
     """
     Tests when read_sql should be eliminated from the code.
@@ -1182,11 +1187,9 @@ def test_snowflake_dead_node(memory_leak_check):
         check_logger_no_msg(stream, "Columns loaded")
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_snowflake_zero_cols(memory_leak_check):
-    """
-    Tests when read_sql's table should load 0 columns.
-    """
+    """Tests when read_sql's table should load 0 columns."""
 
     def test_impl(query, conn):
         df = pd.read_sql(query, conn)
@@ -1202,12 +1205,10 @@ def test_snowflake_zero_cols(memory_leak_check):
     conn = get_snowflake_connection_string(db, schema)
     # We only load 1 column because Pandas is loading all of the data.
     query = "SELECT L_ORDERKEY FROM LINEITEM"
+
     check_func(
         test_impl,
-        (
-            query,
-            conn,
-        ),
+        (query, conn),
         only_seq=True,
     )
     stream = io.StringIO()

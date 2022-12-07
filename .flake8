@@ -1,9 +1,8 @@
-[flake8]
-
 # Note: Flake8 does not support inline comments, and will sometimes crash after 6.0.0
 # Comments must be on a separate line from now on
 # See https://flake8.pycqa.org/en/latest/user/configuration.html#project-configuration
 
+[flake8]
 max-line-length = 80
 
 # Select the following error codes to report:

@@ -103,13 +103,12 @@ class ArrowDataframeReader {
      * selected fields is nullable. Same length and order as selected_fields.
      */
     ArrowDataframeReader(bool parallel, int64_t tot_rows_to_read,
-                         int* selected_fields, int num_selected_fields,
-                         int* is_nullable)
+                         std::set<int> selected_fields,
+                         std::vector<bool> is_nullable)
         : parallel(parallel),
           tot_rows_to_read(tot_rows_to_read),
-          is_nullable(is_nullable, is_nullable + num_selected_fields),
-          selected_fields(selected_fields,
-                          selected_fields + num_selected_fields) {}
+          is_nullable(is_nullable),
+          selected_fields(selected_fields) {}
 
     virtual ~ArrowDataframeReader() { release_gil(); }
 
@@ -148,6 +147,7 @@ class ArrowDataframeReader {
     std::shared_ptr<arrow::Schema> schema;
     std::vector<bool> is_nullable;
     std::set<int> selected_fields;
+
     // For dictionary encoded columns, load them directly as
     // dictionaries (as in the case of parquet), or convert them
     // to dictionaries from regular string arrays (as in the case
