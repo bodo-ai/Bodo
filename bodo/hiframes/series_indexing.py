@@ -31,7 +31,7 @@ from bodo.hiframes.pd_timestamp_ext import (
     convert_datetime64_to_timestamp,
     convert_numpy_timedelta64_to_pd_timedelta,
     integer_to_dt64,
-    pd_timestamp_type,
+    pd_timestamp_tz_naive_type,
 )
 from bodo.utils.typing import (
     BodoError,
@@ -137,7 +137,10 @@ def overload_series_iat_setitem(I, idx, val):
         # unbox dt64 from Timestamp
         # see unboxing pandas/core/arrays/datetimes.py:
         # DatetimeArray._unbox_scalar
-        if I.stype.dtype == types.NPDatetime("ns") and val == pd_timestamp_type:
+        if (
+            I.stype.dtype == types.NPDatetime("ns")
+            and val == pd_timestamp_tz_naive_type
+        ):
 
             def impl_dt(I, idx, val):  # pragma: no cover
                 s = integer_to_dt64(val.value)
@@ -318,7 +321,10 @@ def overload_series_iloc_setitem(I, idx, val):
             isinstance(idx, types.SliceType) and is_scalar_type(val)
         ):
             # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
-            if I.stype.dtype == types.NPDatetime("ns") and val == pd_timestamp_type:
+            if (
+                I.stype.dtype == types.NPDatetime("ns")
+                and val == pd_timestamp_tz_naive_type
+            ):
 
                 def impl_dt(I, idx, val):  # pragma: no cover
                     s = integer_to_dt64(val.value)
@@ -385,7 +391,10 @@ def overload_series_iloc_setitem(I, idx, val):
             # implementation for bodo.utils.conversion.coerce_to_ndarray
             if is_scalar_type(val):
 
-                if I.stype.dtype == types.NPDatetime("ns") and val == pd_timestamp_type:
+                if (
+                    I.stype.dtype == types.NPDatetime("ns")
+                    and val == pd_timestamp_tz_naive_type
+                ):
 
                     def impl_dt(I, idx, val):  # pragma: no cover
                         s = integer_to_dt64(val.value)
@@ -704,7 +713,7 @@ def overload_series_setitem(S, idx, val):
                     " (which is label-based) not supported yet"
                 )
             # unbox dt64 from Timestamp (TODO: timedelta and other datetimelike)
-            if S.dtype == types.NPDatetime("ns") and val == pd_timestamp_type:
+            if S.dtype == types.NPDatetime("ns") and val == pd_timestamp_tz_naive_type:
 
                 def impl_dt(S, idx, val):  # pragma: no cover
                     s = integer_to_dt64(val.value)

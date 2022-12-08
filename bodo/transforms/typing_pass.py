@@ -4384,7 +4384,7 @@ class TypingTransforms:
             return False
 
         list_set_typ = self.typemap.get(index_def.args[0].name, None)
-        # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
+        # We don't support casting pd_timestamp_tz_naive_type/datetime64 values in arrow, so we avoid
         # filter pushdown in that situation.
         return (
             isinstance(list_set_typ, (types.List, types.Set))

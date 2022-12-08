@@ -35,7 +35,7 @@ import bodo.utils.conversion
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -602,7 +602,7 @@ def overload_sub_operator_datetime_index(lhs, rhs):
     # DatetimeIndex - Timestamp
     if (
         isinstance(lhs, DatetimeIndexType)
-        and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+        and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
     ):
         timedelta64_dtype = np.dtype("timedelta64[ns]")
 
@@ -624,7 +624,7 @@ def overload_sub_operator_datetime_index(lhs, rhs):
     # Timestamp - DatetimeIndex
     if (
         isinstance(rhs, DatetimeIndexType)
-        and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+        and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
     ):
         timedelta64_dtype = np.dtype("timedelta64[ns]")
 
@@ -1371,12 +1371,12 @@ class TimedeltaIndexAttribute(AttributeTemplate):
     # @bound_function("timedelta_index.max", no_unliteral=True)
     # def resolve_max(self, ary, args, kws):
     #     assert not kws
-    #     return signature(pd_timestamp_type, *args)
+    #     return signature(pd_timestamp_tz_naive_type, *args)
 
     # @bound_function("timedelta_index.min", no_unliteral=True)
     # def resolve_min(self, ary, args, kws):
     #     assert not kws
-    #     return signature(pd_timestamp_type, *args)
+    #     return signature(pd_timestamp_tz_naive_type, *args)
 
 
 make_attribute_wrapper(TimedeltaIndexType, "data", "_data")
@@ -3601,7 +3601,7 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
         I, "DatetimeIndex.get_loc"
     )
-    if key == pd_timestamp_type:
+    if key == pd_timestamp_tz_naive_type:
         key = bodo.datetime64ns
     if key == pd_timedelta_type:
         key = bodo.timedelta64ns
@@ -4065,7 +4065,7 @@ def overload_index_map(I, mapper, na_action=None):
     # getitem returns Timestamp for dt_index (TODO: pd.Timedelta when available)
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(I, "DatetimeIndex.map")
     if dtype == types.NPDatetime("ns"):
-        dtype = pd_timestamp_type
+        dtype = pd_timestamp_tz_naive_type
     if dtype == types.NPTimedelta("ns"):
         dtype = pd_timedelta_type
     if isinstance(dtype, bodo.hiframes.pd_categorical_ext.PDCategoricalDtype):
@@ -4170,7 +4170,7 @@ def create_binary_op_overload(op):
                 "  arr = bodo.utils.conversion.coerce_to_array(lhs)\n"
             )
             if rhs in [
-                bodo.hiframes.pd_timestamp_ext.pd_timestamp_type,
+                bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type,
                 bodo.hiframes.pd_timestamp_ext.pd_timedelta_type,
             ]:
                 func_text += (
@@ -4198,7 +4198,7 @@ def create_binary_op_overload(op):
                 "  arr = bodo.utils.conversion.coerce_to_array(rhs)\n"
             )
             if lhs in [
-                bodo.hiframes.pd_timestamp_ext.pd_timestamp_type,
+                bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type,
                 bodo.hiframes.pd_timestamp_ext.pd_timedelta_type,
             ]:
                 func_text += (

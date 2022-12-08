@@ -352,7 +352,7 @@ def pd_to_datetime_error_checked(
     the success flag evaluates to True, then the paired value is the correctly parsed timestamp, otherwise  the paired value is a dummy timestamp.
     """
 
-    with numba.objmode(ret_val="pd_timestamp_type", success_flag="bool_"):
+    with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
         ret_val = pd.Timestamp(0)
 

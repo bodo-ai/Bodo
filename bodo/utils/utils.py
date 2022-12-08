@@ -988,7 +988,7 @@ def tuple_list_to_array(A, data, elem_type):
     )
     func_text = "def impl(A, data, elem_type):\n"
     func_text += "  for i, d in enumerate(data):\n"
-    if elem_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
+    if elem_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
         func_text += "    A[i] = bodo.utils.conversion.unbox_if_timestamp(d)\n"
     else:
         func_text += "    A[i] = d\n"

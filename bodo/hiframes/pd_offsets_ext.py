@@ -31,7 +31,7 @@ from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
     get_days_in_month,
-    pd_timestamp_type,
+    pd_timestamp_tz_naive_type,
     tz_has_transition_times,
 )
 from bodo.libs import hdatetime_ext
@@ -200,7 +200,7 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
         return impl
 
     # rhs is a timestamp
-    if lhs == month_begin_type and rhs == pd_timestamp_type:
+    if lhs == month_begin_type and rhs == pd_timestamp_tz_naive_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             year, month, day = calculate_month_begin_date(
@@ -235,7 +235,7 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
 
     # rhs is the offset
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
+        lhs in [datetime_datetime_type, pd_timestamp_tz_naive_type, datetime_date_type]
         and rhs == month_begin_type
     ):
 
@@ -399,7 +399,7 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
         return impl
 
     # rhs is a timestamp
-    if lhs == month_end_type and rhs == pd_timestamp_type:
+    if lhs == month_end_type and rhs == pd_timestamp_tz_naive_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             year, month, day = calculate_month_end_date(
@@ -434,7 +434,7 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
 
     # rhs is the offset
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
+        lhs in [datetime_datetime_type, pd_timestamp_tz_naive_type, datetime_date_type]
         and rhs == month_end_type
     ):
 
@@ -1046,7 +1046,7 @@ def overload_add_operator_date_offset_type(lhs, rhs):
     These will be reused to implement arrays.
     """
     # rhs is a timestamp
-    if lhs == date_offset_type and rhs == pd_timestamp_type:
+    if lhs == date_offset_type and rhs == pd_timestamp_tz_naive_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             ts = relative_delta_addition(lhs, rhs)
@@ -1069,7 +1069,7 @@ def overload_add_operator_date_offset_type(lhs, rhs):
 
     # offset is the rhs
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
+        lhs in [datetime_datetime_type, pd_timestamp_tz_naive_type, datetime_date_type]
         and rhs == date_offset_type
     ):
 

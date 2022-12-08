@@ -973,7 +973,7 @@ class SeriesPass:
         if rhs.fn == operator.sub and (
             is_dt64_series_typ(typ1)
             and (
-                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                 or typ2 == datetime_timedelta_type
                 or typ2 == datetime_datetime_type
                 or is_timedelta64_series_typ(typ2)
@@ -982,7 +982,7 @@ class SeriesPass:
             or (
                 is_dt64_series_typ(typ2)
                 and (
-                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                     or typ1 == datetime_datetime_type
                 )
             )
@@ -1037,14 +1037,14 @@ class SeriesPass:
         if rhs.fn in cmp_ops and (
             is_dt64_series_typ(typ1)
             and (
-                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                 or typ2 == string_type
                 or bodo.utils.typing.is_overload_constant_str(typ2)
             )
             or (
                 is_dt64_series_typ(typ2)
                 and (
-                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                     or typ1 == string_type
                     or bodo.utils.typing.is_overload_constant_str(typ1)
                 )
@@ -1093,11 +1093,11 @@ class SeriesPass:
         if rhs.fn == operator.sub and (
             (
                 isinstance(typ1, DatetimeIndexType)
-                and typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                and typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
             )
             or (
                 isinstance(typ2, DatetimeIndexType)
-                and typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                and typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
             )
         ):
             impl = bodo.hiframes.pd_index_ext.overload_sub_operator_datetime_index(
