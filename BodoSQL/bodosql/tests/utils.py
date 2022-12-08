@@ -927,10 +927,6 @@ def _check_query_equal(
 
     passed = 1
     n_ranks = bodo.get_size()
-    # print("BODO")
-    # print(bodosql_output)
-    # print("SPARK")
-    # print(expected_output)
     # only rank 0 should check if gatherv() called on output
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
@@ -1279,6 +1275,9 @@ def get_equivalent_spark_agg_query(query):
     )
     spark_query = re.sub(
         "VARIANCE_SAMP\\(([a-zA-Z0-9-_]+)\\)", "VAR_SAMP(\\1)", spark_query
+    )
+    spark_query = re.sub(
+        "CAST\\(([a-zA-Z0-9-_]+) AS VARCHAR\\)", "CAST(\\1 AS STRING)", spark_query
     )
 
     return spark_query
