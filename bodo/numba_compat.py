@@ -3190,7 +3190,7 @@ def resolve_number___call__(self, classty):
             bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
                 val1, "numpy.datetime64"
             )
-            if val1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
+            if val1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
                 if not is_overload_constant_str(val2):
                     raise_bodo_error(
                         "datetime64(): 'units' must be a 'str' specifying 'ns'"

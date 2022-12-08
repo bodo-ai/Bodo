@@ -133,7 +133,7 @@ class PandasTimestampType(types.Type):
         super(PandasTimestampType, self).__init__(name=name)
 
 
-pd_timestamp_type = PandasTimestampType()
+pd_timestamp_tz_naive_type = PandasTimestampType()
 
 
 def check_tz_aware_unsupported(val, func_name):
@@ -343,7 +343,7 @@ def init_timestamp(
         return ts._getvalue()
 
     if is_overload_none(tz):
-        typ = pd_timestamp_type
+        typ = pd_timestamp_tz_naive_type
     elif is_overload_constant_str(tz):
         typ = PandasTimestampType(get_overload_const_str(tz))
     elif is_overload_constant_int(tz):
@@ -589,7 +589,7 @@ def overload_pd_timestamp(
     if ts_input == bodo.string_type or is_overload_constant_str(ts_input):
         # just call Pandas in this case since the string parsing code is complex and
         # handles several possible cases
-        types.pd_timestamp_type = pd_timestamp_type
+        types.pd_timestamp_tz_naive_type = pd_timestamp_tz_naive_type
 
         if is_overload_none(tz):
             tz_val = None
@@ -1066,7 +1066,7 @@ def str_2d(a):  # pragma: no cover
 @overload(str, no_unliteral=True)
 def ts_str_overload(a):
     # isoformat omits nanosecond values, see BE-1407
-    if a == pd_timestamp_type:
+    if a == pd_timestamp_tz_naive_type:
         return lambda a: a.isoformat(" ")
 
 
@@ -1600,7 +1600,7 @@ def datetime_date_arr_to_dt64_arr(arr):  # pragma: no cover
     return res
 
 
-types.pd_timestamp_type = pd_timestamp_type
+types.pd_timestamp_tz_naive_type = pd_timestamp_tz_naive_type
 
 
 @register_jitable
@@ -1620,7 +1620,7 @@ def to_datetime_scalar(
     """call pd.to_datetime() with scalar value 'a'
     separate call to avoid adding extra basic blocks to user function for simplicity
     """
-    with numba.objmode(t="pd_timestamp_type"):
+    with numba.objmode(t="pd_timestamp_tz_naive_type"):
         t = pd.to_datetime(
             a,
             errors=errors,
@@ -2297,13 +2297,13 @@ def create_timestamp_cmp_op_overload(op):
             return lambda lhs, rhs: op(lhs.value, rhs.value)
 
         # Timestamp/dt64
-        if lhs == pd_timestamp_type and rhs == bodo.datetime64ns:
+        if lhs == pd_timestamp_tz_naive_type and rhs == bodo.datetime64ns:
             return lambda lhs, rhs: op(
                 bodo.hiframes.pd_timestamp_ext.integer_to_dt64(lhs.value), rhs
             )  # pragma: no cover
 
         # dt64/Timestamp
-        if lhs == bodo.datetime64ns and rhs == pd_timestamp_type:
+        if lhs == bodo.datetime64ns and rhs == pd_timestamp_tz_naive_type:
             return lambda lhs, rhs: op(
                 lhs, bodo.hiframes.pd_timestamp_ext.integer_to_dt64(rhs.value)
             )  # pragma: no cover
@@ -2370,7 +2370,7 @@ def overload_freq_methods(method):
             func_text += "    return pd.Timedelta(unit_value * np.int64(np.{}(td.value / unit_value)))\n".format(
                 method
             )
-        elif td == pd_timestamp_type:
+        elif td == pd_timestamp_tz_naive_type:
             if method == "ceil":
                 func_text += (
                     "    value = td.value + np.remainder(-td.value, unit_value)\n"
@@ -2468,7 +2468,7 @@ def overload_sub_operator_timestamp(lhs, rhs):
 
         return impl
 
-    if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
+    if lhs == pd_timestamp_tz_naive_type and rhs == pd_timestamp_tz_naive_type:
 
         def impl_timestamp(lhs, rhs):  # pragma: no cover
             return convert_numpy_timedelta64_to_pd_timedelta(lhs.value - rhs.value)
@@ -2518,7 +2518,7 @@ def overload_add_operator_timestamp(lhs, rhs):
 def timestamp_min(lhs, rhs):
     check_tz_aware_unsupported(lhs, f"Timestamp.min()")
     check_tz_aware_unsupported(rhs, f"Timestamp.min()")
-    if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
+    if lhs == pd_timestamp_tz_naive_type and rhs == pd_timestamp_tz_naive_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs if lhs < rhs else rhs
@@ -2530,7 +2530,7 @@ def timestamp_min(lhs, rhs):
 def timestamp_max(lhs, rhs):
     check_tz_aware_unsupported(lhs, f"Timestamp.max()")
     check_tz_aware_unsupported(rhs, f"Timestamp.max()")
-    if lhs == pd_timestamp_type and rhs == pd_timestamp_type:
+    if lhs == pd_timestamp_tz_naive_type and rhs == pd_timestamp_tz_naive_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return lhs if lhs > rhs else rhs
@@ -2570,7 +2570,7 @@ def now_impl():  # pragma: no cover
     Untyped pass replaces pd.Timestamp.now() with this call since class methods are
     not supported in Numba's typing
     """
-    with numba.objmode(d="pd_timestamp_type"):
+    with numba.objmode(d="pd_timestamp_tz_naive_type"):
         d = pd.Timestamp.now()
     return d
 
@@ -2695,7 +2695,9 @@ _install_pd_timestamp_unsupported()
 
 
 @lower_builtin(
-    numba.core.types.functions.NumberClass, pd_timestamp_type, types.StringLiteral
+    numba.core.types.functions.NumberClass,
+    pd_timestamp_tz_naive_type,
+    types.StringLiteral,
 )
 def datetime64_constructor(context, builder, sig, args):
     def datetime64_constructor_impl(a, b):

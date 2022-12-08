@@ -52,7 +52,7 @@ from bodo.hiframes.pd_index_ext import (
 )
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType
@@ -6376,7 +6376,7 @@ class DataFrameTupleIterator(types.SimpleIteratorType):
 def _get_series_dtype(arr_typ):
     # values of datetimeindex are extracted as Timestamp
     if arr_typ == types.Array(types.NPDatetime("ns"), 1, "C"):
-        return pd_timestamp_type
+        return pd_timestamp_tz_naive_type
     return arr_typ.dtype
 
 
@@ -6479,7 +6479,7 @@ def iternext_itertuples(context, builder, sig, args, result):
             arr_ptr = getattr(iterobj, "array{}".format(i))
 
             if arr_typ == types.Array(types.NPDatetime("ns"), 1, "C"):
-                getitem_sig = signature(pd_timestamp_type, arr_typ, types.intp)
+                getitem_sig = signature(pd_timestamp_tz_naive_type, arr_typ, types.intp)
                 val = context.compile_internal(
                     builder,
                     lambda a, i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(
