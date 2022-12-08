@@ -1842,6 +1842,36 @@ def test_tz_aware_month_case(memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.parametrize(
+    "time_zone",
+    [
+        pytest.param("US/Pacific", id="pacific"),
+        pytest.param("GMT", id="gmt"),
+        pytest.param("Australia/Sydney", id="sydney", marks=pytest.mark.slow),
+        pytest.param(None, id="no_tz", marks=pytest.mark.slow),
+    ],
+)
+def test_tz_aware_week_quarter(time_zone, memory_leak_check):
+    query = "SELECT WEEK(A), QUARTER(A) from table1"
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2020", end="1/1/2025", freq="H", tz=time_zone
+            ).to_series()
+        }
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame({0: df.A.dt.isocalendar().week, 1: df.A.dt.quarter})
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+        check_names=False,
+    )
+
+
 def test_tz_aware_weekofyear(memory_leak_check):
     query = "SELECT WEEKOFYEAR(A) as m from table1"
     df = pd.DataFrame(
