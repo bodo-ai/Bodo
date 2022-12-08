@@ -3117,8 +3117,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
         String.format(
             "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(%s, %d)", inputVar, node.getIndex());
     if (isSingleRow) {
+      // Float types don't have a nullable vs non-nullable array. Until we have nullable
+      // support we treat NaN as NULL, so this keeps things consistent
+      SqlTypeName typeName = node.getType().getSqlTypeName();
+      boolean is_floating_type =
+          typeName.equals(SqlTypeName.FLOAT)
+              || typeName.equals(SqlTypeName.DOUBLE)
+              || typeName.equals(SqlTypeName.DECIMAL);
       // If we are processing inside CASE we need to track nulls and used columns
-      ctx.getNeedNullCheckColumns().add(colName);
+      if (node.getType().isNullable() || is_floating_type) {
+        // Only track nulls if the type is nullable.
+        ctx.getNeedNullCheckColumns().add(colName);
+      }
       ctx.getUsedColumns().add(node.getIndex());
       // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value accesses
       // (e.g. T1_1[i])
