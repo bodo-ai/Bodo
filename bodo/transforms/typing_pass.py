@@ -906,7 +906,9 @@ class TypingTransforms:
         # This is important because if we don't delete the filter and an error
         # in the code requires a transformation we will wrongfully believe the IR
         # has changed. See test_merge_into_filter_compilation_errors.py::test_requires_transform.
-        self.changed = is_ir_reordered or filters_changed or (not keep_filter)
+        self.changed = self.changed or (
+            is_ir_reordered or filters_changed or (not keep_filter)
+        )
         # Return the updates to the working body so we can modify blocks that may not
         # be in the working body yet.
         return new_working_body
