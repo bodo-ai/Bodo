@@ -751,34 +751,29 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
 def _rank_detect_ties(arr):
     """
     Helper for forming 'obs', or tie-detecting array, for the rank function.
-    Assumes that arr is sorted.
-    TODO: can be optimized using the fact that all NAs appear consecutively
+    It may not necessarily be sorted, and nulls might not be grouped together,
+    if the rank is based on sorting by multiple columns.
     """
 
     def impl(arr):  # pragma: no cover
-        sorted_nas = np.nonzero(pd.isna(arr))[0]
-        eq_arr_na = arr[1:] != arr[:-1]
-        # eq_arr will be a nullable boolean array rather than a non-nullable boolean and thus must be converted
-        eq_arr_na[pd.isna(eq_arr_na)] = False
-        # astype turns NAs to False but it is done explicitly here in case this changes
-        eq_arr = eq_arr_na.astype(np.bool_)
-        # the first NA entry should be marked True
-        obs = np.concatenate((np.array([True]), eq_arr))
-        if sorted_nas.size:
-            # here we set the first NA entry to True, the repeated NAs (rep_NAs) to False, and
-            # the entry succeeding the NAs (if na_option='first') to True
-            first_na, rep_nas = sorted_nas[0], sorted_nas[1:]
-            # TODO: optimize since all nas will be consecutive, could use make an optimization for non-rank_sql
-            # using first_valid_index() (and?) last_valid_index()
-            obs[first_na] = True
-            if rep_nas.size:
-                obs[rep_nas] = False
-                if (rep_nas[-1] + 1) < obs.size:
-                    # entry suceeding NAs, if there are repeated NAs, when na_option='first'
-                    obs[rep_nas[-1] + 1] = True
-            elif (first_na + 1) < obs.size:
-                # entry suceeding NAs, if there are no repeated NAs, when na_option='first'
-                obs[first_na + 1] = True
+        n = len(arr)
+        obs = bodo.utils.utils.alloc_type(n, np.bool_, (-1,))
+        # The first row is a distinct entry
+        obs[0] = True
+        is_null = pd.isna(arr)
+        for i in range(1, len(arr)):
+            # If the current row and previous row are both null, then the
+            # current row is not a distinct entry
+            if is_null[i] and is_null[i - 1]:
+                obs[i] = False
+            # Otherwise, if the current row or the previous row are null, then
+            # they are distinct entries
+            elif is_null[i] or is_null[i - 1]:
+                obs[i] = True
+            # Otherwise, we check if the current row is distinct via the
+            # != operator
+            else:
+                obs[i] = arr[i] != arr[i - 1]
         return obs
 
     return impl

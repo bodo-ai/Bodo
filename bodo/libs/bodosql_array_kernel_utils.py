@@ -1056,9 +1056,12 @@ def gen_windowed(
             for i in range(n):
                 bodo.libs.array_kernels.setna(res, i)
         elif lower_bound <= -n+1 and n-1 <= upper_bound:
-            # <CONSTANT_BLOCK>
-            for i in range(n):
-                res[i] = constant_value
+            if S.count() == 0:
+                # << EMPTY_BLOCK >>
+            else:
+                # << CONSTANT_BLOCK >>
+                for i in range(n):
+                    res[i] = constant_value
         else:
             # Keep track of the first/last index of the current window,
             # the number of non-null entries in the window, and the current
@@ -1140,14 +1143,21 @@ def gen_windowed(
     func_text += "         bodo.libs.array_kernels.setna(res, i)\n"
     if constant_block != None:
         func_text += "   elif lower_bound <= -n+1 and n-1 <= upper_bound:\n"
+        func_text += "      if S.count() == 0:\n"
+        func_text += "         for i in range(n):\n"
+        func_text += (
+            "\n".join([" " * 12 + line[empty_indentation:] for line in empty_lines])
+            + "\n"
+        )
+        func_text += "      else:\n"
         func_text += (
             "\n".join(
-                [" " * 6 + line[constant_indentation:] for line in constant_lines]
+                [" " * 9 + line[constant_indentation:] for line in constant_lines]
             )
             + "\n"
         )
-        func_text += "      for i in range(n):\n"
-        func_text += "         res[i] = constant_value\n"
+        func_text += "         for i in range(n):\n"
+        func_text += "            res[i] = constant_value\n"
     func_text += "   else:\n"
     func_text += "      exiting = lower_bound\n"
     func_text += "      entering = upper_bound\n"

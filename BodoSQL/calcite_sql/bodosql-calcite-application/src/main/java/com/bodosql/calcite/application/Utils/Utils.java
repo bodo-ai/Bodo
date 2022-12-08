@@ -31,6 +31,13 @@ public class Utils {
     return bodoIndent;
   }
 
+  /** Function used to add multiple indents to a string buffer all at once */
+  public static void addIndent(StringBuilder funcText, int numIndents) {
+    for (int i = 0; i < numIndents; i++) {
+      funcText = funcText.append(bodoIndent);
+    }
+  }
+
   /**
    * Function to return the baseDummyColumnName. This should be extended with a counter if an
    * operation requires multiple dummy columns. NOTE: We assume dummy columns do not persist between

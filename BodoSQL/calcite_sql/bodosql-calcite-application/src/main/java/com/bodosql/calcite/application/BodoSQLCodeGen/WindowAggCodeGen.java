@@ -1,7 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.AggHelpers.getColumnAggCall;
 import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToNullableBodoArray;
+import static com.bodosql.calcite.application.Utils.Utils.addIndent;
 import static com.bodosql.calcite.application.Utils.Utils.assertWithErrMsg;
 import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
@@ -14,15 +14,24 @@ import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Pair;
 
+/*
+ * For explanations of how/why this file has been refactored recently:
+ * https://bodo.atlassian.net/wiki/spaces/B/pages/1164836876/Fusing+window+function+calls+with+the+same+window
+ */
+
 public class WindowAggCodeGen {
 
   // We define several variable names statically, for greater clarity when generating the function
   // text
 
-  // The name of the column used for performing the reverse sort
+  // Variable names for the dummy strings to use when there is no upper/lower bound
+  public static final String unboundedLowerBound = "UNUSABLE_LOWER_BOUND";
+  public static final String unboundedUpperBound = "UNUSABLE_UPPER_BOUND";
+
+  // The name of the column used for performing the sort reversion
   // This column should always be present in the input dataframe,
   // Though it will be pruned fairly early on if it is not needed.
-  public static final String reverseSortColumName = "ORIG_POSITION_COL";
+  public static final String revertSortColumnName = "ORIG_POSITION_COL";
 
   // The variable name for the input to the apply function
   private static final String argumentDfName = "argument_df";
@@ -31,163 +40,1191 @@ public class WindowAggCodeGen {
   private static final String argumentDfOriginalIndex = "argument_df_orig_index";
 
   // The variable name which stores the length of the argument dataframe
-  private static final String argumentDfLen = "argument_df_len";
+  private static final String partitionLength = "argument_df_len";
 
   private static final String indent = getBodoIndent();
 
-  static HashMap<String, String> windowOptimizedKernels;
+  // Which function names correspond to a kernel made with gen_windowed
+  static List<String> windowOptimizedKernels = new ArrayList<String>();
 
+  // A mapping of window function names to a single function that can be
+  // used to directly compute the result of the window function of interest
+  static HashMap<String, String> windowCodeExpressions = new HashMap<String, String>();
+
+  // A mapping of window function names to a method that can be
+  // used to directly compute the result of the window function of interest
+  static HashMap<String, String> windowMethods = new HashMap<String, String>();
+
+  // Note: $SUM0 is included in addition to SUM because of some Calcite quirks
   static {
-    windowOptimizedKernels = new HashMap<String, String>();
-    windowOptimizedKernels.put("SUM", "sum");
-    windowOptimizedKernels.put("SUM0", "sum");
-    windowOptimizedKernels.put("COUNT", "count");
-    windowOptimizedKernels.put("AVG", "avg");
-    windowOptimizedKernels.put("MEDIAN", "median");
-    windowOptimizedKernels.put("MODE", "mode");
-    windowOptimizedKernels.put("RATIO_TO_REPORT", "ratio_to_report");
+    // Window functions that have a sliding-window kernel
+    windowOptimizedKernels.add("SUM");
+    windowOptimizedKernels.add("$SUM0");
+    windowOptimizedKernels.add("COUNT");
+    windowOptimizedKernels.add("AVG");
+    windowOptimizedKernels.add("MEDIAN");
+    windowOptimizedKernels.add("MODE");
+    windowOptimizedKernels.add("RATIO_TO_REPORT");
+
+    // Window functions that have a dedicated kernel
+    windowCodeExpressions.put("SUM", "windowed_sum");
+    windowCodeExpressions.put("$SUM0", "windowed_sum");
+    windowCodeExpressions.put("COUNT", "windowed_count");
+    windowCodeExpressions.put("AVG", "windowed_avg");
+    windowCodeExpressions.put("MEDIAN", "windowed_median");
+    windowCodeExpressions.put("MODE", "windowed_mode");
+    windowCodeExpressions.put("RATIO_TO_REPORT", "windowed_ratio_to_report");
+    windowCodeExpressions.put("CONDITIONAL_CHANGE_EVENT", "change_event");
+
+    // Window functions that are still implemented via taking slices in a loop
+    // and calling a Pandas method on the result
+    windowMethods.put("MIN", ".min()");
+    windowMethods.put("MAX", ".max()");
+    windowMethods.put("STDDEV", ".std()");
+    windowMethods.put("STDDEV_SAMP", ".std()");
+    windowMethods.put("STDDEV_POP", ".std(ddof=0)");
+    windowMethods.put("VARIANCE", ".var()");
+    windowMethods.put("VARIANCE_SAMP", ".var()");
+    windowMethods.put("VAR_SAMP", ".var()");
+    windowMethods.put("VARIANCE_POP", ".var(ddof=0)");
+    windowMethods.put("VAR_POP", ".var(ddof=0)");
+    windowMethods.put("COUNT_IF", ".sum()");
   }
 
   /**
-   * Generates a function definition to be used in a groupby apply to perform a SQL Lead/Lag
-   * aggregation.
+   * Generates a function definition with the specified name, to be used in a groupby apply to
+   * perform one or more SQL windowed aggregations. All aggregations handled by a single call are
+   * assumed to have the same PARTITION BY / ORDER BY clauses, but everything else (function,
+   * arguments, window frame) can vary from call to call.
    *
-   * <p>This function should only ever be called from generateWindowedAggFn, as
-   * generateWindowedAggFn takes care some code generation common to both Lead/Lag aggregations, and
-   * the other aggregations (Namely, the definitions for argumentDfOriginalIndex and argumentDfLen)
-   *
-   * @param funcText The existing funcText, supplied by the first part of generateWindowedAggFn
-   * @param argsListList the List of arguments to each of the aggregations being performed
-   * @param expectedOutputColumns The list of string column names in which to store the results of
-   *     the aggregations
-   * @param sortByCols The string representing the list of string column names by which to sort
-   * @param ascendingList The string representing the list of boolean values, which determining if
-   *     the columns in sortByCols will be sorted ascending or descending
+   * @param fn_name The name of the Window Function
+   * @param sortByCols A string representing a list of string column names, to be used by
+   *     df.sort_values, or empty string, if no sorting is necessary, or, in the case of RANK, will
+   *     be the columns to be ranked in question
+   * @param ascendingList A string representing a list of string boolean, to be used by
+   *     df.sort_values, or empty string, if no sorting is necessary
    * @param NAPositionList The string representing the list of string values, which determine null
    *     ordering for each column being sorted. This is empty if no sorting is necessary.
-   * @param isLead Is the aggregation a LEAD, as opposed to a lag.
-   * @return the generated function text
+   * @param sortByList The list of string columns names, to be used when the each column name string
+   *     is needed (e.g. generateRankFns uses them to fetch the appropriate columns).
+   * @param aggs The kinds of the windowed aggregations to perform
+   * @param aggNames The string names of the windowed aggregations to perform
+   * @param typs List of types for the output column, 1 per window function.
+   * @param upperBoundedFlags List of whether each call has an upper bound
+   * @param upperBoundExprs String expressions that represent the "shift" amount for each window's
+   *     upper bound
+   * @param lowerBoundedFlags List of whether each call has an lower bound
+   * @param lowerBoundExprs String expressions that represent the "shift" amount for each window's
+   *     lower bound
+   * @param zeroExpr String that matches a window expression when the value is 0. This is included
+   *     to enable passing types in the window exprs.
+   * @param argsListList the List of arguments to each of the aggregations being performed
+   * @return The generated function text, and a list of output column names, where the indexes of
+   *     the output column list correspond to the indexes for the input list for each aggregation's
+   *     arguments.
    */
-  private static String generateLeadLagAggFn(
-      StringBuilder funcText,
-      final List<List<WindowedAggregationArgument>> argsListList,
-      final List<String> expectedOutputColumns,
+  public static Pair<String, List<String>> generateWindowedAggFn(
+      final String fn_name,
       final String sortByCols,
       final String ascendingList,
       final String NAPositionList,
-      final boolean isLead,
-      final boolean isRespectNulls) {
+      final List<String> sortByList,
+      final List<SqlKind> aggs,
+      final List<String> aggNames,
+      final List<SqlTypeName> typs,
+      final List<Boolean> lowerBoundedFlags,
+      final List<Boolean> upperBoundedFlags,
+      final List<String> lowerBoundExprs,
+      final List<String> upperBoundExprs,
+      final String zeroExpr,
+      final List<List<WindowedAggregationArgument>> argsListList,
+      final List<Boolean> isRespectNulls) {
 
-    // Sort the input dataframe, if needed.
+    // Buffer where we will store the text for the closure
+    StringBuilder funcText = new StringBuilder();
+
+    // List where we will store the names of the arrays that contain the result
+    // for each window function call
+    List<String> colsToAddToOutputDf = new ArrayList<>();
+
+    // Whether or not these window function calls require a sort
+    boolean hasOrder = !sortByCols.equals("");
+
+    /* First, initialize the list of expected output column names. We expect a number
+     * of output columns equal to the number of aggregations we are performing,
+     * which is equal to the length of argsListList
+     */
+    List<String> returnedDfOutputCols = new ArrayList<>();
+    for (int i = 0; i < argsListList.size(); i++) {
+      returnedDfOutputCols.add("AGG_OUTPUT_" + i);
+    }
+
+    /* Add the definition line for the closure. Looks as follows:
+     *
+     * def closure_name(argument_df):
+     */
+    addIndent(funcText, 1);
+    funcText.append("def ").append(fn_name).append("(" + argumentDfName + "):\n");
+
+    /* Before doing anything else, filter the partition columns out of the input dataframe. This is
+     * done to enable Bodo to know that these columns are unused within this function
+     * and the aggregation columns. Looks as follows:
+     *
+     * argument_df = argument_df.lloc[:, ["AGG_OP_0", "AGG_OP_1", "ORIG_POSITION_COL", "ASC_COL_0"]]
+     */
+    pruneColumns(funcText, argsListList, hasOrder, sortByCols);
+
+    /* In the majority of cases (some exceptions like ROW NUMBER) we need to keep
+     * track of the original index of the input dataframe. This is needed due to
+     * some niche Pandas behavior where the rows of the output dataframe from this
+     * function are returned to their original locations in the dataframe that is
+     * the output of the overall groupby apply if the index of the output dataframe
+     * is the same as the input dataframe. Otherwise, the output of the overall
+     * groupby apply will be multi-indexed. Looks as follows:
+     *
+     * argument_df_orig_index = argument_df.index
+     */
+    addIndent(funcText, 2);
+    funcText
+        .append(argumentDfOriginalIndex)
+        .append(" = ")
+        .append(argumentDfName)
+        .append(".index\n");
+
+    /* There are also several locations where we need the length of the input
+     * dataframe. While we could omit this definition for certain aggregations,
+     * it simplifies codegen if we always include it at the start of the function
+     * definition. Looks as follows:
+     *
+     * argument_df_len = len(argument_df)
+     */
+    addIndent(funcText, 2);
+    funcText.append(partitionLength).append(" = len(").append(argumentDfName).append(")\n");
+
+    /* Sort the entries in partition by the ORDER BY columns. Looks as follows:
+     *
+     * sorted_df = argument_df.sort_values(by=["ASC_COL_0", ], ascending=[True, ], na_position=["last", ])
+     */
     funcText.append(
         sortLocalDfIfNeeded(
             argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
 
-    List<String> arraysToSort = new ArrayList<>();
+    /* Keep track of whether or not we will need to revert the sort at the very
+     * end. Each time we perform an aggregation, we set this to true UNLESS there
+     * are no sort columns or the aggregation is an optimized first_value/last_value.
+     *
+     * We do not revert the data sorting unless we encounter a call to a window
+     * function that requires the output data to be in the same order as the
+     * input data, such as SUM.
+     */
+    Boolean needsToRevertSort = false;
 
-    // Repeat the procedure for each lead/lag call
-    for (Integer i = 0; i < argsListList.size(); i++) {
+    // Store information about loop-based aggregations so that they can be
+    // processed all at once by a single for-loop that obtains a single slice
+    List<String> loopAggNames = new ArrayList<String>();
+    List<List<WindowedAggregationArgument>> loopAggArgs =
+        new ArrayList<List<WindowedAggregationArgument>>();
+    List<String> loopAggOutputs = new ArrayList<String>();
+    List<String> loopAggLowerBounds = new ArrayList<String>();
+    List<String> loopAggUpperBounds = new ArrayList<String>();
+    List<Boolean> loopAggLowerBoundeds = new ArrayList<Boolean>();
+    List<Boolean> loopAggUpperBoundeds = new ArrayList<Boolean>();
 
-      List<WindowedAggregationArgument> curArgsList = argsListList.get(i);
-      int num_arguments = curArgsList.size();
-      // Lead/Lag expects one required argument, a column, and two optional arguments, an offset,
-      // and
-      // an offset, and a default value
-      assertWithErrMsg(
-          1 <= num_arguments && num_arguments <= 3,
-          "Lead/Lag expects between 1 and 3 arguments, instead got: " + curArgsList.size());
+    // Loop over each aggregation in the closure and map it to the correct
+    // helper logic
+    for (int i = 0; i < aggs.size(); i++) {
+      SqlKind agg = aggs.get(i);
+      String aggName = aggNames.get(i);
+      List<WindowedAggregationArgument> argsList = argsListList.get(i);
 
-      WindowedAggregationArgument aggColArg = curArgsList.get(0);
+      // Create easy-to-use string variables for the upper and lower bounds by
+      // mapping UNBOUNDED XXX to offsets that match the size of the current
+      // partition.
+      Boolean upperBounded = upperBoundedFlags.get(i);
+      Boolean lowerBounded = lowerBoundedFlags.get(i);
+      String lower = lowerBoundExprs.get(i);
+      String upper = upperBoundExprs.get(i);
+      if (lower.equals(unboundedLowerBound)) {
+        lower = "-" + partitionLength;
+      }
+      if (upper.equals(unboundedUpperBound)) {
+        upper = partitionLength;
+      }
 
-      assertWithErrMsg(aggColArg.isDfCol(), "Lead/Lag's first argument must be a column");
+      // Handle count(*) as a special case of the loop-based functions. This is
+      // a special case because there are no arguments provided to the window
+      // function and COUNT(*) does not require the use of slicing
+      if (aggName == "COUNT" && argsList.size() == 0) {
+        loopAggNames.add("COUNT(*)");
+        loopAggArgs.add(null);
+        loopAggOutputs.add("arr" + String.valueOf(i));
+        colsToAddToOutputDf.add("arr" + String.valueOf(i));
+        loopAggLowerBounds.add(lower);
+        loopAggUpperBounds.add(upper);
+        loopAggLowerBoundeds.add(lowerBounded);
+        loopAggUpperBoundeds.add(upperBounded);
+        needsToRevertSort |= hasOrder;
+        continue;
+      }
 
-      String aggColName = aggColArg.getExprString();
+      // Case on the aggregation and redirect to the appropriate code-generating
+      // helper function (COUNT(*) should have already been handled seperately)
+      switch (aggName) {
 
-      // Default shift amount is 1
-      String shiftAmount = "1";
-      String fillValue = "";
-
-      if (num_arguments >= 2) {
-        WindowedAggregationArgument shiftAmountArg = curArgsList.get(1);
-        assertWithErrMsg(
-            !shiftAmountArg.isDfCol(),
-            "Lead/Lag expects the offset to be a scalar literal, if it is provided. Got: "
-                + curArgsList.toString());
-
-        shiftAmount = shiftAmountArg.getExprString();
-
-        // Add the default fill value (if it's present)
-        if (num_arguments == 3) {
-          WindowedAggregationArgument fillValueArg = curArgsList.get(2);
-          // I don't know if this is handled within Calcite or not, so throwing it as a Bodo error
-          if (fillValueArg.isDfCol()) {
+          /* Generate the code for a RANK call. Looks as follows:
+           *
+           * arr0  = bodo.libs.bodosql_array_kernels.rank_sql((bodo.hiframes.pd_series_ext.get_series_data(sorted_df["ASC_COL_0"]), ), method="min", pct=False)
+           */
+        case "RANK":
+        case "DENSE_RANK":
+        case "PERCENT_RANK":
+        case "CUME_DIST":
+          if (sortByCols == "") {
             throw new BodoSQLCodegenException(
-                "Error! Only scalar fill value is supported for LEAD/LAG");
+                "The OVER clause of ranking window functions must include an ORDER BY clause.");
           }
-          fillValue = fillValueArg.getExprString();
-        }
+          needsToRevertSort |= hasOrder;
+          generateRankFns(funcText, argsList, sortByList, agg, colsToAddToOutputDf, i);
+          break;
+
+          /* Generate the code for a ROW_NUMBER call. Looks as follows:
+           *
+           * arr0 = np.arange(1, argument_df_len + 1)
+           */
+        case "ROW_NUMBER":
+          needsToRevertSort |= hasOrder;
+          generateRowNumberFn(funcText, argsList, colsToAddToOutputDf, i);
+          break;
+
+          /* Generate the code for a NTILE call. Looks as follows:
+           *
+           * arr0 = bodosql.libs.ntile_helper.ntile_helper(argument_df_len, np.int32(10))
+           */
+        case "NTILE":
+          needsToRevertSort |= hasOrder;
+          generateNtileFn(funcText, argsList, colsToAddToOutputDf, i);
+          break;
+
+          /* Generate the code for a LEAD/LAG call. Looks as follows:
+           *
+           * arr0 = sorted_df["AGG_OP_0"].shift(1)
+           */
+        case "LAG":
+        case "LEAD":
+          needsToRevertSort |= hasOrder;
+          generateLeadLagAggFn(
+              funcText,
+              argsList,
+              agg == SqlKind.LEAD,
+              isRespectNulls.get(i),
+              colsToAddToOutputDf,
+              i);
+          break;
+
+          /* Generate the code for a CONDITIONAL_TRUE_EVENT call. Looks as follows:
+           *
+           * arr0 = sorted_df["AGG_OP_0"].astype('uint32').cumsum()
+           */
+        case "CONDITIONAL_TRUE_EVENT":
+          needsToRevertSort |= hasOrder;
+          generateTrueEventFn(funcText, argsList, colsToAddToOutputDf, i);
+          break;
+
+          // TODO [BE-3948]: try to fuse these loops
+        case "FIRST_VALUE":
+        case "LAST_VALUE":
+        case "ANY_VALUE":
+        case "NTH_VALUE":
+          if (!isRespectNulls.get(i)) {
+            String errMsg = "IGNORE_NULLS not yet supported for " + aggName;
+            throw new BodoSQLCodegenException(errMsg);
+          }
+          /* If doing FIRST_VALUE/ANY_VALUE on a prefix window, or LAST_VALUE
+           * on a suffix window, the optimized verison can be used which
+           * does NOT require the sorting to be reverted at the end.
+           * Looks as follows:
+           *
+           * target_arr0 = bodo.hiframes.pd_series_ext.get_series_data(sorted_df["AGG_OP_0"])
+           * if bodo.libs.array_kernels.isna(target_arr0, 0):
+           *   arr0 = np.empty(argument_df_len, dtype="datetime64[ns]")
+           *   for j in range(len(arr0)):
+           *     bodo.libs.array_kernels.setna(arr0, j)
+           * else:
+           *   val0 = bodo.utils.conversion.unbox_if_timestamp(target_arr0[0])
+           *   arr0 = np.empty(argument_df_len, dtype="datetime64[ns]")
+           *   for j in range(len(arr0)):
+           *     arr0[j] = val0
+           */
+          if (((aggName == "FIRST_VALUE" || aggName == "ANY_VALUE")
+                  && !lowerBounded
+                  && upper.equals(zeroExpr))
+              || (aggName == "LAST_VALUE" && !upperBounded && lower.equals(zeroExpr))) {
+            generateOptimizedFirstLast(
+                funcText,
+                typs,
+                partitionLength,
+                lowerBounded,
+                upperBounded,
+                lower,
+                upper,
+                aggName,
+                argsList,
+                colsToAddToOutputDf,
+                i);
+
+            /* Otherwise, generate the FIRST_VALUE/LAST_VALUE/ANY_VALUE/NTH_VALUE
+             * normally using a loop. Looks as follows:
+             *
+             * n = max(1, np.int32(3))
+             * arr0 = np.empty(argument_df_len, dtype="datetime64[ns]")
+             * for i in range(argument_df_len):
+             *   cur_lower_bound = 0
+             *   cur_upper_bound = max(0, i + np.int64(0) + 1)
+             *   if cur_lower_bound >= cur_upper_bound or cur_lower_bound + n - 1 >= argument_df_len or (cur_upper_bound - cur_lower_bound) < n:
+             *     bodo.libs.array_kernels.setna(arr0, i)
+             *   else:
+             *     arr0[i] = bodo.utils.conversion.unbox_if_timestamp(sorted_df["AGG_OP_0"].iloc[cur_lower_bound + n - 1])
+             */
+          } else {
+            needsToRevertSort |= hasOrder;
+            generateFirstLastNth(
+                funcText,
+                typs,
+                partitionLength,
+                lowerBounded,
+                upperBounded,
+                lower,
+                upper,
+                aggName,
+                argsList,
+                colsToAddToOutputDf,
+                i);
+          }
+          break;
+
+          // These functions are handled via a slice and a Pandas method. Add
+          // them to the relevent lists so that they can be dealt with en-masse
+          // at the end.
+        case "MIN":
+        case "MAX":
+        case "STDDEV":
+        case "STDDEV_POP":
+        case "STDDEV_SAMP":
+        case "VARIANCE":
+        case "VARIANCE_SAMP":
+        case "VARIANCE_POP":
+        case "VAR_SAMP":
+        case "VAR_POP":
+        case "COUNT_IF":
+          needsToRevertSort |= hasOrder;
+          loopAggNames.add(aggName);
+          loopAggArgs.add(argsList);
+          loopAggOutputs.add("arr" + String.valueOf(i));
+          colsToAddToOutputDf.add("arr" + String.valueOf(i));
+          loopAggLowerBounds.add(lower);
+          loopAggUpperBounds.add(upper);
+          loopAggLowerBoundeds.add(lowerBounded);
+          loopAggUpperBoundeds.add(upperBounded);
+          break;
+
+          /* All the remaining window functions have a dedicated kernel. Looks
+           * as follows:
+           *
+           * arr0 = bodo.libs.bodosql_array_kernels.windowed_mode(sorted_df["AGG_OP_0"], -argument_df_len, np.int64(0))
+           */
+        default:
+          needsToRevertSort |= hasOrder;
+          if (!windowCodeExpressions.containsKey(aggName)) {
+            throw new BodoSQLCodegenException("Unrecognized window function: " + aggName);
+          } else if (argsList.size() != 1) {
+            throw new BodoSQLCodegenException(aggName + " requires exactly 1 input");
+          }
+          generateSimpleWindowFnCode(
+              funcText,
+              argsList,
+              windowCodeExpressions.get(aggName),
+              windowOptimizedKernels.contains(aggName),
+              lower,
+              upper,
+              colsToAddToOutputDf,
+              i);
       }
-
-      if (isLead) {
-        shiftAmount = "(-" + shiftAmount + ")";
-      }
-      String aggColRef = "sorted_df[" + makeQuoted(aggColName) + "]";
-      funcText
-          .append(indent)
-          .append(indent)
-          .append(aggColRef + " = " + aggColRef + ".shift(" + shiftAmount);
-
-      if (!fillValue.equals("")) {
-        funcText.append(", fill_value=").append(fillValue);
-      }
-
-      funcText.append(")\n");
-
-      String arrName = "arr" + String.valueOf(i);
-
-      funcText
-          .append(indent)
-          .append(indent)
-          .append(arrName + " = sorted_df[" + makeQuoted(aggColName) + "]\n");
-
-      arraysToSort.add(arrName);
     }
 
-    Pair<String, String> additionalFunctextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(
-            arraysToSort, "sorted_df", expectedOutputColumns, !sortByCols.equals(""));
+    /* Generate the code for all of the loop-based window aggregations. Looks
+     * as follows:
+     *
+     * for i in range(argument_df_len):
+     *    cur_lower_bound = 0
+     *    cur_upper_bound = max(0, i + np.int64(0) + 1)
+     *    slice0 = sorted_df["AGG_OP_0"].iloc[:cur_upper_bound]
+     *    if slice0.count() == 0:
+     *      bodo.libs.array_kernels.setna(arr0, i)
+     *    else:
+     *      arr0[i] = bodo.utils.conversion.unbox_if_timestamp(slice0.min())
+     *    ...
+     */
+    if (loopAggNames.size() > 0) {
+      generateLoopBasedWindowFn(
+          funcText,
+          typs,
+          partitionLength,
+          loopAggLowerBoundeds,
+          loopAggUpperBoundeds,
+          loopAggLowerBounds,
+          loopAggUpperBounds,
+          colsToAddToOutputDf,
+          loopAggNames,
+          loopAggArgs,
+          loopAggOutputs,
+          zeroExpr);
+    }
 
-    funcText.append(additionalFunctextAndOutputDfName.getKey());
-    String outputDfName = additionalFunctextAndOutputDfName.getValue();
+    /* If the sort-reverting flag is true, revert the sort. Afterwards, shove
+     * everything into the output DataFrame. Looks as follows:
+     *
+     * _tmp_sorted_df = pd.DataFrame({"AGG_OUTPUT_0": arr0, "ORIG_POSITION_COL": sorted_df["ORIG_POSITION_COL"]}).sort_values(by=["ORIG_POSITION_COL"], ascending=[True])
+     * retval = pd.DataFrame({"AGG_OUTPUT_0": _tmp_sorted_df["AGG_OUTPUT_0"], }, index = argument_df_orig_index)
+     * return retval
+     */
+    Pair<String, String> out =
+        revertSortLocalDfIfNeeded(
+            colsToAddToOutputDf, "sorted_df", returnedDfOutputCols, needsToRevertSort);
+    String new_func_text = out.getKey();
+    funcText.append(new_func_text);
+    String dfName = out.getValue();
+    addIndent(funcText, 2);
+    funcText.append("return ").append(dfName).append("\n");
 
-    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
-
-    return funcText.toString();
+    return new Pair<>(funcText.toString(), returnedDfOutputCols);
   }
 
   /**
-   * Helper function that generate the dataframe to be returned by the groupby apply lambda
-   * function. This helper function also reverse sorts the array containing the returned data, if
-   * needs be.
+   * Generates the code for FIRST_VALUE / LAST_VALUE / ANY_VALUE / NTH_VALUE in non-optimized cases.
+   *
+   * @param funcText String buffer where the output closure's codegen is being stored
+   * @param typs Types of the input columns
+   * @param partitionLength String representation of the length of the partition
+   * @param lowerBounded Is there a lower bound?
+   * @param upperBounded Is there an upper bound?
+   * @param lowerBound String representation of the lower bound
+   * @param upperBound String representation of the upper bound
+   * @param aggName Which window funciton (out of FIRST/LAST/ANY/NTH) is being called
+   * @param argsList List of all inputs to the current window function call
+   * @param arraysToSort List that the output array name should be added to
+   * @param i Which window aggregation (within the closure) are we dealing with
+   */
+  private static void generateFirstLastNth(
+      StringBuilder funcText,
+      final List<SqlTypeName> typs,
+      final String partitionLength,
+      final boolean lowerBounded,
+      final boolean upperBounded,
+      final String lowerBound,
+      final String upperBound,
+      final String aggName,
+      final List<WindowedAggregationArgument> argsList,
+      final List<String> arraysToSort,
+      final int i) {
+
+    String ilocIndex;
+
+    // Which index is the target value exctracted from
+    if (aggName == "FIRST_VALUE" || aggName == "ANY_VALUE") {
+      assertWithErrMsg(argsList.size() >= 1, aggName + " requires 1 argument");
+      ilocIndex = "cur_lower_bound";
+    } else if (aggName == "LAST_VALUE") {
+      assertWithErrMsg(argsList.size() >= 1, aggName + " requires 1 argument");
+      ilocIndex = "cur_upper_bound - 1";
+    } else {
+      assertWithErrMsg(argsList.size() >= 1, aggName + " requires 2 arguments");
+      ilocIndex = "cur_lower_bound + n - 1";
+      addIndent(funcText, 2);
+      funcText.append("n = max(1, " + argsList.get(1).getExprString() + ")\n");
+    }
+
+    assertWithErrMsg(argsList.get(0).isDfCol(), aggName + " requires a column input");
+
+    String array_name = "arr" + String.valueOf(i);
+    WindowedAggregationArgument arg0 = argsList.get(0);
+    String arg0ColName = arg0.getExprString();
+
+    // Build the array to store the output
+    addIndent(funcText, 2);
+    funcText.append(array_name).append(" = ");
+    funcText.append(sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
+
+    // Loop over each entry and calculate the current upper/lower bound of the window
+    // (handling defaults appropriately)
+    addIndent(funcText, 2);
+    funcText.append("for i in range(" + partitionLength + "):\n");
+    if (lowerBounded) {
+      addIndent(funcText, 3);
+      funcText.append("cur_lower_bound = max(0, i + " + lowerBound + ")\n");
+    } else {
+      addIndent(funcText, 3);
+      funcText.append("cur_lower_bound = 0\n");
+    }
+    if (upperBounded) {
+      addIndent(funcText, 3);
+      funcText.append("cur_upper_bound = max(0, i + " + upperBound + " + 1)\n");
+    } else {
+      addIndent(funcText, 3);
+      funcText.append("cur_upper_bound = " + partitionLength + " - 1\n");
+    }
+
+    // Add the condition to check whether or not the window frame is out
+    // of bounds
+    addIndent(funcText, 3);
+    funcText
+        .append("if cur_lower_bound >= cur_upper_bound or ")
+        .append(ilocIndex)
+        .append(" >= ")
+        .append(partitionLength);
+
+    // For NTH value, also make sure that the window is wide enough to have
+    // at least n values inside of it
+    if (aggName == "NTH_VALUE") {
+      funcText.append(" or (cur_upper_bound - cur_lower_bound) < n");
+    }
+    funcText.append(":\n");
+
+    // If its out of bounds (or too small), then the output is NULL
+    addIndent(funcText, 4);
+    funcText.append("bodo.libs.array_kernels.setna(" + array_name + ", i)\n");
+
+    // Otherwise, extract the corresponding location of the inptu array
+    // and place it in index i of the output array
+    addIndent(funcText, 3);
+    funcText.append("else:\n");
+    addIndent(funcText, 4);
+    funcText
+        .append(array_name + "[i] = bodo.utils.conversion.unbox_if_timestamp(sorted_df[")
+        .append(makeQuoted(arg0ColName))
+        .append("].iloc[")
+        .append(ilocIndex)
+        .append("])\n");
+
+    // Register the output array
+    arraysToSort.add(array_name);
+  }
+
+  /**
+   * Generates the code for FIRST_VALUE / LAST_VALUE/ ANY_VALUE in optimized cases (i.e. the prefix
+   * frame for first/any or the suffix frame for last)
+   *
+   * @param funcText String buffer where the output closure's codegen is being stored
+   * @param typs Types of the input columns
+   * @param partitionLength String representation of the length of the partition
+   * @param lowerBounded Is there a lower bound?
+   * @param upperBounded Is there an upper bound?
+   * @param lowerBound String representation of the lower bound
+   * @param upperBound String representation of the upper bound
+   * @param aggName Which window funciton (out of FIRST/LAST/ANY/NTH) is being called
+   * @param argsList List of all inputs to the current window function call
+   * @param arraysToSort List that the output array name should be added to
+   * @param i Which window aggregation (within the closure) are we dealing with
+   */
+  private static void generateOptimizedFirstLast(
+      StringBuilder funcText,
+      final List<SqlTypeName> typs,
+      final String partitionLength,
+      final boolean lowerBounded,
+      final boolean upperBounded,
+      final String lowerBound,
+      final String upperBound,
+      final String aggName,
+      final List<WindowedAggregationArgument> argsList,
+      final List<String> arraysToSort,
+      final int i) {
+
+    assertWithErrMsg(argsList.size() == 1, aggName + " requires 1 input");
+    assertWithErrMsg(argsList.get(0).isDfCol(), aggName + " requires a column input");
+
+    SqlTypeName type_name = typs.get(i);
+    String array_name = "arr" + String.valueOf(i);
+    WindowedAggregationArgument arg0 = argsList.get(0);
+    String arg0ColName = arg0.getExprString();
+
+    // Keep track of which value is copied to the rest of the array
+    String target_idx;
+    if (aggName == "LAST_VALUE") {
+      target_idx = partitionLength + " - 1";
+    } else {
+      target_idx = "0";
+    }
+
+    StringBuilder na_arr_call = new StringBuilder();
+    StringBuilder fill_op = new StringBuilder();
+
+    // Generate the code to fill the entire array with nulls
+    if (SqlTypeName.CHAR_TYPES.contains(type_name)) {
+      // We generate a dummy array for gen_na_str_array_lens because we have an optimized path
+      // when length is 0.
+      addIndent(na_arr_call, 3);
+      na_arr_call.append(
+          String.format(
+              "arr%d = bodo.libs.str_arr_ext.gen_na_str_array_lens(%s, 0, np.empty(1,"
+                  + " np.int64))\n",
+              i, partitionLength));
+    } else {
+      if (SqlTypeName.BINARY_TYPES.contains(type_name)) {
+        addIndent(na_arr_call, 3);
+        na_arr_call.append(
+            String.format(
+                "arr%d = bodo.libs.str_arr_ext.pre_alloc_binary_array(%s, 0)\n",
+                i, partitionLength));
+      } else {
+        addIndent(na_arr_call, 3);
+        na_arr_call.append(
+            String.format(
+                "arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, type_name)));
+      }
+      addIndent(na_arr_call, 3);
+      na_arr_call.append(String.format("for j in range(len(arr%d)):\n", i));
+      addIndent(na_arr_call, 4);
+      na_arr_call.append(String.format("bodo.libs.array_kernels.setna(arr%d, j)\n", i));
+    }
+
+    // Generate the code to copy a single value when it is not null
+    if (SqlTypeName.BINARY_TYPES.contains(type_name)) {
+      addIndent(fill_op, 3);
+      fill_op.append(String.format("val%d = target_arr%d[%s]\n", i, i, target_idx));
+    } else if (type_name != SqlTypeName.CHAR && type_name != SqlTypeName.VARCHAR) {
+      // Strings have an optimized path that don't require any intermediate allocations
+      // so we don't generate a val.
+      addIndent(fill_op, 3);
+      fill_op.append(
+          String.format(
+              "val%d = bodo.utils.conversion.unbox_if_timestamp(target_arr%d[%s])\n",
+              i, i, target_idx));
+    }
+    if (SqlTypeName.CHAR_TYPES.contains(type_name)) {
+      // We generate a dummy array for gen_na_str_array_lens because we have an optimized path
+      // when length is 0.
+      addIndent(fill_op, 3);
+      fill_op.append(
+          String.format(
+              "arr%d = bodo.libs.str_arr_ext.pre_alloc_string_array(%s,"
+                  + " bodo.libs.str_arr_ext.get_str_arr_item_length(target_arr%d, %s) *"
+                  + " %s)\n",
+              i, partitionLength, i, target_idx, partitionLength));
+    } else if (SqlTypeName.BINARY_TYPES.contains(type_name)) {
+      addIndent(fill_op, 3);
+      fill_op.append(
+          String.format(
+              "arr%d = bodo.libs.str_arr_ext.pre_alloc_binary_array(%s, len(val%d) * %s)\n",
+              i, partitionLength, i, partitionLength));
+    } else {
+      addIndent(fill_op, 3);
+      fill_op.append(
+          String.format("arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, type_name)));
+    }
+    addIndent(fill_op, 3);
+    fill_op.append(String.format("for j in range(len(arr%d)):\n", i));
+    if (SqlTypeName.CHAR_TYPES.contains(type_name)) {
+      addIndent(fill_op, 4);
+      fill_op.append(
+          String.format(
+              "bodo.libs.str_arr_ext.get_str_arr_item_copy(arr%d, j, target_arr%d, %s)\n",
+              i, i, target_idx));
+    } else {
+      addIndent(fill_op, 4);
+      fill_op.append(String.format("arr%d[j] = val%d\n", i, i));
+    }
+
+    // Generate the logic that extracts the first/last value, checks if
+    // its null, and executes one of the two branches generated above
+    addIndent(funcText, 2);
+    funcText.append(
+        String.format(
+            "target_arr%d = bodo.hiframes.pd_series_ext.get_series_data(sorted_df[%s])\n",
+            i, makeQuoted(arg0ColName)));
+    addIndent(funcText, 2);
+    funcText.append(
+        String.format("if bodo.libs.array_kernels.isna(target_arr%d, %s):\n", i, target_idx));
+    funcText.append(na_arr_call);
+    addIndent(funcText, 2);
+    funcText.append("else:\n");
+    funcText.append(fill_op);
+
+    arraysToSort.add(array_name);
+  }
+
+  /**
+   * Helper function that handles window aggregations implemented with loops and methods.
+   *
+   * @param funcText String buffer where the output closure's codegen is being stored
+   * @param typs Types of the input columns
+   * @param partitionLength String representation of the length of the partition
+   * @param lowerBoundedFlags For each window function call: is there a lower bound?
+   * @param upperBoundedFlags For each window function call: Is there an upper bound?
+   * @param lowerBounds String representation of the lower bound
+   * @param upperBounds String representation of the upper bound
+   * @param aggNames List of the names of the window functions being called
+   * @param argsLists List of lists of arguments to each window function call
+   * @param arraysToSort List that the output array name should be added to
+   * @param aggOutputs List of names of arrays to store each window funciton output
+   * @param zeroExpr String representation of 0
+   *     <p>TODO [BE-3949]: allow slice-reusing
+   */
+  private static void generateLoopBasedWindowFn(
+      StringBuilder funcText,
+      final List<SqlTypeName> typs,
+      final String partitionLength,
+      final List<Boolean> lowerBoundedFlags,
+      final List<Boolean> upperBoundedFlags,
+      final List<String> lowerBounds,
+      final List<String> upperBounds,
+      final List<String> arraysToSort,
+      final List<String> aggNames,
+      final List<List<WindowedAggregationArgument>> argsLists,
+      final List<String> aggOutputs,
+      final String zeroExpr) {
+
+    // Generate all of the arrays that will store the outputs
+    for (int i = 0; i < aggNames.size(); i++) {
+
+      addIndent(funcText, 2);
+      funcText.append(aggOutputs.get(i)).append(" = ");
+      switch (aggNames.get(i)) {
+
+          // The functions that always have a float output
+        case "STDDEV":
+        case "STDDEV_POP":
+        case "STDDEV_SAMP":
+        case "VAR_POP":
+        case "VAR_SAMP":
+        case "VARIANCE_SAMP":
+        case "VARIANCE_POP":
+          funcText.append("np.empty(" + partitionLength + ", dtype=np.float64)\n");
+          break;
+
+          // The functions that always have a (positive) integer output
+        case "COUNT(*)":
+          funcText.append("np.empty(" + partitionLength + ", dtype=np.uint32)\n");
+          break;
+
+          // If MIN/MAX, verify that the inputs are not strings
+        case "MAX":
+        case "MIN":
+          if (SqlTypeName.STRING_TYPES.contains(typs.get(i))) {
+            throw new BodoSQLCodegenException(
+                "Windowed aggregation function "
+                    + aggNames.get(i)
+                    + " not supported for SQL type "
+                    + typs.get(i).toString());
+          }
+
+          // Everything but the always float/int categories has the same
+          // dtype as the input array
+        default:
+          funcText.append(sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
+      }
+    }
+
+    addIndent(funcText, 2);
+    funcText.append("for i in range(" + partitionLength + "):\n");
+
+    for (int i = 0; i < aggNames.size(); i++) {
+
+      Boolean lowerBounded = lowerBoundedFlags.get(i);
+      Boolean upperBounded = upperBoundedFlags.get(i);
+      String lowerBound = lowerBounds.get(i);
+      String upperBound = upperBounds.get(i);
+
+      // Create cur_lower/upperBounds variables which will be used for slicing.
+      // We can omit creating bounds in the unbounded case, and use the empty string
+      if (!lowerBounded) {
+        addIndent(funcText, 3);
+        funcText.append("cur_lower_bound = 0\n");
+      } else {
+        addIndent(funcText, 3);
+        funcText.append("cur_lower_bound = max(0, i + " + lowerBound + ")\n");
+      }
+      if (!upperBounded) {
+        addIndent(funcText, 3);
+        funcText.append("cur_upper_bound = " + partitionLength + "\n");
+      } else {
+        addIndent(funcText, 3);
+        funcText.append("cur_upper_bound = max(0, i + " + upperBound + " + 1)\n");
+      }
+
+      // Handle count seperately by taking the difference between the upper
+      // bound and the lower bound
+      if (aggNames.get(i) == "COUNT(*)") {
+
+        addIndent(funcText, 3);
+        funcText
+            .append(aggOutputs.get(i))
+            .append("[i] = max(0, cur_upper_bound - cur_lower_bound)\n");
+        continue;
+      }
+
+      assertWithErrMsg(argsLists.get(i).size() == 1, aggNames.get(i) + " requires 1 input");
+      assertWithErrMsg(
+          argsLists.get(i).get(0).isDfCol(), aggNames.get(i) + " requires a column input");
+
+      WindowedAggregationArgument arg0 = argsLists.get(i).get(0);
+      String arg0ColName = arg0.getExprString();
+
+      String sliceName = "slice" + String.valueOf(i);
+      // TODO: port over as many of these functions as possible to sliding
+      // window kernels since calculating the slice each time is expensive
+      addIndent(funcText, 3);
+      funcText
+          .append(sliceName + " = sorted_df[")
+          .append(makeQuoted(arg0ColName))
+          .append("].iloc[");
+
+      // TODO: if we ever want to allow non-scalar aggregation bounds,
+      // this will need to be updated
+
+      // Add the slice bounds. I.e., if we have a lower bound and an upper
+      // bound: xxx.iloc[cur_lower_bound:cur_upper_bound]
+      if (lowerBounded) {
+        funcText.append("cur_lower_bound");
+      }
+      funcText.append(":");
+      if (upperBounded) {
+        funcText.append("cur_upper_bound");
+      }
+      funcText.append("]\n");
+
+      // For all slice-based functions (except COUNT_IF), an empty or all-null
+      // window corresponds to a null output. COUNT_IF just outputs zero in this
+      // case, so we do not generate this check for that function.
+      if (!aggNames.get(i).equals("COUNT_IF")) {
+        // If there is not at least 1 non-null entry in the slice, set the output to NULL
+        addIndent(funcText, 3);
+        funcText.append("if " + sliceName + ".count() == 0:\n");
+        addIndent(funcText, 4);
+        funcText.append("bodo.libs.array_kernels.setna(" + aggOutputs.get(i) + ", i)\n");
+        addIndent(funcText, 3);
+        funcText.append("else:\n");
+        addIndent(funcText, 1);
+      }
+
+      // Call the Pandas method on the slice and store the output
+      String columnAggCall = sliceName + windowMethods.get(aggNames.get(i));
+      addIndent(funcText, 3);
+      funcText
+          .append(aggOutputs.get(i))
+          .append("[i] = ")
+          .append("bodo.utils.conversion.unbox_if_timestamp(")
+          .append(columnAggCall)
+          .append(")\n");
+    }
+  }
+
+  /**
+   * Generates the code for a LEAD/LAG computation
+   *
+   * @param funcText String buffer where the output closure's codegen is being stored
+   * @param argsList List of all inputs to the current window function call
+   * @param isLead Is this a call to LEAD or LAG
+   * @param isRespectNulls Should nulls be respected or ignored
+   * @param arraysToSort List that the output array name should be added to
+   * @param i Which window aggregation (within the closure) are we dealing with
+   */
+  private static void generateLeadLagAggFn(
+      StringBuilder funcText,
+      final List<WindowedAggregationArgument> argsList,
+      final boolean isLead,
+      final boolean isRespectNulls,
+      final List<String> arraysToSort,
+      final int i) {
+
+    // Lead/Lag expects one required argument (a column) and two optional arguments
+    // (an offset and a default value)
+    int num_arguments = argsList.size();
+    assertWithErrMsg(
+        1 <= num_arguments && num_arguments <= 3,
+        "Lead/Lag expects between 1 and 3 arguments, instead got: " + argsList.size());
+    WindowedAggregationArgument aggColArg = argsList.get(0);
+    assertWithErrMsg(aggColArg.isDfCol(), "Lead/Lag's first argument must be a column");
+
+    String aggColName = aggColArg.getExprString();
+
+    // Default shift amount is 1
+    String shiftAmount = "1";
+    String fillValue = "";
+
+    // If there are 2 (or 3) arguments, use the 2nd argument to extract the shift amount
+    if (num_arguments >= 2) {
+      WindowedAggregationArgument shiftAmountArg = argsList.get(1);
+      assertWithErrMsg(
+          !shiftAmountArg.isDfCol(),
+          "Lead/Lag expects the offset to be a scalar literal, if it is provided. Got: "
+              + argsList.toString());
+
+      shiftAmount = shiftAmountArg.getExprString();
+
+      // Add the default fill value (if it's present)
+      if (num_arguments == 3) {
+        WindowedAggregationArgument fillValueArg = argsList.get(2);
+        // I don't know if this is handled within Calcite or not, so throwing it as a Bodo error
+        if (fillValueArg.isDfCol()) {
+          throw new BodoSQLCodegenException(
+              "Error! Only scalar fill value is supported for LEAD/LAG");
+        }
+        fillValue = fillValueArg.getExprString();
+      }
+    }
+
+    // If using lead, flip the sign
+    if (isLead) {
+      shiftAmount = "(-" + shiftAmount + ")";
+    }
+
+    // Perform the shift operation
+    String aggColRef = "sorted_df[" + makeQuoted(aggColName) + "]";
+    String arrName = "arr" + String.valueOf(i);
+    addIndent(funcText, 2);
+    funcText.append(arrName).append(" = " + aggColRef + ".shift(" + shiftAmount);
+
+    // If there is a default value, provide the extra argument to shift
+    if (!fillValue.equals("")) {
+      funcText.append(", fill_value=").append(fillValue);
+    }
+
+    funcText.append(")\n");
+
+    arraysToSort.add(arrName);
+  }
+
+  /**
+   * Generates the code for a ROW_NUMBER() computation
+   *
+   * @param funcText String buffer where the output closure's codegen is being stored
+   * @param argsList List of all inputs to the current window function call
+   * @param arraysToSort List that the output array name should be added to
+   * @param i Which window aggregation (within the closure) are we dealing with
+   */
+  public static void generateRowNumberFn(
+      StringBuilder funcText,
+      final List<WindowedAggregationArgument> argsList,
+      final List<String> arraysToSort,
+      final int i) {
+
+    assertWithErrMsg(argsList.size() == 0, "ROW_NUMBER takes in no arguments");
+
+    String arrName = "arr" + String.valueOf(i);
+
+    // Generate the row_numbers.
+    addIndent(funcText, 2);
+    funcText.append(arrName).append(" = np.arange(1, " + partitionLength + " + 1)\n");
+
+    arraysToSort.add(arrName);
+  }
+
+  /**
+   * Helper function that handles the CONDITIONAL_TRUE_EVENT window aggregation.
+   *
+   * @param funcText String buffer where the output closure's codegen is being stored
+   * @param argsList List of all inputs to the current window function call
+   * @param arraysToSort List that the output array name should be added to
+   * @param i Which window aggregation (within the closure) are we dealing with
+   */
+  private static void generateTrueEventFn(
+      StringBuilder funcText,
+      final List<WindowedAggregationArgument> argsList,
+      final List<String> arraysToSort,
+      final int i) {
+
+    assertWithErrMsg(argsList.size() == 1, "CONDITIONAL_TRUE_EVENT requires 1 input");
+    assertWithErrMsg(argsList.get(0).isDfCol(), "CONDITIONAL_TRUE_EVENT requires a column input");
+
+    String colName = argsList.get(0).getExprString();
+
+    String arrName = "arr" + String.valueOf(i);
+
+    // Generate the row_numbers.
+    addIndent(funcText, 2);
+    funcText
+        .append(arrName)
+        .append(" = sorted_df[" + makeQuoted(colName) + "].astype('uint32').cumsum()\n");
+
+    arraysToSort.add(arrName);
+  }
+
+  /**
+   * Helper function that handles the RANK window aggregations (except for ROW_NUMBER and NTILE)
+   *
+   * @param funcText String buffer where the output closure's codegen is being stored
+   * @param argsList List of all inputs to the current window function call
+   * @param sortByList Which columns were being used to sort by
+   * @param agg Which rank funciton is being called
+   * @param arraysToSort List that the output array name should be added to
+   * @param i Which window aggregation (within the closure) are we dealing with
+   */
+  private static void generateRankFns(
+      StringBuilder funcText,
+      final List<WindowedAggregationArgument> argsList,
+      final List<String> sortByList,
+      final SqlKind agg,
+      final List<String> arraysToSort,
+      final int i) {
+
+    assertWithErrMsg(argsList.size() == 0, "RANK takes in no arguments");
+
+    String arrName = "arr" + String.valueOf(i);
+
+    // Adjust the method arguments based on which RANK function is being called
+    String methodStr;
+    if (agg == SqlKind.DENSE_RANK) {
+      methodStr = "dense";
+    } else if (agg == SqlKind.CUME_DIST) {
+      methodStr = "max";
+    } else {
+      methodStr = "min";
+    }
+    String pctStr = agg == SqlKind.CUME_DIST ? "True" : "False";
+
+    addIndent(funcText, 2);
+    funcText.append(arrName).append("  = bodo.libs.bodosql_array_kernels.rank_sql((");
+
+    // Add each sorting column to the tuple of arguments
+    for (String col : sortByList) {
+      funcText.append(
+          String.format("bodo.hiframes.pd_series_ext.get_series_data(sorted_df[%s]), ", col));
+    }
+    funcText.append(String.format("), method=\"%s\", pct=%s)", methodStr, pctStr));
+
+    /* If PERCENT_RANK, augment the calculation as follows:
+     *
+     * arr0 = [rank calculation] - 1
+     * if argumentDfLen == 1:
+     *   arr0[:] = 0.0
+     * else:
+     *   arr0 /= (argumentDfLen - 1)
+     *
+     */
+    if (agg == SqlKind.PERCENT_RANK) {
+      funcText.append(" - 1\n");
+      addIndent(funcText, 2);
+      funcText.append("if " + partitionLength + " == 1:\n");
+      addIndent(funcText, 3);
+      funcText.append(arrName).append("[:] = 0.0\n");
+      addIndent(funcText, 2);
+      funcText.append("else:\n");
+      addIndent(funcText, 3);
+      funcText.append(arrName).append(" /= (").append(partitionLength).append(" - 1)\n");
+    } else {
+      funcText.append("\n");
+    }
+
+    arraysToSort.add(arrName);
+  }
+
+  /**
+   * Helper function that handles the NTILE window aggregation.
+   *
+   * @param funcText String buffer where the output closure's codegen is being stored
+   * @param argsList List of all inputs to the current window function call
+   * @param arraysToSort List that the output array name should be added to
+   * @param i Which window aggregation (within the closure) are we dealing with
+   */
+  private static void generateNtileFn(
+      StringBuilder funcText,
+      final List<WindowedAggregationArgument> argsList,
+      final List<String> arraysToSort,
+      final int i) {
+
+    assertWithErrMsg(argsList.size() == 1, "NTILE requires 1 input");
+    assertWithErrMsg(!argsList.get(0).isDfCol(), "NTILE requires a scalar input");
+
+    // Extract how many bins to divide the output into
+    WindowedAggregationArgument numBinsArg = argsList.get(0);
+    String numBins = numBinsArg.getExprString();
+    String arrName = "arr" + String.valueOf(i);
+
+    // Use the helper funciton to generate the corresponding output array
+    addIndent(funcText, 2);
+    funcText
+        .append(arrName)
+        .append(" = bodosql.libs.ntile_helper.ntile_helper(")
+        .append(partitionLength)
+        .append(", ")
+        .append(numBins)
+        .append(")\n");
+
+    arraysToSort.add(arrName);
+  }
+
+  /**
+   * Helper function that handles window aggregations that have dedicated kernels.
+   *
+   * @param funcText String buffer where the output closure's codegen is being stored
+   * @param argsList List of all inputs to the current window function call
+   * @param kernelName What is the name of the kernel function
+   * @param is_window_optimized Is this a sliding-window kernel?
+   * @param lowerBound String representation of the lower bound of the window frame
+   * @param upperBound String representation of the upper bound of the window frame
+   * @param arraysToSort List that the output array name should be added to
+   * @param i Which window aggregation (within the closure) are we dealing with
+   */
+  private static void generateSimpleWindowFnCode(
+      StringBuilder funcText,
+      final List<WindowedAggregationArgument> argsList,
+      final String kernelName,
+      final Boolean is_window_optimized,
+      final String lowerBound,
+      final String upperBound,
+      final List<String> arraysToSort,
+      final int i) {
+
+    assertWithErrMsg(argsList.size() == 1, kernelName.toUpperCase() + " requires 1 input");
+    assertWithErrMsg(
+        argsList.get(0).isDfCol(), kernelName.toUpperCase() + " requires a column input");
+
+    String colName = argsList.get(0).getExprString();
+    String arrName = "arr" + String.valueOf(i);
+
+    // Add the kernel call
+    addIndent(funcText, 2);
+    funcText
+        .append(arrName)
+        .append(" = bodo.libs.bodosql_array_kernels.")
+        .append(kernelName)
+        .append("(sorted_df[")
+        .append(makeQuoted(colName))
+        .append("]");
+
+    if (is_window_optimized) {
+      funcText.append(", ").append(lowerBound).append(", ").append(upperBound);
+    }
+
+    funcText.append(")\n");
+
+    arraysToSort.add(arrName);
+  }
+
+  /**
+   * Helper function that generates the dataframe to be returned by the groupby apply lambda
+   * function. This helper function also revert the sorts of the array containing the returned data,
+   * if needs be.
    *
    * @param arrsToSort the list arrays that needs to be sorted/returned
    * @param sorted_df_name the name of the dataframe to be sorted/returned. Must contain
-   *     reverseSortColumName if a reverse sort is needed.
+   *     revertSortColumnName if a sort reversion is needed.
    * @param expectedOutputColNames the list of string column names in which to store each of the
    *     arrays in the returned dataframe
-   * @param needsReverseSort Does the above array need to be sorted before return. We need to sort
-   *     the returned array if we had to sort the input data.
+   * @param needsRevertSort Does the above array need to be revert sorted before return. We need to
+   *     revert the sort of the returned array if we had to sort the input data.
    * @return returns a string that contains the input columns stored in the specified output column
-   *     names, reverse sorted if needed.
+   *     names, with the sort reverted (if necessary).
    */
-  private static Pair<String, String> reverseSortLocalDfIfNeeded(
+  private static Pair<String, String> revertSortLocalDfIfNeeded(
       final List<String> arrsToSort,
       final String sorted_df_name,
       final List<String> expectedOutputColNames,
-      final boolean needsReverseSort) {
+      final boolean needsRevertSort) {
 
-    // The number of arrays to sort should be equivalent to the number of expected output columns
-    assert arrsToSort.size() == expectedOutputColNames.size();
+    assertWithErrMsg(
+        arrsToSort.size() == expectedOutputColNames.size(),
+        "The number of arrays to sort should be equivalent to the number of expected output"
+            + " columns");
 
     // TODO: if arrsToSort.size() == 1, we could return an array instead of a dataframe.
     // see BS-616
@@ -196,8 +1233,9 @@ public class WindowAggCodeGen {
     List<String> outputCols = new ArrayList<>();
     // If we didn't have to do a sort on the input data, we can just return the arrays wrapped in a
     // dataframe.
-    if (!needsReverseSort) {
-      funcText.append(indent).append(indent).append("retval = pd.DataFrame({");
+    if (!needsRevertSort) {
+      addIndent(funcText, 2);
+      funcText.append("retval = pd.DataFrame({");
       for (int i = 0; i < arrsToSort.size(); i++) {
         outputCols.add(expectedOutputColNames.get(i));
         funcText.append(
@@ -206,9 +1244,10 @@ public class WindowAggCodeGen {
 
       funcText.append("}, index = " + argumentDfOriginalIndex + ")\n");
     } else {
-      // If we did need to do a sort on the dataframe, we need to sort the output column(s) before
-      // returning them.
-      funcText.append(indent).append(indent).append("_tmp_sorted_df = pd.DataFrame({");
+      // If we did need to do a sort on the dataframe, we need to revert the sort
+      // on the output column(s) before returning them.
+      addIndent(funcText, 2);
+      funcText.append("_tmp_sorted_df = pd.DataFrame({");
       for (int i = 0; i < arrsToSort.size(); i++) {
         String curArr = arrsToSort.get(i);
         funcText.append(makeQuoted(expectedOutputColNames.get(i)) + ": " + curArr + ", ");
@@ -216,17 +1255,18 @@ public class WindowAggCodeGen {
 
       funcText
           .append(
-              makeQuoted(reverseSortColumName)
+              makeQuoted(revertSortColumnName)
                   + ": "
                   + sorted_df_name
                   + "["
-                  + makeQuoted(reverseSortColumName)
+                  + makeQuoted(revertSortColumnName)
                   + "]})")
           .append(".sort_values(by=[")
-          .append(makeQuoted(reverseSortColumName))
+          .append(makeQuoted(revertSortColumnName))
           .append("], ascending=[True])\n");
 
-      funcText.append(indent).append(indent).append("retval = pd.DataFrame({");
+      addIndent(funcText, 2);
+      funcText.append("retval = pd.DataFrame({");
 
       for (int i = 0; i < arrsToSort.size(); i++) {
         funcText.append(
@@ -240,6 +1280,63 @@ public class WindowAggCodeGen {
     }
 
     return new Pair<>(funcText.toString(), "retval");
+  }
+
+  /**
+   * Generates the code to prune the columnns of the input DataFrame
+   *
+   * @param funcText the string builder where we store the closure
+   * @param argsListList the list of arguments to each window function
+   * @param hasOrder whether or not there is an ORDER BY clause
+   * @param sortByCols the columns we need to sort by, as a string
+   */
+  public static void pruneColumns(
+      final StringBuilder funcText,
+      final List<List<WindowedAggregationArgument>> argsListList,
+      final boolean hasOrder,
+      final String sortByCols) {
+
+    /**
+     * The columns that we need to keep are as follows: If we have a column on which we are
+     * performing an aggregation (IE, MAX(A)), we need to keep that column If we have any columns by
+     * which we need to sort, we need to keep those columns, and the ORIG_POSITION_COL which is
+     * needed for the sort reversion.
+     */
+    StringBuilder kept_cols = new StringBuilder();
+
+    // First, add the aggregation columns to the list of kept columns.
+    for (int i = 0; i < argsListList.size(); i++) {
+
+      // if we have a column argument, it is always the 0-th argument
+      // TODO: update this when we support window functions where this is not the case
+      if (argsListList.get(i).size() > 0 && argsListList.get(i).get(0).isDfCol()) {
+        String colName = argsListList.get(i).get(0).getExprString();
+        kept_cols.append(makeQuoted(colName)).append(", ");
+      }
+    }
+
+    // Add sortbycols, removing the enclosing brackets, and add the original position column,
+    // which is needed for the sort reversion.
+    if (hasOrder) {
+      kept_cols
+          .append(makeQuoted(revertSortColumnName) + ", ")
+          // sortbycols is passed as a string that looks like "['A', 'B', 'C']", so this substring
+          // just removes the outer brackets so that we can add the columns to the new list needed
+          // for the call to loc
+          .append(sortByCols.substring(1, sortByCols.length() - 1));
+    }
+
+    // Drop unneeded columns.
+    addIndent(funcText, 2);
+    if (!kept_cols.toString().equals("")) {
+      funcText.append(
+          argumentDfName + " = " + argumentDfName + ".loc[:, [" + kept_cols.toString() + "]]\n");
+    } else {
+      // In the case that kept_cols is none, we have to do the slicing with iloc, as numba has a
+      // typing error with the
+      // empty column list
+      funcText.append(argumentDfName + " = " + argumentDfName + ".iloc[:, :0]\n");
+    }
   }
 
   /**
@@ -262,21 +1359,15 @@ public class WindowAggCodeGen {
       final String NAPositionList) {
 
     // TODO: performance upgrade
-    // Currently we appending a column (ORIG_COL_POSITION) that keeps track of the original
-    // positions.
-    // Then, in the group by, we sort each of the partitioned dataframes on each rank, before
-    // returning the sorted
-    // dataframe it might be faster to do one sort on the entire data, instead of a sort on each of
-    // the
-    // partitioned dataframes.
-
-    assert !sortByCols.equals("");
-
+    // Currently we are appending a column (ORIG_COL_POSITION) that keeps track of
+    // the original positions. Then, in the groupby, if we sort each of the partitioned
+    // dataframes on each rank, before returning the sorted dataframe it might be
+    // faster to do one sort on the entire data, instead of a sort on each of
+    // the partitioned dataframes.
     StringBuilder sortText = new StringBuilder();
     if (!sortByCols.equals("")) {
+      addIndent(sortText, 2);
       sortText
-          .append(indent)
-          .append(indent)
           .append(output_sorted_df_name + " = " + input_df_name + ".sort_values(by=")
           .append(sortByCols)
           .append(", ascending=")
@@ -285,1318 +1376,10 @@ public class WindowAggCodeGen {
           .append(NAPositionList)
           .append(")\n");
     } else {
-      sortText
-          .append(indent)
-          .append(indent)
-          .append(output_sorted_df_name + " = " + input_df_name + "\n");
+      addIndent(sortText, 2);
+      sortText.append(output_sorted_df_name + " = " + input_df_name + "\n");
     }
 
     return sortText.toString();
-  }
-
-  /**
-   * Generates a function definition with the specified name, to be used in a groupby apply to
-   * perform a SQL windowed aggregation.
-   *
-   * @param fn_name The name of the Window Function
-   * @param sortByCols A string representing a list of string column names, to be used by
-   *     df.sort_values, or empty string, if no sorting is necessary, or, in the case of RANK, will
-   *     be the columns to be ranked in question
-   * @param ascendingList A string representing a list of string boolean, to be used by
-   *     df.sort_values, or empty string, if no sorting is necessary
-   * @param NAPositionList The string representing the list of string values, which determine null
-   *     ordering for each column being sorted. This is empty if no sorting is necessary.
-   * @param sortByList The list of string columns names, to be used when the each column name string
-   *     is needed (e.g. generateRankFns uses them to fetch the appropriate columns).
-   * @param agg The kind of the windowed aggregation to perform
-   * @param aggName The string name of the windowed aggregation to perform
-   * @param typs List of types for the output column, 1 per window function.
-   * @param upper_bounded Does this window have an upper bound?
-   * @param upper_bound_expr String expression that represents the "shift" amount for the window
-   *     upper_bound
-   * @param lower_bounded Does this window have a lower bound?
-   * @param lower_bound_expr String expression that represents the "shift" amount for the window
-   *     lower_bound
-   * @param zeroExpr String that matches a window expression when the value is 0. This is included
-   *     to enable passing types in the window exprs.
-   * @param argsListList the List of arguments to each of the aggregations being performed
-   * @return The generated function text, and a list of output column names, where the indexes of
-   *     the output column list correspond to the indexes for the input list for each aggregation's
-   *     arguments.
-   */
-  // For example:
-  //     argsListList = [A, B] (agg = LEAD)
-  //
-  //     (simplified example func_text, this is the 0th return value in the tuple)
-  //     def impl(df): ...
-  //        out_df["AGG_OUTPUT_1"] = RESULT_OF_LEAD_AGG_ON_A
-  //        out_df["AGG_OUTPUT_2"] = RESULT_OF_LEAD_AGG_ON_B
-  //        return out_df
-  //
-  //     (1th return value in the tuple)
-  //     outputColsList = ["AGG_OUTPUT_1", "AGG_OUTPUT_2"]]```
-
-  public static Pair<String, List<String>> generateWindowedAggFn(
-      final String fn_name,
-      final String sortByCols,
-      final String ascendingList,
-      final String NAPositionList,
-      final List<String> sortByList,
-      final SqlKind agg,
-      final String aggName,
-      final List<SqlTypeName> typs,
-      final boolean upper_bounded,
-      final String upper_bound_expr,
-      final boolean lower_bounded,
-      final String lower_bound_expr,
-      final String zeroExpr,
-      final List<List<WindowedAggregationArgument>> argsListList,
-      final boolean isRespectNulls) {
-
-    // Before doing anything else, filter the partition columns out of the input dataframe. This is
-    // done to enable Bodo to know that these columns are unused within this function
-    // Add the aggregation columns
-
-    List<String> returnedDfOutputCols = new ArrayList<>();
-    StringBuilder kept_cols = new StringBuilder();
-
-    /**
-     * The columns that we need to keep are as follows: If we have a column on which we are
-     * performing an aggregation (IE, MAX(A)), we need to keep that column If we have any columns by
-     * which we need to sort, we need to keep those columns, and the ORIG_POSITION_COL which is
-     * needed for the reverse sort.
-     */
-
-    // First, add the aggregation columns to the list of kept columns.
-    for (int i = 0; i < argsListList.size(); i++) {
-
-      // if we have a column argument, it is always the 0-th argument
-      // TODO: update this when we support window functions where this is not the case
-      if (argsListList.get(i).size() > 0 && argsListList.get(i).get(0).isDfCol()) {
-        String colName = argsListList.get(i).get(0).getExprString();
-        kept_cols.append(makeQuoted(colName)).append(", ");
-      }
-    }
-
-    StringBuilder funcText = new StringBuilder();
-    funcText.append(indent).append("def ").append(fn_name).append("(" + argumentDfName + "):\n");
-
-    // Add sortbycols, removing the enclosing brackets, and add the original position column,
-    // which is needed for the reverse sort.
-    if (!sortByCols.equals("")) {
-      kept_cols
-          .append(makeQuoted(reverseSortColumName) + ", ")
-          // sortbycols is passed as a string that looks like "['A', 'B', 'C']", so this substring
-          // just removes the outer brackets so that we can add the columns to the new list needed
-          // for
-          // the call to loc
-          .append(sortByCols.substring(1, sortByCols.length() - 1));
-    }
-
-    // Drop unneeded columns.
-    funcText.append(indent).append(indent);
-    if (!kept_cols.toString().equals("")) {
-      funcText.append(
-          argumentDfName + " = " + argumentDfName + ".loc[:, [" + kept_cols.toString() + "]]\n");
-    } else {
-      // In the case that kept_cols is none, we have to do the slicing with iloc, as numba has a
-      // typing error with the
-      // empty column list
-      funcText.append(argumentDfName + " = " + argumentDfName + ".iloc[:, :0]\n");
-    }
-
-    // Next, initialize the list of expected output column names
-    // We expect a number of output columns equal to the number of aggregations we are performing,
-    // which is equal to the length of argsListList
-    for (int i = 0; i < argsListList.size(); i++) {
-      returnedDfOutputCols.add("AGG_OUTPUT_" + i);
-    }
-
-    // In the majority of cases (some exceptions like ROW NUMBER) we need to keep track of the
-    // original index of the
-    // input dataframe. This is needed due to some niche
-    // Pandas behavior where the rows of the output dataframe from this function are returned to
-    // their original
-    // locations in the dataframe that is the output of the overall group by apply if the index of
-    // the output dataframe is the same as the input dataframe.
-    // Otherwise, the output of the overall group by apply will be multi-indexed.
-    //
-
-    // For example:
-    //    @bodo.jit
-    //    def example():
-    //
-    //    df = pd.DataFrame({"A": [1,2,3] * 2, "B": [1,2,3,4,5,6]})
-    //
-    //    def apply_impl1(sub_df):
-    //    return pd.DataFrame({"C": [1,2]})
-    //
-    //
-    //    def apply_impl2(sub_df):
-    //    return pd.DataFrame({"C": [1,2]}, index=sub_df.index)
-    //
-    //
-    //    print(df.groupby("A").apply(apply_impl1))
-    //    print(df.groupby("A").apply(apply_impl2))
-
-    // output:
-    //    C
-    //            A
-    //    1 0  1
-    //    1  2
-    //    2 0  1
-    //    1  2
-    //    3 0  1
-    //    1  2
-    //
-    //    C
-    //            A
-    //    1 0  1
-    //    2 1  1
-    //    3 2  1
-    //    1 3  2
-    //    2 4  2
-    //    3 5  2
-
-    // We could generate this variable definition on a case by case basis, but it simplifies codegen
-    // to always append it
-    // at the beginning of the func_text
-    funcText
-        .append(indent)
-        .append(indent)
-        .append(argumentDfOriginalIndex)
-        .append(" = ")
-        .append(argumentDfName)
-        .append(".index\n");
-
-    // There are also several locations where we need the length of the input dataframe. While we
-    // could omit this
-    // definition for certain aggregations, it simplifies codegen if we always include it at the
-    // start
-    // of the function definition
-    funcText
-        .append(indent)
-        .append(indent)
-        .append(argumentDfLen)
-        .append(" = len(")
-        .append(argumentDfName)
-        .append(")\n");
-
-    if (agg == SqlKind.RANK
-        || agg == SqlKind.DENSE_RANK
-        || agg == SqlKind.PERCENT_RANK
-        || agg == SqlKind.CUME_DIST) {
-
-      return new Pair<>(
-          generateRankFns(
-              funcText,
-              argsListList,
-              returnedDfOutputCols,
-              sortByCols,
-              ascendingList,
-              NAPositionList,
-              sortByList,
-              agg),
-          returnedDfOutputCols);
-    } else if (agg == SqlKind.ROW_NUMBER) {
-      // We have a separate function for row_number, that just uses np.arange()
-      return new Pair<>(
-          handleRowNumberWindowAgg(
-              funcText,
-              sortByCols,
-              ascendingList,
-              NAPositionList,
-              argsListList,
-              returnedDfOutputCols),
-          returnedDfOutputCols);
-    } else if (aggName == "CONDITIONAL_TRUE_EVENT") {
-      // Similarly, we have a helper function that we can use for CONDITIONAL_TRUE_EVENT
-      if (argsListList.size() != 1) {
-        throw new BodoSQLCodegenException("CONDITIONAL_TRUE_EVENT should have exactly 1 argument");
-      }
-      WindowedAggregationArgument arg0 = argsListList.get(0).get(0);
-      assert arg0.isDfCol();
-      String arg0ColName = arg0.getExprString();
-      return new Pair<>(
-          generateTrueEventFn(
-              funcText,
-              arg0ColName,
-              returnedDfOutputCols,
-              sortByCols,
-              ascendingList,
-              NAPositionList),
-          returnedDfOutputCols);
-    } else if (agg == SqlKind.NTILE) {
-      // Similarly, we have a helper function that we can use for NTILE
-      return new Pair<>(
-          generateNtileFn(
-              funcText,
-              argsListList,
-              returnedDfOutputCols,
-              sortByCols,
-              ascendingList,
-              NAPositionList),
-          returnedDfOutputCols);
-    } else if (aggName == "CONDITIONAL_CHANGE_EVENT") {
-      // Similarly, we have a helper function that we can use for CONDITIONAL_CHANGE_EVENT
-      assert argsListList.size() == 1;
-      WindowedAggregationArgument arg0 = argsListList.get(0).get(0);
-      assert arg0.isDfCol();
-      String arg0ColName = arg0.getExprString();
-      return new Pair<>(
-          generateChangeEventFn(
-              funcText,
-              arg0ColName,
-              returnedDfOutputCols,
-              sortByCols,
-              ascendingList,
-              NAPositionList),
-          returnedDfOutputCols);
-    } else if (agg == SqlKind.COUNT && argsListList.get(0).size() == 0) {
-      // For COUNT(*), we can manually calculate the length of the window, and
-      // avoid actually taking slices of the input dataframe.
-      return new Pair<>(
-          generateCountStarFn(
-              funcText,
-              argsListList,
-              returnedDfOutputCols,
-              sortByCols,
-              ascendingList,
-              NAPositionList,
-              upper_bounded,
-              upper_bound_expr,
-              lower_bounded,
-              lower_bound_expr),
-          returnedDfOutputCols);
-    } else if (windowOptimizedKernels.containsKey(aggName)) {
-      // These functions have special window-optimized kernels
-      assert argsListList.size() == 1;
-      WindowedAggregationArgument arg0 = argsListList.get(0).get(0);
-      assert arg0.isDfCol();
-      String arg0ColName = arg0.getExprString();
-      String lower = lower_bound_expr;
-      String upper = upper_bound_expr;
-      if (lower == "UNUSABLE_LOWER_BOUND") {
-        lower = "-" + argumentDfLen;
-      }
-      if (upper == "UNUSABLE_UPPER_BOUND") {
-        upper = argumentDfLen;
-      }
-      return new Pair<>(
-          generateWindowOptimizedFn(
-              funcText,
-              arg0ColName,
-              windowOptimizedKernels.get(aggName),
-              returnedDfOutputCols,
-              sortByCols,
-              ascendingList,
-              NAPositionList,
-              upper,
-              lower),
-          returnedDfOutputCols);
-    } else if (agg == SqlKind.LAG || agg == SqlKind.LEAD) {
-      return new Pair<>(
-          generateLeadLagAggFn(
-              funcText,
-              argsListList,
-              returnedDfOutputCols,
-              sortByCols,
-              ascendingList,
-              NAPositionList,
-              (agg == SqlKind.LEAD),
-              isRespectNulls),
-          returnedDfOutputCols);
-    }
-
-    // Perform the sort on the input dataframe (if needed) and store the resulting dataframe
-    // in a variable named "sorted_df"
-    funcText.append(
-        sortLocalDfIfNeeded(
-            argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
-
-    // If we have FIRST_VALUE with upper_bound=0 and unbounded_lower
-    // then we have an array of just the first element.
-    // If we have LAST_VALUE with lower_bound=0 and unbounded_upper
-    // then we have an array of just the last element.
-    // This enables a more efficient copy procedure.
-    boolean optimized_copy =
-        (agg == SqlKind.LAST_VALUE && !upper_bounded && lower_bound_expr.equals(zeroExpr))
-            || (agg == SqlKind.FIRST_VALUE && !lower_bounded && upper_bound_expr.equals(zeroExpr));
-
-    // Output columns used for both paths
-    List<String> colsToAddToOutputDf = new ArrayList<>();
-    // Variable to track the reverse shuffle
-    boolean needsSort;
-
-    // determine the type of the output
-    if (optimized_copy) {
-      for (int i = 0; i < argsListList.size(); i++) {
-        SqlTypeName typeName = typs.get(i);
-        String target_idx =
-            agg == SqlKind.FIRST_VALUE ? "0" : String.format("len(target_arr%d) - 1", i);
-        // How to fill NAs for this type
-        StringBuilder na_arr_call = new StringBuilder();
-        if (typeName == SqlTypeName.CHAR || typeName == SqlTypeName.VARCHAR) {
-          // We generate a dummy array for gen_na_str_array_lens because we have an optimized path
-          // when
-          // length is 0.
-          na_arr_call
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format(
-                      "arr%d = bodo.libs.str_arr_ext.gen_na_str_array_lens(%s, 0, np.empty(1,"
-                          + " np.int64))\n",
-                      i, argumentDfLen));
-        } else if (typeName == SqlTypeName.BINARY || typeName == SqlTypeName.VARBINARY) {
-          na_arr_call
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format(
-                      "arr%d = bodo.libs.str_arr_ext.pre_alloc_binary_array(%s, 0)\n",
-                      i, argumentDfLen));
-          na_arr_call
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(String.format("for j in range(len(arr%d)):\n", i));
-          na_arr_call
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(String.format("bodo.libs.array_kernels.setna(arr%d, j)\n", i));
-        } else {
-          na_arr_call
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format(
-                      "arr%d = %s\n", i, sqlTypeToNullableBodoArray(argumentDfLen, typeName)));
-          na_arr_call
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(String.format("for j in range(len(arr%d)):\n", i));
-          na_arr_call
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(String.format("bodo.libs.array_kernels.setna(arr%d, j)\n", i));
-        }
-        // Generate the non-na path
-        StringBuilder fill_op = new StringBuilder();
-        if (typeName == SqlTypeName.BINARY || typeName == SqlTypeName.VARBINARY) {
-          fill_op
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(String.format("val%d = target_arr%d[%s]\n", i, i, target_idx));
-        } else if (typeName != SqlTypeName.CHAR && typeName != SqlTypeName.VARCHAR) {
-          // Strings have an optimized path that don't require any intermediate allocations
-          // so we don't generate a val.
-          fill_op
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format(
-                      "val%d = bodo.utils.conversion.unbox_if_timestamp(target_arr%d[%s])\n",
-                      i, i, target_idx));
-        }
-        if (typeName == SqlTypeName.CHAR || typeName == SqlTypeName.VARCHAR) {
-          // We generate a dummy array for gen_na_str_array_lens because we have an optimized path
-          // when
-          // length is 0.
-          fill_op
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format(
-                      "arr%d = bodo.libs.str_arr_ext.pre_alloc_string_array(%s,"
-                          + " bodo.libs.str_arr_ext.get_str_arr_item_length(target_arr%d, %s) *"
-                          + " %s)\n",
-                      i, argumentDfLen, i, target_idx, argumentDfLen));
-        } else if (typeName == SqlTypeName.BINARY || typeName == SqlTypeName.VARBINARY) {
-          fill_op
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format(
-                      "arr%d = bodo.libs.str_arr_ext.pre_alloc_binary_array(%s, len(val%d) * %s)\n",
-                      i, argumentDfLen, i, argumentDfLen));
-        } else {
-          fill_op
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format(
-                      "arr%d = %s\n", i, sqlTypeToNullableBodoArray(argumentDfLen, typeName)));
-        }
-        fill_op
-            .append(indent)
-            .append(indent)
-            .append(indent)
-            .append(String.format("for j in range(len(arr%d)):\n", i));
-        if (typeName == SqlTypeName.CHAR || typeName == SqlTypeName.VARCHAR) {
-          fill_op
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format(
-                      "bodo.libs.str_arr_ext.get_str_arr_item_copy(arr%d, j, target_arr%d, %s)\n",
-                      i, i, target_idx));
-        } else {
-          fill_op
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(String.format("arr%d[j] = val%d\n", i, i, target_idx));
-        }
-
-        String curAggColName = argsListList.get(i).get(0).getExprString();
-        // Get the target array.
-        // TODO: Use get_dataframe_data. The sort columns alter the offsets.
-        funcText
-            .append(indent)
-            .append(indent)
-            .append(
-                String.format(
-                    "target_arr%d = bodo.hiframes.pd_series_ext.get_series_data(sorted_df[%s])\n",
-                    i, makeQuoted(curAggColName)));
-        funcText
-            .append(indent)
-            .append(indent)
-            .append(
-                String.format(
-                    "if bodo.libs.array_kernels.isna(target_arr%d, %s):\n", i, target_idx));
-        funcText.append(na_arr_call);
-        funcText.append(indent).append(indent).append("else:\n");
-        funcText.append(fill_op);
-        colsToAddToOutputDf.add("arr" + i);
-      }
-      needsSort = false;
-
-    } else {
-      switch (aggName) {
-        case "AVG":
-        case "STDDEV_POP":
-        case "STDDEV_SAMP":
-        case "VAR_POP":
-        case "VAR_SAMP":
-        case "VARIANCE_SAMP":
-        case "VARIANCE_POP":
-          // TODO: These are the windowed aggregation functions that were previously decomposed
-          // It seems that they currently just type check to the type of the input rows.
-          // Ideally, I want to fix this, but for right now, I can do this as a workaround.
-          // UPDATE: Technically, these typing of the aggregation functions are correct by ansi SQL.
-          // It seems this workaround may last longer then intended.
-          for (int i = 0; i < typs.size(); i++) {
-            funcText
-                .append(indent)
-                .append(indent)
-                .append("arr" + i + " = np.empty(" + argumentDfLen + ", dtype=np.float64)\n");
-            colsToAddToOutputDf.add("arr" + i);
-          }
-          break;
-
-        case "MAX":
-        case "MIN":
-          for (SqlTypeName typ : typs) {
-            if (SqlTypeName.STRING_TYPES.contains(typ)) {
-              throw new BodoSQLCodegenException(
-                  "Windowed aggregation function "
-                      + agg.toString()
-                      + " not supported for SQL type "
-                      + typ.toString());
-            }
-          }
-
-        default:
-          for (int i = 0; i < typs.size(); i++) {
-            funcText
-                .append(indent)
-                .append(indent)
-                .append(
-                    "arr"
-                        + i
-                        + " = "
-                        + sqlTypeToNullableBodoArray(argumentDfLen, typs.get(i))
-                        + "\n");
-            colsToAddToOutputDf.add("arr" + i);
-          }
-      }
-
-      // TODO: in the case we have both upper/lower unbound, we can just do the calculation once,
-      // and
-      // create a numpy array with only those values
-      funcText.append(indent).append(indent).append("for i in range(" + argumentDfLen + "):\n");
-
-      // create cur_lower/upper_bounds variables which will be used for slicing.
-      // We can omit creating bounds in the unbounded case, and use the empty string
-      if (lower_bounded) {
-        funcText
-            .append(indent)
-            .append(indent)
-            .append(indent)
-            .append("cur_lower_bound = max(0, i + " + lower_bound_expr + ")\n");
-      }
-      if (upper_bounded) {
-        funcText
-            .append(indent)
-            .append(indent)
-            .append(indent)
-            .append("cur_upper_bound = max(0, i + " + upper_bound_expr + " + 1)\n");
-      }
-
-      funcText.append(indent).append(indent).append(indent).append("output_index = i\n");
-
-      if (agg == SqlKind.LAST_VALUE || agg == SqlKind.FIRST_VALUE || agg == SqlKind.NTH_VALUE) {
-
-        if (!isRespectNulls) {
-          String errMsg = "IGNORE_NULLS not yet supported for " + agg.toString();
-          throw new BodoSQLCodegenException(errMsg);
-        }
-        // For LAST/FIRST/NTH value, we can simply perform a get item on the input series
-
-        // The value to be passed into ILOC, depending on if we are selecting the first/last value
-        String ilocVal;
-
-        // TODO: As of right now, in the case of unbounded, I'm simply setting the bounds
-        // Lowest/highest bounds possible, since it simplifies both selecting the index for get
-        // item,
-        // and checking if the current window is non empty
-        // in the future, I can move some of these checks from runtime to compile time.
-        if (!lower_bounded) {
-          funcText.append(indent).append(indent).append(indent).append("cur_lower_bound = 0\n");
-        }
-        if (!upper_bounded) {
-          funcText
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append("cur_upper_bound = " + argumentDfLen + "\n");
-        }
-
-        if (agg == SqlKind.LAST_VALUE) {
-          ilocVal = "min(" + argumentDfLen + " - 1, cur_upper_bound - 1)";
-        } else if (agg == SqlKind.FIRST_VALUE) {
-          ilocVal = "cur_lower_bound";
-        } else {
-          assert agg == SqlKind.NTH_VALUE;
-          // By mysql Nth Value, n is one indexed, and must be >= 1.
-          // Mysql also allows a FROM first/last argument.
-          // calcite has no restriction on the value of N, and does not allow a FROM first/last
-          // argument.
-          // for right now, I'm simply going to set N equal to 1 in the case that it is <= 1.
-          // and defaulting to FROM FIRST
-
-          assert !argsListList.get(0).get(0).isDfCol();
-          funcText
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              // TODO: Support aggregation fusion for last/NTH value, see BS-612
-              .append("n = max(1, " + argsListList.get(0).get(1).getExprString() + ")\n");
-          ilocVal = "cur_lower_bound + n - 1";
-        }
-
-        funcText
-            .append(indent)
-            .append(indent)
-            .append(indent)
-            .append(
-                "if (cur_lower_bound >= cur_upper_bound or cur_lower_bound >= " + argumentDfLen);
-        // In the case of Nth value, we have to add a check to see if the window is large enough
-        if (agg == SqlKind.NTH_VALUE) {
-          funcText.append(" or (cur_upper_bound - cur_lower_bound) < n");
-        }
-        funcText.append("):\n");
-        for (int i = 0; i < argsListList.size(); i++) {
-          funcText
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append("bodo.libs.array_kernels.setna(arr" + i + ", output_index)\n");
-        }
-
-        funcText.append(indent).append(indent).append(indent).append("else:\n");
-        for (int i = 0; i < argsListList.size(); i++) {
-          // Last Value, First Value, and NTH value all expect a column arg0
-          WindowedAggregationArgument curAggArg0 = argsListList.get(i).get(0);
-          assert curAggArg0.isDfCol();
-          String curAggColName = curAggArg0.getExprString();
-          funcText
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format(
-                      "inarr_%d = bodo.hiframes.pd_series_ext.get_series_data(sorted_df[%s])\n",
-                      i, makeQuoted(curAggColName)));
-          funcText
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  String.format("if bodo.libs.array_kernels.isna(inarr_%d, %s):\n", i, ilocVal));
-          funcText
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append("bodo.libs.array_kernels.setna(arr" + i + ", output_index)\n");
-          funcText
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append("continue\n");
-          funcText
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(indent)
-              .append(
-                  "arr"
-                      + i
-                      + "[output_index] = bodo.utils.conversion.unbox_if_timestamp(inarr_"
-                      + i
-                      + "["
-                      + ilocVal
-                      + "])\n");
-        }
-
-      } else {
-        // standard case, need to take a slice of the input, and perform
-        // an aggregation on that slice
-        // TODO: Support aggregation fusion for generic row fns. See BS-611
-        assert argsListList.size() == 1;
-
-        // For all aggregations handled in this clause arg0 should be a column
-        WindowedAggregationArgument arg0 = argsListList.get(0).get(0);
-        assert arg0.isDfCol();
-        String arg0ColName = arg0.getExprString();
-
-        // TODO: Find some way to avoid use slicing, as it will make a copy every time.
-        funcText
-            .append(indent)
-            .append(indent)
-            .append(indent)
-            .append("cur_slice = sorted_df[")
-            .append(makeQuoted(arg0ColName))
-            .append("].iloc[");
-        // TODO: if we ever want to allow non-scalar aggregation bounds, this will need to be
-        // updated
-        if (lower_bounded) {
-          funcText.append("cur_lower_bound");
-        }
-        funcText.append(":");
-        if (upper_bounded) {
-          funcText.append("cur_upper_bound");
-        }
-        funcText.append("]\n");
-        String columnAggCall = getColumnAggCall("cur_slice", agg, aggName);
-        // currently, several aggregation functions have errors when called on empty slices,See
-        // BE-1124
-        // In the event that the other aggregation functions are fixed, we will still need
-        // to perform check for LAST_VALUE and FIRST_VALUE
-        if (agg != SqlKind.COUNT) {
-          funcText.append(indent).append(indent).append(indent).append("if len(cur_slice) == 0:\n");
-          for (int i = 0; i < argsListList.size(); i++) {
-            funcText
-                .append(indent)
-                .append(indent)
-                .append(indent)
-                .append(indent)
-                .append("bodo.libs.array_kernels.setna(arr" + i + ", output_index)\n");
-          }
-
-          funcText.append(indent).append(indent).append(indent).append("else:\n");
-          funcText.append(indent).append(indent).append(indent).append(indent);
-        } else {
-          funcText.append(indent).append(indent).append(indent);
-        }
-        // Need to do unboxing to put pd timedelta/timestamp types into array
-        // Needed for min/max
-        for (int i = 0; i < argsListList.size(); i++) {
-          funcText.append(
-              "arr"
-                  + i
-                  + "[output_index] = bodo.utils.conversion.unbox_if_timestamp("
-                  + columnAggCall
-                  + ")\n");
-        }
-      }
-
-      // Since the index of the output dataframe is the same as the index of the input dataframe,
-      // The output of this dataframe will be a dataframe with the array values reverse shuffled
-      // to their original positions in the input dataframe
-      needsSort = !sortByCols.equals("");
-    }
-
-    Pair<String, String> out =
-        reverseSortLocalDfIfNeeded(
-            colsToAddToOutputDf, "sorted_df", returnedDfOutputCols, needsSort);
-    String new_func_text = out.getKey();
-    funcText.append(new_func_text);
-    String dfName = out.getValue();
-    funcText.append(indent).append(indent).append("return ").append(dfName).append("\n");
-
-    return new Pair<>(funcText.toString(), returnedDfOutputCols);
-  }
-
-  /**
-   * Helper function that handles the ROW_NUMBER window aggregation. Should only be called from
-   * generateWindowedAggFn, after performing the column filtering, and the definitions for
-   * argumentDfOriginalIndex, and argumentDfLen.
-   *
-   * @param funcText The current functext. Must contain only the function declaration.
-   * @param sortByCols The string representing the list of string column names by which to sort
-   * @param ascendingList The string representing the list of boolean values, which determining if
-   *     the columns in sortByCols will be sorted ascending or descending
-   * @param NAPositionList The string representing the list of string values, which determine null
-   *     ordering for each column being sorted. This is empty if no sorting is necessary.
-   * @param argsListList the List of arguments to each of the aggregations being performed
-   * @param expectedOutputColumns the List of string column names at which to store the outputs of
-   *     the aggregation
-   * @return A string func_text that performs the aggregations, and stores the output in dataframe
-   *     with the columns specified in expectedOutputColumns
-   */
-  public static String handleRowNumberWindowAgg(
-      StringBuilder funcText,
-      final String sortByCols,
-      final String ascendingList,
-      final String NAPositionList,
-      final List<List<WindowedAggregationArgument>> argsListList,
-      final List<String> expectedOutputColumns) {
-
-    // We currently do not support aggregation fusion for ROW_NUMBER
-    // TODO: Support aggregation fusion for ROW_NUMBER, BS-613
-    assert argsListList.size() == 1;
-
-    // ROW_NUMBER takes no arguments
-    for (int i = 0; i < argsListList.size(); i++) {
-      assert argsListList.get(i).size() == 0;
-    }
-
-    boolean needs_sort = !sortByCols.equals("");
-    if (needs_sort) {
-      // Perform the sort
-      funcText.append(
-          sortLocalDfIfNeeded(
-              argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
-    }
-    // Generate the row_numbers.
-    funcText
-        .append(indent)
-        .append(indent)
-        .append("arr = np.arange(1, " + argumentDfLen + " + 1)\n");
-
-    List<String> arraysToSort = new ArrayList<>();
-    arraysToSort.add("arr");
-
-    Pair<String, String> additionalFuncTextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, needs_sort);
-
-    funcText.append(additionalFuncTextAndOutputDfName.getKey());
-    String outputDfName = additionalFuncTextAndOutputDfName.getValue();
-
-    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
-
-    return funcText.toString();
-  }
-
-  /**
-   * Helper function that handles the CONDITIONAL_TRUE_EVENT window aggregation. Should only be
-   * called from generateWindowedAggFn, after performing the column filtering, and the definitions
-   * for argumentDfOriginalIndex, and argumentDfLen.
-   *
-   * <p>Note: if a window frame was provided, this function ignores it because this window function
-   * always operates on the entire partition
-   *
-   * @param funcText The current func text. Must contain only the function declaration.
-   * @param colName the name of the column whose change events are being tracked
-   * @param expectedOutputColumns the list of string column names at which to store the output
-   *     columns
-   * @param sortByCols The string representing the list of string column names by which to sort
-   * @param ascendingList The string representing the list of boolean values, which determining if
-   *     the columns in sortByCols will be sorted ascending or descending
-   * @param NAPositionList The string representing the list of string values, which determine null
-   *     ordering for each column being sorted. This is empty if no sorting is necessary.
-   * @return The completed funcText, which returns an output dataframe with the aggregations stored
-   *     in the column names provided in expectedOutputColumns
-   */
-  private static String generateTrueEventFn(
-      StringBuilder funcText,
-      final String colName,
-      final List<String> expectedOutputColumns,
-      final String sortByCols,
-      final String ascendingList,
-      final String NAPositionList) {
-
-    if (sortByCols == "") {
-      throw new BodoSQLCodegenException("CONDITIONAL_TRUE_EVENT requires an ORDER_BY clause");
-    }
-
-    // Perform the sort on the input dataframe (if needed) and store the resulting dataframe
-    // in a variable named "sorted_df"
-    funcText.append(
-        sortLocalDfIfNeeded(
-            argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
-
-    funcText
-        .append(indent)
-        .append(indent)
-        .append("arr = sorted_df[" + makeQuoted(colName) + "].astype('uint8').cumsum()\n");
-
-    List<String> arraysToSort = new ArrayList<>();
-    arraysToSort.add("arr");
-
-    Pair<String, String> additionalFuncTextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, true);
-
-    funcText.append(additionalFuncTextAndOutputDfName.getKey());
-    String outputDfName = additionalFuncTextAndOutputDfName.getValue();
-
-    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
-
-    return funcText.toString();
-  }
-
-  /**
-   * Helper function that handles the NTILE window aggregation. Should only be called from
-   * generateWindowedAggFn, after performing the column filtering, and the definitions for
-   * argumentDfOriginalIndex, and argumentDfLen.
-   *
-   * @param funcText The current func text. Must contain only the function declaration.
-   * @param argsListList the list of arguments to each aggregation call
-   * @param expectedOutputColumns the list of string column names at which to store the output
-   *     columns
-   * @param sortByCols The string representing the list of string column names by which to sort
-   * @param ascendingList The string representing the list of boolean values, which determining if
-   *     the columns in sortByCols will be sorted ascending or descending
-   * @param NAPositionList The string representing the list of string values, which determine null
-   *     ordering for each column being sorted. This is empty if no sorting is necessary.
-   * @return The completed funcText, which returns an output dataframe with the aggregations stored
-   *     in the column names provided in expectedOutputColumns
-   */
-  private static String generateNtileFn(
-      StringBuilder funcText,
-      final List<List<WindowedAggregationArgument>> argsListList,
-      final List<String> expectedOutputColumns,
-      final String sortByCols,
-      final String ascendingList,
-      final String NAPositionList) {
-
-    // Number of expected output columns should be equal to the number of functions
-    assert argsListList.size() == expectedOutputColumns.size();
-
-    // TODO: Support aggregation fusion for NTILE BS-614
-    assert argsListList.size() == 1;
-
-    // NTILE expects one argument (number of bins)
-    for (int i = 0; i < argsListList.size(); i++) {
-      assert argsListList.get(i).size() == 1;
-    }
-
-    WindowedAggregationArgument numBinsArg = argsListList.get(0).get(0);
-
-    // numBins should be a literal
-    assert !numBinsArg.isDfCol();
-
-    String numBins = numBinsArg.getExprString();
-
-    // By mysql, if the number of columns does not divide cleanly into the number of bins,
-    // Then the earlier bins get the extra elements. This is achieved though the
-    // use of a helper function, that generates the array containing the bin numbers
-    // for each row
-
-    if (!sortByCols.equals("")) {
-      funcText
-          .append(indent)
-          .append(indent)
-          // reuse the input dataframe
-          .append(
-              argumentDfName
-                  + "[\"OUTPUT_COL\"] = bodosql.libs.ntile_helper.ntile_helper("
-                  + argumentDfLen
-                  + ", "
-                  + numBins
-                  + ")\n");
-      // Perform the sort
-      funcText.append(
-          sortLocalDfIfNeeded(
-              argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
-      funcText.append(indent).append(indent).append("arr = sorted_df[\"OUTPUT_COL\"]\n");
-    } else {
-      funcText
-          .append(indent)
-          .append(indent)
-          .append(
-              "arr = bodosql.libs.ntile_helper.ntile_helper("
-                  + argumentDfLen
-                  + ", "
-                  + numBins
-                  + ")\n");
-    }
-
-    List<String> arraysToSort = new ArrayList<>();
-    arraysToSort.add("arr");
-
-    Pair<String, String> additionalFuncTextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, false);
-
-    funcText.append(additionalFuncTextAndOutputDfName.getKey());
-    String outputDfName = additionalFuncTextAndOutputDfName.getValue();
-
-    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
-
-    return funcText.toString();
-  }
-
-  /**
-   * Helper function that handles the CONDITIONAL_CHANGE_EVENT window aggregation. Should only be
-   * called from generateWindowedAggFn, after performing the column filtering, and the definitions
-   * for argumentDfOriginalIndex, and argumentDfLen.
-   *
-   * <p>Note: if a window frame was provided, this function ignores it because this window function
-   * always operates on the entire partition
-   *
-   * @param funcText The current func text. Must contain only the function declaration.
-   * @param colName the name of the column whose change events are being tracked
-   * @param expectedOutputColumns the list of string column names at which to store the output
-   *     columns
-   * @param sortByCols The string representing the list of string column names by which to sort
-   * @param ascendingList The string representing the list of boolean values, which determining if
-   *     the columns in sortByCols will be sorted ascending or descending
-   * @param NAPositionList The string representing the list of string values, which determine null
-   *     ordering for each column being sorted. This is empty if no sorting is necessary.
-   * @return The completed funcText, which returns an output dataframe with the aggregations stored
-   *     in the column names provided in expectedOutputColumns
-   */
-  private static String generateChangeEventFn(
-      StringBuilder funcText,
-      final String colName,
-      final List<String> expectedOutputColumns,
-      final String sortByCols,
-      final String ascendingList,
-      final String NAPositionList) {
-
-    // Perform the sort on the input dataframe (if needed) and store the resulting dataframe
-    // in a variable named "sorted_df"
-    funcText.append(
-        sortLocalDfIfNeeded(
-            argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
-
-    funcText
-        .append(indent)
-        .append(indent)
-        .append(
-            "arr = bodo.libs.bodosql_array_kernels.change_event("
-                + "sorted_df["
-                + makeQuoted(colName)
-                + "])\n");
-
-    List<String> arraysToSort = new ArrayList<>();
-    arraysToSort.add("arr");
-
-    Pair<String, String> additionalFuncTextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, true);
-
-    funcText.append(additionalFuncTextAndOutputDfName.getKey());
-    String outputDfName = additionalFuncTextAndOutputDfName.getValue();
-
-    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
-
-    return funcText.toString();
-  }
-
-  /**
-   * Helper function that handles window frame-optimized window aggregation. Should only be called
-   * from generateWindowedAggFn, after performing the column filtering, and the definitions for
-   * argumentDfOriginalIndex, and argumentDfLen.
-   *
-   * @param funcText The current func text. Must contain only the function declaration.
-   * @param colName the name of the column whose change events are being tracked
-   * @param expectedOutputColumns the list of string column names at which to store the output
-   *     columns
-   * @param sortByCols The string representing the list of string column names by which to sort
-   * @param ascendingList The string representing the list of boolean values, which determining if
-   *     the columns in sortByCols will be sorted ascending or descending
-   * @param NAPositionList The string representing the list of string values, which determine null
-   *     ordering for each column being sorted. This is empty if no sorting is necessary.
-   * @return The completed funcText, which returns an output dataframe with the aggregations stored
-   *     in the column names provided in expectedOutputColumns
-   */
-  private static String generateWindowOptimizedFn(
-      StringBuilder funcText,
-      final String colName,
-      final String kernelName,
-      final List<String> expectedOutputColumns,
-      final String sortByCols,
-      final String ascendingList,
-      final String NAPositionList,
-      final String upper_bound,
-      final String lower_bound) {
-
-    // Perform the sort on the input dataframe (if needed) and store the resulting dataframe
-    // in a variable named "sorted_df"
-    funcText.append(
-        sortLocalDfIfNeeded(
-            argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
-
-    funcText
-        .append(indent)
-        .append(indent)
-        .append(
-            "arr = bodo.libs.bodosql_array_kernels.windowed_"
-                + kernelName
-                + "("
-                + "sorted_df["
-                + makeQuoted(colName)
-                + "], "
-                + lower_bound
-                + ", "
-                + upper_bound
-                + ")\n");
-
-    List<String> arraysToSort = new ArrayList<>();
-    arraysToSort.add("arr");
-
-    Pair<String, String> additionalFuncTextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(
-            arraysToSort, "sorted_df", expectedOutputColumns, !sortByCols.equals(""));
-
-    funcText.append(additionalFuncTextAndOutputDfName.getKey());
-    String outputDfName = additionalFuncTextAndOutputDfName.getValue();
-
-    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
-
-    return funcText.toString();
-  }
-
-  /**
-   * Helper function that handles the COUNT(*) window aggregation. Should only be called from
-   * generateWindowedAggFn, after performing the column filtering, and the definitions for
-   * argumentDfOriginalIndex, and argumentDfLen.
-   *
-   * @param funcText The current functext. Must contain only the function declaration.
-   * @param argsListList the list of arguments to each aggregation call
-   * @param expectedOutputColumns the list of string column names at which to store the output
-   *     columns
-   * @param sortByCols The string representing the list of string column names by which to sort
-   * @param ascendingList The string representing the list of boolean values, which determining if
-   *     the columns in sortByCols will be sorted ascending or descending
-   * @param NAPositionList The string representing the list of string values, which determine null
-   *     ordering for each column being sorted. This is empty if no sorting is necessary.
-   * @param upper_bounded Does this window have an upper bound?
-   * @param upper_bound_expr String expression that represents the "shift" amount for the window
-   *     upper_bound
-   * @param lower_bounded Does this window have a lower bound?
-   * @param lower_bound_expr String expression that represents the "shift" amount for the window
-   *     lower_bound
-   * @return The func_text which performs the aggregation and stores the outputs into the specified
-   *     output columns
-   */
-  private static String generateCountStarFn(
-      StringBuilder funcText,
-      final List<List<WindowedAggregationArgument>> argsListList,
-      final List<String> expectedOutputColumns,
-      final String sortByCols,
-      final String ascendingList,
-      final String NAPositionList,
-      final boolean upper_bounded,
-      final String upper_bound_expr,
-      final boolean lower_bounded,
-      final String lower_bound_expr) {
-
-    // Number of expected output columns should be equal to the number of functions
-    assert argsListList.size() == expectedOutputColumns.size();
-
-    // TODO: Support aggregation fusion for NTILE BS-614
-    assert argsListList.size() == 1;
-
-    // COUNT(*) expects no arguments
-    for (int i = 0; i < argsListList.size(); i++) {
-      assert argsListList.get(i).size() == 0;
-    }
-
-    funcText
-        .append(indent)
-        .append(indent)
-        .append("arr = np.empty(" + argumentDfLen + ", np.int32)\n");
-
-    funcText.append(indent).append(indent).append("for i in range(" + argumentDfLen + "):\n");
-
-    if (lower_bounded) {
-      funcText
-          .append(indent)
-          .append(indent)
-          .append(indent)
-          .append("lower_bound = max(0, i - ")
-          .append(lower_bound_expr)
-          .append(")\n");
-    } else {
-      funcText.append(indent).append(indent).append(indent).append("lower_bound = 0\n");
-    }
-    if (upper_bounded) {
-      funcText
-          .append(indent)
-          .append(indent)
-          .append(indent)
-          .append("upper_bound = min(" + argumentDfLen + "-1, i + ")
-          .append(upper_bound_expr)
-          .append(")\n");
-    } else {
-      funcText
-          .append(indent)
-          .append(indent)
-          .append(indent)
-          .append("upper_bound = " + argumentDfLen + "-1\n");
-    }
-
-    funcText
-        .append(indent)
-        .append(indent)
-        .append(indent)
-        .append("arr[i] = max(0, (upper_bound - lower_bound) + 1)\n");
-
-    funcText.append(
-        sortLocalDfIfNeeded(
-            argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
-
-    List<String> arraysToSort = new ArrayList<>();
-    arraysToSort.add("arr");
-
-    Pair<String, String> additionalFuncTextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(
-            arraysToSort, "sorted_df", expectedOutputColumns, !sortByCols.equals(""));
-
-    funcText.append(additionalFuncTextAndOutputDfName.getKey());
-    String outputDfName = additionalFuncTextAndOutputDfName.getValue();
-
-    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
-
-    return funcText.toString();
-  }
-
-  /**
-   * Helper function that handles the RANK window aggregations. Should only be called from
-   * generateWindowedAggFn, after performing the column filtering, and the definitions for
-   * argumentDfOriginalIndex, and argumentDfLen.
-   *
-   * @param funcText The current func text. Must contain only the function declaration.
-   * @param argsListList the list of arguments to each aggregation call
-   * @param expectedOutputColumns the list of string column names at which to store the output
-   *     columns
-   * @param sortByCols The string representing the list of string column names by which to sort
-   * @param ascendingList The string representing the list of boolean values, which determining if
-   *     the columns in sortByCols will be sorted ascending or descending
-   * @param NAPositionList The string representing the list of string values, which determine null
-   *     ordering for each column being sorted. This is empty if no sorting is necessary.
-   * @param sortByList Does this window have an upper bound?
-   * @param agg the SqlKind for the aggregation being performed. Must be one of RANK, CUME_DIST, or
-   *     DENSE_RANK
-   * @return The func_text which performs the rank aggregations and stores the outputs into the
-   *     specified output columns
-   */
-  private static String generateRankFns(
-      StringBuilder funcText,
-      final List<List<WindowedAggregationArgument>> argsListList,
-      final List<String> expectedOutputColumns,
-      final String sortByCols,
-      final String ascendingList,
-      final String NAPositionList,
-      final List<String> sortByList,
-      final SqlKind agg) {
-
-    // TODO: support aggregation fusion for the RANK functions
-    assert argsListList.size() == 0;
-
-    // Rank takes no arguments
-    for (int i = 0; i < argsListList.size(); i++) {
-      assert argsListList.get(i).size() == 0;
-    }
-
-    String methodStr;
-    if (agg == SqlKind.DENSE_RANK) {
-      methodStr = "dense";
-    } else if (agg == SqlKind.CUME_DIST) {
-      methodStr = "max";
-    } else {
-      methodStr = "min";
-    }
-    String pctStr = agg == SqlKind.CUME_DIST ? "True" : "False";
-    // Window functions must contain an order by clause (no case for sortByCols == "")
-    if (sortByCols == "") {
-      throw new BodoSQLCodegenException(
-          "The OVER clause of ranking window functions must include an ORDER BY clause.");
-    }
-    // Perform the sort
-    funcText.append(
-        sortLocalDfIfNeeded(
-            argumentDfName, "sorted_df", sortByCols, ascendingList, NAPositionList));
-
-    funcText
-        .append(indent)
-        .append(indent)
-        .append("sorted_df[\"OUTPUT_COL\"] = bodo.libs.bodosql_array_kernels.rank_sql((");
-
-    for (String col : sortByList) {
-      funcText.append(
-          String.format("bodo.hiframes.pd_series_ext.get_series_data(sorted_df[%s]), ", col));
-    }
-    funcText.append(String.format("), method=\"%s\", pct=%s)", methodStr, pctStr));
-    if (agg == SqlKind.PERCENT_RANK) {
-      funcText.append(" - 1\n");
-      funcText.append(indent).append(indent).append("if " + argumentDfLen + " == 1:\n");
-      funcText
-          .append(indent)
-          .append(indent)
-          .append(indent)
-          .append("sorted_df[\"OUTPUT_COL\"] = 0.0\n");
-      funcText.append(indent).append(indent).append("else:\n");
-      funcText
-          .append(indent)
-          .append(indent)
-          .append(indent)
-          .append(
-              "sorted_df[\"OUTPUT_COL\"] = sorted_df[\"OUTPUT_COL\"] / ("
-                  + argumentDfLen
-                  + " - 1)\n");
-    } else {
-      funcText.append("\n");
-    }
-
-    // Extract the value
-    List<String> arraysToSort = new ArrayList<>();
-    arraysToSort.add("sorted_df[\"OUTPUT_COL\"]");
-
-    Pair<String, String> additionalFuncTextAndOutputDfName =
-        reverseSortLocalDfIfNeeded(arraysToSort, "sorted_df", expectedOutputColumns, true);
-
-    funcText.append(additionalFuncTextAndOutputDfName.getKey());
-    String outputDfName = additionalFuncTextAndOutputDfName.getValue();
-
-    funcText.append(indent).append(indent).append("return " + outputDfName + "\n");
-
-    return funcText.toString();
   }
 }

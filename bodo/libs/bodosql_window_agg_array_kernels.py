@@ -42,12 +42,11 @@ def overload_rank_sql(arr_tup, method="average", pct=False):  # pragma: no cover
     if method == "first":
         func_text += "  ret = np.arange(1, n + 1, 1, np.float64)\n"
     else:
-        func_text += "  obs = bodo.libs.array_kernels._rank_detect_ties(arr_tup[0])\n"
-        func_text += "  for arr in arr_tup:\n"
-        func_text += "    next_obs = bodo.libs.array_kernels._rank_detect_ties(arr)\n"
         # Say the sorted_arr is ['a', 'a', 'b', 'b', 'b' 'c'], then obs is [True, False, True, False, False, True]
         # i.e. True in each index if it's the first time we are seeing the element, because of this we use | rather than &
-        func_text += "    obs = obs | next_obs \n"
+        func_text += "  obs = bodo.libs.array_kernels._rank_detect_ties(arr_tup[0])\n"
+        for i in range(1, len(arr_tup)):
+            func_text += f"  obs = obs | bodo.libs.array_kernels._rank_detect_ties(arr_tup[{i}]) \n"
         func_text += "  dense = obs.cumsum()\n"
         if method == "dense":
             func_text += "  ret = bodo.utils.conversion.fix_arr_dtype(\n"
@@ -76,7 +75,7 @@ def overload_rank_sql(arr_tup, method="average", pct=False):  # pragma: no cover
         if method == "dense":
             func_text += "  div_val = np.max(ret)\n"
         else:
-            func_text += "  div_val = arr.size\n"
+            func_text += "  div_val = len(arr_tup[0])\n"
         # NOTE: numba bug in dividing related to parfors, requires manual division
         # TODO: replace with simple division when numba bug fixed
         # [Numba Issue #8147]: https://github.com/numba/numba/pull/8147
