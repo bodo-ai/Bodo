@@ -9,20 +9,150 @@ import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.test_window.test_lead_lag import lead_or_lag  # noqa
-
-# pragma is needed in order to import fixtures
-from bodosql.tests.test_window.test_rows import (  # noqa
-    non_numeric_agg_funcs_subset,
-    numeric_agg_funcs_subset,
-    over_clause_bounds,
-)
 from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
 
 import bodo
 
+# [BE-3894] TODO: refactor this file like how test_rows.py was refactored
+# for window fusion
+
 # Helper environment variable to allow for testing locally, while avoiding
 # memory issues on CI
 testing_locally = os.environ.get("BODOSQL_TESTING_LOCALLY", False)
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            ("CURRENT ROW", "UNBOUNDED FOLLOWING"),
+            id="suffix",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+        ),
+        pytest.param(
+            ("UNBOUNDED PRECEDING", "1 PRECEDING"),
+            id="exclusive_prefix",
+        ),
+        pytest.param(
+            ("1 PRECEDING", "1 FOLLOWING"),
+            id="rolling_3",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+        ),
+        pytest.param(
+            ("CURRENT ROW", "1 FOLLOWING"),
+            id="rolling2",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+        ),
+        pytest.param(
+            ("CURRENT ROW", "CURRENT ROW"),
+            id="current_row",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+        ),
+        pytest.param(
+            ("1 FOLLOWING", "2 FOLLOWING"),
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="2_after",
+        ),
+        pytest.param(
+            ("UNBOUNDED PRECEDING", "2 FOLLOWING"),
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="prefix_plus_2_after",
+        ),
+        pytest.param(
+            ("3 PRECEDING", "UNBOUNDED FOLLOWING"),
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="suffix_plus_2_before",
+        ),
+    ]
+)
+def over_clause_bounds(request):
+    """fixture containing the upper/lower bounds for the SQL OVER clause"""
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param("MEDIAN", id="MEDIAN"),
+        pytest.param("MAX", id="MAX"),
+        pytest.param(
+            "MIN",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="MIN",
+        ),
+        pytest.param("COUNT", marks=pytest.mark.slow, id="COUNT"),
+        pytest.param("COUNT(*)", id="COUNT(*)"),
+        pytest.param("SUM", marks=pytest.mark.slow, id="SUM"),
+        pytest.param("AVG", id="AVG"),
+        pytest.param("STDDEV", id="STDEV"),
+        pytest.param(
+            "STDDEV_POP",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="STDEV_POP",
+        ),
+        pytest.param("VARIANCE", marks=pytest.mark.slow, id="VARIANCE"),
+        pytest.param("VAR_SAMP", marks=pytest.mark.slow, id="VAR_SAMP"),
+        pytest.param("VARIANCE_SAMP", marks=pytest.mark.slow, id="VARIANCE_SAMP"),
+        pytest.param(
+            "VAR_POP",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="VAR_POP",
+        ),
+        pytest.param(
+            "VARIANCE_POP",
+            marks=[
+                pytest.mark.skipif(not testing_locally, reason="Fix Memory Leak error"),
+                pytest.mark.slow,
+            ],
+            id="VARIANCE_POP",
+        ),
+        pytest.param("FIRST_VALUE", id="FIRST_VALUE"),
+        pytest.param("LAST_VALUE", id="LAST_VALUE"),
+        pytest.param("ANY_VALUE", id="ANY_VALUE"),
+    ]
+)
+def numeric_agg_funcs_subset(request):
+    """subset of numeric aggregation functions, used for testing windowed behavior"""
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param("MAX", id="MAX"),
+        pytest.param(
+            "MIN",
+            marks=pytest.mark.skipif(
+                not testing_locally, reason="Fix Memory Leak error"
+            ),
+            id="MIN",
+        ),
+        pytest.param("COUNT", id="COUNT"),
+        pytest.param("COUNT(*)", id="COUNT(*)"),
+        pytest.param("FIRST_VALUE", id="FIRST_VALUE"),
+        pytest.param("LAST_VALUE", id="LAST_VALUE"),
+    ]
+)
+def non_numeric_agg_funcs_subset(request):
+    """subset of non_numeric aggregation functions, used for testing windowed behavior"""
+    return request.param
 
 
 def test_QUALIFY_no_bounds(bodosql_numeric_types, spark_info, memory_leak_check):
