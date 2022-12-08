@@ -37,7 +37,7 @@ from bodo.hiframes.pd_series_ext import (
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
     convert_val_to_timestamp,
-    pd_timestamp_type,
+    pd_timestamp_tz_naive_type,
 )
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
@@ -4142,7 +4142,7 @@ def _validate_self_other_mask_where(
             not in [
                 bodo.datetime64ns,
                 bodo.timedelta64ns,
-                bodo.pd_timestamp_type,
+                bodo.pd_timestamp_tz_naive_type,
                 bodo.pd_timedelta_type,
             ]
         )
@@ -4283,7 +4283,7 @@ def create_explicit_binary_op_overload(op):
         )
         is_other_datetime_iter = is_iterable_type(other) and (
             other.dtype == datetime_datetime_type
-            or other.dtype == pd_timestamp_type
+            or other.dtype == pd_timestamp_tz_naive_type
             or other.dtype == bodo.datetime64ns
         )
 

@@ -132,7 +132,7 @@ _numba_to_sql_param_type_map = {
     bodo.string_type: SqlTypeEnum.String.value,
     # Scalar datetime and timedelta are assumed
     # to be scalar Pandas Timestamp/Timedelta
-    bodo.pd_timestamp_type: SqlTypeEnum.Datetime.value,
+    bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Datetime.value,
     bodo.pd_timedelta_type: SqlTypeEnum.Timedelta.value,
     # date_offset_type represents Timedelta year/month
     # and is support only for scalars

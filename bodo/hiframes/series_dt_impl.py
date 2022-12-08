@@ -703,7 +703,7 @@ def create_bin_op_overload(op):
         # lhs is series(dt64) and rhs is timestamp
         if (
             bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
-            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
         ):
             nat = bodo.datetime64ns("NaT")
 
@@ -733,7 +733,7 @@ def create_bin_op_overload(op):
         # lhs is timestamp and rhs is series(dt64)
         if (
             bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
-            and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+            and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
         ):
             nat = bodo.datetime64ns("NaT")
 
@@ -1041,7 +1041,7 @@ def create_cmp_op_overload(op):
         # lhs is series(dt64) and rhs is timestamp
         if (
             bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
-            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+            and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
         ):
             nat = bodo.datetime64ns("NaT")
 
@@ -1067,7 +1067,7 @@ def create_cmp_op_overload(op):
 
         # lhs is timestamp and rhs is series(dt64)
         if (
-            lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+            lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
             and bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
         ):
             nat = bodo.datetime64ns("NaT")

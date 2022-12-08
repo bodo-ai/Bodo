@@ -18,7 +18,7 @@ from bodo.hiframes.pd_series_ext import (
     is_datetime_date_series_typ,
     is_timedelta64_series_typ,
     pd_timedelta_type,
-    pd_timestamp_type,
+    pd_timestamp_tz_naive_type,
 )
 from bodo.utils.typing import (
     is_overload_bool,
@@ -645,7 +645,7 @@ def is_valid_datetime_or_date_arg(arg):
     and the columnar date/datetime types are both .
     """
 
-    return arg == pd_timestamp_type or (
+    return arg == pd_timestamp_tz_naive_type or (
         bodo.utils.utils.is_array_typ(arg, True)
         and (
             is_datetime_date_series_typ(arg)
@@ -821,7 +821,7 @@ def is_valid_tz_naive_datetime_arg(arg):
     Returns:
         bool: Is this type one of the tz-naive datetime types.
     """
-    return arg in (bodo.datetime64ns, bodo.pd_timestamp_type) or (
+    return arg in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type) or (
         bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.datetime64ns
     )
 
