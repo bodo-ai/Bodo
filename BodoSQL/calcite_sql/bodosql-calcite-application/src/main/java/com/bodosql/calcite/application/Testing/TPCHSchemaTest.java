@@ -59,166 +59,102 @@ public class TPCHSchemaTest {
     /*
      * We will use uint64 for identifiers.
      */
-    int identifer_type = 8;
-    int integer_type = 3;
-    int date_type = 12;
+    BodoSQLColumnDataType identifer_type = BodoSQLColumnDataType.UINT64;
+    BodoSQLColumnDataType integer_type = BodoSQLColumnDataType.INT32;
+    BodoSQLColumnDataType date_type = BodoSQLColumnDataType.DATE;
     /*
      * TPCH uses a decimal type, but we will check with float64 unless this is an issue
      */
-    int decimal_type = 10;
+    BodoSQLColumnDataType decimal_type = BodoSQLColumnDataType.FLOAT64;
     /*
-     * We will use string type for all of the text types
+     * We will use string type for all text types
      */
-    int fixed_text = 16;
-    int variable_text = 16;
+    BodoSQLColumnDataType fixed_text = BodoSQLColumnDataType.STRING;
+    BodoSQLColumnDataType variable_text = BodoSQLColumnDataType.STRING;
 
     ArrayList arr = new ArrayList();
-    arr.add(
-        new BodoSQLColumnImpl("c_custkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(new BodoSQLColumnImpl("c_name", BodoSQLColumnDataType.fromTypeId(variable_text), true));
-    arr.add(
-        new BodoSQLColumnImpl("c_address", BodoSQLColumnDataType.fromTypeId(variable_text), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "c_nationkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(new BodoSQLColumnImpl("c_phone", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl("c_acctbal", BodoSQLColumnDataType.fromTypeId(decimal_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("c_mktsegment", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl("c_comment", BodoSQLColumnDataType.fromTypeId(variable_text), true));
+    arr.add(new BodoSQLColumnImpl("c_custkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("c_name", variable_text, true));
+    arr.add(new BodoSQLColumnImpl("c_address", variable_text, true));
+    arr.add(new BodoSQLColumnImpl("c_nationkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("c_phone", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("c_acctbal", decimal_type, true));
+    arr.add(new BodoSQLColumnImpl("c_mktsegment", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("c_comment", variable_text, true));
     BodoSqlTable table = new LocalTableImpl("customer", schema, arr, false, "customer", "", false);
     schema.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new BodoSQLColumnImpl(
-            "o_orderkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("o_custkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("o_orderstatus", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "o_totalprice", BodoSQLColumnDataType.fromTypeId(decimal_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("o_orderdate", BodoSQLColumnDataType.fromTypeId(date_type), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "o_orderpriority", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(new BodoSQLColumnImpl("o_clerk", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "o_shippriority", BodoSQLColumnDataType.fromTypeId(integer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("o_comment", BodoSQLColumnDataType.fromTypeId(variable_text), true));
+    arr.add(new BodoSQLColumnImpl("o_orderkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("o_custkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("o_orderstatus", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("o_totalprice", decimal_type, true));
+    arr.add(new BodoSQLColumnImpl("o_orderdate", date_type, true));
+    arr.add(new BodoSQLColumnImpl("o_orderpriority", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("o_clerk", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("o_shippriority", integer_type, true));
+    arr.add(new BodoSQLColumnImpl("o_comment", variable_text, true));
     table = new LocalTableImpl("orders", schema, arr, false, "orders", "", false);
     schema.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new BodoSQLColumnImpl(
-            "l_orderkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_partkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_suppkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "l_linenumber", BodoSQLColumnDataType.fromTypeId(integer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_quantity", BodoSQLColumnDataType.fromTypeId(decimal_type), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "l_extendedprice", BodoSQLColumnDataType.fromTypeId(decimal_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_discount", BodoSQLColumnDataType.fromTypeId(decimal_type), true));
-    arr.add(new BodoSQLColumnImpl("l_tax", BodoSQLColumnDataType.fromTypeId(decimal_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_returnflag", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_linestatus", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(new BodoSQLColumnImpl("l_shipdate", BodoSQLColumnDataType.fromTypeId(date_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_commitdate", BodoSQLColumnDataType.fromTypeId(date_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_receiptdate", BodoSQLColumnDataType.fromTypeId(date_type), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "l_shipinstruct", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_shipmode", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl("l_comment", BodoSQLColumnDataType.fromTypeId(variable_text), true));
+    arr.add(new BodoSQLColumnImpl("l_orderkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("l_partkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("l_suppkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("l_linenumber", integer_type, true));
+    arr.add(new BodoSQLColumnImpl("l_quantity", decimal_type, true));
+    arr.add(new BodoSQLColumnImpl("l_extendedprice", decimal_type, true));
+    arr.add(new BodoSQLColumnImpl("l_discount", decimal_type, true));
+    arr.add(new BodoSQLColumnImpl("l_tax", decimal_type, true));
+    arr.add(new BodoSQLColumnImpl("l_returnflag", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("l_linestatus", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("l_shipdate", date_type, true));
+    arr.add(new BodoSQLColumnImpl("l_commitdate", date_type, true));
+    arr.add(new BodoSQLColumnImpl("l_receiptdate", date_type, true));
+    arr.add(new BodoSQLColumnImpl("l_shipinstruct", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("l_shipmode", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("l_comment", variable_text, true));
     table = new LocalTableImpl("lineitem", schema, arr, false, "lineitem", "", false);
     schema.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new BodoSQLColumnImpl(
-            "n_nationkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(new BodoSQLColumnImpl("n_name", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "n_regionkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("n_comment", BodoSQLColumnDataType.fromTypeId(variable_text), true));
+    arr.add(new BodoSQLColumnImpl("n_nationkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("n_name", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("n_regionkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("n_comment", variable_text, true));
     table = new LocalTableImpl("nation", schema, arr, false, "nation", "", false);
     schema.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new BodoSQLColumnImpl(
-            "r_regionkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(new BodoSQLColumnImpl("r_name", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl("r_comment", BodoSQLColumnDataType.fromTypeId(variable_text), true));
+    arr.add(new BodoSQLColumnImpl("r_regionkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("r_name", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("r_comment", variable_text, true));
     table = new LocalTableImpl("region", schema, arr, false, "region", "", false);
     schema.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new BodoSQLColumnImpl("s_suppkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(new BodoSQLColumnImpl("s_name", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl("s_address", BodoSQLColumnDataType.fromTypeId(variable_text), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "s_nationkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(new BodoSQLColumnImpl("s_phone", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl("s_acctbal", BodoSQLColumnDataType.fromTypeId(decimal_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("s_comment", BodoSQLColumnDataType.fromTypeId(variable_text), true));
+    arr.add(new BodoSQLColumnImpl("s_suppkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("s_name", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("s_address", variable_text, true));
+    arr.add(new BodoSQLColumnImpl("s_nationkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("s_phone", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("s_acctbal", decimal_type, true));
+    arr.add(new BodoSQLColumnImpl("s_comment", variable_text, true));
     table = new LocalTableImpl("supplier", schema, arr, false, "supplier", "", false);
     schema.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new BodoSQLColumnImpl(
-            "ps_partkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "ps_suppkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("ps_availqty", BodoSQLColumnDataType.fromTypeId(integer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "ps_supplycost", BodoSQLColumnDataType.fromTypeId(decimal_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("ps_comment", BodoSQLColumnDataType.fromTypeId(variable_text), true));
+    arr.add(new BodoSQLColumnImpl("ps_partkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("ps_suppkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("ps_availqty", integer_type, true));
+    arr.add(new BodoSQLColumnImpl("ps_supplycost", decimal_type, true));
+    arr.add(new BodoSQLColumnImpl("ps_comment", variable_text, true));
     table = new LocalTableImpl("partsupp", schema, arr, false, "partsupp", "", false);
     schema.addTable(table);
     arr = new ArrayList();
-    arr.add(
-        new BodoSQLColumnImpl("p_partkey", BodoSQLColumnDataType.fromTypeId(identifer_type), true));
-    arr.add(new BodoSQLColumnImpl("p_name", BodoSQLColumnDataType.fromTypeId(variable_text), true));
-    arr.add(new BodoSQLColumnImpl("p_mfgr", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(new BodoSQLColumnImpl("p_brand", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(new BodoSQLColumnImpl("p_type", BodoSQLColumnDataType.fromTypeId(variable_text), true));
-    arr.add(new BodoSQLColumnImpl("p_size", BodoSQLColumnDataType.fromTypeId(integer_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("p_container", BodoSQLColumnDataType.fromTypeId(fixed_text), true));
-    arr.add(
-        new BodoSQLColumnImpl(
-            "p_retailprice", BodoSQLColumnDataType.fromTypeId(decimal_type), true));
-    arr.add(
-        new BodoSQLColumnImpl("p_comment", BodoSQLColumnDataType.fromTypeId(variable_text), true));
+    arr.add(new BodoSQLColumnImpl("p_partkey", identifer_type, true));
+    arr.add(new BodoSQLColumnImpl("p_name", variable_text, true));
+    arr.add(new BodoSQLColumnImpl("p_mfgr", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("p_brand", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("p_type", variable_text, true));
+    arr.add(new BodoSQLColumnImpl("p_size", integer_type, true));
+    arr.add(new BodoSQLColumnImpl("p_container", fixed_text, true));
+    arr.add(new BodoSQLColumnImpl("p_retailprice", decimal_type, true));
+    arr.add(new BodoSQLColumnImpl("p_comment", variable_text, true));
     table = new LocalTableImpl("part", schema, arr, false, "part", "", false);
     schema.addTable(table);
 
