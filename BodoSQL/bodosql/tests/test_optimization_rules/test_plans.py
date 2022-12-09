@@ -343,7 +343,7 @@ def test_plan(plan_tests, tpch_data_schema_only, engage3_ctx, datapath):
     plan string as the reference solutions."""
     query_path, expected_path, ctx_str = plan_tests
 
-    # Extract the relevent context dictionary based on the name
+    # Extract the relevant context dictionary based on the name
     if ctx_str == "TPCH":
         ctx = tpch_data_schema_only[0]
     elif ctx_str == "engage3":
