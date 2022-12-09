@@ -31,7 +31,7 @@ def test_read_sql_error_sqlalchemy(memory_leak_check):
         frame = pd.read_sql(sql_request, conn)
         return frame
 
-    with pytest.raises(RuntimeError, match="Error executing query"):
+    with pytest.raises(RuntimeError, match="Table 'employees.invalid' doesn't exist"):
         bodo.jit(test_impl_sql_err)()
 
     def test_impl_credentials_err():

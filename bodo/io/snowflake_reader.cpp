@@ -47,12 +47,13 @@ class SnowflakeReader : public ArrowDataframeReader {
         if (PyErr_Occurred()) throw std::runtime_error("python");
 
         // ds = bodo.io.snowflake.get_dataset(query, conn, only_length,
-        // is_select_query)
+        // is_select_query, is_parallel)
         PyObject* py_only_length_query = PyBool_FromLong(only_length_query);
         PyObject* py_is_select_query = PyBool_FromLong(is_select_query);
-        PyObject* ds_tuple =
-            PyObject_CallMethod(sf_mod, "get_dataset", "ssOO", query, conn,
-                                py_only_length_query, py_is_select_query);
+        PyObject* py_is_parallel = PyBool_FromLong(parallel);
+        PyObject* ds_tuple = PyObject_CallMethod(
+            sf_mod, "get_dataset", "ssOOO", query, conn, py_only_length_query,
+            py_is_select_query, py_is_parallel);
         if (ds_tuple == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }

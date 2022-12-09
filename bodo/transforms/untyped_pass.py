@@ -3280,20 +3280,12 @@ def _get_sql_df_type_from_db(
         except Exception as e:
             message = f"{type(e).__name__}:'{e}'"
 
+    message = comm.bcast(message)
     raise_error = bool(message)
-    # check if more than 1 rank, then propagate the error to raise on all ranks.
-    if bodo.get_size() > 1:
-        comm = MPI.COMM_WORLD
-        raise_error = comm.allreduce(raise_error, op=MPI.LOR)
     if raise_error:
         common_err_msg = f"pd.read_sql(): Error executing query `{sql_const}`."
         # raised general exception since except checks for multiple exceptions (sqlalchemy, snowflake)
-        if message:
-            raise RuntimeError(f"{common_err_msg}\n{message}")
-        else:
-            raise RuntimeError(
-                f"{common_err_msg}\nPlease refer to errors on other ranks."
-            )
+        raise RuntimeError(f"{common_err_msg}\n{message}")
     (
         df_type,
         converted_colnames,

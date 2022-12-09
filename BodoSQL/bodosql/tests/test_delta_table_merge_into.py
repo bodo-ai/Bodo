@@ -27,6 +27,12 @@ that can automatically compute the expected delta table, given the matched/not m
 and their ordering in the query.
 """
 
+# Skip this file until we merge the Iceberg branch
+pytest.skip(
+    allow_module_level=True,
+    reason="Waiting for MERGE INTO support to fix the Calcite generated issue",
+)
+
 from bodosql.libs.iceberg_merge_into import (
     DELETE_ENUM,
     INSERT_ENUM,
