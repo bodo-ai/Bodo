@@ -536,8 +536,9 @@ class FakeArrowJSONResultBatch:
 def get_dataset(
     query: str,
     conn_str: str,
-    only_fetch_length: bool = False,
-    is_select_query: bool = True,
+    only_fetch_length: Optional[bool] = False,
+    is_select_query: Optional[bool] = True,
+    is_parallel: Optional[bool] = True,
 ) -> Tuple[SnowflakeDataset, int]:  # pragma: no cover
     """Get snowflake dataset info required by Arrow reader in C++ and execute
     the Snowflake query
@@ -549,6 +550,7 @@ def get_dataset(
             than return a table? If so we just run a COUNT(*) query and broadcast
             the length without any batches.. Defaults to False.
         is_select_query (bool, optional): Is this query a select?
+        is_parallel (bool, optional): Is this called by all ranks?
 
     Raises:
         BodoError: Raises an error if Bodo returns the data in the wrong format.
@@ -578,7 +580,7 @@ def get_dataset(
             "or 'pip install snowflake-connector-python'."
         )
 
-    ev = tracing.Event("get_snowflake_dataset")
+    ev = tracing.Event("get_snowflake_dataset", is_parallel=is_parallel)
 
     comm = MPI.COMM_WORLD
 
@@ -596,7 +598,11 @@ def get_dataset(
     if only_fetch_length and is_select_query:
         # If we are loading 0 columns, the query will just be a COUNT(*).
         # In this case we can skip computing the query
-        if bodo.get_rank() == 0:
+        # not is_parallel is needed here to handle cases where read is called by one rank
+        # with (distributed=False)
+        # NOTE: it'll be unnecessary in case replicated case
+        # and read is called by all ranks but we opted for that to simplify compiler work.
+        if bodo.get_rank() == 0 or not is_parallel:
             cur = conn.cursor()
             ev_query = tracing.Event("execute_length_query", is_parallel=False)
             cur.execute(query)
@@ -604,14 +610,15 @@ def get_dataset(
             # all of the data.
             arrow_data = cur.fetch_arrow_all()
             num_rows = arrow_data[0][0].as_py()  # type: ignore
-            num_rows = comm.bcast(num_rows)
+            if is_parallel:
+                num_rows = comm.bcast(num_rows)
             cur.close()
             ev_query.finalize()
         else:
             num_rows = comm.bcast(None)
     else:
         # We need to actually submit a Snowflake query
-        if bodo.get_rank() == 0:
+        if bodo.get_rank() == 0 or not is_parallel:
             cur = conn.cursor()
             # do a cheap query to get the Arrow schema (other ranks need the schema
             # before they can start reading, so we want to get the schema asap)
@@ -667,7 +674,8 @@ def get_dataset(
                     )
 
             cur.close()
-            comm.bcast((num_rows, batches, schema))
+            if is_parallel:
+                comm.bcast((num_rows, batches, schema))
         else:
             num_rows, batches, schema = comm.bcast(None)
 
