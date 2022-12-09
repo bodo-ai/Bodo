@@ -470,6 +470,8 @@ def to_date_util(
 
     elif is_valid_datetime_or_date_arg(conversionVal):
         scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0){floor_str})\n"
+    elif is_valid_tz_aware_datetime_arg(conversionVal):
+        scalar_text = f"res[i] = arg0{floor_str}\n"
     else:
         raise raise_bodo_error(
             f"Internal error: unsupported type passed to to_date_util for argument conversionVal: {conversionVal}"

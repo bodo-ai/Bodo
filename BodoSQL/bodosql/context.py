@@ -46,6 +46,7 @@ if bodo.get_rank() == 0:
         SnowflakeCatalogImplClass = (
             gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalogImpl
         )
+        BodoTZInfoClass = gateway.jvm.org.apache.calcite.sql.type.BodoTZInfo
     except Exception as e:
         saw_error = True
         msg = str(e)
@@ -58,6 +59,7 @@ else:
     RelationalAlgebraGeneratorClass = None
     PropertiesClass = None
     SnowflakeCatalogImplClass = None
+    BodoTZInfoClass = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
@@ -82,12 +84,13 @@ class SqlTypeEnum(Enum):
     Date = 12
     Time = 13
     Datetime = 14
-    Timedelta = 15
-    DateOffset = 16
-    String = 17
-    Binary = 18
-    Categorical = 19
-    Unsupported = 20
+    TZ_AWARE_TIMESTAMP = 15
+    Timedelta = 16
+    DateOffset = 17
+    String = 18
+    Binary = 19
+    Categorical = 20
+    Unsupported = 21
 
 
 # Scalar dtypes for supported Bodo Arrays
@@ -145,10 +148,36 @@ _numba_to_sql_param_type_map = {
 }
 
 
+def construct_tz_aware_column_type(typ, col_name, nullable):
+    """Construct a BodoSQL column type for a tz-aware
+    value.
+
+    Args:
+        typ (types.Type): A tz-aware Bodo type
+        col_name (str): Column name
+        nullable (bool): Is the column Nullable
+
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type.
+    """
+    # Create the BodoTzInfo Java object.
+    tz_info = BodoTZInfoClass(str(typ.tz), "int" if isinstance(typ.tz, int) else "str")
+    return ColumnClass(
+        col_name,
+        ColumnTypeClass.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value),
+        nullable,
+        tz_info,
+    )
+
+
 def get_sql_column_type(arr_type, col_name):
     """get SQL type for a given array type."""
     warning_msg = f"DataFrame column '{col_name}' with type {arr_type} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
-    if arr_type.dtype in _numba_to_sql_column_type_map:
+    nullable = bodo.utils.typing.is_nullable_type(arr_type)
+    if isinstance(arr_type, bodo.DatetimeArrayType):
+        # Timezone-aware Timestamp columns have their own special handling.
+        return construct_tz_aware_column_type(arr_type, col_name, nullable)
+    elif arr_type.dtype in _numba_to_sql_column_type_map:
         col_dtype = ColumnTypeClass.fromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
         )
@@ -165,10 +194,6 @@ def get_sql_column_type(arr_type, col_name):
             warnings.warn(BodoSQLWarning(warning_msg))
             col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
             elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
-    elif isinstance(arr_type, bodo.DatetimeArrayType):
-        # TODO [BS-641]: Treat TZ-Aware as its own internal type.
-        col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Datetime.value)
-        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
     else:
         # The type is unsupported we raise a warning indicating this is a possible
         # error but we generate a dummy type because we may be able to support it
@@ -176,7 +201,6 @@ def get_sql_column_type(arr_type, col_name):
         warnings.warn(BodoSQLWarning(warning_msg))
         col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
         elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
-    nullable = bodo.utils.typing.is_nullable_type(arr_type)
     return ColumnClass(col_name, col_dtype, elem_dtype, nullable)
 
 
@@ -184,18 +208,25 @@ def get_sql_param_type(param_type, param_name):
     """get SQL type from a Bodo scalar type. Also returns
     if there was a literal type used for outputting a warning."""
     unliteral_type = types.unliteral(param_type)
+    # The named parameters are always scalars. We don't support
+    # Optional types or None types yet. As a result this is always
+    # non-null.
+    nullable = False
     is_literal = unliteral_type != param_type
-    if unliteral_type in _numba_to_sql_param_type_map:
+    if (
+        isinstance(unliteral_type, bodo.PandasTimestampType)
+        and unliteral_type.tz != None
+    ):
+        # Timezone-aware Timestamps have their own special handling.
+        return construct_tz_aware_column_type(param_name, param_type, nullable)
+    elif unliteral_type in _numba_to_sql_param_type_map:
         return (
             ColumnClass(
                 param_name,
                 ColumnTypeClass.fromTypeId(
                     _numba_to_sql_param_type_map[unliteral_type]
                 ),
-                # The named parameters are always scalars. We don't support
-                # Optional types or None types yet. As a result this is always
-                # non-null.
-                False,
+                nullable,
             ),
             is_literal,
         )

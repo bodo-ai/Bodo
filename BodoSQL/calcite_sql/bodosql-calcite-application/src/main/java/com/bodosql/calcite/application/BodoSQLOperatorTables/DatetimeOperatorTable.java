@@ -1,13 +1,14 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
-import java.util.Arrays;
-import java.util.List;
+import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.isOutputNullableCompile;
+
+import java.util.*;
 import javax.annotation.Nullable;
 import org.apache.calcite.avatica.util.TimeUnit;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlDatePartFunction;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 public final class DatetimeOperatorTable implements SqlOperatorTable {
@@ -483,6 +484,34 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               "DATE_PART(STRING, TIMESTAMP)", OperandTypes.STRING, OperandTypes.TIMESTAMP),
           SqlFunctionCategory.TIMEDATE);
 
+  /**
+   * Determine the return type for Next_Day/Previous_DAY
+   *
+   * @param binding The operand bindings for the function signature.
+   * @return The return type.
+   */
+  public static RelDataType previousNextDayReturnType(SqlOperatorBinding binding) {
+    List<RelDataType> operandTypes = binding.collectOperandTypes();
+    // Determine if the output is nullable.
+    boolean nullable = isOutputNullableCompile(operandTypes);
+    RelDataTypeFactory typeFactory = binding.getTypeFactory();
+
+    // Determine output type based on arg0
+    RelDataType arg0 = operandTypes.get(0);
+    RelDataType returnType;
+    if (arg0 instanceof TZAwareSqlType) {
+      // If the input is tzAware the output is as well.
+      returnType = arg0;
+    } else {
+      // Otherwise we output a tzNaive Timestamp.
+      // TODO: FIXME once we have proper date support.
+      // The output should actually always be a date type.
+      // https://docs.snowflake.com/en/sql-reference/functions/next_day.html
+      returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+    }
+    return typeFactory.createTypeWithNullability(returnType, nullable);
+  }
+
   public static final SqlFunction NEXT_DAY =
       new SqlFunction(
           "NEXT_DAY",
@@ -490,7 +519,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> previousNextDayReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -509,7 +538,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> previousNextDayReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

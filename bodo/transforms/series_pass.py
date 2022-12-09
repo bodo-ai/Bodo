@@ -2335,6 +2335,17 @@ class SeriesPass:
                     self,
                     extra_globals={"_precision": precision, "_scale": scale},
                 )
+            elif isinstance(typ, bodo.DatetimeArrayType):
+                tz = typ.tz
+                return compile_func_single_block(
+                    eval(
+                        "lambda n, t, s=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, _tz)"
+                    ),
+                    rhs.args,
+                    assign.target,
+                    self,
+                    extra_globals={"_tz": tz},
+                )
 
             return compile_func_single_block(
                 impl, rhs.args, assign.target, self, extra_globals={"_dtype": dtype}
