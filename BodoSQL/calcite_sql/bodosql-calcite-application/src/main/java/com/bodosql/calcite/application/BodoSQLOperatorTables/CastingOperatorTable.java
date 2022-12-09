@@ -98,7 +98,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          // For conversion to string, snowflake any expresison type. If the first argument is
+          // For conversion to string, snowflake any expression type. If the first argument is
           // numeric,
           // datetime/timestamp, or binary, then an optional format string is allowed as a second
           // argument.
