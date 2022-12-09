@@ -2,10 +2,8 @@ package com.bodosql.calcite.application.Testing;
 
 import com.bodosql.calcite.application.RelationalAlgebraGenerator;
 import com.bodosql.calcite.schema.LocalSchemaImpl;
+import com.bodosql.calcite.table.*;
 import com.bodosql.calcite.table.BodoSQLColumn.BodoSQLColumnDataType;
-import com.bodosql.calcite.table.BodoSQLColumnImpl;
-import com.bodosql.calcite.table.BodoSqlTable;
-import com.bodosql.calcite.table.LocalTableImpl;
 import java.util.ArrayList;
 
 public class TPCHSchemaTest {

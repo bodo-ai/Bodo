@@ -4,7 +4,10 @@ import static java.util.Objects.requireNonNull;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.NavigableSet;
 import org.apache.calcite.plan.*;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
@@ -14,12 +17,9 @@ import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.rules.PushProjector;
 import org.apache.calcite.rel.rules.TransformationRule;
+import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeField;
-import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.rex.RexOver;
-import org.apache.calcite.rex.RexShuttle;
+import org.apache.calcite.rex.*;
 import org.apache.calcite.tools.RelBuilderFactory;
 import org.immutables.value.Value;
 
@@ -47,6 +47,49 @@ public class AliasPreservingProjectJoinTransposeRule
   /** Creates a ProjectJoinTransposeRule. */
   protected AliasPreservingProjectJoinTransposeRule(Config config) {
     super(config);
+  }
+
+  /**
+   * Determine if a projection performs any actual computation or is just selecting a subset of
+   * columns (possibly with renaming). To determine if a projection is a subset we verify that all
+   * nodes are InputRefs.
+   *
+   * @param node Projection in question
+   * @return Does the node contain something other than an input ref.
+   */
+  private static boolean projectionContainsCompute(Project node) {
+    for (RexNode r : node.getProjects()) {
+      if (!(r instanceof RexInputRef)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Convert a Project from an implementation with non-InputRef expresions into a Projection with
+   * only inputRef expresions that cover every column used by the original node.
+   *
+   * @param node Projection to be converted to just input refs
+   * @return A projection that contains all of the used columns but only inputRefs.
+   */
+  private static Project convertProjectToInputRefs(Project node, RelDataType originalType) {
+    Map<Integer, RexInputRef> inputRefMap = new HashMap<>();
+    // Find all of the inputRefs that are used
+    RelOptUtil.InputReferencedVisitor finder = new RelOptUtil.InputReferencedVisitor();
+    finder.visitEach(node.getProjects());
+    NavigableSet<Integer> inputsReferenced = finder.inputPosReferenced;
+    // Convert the indices into InputRefs
+    List<String> totalFieldNames = originalType.getFieldNames();
+    List<String> keptFieldNames = new ArrayList<>();
+    List<RexNode> inputRefs = new ArrayList<>();
+    List<RelDataTypeField> origFieldList = originalType.getFieldList();
+    for (int pos : inputsReferenced) {
+      keptFieldNames.add(totalFieldNames.get(pos));
+      inputRefs.add(new RexInputRef(pos, origFieldList.get(pos).getType()));
+    }
+    // Create the new projects. Here we reuse the hints.
+    return LogicalProject.create(node.getInput(), node.getHints(), inputRefs, keptFieldNames);
   }
 
   @Deprecated // to be removed before 2.0
@@ -87,28 +130,46 @@ public class AliasPreservingProjectJoinTransposeRule
                         (RexCall) node, call.builder().getRexBuilder());
                   }
                 });
+    // Update the projection to only contain subsets as opposed to actual pushdown.
+    // Note: This is necessary because we require any compute in the join filter
+    // that is a complex operation to be pushed down.
+    boolean projectContainsCompute = projectionContainsCompute(origProject);
+    final Project pushedProject;
+    // Bodo Change: The decision to push compute into a join isn't trivial and needs to be
+    // determined by a cost optimizer. However, selecting just a subset of columns is trivial.
+    // Therefore, we determine if a projection contains compute we reduce the projection to
+    // just a projection on the used columns, except for any compute in the join filter, which
+    // must be pushed down.
+    if (projectContainsCompute) {
+      pushedProject = convertProjectToInputRefs(origProject, join.getRowType());
+    } else {
+      pushedProject = origProject;
+    }
 
     // locate all fields referenced in the projection and join condition;
     // determine which inputs are referenced in the projection and
     // join condition; if all fields are being referenced and there are no
     // special expressions, no point in proceeding any further
-    final PushProjector pushProjector =
+    PushProjector pushProjector =
         new PushProjector(
-            origProject, joinFilter, join, config.preserveExprCondition(), call.builder());
+            pushedProject, joinFilter, join, config.preserveExprCondition(), call.builder());
     if (pushProjector.locateAllRefs()) {
       return;
     }
 
     // create left and right projections, projecting only those
     // fields referenced on each side
-    final RelNode leftProject =
-        pushProjector.createProjectRefsAndExprs(join.getLeft(), true, false);
-    final RelNode rightProject =
-        pushProjector.createProjectRefsAndExprs(join.getRight(), true, true);
-
-    // convert the join condition to reference the projected columns
-    RexNode newJoinFilter = null;
+    RelNode leftProject = pushProjector.createProjectRefsAndExprs(join.getLeft(), true, false);
+    RelNode rightProject = pushProjector.createProjectRefsAndExprs(join.getRight(), true, true);
+    // If both projections are now just the identity no optimization is possible
+    boolean isLeftUnchanged = leftProject.getRowType().equals(join.getLeft().getRowType());
+    boolean isRightUnchange = rightProject.getRowType().equals(join.getRight().getRowType());
+    // If neither the left nor the right has changes we can exit.
+    if (isLeftUnchanged && isRightUnchange) {
+      return;
+    }
     int[] adjustments = pushProjector.getAdjustments();
+    RexNode newJoinFilter = null;
     if (joinFilter != null) {
       List<RelDataTypeField> projectJoinFieldList = new ArrayList<>();
       projectJoinFieldList.addAll(join.getSystemFieldList());
@@ -116,6 +177,15 @@ public class AliasPreservingProjectJoinTransposeRule
       projectJoinFieldList.addAll(rightProject.getRowType().getFieldList());
       newJoinFilter =
           pushProjector.convertRefsAndExprs(joinFilter, projectJoinFieldList, adjustments);
+    }
+    if (projectContainsCompute) {
+      // If we have modified the projections we cannot reuse the old pushProjector. Instead, we
+      // reset the PushProjector, so the original projection uses the new left and right. In
+      // addition
+      // we pass the new join filter which should also be updated.
+      pushProjector =
+          new PushProjector(
+              origProject, newJoinFilter, join, config.preserveExprCondition(), call.builder());
     }
 
     // create a new join with the projected children
