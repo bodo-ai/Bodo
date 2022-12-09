@@ -1,7 +1,9 @@
 package com.bodosql.calcite.table;
 
+import javax.annotation.*;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.sql.type.*;
 
 /**
  *
@@ -33,8 +35,10 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   /** Is this column type nullable? */
   private final boolean nullable;
 
+  private final @Nullable BodoTZInfo tzInfo;
+
   /**
-   * Create a new column from a name and a type.
+   * Create a new column from a name, type, and nullability.
    *
    * @param name the name that we will give the column
    * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
@@ -46,10 +50,29 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.writeName = name;
     this.elemType = BodoSQLColumnDataType.EMPTY;
     this.nullable = nullable;
+    this.tzInfo = null;
   }
 
   /**
-   * Create a new column from a name and a type.
+   * Create a new column from a name, type, nullability and tzInfo.
+   *
+   * @param name the name that we will give the column
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param nullable Is the column type nullable?
+   * @param tzInfo The timezone to use for this column if its timezone aware. This may be null.
+   */
+  public BodoSQLColumnImpl(
+      String name, BodoSQLColumnDataType type, boolean nullable, BodoTZInfo tzInfo) {
+    this.dataType = type;
+    this.readName = name;
+    this.writeName = name;
+    this.elemType = BodoSQLColumnDataType.EMPTY;
+    this.nullable = nullable;
+    this.tzInfo = tzInfo;
+  }
+
+  /**
+   * Create a new column from a read name, write name, type, and nullability.
    *
    * @param readName the name that we will give the column when reading
    * @param writeName the name that we will give the column when writing
@@ -63,10 +86,35 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.writeName = writeName;
     this.elemType = BodoSQLColumnDataType.EMPTY;
     this.nullable = nullable;
+    this.tzInfo = null;
   }
 
   /**
-   * Create a new column from a name and a type.
+   * Create a new column from a read name, write name, type, nullability and tzInfo.
+   *
+   * @param readName the name that we will give the column when reading
+   * @param writeName the name that we will give the column when writing
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param nullable Is the column type nullable?
+   * @param tzInfo The timezone to use for this column if its timezone aware. This may be null.
+   */
+  public BodoSQLColumnImpl(
+      String readName,
+      String writeName,
+      BodoSQLColumnDataType type,
+      boolean nullable,
+      BodoTZInfo tzInfo) {
+    this.dataType = type;
+    this.readName = readName;
+    this.writeName = writeName;
+    this.elemType = BodoSQLColumnDataType.EMPTY;
+    this.nullable = nullable;
+    this.tzInfo = tzInfo;
+  }
+
+  /**
+   * Create a new column from a name, type, elemType, and nullability. This is used for categorical
+   * data.
    *
    * @param name the name that we will give the column
    * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
@@ -80,10 +128,36 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.writeName = name;
     this.elemType = elemType;
     this.nullable = nullable;
+    this.tzInfo = null;
   }
 
   /**
-   * Create a new column from a name and a type.
+   * Create a new column from a name, type, elemType, nullability and tzInfo. This is used for
+   * categorical data.
+   *
+   * @param name the name that we will give the column
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param elemType the {@link BodoSQLColumnDataType} for the element in categorical types
+   * @param nullable Is the column type nullable?
+   * @param tzInfo The timezone to use for this column if its timezone aware. This may be null.
+   */
+  public BodoSQLColumnImpl(
+      String name,
+      BodoSQLColumnDataType type,
+      BodoSQLColumnDataType elemType,
+      boolean nullable,
+      BodoTZInfo tzInfo) {
+    this.dataType = type;
+    this.readName = name;
+    this.writeName = name;
+    this.elemType = elemType;
+    this.nullable = nullable;
+    this.tzInfo = tzInfo;
+  }
+
+  /**
+   * Create a new column from a readName, writeName type, elemType, and nullability. This is used
+   * for categorical data.
    *
    * @param readName the name that we will give the column when reading
    * @param writeName the name that we will give the column when writing
@@ -102,6 +176,33 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.writeName = writeName;
     this.elemType = elemType;
     this.nullable = nullable;
+    this.tzInfo = null;
+  }
+
+  /**
+   * Create a new column from a readName, writeName type, elemType, nullability and tzInfo. This is
+   * used for categorical data.
+   *
+   * @param readName the name that we will give the column when reading
+   * @param writeName the name that we will give the column when writing
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param elemType the {@link BodoSQLColumnDataType} for the element in categorical types
+   * @param nullable Is the column type nullable?
+   * @param tzInfo The timezone to use for this column if its timezone aware. This may be null.
+   */
+  public BodoSQLColumnImpl(
+      String readName,
+      String writeName,
+      BodoSQLColumnDataType type,
+      BodoSQLColumnDataType elemType,
+      boolean nullable,
+      BodoTZInfo tzInfo) {
+    this.dataType = type;
+    this.readName = readName;
+    this.writeName = writeName;
+    this.elemType = elemType;
+    this.nullable = nullable;
+    this.tzInfo = tzInfo;
   }
 
   @Override
@@ -120,13 +221,14 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   }
 
   @Override
-  public RelDataType convertToSqlType(RelDataTypeFactory typeFactory, boolean nullable) {
+  public RelDataType convertToSqlType(
+      RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo) {
     BodoSQLColumnDataType dtype = this.dataType;
     if (this.dataType == BodoSQLColumnDataType.CATEGORICAL) {
       // Categorical code should be treated as its underlying elemType
       dtype = this.elemType;
     }
-    return dtype.convertToSqlType(typeFactory, nullable);
+    return dtype.convertToSqlType(typeFactory, nullable, tzInfo);
   }
 
   @Override
@@ -142,6 +244,11 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   @Override
   public boolean isNullable() {
     return nullable;
+  }
+
+  @Override
+  public BodoTZInfo getTZInfo() {
+    return tzInfo;
   }
 
   /**

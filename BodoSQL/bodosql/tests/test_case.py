@@ -11,6 +11,7 @@ from numba.core import ir
 from numba.core.ir_utils import find_callname, guard
 
 import bodo
+from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.utils import ParforTestPipeline, gen_nonascii_list
 
 
@@ -245,6 +246,26 @@ def test_timestamp_to_datetime_opt(spark_info, memory_leak_check):
     query = "Select Case WHEN A > STR_TO_DATE('2022-10-31', '%Y-%m-%d') THEN 1 END FROM table1"
     spark_query = "Select Case WHEN A > TO_DATE('2022-10-31', 'yyyy-MM-dd') THEN 1 END FROM table1"
     _check_timestamp_to_datetime_opt(spark_info, query, spark_query)
+
+
+def test_tz_aware_case_null(representative_tz, memory_leak_check):
+    """
+    Tests a case statement using a column + NULL on tz-aware timestamp
+    data.
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                "2022/1/1", periods=30, freq="6D5H", tz=representative_tz
+            ),
+            "B": [True, False, True, True, False] * 6,
+        }
+    )
+    query = "Select Case WHEN B THEN A END as output FROM table1"
+    ctx = {"table1": df}
+    expected_output = pd.DataFrame({"output": df["A"].copy()})
+    expected_output[~df.B] = None
+    check_query(query, ctx, None, expected_output=expected_output)
 
 
 def _check_timestamp_to_datetime_opt(spark_info, query, spark_query):

@@ -1923,7 +1923,6 @@ def test_tz_aware_next_day(representative_tz, memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
-@pytest.mark.skip("[BE-4022] Support tz-aware data as the output of case")
 def test_tz_aware_next_day_case(
     representative_tz,
     memory_leak_check,
@@ -1969,7 +1968,6 @@ def test_tz_aware_previous_day(representative_tz, memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
-@pytest.mark.skip("[BE-4022] Support tz-aware data as the output of case")
 def test_tz_aware_previous_day_case(
     representative_tz,
     memory_leak_check,

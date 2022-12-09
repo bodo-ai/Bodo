@@ -245,7 +245,6 @@ def check_query(
     # unoptimized plan, optimized plan, and the Pandas code
     debug_mode = os.environ.get("BODOSQL_TESTING_DEBUG", False)
     if debug_mode:
-
         print("Query:")
         print(query)
         bc = bodosql.BodoSQLContext(dataframe_dict)
