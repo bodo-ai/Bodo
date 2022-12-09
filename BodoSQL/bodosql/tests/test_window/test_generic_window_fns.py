@@ -22,6 +22,8 @@ from bodosql.tests.utils import check_query, get_equivalent_spark_agg_query
         ),
     ],
 )
+@pytest.mark.timeout(1300)
+# passes in 18 minutes on 1 rank
 def test_numeric_window_functions(
     funcs,
     all_numeric_window_df,
@@ -63,6 +65,8 @@ def test_numeric_window_functions(
         pytest.param(["COUNT(*)", "COUNT", "COUNT_IF"], id="count-count_if-count_star"),
     ],
 )
+@pytest.mark.timeout(600)
+# passes in 468.71 seconds on 1 rank
 def test_non_numeric_window_functions(
     funcs, all_window_df, all_window_col_names, window_frames, spark_info
 ):
