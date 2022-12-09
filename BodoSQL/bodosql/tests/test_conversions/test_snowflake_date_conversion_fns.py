@@ -239,6 +239,30 @@ def test_to_date_tz_aware(memory_leak_check):
     )
 
 
+def test_to_date_tz_aware_case(memory_leak_check):
+    """tests to_date on valid datetime values in a case statment"""
+    df = pd.DataFrame(
+        {
+            "timestamps": pd.date_range(
+                "1/18/2022", periods=30, freq="10D5H", tz="US/PACIFIC"
+            ),
+            "B": [True, False, True, False, True] * 6,
+        }
+    )
+    ctx = {"table1": df}
+    query = f"SELECT CASE WHEN B THEN TO_DATE(timestamps) END as timestamps from table1"
+    to_date_series = df["timestamps"].dt.normalize()
+    to_date_series[~df.B] = None
+    expected_output = pd.DataFrame({"timestamps": to_date_series})
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+    )
+
+
 # [BE-3774] Leaks Memory
 def test_invalid_to_date_args(spark_info, dt_fn_dataframe, test_fn):
     """tests arguments which cause NA in try_to_date, and throw an error for to_date"""

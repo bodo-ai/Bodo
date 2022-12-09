@@ -6,7 +6,7 @@ import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.sql.SqlIntervalQualifier;
 import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +24,9 @@ public interface BodoSQLColumn {
 
   boolean isNullable();
 
-  RelDataType convertToSqlType(RelDataTypeFactory typeFactory, boolean nullable);
+  BodoTZInfo getTZInfo();
+
+  RelDataType convertToSqlType(RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo);
 
   /**
    * Does reading this column type need to be cast to another Bodo type to match the generated Java
@@ -73,14 +75,15 @@ public interface BodoSQLColumn {
     DATE(12, "DATE"), // /< equivalent to datetime.date value
     TIME(13, "TIME"), // /< equivalent to bodo.Time value
     DATETIME(14, "DATETIME"), // /< equivalent to datetime64[ns] value
-    TIMEDELTA(15, "TIMEDELTA"), // /< equivalent to timedelta64[ns] value
-    DATEOFFSET(16, "DATEOFFSET"), // /< equivalent to pd.DateOffset value
-    STRING(17, "STRING"), // /< String elements
-    BINARY(18, "BINARY"), // /< Binary (byte) array
-    CATEGORICAL(19, "CATEGORICAL"),
-    UNSUPPORTED(20, "UNSUPPORTED"), // Unknown type we may be able to prune
+    TZ_AWARE_TIMESTAMP(15, "TZ_AWARE_TIMESTAMP"), // /< equivalent to Timestamp with tz info
+    TIMEDELTA(16, "TIMEDELTA"), // /< equivalent to timedelta64[ns] value
+    DATEOFFSET(17, "DATEOFFSET"), // /< equivalent to pd.DateOffset value
+    STRING(18, "STRING"), // /< String elements
+    BINARY(19, "BINARY"), // /< Binary (byte) array
+    CATEGORICAL(20, "CATEGORICAL"),
+    UNSUPPORTED(21, "UNSUPPORTED"), // Unknown type we may be able to prune
     // `NUM_TYPE_IDS` must be last!
-    NUM_TYPE_IDS(21, "NUM_TYPE_IDS"); // /< Total number of type ids
+    NUM_TYPE_IDS(22, "NUM_TYPE_IDS"); // /< Total number of type ids
 
     private final int type_id;
     private final String type_id_name;
@@ -135,9 +138,10 @@ public interface BodoSQLColumn {
         case SMALLINT:
           return INT16;
         case TIMESTAMP:
-        case TIMESTAMP_WITH_TIMEZONE:
           // TODO: Define a separate type for containing timezones
           return DATETIME;
+        case TIMESTAMP_WITH_TIMEZONE:
+          return TZ_AWARE_TIMESTAMP;
         case TINYINT:
           return INT8;
         default:
@@ -149,7 +153,8 @@ public interface BodoSQLColumn {
       }
     }
 
-    public RelDataType convertToSqlType(RelDataTypeFactory typeFactory, boolean nullable) {
+    public RelDataType convertToSqlType(
+        RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo) {
       RelDataType temp;
       switch (this) {
         case INT8:
@@ -187,6 +192,10 @@ public interface BodoSQLColumn {
           break;
         case DATETIME:
           temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);
+          break;
+        case TZ_AWARE_TIMESTAMP:
+          assert tzInfo != null;
+          temp = typeFactory.createTZAwareSqlType(tzInfo);
           break;
         case TIMEDELTA:
           // TODO: Figure out SqlParserPos. Probably not relevant

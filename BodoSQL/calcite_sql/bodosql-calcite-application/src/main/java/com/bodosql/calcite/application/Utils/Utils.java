@@ -11,11 +11,12 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.*;
 
 /** Class filled with static utility functions. */
 public class Utils {
@@ -193,19 +194,14 @@ public class Utils {
    *
    * @param typeName SQL Type.
    * @param outputScalar Should the output generate a type for converting scalars.
-   * @param outputArrayType flag for returning an array type instead of dtype
    * @return The pandas type
    */
-  public static String sqlTypenameToPandasTypename(
-      SqlTypeName typeName, boolean outputScalar, boolean outputArrayType) {
+  public static String sqlTypenameToPandasTypename(SqlTypeName typeName, boolean outputScalar) {
     String dtype;
-    assert !(outputScalar && outputArrayType);
     switch (typeName) {
       case BOOLEAN:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_bool";
-        } else if (outputArrayType) {
-          return "bodo.boolean_array";
         } else {
           dtype = makeQuoted("boolean");
         }
@@ -213,8 +209,6 @@ public class Utils {
       case TINYINT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int8";
-        } else if (outputArrayType) {
-          return "bodo.IntegerArrayType(bodo.int8)";
         } else {
           dtype = "pd.Int8Dtype()";
         }
@@ -222,8 +216,6 @@ public class Utils {
       case SMALLINT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int16";
-        } else if (outputArrayType) {
-          return "bodo.IntegerArrayType(bodo.int16)";
         } else {
           dtype = "pd.Int16Dtype()";
         }
@@ -231,8 +223,6 @@ public class Utils {
       case INTEGER:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int32";
-        } else if (outputArrayType) {
-          return "bodo.IntegerArrayType(bodo.int32)";
         } else {
           dtype = "pd.Int32Dtype()";
         }
@@ -240,8 +230,6 @@ public class Utils {
       case BIGINT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int64";
-        } else if (outputArrayType) {
-          return "bodo.IntegerArrayType(bodo.int64)";
         } else {
           dtype = "pd.Int64Dtype()";
         }
@@ -249,8 +237,6 @@ public class Utils {
       case FLOAT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float32";
-        } else if (outputArrayType) {
-          return "bodo.float32[::1]";
         } else {
           dtype = "np.float32";
         }
@@ -259,8 +245,6 @@ public class Utils {
       case DECIMAL:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float64";
-        } else if (outputArrayType) {
-          return "bodo.float64[::1]";
         } else {
           dtype = "np.float64";
         }
@@ -272,8 +256,6 @@ public class Utils {
           // This should likely be in the engine itself, to match pandas behavior
           // BE-2882
           dtype = "pd.to_datetime";
-        } else if (outputArrayType) {
-          return "bodo.datetime64ns[::1]";
         } else {
           dtype = "np.dtype(\"datetime64[ns]\")";
         }
@@ -286,8 +268,6 @@ public class Utils {
       case CHAR:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_str";
-        } else if (outputArrayType) {
-          return "bodo.string_array_type";
         } else {
           dtype = "str";
         }
@@ -296,8 +276,6 @@ public class Utils {
       case BINARY:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_str";
-        } else if (outputArrayType) {
-          return "bodo.binary_array_type";
         } else {
           // TODO: FIXME?
           dtype = "bodo.bytes_type";
@@ -318,8 +296,6 @@ public class Utils {
           // This should likely be in the engine itself, to match pandas behavior
           // BE-2882
           dtype = "pd.to_timedelta";
-        } else if (outputArrayType) {
-          return "bodo.timedelta64ns[::1]";
         } else {
           dtype = "np.dtype(\"timedelta64[ns]\")";
         }
@@ -334,6 +310,95 @@ public class Utils {
             "Internal Error: Calcite Plan Produced an Unsupported Type: " + typeName.getName());
     }
     return dtype;
+  }
+
+  public static String sqlTypeToBodoArrayType(RelDataType type) {
+    boolean nullable = type.isNullable();
+    switch (type.getSqlTypeName()) {
+      case BOOLEAN:
+        if (nullable) {
+          return "bodo.boolean_array";
+        } else {
+          return "numba.core.types.Array(bodo.bool_, 1, 'C')";
+        }
+      case TINYINT:
+        // TODO: Add signed vs unsigned support
+        if (nullable) {
+          return "bodo.IntegerArrayType(bodo.int8)";
+        } else {
+          return "numba.core.types.Array(bodo.int8, 1, 'C')";
+        }
+      case SMALLINT:
+        // TODO: Add signed vs unsigned support
+        if (nullable) {
+          return "bodo.IntegerArrayType(bodo.int16)";
+        } else {
+          return "numba.core.types.Array(bodo.int16, 1, 'C')";
+        }
+      case INTEGER:
+        // TODO: Add signed vs unsigned support
+        if (nullable) {
+          return "bodo.IntegerArrayType(bodo.int32)";
+        } else {
+          return "numba.core.types.Array(bodo.int32, 1, 'C')";
+        }
+      case BIGINT:
+        // TODO: Add signed vs unsigned support
+        if (nullable) {
+          return "bodo.IntegerArrayType(bodo.int64)";
+        } else {
+          return "numba.core.types.Array(bodo.int64, 1, 'C')";
+        }
+      case FLOAT:
+        // TODO: Add nullable support
+        return "numba.core.types.Array(bodo.float32, 1, 'C')";
+      case DOUBLE:
+      case DECIMAL:
+        // TODO: Add nullable support
+        return "numba.core.types.Array(bodo.float64, 1, 'C')";
+      case DATE:
+        // TODO: Add proper date support
+      case TIMESTAMP:
+        // TODO: Add nullable support
+        return "numba.core.types.Array(bodo.datetime64ns, 1, 'C')";
+      case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+        // TODO: Add nullable support
+        TZAwareSqlType tzAwareType = (TZAwareSqlType) type;
+        return String.format("bodo.DatetimeArrayType(%s)", tzAwareType.getTZInfo().getPyZone());
+      case TIME:
+        // TODO [BE-3649]: The precision needs to be handled here.
+        throw new BodoSQLCodegenException(
+            "Internal Error: Calcite Plan Produced an Unsupported TIME Type");
+      case VARCHAR:
+      case CHAR:
+        // TODO: Add nullable support
+        return "bodo.string_array_type";
+      case VARBINARY:
+      case BINARY:
+        // TODO: Add nullable support
+        return "bodo.binary_array_type";
+      case INTERVAL_DAY_HOUR:
+      case INTERVAL_DAY_MINUTE:
+      case INTERVAL_DAY_SECOND:
+      case INTERVAL_HOUR_MINUTE:
+      case INTERVAL_HOUR_SECOND:
+      case INTERVAL_MINUTE_SECOND:
+      case INTERVAL_HOUR:
+      case INTERVAL_MINUTE:
+      case INTERVAL_SECOND:
+      case INTERVAL_DAY:
+        // TODO: Add nullable support
+        return "numba.core.types.Array(bodo.timedelta64ns, 1, 'C')";
+      case INTERVAL_YEAR:
+      case INTERVAL_MONTH:
+      case INTERVAL_YEAR_MONTH:
+        // May later refactor this code to create DateOffsets, for now
+        // causes an error
+      default:
+        throw new BodoSQLCodegenException(
+            "Internal Error: Calcite Plan Produced an Unsupported Type: "
+                + type.getSqlTypeName().getName());
+    }
   }
 
   /**
@@ -505,7 +570,7 @@ public class Utils {
       String inputVar,
       BodoCtx ctx,
       String lambdaFnStr,
-      SqlTypeName outputType,
+      RelDataType outputType,
       List<String> colNames,
       PandasCodeGenVisitor pdVisitorClass) {
     // We assume, at this point, that the ctx.colsToAddList has been added to inputVar, and
@@ -562,7 +627,7 @@ public class Utils {
     // errors later
     String bodyGlobal = pdVisitorClass.lowerAsGlobal("'" + lambdaFnStr + "'");
 
-    String outputArrayType = sqlTypenameToPandasTypename(outputType, false, true);
+    String outputArrayType = sqlTypeToBodoArrayType(outputType);
     String outputArrayTypeGlobal = pdVisitorClass.lowerAsGlobal(outputArrayType);
 
     return String.format(

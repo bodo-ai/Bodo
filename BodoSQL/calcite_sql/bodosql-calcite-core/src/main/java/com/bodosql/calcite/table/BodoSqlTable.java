@@ -78,7 +78,9 @@ public abstract class BodoSqlTable implements Table {
   public RelDataType getRowType(RelDataTypeFactory rdtf) {
     RelDataTypeFactory.Builder builder = rdtf.builder();
     for (BodoSQLColumn column : columns) {
-      builder.add(column.getColumnName(), column.convertToSqlType(rdtf, column.isNullable()));
+      builder.add(
+          column.getColumnName(),
+          column.convertToSqlType(rdtf, column.isNullable(), column.getTZInfo()));
       builder.nullable(true);
     }
     return builder.build();
