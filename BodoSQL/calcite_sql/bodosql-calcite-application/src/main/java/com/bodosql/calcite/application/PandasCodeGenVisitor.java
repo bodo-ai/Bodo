@@ -1073,7 +1073,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   /**
    * Visitor for RexCalls IGNORE NULLS and RESPECT NULLS This function is only called if IGNORE
-   * NULLS and RESPECT NULLS is called without an associated window. Otherwise, it is included as an
+   * NULLS and RESPECT NULLS is called without an associated window. Otherwise, it is included as a
    * field in the REX OVER node.
    *
    * <p>Currently, we always throw an error when entering this call. Frankly, based on my reading of

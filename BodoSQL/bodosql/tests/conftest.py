@@ -366,6 +366,40 @@ def bodosql_datetime_types(request):
             "table1": pd.DataFrame(
                 {
                     "A": [
+                        datetime.date(2011, 4, 24),
+                        datetime.date(2020, 6, 7),
+                        datetime.date(2022, 1, 1),
+                        None,
+                    ]
+                    * 3,
+                    "B": [
+                        datetime.date(2021, 11, 2),
+                        datetime.date(2022, 11, 21),
+                        None,
+                    ]
+                    * 4,
+                    "C": [
+                        datetime.date(2021, 11, 21),
+                        None,
+                        pd.Timestamp(2021, 3, 3),
+                    ]
+                    * 4,
+                }
+            ),
+        },
+    ]
+)
+def bodosql_date_types(request):
+    # TODO: Use this fixture more when we have a proper date type
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        {
+            "table1": pd.DataFrame(
+                {
+                    "A": [
                         np.timedelta64(10, "Y"),
                         np.timedelta64(9, "M"),
                         np.timedelta64(8, "W"),
