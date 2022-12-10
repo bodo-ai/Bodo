@@ -2849,9 +2849,6 @@ def concat_overload(
         for i, obj in enumerate(objs.types):
             assert isinstance(obj, (SeriesType, DataFrameType))
             check_runtime_cols_unsupported(obj, "pandas.concat()")
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                obj, "pandas.concat()"
-            )
             if isinstance(obj, SeriesType):
                 # TODO: use Series name if possible
                 names.append(str(col_no))
@@ -2882,9 +2879,6 @@ def concat_overload(
         all_colnames = []
         for df in objs.types:
             check_runtime_cols_unsupported(df, "pandas.concat()")
-            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-                df, "pandas.concat()"
-            )
             all_colnames.extend(df.columns)
 
         # remove duplicates but keep original order

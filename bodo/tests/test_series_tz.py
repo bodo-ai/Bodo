@@ -246,3 +246,85 @@ def test_dt_tz_convert_none(memory_leak_check):
         start="1/1/2022", freq="16D5H", periods=30, tz="Poland"
     ).to_series()
     check_func(impl, (S,))
+
+
+def test_pd_concat_series(memory_leak_check):
+    """
+    Tests pd.Concat on two Series Arguments with tz_aware
+    Data.
+    """
+
+    def impl1(S1, S2):
+        return pd.concat([S1, S2])
+
+    def impl2(S1, S2):
+        return pd.concat((S1, S2))
+
+    def impl3(S1, S2):
+        df = pd.concat((S1, S2), axis=1)
+        # Rename to avoid issues
+        df.columns = ["A", "B"]
+        return df
+
+    S1 = (
+        pd.date_range(
+            start="1/1/2022",
+            freq="16D5H",
+            periods=30,
+            tz="Poland",
+        )
+        .to_series()
+        .reset_index(drop=True)
+    )
+    S2 = (
+        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="UTC")
+        .to_series()
+        .reset_index(drop=True)
+    )
+    # pd.concat doesn't match the order of Pandas across multiple ranks
+    check_func(impl1, (S1, S1), sort_output=True, reset_index=True)
+    check_func(impl2, (S1, S1), sort_output=True, reset_index=True)
+    check_func(impl3, (S1, S1), sort_output=True, reset_index=True)
+    # Different timezones should be allowed because they become different columns.
+    check_func(impl3, (S1, S2), sort_output=True, reset_index=True)
+
+
+def test_pd_concat_series_error(memory_leak_check):
+    """Tests trying to concatenate rows of a Series
+    with different Timezones throw reasonable errors.
+    """
+
+    @bodo.jit
+    def impl(S1, S2):
+        return pd.concat((S1, S2))
+
+    S1 = (
+        pd.date_range(
+            start="1/1/2022",
+            freq="16D5H",
+            periods=30,
+            tz="Poland",
+        )
+        .to_series()
+        .reset_index(drop=True)
+    )
+    S2 = (
+        pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="UTC")
+        .to_series()
+        .reset_index(drop=True)
+    )
+    S3 = (
+        pd.date_range(start="1/1/2022", freq="16D5H", periods=30)
+        .to_series()
+        .reset_index(drop=True)
+    )
+    with pytest.raises(
+        BodoError,
+        match="Cannot concatenate the rows of Timestamp data with different timezones",
+    ):
+        impl(S1, S2)
+    with pytest.raises(
+        BodoError,
+        match="Cannot concatenate the rows of Timestamp data with different timezones",
+    ):
+        impl(S1, S3)

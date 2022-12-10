@@ -1420,10 +1420,6 @@ def concat(arr_list):  # pragma: no cover
 @overload(concat, no_unliteral=True)
 def concat_overload(arr_list):
 
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-        arr_list.dtype, "bodo.concat()"
-    )
-
     # TODO: Support actually handling the possibles null values
     if isinstance(arr_list, bodo.NullableTupleType):
         return lambda arr_list: bodo.libs.array_kernels.concat(
@@ -1521,6 +1517,29 @@ def concat_overload(arr_list):
             loc_vars,
         )
         return loc_vars["struct_array_concat_impl"]
+
+    # TZ-Aware arrays
+    if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
+        arr_list.dtype, bodo.DatetimeArrayType
+    ):
+        tz_literal = arr_list.dtype.tz
+
+        def tz_aware_concat_impl(arr_list):  # pragma: no cover
+            tot_len = 0
+            for A in arr_list:
+                tot_len += len(A)
+            Aret = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                tot_len, tz_literal
+            )
+            curr_pos = 0
+            for A in arr_list:
+                for i in range(len(A)):
+                    Aret[i + curr_pos] = A[i]
+                curr_pos += len(A)
+
+            return Aret
+
+        return tz_aware_concat_impl
 
     # datetime.date array
     if (
@@ -1862,6 +1881,20 @@ def concat_overload(arr_list):
             return result
 
         return impl_map_arr_list
+
+    if isinstance(arr_list, types.Tuple):
+        # Generate a simpler error message for multiple timezones.
+        all_timestamp_data = all(
+            [
+                isinstance(typ, bodo.DatetimeArrayType)
+                or (isinstance(typ, types.Array) and typ.dtype == bodo.datetime64ns)
+                for typ in arr_list.types
+            ]
+        )
+        if all_timestamp_data:
+            raise BodoError(
+                f"Cannot concatenate the rows of Timestamp data with different timezones. Found types: {arr_list}. Please use pd.Series.tz_convert(None) to remove Timezone information."
+            )
 
     for typ in arr_list:
         if not isinstance(typ, types.Array):  # pragma: no cover
