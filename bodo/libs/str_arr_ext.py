@@ -2302,13 +2302,19 @@ def overload_str_arr_astype(A, dtype, copy=True):
             "StringArray.astype(): 'dtype' when passed as string must be a constant value"
         )
 
-    # same dtype case
+    # same dtype case with str. Here we opt to cause both dict
+    # and regular string arrays maintain the same type.
     if isinstance(dtype, types.Function) and dtype.key[0] == str:
         # no need to copy since our StringArray is immutable
         return lambda A, dtype, copy=True: A  # pragma: no cover
 
     # numpy dtypes
     nb_dtype = parse_dtype(dtype, "StringArray.astype")
+
+    if A == nb_dtype:
+        # same dtype case when passing an array typeref.
+        # no need to copy since our StringArray is immutable
+        return lambda A, dtype, copy=True: A  # pragma: no cover
 
     # TODO: support other dtypes if any
     # TODO: error checking
