@@ -6,6 +6,8 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+from bodo.tests.timezone_common import representative_tz  # noqa
+
 
 @pytest.fixture
 def null_set_df():
@@ -35,6 +37,31 @@ def test_union_string_cols(bodosql_string_types, spark_info, memory_leak_check):
     check_query(query, bodosql_string_types, spark_info, convert_float_nan=True)
 
 
+def test_union_tz_aware_cols(representative_tz, memory_leak_check):
+    """tests that union works for tz_aware columns"""
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="4D7H", periods=30, tz=representative_tz
+                )
+            )
+            + [None] * 4,
+            # Note: B's and A's will overlap.
+            "B": [None] * 14
+            + list(
+                pd.date_range(
+                    start="1/1/2022", freq="12D21H", periods=20, tz=representative_tz
+                )
+            ),
+        }
+    )
+    py_output = pd.DataFrame({"A": pd.concat((df["A"], df["B"]))}).drop_duplicates()
+    ctx = {"table1": df}
+    query = "(Select A from table1) union (Select B from table1)"
+    check_query(query, ctx, None, expected_output=py_output)
+
+
 def test_union_all_cols(basic_df, spark_info, memory_leak_check):
     """tests that union all works for columns"""
     query = "(Select A from table1) union ALL (Select A from table1)"
@@ -46,6 +73,31 @@ def test_union_all_null_cols(null_set_df, spark_info, memory_leak_check):
     """tests that union all works for columns"""
     query = "(Select A from table1) union ALL (Select B from table1)"
     check_query(query, null_set_df, spark_info, convert_float_nan=True)
+
+
+def test_union_all_tz_aware_cols(representative_tz, memory_leak_check):
+    """tests that union all works for tz_aware columns"""
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="4D7H", periods=30, tz=representative_tz
+                )
+            )
+            + [None] * 4,
+            # Note: B's and A's will overlap.
+            "B": [None] * 14
+            + list(
+                pd.date_range(
+                    start="1/1/2022", freq="12D21H", periods=20, tz=representative_tz
+                )
+            ),
+        }
+    )
+    py_output = pd.DataFrame({"A": pd.concat((df["A"], df["B"]))})
+    ctx = {"table1": df}
+    query = "(Select A from table1) union all (Select B from table1)"
+    check_query(query, ctx, None, expected_output=py_output)
 
 
 def test_intersect_cols(basic_df, spark_info, memory_leak_check):
@@ -70,6 +122,39 @@ def test_intersect_string_cols(bodosql_string_types, spark_info, memory_leak_che
         spark_info,
         convert_float_nan=True,
     )
+
+
+def test_intersect_tz_aware_cols(representative_tz, memory_leak_check):
+    """tests that intersect works for tz_aware columns"""
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="4D7H", periods=30, tz=representative_tz
+                )
+            )
+            + [None] * 4,
+            # Note: B's and A's will overlap.
+            "B": [None] * 14
+            + list(
+                pd.date_range(
+                    start="1/1/2022", freq="12D21H", periods=20, tz=representative_tz
+                )
+            ),
+        }
+    )
+    py_output = df[["A"]].merge(df[["B"]].rename(columns={"B": "A"}), on="A")
+    # If there is 1 NA in the output it should exist.
+    # TODO: Double check intersect null behavior with Snowflake.
+    na_entries = py_output["A"].isna()
+    # If there is 1 NA in the output it should exist.
+    append_na = py_output["A"].isna().any()
+    py_output = py_output[~na_entries]
+    if append_na:
+        py_output = pd.DataFrame({"A": list(py_output["A"]) + [None]})
+    ctx = {"table1": df}
+    query = "(Select A from table1) intersect (Select B from table1)"
+    check_query(query, ctx, None, expected_output=py_output)
 
 
 @pytest.mark.skip("[BS-379] Except not supported")
@@ -126,6 +211,33 @@ def test_except_scalars(spark_info, memory_leak_check):
         check_dtype=False,
         only_python=True,
     )
+
+
+@pytest.mark.skip("[BS-379] Except not supported")
+def test_except_tz_aware_cols(representative_tz, memory_leak_check):
+    """tests that except works for string columns"""
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="4D7H", periods=30, tz=representative_tz
+                )
+            )
+            + [None] * 4,
+            # Note: B's and A's will overlap.
+            "B": [None] * 14
+            + list(
+                pd.date_range(
+                    start="1/1/2022", freq="12D21H", periods=20, tz=representative_tz
+                )
+            ),
+        }
+    )
+    # TODO: Fix the expected output.
+    py_output = pd.DataFrame({"A": pd.concat((df["A"], df["B"]))})
+    ctx = {"table1": df}
+    query = "(Select A from table1) union all (Select B from table1)"
+    check_query(query, ctx, None, expected_output=py_output)
 
 
 # the following literal tests are done using only python to avoid [BS-381]
