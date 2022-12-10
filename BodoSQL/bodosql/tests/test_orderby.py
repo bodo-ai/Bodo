@@ -6,6 +6,8 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+from bodo.tests.timezone_common import representative_tz  # noqa
+
 
 @pytest.fixture(
     params=[
@@ -428,3 +430,74 @@ def test_orderby_nulls_first_last(null_ordering_table, spark_info, memory_leak_c
         sort_output=False,
         convert_float_nan=True,
     )
+
+
+def test_orderby_tz_aware(representative_tz, memory_leak_check):
+    """
+    Test various ORDER BY operations on tz-aware data
+    """
+    df = pd.DataFrame(
+        {
+            "A": [
+                pd.Timestamp("2022-1-1", tz=representative_tz),
+                pd.Timestamp("2022-1-3", tz=representative_tz),
+                None,
+                pd.Timestamp("2023-11-13", tz=representative_tz),
+                pd.Timestamp("2021-11-4", tz=representative_tz),
+            ]
+            * 2,
+            "B": [
+                None,
+                pd.Timestamp("2021-1-1", tz=representative_tz),
+                pd.Timestamp("2021-1-2", tz=representative_tz),
+                pd.Timestamp("2024-1-1", tz=representative_tz),
+                pd.Timestamp("2024-1-3", tz=representative_tz),
+                pd.Timestamp("2019-1-1", tz=representative_tz),
+                pd.Timestamp("2023-1-3", tz=representative_tz),
+                pd.Timestamp("2015-1-1", tz=representative_tz),
+                pd.Timestamp("2011-1-3", tz=representative_tz),
+                None,
+            ],
+            # This is just a Data Column
+            "C": pd.date_range(
+                "2022/1/1", freq="13T", periods=10, tz=representative_tz
+            ),
+        }
+    )
+    ctx = {"table1": df}
+    # NOTE: Pandas doesn't support using different NULLS FIRST or NULLS LAST
+    # per column, so we will manually convert NULL to a different type.
+    large_timestamp = pd.Timestamp("2050-1-1", tz=representative_tz)
+    small_timestamp = pd.Timestamp("1970-1-1", tz=representative_tz)
+
+    query1 = f"""
+        Select *
+        FROM table1
+        ORDER BY
+            A DESC nulls last,
+            B ASC nulls first
+    """
+    py_output = df.fillna(small_timestamp)
+    py_output = py_output.sort_values(["A", "B"], ascending=[False, True])
+    # Reset small_timestamp to None
+    col_a_nas = py_output["A"] == small_timestamp
+    col_b_nas = py_output["B"] == small_timestamp
+    py_output["A"][col_a_nas] = None
+    py_output["B"][col_b_nas] = None
+    check_query(query1, ctx, None, sort_output=False, expected_output=py_output)
+
+    query2 = f"""
+        Select *
+        FROM table1
+        ORDER BY
+            A ASC nulls last,
+            B DESC nulls first
+    """
+    py_output = df.fillna(large_timestamp)
+    py_output = py_output.sort_values(["A", "B"], ascending=[True, False])
+    # Reset small_timestamp to None
+    col_a_nas = py_output["A"] == large_timestamp
+    col_b_nas = py_output["B"] == large_timestamp
+    py_output["A"][col_a_nas] = None
+    py_output["B"][col_b_nas] = None
+    check_query(query2, ctx, None, sort_output=False, expected_output=py_output)
