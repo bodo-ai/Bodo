@@ -5,8 +5,11 @@ Tests correctness of the 'Greatest' keyword in BodoSQL
 Note, a large number of tests on this file generate wildly different column names then the
 spark result. See BS-119.
 """
+import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
+
+from bodo.tests.timezone_common import representative_tz  # noqa
 
 
 @pytest.fixture(params=["GREATEST", "LEAST"])
@@ -36,7 +39,6 @@ def test_greatest_integer_literals(
     check_query(query2, basic_df, spark_info, check_dtype=False, check_names=False)
 
 
-@pytest.mark.skip("[BS-154], Issue with float comparison")
 def test_greatest_float_literals(
     basic_df, spark_info, greatest_or_least, memory_leak_check
 ):
@@ -45,21 +47,34 @@ def test_greatest_float_literals(
     """
     query1 = f"""
     SELECT
-        A, {greatest_or_least}(.1, .111, -1.1, 1.75, .5, .01)
+        A, {greatest_or_least}(.1, .111, -1.1, 1.75, .5, .01) as output
     FROM
         table1
     """
     query2 = f"""
     SELECT
-        A, {greatest_or_least}(-.1, -.111, -1.1, -1.75, -.5, -.01)
+        A, {greatest_or_least}(-.1, -.111, -1.1, -1.75, -.5, -.01) as output
     FROM
         table1
     """
-    check_query(query1, basic_df, spark_info, check_dtype=False, check_names=False)
-    check_query(query2, basic_df, spark_info, check_dtype=False, check_names=False)
+    check_query(
+        query1,
+        basic_df,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        convert_columns_decimal=["output"],
+    )
+    check_query(
+        query2,
+        basic_df,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        convert_columns_decimal=["output"],
+    )
 
 
-@pytest.mark.skip("[BS-116]")
 def test_greatest_string_literals(
     basic_df, spark_info, greatest_or_least, memory_leak_check
 ):
@@ -135,7 +150,6 @@ def test_greatest_string_columns(
     )
 
 
-@pytest.mark.skip("[BE-959] Support Binary Array as output of apply")
 def test_greatest_binary_columns(
     bodosql_binary_types, spark_info, greatest_or_least, memory_leak_check
 ):
@@ -153,7 +167,7 @@ def test_greatest_binary_columns(
     )
 
 
-@pytest.mark.skip("[BS-118]")
+@pytest.mark.skip("[BS-118] Need proper null handling with comparison operators")
 def test_greatest_bool_columns(
     bodosql_boolean_types, spark_info, greatest_or_least, memory_leak_check
 ):
@@ -169,3 +183,95 @@ def test_greatest_bool_columns(
     check_query(
         query, bodosql_boolean_types, spark_info, check_dtype=False, check_names=False
     )
+
+
+def test_greatest_date_literals(spark_info, greatest_or_least, memory_leak_check):
+    """
+    tests that Greatest works on date literals.
+    """
+    query = f"""
+    SELECT
+        {greatest_or_least}(Date '2022-1-1',Date '2022-10-1',Date '2022-1-10')
+    """
+    check_query(query, {}, spark_info, check_dtype=False, check_names=False)
+
+
+@pytest.mark.skip("[BS-118] Need proper null handling with comparison operators")
+def test_greatest_date_columns(
+    bodosql_date_types, spark_info, greatest_or_least, memory_leak_check
+):
+    """
+    tests that Greatest works on date columns.
+    """
+    query = f"""
+    SELECT
+        {greatest_or_least}(A,B,C)
+    FROM
+        table1
+    """
+    check_query(
+        query, bodosql_date_types, spark_info, check_dtype=False, check_names=False
+    )
+
+
+def test_greatest_timestamp_literals(spark_info, greatest_or_least, memory_leak_check):
+    """
+    tests that Greatest works on timestamp literals
+    """
+    query = f"""
+    SELECT
+        {greatest_or_least}(Timestamp '2022-1-1', Timestamp '2022-10-1', Timestamp '2022-1-1 10:35:32')
+    """
+    check_query(query, {}, spark_info, check_dtype=False, check_names=False)
+
+
+@pytest.mark.skip("[BS-118] Need proper null handling with comparison operators")
+def test_greatest_timestamp_columns(
+    bodosql_datetime_types, spark_info, greatest_or_least, memory_leak_check
+):
+    """
+    tests that Greatest works on timestamp columns
+    """
+    query = f"""
+    SELECT
+        {greatest_or_least}(A,B,C)
+    FROM
+        table1
+    """
+    check_query(
+        query, bodosql_datetime_types, spark_info, check_dtype=False, check_names=False
+    )
+
+
+def test_greatest_tz_aware_columns(
+    representative_tz, greatest_or_least, memory_leak_check
+):
+    """
+    tests that Greatest works on tz_aware timestamp columns
+    """
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="3/1/2022", freq="4H", periods=30, tz=representative_tz
+            ),
+            "B": pd.date_range(
+                start="2/18/2022", freq="1D5H", periods=30, tz=representative_tz
+            ),
+            "C": pd.date_range(
+                start="1/1/2022", freq="5D", periods=30, tz=representative_tz
+            ),
+        }
+    )
+    ctx = {"table1": df}
+    query = f"""
+    SELECT
+        {greatest_or_least}(A,B,C) as output
+    FROM
+        table1
+    """
+    if greatest_or_least == "GREATEST":
+        S = df.max(axis=1)
+    else:
+        S = df.min(axis=1)
+    py_output = pd.DataFrame({"output": S})
+    check_query(query, ctx, None, expected_output=py_output)
