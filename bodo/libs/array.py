@@ -2816,14 +2816,22 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
 
     col_dtype = col_array_typ.dtype
 
-    if isinstance(col_dtype, (types.Number, TimeType)) or col_dtype in [
+    if isinstance(
+        col_dtype,
+        (types.Number, TimeType, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype),
+    ) or col_dtype in [
         bodo.datetime_date_type,
         bodo.datetime64ns,
         bodo.timedelta64ns,
         types.bool_,
     ]:
-        # This code path just returns the data.
 
+        # Note: PandasDatetimeTZDtype is not the return type for scalar data.
+        # In C++ the data is just a datetime64ns
+        if isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+            col_dtype = bodo.datetime64ns
+
+        # This code path just returns the data.
         @intrinsic
         def getitem_func(typingctx, table_t, ind_t):
             def codegen(context, builder, sig, args):
@@ -3024,12 +3032,20 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
 
         return checkna_func
 
-    elif isinstance(col_array_dtype, types.Array):
+    elif isinstance(col_array_dtype, (types.Array, bodo.DatetimeArrayType)):
         col_dtype = col_array_dtype.dtype
         if col_dtype in [
             bodo.datetime64ns,
             bodo.timedelta64ns,
-        ]:
+        ] or isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+
+            # Note: PandasDatetimeTZDtype is not the return type for scalar data.
+            # In C++ the data is just a datetime64ns
+            if isinstance(
+                col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+            ):
+                col_dtype = bodo.datetime64ns
+
             # Datetime arrays represent NULL by using pd._libs.iNaT
             @intrinsic
             def checkna_func(typingctx, table_t, ind_t):

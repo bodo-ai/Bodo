@@ -9,6 +9,8 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_efficient_join, check_query
 
+from bodo.tests.timezone_common import representative_tz  # noqa
+
 
 @pytest.fixture(params=["INNER", "LEFT", "RIGHT", "FULL OUTER"])
 def join_type(request):
@@ -493,3 +495,55 @@ def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
     """
 
     check_query(query, ctx, spark_info, check_names=False, check_dtype=False)
+
+
+def test_tz_aware_join(representative_tz, memory_leak_check):
+    """
+    Test join, including non-equality, on tz_aware data
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="4D7H", periods=30, tz=representative_tz
+                )
+            )
+            + [None] * 4,
+            # Note: B's and A's will overlap.
+            "B": [None] * 14
+            + list(
+                pd.date_range(
+                    start="1/1/2022", freq="12D21H", periods=20, tz=representative_tz
+                )
+            ),
+            "C": pd.date_range(
+                start="3/1/2022", freq="1H", periods=34, tz=representative_tz
+            ),
+            "D": pd.date_range(
+                start="1/1/2022", freq="14D20T", periods=34, tz=representative_tz
+            ),
+        }
+    )
+    query = """
+        select
+            t1.A as A,
+            t2.B as B,
+            t1.C as C,
+            t2.D as D
+        FROM
+            table1 t1
+        JOIN table2 t2
+            on t1.A = t2.B and t2.C > t1.B
+    """
+    ctx = {
+        "table1": df,
+        "table2": df,
+    }
+    py_output = df.merge(df, left_on="A", right_on="B")
+    # Drop nulls to match SQL
+    py_output = py_output[py_output.A_x.notna()]
+    # Add the comparison
+    py_output = py_output[py_output.C_y > py_output.B_x]
+    py_output = py_output[["A_x", "B_y", "C_x", "D_y"]]
+    py_output.columns = ["A", "B", "C", "D"]
+    check_query(query, ctx, None, expected_output=py_output)
