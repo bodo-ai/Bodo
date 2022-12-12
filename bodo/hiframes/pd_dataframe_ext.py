@@ -4332,7 +4332,7 @@ def to_sql_overload(
     func_text += "        location = ''\n"
     if not is_overload_none(schema):
         func_text += "        location += '\"' + schema + '\".'\n"
-    func_text += "        location += '\"' + name + '\"'\n"
+    func_text += "        location += name\n"
     func_text += "        my_rank = bodo.get_rank()\n"
 
     # In object mode: Connect to snowflake, create internal stage, and
