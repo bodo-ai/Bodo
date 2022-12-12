@@ -2329,7 +2329,11 @@ class DataFramePass:
             f"    mutated = bool(dist_reduce(int(mutated), np.int32({sum_no})))\n"
         )
         func_text += "  if not mutated:\n"
-        func_text += f"    rev_idx = sort_idx.argsort()\n"
+
+        # Use Bodo's implementation of argsort instead of numba (sort_idx.argsort())
+        # Numba's implementation is slow.
+        # https://bodo.atlassian.net/browse/BE-4053
+        func_text += f"    rev_idx = bodo.hiframes.series_impl.argsort(sort_idx)\n"
         func_text += f"    out_index = out_index[rev_idx]\n"
         for i in range(n_out_cols):
             func_text += f"    out_arr{i} = out_arr{i}[rev_idx]\n"

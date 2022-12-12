@@ -959,7 +959,7 @@ def nlargest(A, index_arr, k, is_largest, cmp_f):  # pragma: no cover
     # if all of A, just sort and reverse
     if k >= m:
         B = np.sort(A)
-        out_index = index_arr[np.argsort(A)]
+        out_index = index_arr[bodo.hiframes.series_impl.argsort(A)]
         mask = pd.Series(B).notna().values
         B = B[mask]
         out_index = out_index[mask]
