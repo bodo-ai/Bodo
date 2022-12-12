@@ -749,6 +749,56 @@ def test_to_sql_wrong_password():
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest.mark.parametrize(
+    "table_names",
+    [
+        "table_lower",
+        "TABLE_UPPER",
+        "Table_mixed",
+        '"table_lower"',
+        '"TABLE_UPPER"',
+        '"Table_mixed"',
+    ],
+)
+
+
+def test_to_sql_table_name(table_names):
+    """Test case sensitivity of table names written with DataFrame.to_sql().
+    Escaping the table name with double quotes makes it case sensitive, but
+    non-escaped table names default to upper-case when written to Snowflake DB.
+    This test ensures that Bodo/BodoSQL users can use any combination of quotes
+    and case sensitivity when naming tables to write.
+    """
+    @bodo.jit
+    def write_impl(df, conn_str, table_name):
+        df.to_sql(
+            table_name, conn_str, schema="PUBLIC", index=False, if_exists="replace"
+        )
+
+    @bodo.jit
+    def read_impl(conn_str, table_name):
+        output_df = pd.read_sql(f"select * from {table_name}", conn_str)
+        return output_df
+
+    # Note: Bodo makes column names all lowercase internally
+    # so we use "a" as the column name rather than "A" here for convenience.
+    # In the future this may change when we match Snowflake behavior
+    # for column names when writing tables.
+    df = pd.DataFrame({"a": np.arange(100, 200)})
+    conn_str = get_snowflake_connection_string(db="TEST_DB", schema="PUBLIC")
+
+    write_impl(df, conn_str, table_names)
+    output_df = read_impl(conn_str, table_names)
+    pd.testing.assert_frame_equal(
+        output_df.reset_index(drop=True),
+        df.reset_index(drop=True),
+        check_names=False,
+        check_dtype=False,
+        check_index_type=False,
+    )
+
+
+@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 @pytest.mark.parametrize("df_size", [17000 * 3, 2])
 @pytest.mark.parametrize("sf_write_overlap", [True, False])
 @pytest.mark.parametrize("sf_write_use_put", [True, False])
