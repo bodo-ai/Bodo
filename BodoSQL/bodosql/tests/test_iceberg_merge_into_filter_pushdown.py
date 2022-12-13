@@ -14,6 +14,9 @@ from bodosql import BodoSQLContext, TablePath
 import bodo
 from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
 from bodo.tests.iceberg_database_helpers import spark_reader
+from bodo.tests.iceberg_database_helpers.simple_tables import (
+    TABLE_MAP as SIMPLE_TABLES_MAP,
+)
 from bodo.tests.iceberg_database_helpers.utils import (
     create_iceberg_table,
     get_spark,
@@ -26,10 +29,15 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import check_func
 
+# Skip this file until we merge the Iceberg branch
+pytest.skip(
+    allow_module_level=True,
+    reason="Waiting for MERGE INTO support to fix the Calcite generated issue",
+)
+
 pytestmark = pytest.mark.iceberg
 
 
-@pytest.mark.skip(reason="Waiting for merge into support")
 def test_filter_pushdown_target(iceberg_database, iceberg_table_conn):
     """
     Test that merge into with only the target table loaded from Iceberg
@@ -53,12 +61,21 @@ def test_filter_pushdown_target(iceberg_database, iceberg_table_conn):
         return bc.sql("select * from target_table")
 
     # Select the iceberg table
-    table_name = "simple_numeric_table"
+    table_name = "merge_into_numeric_table1"
+    # Create the table
+    spark = get_spark()
+    expected_output, sql_schema = SIMPLE_TABLES_MAP["numeric_table"]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            expected_output,
+            sql_schema,
+            table_name,
+            spark,
+        )
+    bodo.barrier()
+
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
-
-    # Read the table from Spark.
-    expected_output, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
 
     # Generate the expected output
     a_vals = {-1, -7, -17, 1, 2, 3}
@@ -109,7 +126,6 @@ def test_filter_pushdown_target(iceberg_database, iceberg_table_conn):
     assert expr_filters == "None", "Expr filters were pushed unexpectedly"
 
 
-@pytest.mark.skip(reason="Waiting for merge into support")
 def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn):
     """
     Test that merge into with the target table loaded from Iceberg
@@ -135,13 +151,22 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
         return bc.sql("select * from target_table")
 
     # Select the iceberg table
-    table_name = "simple_numeric_table"
+    table_name = "merge_into_numeric_table2"
+    # Create the table
+    spark = get_spark()
+    expected_output, sql_schema = SIMPLE_TABLES_MAP["numeric_table"]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            expected_output,
+            sql_schema,
+            table_name,
+            spark,
+        )
+    bodo.barrier()
+
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
     target_table_path = TablePath(table_name, "sql", conn_str=conn, db_schema=db_schema)
-
-    # Read the table from Spark.
-    expected_output, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
 
     # Generate the expected output
     a_vals = {2, 3}
@@ -218,7 +243,6 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
     assert expr_filters_source != "None", "No Expr filters were pushed"
 
 
-@pytest.mark.skip(reason="Waiting for merge into support")
 def test_filter_pushdown_self_merge(iceberg_database, iceberg_table_conn):
     """
     Test that merge into with the target table and source table

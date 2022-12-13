@@ -1,59 +1,64 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-import io
 import os
 
 import bodosql
 import pandas as pd
 import pytest
 
+import bodo
+from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
 from bodo.tests.iceberg_database_helpers.utils import (
     DATABASE_NAME,
     create_iceberg_table,
     get_spark,
 )
-from bodo.tests.user_logging_utils import (
-    check_logger_msg,
-    create_string_io_logger,
-    set_logging_stream,
-)
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
-pytest.skip(allow_module_level=True, reason="Waiting for MERGE INTO support")
+# Skip this file until we merge the Iceberg branch
+pytest.skip(
+    allow_module_level=True,
+    reason="Waiting for MERGE INTO support to fix the Calcite generated issue",
+)
+
+pytestmark = pytest.mark.iceberg
 
 
-@pytest.fixture(scope="module")
-def table_name():
-    return "test_merge_into_iceberg_parity"
+@pytest.fixture(scope="function")
+def table_name(request):
+    return request.node.name
 
 
 def _create_and_init_table(table_name, types, df, source=None):
     spark = get_spark()
     warehouse_loc = os.path.abspath(os.getcwd())
     db_schema = DATABASE_NAME
-    create_iceberg_table(
-        df,
-        types,
-        table_name,
-        spark,
-    )
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            df,
+            types,
+            table_name,
+            spark,
+        )
+    bodo.barrier()
     conn = f"iceberg://{warehouse_loc}"
 
     return bodosql.BodoSQLContext(
         {
             **{
                 table_name: bodosql.TablePath(
-                    table_name, conn_str=conn, db_schema=db_schema
+                    table_name, "sql", conn_str=conn, db_schema=db_schema
                 )
             },
-            **({"source": source} if source else {}),
+            **({"source": source} if source is not None else {}),
         }
     )
 
 
+@pytest.mark.skip("INSERT * Syntax is Not Supported Yet")
 def test_merge_into_empty_target_insert_all_non_matching_rows(
-    table_name, memory_leak_check
+    iceberg_database, iceberg_table_conn, table_name
 ):
     """
     Parity for iceberg's testMergeIntoEmptyTargetInsertAllNonMatchingRows.
@@ -62,14 +67,14 @@ def test_merge_into_empty_target_insert_all_non_matching_rows(
     bc = _create_and_init_table(
         table_name,
         [("id", "int", False), ("dep", "string", False)],
-        pd.DataFrame(),
+        pd.DataFrame({"id": [], "dep": []}),
         pd.DataFrame({"id": [1, 2, 3], "dep": ["emp-id-1", "emp-id-2", "emp-id-3"]}),
     )
 
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN NOT MATCHED THEN "
             "  INSERT *",
         )
@@ -90,8 +95,11 @@ def test_merge_into_empty_target_insert_all_non_matching_rows(
     )
 
 
+@pytest.mark.skip("Need support for insert *")
 def test_merge_into_empty_target_insert_only_matching_rows(
-    table_name, memory_leak_check
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
 ):
     """
     Parity for iceberg's testMergeIntoEmptyTargetInsertOnlyMatchingRows.
@@ -107,7 +115,7 @@ def test_merge_into_empty_target_insert_only_matching_rows(
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN NOT MATCHED AND (s.id >=2) THEN "
             "  INSERT *",
         )
@@ -126,7 +134,9 @@ def test_merge_into_empty_target_insert_only_matching_rows(
     )
 
 
-def test_merge_into_non_existing_table(table_name, memory_leak_check):
+def test_merge_into_non_existing_table(
+    iceberg_database, iceberg_table_conn, table_name
+):
     """
     Tests that merging into a non existing table works throws a reasonable error
     """
@@ -143,16 +153,19 @@ def test_merge_into_non_existing_table(table_name, memory_leak_check):
 
         bc.sql(
             f"MERGE INTO I_DO_NOT_EXIST AS t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN NOT MATCHED THEN "
-            "  INSERT *",
+            "  INSERT (id, dep) values (s.id, s.dep)",
         )
 
-    with pytest.raises(BodoError, "TODO!"):
+    with pytest.raises(BodoError, match="Object 'I_DO_NOT_EXIST' not found"):
         impl(bc)
 
 
-def test_merge_with_only_update_clause(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for set *")
+def test_merge_with_only_update_clause(
+    iceberg_database, iceberg_table_conn, table_name
+):
     """
     Parity for iceberg's testMergeWithOnlyUpdateClause.
     """
@@ -160,7 +173,6 @@ def test_merge_with_only_update_clause(table_name, memory_leak_check):
     bc = _create_and_init_table(
         table_name,
         [("id", "int", False), ("dep", "string", False)],
-        ('{ "id": 1, "dep": "emp-id-one" }\n' '{ "id": 6, "dep": "emp-id-six" }'),
         pd.DataFrame(
             {"id": [1, 6], "dep": ["emp-id-one", "emp-id-six"]},
         ),
@@ -172,7 +184,7 @@ def test_merge_with_only_update_clause(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id = 1 THEN "
             "  UPDATE SET *"
         )
@@ -191,7 +203,9 @@ def test_merge_with_only_update_clause(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_only_delete_clause(table_name, memory_leak_check):
+def test_merge_with_only_delete_clause(
+    iceberg_database, iceberg_table_conn, table_name
+):
     """
     Parity for Iceberg's testMergeWithOnlyDeleteClause.
     """
@@ -210,7 +224,7 @@ def test_merge_with_only_delete_clause(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id = 6 THEN "
             "  DELETE"
         )
@@ -229,7 +243,8 @@ def test_merge_with_only_delete_clause(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_all_clauses(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for set * and insert *")
+def test_merge_with_all_clauses(iceberg_database, iceberg_table_conn, table_name):
     """
     Parity for Iceberg's testMergeWithAllClauses.
     """
@@ -248,7 +263,7 @@ def test_merge_with_all_clauses(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id = 1 THEN "
             "  UPDATE SET * "
             "WHEN MATCHED AND t.id = 6 THEN "
@@ -271,8 +286,9 @@ def test_merge_with_all_clauses(table_name, memory_leak_check):
     )
 
 
+@pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
 def test_merge_with_all_causes_with_explicit_column_specification(
-    table_name, memory_leak_check
+    iceberg_database, iceberg_table_conn, table_name
 ):
     """
     Parity for Iceberg's testMergeWithAllClausesWithExplicitColumnSpecification.
@@ -292,7 +308,7 @@ def test_merge_with_all_causes_with_explicit_column_specification(
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id = 1 THEN "
             "  UPDATE SET t.id = s.id, t.dep = s.dep "
             "WHEN MATCHED AND t.id = 6 THEN "
@@ -315,7 +331,8 @@ def test_merge_with_all_causes_with_explicit_column_specification(
     )
 
 
-def test_merge_with_source_cte(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for set * and insert *")
+def test_merge_with_source_cte(iceberg_database, iceberg_table_conn, table_name):
     """
     Parity for Iceberg's testMergeWithSourceCTE.
     """
@@ -335,7 +352,7 @@ def test_merge_with_source_cte(table_name, memory_leak_check):
         bc.sql(
             "WITH cte1 AS (SELECT id + 1 AS id, dep FROM source) "
             f"MERGE INTO {table_name} AS t USING cte1 AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id = 2 THEN "
             "  UPDATE SET * "
             "WHEN MATCHED AND t.id = 6 THEN "
@@ -358,7 +375,12 @@ def test_merge_with_source_cte(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_source_from_set_ops(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for set * and insert *")
+def test_merge_with_source_from_set_ops(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithSourceFromSetOps.
     """
@@ -377,7 +399,7 @@ def test_merge_with_source_from_set_ops(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING (%s) AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id = 1 THEN "
             "  UPDATE SET * "
             "WHEN MATCHED AND t.id = 6 THEN "
@@ -400,7 +422,12 @@ def test_merge_with_source_from_set_ops(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_multiple_updates_for_target_row(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for set * and insert *")
+def test_merge_with_multiple_updates_for_target_row(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithMultipleUpdatesForTargetRow.
     """
@@ -425,7 +452,7 @@ def test_merge_with_multiple_updates_for_target_row(table_name, memory_leak_chec
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING {derivedSource} AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id = 1 THEN "
             "  UPDATE SET * "
             "WHEN MATCHED AND t.id = 6 THEN "
@@ -448,7 +475,12 @@ def test_merge_with_multiple_updates_for_target_row(table_name, memory_leak_chec
     )
 
 
-def test_merge_with_unconditional_delete(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for set * and insert *")
+def test_merge_with_unconditional_delete(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithUnconditionalDelete.
     """
@@ -470,7 +502,7 @@ def test_merge_with_unconditional_delete(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED THEN "
             "  DELETE "
             "WHEN NOT MATCHED AND s.id = 2 THEN "
@@ -491,7 +523,12 @@ def test_merge_with_unconditional_delete(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_single_conditional_delete(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for set * and insert *")
+def test_merge_with_single_conditional_delete(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithSingleConditionalDelete.
     """
@@ -513,7 +550,7 @@ def test_merge_with_single_conditional_delete(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} AS t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id = 1 THEN "
             "  DELETE "
             "WHEN NOT MATCHED AND s.id = 2 THEN "
@@ -534,7 +571,12 @@ def test_merge_with_single_conditional_delete(table_name, memory_leak_check):
     )
 
 
-def test_self_merge(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for set * and insert *")
+def test_self_merge(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testSelfMerge.
     """
@@ -550,7 +592,7 @@ def test_self_merge(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING {table_name} s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id = 1 THEN "
             "  UPDATE SET v = 'x' "
             "WHEN NOT MATCHED THEN "
@@ -571,7 +613,12 @@ def test_self_merge(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_source_as_self_subquery(table_name, memory_leak_check):
+# @pytest.mark.skip("Need support for parsing the literals???")
+def test_merge_with_source_as_self_subquery(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithSourceAsSelfSubquery.
     """
@@ -590,7 +637,7 @@ def test_merge_with_source_as_self_subquery(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING (SELECT id AS value FROM {table_name} r JOIN source ON r.id = source.value) s "
-            "ON t.id == s.value "
+            "ON t.id = s.value "
             "WHEN MATCHED AND t.id = 1 THEN "
             "  UPDATE SET v = 'x' "
             "WHEN NOT MATCHED THEN "
@@ -611,7 +658,11 @@ def test_merge_with_source_as_self_subquery(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_extra_columns_in_source(table_name, memory_leak_check):
+def test_merge_with_extra_columns_in_source(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithExtraColumnsInSource.
     (slightly modified, changed column names in source vs dest
@@ -636,7 +687,7 @@ def test_merge_with_extra_columns_in_source(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.id == source.id "
+            "ON t.id = source.id "
             "WHEN MATCHED THEN "
             "  UPDATE SET v = source.source_v "
             "WHEN NOT MATCHED THEN "
@@ -644,13 +695,6 @@ def test_merge_with_extra_columns_in_source(table_name, memory_leak_check):
         )
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
-
-    stream = io.StringIO()
-    logger = create_string_io_logger(stream)
-    with set_logging_stream(logger, 1):
-
-        # Check the columns were pruned on the source table
-        check_logger_msg(stream, "Columns loaded ['id', 'source_v']")
 
     expected_rows = pd.DataFrame({"id": [1, 2, 3, 4], "v": ["v1_1", "v2", "v3", "v4"]})
 
@@ -664,26 +708,30 @@ def test_merge_with_extra_columns_in_source(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_nulls_in_target_and_source(table_name, memory_leak_check):
+def test_merge_with_nulls_in_target_and_source(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithNullsInTargetAndSource.
     """
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("v", "string", False)],
+        [("id", "int", True), ("v", "string", True)],
         pd.DataFrame(
-            {"id": [None, 2], "v": ["v1", "v2"]},
+            {"id": pd.Series([None, 2], dtype="Int64"), "v": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"id": [None, 4], "v": ["v1_1", "v4"]},
+            {"id": pd.Series([None, 4], dtype="Int64"), "v": ["v1_1", "v4"]},
         ),
     )
 
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.id == source.id "
+            "ON t.id = source.id "
             "WHEN MATCHED THEN "
             "  UPDATE SET v = source.v "
             "WHEN NOT MATCHED THEN "
@@ -706,19 +754,24 @@ def test_merge_with_nulls_in_target_and_source(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_null_safe_equals(table_name, memory_leak_check):
+@pytest.mark.skip("Support <=> with Join")
+def test_merge_with_null_safe_equals(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithNullSafeEquals.
     """
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("v", "string", False)],
+        [("id", "int", True), ("v", "string", True)],
         pd.DataFrame(
-            {"id": [None, 2], "v": ["v1", "v2"]},
+            {"id": pd.Series([None, 2], dtype="Int64"), "v": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"id": [None, 4], "v": ["v1_1", "v4"]},
+            {"id": pd.Series([None, 4], dtype="Int64"), "v": ["v1_1", "v4"]},
         ),
     )
 
@@ -746,26 +799,31 @@ def test_merge_with_null_safe_equals(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_null_condition(table_name, memory_leak_check):
+@pytest.mark.skip("Support non-equijoin. This gets mapped to a Left-Join cond=True")
+def test_merge_with_null_condition(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithNullCondition.
     """
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("v", "string", False)],
+        [("id", "int", True), ("v", "string", True)],
         pd.DataFrame(
-            {"id": [None, 2], "v": ["v1", "v2"]},
+            {"id": pd.Series([None, 2], dtype="Int64"), "v": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"id": [None, 2], "v": ["v1_1", "v2_2"]},
+            {"id": pd.Series([None, 2], dtype="Int64"), "v": ["v1_1", "v2_2"]},
         ),
     )
 
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.id == source.id AND NULL "
+            "ON t.id = source.id AND NULL "
             "WHEN MATCHED THEN "
             "  UPDATE SET v = source.v "
             "WHEN NOT MATCHED THEN "
@@ -788,7 +846,11 @@ def test_merge_with_null_condition(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_null_action_conditions(table_name, memory_leak_check):
+def test_merge_with_null_action_conditions(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithNullActionConditions.
     """
@@ -797,7 +859,7 @@ def test_merge_with_null_action_conditions(table_name, memory_leak_check):
         table_name,
         [("id", "int", False), ("v", "string", False)],
         pd.DataFrame(
-            {"id": [None, 2], "v": ["v1", "v2"]},
+            {"id": [1, 2], "v": ["v1", "v2"]},
         ),
         pd.DataFrame(
             {"id": [1, 2, 3], "v": ["v1_1", "v2_2", "v3_3"]},
@@ -807,7 +869,7 @@ def test_merge_with_null_action_conditions(table_name, memory_leak_check):
     def impl1(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.id == source.id "
+            "ON t.id = source.id "
             "WHEN MATCHED AND source.id = 1 AND NULL THEN "
             "  UPDATE SET v = source.v "
             "WHEN MATCHED AND source.v = 'v1_1' AND NULL THEN "
@@ -822,7 +884,7 @@ def test_merge_with_null_action_conditions(table_name, memory_leak_check):
 
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.id == source.id "
+            "ON t.id = source.id "
             "WHEN MATCHED AND source.id = 1 AND NULL THEN "
             "  UPDATE SET v = source.v "
             "WHEN MATCHED AND source.v = 'v1_1' THEN "
@@ -854,7 +916,11 @@ def test_merge_with_null_action_conditions(table_name, memory_leak_check):
     )
 
 
-def test_merge_with_multiple_matching_actions(table_name, memory_leak_check):
+def test_merge_with_multiple_matching_actions(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithMultipleMatchingActions.
     """
@@ -873,7 +939,7 @@ def test_merge_with_multiple_matching_actions(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.id == source.id "
+            "ON t.id = source.id "
             "WHEN MATCHED AND source.id = 1 AND NULL THEN "
             "  UPDATE SET v = source.v "
             "WHEN MATCHED AND source.v = 'v1_1' AND NULL THEN "
@@ -896,7 +962,12 @@ def test_merge_with_multiple_matching_actions(table_name, memory_leak_check):
     )
 
 
-def test_merge_insert_only(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for insert *")
+def test_merge_insert_only(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeInsertOnly.
     """
@@ -918,7 +989,7 @@ def test_merge_insert_only(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.id == source.id "
+            "ON t.id = source.id "
             "WHEN NOT MATCHED THEN "
             "  INSERT *"
         )
@@ -939,7 +1010,11 @@ def test_merge_insert_only(table_name, memory_leak_check):
     )
 
 
-def test_merge_insert_only_with_condition(table_name, memory_leak_check):
+def test_merge_insert_only_with_condition(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeInsertOnlyWithCondition.
     """
@@ -958,14 +1033,19 @@ def test_merge_insert_only_with_condition(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN NOT MATCHED AND is_new = TRUE THEN "
             "  INSERT (v, id) VALUES (s.v + 100, s.id)",
         )
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "v": [1, 121]})
+    expected_rows = pd.DataFrame(
+        {
+            "id": pd.Series([1, 2], dtype="int32"),
+            "v": pd.Series([1, 121], dtype="int32"),
+        }
+    )
 
     check_func(
         impl,
@@ -977,7 +1057,14 @@ def test_merge_insert_only_with_condition(table_name, memory_leak_check):
     )
 
 
-def test_merge_aligns_update_and_insert_actions(table_name, memory_leak_check):
+@pytest.mark.skip(
+    "id column is ambiguous because calcite can't figure out insert must come from source table."
+)
+def test_merge_aligns_update_and_insert_actions(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeAlignsUpdateAndInsertActions.
     """
@@ -996,7 +1083,7 @@ def test_merge_aligns_update_and_insert_actions(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.id == source.id "
+            "ON t.id = source.id "
             "WHEN MATCHED THEN "
             "  UPDATE SET b = c2, a = c1, t.id = source.id "
             "WHEN NOT MATCHED THEN "
@@ -1019,8 +1106,13 @@ def test_merge_aligns_update_and_insert_actions(table_name, memory_leak_check):
     )
 
 
+@pytest.mark.skip(
+    "id column is ambiguous because calcite can't figure out insert must come from source table."
+)
 def test_merge_mixed_case_aligns_update_and_insert_actions(
-    table_name, memory_leak_check
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
 ):
     """
     Parity for Iceberg's testMergeMixedCaseAlignsUpdateAndInsertActions.
@@ -1028,7 +1120,7 @@ def test_merge_mixed_case_aligns_update_and_insert_actions(
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("a", "int", False), ("b", "int", False)],
+        [("id", "int", False), ("a", "int", False), ("b", "string", False)],
         pd.DataFrame(
             {"id": [1], "a": [2], "b": ["str"]},
         ),
@@ -1040,7 +1132,7 @@ def test_merge_mixed_case_aligns_update_and_insert_actions(
     def impl1(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.iD == source.Id "
+            "ON t.iD = source.Id "
             "WHEN MATCHED THEN "
             "  UPDATE SET B = c2, A = c1, t.Id = source.id "
             "WHEN NOT MATCHED THEN "
@@ -1087,14 +1179,19 @@ def test_merge_mixed_case_aligns_update_and_insert_actions(
     )
 
 
-def test_merge_multiple_match_ordering(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
+def test_merge_multiple_match_ordering(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Tests that rows perform the first matching condition
     """
 
     bc = _create_and_init_table(
         table_name,
-        [("id", "int", False), ("a", "int", False), ("b", "int", False)],
+        [("id", "int", False), ("a", "int", False), ("b", "string", False)],
         pd.DataFrame(
             {
                 "id": [1, 2, 3, 4, 5],
@@ -1125,7 +1222,7 @@ def test_merge_multiple_match_ordering(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s"
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED AND t.id > 3 THEN "
             "  UPDATE SET t.a = s.c1"
             "WHEN MATCHED AND t.id < 3 THEN "
@@ -1148,18 +1245,8 @@ def test_merge_multiple_match_ordering(table_name, memory_leak_check):
 
     expected = pd.DataFrame(
         {
-            "id": [
-                1,
-                2,
-                4,
-                5,
-                -1,
-                -2,
-                -3,
-                -4,
-                -5,
-            ],
-            "a": [-1, -3, -5, -8, -10, -2, -4, -6, -8, -10],
+            "id": [1, 2, 4, 5, -1, -2, -3, -4, -5],
+            "a": [-1, -3, -8, -10, -2, -4, -6, -8, -10],
             "b": [
                 "str1",
                 "str2",
@@ -1179,11 +1266,15 @@ def test_merge_multiple_match_ordering(table_name, memory_leak_check):
         only_1DVar=True,
         py_output=expected,
         reset_index=True,
-        sort_output=True,
     )
 
 
-def test_merge_with_inferred_casts(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
+def test_merge_with_inferred_casts(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithInferredCasts.
     """
@@ -1191,7 +1282,6 @@ def test_merge_with_inferred_casts(table_name, memory_leak_check):
     bc = _create_and_init_table(
         table_name,
         [("id", "int", False), ("s", "string", False)],
-        ('{ "id": 1, "s": "value"}'),
         pd.DataFrame({"id": [1], "s": ["value"]}),
         pd.DataFrame({"id": [1], "c1": [-2]}),
     )
@@ -1199,7 +1289,7 @@ def test_merge_with_inferred_casts(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source "
-            "ON t.id == source.id "
+            "ON t.id = source.id "
             "WHEN MATCHED THEN "
             "  UPDATE SET t.s = source.c1"
         )
@@ -1214,11 +1304,15 @@ def test_merge_with_inferred_casts(table_name, memory_leak_check):
         only_1DVar=True,
         py_output=expected_1,
         reset_index=True,
-        sort_output=True,
     )
 
 
-def test_merge_with_multiple_not_matched_actions(table_name, memory_leak_check):
+@pytest.mark.skip("INSERT * Syntax is Not Supported Yet")
+def test_merge_with_multiple_not_matched_actions(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeWithMultipleNotMatchedActions.
     """
@@ -1233,7 +1327,7 @@ def test_merge_with_multiple_not_matched_actions(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN NOT MATCHED AND s.id = 1 THEN "
             "  INSERT (dep, id) VALUES (s.dep, -1)"
             "WHEN NOT MATCHED THEN "
@@ -1256,8 +1350,11 @@ def test_merge_with_multiple_not_matched_actions(table_name, memory_leak_check):
     )
 
 
+@pytest.mark.skip("Need support for insert *")
 def test_merge_with_multiple_conditional_not_matched_actions(
-    table_name, memory_leak_check
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
 ):
     """
     Parity for Iceberg's testMergeWithMultipleConditionalNotMatchedActions.
@@ -1273,7 +1370,7 @@ def test_merge_with_multiple_conditional_not_matched_actions(
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source AS s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN NOT MATCHED AND s.id = 1 THEN "
             "  INSERT (dep, id) VALUES (s.dep, -1)"
             "WHEN NOT MATCHED AND s.id = 2 THEN "
@@ -1296,7 +1393,12 @@ def test_merge_with_multiple_conditional_not_matched_actions(
     )
 
 
-def test_merge_resolves_columns_by_name(table_name, memory_leak_check):
+@pytest.mark.skip("Need support for insert * and set *")
+def test_merge_resolves_columns_by_name(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeResolvesColumnsByName.
     """
@@ -1319,7 +1421,7 @@ def test_merge_resolves_columns_by_name(table_name, memory_leak_check):
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source as s"
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN MATCHED THEN "
             "  UPDATE SET * "
             "WHEN NOT MATCHED THEN "
@@ -1346,8 +1448,11 @@ def test_merge_resolves_columns_by_name(table_name, memory_leak_check):
     )
 
 
+@pytest.mark.skip("Need support for insert * and set *")
 def test_merge_should_resolve_when_there_are_no_unresolved_expressions_or_columns(
-    table_name, memory_leak_check
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
 ):
     """
     Parity for Iceberg's testMergeShouldResolveWhenThereAreNoUnresolvedExpressionsOrColumns.
@@ -1387,6 +1492,8 @@ def test_merge_should_resolve_when_there_are_no_unresolved_expressions_or_column
 
 
 def test_merge_with_non_existing_columns(
+    iceberg_database,
+    iceberg_table_conn,
     table_name,
 ):
     """
@@ -1397,25 +1504,28 @@ def test_merge_with_non_existing_columns(
     bc = _create_and_init_table(
         table_name,
         [("id", "int", False), ("c", "date", False)],
-        pd.DataFrame(),
+        pd.DataFrame({"id": [], "c": []}),
         pd.DataFrame({"c1": [1, 2, 3], "c2": [4, 5, 6]}),
     )
 
+    @bodo.jit
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN MATCHED THEN "
             "  UPDATE SET t.invalid_col = s.c2"
         )
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    with pytest.raises(BodoError, "TODO!"):
+    with pytest.raises(BodoError, match="Unknown target column"):
         out1 = impl(bc)
 
 
 def test_merge_with_invalid_columns_in_insert(
+    iceberg_database,
+    iceberg_table_conn,
     table_name,
 ):
     """
@@ -1426,38 +1536,42 @@ def test_merge_with_invalid_columns_in_insert(
     bc = _create_and_init_table(
         table_name,
         [("id", "int", False), ("c", "date", False)],
-        pd.DataFrame(),
+        pd.DataFrame({"id": [], "c": []}),
         pd.DataFrame({"c1": [-100], "c2": [-200]}),
     )
 
-    def init_bc():
-        return bc
-
+    @bodo.jit
     def test_dup_insert_cols(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN NOT MATCHED THEN "
             "  INSERT (id, id) VALUES (s.c1, null)"
         )
 
+    @bodo.jit
     def test_must_provide_all_dest_cols(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN NOT MATCHED THEN " + "  INSERT (id) VALUES (s.c1)",
         )
 
-    bc = init_bc()
-
-    with pytest.raises(BodoError, "TODO!"):
+    with pytest.raises(
+        BodoError, match="Target column 'id' is assigned more than once"
+    ):
         test_dup_insert_cols(bc)
 
-    with pytest.raises(BodoError, "TODO!"):
+    with pytest.raises(
+        RuntimeError, match="Column c contains nulls but is expected to be non-nullable"
+    ):
         test_must_provide_all_dest_cols(bc)
 
 
+@pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
 def test_merge_with_conflicting_updates(
+    iceberg_database,
+    iceberg_table_conn,
     table_name,
 ):
     """
@@ -1468,7 +1582,7 @@ def test_merge_with_conflicting_updates(
     bc = _create_and_init_table(
         table_name,
         [("id", "int", False), ("c", "int", False)],
-        pd.DataFrame(),
+        pd.DataFrame({"id": [], "c": []}),
         pd.DataFrame(
             {
                 "c1": [-100],
@@ -1478,19 +1592,23 @@ def test_merge_with_conflicting_updates(
         ),
     )
 
+    @bodo.jit
     def impl(bc):
         return bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN MATCHED THEN "
             "  UPDATE SET t.id = 1, t.c = 2, t.id = 2",
         )
 
-    with pytest.raises(BodoError, "TODO!"):
+    with pytest.raises(BodoError, match="TODO!"):
         impl(bc)
 
 
+@pytest.mark.skip("Need support for table alias in the LHS of the update assignment")
 def test_merge_with_invalid_assignments(
+    iceberg_database,
+    iceberg_table_conn,
     table_name,
 ):
     """
@@ -1509,25 +1627,27 @@ def test_merge_with_invalid_assignments(
         ),
     )
 
+    @bodo.jit
     def test_set_null(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN MATCHED THEN "
             "  UPDATE SET t.id = NULL"
         )
 
+    @bodo.jit
     def test_set_wrong_typ(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN MATCHED THEN "
             "  UPDATE SET t.s = s.c2"
         )
 
-    with pytest.raises(BodoError, "TODO!"):
+    with pytest.raises(BodoError, match="TODO!"):
         test_set_null(bc)
-    with pytest.raises(BodoError, "TODO!"):
+    with pytest.raises(BodoError, match="TODO!"):
         test_set_wrong_typ(bc)
 
 
@@ -1547,7 +1667,11 @@ def gen_agg_subquery_bc():
 
 
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
-def test_merge_with_aggregate_expressions_in_join(table_name, memory_leak_check):
+def test_merge_with_aggregate_expressions_in_join(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Partial parity for Iceberg's testMergeWithAggregateExpressions.
     (Changed due to our lack of struct support, and the possibility to support this in the future)
@@ -1560,7 +1684,7 @@ def test_merge_with_aggregate_expressions_in_join(table_name, memory_leak_check)
     def test_agg_in_join(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 AND max(t.id) == 1 "
+            "ON t.id = s.c1 AND max(t.id) = 1 "
             "WHEN MATCHED THEN "
             "  UPDATE SET t.c = -1"
         )
@@ -1579,7 +1703,11 @@ def test_merge_with_aggregate_expressions_in_join(table_name, memory_leak_check)
 
 
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
-def test_merge_with_aggregate_expressions_in_update_cond(table_name, memory_leak_check):
+def test_merge_matched_with_aggregate_expressions_in_update_cond(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Partial parity for Iceberg's testMergeWithAggregateExpressions.
     (Changed due to our lack of struct support, and the possibility to support this in the future)
@@ -1592,7 +1720,7 @@ def test_merge_with_aggregate_expressions_in_update_cond(table_name, memory_leak
     def test_agg_in_update_cond(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN MATCHED AND sum(t.id) < 1 THEN "
             "  UPDATE SET t.c = -1"
         )
@@ -1611,7 +1739,11 @@ def test_merge_with_aggregate_expressions_in_update_cond(table_name, memory_leak
 
 
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
-def test_merge_with_aggregate_expressions_in_delete_cond(table_name, memory_leak_check):
+def test_merge_with_aggregate_expressions_in_delete_cond(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Partial parity for Iceberg's testMergeWithAggregateExpressions.
     (Changed due to our lack of struct support, and the possibility to support this in the future)
@@ -1623,7 +1755,7 @@ def test_merge_with_aggregate_expressions_in_delete_cond(table_name, memory_leak
     def test_agg_in_delete_cond(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN MATCHED AND sum(t.id) = 1 THEN "
             "  DELETE"
         )
@@ -1641,7 +1773,11 @@ def test_merge_with_aggregate_expressions_in_delete_cond(table_name, memory_leak
 
 
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
-def test_merge_with_aggregate_expressions_in_update_cond(table_name, memory_leak_check):
+def test_merge_not_matched_with_aggregate_expressions_in_update_cond(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Partial parity for Iceberg's testMergeWithAggregateExpressions.
     (Changed due to our lack of struct support, and the possibility to support this in the future)
@@ -1653,7 +1789,7 @@ def test_merge_with_aggregate_expressions_in_update_cond(table_name, memory_leak
     def test_agg_in_update_cond(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN NOT MATCHED AND sum(c1) < 1 THEN "
             "  INSERT (id, c) VALUES (1, null)"
         )
@@ -1672,7 +1808,11 @@ def test_merge_with_aggregate_expressions_in_update_cond(table_name, memory_leak
 
 
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
-def test_merge_with_subqueries_in_join_condition(table_name, memory_leak_check):
+def test_merge_with_subqueries_in_join_condition(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Partial parity for Iceberg's testMergeWithSubqueriesInConditions.
     (Changed due to our lack of struct support, and the possibility to support this in the future)
@@ -1684,7 +1824,7 @@ def test_merge_with_subqueries_in_join_condition(table_name, memory_leak_check):
     def test_agg_in_join(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 AND t.id < (SELECT max(c2) FROM source)"
+            "ON t.id = s.c1 AND t.id < (SELECT max(c2) FROM source)"
             "WHEN MATCHED THEN "
             "  UPDATE SET t.c = -1"
         )
@@ -1703,7 +1843,9 @@ def test_merge_with_subqueries_in_join_condition(table_name, memory_leak_check):
 
 
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
-def test_merge_with_subqueries_in_update_condition(table_name, memory_leak_check):
+def test_merge_with_subqueries_in_update_condition(
+    table_name,
+):
     """
     Partial parity for Iceberg's testMergeWithSubqueriesInConditions.
     (Changed due to our lack of struct support, and the possibility to support this in the future)
@@ -1715,7 +1857,7 @@ def test_merge_with_subqueries_in_update_condition(table_name, memory_leak_check
     def test_agg_in_update_cond(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN MATCHED AND t.id > (SELECT max(c2) FROM source) THEN "
             "  UPDATE SET t.c = -1"
         )
@@ -1733,7 +1875,11 @@ def test_merge_with_subqueries_in_update_condition(table_name, memory_leak_check
 
 
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
-def test_merge_with_subqueries_in_delete_condition(table_name, memory_leak_check):
+def test_merge_with_subqueries_in_delete_condition(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Partial parity for Iceberg's testMergeWithSubqueriesInConditions.
     (Changed due to our lack of struct support, and the possibility to support this in the future)
@@ -1745,7 +1891,7 @@ def test_merge_with_subqueries_in_delete_condition(table_name, memory_leak_check
     def test_agg_in_delete_cond(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN MATCHED AND t.id < (SELECT max(c2) FROM source) THEN "
             "  DELETE"
         )
@@ -1763,7 +1909,11 @@ def test_merge_with_subqueries_in_delete_condition(table_name, memory_leak_check
 
 
 @pytest.mark.skip("Not currently supported: https://bodo.atlassian.net/browse/BE-3716")
-def test_merge_with_subqueries_in_insert_condition(table_name, memory_leak_check):
+def test_merge_with_subqueries_in_insert_condition(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Partial parity for Iceberg's testMergeWithSubqueriesInConditions.
     (Changed due to our lack of struct support, and the possibility to support this in the future)
@@ -1775,7 +1925,7 @@ def test_merge_with_subqueries_in_insert_condition(table_name, memory_leak_check
     def test_agg_in_insert_cond(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.c1 "
+            "ON t.id = s.c1 "
             "WHEN NOT MATCHED AND t.id NOT IN (SELECT c2 FROM source) THEN "
             "  INSERT (id, c) VALUES (1, null)"
         )
@@ -1792,7 +1942,9 @@ def test_merge_with_subqueries_in_insert_condition(table_name, memory_leak_check
     )
 
 
-def test_merge_with_target_columns_in_insert_conditions(table_name):
+def test_merge_with_target_columns_in_insert_conditions(
+    iceberg_database, iceberg_table_conn, table_name
+):
     """
     Parity for Iceberg's testMergeWithTargetColumnsInInsertConditions.
     """
@@ -1800,23 +1952,31 @@ def test_merge_with_target_columns_in_insert_conditions(table_name):
     bc = _create_and_init_table(
         table_name,
         [("id", "int", False), ("c2", "int", False)],
-        pd.DataFrame(),
+        pd.DataFrame({"id": [], "c2": []}),
         pd.DataFrame({"id": [1], "dep": [11]}),
     )
 
+    @bodo.jit
     def impl(bc):
         bc.sql(
             f"MERGE INTO {table_name} t USING source s "
-            "ON t.id == s.id "
+            "ON t.id = s.id "
             "WHEN NOT MATCHED AND c2 = 1 THEN "
             "  INSERT (id, c2) VALUES (s.id, null)"
         )
 
-    with pytest.raises(BodoError, "TODO"):
+    with pytest.raises(
+        BodoError, match=r"Failure in compiling or validating SQL Query"
+    ):
         impl(bc)
 
 
-def test_merge_empty_table(table_name, memory_leak_check):
+@pytest.mark.skip("Support insert * and set *")
+def test_merge_empty_table(
+    iceberg_database,
+    iceberg_table_conn,
+    table_name,
+):
     """
     Parity for Iceberg's testMergeEmptyTable.
     """
@@ -1824,7 +1984,7 @@ def test_merge_empty_table(table_name, memory_leak_check):
     bc = _create_and_init_table(
         table_name,
         [("id", "int", False)],
-        pd.DataFrame(),
+        pd.DataFrame({"id": []}),
         pd.DataFrame(
             {"id": [0, 1, 2, 3, 4]},
         ),
