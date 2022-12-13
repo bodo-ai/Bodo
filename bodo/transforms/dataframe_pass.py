@@ -871,6 +871,7 @@ class DataFramePass:
             f,
             rhs.args[:2] + list(named_params.values()),
             extra_globals=glbls,
+            run_full_pipeline=True,
         )
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):

@@ -35,9 +35,9 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (Timestamp('2021-12-09 09:57:44.114123'), Timestamp('2021-12-09 09:57:44.114123'), Timestamp('1970-04-11 00:00:00'), Timestamp('2021-12-09 09:57:44.114123'))
     ```
-  
-  
-  
+
+
+
 #### `pd.Timestamp.day`
 
 - ++pandas.Timestamp.%%day%%++
@@ -70,7 +70,7 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     9
     ```
-  
+
 #### `pd.Timestamp.microsecond`
 
 
@@ -87,7 +87,7 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     114123
     ```
-  
+
 #### `pd.Timestamp.month`
 
 
@@ -121,8 +121,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     12
     ```
-  
-  
+
+
 #### `pd.Timestamp.second`
 
 
@@ -139,8 +139,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     44
     ```
-  
-  
+
+
 #### `pd.Timestamp.year`
 
 
@@ -157,8 +157,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     2021
     ```
-  
-  
+
+
 #### `pd.Timestamp.dayofyear`
 
 
@@ -175,8 +175,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     343
     ```
-  
-  
+
+
 #### `pd.Timestamp.day_of_year`
 
 
@@ -193,8 +193,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     343
     ```
-  
-  
+
+
 #### `pd.Timestamp.dayofweek`
 
 
@@ -211,8 +211,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     343
     ```
-  
-  
+
+
 #### `pd.Timestamp.day_of_week`
 
 
@@ -229,8 +229,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     3
     ```
-  
-  
+
+
 #### `pd.Timestamp.days_in_month`
 
 
@@ -264,8 +264,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     31
     ```
-  
-  
+
+
 #### `pd.Timestamp.is_leap_year`
 
 
@@ -283,8 +283,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (True, False)
     ```
-  
-  
+
+
 #### `pd.Timestamp.is_month_start`
 
 
@@ -302,8 +302,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (True, False)
     ```
-  
-  
+
+
 #### `pd.Timestamp.is_month_end`
 
 
@@ -321,8 +321,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (True, False)
     ```
-  
-  
+
+
 #### `pd.Timestamp.is_quarter_start`
 
 
@@ -340,8 +340,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (False, True)
     ```
-  
-  
+
+
 #### `pd.Timestamp.is_quarter_end`
 
 
@@ -359,8 +359,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (True, False)
     ```
-  
-  
+
+
 #### `pd.Timestamp.is_year_start`
 
 
@@ -378,8 +378,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (False, True)
     ```
-  
-  
+
+
 #### `pd.Timestamp.is_year_end`
 
 
@@ -397,8 +397,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (True, False)
     ```
-  
-  
+
+
 #### `pd.Timestamp.quarter`
 
 
@@ -416,8 +416,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (4, 3)
     ```
-  
-  
+
+
 #### `pd.Timestamp.week`
 
 
@@ -435,8 +435,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (35, 38)
     ```
-  
-  
+
+
 #### `pd.Timestamp.weekofyear`
 
 
@@ -454,8 +454,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (35, 38)
     ```
-  
-  
+
+
 #### `pd.Timestamp.value`
 
 
@@ -471,8 +471,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     12345
     ```
-  
-  
+
+
 #### `pd.Timestamp.ceil`
 
 
@@ -494,8 +494,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (Timestamp('2021-12-09 09:57:44.114123'), Timestamp('2021-12-10 00:00:00'))
     ```
-  
-  
+
+
 #### `pd.Timestamp.date`
 
 
@@ -513,7 +513,7 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (Timestamp('2021-12-09 09:57:44.114123'), datetime.date(2021, 12, 9))
     ```
-  
+
 
 #### `pd.Timestamp.day_name`
 
@@ -536,8 +536,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     ('Thursday', 'Friday', 'Saturday')
     ```
-  
-  
+
+
 #### `pd.Timestamp.floor`
 
 
@@ -559,8 +559,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (Timestamp('2021-12-09 09:57:44.114123'), Timestamp('2021-12-09 00:00:00'))
     ```
-  
-  
+
+
 #### `pd.Timestamp.isocalendar`
 
 
@@ -577,8 +577,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (2021, 49, 4)
     ```
-  
-  
+
+
 #### `pd.Timestamp.isoformat`
 
 
@@ -595,8 +595,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     '2021-12-09T09:57:44'
     ```
-  
-  
+
+
 #### `pd.Timestamp.month_name`
 
 
@@ -614,8 +614,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     'December'
     ```
-  
-  
+
+
 #### `pd.Timestamp.normalize`
 
 
@@ -632,8 +632,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     Timestamp('2021-12-09 00:00:00')
     ```
-  
-  
+
+
 #### `pd.Timestamp.round`
 
 
@@ -655,7 +655,7 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (Timestamp('2021-12-09 00:00:00'),Timestamp('2021-12-10 00:00:00'))
     ```
-  
+
 
 #### `pd.Timestamp.strftime`
 
@@ -676,8 +676,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     '2021-12-09 12:00:00'
     ```
-  
-  
+
+
 #### `pd.Timestamp.toordinal`
 
 
@@ -693,8 +693,8 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     738133
     ```
-  
-  
+
+
 #### `pd.Timestamp.weekday`
 
 
@@ -712,14 +712,15 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     >>> f()
     (3, 4)
     ```
-  
-  
+
+
 #### `pd.Timestamp.now`
 
 
 - ++pandas.Timestamp.%%now%%(tz=None)++
 
-    ***Supported Arguments***: None
+    ***Supported Arguments***:
+    - `tz`: constant string, integer, or None
 
     ***Example Usage***
 
@@ -732,4 +733,4 @@ Timestamp functionality is documented in [`pandas.Timestamp`](https://pandas.pyd
     Timestamp('2021-12-10 10:54:06.457168')
 
     ```
-  
+
