@@ -2564,15 +2564,34 @@ def to_datetime64(ts):
     return impl
 
 
-@register_jitable
-def now_impl():  # pragma: no cover
+def now_impl(tz=None):  # pragma: no cover
+    pass
+
+
+@overload(now_impl, no_unilteral=True)
+def now_impl_overload(tz=None):
     """Internal call to support pd.Timestamp.now().
     Untyped pass replaces pd.Timestamp.now() with this call since class methods are
     not supported in Numba's typing
     """
-    with numba.objmode(d="pd_timestamp_tz_naive_type"):
-        d = pd.Timestamp.now()
-    return d
+
+    if is_overload_none(tz):
+        tz_typ = PandasTimestampType(None)
+    elif is_overload_constant_str(tz):
+        tz_typ = PandasTimestampType(get_overload_const_str(tz))
+    elif is_overload_constant_int(tz):
+        tz_typ = PandasTimestampType(get_overload_const_int(tz))
+    else:
+        raise_bodo_error(
+            "pandas.Timestamp.now(): tz argument must be a constant string or integer literal if provided"
+        )
+
+    def impl(tz=None):  # pragma: no cover
+        with numba.objmode(d=tz_typ):
+            d = pd.Timestamp.now(tz)
+        return d
+
+    return impl
 
 
 # -- builtin operators for dt64 ----------------------------------------------

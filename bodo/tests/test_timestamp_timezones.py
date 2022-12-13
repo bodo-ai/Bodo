@@ -387,3 +387,16 @@ def test_datetime_timedelta_sub(representative_tz, memory_leak_check):
     )
     td = datetime.timedelta(hours=2, seconds=11, microseconds=45)
     check_func(test_impl, (ts, td))
+
+
+def test_timestamp_now_with_tz_str(representative_tz, memory_leak_check):
+
+    # Note: we have to lower this a global so that it's constant, since we require it to be
+    # a constant at this time
+    @bodo.jit()
+    def test_impl():
+        return pd.Timestamp.now(representative_tz)
+
+    # Note: have to test this manually as pd.Timestamp.now() will return slightly differing values
+    out = test_impl()
+    assert pd.Timestamp.now(representative_tz) - out < pd.Timedelta(1, "min")
