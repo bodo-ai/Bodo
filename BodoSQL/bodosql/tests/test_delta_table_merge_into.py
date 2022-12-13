@@ -36,6 +36,7 @@ pytest.skip(
 from bodosql.libs.iceberg_merge_into import (
     DELETE_ENUM,
     INSERT_ENUM,
+    ROW_ID_COL_NAME,
     UPDATE_ENUM,
 )
 
@@ -52,17 +53,28 @@ using_cond_one = "SOURCE_TABLE as SOURCE_TABLE"
 target_one_source_one_condition_one_matched_rows = source_df_one.merge(
     target_df_one, left_on="X", right_on="A"
 )
+target_one_source_one_condition_one_matched_rows[
+    ROW_ID_COL_NAME
+] = target_one_source_one_condition_one_matched_rows["A"]
 target_one_source_one_condition_one_not_matched_rows = pd.DataFrame(
-    {"X": [20], "Y": [-4], "Z": [-8]}
+    {"X": [20], "Y": [-4], "Z": [-8], ROW_ID_COL_NAME: [None]}
 )
 
 join_condition_two = "(SOURCE_TABLE.X - 9) = DEST_TABLE.A AND SOURCE_TABLE.Y in (-5, -4) AND DEST_TABLE.A IN (11, 20, 100)"
 
 target_one_source_one_condition_two_matched_rows = pd.DataFrame(
-    {"A": [11], "B": [11 * 2], "C": [11 * 3], "X": [20], "Y": [-4], "Z": [-8]}
+    {
+        "A": [11],
+        "B": [11 * 2],
+        "C": [11 * 3],
+        "X": [20],
+        "Y": [-4],
+        "Z": [-8],
+        ROW_ID_COL_NAME: [11],
+    }
 )
 target_one_source_one_condition_two_not_matched_rows = pd.DataFrame(
-    {"X": [1, 3, 10], "Y": [-1, -2, -3], "Z": [-5, -6, -7]}
+    {"X": [1, 3, 10], "Y": [-1, -2, -3], "Z": [-5, -6, -7], ROW_ID_COL_NAME: [None] * 3}
 )
 
 not_matched_condition0 = "X = 1"
@@ -148,7 +160,7 @@ def apply_matched_action(df, action):
     else:
         raise Exception(f"Error, unhandled action in apply_matched_action: {action}")
 
-    return df.loc[:, ["A", "B", "C", "_merge_into_change"]]
+    return df.loc[:, ["A", "B", "C", ROW_ID_COL_NAME, "_merge_into_change"]]
 
 
 not_matched_action_0 = "THEN INSERT (A, B, C) VALUES (-101, -102, -103)"
@@ -227,7 +239,7 @@ def gen_expected_query_and_expected_df(
         MERGE INTO DEST_TABLE as DEST_TABLE
         USING {using_cond} ON ({join_cond})\n
     """
-    output_df = pd.DataFrame({})
+    output_df = pd.DataFrame({}, columns=["A", "B", "C", ROW_ID_COL_NAME])
 
     query += gen_clauses(
         matched_conditions_and_actions, not_matched_conditions_and_actions
@@ -412,7 +424,6 @@ def test_delta_table_simple(
     Tests that the generated delta table is the expected value. Does NOT test
     that the delta table is valid (no two actions applied to the same row)
     """
-
     if (
         len(matched_conditions_and_actions) == 0
         and len(not_matched_conditions_and_actions) == 0
