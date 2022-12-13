@@ -166,7 +166,8 @@ def parse_dbtype(con_str):
 
     # NOTE: if you're upding supported schemes here, don't forget
     # to update the associated error message in _run_call_read_sql_table
-    if con_str == "iceberg+glue" or parseresult.scheme in (
+
+    if con_str.startswith("iceberg+glue") or parseresult.scheme in (
         "iceberg",
         "iceberg+file",
         "iceberg+s3",
