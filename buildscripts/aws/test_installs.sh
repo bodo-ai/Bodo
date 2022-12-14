@@ -26,6 +26,10 @@ if [ "$RUN_NIGHTLY" != "yes" ]; then
     mamba install -y -c conda-forge cx_oracle psycopg2
 fi
 mamba install -y -c conda-forge pytest pytest-cov pytest-timeout
+# From snowflake to cx_oracle or psycopg2 all 
+# downgrade hdf5 and install it without mpi
+# So we revert it back.
+mamba install -y -c conda-forge 'hdf5=1.12.*=*mpich*'
 python -m pip install deltalake
 python -m pip install awscli
 

@@ -7,7 +7,7 @@ from utils.utils import run_cmd
 
 def test_iceberg_basic_df():
     num_processes = 36
-    timeout = 300
+    timeout = 600
 
     table_name = f"types_table_{str(uuid4())[:8]}"
     cmd = [
