@@ -3257,13 +3257,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String joinCond = joinCondInfo.getKey();
       Boolean hasEquals = joinCondInfo.getValue();
       /* extract join type */
-      // TODO: Update join type to "cross" if cond=True
       String joinType = node.getJoinType().lowerName;
       if (!hasEquals && !joinType.equals("inner")) {
         // If there is no equality in the join we don't support it in the engine yet.
         // We can handle inner join with a dummy column, but not outer joins.
         throw new BodoSQLCodegenException(
             "BodoSQL outer joins require at least 1 equality condition");
+      }
+      // a join without any conditions is a cross join (how="cross" in pd.merge)
+      if (joinCond.equals("True")) {
+        joinType = "cross";
       }
       // Do we need to apply a filter after the merge?
       boolean filterOutput = !hasEquals && !joinCond.equals("True");

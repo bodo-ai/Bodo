@@ -349,6 +349,19 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         dtype_size = numpy_item_size[out_array->dtype];
     }
 
+    PrimitiveBuilder(Bodo_CTypes::CTypeEnum dtype, int64_t length,
+                     bool is_nullable, bool is_categorical)
+        : is_nullable(is_nullable), is_categorical(is_categorical) {
+        if (is_nullable)
+            out_array =
+                alloc_array(length, -1, -1, bodo_array_type::NULLABLE_INT_BOOL,
+                            dtype, 0, -1);
+        else
+            out_array = alloc_array(length, -1, -1, bodo_array_type::NUMPY,
+                                    dtype, 0, -1);
+        dtype_size = numpy_item_size[out_array->dtype];
+    }
+
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         std::shared_ptr<arrow::DataType> arrow_type = chunked_arr->type();
 
@@ -409,6 +422,8 @@ class StringBuilder : public TableBuilder::BuilderColumn {
      */
     StringBuilder(std::shared_ptr<arrow::DataType> type)
         : dtype(arrow_to_bodo_type(type)) {}
+
+    StringBuilder(Bodo_CTypes::CTypeEnum dtype) : dtype(dtype) {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // XXX hopefully keeping the string arrays around doesn't prevent other
@@ -535,6 +550,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
                 "BINARY data types");
         }
     }
+
+    DictionaryEncodedStringBuilder(int64_t length) : length(length) {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // Store the chunks
@@ -770,6 +787,10 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
         string_builder = new StringBuilder(type->field(0)->type());
     }
 
+    ListStringBuilder(Bodo_CTypes::CTypeEnum dtype) {
+        string_builder = new StringBuilder(dtype);
+    }
+
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // get child (StringArray) chunks and pass them to StringBuilder
         arrow::ArrayVector child_chunks;
@@ -847,6 +868,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
      * @param type : Arrow type of input array
      */
     ArrowBuilder(std::shared_ptr<arrow::DataType> type) {}
+    ArrowBuilder() {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // XXX hopefully keeping the arrays around doesn't prevent other
@@ -941,6 +963,31 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
             columns.push_back(new AllNullsBuilder(num_rows));
         } else {
             columns.push_back(new ArrowBuilder(field->type()));
+        }
+    }
+}
+
+TableBuilder::TableBuilder(table_info* table, const int64_t num_rows) {
+    for (array_info* arr : table->columns) {
+        if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            columns.push_back(
+                new PrimitiveBuilder(arr->dtype, num_rows, true, false));
+        } else if (arr->arr_type == bodo_array_type::NUMPY) {
+            columns.push_back(
+                new PrimitiveBuilder(arr->dtype, num_rows, false, false));
+        } else if (arr->arr_type == bodo_array_type::CATEGORICAL) {
+            columns.push_back(
+                new PrimitiveBuilder(arr->dtype, num_rows, false, true));
+        } else if (arr->arr_type == bodo_array_type::DICT) {
+            columns.push_back(new DictionaryEncodedStringBuilder(num_rows));
+        } else if (arr->arr_type == bodo_array_type::STRING) {
+            columns.push_back(new StringBuilder(arr->dtype));
+        } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
+            columns.push_back(new ListStringBuilder(arr->dtype));
+        } else if (arr->arr_type == bodo_array_type::ARROW) {
+            columns.push_back(new ArrowBuilder());
+        } else {
+            throw std::runtime_error("TableBuilder: data type not supported");
         }
     }
 }

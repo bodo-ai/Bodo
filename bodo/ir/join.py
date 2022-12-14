@@ -24,6 +24,7 @@ from bodo.libs.array import (
     arr_info_list_to_table,
     array_to_info,
     cpp_table_to_py_data,
+    cross_join_table,
     delete_table,
     hash_join_table,
     py_data_to_cpp_table,
@@ -131,7 +132,7 @@ def get_join_cond_addr(name):
     return addr
 
 
-HOW_OPTIONS = Literal["inner", "left", "right", "outer", "asof"]
+HOW_OPTIONS = Literal["inner", "left", "right", "outer", "asof", "cross"]
 
 
 class Join(ir.Stmt):
@@ -341,7 +342,7 @@ class Join(ir.Stmt):
         self.right_to_output_map = right_to_output_map
         self.extra_data_col_num = extra_data_col_num
 
-        if len(out_data_vars) > 1:
+        if self.out_data_vars[1] is not None:
             # Compute the source for the index. Note we only
             # need to track the source for a possible output
             # index.
@@ -693,6 +694,21 @@ def visit_vars_join(join_node, callback, cbdata):
 ir_utils.visit_vars_extensions[Join] = visit_vars_join
 
 
+def _is_cross_join_len(join_node):
+    """Return True if we have a cross join with all output columns dead but output table
+    alive. This means only the length of the output table is used (corner case).
+    In this case, we need to keep input columns alive to calculate output length.
+    Cross join needs special handling since it has no keys that would stay alive.
+    See test_merge_cross_len_only.
+    """
+    return (
+        join_node.how == "cross"
+        and not join_node.out_used_cols
+        and join_node.has_live_out_table_var
+        and not join_node.has_live_out_index_var
+    )
+
+
 def remove_dead_join(
     join_node, lives_no_aliases, lives, arg_aliases, alias_map, func_ir, typemap
 ):
@@ -738,7 +754,9 @@ def remove_dead_join(
                     and col_num not in join_node.left_cond_cols
                 ):
                     join_node.left_dead_var_inds.add(col_num)
-                    if not join_node.is_left_table:
+                    if not join_node.is_left_table and not _is_cross_join_len(
+                        join_node
+                    ):
                         join_node.left_vars[col_num] = None
             elif orig == "right":
                 if (
@@ -746,7 +764,9 @@ def remove_dead_join(
                     and col_num not in join_node.right_cond_cols
                 ):
                     join_node.right_dead_var_inds.add(col_num)
-                    if not join_node.is_right_table:
+                    if not join_node.is_right_table and not _is_cross_join_len(
+                        join_node
+                    ):
                         join_node.right_vars[col_num] = None
 
         # Remove dead columns from the dictionary.
@@ -757,13 +777,13 @@ def remove_dead_join(
         if join_node.is_left_table:
             all_dead_set = set(range(join_node.n_left_table_cols))
             remove_table = not bool(all_dead_set - join_node.left_dead_var_inds)
-            if remove_table:
+            if remove_table and not _is_cross_join_len(join_node):
                 join_node.left_vars[0] = None
 
         if join_node.is_right_table:
             all_dead_set = set(range(join_node.n_right_table_cols))
             remove_table = not bool(all_dead_set - join_node.right_dead_var_inds)
-            if remove_table:
+            if remove_table and not _is_cross_join_len(join_node):
                 join_node.right_vars[0] = None
 
     if join_node.has_live_out_index_var:
@@ -1036,6 +1056,55 @@ def build_join_definitions(join_node, definitions=None):
 ir_utils.build_defs_extensions[Join] = build_join_definitions
 
 
+def _gen_cross_join_len(
+    join_node, out_table_type, typemap, calltypes, typingctx, targetctx, both_parallel
+):
+    """generate join output nodes for cross join corner case where only the length of
+    the output table is used.
+    Creates a dummy table with the output length assigned as product of input lengths.
+    See test_merge_cross_len_only.
+    """
+
+    func_text = "def f(left, right):\n"
+    # if both tables are parallel, local chunks of one table have to be broadcast
+    # see cross_join_table()
+    if both_parallel:
+        func_text += "  n_rows = bodo.libs.distributed_api.dist_reduce(len(left), sum_op) * len(right)\n"
+    else:
+        func_text += "  n_rows = len(left) * len(right)\n"
+    func_text += "  py_table = init_table(py_table_type, False)\n"
+    func_text += "  py_table = set_table_len(py_table, n_rows)\n"
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    join_impl = loc_vars["f"]
+
+    glbs = {
+        "py_table_type": out_table_type,
+        "init_table": bodo.hiframes.table.init_table,
+        "set_table_len": bodo.hiframes.table.set_table_len,
+        "sum_op": np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value),
+        "bodo": bodo,
+    }
+
+    arg_vars = [join_node.left_vars[0], join_node.right_vars[0]]
+    arg_typs = tuple(typemap[v.name] for v in arg_vars)
+
+    f_block = compile_to_numba_ir(
+        join_impl,
+        glbs,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_typs,
+        typemap=typemap,
+        calltypes=calltypes,
+    ).blocks.popitem()[1]
+    replace_arg_nodes(f_block, arg_vars)
+    nodes = f_block.body[:-3]
+    nodes[-1].target = join_node.out_data_vars[0]
+    return nodes
+
+
 def join_distributed_run(
     join_node, array_dists, typemap, calltypes, typingctx, targetctx
 ):
@@ -1111,6 +1180,18 @@ def join_distributed_run(
     else:
         index_col_type = types.none
 
+    # handle cross join corner case where only output length is used
+    if _is_cross_join_len(join_node):
+        return _gen_cross_join_len(
+            join_node,
+            out_table_type,
+            typemap,
+            calltypes,
+            typingctx,
+            targetctx,
+            left_parallel and right_parallel,
+        )
+
     # Extra column refer: When doing a merge on column and index, the key
     # is put also in output, so we need one additional column in that case.
     if join_node.extra_data_col_num != -1:
@@ -1151,7 +1232,7 @@ def join_distributed_run(
     left_used_key_col_nums = set()
     right_used_key_col_nums = set()
 
-    # Generate a map for the general_merge_cond. Here we a
+    # Generate a map for the general_merge_cond. Here we
     # define a column by two values. The logical index is its
     # column number in the Pandas DataFrame. In contrast the
     # physical index is the actual location in the C++ table.
@@ -1163,7 +1244,6 @@ def join_distributed_run(
     # the generated cfuncs for complex joins are written using the
     # column name and needs to be converted to the column number in
     # C++ for the generated code.
-    #
     left_logical_physical_map = {}
     right_logical_physical_map = {}
     left_physical_to_logical_list = []
@@ -1514,13 +1594,14 @@ def join_distributed_run(
     else:
         # Cast the keys to a common dtype for comparison
         # if the types differ.
-        func_text += "    t1_keys = ({},)\n".format(
+        func_text += "    t1_keys = ({}{})\n".format(
             ", ".join(
                 f"bodo.utils.utils.astype({left_key_names[i]}, key_type_{i})"
                 if left_key_types[i] != matched_key_types[i]
                 else f"{left_key_names[i]}"
                 for i in range(n_keys)
-            )
+            ),
+            "," if n_keys != 0 else "",
         )
         func_text += "    data_left = ({}{})\n".format(
             ",".join(left_other_names), "," if len(left_other_names) != 0 else ""
@@ -1577,13 +1658,14 @@ def join_distributed_run(
     else:
         # Cast the keys to a common dtype for comparison
         # if the types differ.
-        func_text += "    t2_keys = ({},)\n".format(
+        func_text += "    t2_keys = ({}{})\n".format(
             ", ".join(
                 f"bodo.utils.utils.astype({right_key_names[i]}, key_type_{i})"
                 if right_key_types[i] != matched_key_types[i]
                 else f"{right_key_names[i]}"
                 for i in range(n_keys)
-            )
+            ),
+            "," if n_keys != 0 else "",
         )
         func_text += "    data_right = ({}{})\n".format(
             ",".join(right_other_names), "," if len(right_other_names) != 0 else ""
@@ -1611,7 +1693,7 @@ def join_distributed_run(
             " = bodo.ir.join.local_merge_asof(t1_keys, t2_keys, data_left, data_right)\n"
         )
     else:
-        func_text += _gen_local_hash_join(
+        func_text += _gen_join_cpp_call(
             join_node,
             left_key_types,
             right_key_types,
@@ -1661,6 +1743,7 @@ def join_distributed_run(
             "parallel_asof_comm": parallel_asof_comm,
             "array_to_info": array_to_info,
             "arr_info_list_to_table": arr_info_list_to_table,
+            "cross_join_table": cross_join_table,
             "hash_join_table": hash_join_table,
             "delete_table": delete_table,
             "add_join_gen_cond_cfunc_sym": add_join_gen_cond_cfunc_sym,
@@ -1927,7 +2010,7 @@ def _get_table_parallel_flags(join_node, array_dists):
     return left_parallel, right_parallel
 
 
-def _gen_local_hash_join(
+def _gen_join_cpp_call(
     join_node,
     left_key_types,
     right_key_types,
@@ -2042,7 +2125,7 @@ def _gen_local_hash_join(
             )
 
     n_keys = len(left_key_types)
-    func_text = "    # beginning of _gen_local_hash_join\n"
+    func_text = "    # beginning of _gen_join_cpp_call\n"
     if join_node.is_left_table:
         if join_node.has_live_left_table_var:
             index_left_others = left_other_names[1:]
@@ -2106,21 +2189,37 @@ def _gen_local_hash_join(
 
     # single-element numpy array to return number of global rows from C++
     func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
-    func_text += "    out_table = hash_join_table(table_left, table_right, {}, {}, {}, {}, {}, vect_same_key.ctypes, key_in_output.ctypes, vect_need_typechange.ctypes, {}, {}, {}, {}, {}, {}, cfunc_cond, left_table_cond_columns.ctypes, {}, right_table_cond_columns.ctypes, {}, total_rows_np.ctypes)\n".format(
-        left_parallel,
-        right_parallel,
-        n_keys,
-        len(left_data_logical_list),
-        len(right_data_logical_list),
-        join_node.is_left,
-        join_node.is_right,
-        join_node.is_join,
-        join_node.extra_data_col_num != -1,
-        join_node.indicator_col_num != -1,
-        join_node.is_na_equal,
-        len(left_col_nums),
-        len(right_col_nums),
-    )
+    if join_node.how == "cross":
+        func_text += (
+            f"    out_table = cross_join_table(table_left, table_right, "
+            f"{left_parallel}, {right_parallel}, total_rows_np.ctypes)\n"
+        )
+    else:
+        func_text += (
+            "    out_table = hash_join_table("
+            "table_left, "
+            "table_right, "
+            f"{left_parallel}, "
+            f"{right_parallel}, "
+            f"{n_keys}, "
+            f"{len(left_data_logical_list)}, "
+            f"{len(right_data_logical_list)}, "
+            f"vect_same_key.ctypes, "
+            f"key_in_output.ctypes, "
+            f"vect_need_typechange.ctypes, "
+            f"{join_node.is_left}, "
+            f"{join_node.is_right}, "
+            f"{join_node.is_join}, "
+            f"{join_node.extra_data_col_num != -1}, "
+            f"{join_node.indicator_col_num != -1}, "
+            f"{join_node.is_na_equal}, "
+            f"cfunc_cond, "
+            f"left_table_cond_columns.ctypes, "
+            f"{len(left_col_nums)}, "
+            f"right_table_cond_columns.ctypes, "
+            f"{len(right_col_nums)}, "
+            f"total_rows_np.ctypes)\n"
+        )
     func_text += "    delete_table(table_left)\n"
     func_text += "    delete_table(table_right)\n"
     out_types = "(py_table_type, index_col_type)"

@@ -6,12 +6,6 @@
 #include "_decimal_ext.h"
 #include "hyperloglog.hpp"
 
-// ------------------------------------------------
-// Always include robin and hopscotch maps because they are used regardless of
-// default hash map implementation
-#include <include/tsl/hopscotch_map.h>
-#include <include/tsl/robin_map.h>
-
 // Choose default implementation for unordered map and set
 #undef USE_STD
 #undef USE_TSL_ROBIN
@@ -681,5 +675,15 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
 std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype);
 
 std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type);
+
+/**
+ * @brief concatenate tables vertically into a single table.
+ * Input tables are assumed to have the same schema, and will
+ * be fully deleted (decref arrays and delete pointers).
+ *
+ * @param table_chunks input tables which are assumed to have the same schema
+ * @return table_info* concatenated table
+ */
+table_info* concat_tables(std::vector<table_info*>& table_chunks);
 
 #endif  // _ARRAY_UTILS_H_INCLUDED

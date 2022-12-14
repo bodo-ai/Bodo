@@ -2607,6 +2607,17 @@ class JoinTyper(AbstractTemplate):
             _,
         ) = args
 
+        how = get_overload_const_str(how_var)
+
+        # cross join output has all left/right input columns
+        if how == "cross":
+            data = left_df.data + right_df.data
+            columns = left_df.columns + right_df.columns
+            out_df = DataFrameType(
+                data, RangeIndexType(types.none), columns, is_table_format=True
+            )
+            return signature(out_df, *args)
+
         left_on = get_overload_const_list(left_on)
         right_on = get_overload_const_list(right_on)
 
@@ -2626,7 +2637,6 @@ class JoinTyper(AbstractTemplate):
         right_index = "$_bodo_index_" in right_on
 
         # Determine if this is a left outer join or a right outer join.
-        how = get_overload_const_str(how_var)
         is_left = how in {"left", "outer"}
         is_right = how in {"right", "outer"}
         columns = []
