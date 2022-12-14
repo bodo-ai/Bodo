@@ -3590,8 +3590,10 @@ def validate_merge_spec(
     common_validate_merge_merge_asof_spec(
         "merge", left, right, on, left_on, right_on, left_index, right_index, suffixes
     )
-    # make sure how is constant and one of ("left", "right", "outer", "inner")
-    ensure_constant_values("merge", "how", how, ("left", "right", "outer", "inner"))
+    # make sure how is constant and one of ("left", "right", "outer", "inner", "cross")
+    ensure_constant_values(
+        "merge", "how", how, ("left", "right", "outer", "inner", "cross")
+    )
 
 
 def validate_merge_asof_spec(

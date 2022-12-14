@@ -1,5 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_array_utils.h"
+#include "../io/arrow_reader.h"
+#include "_bodo_to_arrow.h"
 
 #include <mpi.h>
 #include <iostream>
@@ -1929,4 +1931,33 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
     // cast to `size_t` to avoid compilation error on Windows
     ev.add_attribute("g_global_estimate", static_cast<size_t>(est));
     return {local_est, est};
+}
+
+/**
+ * @brief concatenate tables vertically into a single table.
+ * Input tables are assumed to have the same schema, and will
+ * be fully deleted (decref arrays and delete pointers).
+ *
+ * @param table_chunks input tables which are assumed to have the same schema
+ * @return table_info* concatenated table
+ */
+table_info* concat_tables(std::vector<table_info*>& table_chunks) {
+    // get number of total rows for TableBuilder
+    int64_t n_total_rows = 0;
+    for (table_info* table : table_chunks) {
+        n_total_rows += table->nrows();
+    }
+
+    assert(table_chunks->size() > 0);
+    TableBuilder table_builder(table_chunks[0], n_total_rows);
+    for (table_info* table : table_chunks) {
+        table_builder.append(bodo_table_to_arrow(table));
+    }
+
+    table_info* out_table = table_builder.get_table();
+
+    for (table_info* table : table_chunks) {
+        delete_table_decref_arrays(table);
+    }
+    return out_table;
 }

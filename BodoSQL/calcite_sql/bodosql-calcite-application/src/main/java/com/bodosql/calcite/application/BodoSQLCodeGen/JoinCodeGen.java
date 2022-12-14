@@ -24,8 +24,7 @@ public class JoinCodeGen {
    * @param rightColNames The names of the columns in the right table
    * @param leftColNames The names of the columns in the left table
    * @param expectedOutColumns The expected names of the columns in the output table
-   * @param joinCond Expression to be passed to Bodo for pd.merge. If this expression is True we
-   *     cannot support it directly and need to perform a cross join instead.
+   * @param joinCond Expression to be passed to Bodo for pd.merge.
    * @return The code generated for the Join expression.
    */
   public static String generateJoinCode(
@@ -93,9 +92,9 @@ public class JoinCodeGen {
     boolean hasDummy = false;
     boolean updateOnStr = false;
 
-    if (joinCond.equals("True") || !hasEquals) {
+    if (!hasEquals && !joinType.equals("cross")) {
       /*
-       * Temporary workaround to support cross join until it's supported in
+       * Temporary workaround to support cross join with filters until it's supported in
        * the engine. Creates a temporary column and merges on that column.
        */
       hasDummy = true;
@@ -113,7 +112,7 @@ public class JoinCodeGen {
               "pd.concat((%s, pd.DataFrame({\"%s\": right_arr})), axis=1)",
               rightTable, dummyColumn);
       onStr = makeQuoted(dummyColumn);
-    } else {
+    } else if (!joinType.equals("cross")) {
       onStr = makeQuoted(joinCond);
       updateOnStr = true;
     }
@@ -153,12 +152,12 @@ public class JoinCodeGen {
     }
 
     if (joinType.equals("full")) joinType = "outer";
+    onStr = onStr.equals("") ? "" : ", on=" + onStr;
     StringBuilder joinBuilder = new StringBuilder();
     joinBuilder
         .append(leftTable)
         .append(".merge(")
         .append(rightTable)
-        .append(", on=")
         .append(onStr)
         .append(", how=")
         .append(makeQuoted(joinType))

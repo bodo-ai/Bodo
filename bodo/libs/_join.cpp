@@ -1299,3 +1299,191 @@ table_info* hash_join_table(
         return NULL;
     }
 }
+
+/**
+ * @brief handle dict-encoded columns of input tables to cross join.
+ * Dictionaries need to be global since we use broadcast.
+ *
+ * @param left_table left input table to cross join
+ * @param right_table right input table to cross join
+ * @param left_parallel left table is parallel
+ * @param right_parallel right table is parallel
+ */
+void cross_join_handle_dict_encoded(table_info* left_table,
+                                    table_info* right_table, bool left_parallel,
+                                    bool right_parallel) {
+    // Set has_global_dictionary for replicated data just in case.
+    // Should not be necessary since has_global_dictionary
+    // should be set by the compiler automatically for replicated data
+    if (!left_parallel) {
+        for (array_info* a : left_table->columns) {
+            if (a->arr_type == bodo_array_type::DICT) {
+                a->has_global_dictionary = true;
+            }
+        }
+    }
+    if (!right_parallel) {
+        for (array_info* a : right_table->columns) {
+            if (a->arr_type == bodo_array_type::DICT) {
+                a->has_global_dictionary = true;
+            }
+        }
+    }
+    // make all dictionaries global (necessary for broadcast and potentially
+    // other operations)
+    for (array_info* a : left_table->columns) {
+        if (a->arr_type == bodo_array_type::DICT) {
+            make_dictionary_global_and_unique(a, left_parallel);
+        }
+    }
+    for (array_info* a : right_table->columns) {
+        if (a->arr_type == bodo_array_type::DICT) {
+            make_dictionary_global_and_unique(a, right_parallel);
+        }
+    }
+}
+
+/**
+ * @brief cross join two tables locally with a simple nested loop join.
+ * steals references (decrefs) both inputs since it calls RetrieveTable.
+ *
+ * @param left_table left input table
+ * @param right_table right input table
+ * @param parallel_trace parallel flag to pass to tracing calls
+ * @return table_info* cross join output table
+ */
+table_info* cross_join_table_local(table_info* left_table,
+                                   table_info* right_table,
+                                   bool parallel_trace) {
+    tracing::Event ev("cross_join_table_local", parallel_trace);
+    size_t n_rows_left = left_table->nrows();
+    size_t n_rows_right = right_table->nrows();
+    size_t n_rows_out = n_rows_left * n_rows_right;
+    std::vector<int64_t> left_idxs;
+    std::vector<int64_t> right_idxs;
+    left_idxs.reserve(n_rows_out);
+    right_idxs.reserve(n_rows_out);
+
+    // set 500K block size to make sure block data of all cores fits in L3 cache
+    int64_t block_size_bytes = 500 * 1024;
+    char* block_size = std::getenv("BODO_CROSS_JOIN_BLOCK_SIZE");
+    if (block_size) {
+        block_size_bytes = std::stoi(block_size);
+    }
+    if (block_size_bytes < 0) {
+        throw std::runtime_error(
+            "cross_join_table_local: block_size_bytes < 0");
+    }
+
+    int64_t n_left_blocks = (int64_t)std::ceil(
+        table_local_memory_size(left_table) / (double)block_size_bytes);
+    int64_t n_right_blocks = (int64_t)std::ceil(
+        table_local_memory_size(right_table) / (double)block_size_bytes);
+
+    int64_t left_block_n_rows =
+        (int64_t)std::ceil(n_rows_left / (double)n_left_blocks);
+    int64_t right_block_n_rows =
+        (int64_t)std::ceil(n_rows_right / (double)n_right_blocks);
+
+    for (int64_t b_left = 0; b_left < n_left_blocks; b_left++) {
+        for (int64_t b_right = 0; b_right < n_right_blocks; b_right++) {
+            int64_t left_block_start = b_left * left_block_n_rows;
+            int64_t right_block_start = b_right * right_block_n_rows;
+            for (int64_t i = left_block_start;
+                 i < left_block_start + left_block_n_rows; i++) {
+                for (int64_t j = right_block_start;
+                     j < right_block_start + right_block_n_rows; j++) {
+                    if ((i < (int64_t)n_rows_left) &&
+                        (j < (int64_t)n_rows_right)) {
+                        left_idxs.emplace_back(i);
+                        right_idxs.emplace_back(j);
+                    }
+                }
+            }
+        }
+    }
+
+    table_info* out_left = RetrieveTable(left_table, left_idxs, -1);
+    table_info* out_right = RetrieveTable(right_table, right_idxs, -1);
+    std::vector<array_info*> out_arrs(out_left->columns);
+    out_arrs.insert(out_arrs.end(), (out_right->columns).begin(),
+                    (out_right->columns).end());
+    return new table_info(out_arrs);
+}
+
+// design overview:
+// https://bodo.atlassian.net/l/cp/Av2ijf9A
+table_info* cross_join_table(table_info* left_table, table_info* right_table,
+                             bool left_parallel, bool right_parallel,
+                             uint64_t* num_rows_ptr) {
+    cross_join_handle_dict_encoded(left_table, right_table, left_parallel,
+                                   right_parallel);
+
+    try {
+        bool parallel_trace = (left_parallel || right_parallel);
+        tracing::Event ev("cross_join_table", parallel_trace);
+        table_info* out_table;
+
+        // handle parallel cross join by broadcasting table chunks from every
+        // rank
+        if (left_parallel && right_parallel) {
+            int n_pes, myrank;
+            MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+            MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+            std::vector<table_info*> out_table_chunks;
+            out_table_chunks.reserve(n_pes);
+
+            // broadcast the smaller table to reduce overall communication
+            int64_t left_table_size = table_global_memory_size(left_table);
+            int64_t right_table_size = table_global_memory_size(right_table);
+            bool left_table_bcast = left_table_size < right_table_size;
+            table_info* bcast_table = left_table;
+            table_info* other_table = right_table;
+            if (!left_table_bcast) {
+                bcast_table = right_table;
+                other_table = left_table;
+            }
+
+            for (int p = 0; p < n_pes; p++) {
+                // NOTE: broadcast_table steals a reference from bcast_table on
+                // root rank. since all ranks become root in this loop
+                // eventually, bcast_table is decrefed everywhere.
+                table_info* bcast_table_chunk =
+                    broadcast_table(bcast_table, bcast_table,
+                                    bcast_table->ncols(), parallel_trace, p);
+
+                // incref other table since needed in next iterations and
+                // cross_join_table_local decrefs
+                incref_table_arrays(other_table);
+                table_info* out_table_chunk =
+                    left_table_bcast
+                        ? cross_join_table_local(bcast_table_chunk, other_table,
+                                                 parallel_trace)
+                        : cross_join_table_local(other_table, bcast_table_chunk,
+                                                 parallel_trace);
+                delete bcast_table_chunk;
+                out_table_chunks.emplace_back(out_table_chunk);
+            }
+            decref_table_arrays(other_table);
+
+            out_table = concat_tables(out_table_chunks);
+        }
+        // If either table is already replicated then broadcasting
+        // isn't necessary (output's distribution will match the other input as
+        // intended)
+        else {
+            out_table =
+                cross_join_table_local(left_table, right_table, parallel_trace);
+        }
+        // NOTE: no need to delete table pointers since done in generated Python
+        // code in join.py
+
+        // number of local output rows is passed to Python in case all output
+        // columns are dead.
+        *num_rows_ptr = out_table->nrows();
+        return out_table;
+    } catch (const std::exception& e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return NULL;
+    }
+}

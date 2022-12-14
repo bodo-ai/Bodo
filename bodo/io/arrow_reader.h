@@ -43,6 +43,16 @@ class TableBuilder {
                  const std::set<std::string>& str_as_dict_cols,
                  const bool create_dict_from_string);
 
+    /**
+     * @brief Construct a new Table Builder object with the same column types as
+     * 'table'. Currently used in concat_tables() but will probably be replaced
+     * with a better implementation (e.g. with Arrow's Concatenate when
+     * possible).
+     *
+     * @param table Bodo table to use for typing
+     */
+    TableBuilder(table_info* table, const int64_t num_rows);
+
     ~TableBuilder() {
         for (auto col : columns) delete col;
     }

@@ -106,6 +106,7 @@ ll.add_symbol("get_shuffle_info", array_ext.get_shuffle_info)
 ll.add_symbol("delete_shuffle_info", array_ext.delete_shuffle_info)
 ll.add_symbol("reverse_shuffle_table", array_ext.reverse_shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
+ll.add_symbol("cross_join_table", array_ext.cross_join_table)
 ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
 ll.add_symbol("sort_values_table", array_ext.sort_values_table)
 ll.add_symbol("sample_table", array_ext.sample_table)
@@ -2398,6 +2399,51 @@ def hash_join_table(
             types.int64,
             types.voidptr,
             types.int64,
+            types.voidptr,
+        ),
+        codegen,
+    )
+
+
+@intrinsic
+def cross_join_table(
+    typingctx,
+    left_table_t,
+    right_table_t,
+    left_parallel_t,
+    right_parallel_t,
+    num_rows_ptr_t,
+):
+    """
+    Call cpp function for cross join of two tables.
+    """
+    assert left_table_t == table_type, "cross_join_table: cpp table type expected"
+    assert right_table_t == table_type, "cross_join_table: cpp table type expected"
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="cross_join_table"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        table_type(
+            left_table_t,
+            right_table_t,
+            types.boolean,
+            types.boolean,
             types.voidptr,
         ),
         codegen,

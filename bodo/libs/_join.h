@@ -101,4 +101,21 @@ table_info* hash_join_table(
     cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
     uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
     uint64_t cond_func_right_column_len, uint64_t* num_rows_ptr);
+
+/**
+ * @brief cross join two tables (parallel if any input is parallel)
+ *
+ * @param left_table left input table
+ * @param right_table right input table
+ * @param left_parallel whether the left table is parallel or not
+ * @param right_parallel whether the right table is parallel or not
+ * @param num_rows_ptr Pointer used to store the number of rows in the
+        output to return to Python. This enables marking all columns as
+        dead.
+ * @return table_info* cross join output table
+ */
+table_info* cross_join_table(table_info* left_table, table_info* right_table,
+                             bool left_parallel, bool right_parallel,
+                             uint64_t* num_rows_ptr);
+
 #endif  // _JOIN_H_INCLUDED

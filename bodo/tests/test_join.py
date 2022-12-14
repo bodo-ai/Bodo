@@ -15,6 +15,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
+from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -873,6 +874,33 @@ def test_merge_common_cols(df1, df2, memory_leak_check):
         impl(df1, df2).sort_values("A").reset_index(drop=True),
         check_column_type=False,
     )
+
+
+def test_merge_cross(memory_leak_check, df_value):
+    """
+    Test merge() with how="cross" with various data types and values
+    """
+
+    def test_impl1(df1, df2):
+        return df1.merge(df2, how="cross")
+
+    rng = np.random.default_rng(100)
+    df2 = pd.DataFrame({"RAND": rng.integers(11, 33, 6)})
+    check_func(test_impl1, (df_value, df2), sort_output=True, reset_index=True)
+    check_func(test_impl1, (df2, df_value), sort_output=True, reset_index=True)
+
+
+def test_merge_cross_len_only(memory_leak_check):
+    """
+    Test merge() with how="cross" with only length of output used (corner case)
+    """
+
+    def test_impl1(df1, df2):
+        return len(df1.merge(df2, how="cross"))
+
+    df1 = pd.DataFrame({"A": [1, 2, 3, 4], "B": [1, 3, 4, 11]})
+    df2 = pd.DataFrame({"C": [3, 4, 5], "D": [6, 7, 8]})
+    check_func(test_impl1, (df1, df2))
 
 
 @pytest.mark.slow
