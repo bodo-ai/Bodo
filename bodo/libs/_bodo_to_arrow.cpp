@@ -2,6 +2,7 @@
 
 #include "_bodo_to_arrow.h"
 #include <cassert>
+#include "_array_utils.h"
 
 // if status of arrow::Result is not ok, form an err msg and raise a
 // runtime_error with it. If it is ok, get value using ValueOrDie
@@ -447,8 +448,124 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         }
 
         *out = result;
+    } else if (array->arr_type == bodo_array_type::CATEGORICAL) {
+        // convert Bodo categorical array to corresponding Arrow dictionary
+        // array. array_info doesn't store category values right now so we just
+        // set dummy values. Category values are not needed in our C++ kernels.
+        const size_t siztype = numpy_item_size[array->dtype];
+        int64_t in_num_bytes = array->length * siztype;
+        std::shared_ptr<arrow::Buffer> out_buffer =
+            std::make_shared<arrow::Buffer>((uint8_t *)array->data1,
+                                            in_num_bytes);
+
+        // set arrow bit mask using category index values (-1 for nulls)
+        int64_t null_count_ = 0;
+        for (size_t i = 0; i < array->length; i++) {
+            char *ptr = array->data1 + (i * siztype);
+            if (isnan_categorical_ptr(array->dtype, ptr)) {
+                null_count_++;
+                SetBitTo(null_bitmap->mutable_data(), i, false);
+            } else {
+                SetBitTo(null_bitmap->mutable_data(), i, true);
+            }
+        }
+        std::shared_ptr<arrow::DataType> index_type;
+        switch (array->dtype) {
+            case Bodo_CTypes::INT8:
+                index_type = arrow::int8();
+                break;
+            case Bodo_CTypes::INT16:
+                index_type = arrow::int16();
+                break;
+            case Bodo_CTypes::INT32:
+                index_type = arrow::int32();
+                break;
+            case Bodo_CTypes::INT64:
+                index_type = arrow::int64();
+                break;
+            default:
+                throw std::runtime_error(
+                    "bodo_array_to_arrow(): invalid categorical dtype");
+        }
+        auto arr_data =
+            arrow::ArrayData::Make(index_type, array->length,
+                                   {null_bitmap, out_buffer}, null_count_, 0);
+        std::shared_ptr<arrow::Array> index_array = arrow::MakeArray(arr_data);
+
+        // if the number of categories is unknown and set to 0, use maximum
+        // index to find number of categories
+        uint64_t n_cats = array->num_categories;
+        if (n_cats == 0) {
+            uint64_t max_ind;
+            switch (array->dtype) {
+                case Bodo_CTypes::INT8:
+                    max_ind = *std::max_element(
+                        (int8_t *)array->data1,
+                        ((int8_t *)array->data1) + array->length);
+                    break;
+                case Bodo_CTypes::INT16:
+                    max_ind = *std::max_element(
+                        (int16_t *)array->data1,
+                        ((int16_t *)array->data1) + array->length);
+                    break;
+                case Bodo_CTypes::INT32:
+                    max_ind = *std::max_element(
+                        (int32_t *)array->data1,
+                        ((int32_t *)array->data1) + array->length);
+                    break;
+                case Bodo_CTypes::INT64:
+                    max_ind = *std::max_element(
+                        (int64_t *)array->data1,
+                        ((int64_t *)array->data1) + array->length);
+                    break;
+                default:
+                    throw std::runtime_error(
+                        "bodo_array_to_arrow(): invalid categorical dtype");
+            }
+            n_cats = (uint64_t)(max_ind + 1);
+        }
+
+        // create dictionary with dummy values
+        std::shared_ptr<arrow::Array> dictionary;
+        arrow::Int64Builder builder;
+        std::vector<int64_t> values(n_cats);
+        std::iota(std::begin(values), std::end(values), 0);
+        (void)builder.AppendValues(values);
+        (void)builder.Finish(&dictionary);
+
+        auto type = arrow::dictionary(index_array->type(), dictionary->type());
+
+        auto result =
+            arrow::DictionaryArray::FromArrays(type, index_array, dictionary);
+        std::shared_ptr<arrow::Array> dict_array;
+        CHECK_ARROW_AND_ASSIGN(result, "arrow::DictionaryArray::FromArrays",
+                               dict_array)
+        ret_type = dict_array->type();
+        *out = dict_array;
     }
 
     assert(ret_type != nullptr);
     return ret_type;
+}
+
+std::shared_ptr<arrow::Table> bodo_table_to_arrow(table_info *table) {
+    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
+    std::vector<std::shared_ptr<arrow::Array>> arrow_arrs(
+        table->columns.size());
+
+    for (int i = 0; i < (int)table->ncols(); i++) {
+        array_info *arr = table->columns[i];
+        arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
+        auto arrow_type =
+            bodo_array_to_arrow(::arrow::default_memory_pool(), arr,
+                                &arrow_arrs[i], "", time_unit, false);
+        schema_vector.push_back(
+            arrow::field("A" + std::to_string(i), arrow_type, true));
+    }
+    std::shared_ptr<arrow::KeyValueMetadata> schema_metadata;
+    std::shared_ptr<arrow::Schema> schema =
+        std::make_shared<arrow::Schema>(schema_vector, schema_metadata);
+    std::shared_ptr<arrow::Table> arrow_table =
+        arrow::Table::Make(schema, arrow_arrs, table->nrows());
+    return arrow_table;
 }

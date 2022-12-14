@@ -2086,7 +2086,7 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
     }
 }
 
-/* Broadcasting the first n_cols of in_table to the other nodes.
+/* Broadcast the first n_cols of in_table to the other nodes.
    The ref_table contains only the type information. In order to eliminate it,
    we would need to have a broadcast_datatype function.
 
@@ -2103,10 +2103,9 @@ std::shared_ptr<arrow::Array> broadcast_arrow_array(
    @return the table put in all the nodes
 */
 table_info* broadcast_table(table_info* ref_table, table_info* in_table,
-                            size_t n_cols, bool is_parallel) {
+                            size_t n_cols, bool is_parallel, int mpi_root) {
     tracing::Event ev("broadcast_table", is_parallel);
     int n_pes, myrank;
-    int mpi_root = 0;
     MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
 

@@ -505,6 +505,13 @@ struct table_info {
     const array_info* operator[](size_t idx) const { return columns[idx]; }
 };
 
+/* Compute the total memory of local chunk of the table on current rank
+ *
+ * @param table : The input table
+ * @return the total size of the local chunk of the table
+ */
+int64_t table_local_memory_size(table_info* table);
+
 /* Compute the total memory of the table accross all processors.
  *
  * @param table : The input table
@@ -538,6 +545,20 @@ void delete_table_decref_arrays(table_info* table);
  * Free an array of a table
  */
 void decref_table_array(table_info* table, int arr_no);
+
+/**
+ * @brief incref all arrays in a table
+ *
+ * @param table input table
+ */
+void incref_table_arrays(table_info* table);
+
+/**
+ * @brief decref all arrays in a table
+ *
+ * @param table input table
+ */
+void decref_table_arrays(table_info* table);
 
 /**
  * decref Bodo array and free all memory if refcount is zero.
