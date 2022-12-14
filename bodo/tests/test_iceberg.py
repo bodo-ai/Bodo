@@ -90,13 +90,13 @@ WRITE_TABLES = [
     pytest.param(
         "decimals_table",
         marks=pytest.mark.skip(
-            reason="We don't suppport custom precisions and scale at the moment."
+            reason="We don't support custom precisions and scale at the moment."
         ),
     ),
     pytest.param(
         "decimals_list_table",
         marks=pytest.mark.skip(
-            reason="We don't suppport custom precisions and scale at the moment."
+            reason="We don't support custom precisions and scale at the moment."
         ),
     ),
     "dict_encoded_string_table",
@@ -301,7 +301,7 @@ def test_simple_bool_binary_table_read(
 ):
     """
     Test reading simple_bool_binary_table which consists of boolean
-    and binary typs (bytes). Needs special handling to compare
+    and binary types (bytes). Needs special handling to compare
     with PySpark.
     """
     table_name = "simple_bool_binary_table"
@@ -696,6 +696,52 @@ def test_snapshot_id(iceberg_database, iceberg_table_conn, memory_leak_check):
 
 
 # Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
+def test_read_merge_into_cow_row_id_col(iceberg_database, iceberg_table_conn):
+    """
+    Test that reading from an Iceberg table in MERGE INTO COW mode
+    returns a dataframe with an additional row id column
+    """
+
+    comm = MPI.COMM_WORLD
+    table_name = "simple_numeric_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    # Get Relevant Info from Spark
+    spark_out = None
+    out_len = -1
+    err = None
+    if bodo.get_rank() == 0:
+        try:
+            spark_out, out_len, _ = spark_reader.read_iceberg_table(
+                table_name, db_schema
+            )
+        except Exception as e:
+            err = e
+    spark_out, out_len, err = comm.bcast((spark_out, out_len, err))
+    if isinstance(err, Exception):
+        raise err
+
+    # _bodo_row_id is always loaded in MERGE INTO COW Mode, see sql_ext.py
+    # Since Iceberg output is unordered, not guarantee that the row id values
+    # are assigned to the same row. Thus, need to check them separately
+    check_func(
+        lambda name, conn, db: pd.read_sql_table(name, conn, db, _bodo_merge_into=True)[0]["_bodo_row_id"],  # type: ignore
+        (table_name, conn, db_schema),
+        py_output=np.arange(out_len),
+    )
+
+    check_func(
+        lambda name, conn, db: pd.read_sql_table(name, conn, db, _bodo_merge_into=True)[0][["B", "E", "A"]],  # type: ignore
+        (table_name, conn, db_schema),
+        py_output=spark_out[["B", "E", "A"]],
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+    )
+
+
+# Add memory_leak_check after fixing https://bodo.atlassian.net/browse/BE-3606
 def test_filter_pushdown_partitions(iceberg_database, iceberg_table_conn):
     """
     Test that simple date based partitions can be read as expected.
@@ -772,6 +818,7 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
     but doesn't filter files.
     """
 
+    comm = MPI.COMM_WORLD
     table_name = "simple_numeric_table"
     db_schema, warehouse_loc = iceberg_database
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
@@ -783,16 +830,16 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
     def impl1(table_name, conn, db_schema):
         # Just return df because sort_output, reset_index don't work when
         # returning tuples.
-        df, _, _ = pd.read_sql_table(table_name, conn, db_schema, _bodo_merge_into=True)
+        df, _, _ = pd.read_sql_table(table_name, conn, db_schema, _bodo_merge_into=True)  # type: ignore
         df = df[df.B == 2]
-        return df
+        return df.drop(columns=["_bodo_row_id"])
 
     file_list_type = types.List(types.unicode_type)
 
     def impl2(table_name, conn, db_schema):
         df, file_list, snapshot_id = pd.read_sql_table(
             table_name, conn, db_schema, _bodo_merge_into=True
-        )
+        )  # type: ignore
         df = df[df.B == 2]
         # Force use of df since we won't return it and still need
         # to load data.
@@ -800,15 +847,23 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
             sort_list = f(df, file_list)
         return (sort_list, snapshot_id)
 
-    spark = get_spark()
-    # Load the table output
-    table_output = spark.sql(
-        f"""
-    select * from hadoop_prod.{db_schema}.{table_name}
-    WHERE B = 2
-    """
-    )
-    table_output = table_output.toPandas()
+    table_output = None
+    err = None
+    if bodo.get_rank() == 0:
+        try:
+            spark = get_spark()
+            # Load the table output
+            table_output = spark.sql(
+                f"""SELECT * FROM hadoop_prod.{db_schema}.{table_name}
+                WHERE B = 2
+                """
+            ).toPandas()
+        except Exception as e:
+            err = e
+    table_output, err = comm.bcast((table_output, err))
+    if isinstance(err, Exception):
+        raise err
+
     check_func(
         impl1,
         (table_name, conn, db_schema),
@@ -824,7 +879,9 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
             bodo.jit(impl1)(table_name, conn, db_schema)
-            check_logger_msg(stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F']")
+            check_logger_msg(
+                stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F', '_bodo_row_id']"
+            )
             check_logger_msg(stream, "Filter pushdown successfully performed")
     # Load the tracing results
     dnf_filters = tracing_info.get_event_attribute(
@@ -1075,7 +1132,7 @@ def test_basic_write_replace(
     # if bodo.get_rank() == 0:
     #     try:
     #         bodo.jit(replicated=["df"])(impl)(df, table_name, conn, db_schema)
-    #         # Read using Pyspark, and then check that it's what's expected
+    #         # Read using PySpark, and then check that it's what's expected
     #         passed = _test_equal_guard(
     #             orig_df,
     #             py_out,
@@ -2242,7 +2299,7 @@ def test_write_sorted(
     passed = None
     if bodo.get_rank() == 0:
         spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema, spark)
-        # Spark doesn't handle null timestamps consistenctly. It sometimes converts them to
+        # Spark doesn't handle null timestamps consistently. It sometimes converts them to
         # 0 (i.e. epoch) instead of NaTs like Pandas does. This modifies expected
         # df to match Spark.
         if base_name == "dt_tsz_table":

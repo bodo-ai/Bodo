@@ -19,7 +19,10 @@ from numba.extending import intrinsic
 
 import bodo
 from bodo.io.fs_io import get_s3_bucket_region_njit
-from bodo.io.helpers import pyarrow_table_schema_type
+from bodo.io.helpers import (
+    _get_numba_typ_from_pa_typ,
+    pyarrow_table_schema_type,
+)
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
@@ -78,11 +81,13 @@ def format_iceberg_conn_njit(conn_str):  # pragma: no cover
 
 
 # ----------------------------- Iceberg Read -----------------------------#
-def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
+def get_iceberg_type_info(
+    table_name: str, con: str, database_schema: str, is_merge_into_cow: bool = False
+):
     """
-    Helper function to fetch Bodo types for an
-    Iceberg table with the given table name, conn,
-    and database_schema.
+    Helper function to fetch Bodo types for an Iceberg table with the given
+    connection info. Will include an additional Row ID column for MERGE INTO
+    COW operations.
 
     Returns:
         - List of column names
@@ -91,8 +96,6 @@ def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
     """
     import bodo_iceberg_connector
     import numba.core
-
-    from bodo.io.parquet_pio import _get_numba_typ_from_pa_typ
 
     # In the case that we encounter an error, we store the exception in col_names_or_err
     col_names_or_err = None
@@ -136,6 +139,11 @@ def get_iceberg_type_info(table_name: str, con: str, database_schema: str):
     bodo_types = [
         _get_numba_typ_from_pa_typ(typ, False, True, None)[0] for typ in col_types
     ]
+
+    # Special MERGE INTO COW Handling for Row ID Column
+    if is_merge_into_cow:
+        col_names.append("_bodo_row_id")
+        bodo_types.append(types.Array(types.int64, 1, "C"))
 
     return (col_names, bodo_types, pyarrow_schema)
 
