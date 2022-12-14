@@ -115,7 +115,7 @@ class IcebergParquetReader : public ParquetReader {
     // to handle file-level transformations, etc.
     // virtual void read_all(TableBuilder& builder) {}
 
-    // The pyarrow schema for the table determined
+    // The PyArrow schema for the table determined
     // at compile time. This will be compared with the schema
     // of the files read in, to detect schema evolution, and
     // in the future, make transformations based on it.
@@ -159,7 +159,7 @@ class IcebergParquetReader : public ParquetReader {
  * @param num_selected_fields : length of selected_fields array
  * @param is_nullable : array of bools that indicates which of the
  * selected fields is nullable. Same length and order as selected_fields.
- * @param pyarrow_table_schema : Pyarrow schema (instance of pyarrow.lib.Schema)
+ * @param pyarrow_table_schema : PyArrow schema (instance of pyarrow.lib.Schema)
  * determined at compile time. Used for schema evolution detection, and for
  * evaluating transformations in the future.
  * @param is_merge_into : Is this table loaded as the target table for merge
@@ -190,6 +190,7 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
             {_selected_fields, _selected_fields + num_selected_fields});
         std::vector<bool> is_nullable(_is_nullable,
                                       _is_nullable + num_selected_fields);
+
         IcebergParquetReader reader(conn, database_schema, table_name, parallel,
                                     tot_rows_to_read, dnf_filters, expr_filters,
                                     selected_fields, is_nullable,
@@ -198,6 +199,7 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
         // Initialize reader
         reader.init_iceberg_reader(str_as_dict_cols, num_str_as_dict_cols);
 
+        // MERGE INTO COW Output Handling
         if (is_merge_into_cow) {
             *file_list_ptr = reader.get_file_list();
             *snapshot_id_ptr = reader.get_snapshot_id();
@@ -206,8 +208,31 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
             *snapshot_id_ptr = -1;
         }
 
-        *total_rows_out = reader.get_total_rows();
-        return reader.read();
+        int64_t total_rows = reader.get_total_rows();
+        *total_rows_out = total_rows;
+        table_info* read_output = reader.read();
+
+        // Append the index column to the output table used for MERGE INTO COW
+        // Since the MERGE INTO flag is internal, we assume that this column
+        // is never dead for simplicity sake.
+        if (is_merge_into_cow) {
+            array_info* row_id_col_arr =
+                alloc_numpy(total_rows, Bodo_CTypes::INT64);
+
+            // Create the initial value on this rank
+            int64_t init_val = 0;
+            if (parallel) {
+                MPI_Exscan(&total_rows, &init_val, 1, MPI_LONG_LONG_INT,
+                           MPI_SUM, MPI_COMM_WORLD);
+            }
+
+            // Equivalent to np.arange(*total_rows_out, dtype=np.int64)
+            std::iota((int64_t*)row_id_col_arr->data1,
+                      (int64_t*)row_id_col_arr->data1 + total_rows, init_val);
+            read_output->columns.push_back(row_id_col_arr);
+        }
+
+        return read_output;
 
     } catch (const std::exception& e) {
         // if the error string is "python" this means the C++ exception is

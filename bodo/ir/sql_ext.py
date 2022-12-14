@@ -122,7 +122,7 @@ class SqlReader(ir.Stmt):
         # supported/required for snowflake and must be provided
         # at compile time.
         self.database_schema = database_schema
-        # This is the pyarrow schema object.
+        # This is the PyArrow schema object.
         # Only relevant for Iceberg at the moment,
         # but potentially for Snowflake in the future
         self.pyarrow_table_schema = pyarrow_table_schema
@@ -164,7 +164,7 @@ def parse_dbtype(con_str):
         # Standardize mysql to always use "mysql"
         return "mysql", con_paswd
 
-    # NOTE: if you're upding supported schemes here, don't forget
+    # NOTE: if you're updating supported schemes here, don't forget
     # to update the associated error message in _run_call_read_sql_table
 
     if con_str.startswith("iceberg+glue") or parseresult.scheme in (
@@ -548,7 +548,7 @@ def escape_column_names(col_names, db_type, converted_colnames):
     """
     Function that escapes column names when updating the SQL queries.
     Some outputs (i.e. count(*)) map to both functions and the output
-    column names in certain dialects. If these are readded to the query,
+    column names in certain dialects. If these are re-added to the query,
     it may modify the results by rerunning the function, so we must
     escape the column names
 
@@ -956,11 +956,18 @@ def _gen_sql_reader_py(
             "iceberg",
         )
 
-        # Determine selected columns (and thus nullable) from Iceberg
-        # schema, assuming that Iceberg and Parquet field ordering is the same
+        merge_into_row_id_col_idx = -1
+        if is_merge_into and col_names.index("_bodo_row_id") in out_used_cols:
+            merge_into_row_id_col_idx = col_names.index("_bodo_row_id")
+
+        # Determine selected C++ columns (and thus nullable) from original Iceberg
+        # table / schema, assuming that Iceberg and Parquet field ordering is the same
+        # Note that this does not include any locally generated columns (row id, file list, ...)
         # TODO: Update for schema evolution, when Iceberg Schema != Parquet Schema
         selected_cols: List[int] = [
-            pyarrow_table_schema.get_field_index(col_names[i]) for i in out_used_cols
+            pyarrow_table_schema.get_field_index(col_names[i])
+            for i in out_used_cols
+            if i != merge_into_row_id_col_idx
         ]
         selected_cols_map = {c: i for i, c in enumerate(selected_cols)}
         nullable_cols = [int(is_nullable(col_typs[i])) for i in selected_cols]
@@ -1031,7 +1038,11 @@ def _gen_sql_reader_py(
                 # But we're assuming that the iceberg schema ordering is the same as the parquet ordering
                 # TODO: Will change with schema evolution
                 if j < len(out_used_cols) and i == out_used_cols[j]:
-                    table_idx.append(selected_cols_map[i])
+                    if i == merge_into_row_id_col_idx:
+                        # row_id column goes at the end
+                        table_idx.append(len(selected_cols))
+                    else:
+                        table_idx.append(selected_cols_map[i])
                     j += 1
                 else:
                     table_idx.append(-1)
