@@ -62,16 +62,16 @@ fi
 if [ "$RUN_NIGHTLY" != "yes" ];
 then
    $MAMBA_INSTALL -c conda-forge boost-cpp=1.74.0 cmake h5py mpich mpi
-   $MAMBA_INSTALL 'hdf5=1.12.*=*mpich*' -c conda-forge
+   $MAMBA_INSTALL pyspark=3.2 'openjdk=11' -c conda-forge
    $MAMBA_INSTALL -c conda-forge pyarrow=9.0.0
    $MAMBA_INSTALL fsspec>=2021.09 -c conda-forge
+   $MAMBA_INSTALL 'hdf5=1.12.*=*mpich*' -c conda-forge
    $MAMBA_INSTALL pandas=${BODO_PD_VERSION:-'1.4.*'} -c conda-forge
    $MAMBA_INSTALL numba=0.55.2 -c conda-forge
    $MAMBA_INSTALL cython -c conda-forge
    $MAMBA_INSTALL mpi4py -c conda-forge
    $MAMBA_INSTALL scikit-learn='1.1.*' 'gcsfs>=2022.1' -c conda-forge
    $MAMBA_INSTALL matplotlib='3.5.1' -c conda-forge
-   $MAMBA_INSTALL pyspark=3.2 'openjdk=11' -c conda-forge
    $MAMBA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
    if [ "$RUN_COVERAGE" == "yes" ]; then $MAMBA_INSTALL coveralls; fi
 else
