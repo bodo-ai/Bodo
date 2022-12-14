@@ -2523,7 +2523,7 @@ def test_merge_into_cow_write_api(
         conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
         conn = bodo.io.iceberg.format_iceberg_conn(conn)
 
-        # Get relavent read info from connector
+        # Get relevant read info from connector
         snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
             conn, db_schema, table_name
         )
@@ -2573,6 +2573,103 @@ def test_merge_into_cow_write_api(
         passed = comm.bcast(passed)
 
 
+def test_merge_into_cow_write_api_partitioned(
+    iceberg_database,
+    iceberg_table_conn,
+):
+    """
+    Test the Iceberg Connectors MERGE INTO COW Write Operation
+    with partitioned Iceberg tables
+    """
+
+    comm = MPI.COMM_WORLD
+    bodo.barrier()
+
+    # Should always only run this test on rank O
+    if bodo.get_rank() != 0:
+        passed = comm.bcast(False)
+        if not passed:
+            raise Exception("Exception on Rank 0")
+        return
+
+    passed = True
+    try:
+        # Create a table to work off of
+        table_name = "merge_into_cow_write_api_partitioned"
+        df, sql_schema = SIMPLE_TABLES_MAP["primitives_table"]
+        create_iceberg_table(
+            df,
+            sql_schema,
+            table_name,
+            par_spec=[PartitionField("C", "identity", -1)],
+        )
+
+        db_schema, warehouse_loc = iceberg_database
+        conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+        conn = bodo.io.iceberg.format_iceberg_conn(conn)
+
+        # Get relevant read info from connector
+        snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
+            conn, db_schema, table_name
+        )
+        old_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+            conn,
+            db_schema,
+            table_name,
+            None,
+        )[1]
+
+        # Write new partitioned files into warehouse location
+        new_paths = []
+        record_counts = []
+
+        # Write a new data file to the "warehouse" to use in the operation
+        # Note, Bodo will essentially do this internally at Parquet Write
+        for part_val, name in [(True, "true"), (False, "false"), (None, "null")]:
+            sub_df = df[df["C"] == part_val]
+            if len(sub_df) == 0:
+                continue
+
+            record_counts.append(len(sub_df))
+            new_path = os.path.join(f"C={name}", "new_file.parquet")
+            new_paths.append(new_path)
+
+            sub_df.to_parquet(
+                os.path.join(warehouse_loc, db_schema, table_name, "data", new_path)
+            )
+
+        # Commit the MERGE INTO COW operation
+        success = bodo_iceberg_connector.commit_merge_cow(
+            conn,
+            db_schema,
+            table_name,
+            warehouse_loc,
+            old_fnames,
+            new_paths,
+            {"record_count": record_counts, "size": [0] * len(new_paths)},
+            snapshot_id,
+        )
+        assert success, "MERGE INTO Commit Operation Failed"
+
+        # See if the reported files to read is only the new file
+        out_fnames = bodo_iceberg_connector.bodo_connector_get_parquet_file_list(
+            conn,
+            db_schema,
+            table_name,
+            None,
+        )[1]
+
+        assert set(out_fnames) == set(
+            os.path.join(db_schema, table_name, "data", path) for path in new_paths
+        )
+
+    except Exception as e:
+        passed = False
+        raise e
+    finally:
+        passed = comm.bcast(passed)
+
+
 def test_merge_into_cow_write_api_snapshot_check(
     iceberg_database,
     iceberg_table_conn,
@@ -2600,7 +2697,7 @@ def test_merge_into_cow_write_api_snapshot_check(
         # Format the connection string since we don't go through pd.read_sql_table
         conn = bodo.io.iceberg.format_iceberg_conn(conn)
 
-        # Get relavent read info from connector
+        # Get relevant read info from connector
         snapshot_id = bodo_iceberg_connector.bodo_connector_get_current_snapshot_id(
             conn, db_schema, table_name
         )
