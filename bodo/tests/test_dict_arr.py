@@ -302,6 +302,29 @@ def test_int_convert_opt(memory_leak_check):
     assert dist_IR_contains(f_ir, "convert_dict_arr_to_int")
 
 
+def test_str_to_dict_astype(memory_leak_check):
+    """Test .astype() Casting from String to Dict Array"""
+
+    def impl(S):
+        return S.astype(bodo.dict_str_arr_type)
+
+    data = ["a", "b", "a", "c", "a", "b", "c"] * 20
+    py_out = pd.Series(
+        pd.arrays.ArrowStringArray(
+            pa.array(data, type=pa.dictionary(pa.int32(), pa.string())).cast(
+                pa.dictionary(pa.int32(), pa.large_string())
+            )
+        )
+    )
+
+    check_func(
+        impl,
+        (pd.Series(data, dtype="string"),),
+        py_output=py_out,
+        use_dict_encoded_strings=False,
+    )
+
+
 @pytest.mark.slow
 def test_gatherv_rm(dict_arr_value, memory_leak_check):
     """make sure gatherv() is removed in non-distributed pipeline without errors"""
