@@ -12,6 +12,8 @@ TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
 
 # ------ Install Bodo -----------
 mamba install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/bodo-binary -c conda-forge bodo=$BODO_VERSION
+# Pin Openjdk version
+mamba install -y 'openjdk=11' -c conda-forge
 
 # ------ Export environment variables for Snowflake tests -----
 export SF_USERNAME=`credstash -r us-east-2 get snowflake.bodopartner.ue1.username`
