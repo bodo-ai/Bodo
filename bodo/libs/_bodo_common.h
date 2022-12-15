@@ -395,7 +395,7 @@ array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
 
 array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,
-                                 int64_t extra_null_bytes);
+                                 int64_t extra_null_bytes = 0);
 
 array_info* alloc_nullable_array_no_nulls(int64_t length,
                                           Bodo_CTypes::CTypeEnum typ_enum,
@@ -406,7 +406,7 @@ array_info* alloc_nullable_array_all_nulls(int64_t length,
                                            int64_t extra_null_bytes);
 
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
-                               int64_t extra_null_bytes);
+                               int64_t extra_null_bytes = 0);
 
 array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
                                     int64_t extra_null_bytes);
@@ -658,6 +658,22 @@ std::string_view ArrowStrArrGetView(std::shared_ptr<ARROW_ARRAY_TYPE> str_arr,
         reinterpret_cast<const char*>(str_arr->raw_data() + pos),
         raw_value_offsets[i + 1] - pos);
 }
+
+// C++20 magic to support "heterogeneous" access to unordered containers
+// makes the key "transparent", allowing std::string_view to be used similar to
+// std::string https://www.cppstories.com/2021/heterogeneous-access-cpp20/
+struct string_hash {
+    using is_transparent = void;
+    [[nodiscard]] size_t operator()(const char* txt) const {
+        return std::hash<std::string_view>{}(txt);
+    }
+    [[nodiscard]] size_t operator()(std::string_view txt) const {
+        return std::hash<std::string_view>{}(txt);
+    }
+    [[nodiscard]] size_t operator()(const std::string& txt) const {
+        return std::hash<std::string>{}(txt);
+    }
+};
 
 #ifdef __cplusplus
 // Define constructor outside of the struct to fix C linkage warning

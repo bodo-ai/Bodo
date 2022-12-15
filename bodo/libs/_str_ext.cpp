@@ -1,19 +1,22 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include <numpy/arrayobject.h>
-#include <boost/algorithm/string/replace.hpp>
+
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include <arrow/python/pyarrow.h>
+#include <numpy/arrayobject.h>
+#include <boost/algorithm/string/replace.hpp>
+
+#include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 
-#include "_str_decode.cpp"
-
 #include <boost/lexical_cast.hpp>
+
+#include "_str_decode.cpp"
 
 extern "C" {
 
@@ -105,6 +108,7 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val);
 void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
                          const int32_t* indices, const uint8_t* null_bitmap);
+array_info* str_to_dict_str_array(array_info* str_arr);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
@@ -213,6 +217,17 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&int_to_hex)));
     PyObject_SetAttrString(m, "box_dict_str_array",
                            PyLong_FromVoidPtr((void*)(&box_dict_str_array)));
+    PyObject_SetAttrString(m, "str_to_dict_str_array",
+                           PyLong_FromVoidPtr((void*)(&str_to_dict_str_array)));
+
+    PyObject_SetAttrString(m, "get_stats_alloc",
+                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
+    PyObject_SetAttrString(m, "get_stats_free",
+                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
+    PyObject_SetAttrString(m, "get_stats_mi_alloc",
+                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
+    PyObject_SetAttrString(m, "get_stats_mi_free",
+                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
     return m;
 }
 
@@ -959,4 +974,70 @@ void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
     }
     return ret;
 #undef CHECK
+}
+
+/**
+ * @brief Kernel to Convert String Arrays to Dictionary String Arrays
+ * Most of the logic is shared with DictionaryEncodedFromStringBuilder
+ * (TableBuilder::BuilderColumn subclass in arrow_reader.cpp)
+ *
+ * @param str_arr Input String Array (not consumed by function)
+ * @return array_info* Output Dictionary Array with Copied Contents
+ */
+array_info* str_to_dict_str_array(array_info* str_arr) {
+    const auto arr_len = str_arr->length;
+    const auto num_null_bitmask_bytes = (arr_len + 7) >> 3;
+
+    // Dictionary Indices Array
+    auto indices_arr = alloc_nullable_array(arr_len, Bodo_CTypes::INT32);
+    memcpy(indices_arr->null_bitmask, str_arr->null_bitmask,
+           num_null_bitmask_bytes);
+
+    // Map string to its new index in dictionary values array
+    UNORD_MAP_CONTAINER<std::string, std::pair<int32_t, uint64_t>, string_hash,
+                        std::equal_to<>>
+        str_to_ind;
+    uint32_t num_dict_strs = 0;
+    uint64_t total_dict_chars = 0;
+
+    offset_t* offsets = (offset_t*)str_arr->data2;
+    for (uint64_t i = 0; i < arr_len; i++) {
+        if (!str_arr->get_null_bit(i)) continue;
+        std::string_view elem(str_arr->data1 + offsets[i],
+                              offsets[i + 1] - offsets[i]);
+
+        int32_t elem_idx;
+        if (!str_to_ind.contains(elem)) {
+            std::pair<int32_t, uint64_t> ind_offset_len =
+                std::make_pair(num_dict_strs, total_dict_chars);
+            // TODO: remove std::string() after upgrade to C++23
+            str_to_ind[std::string(elem)] = ind_offset_len;
+            total_dict_chars += elem.length();
+            elem_idx = num_dict_strs++;
+        } else {
+            elem_idx = str_to_ind.find(elem)->second.first;
+        }
+
+        indices_arr->at<int32_t>(i) = elem_idx;
+    }
+
+    // Create Dictionary String Values
+    array_info* values_arr =
+        alloc_string_array(num_dict_strs, total_dict_chars);
+    int64_t n_null_bytes = (num_dict_strs + 7) >> 3;
+    memset(values_arr->null_bitmask, 0xFF, n_null_bytes);  // No nulls
+
+    offset_t* out_offsets = (offset_t*)values_arr->data2;
+    out_offsets[0] = 0;
+    for (auto& it : str_to_ind) {
+        memcpy(values_arr->data1 + it.second.second, it.first.c_str(),
+               it.first.size());
+        out_offsets[it.second.first] = it.second.second;
+    }
+    out_offsets[num_dict_strs] = static_cast<offset_t>(total_dict_chars);
+
+    return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+                          arr_len, -1, -1, NULL, NULL, NULL,
+                          indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
+                          0, 0, false, false, false, values_arr, indices_arr);
 }

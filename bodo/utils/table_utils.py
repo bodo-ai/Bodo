@@ -2,7 +2,7 @@
 """File containing utility functions for supporting DataFrame operations with Table Format."""
 
 from collections import defaultdict
-from typing import Dict, Set
+from typing import Any, Dict, Set
 
 import numba
 import numpy as np
@@ -169,7 +169,7 @@ def generate_mappable_table_func_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-ArrayAnalysis._analyze_op_call_bodo_utils_table_utils_generate_mappable_table_func = (
+ArrayAnalysis._analyze_op_call_bodo_utils_table_utils_generate_mappable_table_func = (  # type: ignore
     generate_mappable_table_func_equiv
 )
 
@@ -240,7 +240,7 @@ def table_concat(table, col_nums_meta, arr_type):
         arr_type.instance_type if isinstance(arr_type, types.TypeRef) else arr_type
     )
     concat_blk = table.type_to_blk[arr_type]
-    glbls = {"bodo": bodo}
+    glbls: Dict[str, Any] = {"bodo": bodo}
     glbls["col_indices"] = np.array(table.block_to_arr_ind[concat_blk], dtype=np.int64)
 
     # Get the actual Metatype from the TypeRef
@@ -325,7 +325,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
 
     # Define the globals for this kernel. These
     # will be updated throughout codegen.
-    glbls = {"bodo": bodo}
+    glbls: Dict[str, Any] = {"bodo": bodo}
 
     # Compute the types that must be copied. Every column
     # should be updated in the same location.
@@ -419,6 +419,8 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
             # Most types are represented by their scalar values
             if isinstance(typ, bodo.IntegerArrayType):
                 cast_typ = typ.get_pandas_scalar_type_instance.name
+            elif typ == bodo.dict_str_arr_type:
+                cast_typ = typ
             else:
                 cast_typ = typ.dtype
             glbls[f"typ_{blk}"] = cast_typ
@@ -466,4 +468,4 @@ def table_astype_equiv(self, scope, equiv_set, loc, args, kws):
     return None
 
 
-ArrayAnalysis._analyze_op_call_bodo_utils_table_utils_table_astype = table_astype_equiv
+ArrayAnalysis._analyze_op_call_bodo_utils_table_utils_table_astype = table_astype_equiv  # type: ignore
