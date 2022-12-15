@@ -1672,6 +1672,43 @@ def test_weekiso_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
     )
 
 
+@pytest.mark.tz_aware
+def test_tz_aware_weekiso(tz_aware_df, memory_leak_check):
+    """simplest weekiso test on timezone aware data"""
+    query = "SELECT WEEKISO(A) from table1"
+
+    expected_output = pd.DataFrame(
+        {"expected": tz_aware_df["table1"]["A"].dt.isocalendar().week}
+    )
+    check_query(
+        query,
+        tz_aware_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_weekiso_case(tz_aware_df, memory_leak_check):
+    """weekiso test in case statement on timezone aware data"""
+    query = "SELECT CASE WHEN WEEKISO(A) > 2 THEN WEEKISO(A) ELSE 0 END from table1"
+
+    weekiso_series = tz_aware_df["table1"]["A"].dt.isocalendar().week
+    weekiso_series[weekiso_series <= 2] = 0
+
+    expected_output = pd.DataFrame({"expected": weekiso_series})
+    check_query(
+        query,
+        tz_aware_df,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+    )
+
+
 dm = {"mo": 0, "tu": 1, "we": 2, "th": 3, "fr": 4, "sa": 5, "su": 6}
 
 
