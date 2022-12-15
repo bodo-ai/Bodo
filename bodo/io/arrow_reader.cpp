@@ -633,24 +633,10 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
     arrow::ArrayVector all_chunks;
 };
 
-// C++20 magic to support "heterogeneous" access to unordered containers
-// makes the key "transparent", allowing std::string_view to be used similar to
-// std::string https://www.cppstories.com/2021/heterogeneous-access-cpp20/
-struct string_hash {
-    using is_transparent = void;
-    [[nodiscard]] size_t operator()(const char* txt) const {
-        return std::hash<std::string_view>{}(txt);
-    }
-    [[nodiscard]] size_t operator()(std::string_view txt) const {
-        return std::hash<std::string_view>{}(txt);
-    }
-    [[nodiscard]] size_t operator()(const std::string& txt) const {
-        return std::hash<std::string>{}(txt);
-    }
-};
-
 /// Column builder for constructing dictionary-encoded string arrays from string
 /// arrays
+/// TODO: Minimize duplicated code and shared logic from str_to_dict_str_array
+/// function in _str_ext.cpp
 class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
    public:
     /**

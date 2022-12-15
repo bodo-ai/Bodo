@@ -2457,6 +2457,11 @@ class DistributedAnalysis:
         if fdef == ("set_null_bits_to_value", "bodo.libs.str_arr_ext"):
             return
 
+        if fdef == ("str_arr_to_dict_str_arr", "bodo.libs.str_arr_ext"):
+            # LHS should match RHS
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if fdef == ("array_op_describe", "bodo.libs.array_ops"):
             return
 

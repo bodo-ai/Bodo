@@ -1126,7 +1126,7 @@ ll.add_symbol("str_arr_to_float64", hstr_ext.str_arr_to_float64)
 ll.add_symbol("get_utf8_size", hstr_ext.get_utf8_size)
 ll.add_symbol("print_str_arr", hstr_ext.print_str_arr)
 ll.add_symbol("inplace_int64_to_str", hstr_ext.inplace_int64_to_str)
-
+ll.add_symbol("str_to_dict_str_array", hstr_ext.str_to_dict_str_array)
 
 inplace_int64_to_str = types.ExternalFunction(
     "inplace_int64_to_str", types.void(types.voidptr, types.int64, types.int64)
@@ -2321,6 +2321,7 @@ def overload_str_arr_astype(A, dtype, copy=True):
     if not isinstance(nb_dtype, (types.Float, types.Integer)) and nb_dtype not in (
         types.bool_,
         bodo.libs.bool_arr_ext.boolean_dtype,
+        bodo.dict_str_arr_type,
     ):  # pragma: no cover
         raise BodoError("invalid dtype in StringArray.astype()")
 
@@ -2369,6 +2370,13 @@ def overload_str_arr_astype(A, dtype, copy=True):
 
         return impl_bool
 
+    elif nb_dtype == bodo.dict_str_arr_type:
+
+        def impl_dict_str(A, dtype, copy=True):  # pragma: no cover
+            return str_arr_to_dict_str_arr(A)
+
+        return impl_dict_str
+
     else:
         # int dtype doesn't support NAs
         # TODO: raise some form of error for NAs
@@ -2381,6 +2389,53 @@ def overload_str_arr_astype(A, dtype, copy=True):
             return B
 
         return impl_int
+
+
+@numba.jit
+def str_arr_to_dict_str_arr(A):  # pragma: no cover
+    return str_arr_to_dict_str_arr_cpp(A)
+
+
+@intrinsic
+def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
+    def codegen(context, builder, sig, args):
+        (str_arr,) = args
+
+        str_arr_info = bodo.libs.array.array_to_info_codegen(
+            context,
+            builder,
+            bodo.libs.array.array_info_type(sig.args[0]),
+            (str_arr,),
+            False,
+        )
+
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="str_to_dict_str_array"
+        )
+        dict_array_info = builder.call(fn_tp, [str_arr_info])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+        dict_arr = bodo.libs.array.info_to_array_codegen(
+            context,
+            builder,
+            sig.return_type(bodo.libs.array.array_info_type, sig.return_type),
+            (dict_array_info, context.get_constant_null(sig.return_type)),
+        )
+
+        return dict_arr
+
+    assert (
+        str_arr_t == bodo.string_array_type
+    ), "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
+
+    sig = bodo.dict_str_arr_type(bodo.string_array_type)
+    return sig, codegen
 
 
 @intrinsic
@@ -2624,7 +2679,7 @@ def pre_alloc_str_arr_equiv(self, scope, equiv_set, loc, args, kws):
 
 from numba.parfors.array_analysis import ArrayAnalysis
 
-ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = (
+ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = (  # type: ignore
     pre_alloc_str_arr_equiv
 )
 
