@@ -338,11 +338,15 @@ def test_add_interval_time_units(unit, args, answers):
 @pytest.fixture(
     params=[
         pytest.param(
-            pd.concat(
+            pd.Series(
                 [
-                    pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
-                    pd.Series([None, None]),
-                    pd.Series(pd.date_range("1970-01-01", "2108-01-01", periods=20)),
+                    pd.Timestamp(d)
+                    for d in pd.date_range("2018-01-01", "2019-01-01", periods=20)
+                ]
+                + [None, None]
+                + [
+                    pd.Timestamp(d)
+                    for d in pd.date_range("1970-01-01", "2108-01-01", periods=20)
                 ]
             ),
             id="vector",
@@ -351,6 +355,10 @@ def test_add_interval_time_units(unit, args, answers):
     ],
 )
 def dates_scalar_vector(request):
+    """A fixture of either a single timestamp, or a series of timestamps from
+    various year/month ranges with some nulls inserted. Uses pd.Series on
+    concatenated lists instead of pd.concat since the date_range outputs
+    a DatetimeIndex with a potentially inconvenient dtype when combinined."""
     return request.param
 
 
@@ -599,9 +607,14 @@ def test_monthname(dates_scalar_vector):
                 pd.concat(
                     [
                         pd.Series(
-                            pd.date_range("2018-01-01", "2019-01-01", periods=20)
-                        ),
-                        pd.Series([None, None]),
+                            [
+                                pd.Timestamp(d)
+                                for d in pd.date_range(
+                                    "2018-01-01", "2019-01-01", periods=20
+                                )
+                            ]
+                            + [None, None]
+                        )
                     ]
                 ),
                 pd.Series(pd.date_range("2005-01-01", "2020-01-01", periods=22)),
@@ -610,7 +623,13 @@ def test_monthname(dates_scalar_vector):
         ),
         pytest.param(
             (
-                pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
+                pd.Series(
+                    [
+                        pd.Timestamp(d)
+                        for d in pd.date_range("2018-01-01", "2019-01-01", periods=20)
+                    ]
+                    + [None, None]
+                ),
                 pd.Timestamp("2018-06-05"),
             ),
             id="vector_scalar",
