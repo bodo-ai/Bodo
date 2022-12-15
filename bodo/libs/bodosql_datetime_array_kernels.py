@@ -399,12 +399,12 @@ def dayname_util(arr):
         string series/scalar: the day of the week from the input timestamp(s)
     """
 
-    verify_datetime_arg(arr, "DAYNAME", "arr")
+    verify_datetime_arg_allow_tz(arr, "DAYNAME", "arr")
 
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = "res[i] = pd.Timestamp(arg0).day_name()"
+    scalar_text = f"res[i] = bodo.utils.conversion.box_if_dt64(arg0).day_name()"
 
     out_dtype = bodo.string_array_type
 

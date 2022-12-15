@@ -1842,26 +1842,71 @@ def test_tz_aware_month_case(memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
-@pytest.mark.parametrize(
-    "time_zone",
-    [
-        pytest.param("US/Pacific", id="pacific"),
-        pytest.param("GMT", id="gmt"),
-        pytest.param("Australia/Sydney", id="sydney", marks=pytest.mark.slow),
-        pytest.param(None, id="no_tz", marks=pytest.mark.slow),
-    ],
+@pytest.fixture(
+    params=[
+        pytest.param(("US/Pacific", "1/1/2023", "H"), id="pacific-by_hour"),
+        pytest.param(("GMT", "1/1/2021", "49MIN"), id="gmt-by_49_minutes"),
+        pytest.param(
+            ("Australia/Sydney", "1/1/2027", "W"),
+            id="sydney-by_week",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            ("US/Eastern", "6/12/2021", "1234567891234ns"),
+            id="no_ts-by_many_ns",
+            marks=pytest.mark.slow,
+        ),
+    ]
 )
-def test_tz_aware_week_quarter(time_zone, memory_leak_check):
-    query = "SELECT WEEK(A), QUARTER(A) from table1"
-    df = pd.DataFrame(
+def large_tz_df(request):
+    tz, end, freq = request.param
+    D = pd.date_range(start="1/1/2020", tz=tz, end=end, freq=freq)
+    return pd.DataFrame(
         {
-            "A": pd.date_range(
-                start="1/1/2020", end="1/1/2025", freq="H", tz=time_zone
-            ).to_series()
+            "A": D.to_series(index=pd.RangeIndex(len(D))),
+            "B": [i % 2 == 0 for i in range(len(D))],
         }
     )
-    ctx = {"table1": df}
-    py_output = pd.DataFrame({0: df.A.dt.isocalendar().week, 1: df.A.dt.quarter})
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="case"),
+    ],
+)
+def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
+    """Tests the BodoSQL functions WEEK, QUARTER and DAYNAME on timezone aware
+    data with and without case statements. The queries are in the following
+    forms:
+
+    1. SELECT A, WEEK(A), ... from table1
+    2. SELECT A, CASE WHEN B THEN WEEK(A) ELSE NULL END, ... from table1
+    """
+    calculations = []
+    for func in ["WEEK", "QUARTER", "DAYNAME"]:
+        if case:
+            calculations.append(f"CASE WHEN B THEN {func}(A) ELSE NULL END")
+        else:
+            calculations.append(f"{func}(A)")
+    query = f"SELECT A, {', '.join(calculations)} FROM table1"
+
+    ctx = {"table1": large_tz_df}
+
+    py_output = pd.DataFrame(
+        {
+            "a": large_tz_df.A,
+            "w": large_tz_df.A.dt.isocalendar().week,
+            "q": large_tz_df.A.dt.quarter,
+            "d": large_tz_df.A.dt.day_name(),
+        }
+    )
+    if case:
+        py_output["w"][~large_tz_df["B"]] = None
+        py_output["q"][~large_tz_df["B"]] = None
+        py_output["d"][~large_tz_df["B"]] = None
+
     check_query(
         query,
         ctx,
