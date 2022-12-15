@@ -296,8 +296,8 @@ def gen_vectorized(
         # arguments extracted by getitem.
         func_text += f"   n = {size_text}\n"
 
-        # If prefix_code was provided, embed it before the loop (unless the output
-        # is all-null)
+        # If prefix_code was provided, embed it before the loop
+        # (unless the output is all-null)
         if prefix_code is not None and not out_null:
             for line in prefix_code.splitlines():
                 func_text += " " * 3 + line[prefix_indentation:] + "\n"
@@ -851,7 +851,7 @@ def verify_datetime_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
 
     raises: BodoError if the argument is not a datetime, datetime column, or NULL
     """
@@ -885,6 +885,30 @@ def verify_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a datetime, datetime column, or null"
         )
+
+
+def get_tz_if_exists(arg):  # pragma: no cover
+    """Returns the timezone from a scalar or vector datetime/timestamp argument,
+       or None if it has no timestamp.
+
+    Args:
+        arg (dtype): the dtype of the argument whose timezone is being extracted.
+                     assumes that verify_datetime_arg_allow_tz has already been
+                     called on arg.
+
+    Returns: the timezone (if the argument has one) or None (if it does not)
+    """
+    if (
+        is_overload_none(arg)
+        or is_valid_date_arg(arg)
+        or is_valid_tz_naive_datetime_arg(arg)
+    ):
+        return None
+    else:
+        if bodo.utils.utils.is_array_typ(arg, True):
+            return arg.dtype.tz
+        else:
+            return arg.tz
 
 
 def get_common_broadcasted_type(arg_types, func_name):
