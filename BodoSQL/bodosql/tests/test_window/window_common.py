@@ -45,13 +45,6 @@ uint8_col = pd.Series(
     [None if (i**2) % 10 == 1 else (i**2) % 10 for i in range(window_col_size)],
     dtype=pd.UInt8Dtype(),
 )
-int32_col = pd.Series(
-    [
-        max((i**2) % 10, (i**2) % 11, (i**2) % 12) * (-1) ** i
-        for i in range(window_col_size)
-    ],
-    dtype=pd.Int32Dtype(),
-)
 int64_col = pd.Series(
     [
         None
@@ -124,7 +117,6 @@ def uint8_window_df():
 @pytest.fixture(
     params=[
         pytest.param(uint8_col, id="uint8", marks=pytest.mark.slow),
-        pytest.param(int32_col, id="int32", marks=pytest.mark.slow),
         pytest.param(int64_col, id="int64"),
         pytest.param(float64_col, id="float64", marks=pytest.mark.slow),
     ]
@@ -140,7 +132,6 @@ def all_numeric_window_df(request):
     return col_to_window_df(
         {
             "U8": uint8_col,
-            "I32": int32_col,
             "I64": int64_col,
             "F64": float64_col,
         }
@@ -152,7 +143,6 @@ def all_numeric_window_col_names(request):
     """Returns the data column names from all_numeric_window_df"""
     return {
         "U8": "200",
-        "I32": "-12345",
         "I64": "-987654321",
         "F64": "2.718281828",
     }
@@ -162,16 +152,12 @@ def all_numeric_window_col_names(request):
     params=[
         pytest.param(uint8_col, id="uint8", marks=pytest.mark.slow),
         pytest.param(
-            int32_col,
-            id="int32",
-        ),
-        pytest.param(
             int64_col,
             id="int64",
         ),
         pytest.param(float64_col, id="float64", marks=pytest.mark.slow),
         pytest.param(boolean_col, id="boolean", marks=pytest.mark.slow),
-        pytest.param(string_col, id="string"),
+        pytest.param(string_col, id="string", marks=pytest.mark.slow),
         pytest.param(binary_col, id="binary", marks=pytest.mark.slow),
         pytest.param(
             datetime64_col,
@@ -190,7 +176,6 @@ def all_window_df():
     return col_to_window_df(
         {
             "U8": uint8_col,
-            "I32": int32_col,
             "I64": int64_col,
             "F64": float64_col,
             "BO": boolean_col,
@@ -214,7 +199,6 @@ def all_window_col_names():
     each of those column types (for LEAD/LAG testing)."""
     return {
         "U8": "255",
-        "I32": "-1",
         "I64": "0",
         "F64": "3.1415926",
         "BO": "False",
@@ -235,18 +219,20 @@ def all_window_col_names():
                 ],
                 1,
             ),
-            id="prefix-suffix-rolling_5-fused",
+            id="fully_fused",
         ),
         pytest.param(
             (
                 [
-                    "PARTITION BY W1 ORDER BY W4 ROWS BETWEEN 10 PRECEDING AND 1 PRECEDING",
-                    "PARTITION BY W1 ORDER BY W3 ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING",
-                    "PARTITION BY W2 % 5, W3 % 5 ORDER BY W4 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING",
+                    "PARTITION BY W1 ORDER BY W4 DESC ROWS BETWEEN 10 PRECEDING AND 1 PRECEDING",
+                    "PARTITION BY W2 % 3, W3 % 3 ORDER BY W4 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING",
+                    "PARTITION BY W1 ORDER BY W4 DESC ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING",
+                    "PARTITION BY W2 % 3, W3 % 3 ORDER BY W4 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING",
+                    "PARTITION BY W1 ORDER BY W4 DESC ROWS BETWEEN CURRENT ROW AND 30 FOLLOWING",
                 ],
-                3,
+                2,
             ),
-            id="10_before-exclusive_suffix-whole_window-not_fused",
+            id="partially_fused",
             marks=pytest.mark.slow,
         ),
     ]

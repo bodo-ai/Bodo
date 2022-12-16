@@ -52,6 +52,7 @@ def test_empty_window(uint8_window_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_window_no_order(uint8_window_df, spark_info, memory_leak_check):
     """Tests when the window clause does not have an order"""
     query = "SELECT W4, SUM(A) OVER (PARTITION BY W1) FROM table1"
@@ -66,6 +67,7 @@ def test_window_no_order(uint8_window_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_window_no_rows(uint8_window_df, spark_info, memory_leak_check):
     """Tests when the window clause does not have a rows specification"""
     query = "SELECT W4, SUM(A) OVER (PARTITION BY W1 ORDER BY W4) FROM table1"
@@ -80,6 +82,7 @@ def test_window_no_rows(uint8_window_df, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.slow
 def test_window_case(uint8_window_df, spark_info):
     """Tests windowed window function calls inside of CASE statements. The
        case_args is a list of lists of tuples with the following format:

@@ -49,7 +49,7 @@ def gen_lead_lag_queries(
     "cols_to_use, window_frame",
     [
         pytest.param(
-            ["U8", "I32", "I64", "F64"], "PARTITION BY W1 ORDER BY W4", id="numerics"
+            ["U8", "I64", "F64"], "PARTITION BY W1 ORDER BY W4", id="numerics"
         ),
         pytest.param(
             ["BO", "ST", "BI", "DT"], "PARTITION BY W2 ORDER BY W3", id="non_numerics"

@@ -166,7 +166,7 @@ def test_first_value_last_value_optimized(
     combinations of window frames to test correctness, fusion and optimization"""
     selects = []
     window = "PARTITION BY U8 ORDER BY DT ASC NULLS FIRST"
-    for col in ["I32", "ST", "BI"]:
+    for col in ["I64", "ST", "BI"]:
         selects.append(
             f"FIRST_VALUE({col}) OVER ({window} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS {col}_FV"
         )
