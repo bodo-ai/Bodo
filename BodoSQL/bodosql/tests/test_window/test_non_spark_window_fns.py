@@ -204,6 +204,7 @@ def test_conditional_true_event(
             "ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING",
             pd.Series([30, 40, None, 40, 50, None, 50, 60, None]),
             id="uint8-multiple_partitions-suffix",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([0.275, 0.488, 0.04, 0.06, 0.92, 1.0, 0.1, None, 0.0, None]),
@@ -211,6 +212,7 @@ def test_conditional_true_event(
             "ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING",
             pd.Series([0.275, 0.1675, 0.275, 0.488, 0.1, 0.51, 0.51, 0.1, 0.05, 0.0]),
             id="float64-single_partition-rolling_5",
+            marks=pytest.mark.slow,
         ),
     ],
 )
@@ -252,12 +254,14 @@ def test_median(data_col, partition_col, window_frame, answer):
             pd.Series(["A", "B", "C", "D"] * 4),
             pd.Series([None, 0.25, 0.25, None] * 4),
             id="int32-groups_of_4",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([0, 1, -1, None] * 4, dtype=pd.Int32Dtype()),
             pd.Series(["A"] * 16),
             pd.Series([None] * 16),
             id="int32-single_partition",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([0, 1, -1, None] * 4, dtype=pd.Int32Dtype()),
@@ -407,6 +411,7 @@ def test_ratio_to_report(data_col, partition_col, answer, memory_leak_check):
                 }
             ),
             id="string-noframe",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([b"X", b"Y", b"X", b"Y", b"X", b"X", b"Y", b"Y", None, None]),
@@ -443,6 +448,7 @@ def test_ratio_to_report(data_col, partition_col, answer, memory_leak_check):
             ("UNBOUNDED PRECEDING", "UNBOUNDED FOLLOWING"),
             pd.DataFrame({0: [1.0] * 5 + [3.0] * 5}),
             id="float-entire",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             pd.Series([pd.Timestamp(f"201{y}-7-4") for y in "0110143224"]),
@@ -451,6 +457,7 @@ def test_ratio_to_report(data_col, partition_col, answer, memory_leak_check):
                 {0: pd.Series([pd.Timestamp(f"201{y}-7-4") for y in "0101144244"])}
             ),
             id="timestamp-overinclusive_prefix",
+            marks=pytest.mark.slow,
         ),
     ],
 )

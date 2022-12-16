@@ -44,7 +44,7 @@ def test_row_number_orderby(datapath, memory_leak_check):
     "order_clause",
     [
         pytest.param("A ASC NULLS FIRST", id="asc_nf"),
-        pytest.param("A DESC NULLS FIRST", id="desc_nf"),
+        pytest.param("A DESC NULLS FIRST", id="desc_nf", marks=pytest.mark.slow),
         pytest.param("A ASC NULLS LAST", id="asc_nl", marks=pytest.mark.slow),
         pytest.param("A DESC NULLS LAST", id="desc_nl", marks=pytest.mark.slow),
         pytest.param("W3 % 3 DESC, A ASC NULLS FIRST", id="combo"),

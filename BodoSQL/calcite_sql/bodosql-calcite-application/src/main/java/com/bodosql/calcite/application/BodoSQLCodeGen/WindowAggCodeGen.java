@@ -587,13 +587,18 @@ public class WindowAggCodeGen {
     if (aggName == "NTH_VALUE") {
       funcText.append(" or (cur_upper_bound - cur_lower_bound) < n");
     }
-    funcText.append(":\n");
+    funcText
+        .append(" or bodo.libs.array_kernels.isna(sorted_df[")
+        .append(makeQuoted(arg0ColName))
+        .append("].values, ")
+        .append(ilocIndex)
+        .append("):\n");
 
     // If its out of bounds (or too small), then the output is NULL
     addIndent(funcText, 4);
     funcText.append("bodo.libs.array_kernels.setna(" + array_name + ", i)\n");
 
-    // Otherwise, extract the corresponding location of the inptu array
+    // Otherwise, extract the corresponding location of the input array
     // and place it in index i of the output array
     addIndent(funcText, 3);
     funcText.append("else:\n");
