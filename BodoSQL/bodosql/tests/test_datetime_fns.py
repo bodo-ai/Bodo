@@ -623,6 +623,42 @@ def test_microseconds(spark_info, dt_fn_dataframe, memory_leak_check):
     )
 
 
+@pytest.mark.tz_aware
+def test_tz_aware_microsecond(tz_aware_df, memory_leak_check):
+    """simplest test for microsecond on timezone aware data"""
+    query = "SELECT MICROSECOND(A) as microsec_time from table1"
+    expected_output = pd.DataFrame(
+        {"microsec_time": tz_aware_df["table1"]["A"].dt.microsecond}
+    )
+
+    check_query(
+        query,
+        tz_aware_df,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_microsecond_case(tz_aware_df, memory_leak_check):
+    """test for microsecond within case statement on timezone aware data"""
+    query = "SELECT CASE WHEN MICROSECOND(A) > 1 THEN MICROSECOND(A) ELSE -1 END as microsec_time from table1"
+
+    micro_series = tz_aware_df["table1"]["A"].dt.microsecond
+    micro_series[micro_series <= 1] = -1
+
+    expected_output = pd.DataFrame({"microsec_time": micro_series})
+
+    check_query(
+        query,
+        tz_aware_df,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+    )
+
+
 def test_dayname_cols(spark_info, dt_fn_dataframe, memory_leak_check):
     """tests the dayname function on column inputs. Needed since the equivalent function has different syntax"""
     query = "SELECT DAYNAME(timestamps) from table1"
