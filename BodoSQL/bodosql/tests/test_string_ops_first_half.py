@@ -180,7 +180,7 @@ def test_upper_lower_like_constants(
     string_constants,
     spark_info,
     like_expression,
-    # memory_leak_check, Seems to be leaking memory sporatically, see [BS-534]
+    # memory_leak_check, Seems to be leaking memory sporadically, see [BS-534]
 ):
     """
     Tests that lower/upper works on string constants
