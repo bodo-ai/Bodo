@@ -131,6 +131,9 @@ class ArrowDataframeReader {
     /// return the total number of global rows that we are reading
     int64_t get_total_rows() const { return total_rows; }
 
+    /// Return the number of rows read by the current rank
+    int64_t get_local_rows() const { return count; }
+
     /// read data and return a Bodo table
     table_info* read() {
         tracing::Event ev("reader::read", parallel);

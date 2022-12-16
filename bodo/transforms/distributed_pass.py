@@ -2107,6 +2107,16 @@ class DistributedPass:
                 self,
             )
 
+        # Iceberg Merge Into
+        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
+            # Dataframe is the 3rd argument (counting from 0)
+            df_arg = rhs.args[3].name
+            if self._is_1D_or_1D_Var_arr(df_arg) and self._set_last_arg_to_true(
+                assign.value
+            ):
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
+
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
         if fdef == ("get_type_max_value", "numba.cpython.builtins"):

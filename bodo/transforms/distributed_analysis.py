@@ -2084,6 +2084,11 @@ class DistributedAnalysis:
         if fdef == ("set_bit_to_arr", "bodo.libs.int_arr_ext"):
             return
 
+        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
+            # iceberg_merge_cow_py doesn't have a return value
+            # or alter the distribution of any input.
+            return
+
         # add proper diagnostic info for tuple/list to array since usually happens
         # when the code creates Series/Dataframe from list, e.g. pd.Series([1, 2, 3])
         if fdef == ("tuple_list_to_array", "bodo.utils.utils"):
