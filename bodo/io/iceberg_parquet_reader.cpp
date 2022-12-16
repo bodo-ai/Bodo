@@ -208,27 +208,30 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
             *snapshot_id_ptr = -1;
         }
 
-        int64_t total_rows = reader.get_total_rows();
-        *total_rows_out = total_rows;
+        *total_rows_out = reader.get_total_rows();
         table_info* read_output = reader.read();
 
         // Append the index column to the output table used for MERGE INTO COW
         // Since the MERGE INTO flag is internal, we assume that this column
         // is never dead for simplicity sake.
         if (is_merge_into_cow) {
+            int64_t num_local_rows = reader.get_local_rows();
             array_info* row_id_col_arr =
-                alloc_numpy(total_rows, Bodo_CTypes::INT64);
+                alloc_numpy(num_local_rows, Bodo_CTypes::INT64);
 
             // Create the initial value on this rank
+            // TODO: Replace with start_idx from ArrowReader
             int64_t init_val = 0;
             if (parallel) {
-                MPI_Exscan(&total_rows, &init_val, 1, MPI_LONG_LONG_INT,
+                MPI_Exscan(&num_local_rows, &init_val, 1, MPI_LONG_LONG_INT,
                            MPI_SUM, MPI_COMM_WORLD);
             }
 
             // Equivalent to np.arange(*total_rows_out, dtype=np.int64)
             std::iota((int64_t*)row_id_col_arr->data1,
-                      (int64_t*)row_id_col_arr->data1 + total_rows, init_val);
+                      (int64_t*)row_id_col_arr->data1 + num_local_rows,
+                      init_val);
+
             read_output->columns.push_back(row_id_col_arr);
         }
 

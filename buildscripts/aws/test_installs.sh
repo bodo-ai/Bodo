@@ -1,5 +1,5 @@
 #!/bin/bash
-set -exo pipefail
+set -eo pipefail
 
 # Installations needed to run unittests. All placed in 1 file for the AWS Codebuild install step.
 
@@ -8,6 +8,10 @@ set -exo pipefail
 source deactivate || true
 export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
+
+# Print Command before Executing
+# Source Operations Prints Too Much Output
+set -x
 
 # s3fs is required by pandas for S3 IO.
 mamba install -y -c conda-forge boto3 botocore fsspec>=2021.09 s3fs
