@@ -34,7 +34,12 @@ if [ "$RUNTIME" != "yes" ];
 then
   conda create -n $CONDA_ENV -q -y -c conda-forge python=$PYTHON_VERSION mamba
 fi
+
+# Print Command before Executing
+# Source Operations Prints Too Much Output
+set +x
 source activate $CONDA_ENV
+set -x
 
 if [ "$RUNTIME" != "yes" ];
 then

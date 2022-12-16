@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 import numba
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 from mpi4py import MPI
 from numba.core import types
@@ -22,6 +23,11 @@ from bodo.io.fs_io import get_s3_bucket_region_njit
 from bodo.io.helpers import (
     _get_numba_typ_from_pa_typ,
     pyarrow_table_schema_type,
+)
+from bodo.libs.array import (
+    arr_info_list_to_table,
+    array_to_info,
+    py_table_to_cpp_table,
 )
 from bodo.libs.str_ext import unicode_to_utf8
 from bodo.utils import tracing
@@ -235,7 +241,7 @@ class IcebergParquetDataset:
     (see get_parquet_dataset in parquet_pio.py).
     conn, database schema, table_name and pa_table_schema
     are required.
-    'pa_table_schema' is the pyarrow.lib.Schema object
+    'pa_table_schema' is the PyArrow schema object
     obtained from Iceberg at compile time, i.e. the expected final
     schema.
     'pq_dataset' is the parquet dataset object. It's required
@@ -621,7 +627,7 @@ def get_table_details_before_write(
             if iceberg_schema_id is None:
                 # When the table doesn't exist, i.e. we're creating a new one,
                 # `iceberg_schema_str` will be empty, so we need to create it
-                # from the pyarrow schema of the dataframe.
+                # from the PyArrow schema of the dataframe.
                 iceberg_schema_str = connector.pyarrow_to_iceberg_schema_str(df_schema)
         except connector.IcebergError as e:
             # Only include Java error info in dev mode because it contains at lot of
@@ -672,7 +678,7 @@ def get_table_details_before_write(
 def collect_file_info(iceberg_files_info) -> Tuple[List[str], List[int], List[int]]:
     """
     Collect C++ Iceberg File Info to a single rank
-    and process before handing off to the connector / commiting functions
+    and process before handing off to the connector / committing functions
     """
     from mpi4py import MPI
 
@@ -865,12 +871,12 @@ def iceberg_pq_write(
         partition_spec: Array of Tuples containing Partition Spec for Iceberg Table (passed to C++)
         sort_order: Array of Tuples containing Sort Order for Iceberg Table (passed to C++)
         iceberg_schema_str (str): JSON Encoding of Iceberg Schema to include in Parquet metadata
-        is_parallel (bool): Whether the write is occuring on a distributed dataframe
+        is_parallel (bool): Whether the write is occurring on a distributed dataframe
         expected_schema (pyarrow.Schema): Expected schema of output PyArrow table written
             to Parquet files in the Iceberg table. None if not necessary
 
     Returns:
-        Distributed list of written file info needed by Iceberg for commiting
+        Distributed list of written file info needed by Iceberg for committing
         1) file_path (after the table_loc prefix)
         2) record_count / Number of rows
         3) File size in bytes
@@ -927,7 +933,7 @@ def iceberg_write(
         bodo_table : table object to pass to c++
         col_names : array object containing column names (passed to c++)
         if_exists (str): behavior when table exists. must be one of ['fail', 'append', 'replace']
-        is_parallel (bool): whether the write is occuring on a distributed dataframe
+        is_parallel (bool): whether the write is occurring on a distributed dataframe
         df_pyarrow_schema (pyarrow.Schema): PyArrow schema of the dataframe being written
         allow_downcasting (bool): Perform write downcasting on table columns to fit Iceberg schema
             This includes both type and nullability downcasting
@@ -1016,8 +1022,103 @@ def iceberg_write(
     ev.finalize()
 
 
-@numba.njit()
+@numba.generated_jit(nopython=True)
 def iceberg_merge_cow_py(
+    table_name,
+    conn,
+    database_schema,
+    bodo_df,
+    snapshot_id,
+    old_fnames,
+    is_parallel=False,
+):
+
+    if not is_parallel:
+        raise BodoError(
+            "Merge Into with Iceberg Tables are only supported on distributed DataFrames"
+        )
+
+    df_pyarrow_schema = bodo.io.helpers.numba_to_pyarrow_schema(
+        bodo_df, is_iceberg=True
+    )
+    col_names_py = pd.array(bodo_df.columns)
+
+    if bodo_df.is_table_format:
+        bodo_table_type = bodo_df.table_type
+
+        def impl(
+            table_name,
+            conn,
+            database_schema,
+            bodo_df,
+            snapshot_id,
+            old_fnames,
+            is_parallel=False,
+        ):  # pragma: no cover
+            iceberg_merge_cow(
+                table_name,
+                format_iceberg_conn_njit(conn),
+                database_schema,
+                py_table_to_cpp_table(
+                    bodo.hiframes.pd_dataframe_ext.get_dataframe_table(bodo_df),
+                    bodo_table_type,
+                ),
+                snapshot_id,
+                old_fnames,
+                array_to_info(col_names_py),
+                df_pyarrow_schema,
+                is_parallel,
+            )
+
+    else:
+        data_args = ", ".join(
+            "array_to_info(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(bodo_df, {}))".format(
+                i
+            )
+            for i in range(len(bodo_df.columns))
+        )
+
+        func_text = "def impl(\n"
+        func_text += "    table_name,\n"
+        func_text += "    conn,\n"
+        func_text += "    database_schema,\n"
+        func_text += "    bodo_df,\n"
+        func_text += "    snapshot_id,\n"
+        func_text += "    old_fnames,\n"
+        func_text += "    is_parallel=False,\n"
+        func_text += "):\n"
+        func_text += "    info_list = [{}]\n".format(data_args)
+        func_text += "    table = arr_info_list_to_table(info_list)\n"
+        func_text += "    iceberg_merge_cow(\n"
+        func_text += "        table_name,\n"
+        func_text += "        format_iceberg_conn_njit(conn),\n"
+        func_text += "        database_schema,\n"
+        func_text += "        table,\n"
+        func_text += "        snapshot_id,\n"
+        func_text += "        old_fnames,\n"
+        func_text += "        array_to_info(col_names_py),\n"
+        func_text += "        df_pyarrow_schema,\n"
+        func_text += "        is_parallel,\n"
+        func_text += "    )\n"
+
+        locals = dict()
+        globals = {
+            "bodo": bodo,
+            "array_to_info": array_to_info,
+            "arr_info_list_to_table": arr_info_list_to_table,
+            "iceberg_merge_cow": iceberg_merge_cow,
+            "format_iceberg_conn_njit": format_iceberg_conn_njit,
+            "col_names_py": col_names_py,
+            "df_pyarrow_schema": df_pyarrow_schema,
+        }
+        exec(func_text, globals, locals)
+        impl = locals["impl"]
+
+    return impl
+
+
+@numba.njit()
+def iceberg_merge_cow(
     table_name,
     conn,
     database_schema,
