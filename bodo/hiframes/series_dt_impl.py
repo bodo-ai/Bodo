@@ -109,6 +109,7 @@ def create_date_field_overload(field):
             "hour",
             "minute",
             "second",
+            "microsecond",
         ]
 
         if field not in series_dt_fields:
