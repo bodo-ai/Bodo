@@ -704,28 +704,50 @@ def test_np_random_multivariate_normal(memory_leak_check):
 
 @pytest.fixture(
     params=[
-        pd.arrays.IntegerArray(
-            np.array([1, -3, 2, 3, 10] * 2, np.int8),
-            np.array([False, True, True, False, False] * 2),
+        pytest.param(
+            pd.arrays.IntegerArray(
+                np.array([1, -3, 2, 3, 10] * 2, np.int8),
+                np.array([False, True, True, False, False] * 2),
+            ),
+            id="IntegerArray",
         ),
-        pd.array([True, False, True, pd.NA, False] * 2),
-        np.array(
-            [
-                Decimal("1.6"),
-                None,
-                Decimal("-0.222"),
-                Decimal("1111.316"),
-                Decimal("5.1"),
-            ]
-            * 2
+        pytest.param(
+            pd.arrays.FloatingArray(
+                np.array([1.0, -3.0, 2.0, 3.0, 10.0] * 2, np.float64),
+                np.array([False, True, True, False, False] * 2),
+            ),
+            id="FloatingArray",
+            marks=pytest.mark.skip(reason="FloatingArray not fully implemented"),
         ),
-        np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None]),
-        np.append(
-            [
-                datetime.timedelta(days=5, seconds=4, weeks=4),
-                datetime.timedelta(days=2, microseconds=121),
-            ],
-            [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 4,
+        pytest.param(
+            pd.array([True, False, True, pd.NA, False] * 2), id="BooleanArray"
+        ),
+        pytest.param(
+            np.array(
+                [
+                    Decimal("1.6"),
+                    None,
+                    Decimal("-0.222"),
+                    Decimal("1111.316"),
+                    Decimal("5.1"),
+                ]
+                * 2
+            ),
+            id="DecimalArray",
+        ),
+        pytest.param(
+            np.append(pd.date_range("2020-01-14", "2020-01-22").date, [None]),
+            id="DateArray",
+        ),
+        pytest.param(
+            np.append(
+                [
+                    datetime.timedelta(days=5, seconds=4, weeks=4),
+                    datetime.timedelta(days=2, microseconds=121),
+                ],
+                [None, datetime.timedelta(microseconds=100000001213131, hours=5)] * 4,
+            ),
+            id="TimedeltaArray",
         ),
         pytest.param(pd.Categorical([1, 2, 5, None, 2] * 2), marks=pytest.mark.slow),
         pytest.param(pd.Categorical(["AA", "BB", "", "AA", None] * 2)),

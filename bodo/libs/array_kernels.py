@@ -52,6 +52,7 @@ from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import DictionaryArrayType, init_dict_arr
 from bodo.libs.distributed_api import Reduce_Type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, alloc_int_array
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import (
@@ -110,7 +111,9 @@ def overload_isna(arr, i):
         )  # pragma: no cover
 
     # masked Integer array, boolean array
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType, TimeArrayType)) or arr in (
+    if isinstance(
+        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
+    ) or arr in (
         boolean_array,
         datetime_date_array_type,
         datetime_timedelta_array_type,
@@ -250,7 +253,7 @@ def setna_overload(arr, ind, int_nan_const=0):
 
         return impl
 
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)):
+    if isinstance(arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)):
         return lambda arr, ind, int_nan_const=0: bodo.libs.int_arr_ext.set_bit_to_arr(
             arr._null_bitmap, ind, 0
         )  # pragma: no cover
@@ -653,6 +656,7 @@ class QuantileType(AbstractTemplate):
 
 @lower_builtin(quantile, types.Array, types.float64)
 @lower_builtin(quantile, IntegerArrayType, types.float64)
+@lower_builtin(quantile, FloatingArrayType, types.float64)
 @lower_builtin(quantile, BooleanArrayType, types.float64)
 def lower_dist_quantile_seq(context, builder, sig, args):
 
@@ -664,7 +668,9 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 
     arr_val = args[0]
     arr_typ = sig.args[0]
-    if isinstance(arr_typ, (IntegerArrayType, BooleanArrayType)):
+    if isinstance(
+        arr_typ, (IntegerArrayType, FloatingArrayType, BooleanArrayType)
+    ):  # pragma: no cover
         arr_val = cgutils.create_struct_proxy(arr_typ)(context, builder, arr_val).data
         arr_typ = types.Array(arr_typ.dtype, 1, "C")
 
@@ -698,6 +704,7 @@ def lower_dist_quantile_seq(context, builder, sig, args):
 
 @lower_builtin(quantile_parallel, types.Array, types.float64, types.intp)
 @lower_builtin(quantile_parallel, IntegerArrayType, types.float64, types.intp)
+@lower_builtin(quantile_parallel, FloatingArrayType, types.float64, types.intp)
 @lower_builtin(quantile_parallel, BooleanArrayType, types.float64, types.intp)
 def lower_dist_quantile_parallel(context, builder, sig, args):
 
@@ -709,7 +716,9 @@ def lower_dist_quantile_parallel(context, builder, sig, args):
 
     arr_val = args[0]
     arr_typ = sig.args[0]
-    if isinstance(arr_typ, (IntegerArrayType, BooleanArrayType)):
+    if isinstance(
+        arr_typ, (IntegerArrayType, FloatingArrayType, BooleanArrayType)
+    ):  # pragma: no cover
         arr_val = cgutils.create_struct_proxy(arr_typ)(context, builder, arr_val).data
         arr_typ = types.Array(arr_typ.dtype, 1, "C")
 
@@ -1941,7 +1950,7 @@ def overload_convert_to_nullable_tup(arr_tup):
     """
     # no need for conversion if already nullable int
     if isinstance(arr_tup, (types.UniTuple, types.List)) and isinstance(
-        arr_tup.dtype, (IntegerArrayType, BooleanArrayType)
+        arr_tup.dtype, (IntegerArrayType, FloatingArrayType, BooleanArrayType)
     ):
         return lambda arr_tup: arr_tup  # pragma: no cover
 

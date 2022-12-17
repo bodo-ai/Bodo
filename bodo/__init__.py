@@ -217,6 +217,7 @@ from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.nullable_tuple_ext import NullableTupleType
 from bodo.libs.struct_arr_ext import StructArrayType
