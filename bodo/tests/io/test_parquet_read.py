@@ -1521,6 +1521,26 @@ def test_read_pq_head_only(datapath, memory_leak_check):
             shutil.rmtree("pq_data", ignore_errors=True)
 
 
+def test_limit_pushdown_multiple_tables(datapath, memory_leak_check):
+    """
+    test reading only shape and/or head from Parquet file if possible
+    (limit pushdown) with multiple DataFrames in the same block.
+    """
+
+    def impl(path1, path2):
+        df1 = pd.read_parquet(path1)
+        df2 = pd.read_parquet(path2)
+        return df1.head(4), df2.head(5)
+
+    fname = datapath("int_nulls_multi.pq")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (fname, fname), check_dtype=False)
+        check_logger_msg(stream, "Constant limit detected, reading at most 4 rows")
+        check_logger_msg(stream, "Constant limit detected, reading at most 5 rows")
+
+
 def _check_for_pq_read_head_only(bodo_func, has_read=True):
     """make sure head-only parquet read optimization is recognized"""
     fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
