@@ -351,6 +351,24 @@ def pd_to_datetime_error_checked(
     pd.to_datetime in objmode, which returns a tuple (success flag, value). If
     the success flag evaluates to True, then the paired value is the correctly parsed timestamp, otherwise  the paired value is a dummy timestamp.
     """
+    # Manual check for invalid date strings to match behavior of Snowflake
+    # since Pandas accepts dates like the following: "2020", "2020-01"
+    if val is not None:
+        # account for case where val is a timestamp
+        val_arg0 = val.split(" ")[0]
+
+        # Check the number of characters to prevent those invalid cases
+        # YYYY/MM/DD, YYYY-MM-DD, etc. all have exactly 10 characters
+        # With timestamp information, they have even greater.
+        if len(val_arg0) < 10:
+            return (False, None)
+        else:
+            # Check that the number of "/", and "-" are either 0 or 2
+            slash_flag = val_arg0.count("/") in [0, 2]
+            dash_flag = val_arg0.count("-") in [0, 2]
+
+            if not (slash_flag and dash_flag):
+                return (False, None)
 
     with numba.objmode(ret_val="pd_timestamp_tz_naive_type", success_flag="bool_"):
         success_flag = True
