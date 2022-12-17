@@ -4538,6 +4538,7 @@ class DistributedPass:
                             "table_filter",
                             "bodo.hiframes.table",
                         )
+                        and (rhs.args[0].name in arr_varnames)
                     ) or (is_expr(rhs, "getitem") and rhs.value.name in arr_varnames):
                         if is_call(rhs):
                             # table_format
