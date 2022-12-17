@@ -99,8 +99,8 @@ def pa_schema_unify_reduction(schema_a, schema_b, unused):
 pa_schema_unify_mpi_op = MPI.Op.Create(pa_schema_unify_reduction, commute=True)
 
 
-# Read Arrow Int columns as nullable int array (IntegerArrayType)
-use_nullable_int_arr = True
+# Read Arrow Int/Float columns as nullable array (IntegerArrayType/FloatingArrayType)
+use_nullable_pd_arr = True
 
 _pyarrow_numba_type_map = {
     # boolean
@@ -256,20 +256,29 @@ def _get_numba_typ_from_pa_typ(
         arr_typ = boolean_array
 
     # Do what metadata says or use global defualt
-    _use_nullable_int_arr = (
-        use_nullable_int_arr
+    _use_nullable_pd_arr = (
+        use_nullable_pd_arr
         if nullable_from_metadata is None
         else nullable_from_metadata
     )
 
     # TODO: support nullable int for indices
     if (
-        _use_nullable_int_arr
+        _use_nullable_pd_arr
         and not is_index
         and isinstance(dtype, types.Integer)
         and pa_typ.nullable
     ):
         arr_typ = IntegerArrayType(dtype)
+
+    # TODO: uncomment once nullable float array is fully supported
+    # if (
+    #     _use_nullable_pd_arr
+    #     and not is_index
+    #     and isinstance(dtype, types.Float)
+    #     and pa_typ.nullable
+    # ):
+    #     arr_typ = FloatingArrayType(dtype)
 
     return arr_typ, supported
 

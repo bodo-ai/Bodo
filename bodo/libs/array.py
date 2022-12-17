@@ -33,6 +33,7 @@ from bodo.libs.array_item_arr_ext import (
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import (
@@ -217,7 +218,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                     types_list += get_types(field_typ)
                 return types_list
             elif (
-                isinstance(arr_typ, (types.Array, IntegerArrayType))
+                isinstance(arr_typ, (types.Array, IntegerArrayType, FloatingArrayType))
                 or arr_typ == boolean_array
             ):
                 return get_types(arr_typ.dtype)
@@ -268,7 +269,8 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                 )
             # TODO: add Struct, Categorical, String
             elif isinstance(
-                arr_typ, (IntegerArrayType, DecimalArrayType, types.Array)
+                arr_typ,
+                (IntegerArrayType, FloatingArrayType, DecimalArrayType, types.Array),
             ) or arr_typ in (
                 boolean_array,
                 datetime_date_array_type,
@@ -332,7 +334,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                     [null_bitmap_ptr] + buffs_data,
                 )
             elif isinstance(
-                arr_typ, (IntegerArrayType, DecimalArrayType)
+                arr_typ, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
             ) or arr_typ in (
                 boolean_array,
                 datetime_date_array_type,
@@ -644,7 +646,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
 
     # nullable integer/bool array
     if isinstance(
-        arr_type, (IntegerArrayType, DecimalArrayType, TimeArrayType)
+        arr_type, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
     ) or arr_type in (
         boolean_array,
         datetime_date_array_type,
@@ -1064,7 +1066,9 @@ def nested_to_array(
             infos_pos + 2,
         )
 
-    elif isinstance(arr_typ, (IntegerArrayType, DecimalArrayType)) or arr_typ in (
+    elif isinstance(
+        arr_typ, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or arr_typ in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -1402,7 +1406,7 @@ def info_to_array_codegen(context, builder, sig, args):
 
     # nullable integer/bool array
     if isinstance(
-        arr_type, (IntegerArrayType, DecimalArrayType, TimeArrayType)
+        arr_type, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
     ) or arr_type in (
         boolean_array,
         datetime_date_array_type,
@@ -3035,7 +3039,7 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     3  "ef"  9
     """
     if (
-        isinstance(col_array_dtype, bodo.libs.int_arr_ext.IntegerArrayType)
+        isinstance(col_array_dtype, (IntegerArrayType, FloatingArrayType))
         or col_array_dtype
         in (bodo.libs.bool_arr_ext.boolean_array, bodo.binary_array_type)
         or is_str_arr_type(col_array_dtype)

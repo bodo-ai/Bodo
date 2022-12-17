@@ -1356,6 +1356,43 @@ int is_pd_int_array(PyObject* arr) {
 }
 
 /**
+ * @brief check if object is a pd.FloatArray
+ *
+ * @param arr Python object to check
+ * @return int 1 if object is a pd.FloatArray, 0 otherwise
+ */
+int is_pd_float_array(PyObject* arr) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        PyGILState_Release(gilstate);  \
+        return false;                  \
+    }
+
+    auto gilstate = PyGILState_Ensure();
+    // pd.arrays.FloatingArray
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* pd_arrays_obj = PyObject_GetAttrString(pd_mod, "arrays");
+    CHECK(pd_arrays_obj, "getting pd.arrays failed");
+    PyObject* pd_arrays_float_arr_obj =
+        PyObject_GetAttrString(pd_arrays_obj, "FloatingArray");
+    CHECK(pd_arrays_obj, "getting pd.arrays.FloatingArray failed");
+
+    // isinstance(arr, FloatingArray)
+    int ret = PyObject_IsInstance(arr, pd_arrays_float_arr_obj);
+    CHECK(ret >= 0, "isinstance fails");
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(pd_arrays_obj);
+    Py_DECREF(pd_arrays_float_arr_obj);
+    PyGILState_Release(gilstate);
+    return ret;
+
+#undef CHECK
+}
+
+/**
  * @brief unbox object array into native data and null_bitmap of native nullable
  * int array
  *
@@ -1397,6 +1434,55 @@ void int_array_from_sequence(PyObject* arr_obj, int64_t* data,
             // TODO: checking int fails for some reason
             // CHECK(PyLong_Check(s), "expecting an int");
             data[i] = PyLong_AsLongLong(s);
+        }
+        Py_DECREF(s);
+    }
+
+    Py_DECREF(pd_mod);
+    Py_DECREF(C_NA);
+#undef CHECK
+}
+
+/**
+ * @brief unbox object array into native data and null_bitmap of native nullable
+ * float array
+ *
+ * @param arr_obj object array with float or NA values
+ * @param data native float data array of output array
+ * @param null_bitmap null bitmap of output array
+ */
+void float_array_from_sequence(PyObject* arr_obj, double* data,
+                               uint8_t* null_bitmap) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return;                        \
+    }
+
+    CHECK(PySequence_Check(arr_obj), "expecting a PySequence");
+    CHECK(data && null_bitmap, "buffer arguments must not be NULL");
+
+    // get pd.NA object to check for new NA kind
+    PyObject* pd_mod = PyImport_ImportModule("pandas");
+    CHECK(pd_mod, "importing pandas module failed");
+    PyObject* C_NA = PyObject_GetAttrString(pd_mod, "NA");
+    CHECK(C_NA, "getting pd.NA failed");
+
+    Py_ssize_t n = PyObject_Size(arr_obj);
+
+    for (Py_ssize_t i = 0; i < n; ++i) {
+        PyObject* s = PySequence_GetItem(arr_obj, i);
+        CHECK(s, "getting float array element failed");
+        // Pandas stores NA as either None or nan
+        if (s == Py_None ||
+            (PyFloat_Check(s) && std::isnan(PyFloat_AsDouble(s))) ||
+            s == C_NA) {
+            // set null bit to 0
+            SetBitTo(null_bitmap, i, 0);
+        } else {
+            // set null bit to 1
+            null_bitmap[i / 8] |= kBitmask[i % 8];
+            data[i] = PyFloat_AsDouble(s);
         }
         Py_DECREF(s);
     }
@@ -1661,9 +1747,24 @@ PyMODINIT_FUNC PyInit_array_ext(void) {
     // Python. We currently don't know the best way to detect and raise
     // exceptions in box/unbox functions which is where this function is called.
     // Once we do, we should handle this appropriately. TODO
+    PyObject_SetAttrString(m, "is_pd_float_array",
+                           PyLong_FromVoidPtr((void*)(&is_pd_float_array)));
+    // This function is C, but it has components that can fail, in which case
+    // we should call PyErr_Set_String and detect this and raise an exception in
+    // Python. We currently don't know the best way to detect and raise
+    // exceptions in box/unbox functions which is where this function is called.
+    // Once we do, we should handle this appropriately. TODO
     PyObject_SetAttrString(
         m, "int_array_from_sequence",
         PyLong_FromVoidPtr((void*)(&int_array_from_sequence)));
+    // This function is C, but it has components that can fail, in which case
+    // we should call PyErr_Set_String and detect this and raise an exception in
+    // Python. We currently don't know the best way to detect and raise
+    // exceptions in box/unbox functions which is where this function is called.
+    // Once we do, we should handle this appropriately. TODO
+    PyObject_SetAttrString(
+        m, "float_array_from_sequence",
+        PyLong_FromVoidPtr((void*)(&float_array_from_sequence)));
     // Only uses C which cannot throw exceptions, so typical exception
     // handling is not required
     PyObject_SetAttrString(m, "get_stats_alloc",
