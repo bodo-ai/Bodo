@@ -72,6 +72,7 @@ bodo_types_with_params = {
     "Decimal128Type",
     "DecimalArrayType",
     "IntegerArrayType",
+    "FloatingArrayType",
     "IntervalArrayType",
     "IntervalIndexType",
     "List",
@@ -151,6 +152,9 @@ no_side_effect_call_tuples = {
     ("get_int_arr_bitmap", "int_arr_ext", "libs", bodo),
     ("init_integer_array", "int_arr_ext", "libs", bodo),
     ("alloc_int_array", "int_arr_ext", "libs", bodo),
+    # Float array
+    ("init_float_array", "float_arr_ext", "libs", bodo),
+    ("alloc_float_array", "float_arr_ext", "libs", bodo),
     # str array
     ("inplace_eq", "str_arr_ext", "libs", bodo),
     # bool array

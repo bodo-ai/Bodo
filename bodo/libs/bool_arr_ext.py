@@ -895,6 +895,7 @@ def bool_arr_ind_getitem(A, ind):
             (
                 types.Array,
                 bodo.libs.int_arr_ext.IntegerArrayType,
+                bodo.libs.float_arr_ext.FloatingArrayType,
                 bodo.libs.struct_arr_ext.StructArrayType,
                 bodo.libs.array_item_arr_ext.ArrayItemArrayType,
                 bodo.libs.map_arr_ext.MapArrayType,

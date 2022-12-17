@@ -2338,6 +2338,15 @@ class DistributedAnalysis:
             array_dists[rhs.args[0].name] = new_dist
             return
 
+        if fdef == ("init_float_array", "bodo.libs.float_arr_ext"):
+            # lhs, data, and bitmap should have the same distribution
+            new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            new_dist = self._meet_array_dists(
+                lhs, rhs.args[1].name, array_dists, new_dist
+            )
+            array_dists[rhs.args[0].name] = new_dist
+            return
+
         if fdef == ("init_bool_array", "bodo.libs.bool_arr_ext"):
             # lhs, data, and bitmap should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)

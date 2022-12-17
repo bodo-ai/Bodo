@@ -1115,7 +1115,7 @@ def _typeof(val):
 
 def typeof_pd_float_dtype(val):
     """
-    Pandas 1.2.0 adds interpretting a nullable FloatArray
+    Pandas 1.2.0 adds interpretting a nullable FloatingArray
     This isn't supported yet in Bodo, so we convert these inputs
     to floating point values.
     """

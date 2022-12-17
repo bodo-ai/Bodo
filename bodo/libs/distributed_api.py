@@ -34,6 +34,7 @@ from bodo.libs.array_item_arr_ext import (
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import MapArrayType
@@ -208,7 +209,9 @@ def isend(arr, size, pe, tag, cond=True):
         return impl
 
     # nullable arrays
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
+    if isinstance(
+        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or arr in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -292,7 +295,9 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
         return impl
 
     # nullable arrays
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
+    if isinstance(
+        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or arr in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -715,7 +720,8 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         return gatherv_impl_int_arr
 
     if isinstance(
-        data, (IntegerArrayType, DecimalArrayType, bodo.TimeArrayType)
+        data,
+        (IntegerArrayType, FloatingArrayType, DecimalArrayType, bodo.TimeArrayType),
     ) or data in (
         boolean_array,
         datetime_date_array_type,
@@ -1662,6 +1668,11 @@ def get_value_for_type(dtype):  # pragma: no cover
         )
         return pd.array([3], pd_dtype)
 
+    # Float array
+    if isinstance(dtype, FloatingArrayType):
+        pd_dtype = "Float{}".format(dtype.dtype.bitwidth)
+        return pd.array([3.0], pd_dtype)
+
     # bool array
     if dtype == boolean_array:
         return pd.array([True], "boolean")
@@ -1996,7 +2007,9 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
 
         return scatterv_array_item_impl
 
-    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data in (
+    if isinstance(
+        data, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or data in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -2006,6 +2019,8 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         # their init functions
         if isinstance(data, IntegerArrayType):
             init_func = bodo.libs.int_arr_ext.init_integer_array
+        if isinstance(data, FloatingArrayType):  # pragma: no cover
+            init_func = bodo.libs.float_arr_ext.init_float_array
         if isinstance(data, DecimalArrayType):
             precision = data.precision
             scale = data.scale
@@ -2367,8 +2382,8 @@ def bcast_overload(data, root=MPI_ROOT):
 
         return bcast_decimal_arr
 
-    # nullable int/bool/date arrays
-    if isinstance(data, IntegerArrayType) or data in (
+    # nullable int/float/bool/date arrays
+    if isinstance(data, (IntegerArrayType, FloatingArrayType)) or data in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -2912,7 +2927,9 @@ def alltoallv(
     typ_enum_o = get_type_enum(out_data)
     assert typ_enum == typ_enum_o
 
-    if isinstance(send_data, (IntegerArrayType, DecimalArrayType)) or send_data in (
+    if isinstance(
+        send_data, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or send_data in (
         boolean_array,
         datetime_date_array_type,
     ):

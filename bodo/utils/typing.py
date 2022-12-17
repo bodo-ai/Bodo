@@ -1347,6 +1347,7 @@ def is_literal_type(t):
         # dtype literals should be treated as literals
         or isinstance(t, (types.DTypeSpec, types.Function))
         or isinstance(t, bodo.libs.int_arr_ext.IntDtype)
+        or isinstance(t, bodo.libs.float_arr_ext.FloatDtype)
         or t
         in (bodo.libs.bool_arr_ext.boolean_dtype, bodo.libs.str_arr_ext.string_dtype)
         # values like np.sum could be passed as UDFs and are technically literals
@@ -1430,6 +1431,8 @@ def get_literal_value(t):
         return t
     if isinstance(t, bodo.libs.int_arr_ext.IntDtype):
         return getattr(pd, str(t)[:-2])()
+    if isinstance(t, bodo.libs.float_arr_ext.FloatDtype):  # pragma: no cover
+        return getattr(pd, str(t)[:-2])()
     if t == bodo.libs.bool_arr_ext.boolean_dtype:
         return pd.BooleanDtype()
     if t == bodo.libs.str_arr_ext.string_dtype:
@@ -1487,6 +1490,9 @@ def dtype_to_array_type(dtype, convert_nullable=False):
 
     if isinstance(dtype, bodo.libs.int_arr_ext.IntDtype):
         return bodo.IntegerArrayType(dtype.dtype)
+
+    if isinstance(dtype, bodo.libs.float_arr_ext.FloatDtype):  # pragma: no cover
+        return bodo.FloatingArrayType(dtype.dtype)
 
     if dtype == types.bool_:
         return bodo.boolean_array

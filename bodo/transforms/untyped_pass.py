@@ -35,6 +35,7 @@ from bodo.io import h5
 from bodo.utils.utils import is_assign, is_call, is_expr
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.hiframes.pd_index_ext import RangeIndexType
 from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
@@ -1739,9 +1740,11 @@ class UntypedPass:
         if _bodo_upcast_to_float64:
             dtype_map_cpy = dtype_map.copy()
             for c, t in dtype_map_cpy.items():
-                if isinstance(t, (types.Array, IntegerArrayType)) and isinstance(
+                if isinstance(
+                    t, (types.Array, IntegerArrayType, FloatingArrayType)
+                ) and isinstance(
                     t.dtype, (types.Integer, types.Float)
-                ):
+                ):  # pragma: no cover
                     dtype_map[c] = types.Array(types.float64, 1, "C")
 
         # handle dtype arg if provided
@@ -2751,6 +2754,12 @@ def _dtype_val_to_arr_type(t, func_name, loc):
             )
             return IntegerArrayType(dtype.dtype)
 
+        if t.startswith("Float"):  # pragma: no cover
+            dtype = bodo.libs.float_arr_ext.typeof_pd_float_dtype(
+                pd.api.types.pandas_dtype(t), None
+            )
+            return FloatingArrayType(dtype.dtype)
+
         # datetime64 case
         if t == "datetime64[ns]":
             return types.Array(types.NPDatetime("ns"), 1, "C")
@@ -2782,9 +2791,14 @@ def _dtype_val_to_arr_type(t, func_name, loc):
         return CategoricalArrayType(typ)
 
     # nullable int types
-    if isinstance(t, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(t, pd.core.arrays.integer._IntegerDtype):  # pragma: no cover
         dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(t, None)
         return IntegerArrayType(dtype.dtype)
+
+    # nullable float types
+    if isinstance(t, pd.core.arrays.floating.FloatingDtype):
+        dtype = bodo.libs.float_arr_ext.typeof_pd_float_dtype(t, None)
+        return FloatingArrayType(dtype.dtype)
 
     # try numpy dtypes
     try:
