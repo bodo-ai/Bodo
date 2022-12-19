@@ -300,7 +300,6 @@ _numba_pyarrow_type_map = {
     types.float64: pa.float64(),
     # Date and Time
     types.NPDatetime("ns"): pa.date64(),
-    # (TODO: time32, time64, ...)
 }
 
 
@@ -385,11 +384,23 @@ def _numba_to_pyarrow_type(numba_type: types.ArrayCompatible, is_iceberg: bool =
         # naive, it won't matter.
         dtype = pa.timestamp("us", "UTC") if is_iceberg else pa.timestamp("ns", "UTC")
 
+    # TODO: Figure out how to raise an error her for Iceberg (is_icberg is set to True).
+    elif isinstance(numba_type, types.Array) and numba_type.dtype == bodo.timedelta64ns:
+        dtype = pa.duration("ns")
     elif (
         isinstance(numba_type, (types.Array, IntegerArrayType))
         and numba_type.dtype in _numba_pyarrow_type_map
     ):
         dtype = _numba_pyarrow_type_map[numba_type.dtype]  # type: ignore
+    elif isinstance(numba_type, bodo.TimeArrayType):
+        if numba_type.precision == 0:
+            dtype = pa.time32("s")
+        elif numba_type.precision == 3:
+            dtype = pa.time32("ms")
+        elif numba_type.precision == 6:
+            dtype = pa.time64("us")
+        elif numba_type.precision == 9:
+            dtype = pa.time64("ns")
     else:
         raise BodoError(
             f"Conversion from Bodo array type {numba_type} to PyArrow type not supported yet"

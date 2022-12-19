@@ -95,8 +95,9 @@ void iceberg_pq_write_helper(
     *file_size_in_bytes =
         pq_write(fpath, table, col_names_arr, nullptr, false, "", compression,
                  is_parallel, false, 0, 0, 0, "", bucket_region, row_group_size,
-                 "", "UTC", arrow::TimeUnit::MICRO, md, std::string(fpath),
-                 iceberg_arrow_schema);
+                 "", false /*convert_timedelta_to_int64*/, "UTC",
+                 false /*downcast_time_ns_to_us*/, arrow::TimeUnit::MICRO, md,
+                 std::string(fpath), iceberg_arrow_schema);
     *record_count = table->nrows();
 }
 

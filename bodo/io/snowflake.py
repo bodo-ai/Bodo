@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pyarrow as pa
 from mpi4py import MPI
+from numba.core import types
 
 import bodo
 from bodo.hiframes.pd_dataframe_ext import DataFrameType
@@ -18,11 +19,13 @@ from bodo.io.helpers import (
     update_env_vars,
     update_file_contents,
 )
+from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.str_arr_ext import string_array_type
+from bodo.libs.struct_arr_ext import StructArrayType
 from bodo.utils import tracing
 from bodo.utils.py_objs import install_py_obj_class
-from bodo.utils.typing import BodoError, BodoWarning
+from bodo.utils.typing import BodoError, BodoWarning, is_str_arr_type
 
 # Imports for typechecking
 if TYPE_CHECKING:  # pragma: no cover  Built-in Python Attribute. False during runtime
@@ -100,6 +103,86 @@ FIELD_TYPE_TO_PA_TYPE = [
     # Boolean
     pa.bool_(),
 ]
+
+
+def gen_snowflake_schema(column_names, column_datatypes):
+    """Generate a dictionary where column is key and
+    its corresponding bodo->snowflake datatypes is value
+
+    Args:
+        column_names (array-like): Array of dataframe column names
+        column_datatypes (array-like): Array of dataframe column datatypes
+
+    Returns:
+        sf_schema (dict): {col_name : snowflake_datatype}
+    Raises BodoError for unsupported datatypes when writing to snowflake.
+    """
+    sf_schema = {}
+    for col_name, col_type in zip(column_names, column_datatypes):
+        # TODO: differentiate between timezone aware or not types.
+        # [BE-3587] need specific tz for each column type.
+        if isinstance(col_type, bodo.DatetimeArrayType) or (
+            col_type == bodo.datetime_datetime_type
+        ):
+            sf_schema[col_name] = "TIMESTAMP_NTZ"
+        elif col_type == bodo.datetime_date_array_type:
+            sf_schema[col_name] = "DATE"
+        elif isinstance(col_type, bodo.TimeArrayType):
+            if col_type.precision in [0, 3, 6]:
+                precision = col_type.precision
+            elif col_type.precision == 9:
+                # Set precision to 6 due to snowflake limitation
+                # https://community.snowflake.com/s/article/Nano-second-precision-lost-after-Parquet-file-Unload
+                if bodo.get_rank() == 0:
+                    warnings.warn(
+                        BodoWarning(
+                            f"to_sql(): {col_name} time precision will be lost.\nSnowflake loses nano second precision when exporting parquet file using COPY INTO.\n"
+                            " This is due to a limitation on Parquet V1 that is currently being used in Snowflake"
+                        )
+                    )
+                precision = 6
+            sf_schema[col_name] = f"TIME({precision})"
+        elif isinstance(col_type, types.Array):
+            numpy_type = col_type.dtype.name
+            if numpy_type.startswith("datetime"):
+                sf_schema[col_name] = "DATETIME"
+            # NOTE: Bodo matches Pandas behavior
+            # and prints same warning and save it as a number.
+            if numpy_type.startswith("timedelta"):
+                sf_schema[col_name] = "NUMBER(38, 0)"
+                if bodo.get_rank() == 0:
+                    warnings.warn(
+                        BodoWarning(
+                            f"to_sql(): {col_name} with type 'timedelta' will be written as integer values (ns frequency) to the database."
+                        )
+                    )
+            # TODO: differentiate unsigned, int8, int16, ...
+            elif numpy_type.startswith(("int", "uint")):
+                sf_schema[col_name] = "NUMBER(38, 0)"
+            elif numpy_type.startswith(("float")):
+                sf_schema[col_name] = "REAL"
+        elif is_str_arr_type(col_type):
+            sf_schema[col_name] = "TEXT"
+        elif col_type == bodo.binary_array_type:
+            sf_schema[col_name] = "BINARY"
+        elif col_type == bodo.boolean_array:
+            sf_schema[col_name] = "BOOLEAN"
+        # TODO: differentiate between unsigned vs. signed, 8, 16, 32, 64
+        elif isinstance(col_type, bodo.IntegerArrayType):
+            sf_schema[col_name] = "NUMBER(38, 0)"
+        elif isinstance(col_type, bodo.DecimalArrayType):
+            sf_schema[col_name] = "NUMBER(38, 18)"
+        elif isinstance(col_type, (ArrayItemArrayType, StructArrayType)):
+            # based on testing with infer_schema
+            sf_schema[col_name] = "VARIANT"
+        else:
+            raise BodoError(
+                "Conversion from Bodo array type {} to snowflake type not supported yet.",
+                col_type,
+            )
+
+    return sf_schema
+
 
 # SF_WRITE_COPY_INTO_ON_ERROR (str):
 # Action to take when `COPY INTO` statements fail.
@@ -821,7 +904,7 @@ def create_table_handle_exists(
     cursor: "SnowflakeCursor",
     stage_name: str,
     location: str,
-    df_columns,
+    sf_schema,
     if_exists: str,
 ):
     """Automatically create a new table in Snowflake at the given location if
@@ -831,21 +914,19 @@ def create_table_handle_exists(
         cursor: Snowflake connection cursor
         stage_name: Name of internal stage containing desired files
         location: Location to create a table
-        df_columns (array-like): Array of dataframe column names
+        sf_schema (dict): key: dataframe column names, value: dataframe column snowflake datatypes
         if_exists: Action to take if table already exists:
             "fail": If table exists, raise a ValueError. Create if does not exist
             "replace": If table exists, drop it, recreate it, and insert data.
                 Create if does not exist
             "append": If table exists, insert data. Create if does not exist
 
-    Returns
-        file_format_name (str): Name of created file format
     """
     ev = tracing.Event("create_table_if_not_exists", is_parallel=False)
 
     # Snowflake import
     try:
-        import snowflake.connector
+        import snowflake.connector  # noqa
     except ImportError:
         raise BodoError(
             "Snowflake Python connector packages not found. "
@@ -853,9 +934,6 @@ def create_table_handle_exists(
             "This can be installed by calling 'conda install -c conda-forge snowflake-connector-python' "
             "or 'pip install snowflake-connector-python'."
         )
-
-    file_format_name = None  # forward declaration
-    file_format_err = None  # forward declaration
 
     # Handle `if_exists`
     if if_exists == "fail":
@@ -867,49 +945,13 @@ def create_table_handle_exists(
     else:
         raise ValueError(f"'{if_exists}' is not valid for if_exists")
 
-    # Create a new file format object that describes the data in staged files.
-    # We will quickly generate a file format name that doesn't already exist within Snowflake.
-    # An infinite loop here is extremely unlikely unless uuid4's are used up.
-    ev_create_file_format = tracing.Event("create_file_format", is_parallel=False)
-    while True:
-        try:
-            file_format_name = f"bodo_io_snowflake_write_{uuid4()}"
-            file_format_sql = (
-                f'CREATE FILE FORMAT "{file_format_name}" '
-                f"TYPE=PARQUET COMPRESSION=AUTO "
-                f"/* Python:bodo.io.snowflake.create_table_if_not_exists() */"
-            )
-            cursor.execute(file_format_sql, _is_internal=True)
-            break
-        except snowflake.connector.ProgrammingError as pe:
-            if pe.msg is not None and pe.msg.endswith("already exists."):
-                continue
-            file_format_err = pe.msg
-            break
-    ev_create_file_format.finalize()
-
-    if file_format_err is not None:
-        raise snowflake.connector.ProgrammingError(file_format_err)
-
-    # Infer schema of staged files from file format object
-    ev_infer_schema = tracing.Event("infer_schema", is_parallel=False)
-    infer_schema_sql = (
-        f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema("
-        f"location=>'@\"{stage_name}\"', file_format=>'\"{file_format_name}\"')) "
-        f"/* Python:bodo.io.snowflake.create_table_if_not_exists() */"
-    )
-    column_type_mapping = dict(
-        cursor.execute(infer_schema_sql, _is_internal=True).fetchall()  # type: ignore
-    )
-    ev_infer_schema.finalize()
-
     # Infer schema can return the columns out of order depending on the
     # chunking we do when we upload, so we have to iterate through the
     # dataframe columns to make sure we create the table with its columns
     # in order.
     ev_create_table = tracing.Event("create_table", is_parallel=False)
     create_table_columns = ", ".join(
-        [f'"{c}" {column_type_mapping[c]}' for c in df_columns]
+        [f'"{c}" {sf_schema[c]}' for c in sf_schema.keys()]
     )
     create_table_sql = (
         f"{create_table_cmd} {location} ({create_table_columns}) "
@@ -918,15 +960,6 @@ def create_table_handle_exists(
     cursor.execute(create_table_sql, _is_internal=True)
     ev_create_table.finalize()
 
-    # Drop temporary file format object
-    ev_drop_file_format = tracing.Event("drop_file_format", is_parallel=False)
-    drop_file_format_sql = (
-        f'DROP FILE FORMAT IF EXISTS "{file_format_name}" '
-        f"/* Python:bodo.io.snowflake.create_table_if_not_exists() */"
-    )
-    cursor.execute(drop_file_format_sql, _is_internal=True)
-    ev_drop_file_format.finalize()
-
     ev.finalize()
 
 
@@ -934,7 +967,7 @@ def execute_copy_into(
     cursor: "SnowflakeCursor",
     stage_name: str,
     location: str,
-    df_columns,
+    sf_schema,
 ):
     """Execute a COPY_INTO command from all files in stage to a table location.
 
@@ -942,7 +975,7 @@ def execute_copy_into(
         cursor: Snowflake connection cursor
         stage_name: Name of internal stage containing desired files
         location: Desired table location
-        df_columns (array-like): Array of dataframe column names
+        sf_schema (dict): key: dataframe column names, value: dataframe column snowflake datatypes
 
     Returns (nsuccess, num_chunks, num_rows, output) where:
         nsuccess (int): Number of chunks successfully copied by the function
@@ -952,18 +985,39 @@ def execute_copy_into(
     """
     ev = tracing.Event("execute_copy_into", is_parallel=False)
 
-    columns = ",".join([f'"{c}"' for c in df_columns])
+    columns = ",".join([f'"{c}"' for c in sf_schema.keys()])
 
     # In Snowflake, all parquet data is stored in a single column, $1,
     # so we must select columns explicitly
     # See (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
-    parquet_columns = ",".join([f'$1:"{c}"' for c in df_columns])
+
+    # Binary data: to_binary(col) didn't work as it treats data as HEX
+    # BINARY_FORMAT file format option to change this behavior is not supported in
+    # copy into parquet to snowflake
+    # As a workaround, use ::cast operator and set BINARY_AS_TEXT = False
+    # https://docs.snowflake.com/en/user-guide/binary-input-output.html#file-format-option-for-loading-unloading-binary-values
+    # https://docs.snowflake.com/en/sql-reference/sql/create-file-format.html#syntax
+
+    # Time data: set as string, and data is stored correctly as time based on sf_schema info received.
+
+    binary_time_mod = {
+        c: "::binary"
+        if sf_schema[c] == "BINARY"
+        else "::string"
+        if sf_schema[c].startswith("TIME")
+        else ""
+        for c in sf_schema.keys()
+    }
+
+    parquet_columns = ",".join(
+        [f'$1:"{c}"{binary_time_mod[c]}' for c in sf_schema.keys()]
+    )
 
     # Execute copy_into command with files from all ranks
     copy_into_sql = (
         f"COPY INTO {location} ({columns}) "
         f'FROM (SELECT {parquet_columns} FROM @"{stage_name}") '
-        f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION=AUTO) "
+        f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION=AUTO BINARY_AS_TEXT=False) "
         f"PURGE=TRUE ON_ERROR={SF_WRITE_COPY_INTO_ON_ERROR} "
         f"/* Python:bodo.io.snowflake.execute_copy_into() */"
     )
@@ -1318,7 +1372,7 @@ def create_table_copy_into(
     cursor: "SnowflakeCursor",
     stage_name: str,
     location: str,
-    df_columns,
+    sf_schema,
     if_exists: str,
     old_creds,
     tmp_folder: TemporaryDirectory,
@@ -1335,7 +1389,7 @@ def create_table_copy_into(
         cursor: Snowflake connection cursor
         stage_name: Name of internal stage containing files to copy_into
         location: Destination table location
-        df_columns (array-like): Array of dataframe column names
+        sf_schema (dict): key: dataframe column names, value: dataframe column snowflake datatypes
         if_exists: Action to take if table already exists:
             "fail": If table exists, raise a ValueError. Create if does not exist
             "replace": If table exists, drop it, recreate it, and insert data.
@@ -1378,14 +1432,14 @@ def create_table_copy_into(
                 cursor,
                 stage_name,
                 location,
-                df_columns,
+                sf_schema,
                 if_exists,
             )
             (nsuccess, nchunks, nrows, copy_into_result) = execute_copy_into(
                 cursor,
                 stage_name,
                 location,
-                df_columns,
+                sf_schema,
             )
 
             if nsuccess != nchunks:
