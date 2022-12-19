@@ -320,7 +320,7 @@ public class DatetimeFnCodeGen {
     if (isScalar) {
       // TODO: Null check this
       outputExpr =
-          "(bodosql.libs.generated_lib.sql_null_checking_year("
+          "(bodo.libs.bodosql_array_kernels.get_year("
               + arg0Expr
               + ") * 100 + bodosql.libs.generated_lib.sql_null_checking_weekofyear("
               + arg0Expr

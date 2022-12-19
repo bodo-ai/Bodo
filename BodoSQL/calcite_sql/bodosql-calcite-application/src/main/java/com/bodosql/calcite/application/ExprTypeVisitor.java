@@ -41,6 +41,7 @@ public class ExprTypeVisitor {
           "DAYNAME",
           "DAYOFMONTH",
           "DAYOFWEEK",
+          "DAYOFWEEKISO",
           "DAYOFYEAR",
           "DEGREES",
           "EXP",

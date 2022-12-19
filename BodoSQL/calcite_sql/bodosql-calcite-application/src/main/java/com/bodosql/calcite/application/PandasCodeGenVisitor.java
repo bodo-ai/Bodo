@@ -2683,6 +2683,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DAY":
           case "DAYOFYEAR":
           case "DAYOFWEEK":
+          case "DAYOFWEEKISO":
           case "DAYOFMONTH":
           case "HOUR":
           case "MONTH":
