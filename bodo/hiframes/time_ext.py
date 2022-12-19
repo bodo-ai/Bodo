@@ -545,8 +545,7 @@ make_attribute_wrapper(TimeArrayType, "null_bitmap", "_null_bitmap")
 def overload_time_arr_copy(A):
     """Copy a TimeArrayType by copying the underlying data and null bitmap"""
     return lambda A: bodo.hiframes.time_ext.init_time_array(
-        A._data.copy(),
-        A._null_bitmap.copy(),
+        A._data.copy(), A._null_bitmap.copy()
     )  # pragma: no cover
 
 

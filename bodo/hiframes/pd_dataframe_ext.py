@@ -4000,8 +4000,12 @@ def to_parquet_overload(
         func_text += "                            row_group_size,\n"
         func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
         func_text += (
-            "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
+            "                              False,\n"  # convert_timedelta_to_int64
         )
+        func_text += (
+            "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
+        )
+        func_text += "                              False)\n"  # downcast_time_ns_to_us
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names)\n"
@@ -4017,8 +4021,12 @@ def to_parquet_overload(
         func_text += "                            row_group_size,\n"
         func_text += "                            unicode_to_utf8(_bodo_file_prefix),\n"
         func_text += (
-            "                            unicode_to_utf8(_bodo_timestamp_tz))\n"
+            "                              False,\n"  # convert_timedelta_to_int64
         )
+        func_text += (
+            "                            unicode_to_utf8(_bodo_timestamp_tz),\n"
+        )
+        func_text += "                              False)\n"  # downcast_time_ns_to_us
         func_text += "    delete_table_decref_arrays(table)\n"
         func_text += "    delete_info_decref_array(index_col)\n"
         func_text += "    delete_info_decref_array(col_names)\n"
@@ -4483,7 +4491,9 @@ def to_sql_overload(
         # file is already a reasonable size for one row group.
         "                chunksize,\n"  # row_group_size
         "                unicode_to_utf8('null'),\n"  # prefix
+        "                True,\n"  # Explicitly cast timedelta to int64 in the bodo_array_to_arrow step (convert_timedelta_to_int64)
         "                unicode_to_utf8('UTC'),\n"  # Explicitly set tz='UTC' for snowflake write. see [BE-3530]
+        "                True,\n"  # Explicitly downcast nanoseconds to microseconds (See gen_snowflake_schema comment)
         "            )\n"
         "            ev_pq_write_cpp.finalize()\n"
         "            delete_table_decref_arrays(table_chunk)\n"
@@ -4507,15 +4517,14 @@ def to_sql_overload(
     # Barrier ensures that files are copied into internal stage before COPY_INTO
     func_text += "        bodo.barrier()\n"
 
+    # Generate snowflake schema from bodo datatypes.
+    sf_schema = bodo.io.snowflake.gen_snowflake_schema(df.columns, df.data)
     # In object mode on rank 0: Create a new table if needed, execute COPY_INTO,
     # and clean up created internal stage.
     func_text += (
-        # We define df_columns outside of objmode to ensure that only the columns
-        # array is boxed rather than the entire dataframe, for performance
-        "        df_columns = df.columns\n"
         "        with bodo.objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
-        "                cursor, stage_name, location, df_columns,\n"
+        f"                cursor, stage_name, location, {sf_schema},\n"
         "                if_exists, old_creds, tmp_folder,\n"
         "                azure_stage_direct_upload, old_core_site,\n"
         "                old_sas_token,\n"

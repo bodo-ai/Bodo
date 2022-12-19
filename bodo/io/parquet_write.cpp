@@ -161,7 +161,8 @@ int64_t pq_write(
     const char *metadata, const char *compression, bool is_parallel,
     bool write_rangeindex_to_metadata, const int ri_start, const int ri_stop,
     const int ri_step, const char *idx_name, const char *bucket_region,
-    int64_t row_group_size, const char *prefix, std::string tz,
+    int64_t row_group_size, const char *prefix, bool convert_timedelta_to_int64,
+    std::string tz, bool downcast_time_ns_to_us,
     arrow::TimeUnit::type time_unit,
     std::unordered_map<std::string, std::string> schema_metadata_pairs,
     std::string filename, std::shared_ptr<arrow::Schema> expected_schema) {
@@ -259,8 +260,9 @@ int64_t pq_write(
     for (size_t i = 0; i < table->columns.size(); i++) {
         auto col = table->columns[i];
         auto nullable = true;
-        auto arrow_type =
-            bodo_array_to_arrow(pool, col, &columns[i], tz, time_unit, false);
+        auto arrow_type = bodo_array_to_arrow(
+            pool, col, &columns[i], convert_timedelta_to_int64, tz, time_unit,
+            false, downcast_time_ns_to_us);
 
         // Cast the Arrow arrays to their expected type and nullability
         // This is currently only used for enforcing the output of Iceberg
@@ -337,13 +339,15 @@ int64_t pq_write(
         std::shared_ptr<arrow::Field> index_field;
 
         if (strcmp(idx_name, "null") != 0) {
-            auto arrow_type =
-                bodo_array_to_arrow(pool, index, &arr, tz, time_unit, false);
+            auto arrow_type = bodo_array_to_arrow(
+                pool, index, &arr, convert_timedelta_to_int64, tz, time_unit,
+                false, downcast_time_ns_to_us);
             index_field = arrow::field(idx_name, arrow_type);
 
         } else {
-            auto arrow_type =
-                bodo_array_to_arrow(pool, index, &arr, tz, time_unit, false);
+            auto arrow_type = bodo_array_to_arrow(
+                pool, index, &arr, convert_timedelta_to_int64, tz, time_unit,
+                false, downcast_time_ns_to_us);
             index_field = arrow::field("__index_level_0__", arrow_type);
         }
 
@@ -449,13 +453,14 @@ int64_t pq_write_py_entry(const char *_path_name, const table_info *table,
                           const int ri_start, const int ri_stop,
                           const int ri_step, const char *idx_name,
                           const char *bucket_region, int64_t row_group_size,
-                          const char *prefix, const char *tz) {
+                          const char *prefix, bool convert_timedelta_to_int64,
+                          const char *tz, bool downcast_time_ns_to_us) {
     try {
-        int64_t file_size =
-            pq_write(_path_name, table, col_names_arr, index, write_index,
-                     metadata, compression, is_parallel,
-                     write_rangeindex_to_metadata, ri_start, ri_stop, ri_step,
-                     idx_name, bucket_region, row_group_size, prefix, tz);
+        int64_t file_size = pq_write(
+            _path_name, table, col_names_arr, index, write_index, metadata,
+            compression, is_parallel, write_rangeindex_to_metadata, ri_start,
+            ri_stop, ri_step, idx_name, bucket_region, row_group_size, prefix,
+            convert_timedelta_to_int64, tz, downcast_time_ns_to_us);
         return file_size;
     } catch (const std::exception &e) {
         PyErr_SetString(PyExc_RuntimeError, e.what());

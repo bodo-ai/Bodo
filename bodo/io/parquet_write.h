@@ -61,6 +61,8 @@ Bodo_Fs::FsEnum filesystem_type(const char *fname);
  * be added automatically if relevant and doesn't need to be included.
  * @param filename Name of the file to be written. Currently this is only used
  * by Iceberg -- this will be refactored in future PRs.
+ * @param convert_timedelta_to_int64 : cast timedelta to int64.
+ * This is required for writing to Snowflake.
  * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
  * string ("") to not specify one. This is primarily required for
  * Iceberg/Snowflake, for which we specify "UTC".
@@ -72,6 +74,9 @@ Bodo_Fs::FsEnum filesystem_type(const char *fname);
  * cannot modify the existing array, as it might be used elsewhere. This is
  * primarily required for Iceberg which requires data to be written in
  * microseconds.
+ * @param downcast_time_ns_to_us (default False): Is time data required to be
+ * written in microseconds? NOTE: this is needed for snowflake write operation.
+ * See gen_snowflake_schema comments.
  * @returns size of the written file (in bytes)
  */
 int64_t pq_write(
@@ -80,7 +85,9 @@ int64_t pq_write(
     const char *metadata, const char *compression, bool is_parallel,
     bool write_rangeindex_to_metadata, const int ri_start, const int ri_stop,
     const int ri_step, const char *idx_name, const char *bucket_region,
-    int64_t row_group_size, const char *prefix, std::string tz = "",
+    int64_t row_group_size, const char *prefix,
+    bool convert_timedelta_to_int64 = false, std::string tz = "",
+    bool downcast_time_ns_to_us = false,
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO,
     std::unordered_map<std::string, std::string> schema_metadata_pairs = {},
     std::string filename = "",
