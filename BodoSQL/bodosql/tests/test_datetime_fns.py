@@ -264,7 +264,6 @@ def dt_fn_dataframe():
             "MINUTE",
             "DAYOFYEAR",
             "HOUR",
-            "DAYOFWEEK",
             "DAYOFMONTH",
             "MONTH",
             "QUARTER",
@@ -1942,6 +1941,7 @@ def large_tz_df(request):
     )
 
 
+@pytest.mark.tz_aware
 @pytest.mark.parametrize(
     "case",
     [
@@ -1958,7 +1958,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
     2. SELECT A, CASE WHEN B THEN WEEK(A) ELSE NULL END, ... from table1
     """
     calculations = []
-    for func in ["WEEK", "QUARTER", "DAYNAME"]:
+    for func in ["WEEK", "QUARTER", "DAYNAME", "MONTHNAME"]:
         if case:
             calculations.append(f"CASE WHEN B THEN {func}(A) ELSE NULL END")
         else:
@@ -1973,12 +1973,14 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
             "w": large_tz_df.A.dt.isocalendar().week,
             "q": large_tz_df.A.dt.quarter,
             "d": large_tz_df.A.dt.day_name(),
+            "m": large_tz_df.A.dt.month_name(),
         }
     )
     if case:
         py_output["w"][~large_tz_df["B"]] = None
         py_output["q"][~large_tz_df["B"]] = None
         py_output["d"][~large_tz_df["B"]] = None
+        py_output["m"][~large_tz_df["B"]] = None
 
     check_query(
         query,
@@ -1990,6 +1992,67 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
     )
 
 
+@pytest.mark.tz_aware
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="case"),
+    ],
+)
+def test_tz_aware_dayof_fns(large_tz_df, case, memory_leak_check):
+    """Tests the BodoSQL functions DAYOFWEEK, DAYOFWEEKISO, DAYOFMONTH and
+    DAYOFYEAR on timezone aware data with and without case statements. The queries
+    are in the following forms:
+
+    1. SELECT A, DAYOFWEEK(A), ... from table1
+    2. SELECT A, CASE WHEN B THEN DAYOFWEEK(A) ELSE NULL END, ... from table1
+
+    Note, the two DOY functions have the following correspondance to day anmes:
+      DAYNAME  DAYOFWEEK DAYOFWEKISO
+       Monday          1           1
+      Tuesday          2           2
+    Wednesday          3           3
+     Thursday          4           4
+       Friday          5           5
+     Saturday          6           6
+       Sunday          0           7
+    """
+    calculations = []
+    for func in ["DAYOFWEEK", "DAYOFWEEKISO", "DAYOFMONTH", "DAYOFYEAR"]:
+        if case:
+            calculations.append(f"CASE WHEN B THEN {func}(A) ELSE NULL END")
+        else:
+            calculations.append(f"{func}(A)")
+    query = f"SELECT A, {', '.join(calculations)} FROM table1"
+
+    ctx = {"table1": large_tz_df}
+    py_output = pd.DataFrame(
+        {
+            "A": large_tz_df.A,
+            "dow": (large_tz_df.A.dt.dayofweek + 1) % 7,
+            "dowiso": large_tz_df.A.dt.dayofweek + 1,
+            "dom": large_tz_df.A.dt.day,
+            "doy": large_tz_df.A.dt.dayofyear,
+        }
+    )
+    if case:
+        py_output["dow"][~large_tz_df["B"]] = None
+        py_output["dowiso"][~large_tz_df["B"]] = None
+        py_output["dom"][~large_tz_df["B"]] = None
+        py_output["doy"][~large_tz_df["B"]] = None
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+        check_dtype=False,
+        check_names=False,
+    )
+
+
+@pytest.mark.tz_aware
 def test_tz_aware_weekofyear(memory_leak_check):
     query = "SELECT WEEKOFYEAR(A) as m from table1"
     df = pd.DataFrame(
@@ -2004,6 +2067,7 @@ def test_tz_aware_weekofyear(memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.tz_aware
 def test_tz_aware_weekofyear_case(memory_leak_check):
     query = "SELECT CASE WHEN B THEN WEEKOFYEAR(A) END as m from table1"
     df = pd.DataFrame(
@@ -2021,6 +2085,7 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.tz_aware
 def test_tz_aware_next_day(representative_tz, memory_leak_check):
     query = "SELECT next_day(A, B) as m from table1"
     df = pd.DataFrame(
@@ -2041,6 +2106,7 @@ def test_tz_aware_next_day(representative_tz, memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.tz_aware
 def test_tz_aware_next_day_case(
     representative_tz,
     memory_leak_check,
@@ -2066,6 +2132,7 @@ def test_tz_aware_next_day_case(
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.tz_aware
 def test_tz_aware_previous_day(representative_tz, memory_leak_check):
     query = "SELECT previous_day(A, B) as m from table1"
     df = pd.DataFrame(
@@ -2086,6 +2153,7 @@ def test_tz_aware_previous_day(representative_tz, memory_leak_check):
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.tz_aware
 def test_tz_aware_previous_day_case(
     representative_tz,
     memory_leak_check,

@@ -105,6 +105,7 @@ def create_date_field_overload(field):
             "year",
             "quarter",
             "month",
+            "week",
             "day",
             "hour",
             "minute",
