@@ -89,143 +89,94 @@ def generate_and_write_library():
     """generates the function library, and writes it to the expected location.
     This function should be called within setup.py"""
 
-    library_fns_info = (
-        [
-            ("not", generate_standard_python_fn_call("not"), 1),
-            ("addition", generate_standard_python_fn_call("operator.add"), 2),
-            ("subtraction", generate_standard_python_fn_call("operator.sub"), 2),
-            ("multiplication", generate_standard_python_fn_call("operator.mul"), 2),
-            ("true_division", generate_standard_python_fn_call("np.true_divide"), 2),
-            ("modulo", generate_standard_python_fn_call("np.mod"), 2),
-            ("power", generate_standard_python_fn_call("operator.pow"), 2),
-            ("equal", generate_standard_python_fn_call("operator.eq"), 2),
-            ("not_equal", generate_standard_python_fn_call("operator.ne"), 2),
-            ("less_than", generate_standard_python_fn_call("operator.lt"), 2),
-            ("less_than_or_equal", generate_standard_python_fn_call("operator.le"), 2),
-            ("greater_than", generate_standard_python_fn_call("operator.gt"), 2),
+    library_fns_info = [
+        ("not", generate_standard_python_fn_call("not"), 1),
+        ("addition", generate_standard_python_fn_call("operator.add"), 2),
+        ("subtraction", generate_standard_python_fn_call("operator.sub"), 2),
+        ("multiplication", generate_standard_python_fn_call("operator.mul"), 2),
+        ("true_division", generate_standard_python_fn_call("np.true_divide"), 2),
+        ("modulo", generate_standard_python_fn_call("np.mod"), 2),
+        ("power", generate_standard_python_fn_call("operator.pow"), 2),
+        ("equal", generate_standard_python_fn_call("operator.eq"), 2),
+        ("not_equal", generate_standard_python_fn_call("operator.ne"), 2),
+        ("less_than", generate_standard_python_fn_call("operator.lt"), 2),
+        ("less_than_or_equal", generate_standard_python_fn_call("operator.le"), 2),
+        ("greater_than", generate_standard_python_fn_call("operator.gt"), 2),
+        (
+            "greater_than_or_equal",
+            generate_standard_python_fn_call("operator.ge"),
+            2,
+        ),
+        # library wrappers
+        (
+            "sql_to_python",
+            generate_standard_python_fn_call("bodosql.libs.regex.sql_to_python"),
+            1,
+        ),
+        # string Fn's
+        ("strip", generate_standard_method_call("strip"), 2),
+        ("lstrip", generate_standard_method_call("lstrip"), 2),
+        ("rstrip", generate_standard_method_call("rstrip"), 2),
+        ("len", generate_standard_python_fn_call("len"), 1),
+        ("upper", generate_standard_method_call("upper"), 1),
+        ("lower", generate_standard_method_call("lower"), 1),
+        # stuff for like
+        ("in", (lambda args_list: f"({args_list[0]} in {args_list[1]})"), 2),
+        (
+            "re_match",
+            (lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}))"),
+            2,
+        ),
+        # stuff for case insensitive like
+        (
+            "in_nocase",
+            (lambda args_list: f"({args_list[0]}.lower() in {args_list[1]}.lower())"),
+            2,
+        ),
+        (
+            "re_match_nocase",
             (
-                "greater_than_or_equal",
-                generate_standard_python_fn_call("operator.ge"),
-                2,
+                lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}, flags=re.I))"
             ),
-            # library wrappers
-            (
-                "sql_to_python",
-                generate_standard_python_fn_call("bodosql.libs.regex.sql_to_python"),
-                1,
+            2,
+        ),
+        # DATETIME fns
+        ("timestamp_dayfloor", lambda x: f"{x[0]}.floor(freq='D')", 1),
+        ("strftime", generate_standard_method_call("strftime"), 2),
+        (
+            "pd_to_datetime_with_format",
+            generate_standard_python_fn_call(
+                "bodosql.libs.sql_operators.pd_to_datetime_with_format"
             ),
-            # string Fn's
-            ("strip", generate_standard_method_call("strip"), 2),
-            ("lstrip", generate_standard_method_call("lstrip"), 2),
-            ("rstrip", generate_standard_method_call("rstrip"), 2),
-            ("len", generate_standard_python_fn_call("len"), 1),
-            ("upper", generate_standard_method_call("upper"), 1),
-            ("lower", generate_standard_method_call("lower"), 1),
-            ("replace", generate_standard_method_call("replace"), 3),
-            # ("spaces", generate_standard_python_fn_call("bodo.libs.bodosql_string_array_kernels.space_util"), 1),
-            # ("reverse", generate_standard_python_fn_call("bodo.libs.bodosql_string_array_kernels.reverse_util"), 1),
-            # stuff for like
-            ("in", (lambda args_list: f"({args_list[0]} in {args_list[1]})"), 2),
-            (
-                "re_match",
-                (lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}))"),
-                2,
+            2,
+        ),
+        (
+            "pd_timedelta_total_seconds",
+            generate_standard_method_call("total_seconds"),
+            1,
+        ),
+        ("yearofweek", generate_atribute_reference("isocalendar()[0]"), 1),
+        ("weekofyear", generate_atribute_reference("weekofyear"), 1),
+        ("pd_timedelta_days", generate_atribute_reference("days"), 1),
+    ] + [
+        # Scalar Conversion functions
+        ("scalar_conv_bool", generate_standard_python_fn_call("np.bool_"), 1),
+        ("scalar_conv_int8", generate_standard_python_fn_call("np.int8"), 1),
+        ("scalar_conv_int16", generate_standard_python_fn_call("np.int16"), 1),
+        ("scalar_conv_int32", generate_standard_python_fn_call("np.int32"), 1),
+        ("scalar_conv_int64", generate_standard_python_fn_call("np.int64"), 1),
+        ("scalar_conv_str", generate_standard_python_fn_call("str"), 1),
+        (
+            "scalar_conv_binary",
+            generate_standard_python_fn_call(
+                "bodosql.libs.binary_functions.cast_binary"
             ),
-            # stuff for case insensitive like
-            (
-                "in_nocase",
-                (
-                    lambda args_list: f"({args_list[0]}.lower() in {args_list[1]}.lower())"
-                ),
-                2,
-            ),
-            (
-                "re_match_nocase",
-                (
-                    lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}, flags=re.I))"
-                ),
-                2,
-            ),
-            # DATETIME fns
-            ("timestamp_dayfloor", lambda x: f"{x[0]}.floor(freq='D')", 1),
-            ("strftime", generate_standard_method_call("strftime"), 2),
-            (
-                "pd_to_datetime_with_format",
-                generate_standard_python_fn_call(
-                    "bodosql.libs.sql_operators.pd_to_datetime_with_format"
-                ),
-                2,
-            ),
-            (
-                "pd_Timestamp_single_value",
-                generate_standard_python_fn_call("pd.Timestamp"),
-                1,
-            ),
-            (
-                "pd_Timestamp_single_value_with_second_unit",
-                lambda args: f"pd.Timestamp({args[0]}, unit='s')",
-                1,
-            ),
-            (
-                "pd_Timestamp_single_value_with_day_unit",
-                lambda args: f"pd.Timestamp({args[0]}, unit='D')",
-                1,
-            ),
-            (
-                "pd_Timestamp_single_value_with_year_unit",
-                lambda args: f"pd.Timestamp({args[0]}, unit='Y')",
-                1,
-            ),
-            ("pd_timedelta_days", generate_atribute_reference("days"), 1),
-            (
-                "pd_timedelta_total_seconds",
-                generate_standard_method_call("total_seconds"),
-                1,
-            ),
-            ("yearofweek", generate_atribute_reference("isocalendar()[0]"), 1),
-        ]
-        + [
-            (x, generate_atribute_reference(x), 1)
-            for x in [
-                "weekofyear",
-                "dayofyear",
-                "nanosecond",
-                "microsecond",
-                "millisecond",
-                "second",
-                "minute",
-                "hour",
-                "day",
-                "month",
-                "quarter",
-                "year",
-            ]
-        ]
-        + [
-            (
-                "dayofweek",
-                generate_standard_python_fn_call("bodosql.libs.sql_operators.sql_dow"),
-                1,
-            ),
-            # Scalar Conversion functions
-            ("scalar_conv_bool", generate_standard_python_fn_call("np.bool_"), 1),
-            ("scalar_conv_int8", generate_standard_python_fn_call("np.int8"), 1),
-            ("scalar_conv_int16", generate_standard_python_fn_call("np.int16"), 1),
-            ("scalar_conv_int32", generate_standard_python_fn_call("np.int32"), 1),
-            ("scalar_conv_int64", generate_standard_python_fn_call("np.int64"), 1),
-            ("scalar_conv_str", generate_standard_python_fn_call("str"), 1),
-            (
-                "scalar_conv_binary",
-                generate_standard_python_fn_call(
-                    "bodosql.libs.binary_functions.cast_binary"
-                ),
-                1,
-            ),
-            ("scalar_conv_float32", generate_standard_python_fn_call("np.float32"), 1),
-            ("scalar_conv_float64", generate_standard_python_fn_call("np.float64"), 1),
-            ("scalar_conv_str", generate_standard_python_fn_call("str"), 1),
-        ]
-    )
+            1,
+        ),
+        ("scalar_conv_float32", generate_standard_python_fn_call("np.float32"), 1),
+        ("scalar_conv_float64", generate_standard_python_fn_call("np.float64"), 1),
+        ("scalar_conv_str", generate_standard_python_fn_call("str"), 1),
+    ]
 
     library_fn_strings = []
 

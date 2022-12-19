@@ -322,6 +322,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction DAYOFWEEKISO =
+      new SqlDatePartFunction("DAYOFWEEKISO", TimeUnit.ISODOW);
+
   public static final SqlFunction MONTHNAME =
       new SqlFunction(
           "MONTHNAME",
@@ -566,6 +569,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           UTC_TIMESTAMP,
           UTC_DATE,
           DAYNAME,
+          DAYOFWEEKISO,
           MONTHNAME,
           MICROSECOND,
           WEEKOFYEAR,

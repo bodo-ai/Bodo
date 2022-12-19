@@ -36,53 +36,30 @@ public class ExtractCodeGen {
       case "SECOND":
       case "MINUTE":
       case "HOUR":
-      case "DAY":
       case "MONTH":
       case "QUARTER":
       case "YEAR":
-        // For these cases, the equivalent pandas function is just
-        // the lowercase of the extract flag
-        if (outputScalar) {
-          extractCode =
-              "bodosql.libs.generated_lib.sql_null_checking_"
-                  + datetimeVal.toLowerCase()
-                  + "("
-                  + column
-                  + ")";
-        } else {
-          extractCode =
-              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                  + column
-                  + ").dt."
-                  + datetimeVal.toLowerCase()
-                  + ")";
-        }
+        extractCode =
+            "bodo.libs.bodosql_array_kernels.extract_"
+                + datetimeVal.toLowerCase()
+                + "("
+                + column
+                + ")";
         break;
+      case "DAY":
       case "DAYOFMONTH":
-        if (outputScalar) {
-          extractCode = "bodosql.libs.generated_lib.sql_null_checking_day" + "(" + column + ")";
-        } else {
-          extractCode = "pd.Series(" + column + ").dt.day.values";
-        }
+        extractCode = "bodo.libs.bodosql_array_kernels.dayofmonth(" + column + ")";
         break;
       case "DOW":
       case "DAYOFWEEK":
-        // pandas has monday = 0, and counts up from there
-        // MYSQL has sunday = 1, and counts up from there
-        if (outputScalar) {
-          // The scalar library fn handles the addition/modulo
-          extractCode = "bodosql.libs.generated_lib.sql_null_checking_dayofweek(" + column + ")";
-        } else {
-          extractCode = "((pd.Series(" + column + ").dt.dayofweek + 1) % 7 + 1).values";
-        }
+        extractCode = "bodo.libs.bodosql_array_kernels.dayofweek(" + column + ")";
+        break;
+      case "DAYOFWEEKISO":
+        extractCode = "bodo.libs.bodosql_array_kernels.dayofweekiso(" + column + ")";
         break;
       case "DOY":
       case "DAYOFYEAR":
-        if (outputScalar) {
-          extractCode = "bodosql.libs.generated_lib.sql_null_checking_dayofyear(" + column + ")";
-        } else {
-          extractCode = "pd.Series(" + column + ").dt.dayofyear.values";
-        }
+        extractCode = "bodo.libs.bodosql_array_kernels.dayofyear(" + column + ")";
         break;
       case "WEEK":
       case "WEEKOFYEAR":

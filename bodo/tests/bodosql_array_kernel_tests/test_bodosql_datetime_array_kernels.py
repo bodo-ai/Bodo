@@ -387,6 +387,126 @@ def test_dayname(dates_scalar_vector):
     )
 
 
+def test_dayofmonth(dates_scalar_vector):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayofmonth(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofmonth(arr)
+
+    # Simulates DAYOFMONTH on a single row
+    def dayofmonth_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem.day
+
+    dayname_answer = vectorized_sol((dates_scalar_vector,), dayofmonth_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=dayname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_dayofweek(dates_scalar_vector):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayofweek(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofweek(arr)
+
+    # Simulates DAYOFWEEK on a single row
+    def dayofweek_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            dow_dict = {
+                "Monday": 1,
+                "Tuesday": 2,
+                "Wednesday": 3,
+                "Thursday": 4,
+                "Friday": 5,
+                "Saturday": 6,
+                "Sunday": 0,
+            }
+            return dow_dict[elem.day_name()]
+
+    dayname_answer = vectorized_sol((dates_scalar_vector,), dayofweek_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=dayname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_dayofweekiso(dates_scalar_vector):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayofweekiso(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofweekiso(arr)
+
+    # Simulates DAYOFWEEKISO on a single row
+    def dayofweekiso_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            dow_dict = {
+                "Monday": 1,
+                "Tuesday": 2,
+                "Wednesday": 3,
+                "Thursday": 4,
+                "Friday": 5,
+                "Saturday": 6,
+                "Sunday": 7,
+            }
+            return dow_dict[elem.day_name()]
+
+    dayname_answer = vectorized_sol(
+        (dates_scalar_vector,), dayofweekiso_scalar_fn, None
+    )
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=dayname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_dayofyear(dates_scalar_vector):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayofyear(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofyear(arr)
+
+    # Simulates DAYOFYEAR on a single row
+    def dayofyear_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem.dayofyear
+
+    dayname_answer = vectorized_sol((dates_scalar_vector,), dayofyear_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=dayname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.parametrize(
     "days",
     [
@@ -806,6 +926,9 @@ def test_calendar_optional():
             bodo.libs.bodosql_array_kernels.weekday(arg0),
             bodo.libs.bodosql_array_kernels.yearofweekiso(arg0),
             bodo.libs.bodosql_array_kernels.makedate(arg1, arg2),
+            bodo.libs.bodosql_array_kernels.dayofweek(arg0),
+            bodo.libs.bodosql_array_kernels.dayofmonth(arg0),
+            bodo.libs.bodosql_array_kernels.dayofyear(arg0),
         )
 
     A, B, C = pd.Timestamp("2018-04-01"), 2005, 365
@@ -818,10 +941,13 @@ def test_calendar_optional():
                 a3 = 6 if flag0 else None
                 a4 = 2018 if flag0 else None
                 a5 = pd.Timestamp("2005-12-31") if flag1 and flag2 else None
+                a6 = 0 if flag0 else None
+                a7 = 1 if flag0 else None
+                a8 = 91 if flag0 else None
                 check_func(
                     impl,
                     (A, B, C, flag0, flag1, flag2),
-                    py_output=(a0, a1, a2, a3, a4, a5),
+                    py_output=(a0, a1, a2, a3, a4, a5, a6, a7, a8),
                 )
 
 

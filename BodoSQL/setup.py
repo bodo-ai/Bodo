@@ -54,7 +54,6 @@ def build_libs(obj):
     import buildscripts.python_library_build.write_generated_lib
 
     buildscripts.python_library_build.write_generated_lib.generate_and_write_library()
-
     try:
         pom_dir = os.path.join("calcite_sql", "pom.xml")
         dmvn_repo = os.path.dirname("bodosql-protocol-mvn/")
