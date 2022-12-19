@@ -1808,6 +1808,7 @@ std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::DATE) return "DATE";
     if (dtype == Bodo_CTypes::DATETIME) return "DATETIME";
     if (dtype == Bodo_CTypes::TIMEDELTA) return "TIMEDELTA";
+    if (dtype == Bodo_CTypes::TIME) return "TIME";
     return "unmatching dtype";
 }
 

@@ -1618,7 +1618,7 @@ def _infer_ndarray_obj_dtype(val):
     first_val = val[i]
     if isinstance(first_val, str):
         return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
-    elif isinstance(first_val, bytes):
+    elif isinstance(first_val, (bytes, bytearray)):
         return binary_array_type
     elif isinstance(first_val, bool):
         return bodo.libs.bool_arr_ext.boolean_array

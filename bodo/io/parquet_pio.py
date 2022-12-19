@@ -1355,7 +1355,9 @@ def parquet_write_table_cpp(
     bucket_region,
     row_group_size,
     file_prefix,
+    convert_timedelta_to_int64,
     timestamp_tz,
+    downcast_time_ns_to_us,
 ):
     """
     Call C++ parquet write function
@@ -1381,7 +1383,9 @@ def parquet_write_table_cpp(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(64),
                 lir.IntType(8).as_pointer(),
+                lir.IntType(1),  # convert_timedelta_to_int64
                 lir.IntType(8).as_pointer(),  # tz
+                lir.IntType(1),  # downcast_time_ns_to_us
             ],
         )
         fn_tp = cgutils.get_or_insert_function(builder.module, fnty, name="pq_write")
@@ -1407,7 +1411,9 @@ def parquet_write_table_cpp(
             types.voidptr,
             types.int64,
             types.voidptr,
+            types.boolean,  # convert_timedelta_to_int64
             types.voidptr,  # tz
+            types.boolean,  # downcast_time_ns_to_us
         ),
         codegen,
     )

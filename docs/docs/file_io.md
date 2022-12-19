@@ -1140,7 +1140,6 @@ required at the Schema level:
 - `USAGE`
 - `CREATE TABLE`
 - `CREATE STAGE`
-- `CREATE FILE FORMAT`
 
 #### Replacing an existing table
 ***Replacing an existing table***

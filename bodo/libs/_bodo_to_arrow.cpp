@@ -40,6 +40,12 @@ static void CastBodoDateToArrowDate32(const int64_t *input, int64_t length,
  * @param pool Arrow memory pool
  * @param array Bodo array to create Arrow array from
  * @param[out] out Arrow array created from Bodo Array
+ * @param convert_timedelta_to_int64 : cast timedelta to int64.
+ * This is required for writing to Snowflake.
+ * When this is false and a timedelta column is passed, the function will error
+ * out.
+ * TODO: [BE-4102] Full support for this type (i.e. converting to Arrow
+ * 'duration' type).
  * @param tz Timezone to use for Datetime (/timestamp) arrays. Provide an empty
  * string ("") to not specify one. This is primarily required for Iceberg, for
  * which we specify "UTC".
@@ -51,12 +57,16 @@ static void CastBodoDateToArrowDate32(const int64_t *input, int64_t length,
  * cannot modify the existing array, as it might be used elsewhere. This is
  * primarily required for Iceberg which requires data to be written in
  * microseconds.
+ * @param downcast_time_ns_to_us (default False): Is time data required to be
+ * written in microseconds? NOTE: this is needed for snowflake write operation.
+ * See gen_snowflake_schema comments.
  * @return Arrow DataType of output array
  */
 std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const array_info *array,
-    std::shared_ptr<arrow::Array> *out, const std::string &tz,
-    arrow::TimeUnit::type &time_unit, bool copy) {
+    std::shared_ptr<arrow::Array> *out, bool convert_timedelta_to_int64,
+    const std::string &tz, arrow::TimeUnit::type &time_unit, bool copy,
+    bool downcast_time_ns_to_us) {
     // Return DataType value
     std::shared_ptr<arrow::DataType> ret_type = nullptr;
 
@@ -122,11 +132,13 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
         std::shared_ptr<arrow::Array> index_array;
 
         // Recurse on the dictionary
-        auto dict_type = bodo_array_to_arrow(pool, array->info1, &dictionary,
-                                             tz, time_unit, copy);
+        auto dict_type = bodo_array_to_arrow(
+            pool, array->info1, &dictionary, convert_timedelta_to_int64, tz,
+            time_unit, copy, downcast_time_ns_to_us);
         // Recurse on the index array
-        auto index_type = bodo_array_to_arrow(pool, array->info2, &index_array,
-                                              tz, time_unit, copy);
+        auto index_type = bodo_array_to_arrow(
+            pool, array->info2, &index_array, convert_timedelta_to_int64, tz,
+            time_unit, copy, downcast_time_ns_to_us);
 
         // Extract the types from the dictionary call.
         // TODO: Can we provide ordered?
@@ -213,7 +225,10 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                         type = arrow::time64(arrow::TimeUnit::MICRO);
                         break;
                     case 9:
-                        type = arrow::time64(arrow::TimeUnit::NANO);
+                        if (downcast_time_ns_to_us)
+                            type = arrow::time64(arrow::TimeUnit::MICRO);
+                        else
+                            type = arrow::time64(arrow::TimeUnit::NANO);
                         break;
                     default:
                         throw std::runtime_error(
@@ -221,6 +236,20 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
                             "bodo_array_to_arrow." +
                             std::to_string(array->precision));
                 }
+                break;
+            case Bodo_CTypes::TIMEDELTA:
+                // Convert timedelta to ns frequency in case of snowflake write
+                if (convert_timedelta_to_int64) {
+                    in_num_bytes = sizeof(int64_t) * array->length;
+                    type = arrow::int64();
+                }
+                // NOTE: Parquet/Iceberg will raise an error on Python side
+                // when _get_numba_typ_from_pa_typ is reached.
+                // raise error for any other operation.
+                else
+                    throw std::runtime_error(
+                        "Converting Bodo arrays to Arrow format is currently "
+                        "not supported for Timedelta.");
                 break;
             case Bodo_CTypes::DATETIME:
                 // input from Bodo uses int64 for datetimes (datetime64[ns])
@@ -262,8 +291,10 @@ std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
             CHECK_ARROW_AND_ASSIGN(res, "AllocateBuffer", out_buffer);
             CastBodoDateToArrowDate32((int64_t *)array->data1, array->length,
                                       (int32_t *)out_buffer->mutable_data());
-        } else if (array->dtype == Bodo_CTypes::TIME && array->precision != 9) {
-            if (array->precision == 6) {
+        } else if (array->dtype == Bodo_CTypes::TIME &&
+                   (array->precision != 9 || downcast_time_ns_to_us)) {
+            if (array->precision == 6 ||
+                (array->precision == 9 && downcast_time_ns_to_us)) {
                 int64_t divide_factor = 1000;
                 arrow::Result<std::unique_ptr<arrow::Buffer>> res =
                     AllocateBuffer(in_num_bytes, pool);
@@ -556,9 +587,10 @@ std::shared_ptr<arrow::Table> bodo_table_to_arrow(table_info *table) {
     for (int i = 0; i < (int)table->ncols(); i++) {
         array_info *arr = table->columns[i];
         arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-        auto arrow_type =
-            bodo_array_to_arrow(::arrow::default_memory_pool(), arr,
-                                &arrow_arrs[i], "", time_unit, false);
+        auto arrow_type = bodo_array_to_arrow(
+            ::arrow::default_memory_pool(), arr, &arrow_arrs[i],
+            false /*convert_timedelta_to_int64*/, "", time_unit, false,
+            false /*downcast_time_ns_to_us*/);
         schema_vector.push_back(
             arrow::field("A" + std::to_string(i), arrow_type, true));
     }
