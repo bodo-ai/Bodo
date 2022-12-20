@@ -13,6 +13,13 @@ import org.apache.calcite.sql.type.SqlTypeName;
  */
 public class DateAddCodeGen {
 
+  /**
+   * Function that return the necessary generated code for a Snowflake DATEADD function call, which
+   * adds an integer amount to a datetime of a certain unit.
+   *
+   * @param operandsInfo the list of arguments (UNIT, AMOUNT, START_DATETIME)
+   * @return The code generated that matches the DATEADD expression.
+   */
   public static RexNodeVisitorInfo generateSnowflakeDateAddCode(
       List<RexNodeVisitorInfo> operandsInfo) {
 
@@ -139,32 +146,30 @@ public class DateAddCodeGen {
   }
 
   /**
-   * Function that return the necessary generated code for a DateAdd Function Call.
+   * Function that return the necessary generated code for a MySQL DATEADD function call, which
+   * differs from Snowflake DATEADD as follows:
    *
-   * @param arg0 The first arg expr.
-   * @param arg1 The second arg expr.
-   * @param generateScalarCode Should scalar code be generated
+   * <p>Both of the following add 42 days to column A: MySQL: DATEADD(A, 42) Snowflake:
+   * DATEADD('day', 42, A)
+   *
+   * @param arg0 The first starting datetime (or string).
+   * @param arg1 The amount of days to add to the starting datetime.
    * @param strNeedsCast Is arg0 a string that needs casting.
+   * @param generateScalarCode Are the inputs scalars?
    * @return The code generated that matches the DateAdd expression.
    */
-  public static String generateDateAddCode(
-      String arg0, String arg1, boolean generateScalarCode, boolean strNeedsCast) {
-    // Note: Null handling is supported by Bodo/Pandas behavior
-    // TODO: Only in the case that timestamp NULLS == NaN
+  public static String generateMySQLDateAddCode(
+      String arg0, String arg1, boolean strNeedsCast, boolean generateScalarCode) {
     StringBuilder addBuilder = new StringBuilder();
     if (strNeedsCast) {
       arg0 = generateCastCode(arg0, SqlTypeName.TIMESTAMP, generateScalarCode);
     }
-    if (generateScalarCode) {
-      addBuilder
-          .append("bodosql.libs.generated_lib.sql_null_checking_addition(")
-          .append(arg0)
-          .append(", ")
-          .append(arg1)
-          .append(")");
-    } else {
-      addBuilder.append("(pd.Series(").append(arg0).append(") + ").append(arg1).append(").values");
-    }
+    addBuilder
+        .append("bodo.libs.bodosql_array_kernels.add_interval_days(")
+        .append(arg1)
+        .append(", ")
+        .append(arg0)
+        .append(")");
 
     return addBuilder.toString();
   }

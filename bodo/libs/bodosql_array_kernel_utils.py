@@ -883,7 +883,7 @@ def verify_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
         or is_valid_tz_aware_datetime_arg(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a datetime, datetime column, or null"
+            f"{f_name} {a_name} argument must be a datetime, datetime column, or null without a tz"
         )
 
 
@@ -893,22 +893,15 @@ def get_tz_if_exists(arg):  # pragma: no cover
 
     Args:
         arg (dtype): the dtype of the argument whose timezone is being extracted.
-                     assumes that verify_datetime_arg_allow_tz has already been
-                     called on arg.
 
     Returns: the timezone (if the argument has one) or None (if it does not)
     """
-    if (
-        is_overload_none(arg)
-        or is_valid_date_arg(arg)
-        or is_valid_tz_naive_datetime_arg(arg)
-    ):
-        return None
-    else:
+    if is_valid_tz_aware_datetime_arg(arg):
         if bodo.utils.utils.is_array_typ(arg, True):
             return arg.dtype.tz
         else:
             return arg.tz
+    return None
 
 
 def get_common_broadcasted_type(arg_types, func_name):

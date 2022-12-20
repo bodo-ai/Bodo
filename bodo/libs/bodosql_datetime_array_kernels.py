@@ -5,6 +5,8 @@ Implements datetime array kernels that are specific to BodoSQL
 
 import numba
 import numpy as np
+import pandas as pd
+import pytz
 from numba.core import types
 from numba.extending import overload
 
@@ -367,33 +369,108 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
         the unit specified) to the datetime.
     """
 
-    date_args = {"years", "months", "weeks", "days"}
-    func = "DateOffset" if unit in date_args else "Timedelta"
-
     def overload_add_datetime_interval_util(amount, start_dt):
         verify_int_arg(amount, "add_interval_" + unit, "amount")
-        verify_datetime_arg(start_dt, "add_interval_" + unit, "start_dt")
+        verify_datetime_arg_allow_tz(start_dt, "add_interval_" + unit, "start_dt")
+        time_zone = get_tz_if_exists(start_dt)
 
         arg_names = ["amount", "start_dt"]
         arg_types = [amount, start_dt]
         propagate_null = [True] * 2
-        # Scalars will return Timestamp values while vectors will remain
-        # in datetime64 format
-        unbox_str = (
-            "bodo.utils.conversion.unbox_if_timestamp"
-            if bodo.utils.utils.is_array_typ(amount, True)
-            or bodo.utils.utils.is_array_typ(start_dt, True)
-            else ""
-        )
-        # pd.Timedelta does not have a nanosecond argument, instead when an
-        # integer is passed in without a keyword-arg it is assumed to be ns
-        if unit == "nanoseconds":
-            expr = "bodo.utils.conversion.box_if_dt64(arg1) + pd.Timedelta(arg0)"
-        else:
-            expr = f"bodo.utils.conversion.box_if_dt64(arg1) + pd.{func}({unit}=arg0)"
-        scalar_text = f"res[i] = {unbox_str}({expr})"
+        is_vector = bodo.utils.utils.is_array_typ(
+            amount, True
+        ) or bodo.utils.utils.is_array_typ(start_dt, True)
+        extra_globals = None
 
-        out_dtype = np.dtype("datetime64[ns]")
+        # Code path generated for timezone-aware data
+        if time_zone is not None:
+
+            # Find the transition times / deltas for the timezone in question.
+            # These arrays will be lowered via global variables in the exec env
+            if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
+                tz_obj = pytz.timezone(time_zone)
+                trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view(
+                    "i8"
+                )
+                deltas = np.array(tz_obj._transition_info)[:, 0]
+                deltas = (
+                    (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
+                    .astype(np.int64)
+                    .values
+                )
+                extra_globals = {"trans": trans, "deltas": deltas}
+
+            # Handle months/years via the following steps:
+            # 1. Find the starting ns
+            # 2. Find the ending ns by converting to tz-native then adding
+            #    a date offset with the corresponding number of months/years
+            # 3. Find the deltas in the starting & ending datetime by finding
+            #    their positions within the transition times array
+            # 4. Create a timedelta combines adds the ns jump from step 2 with
+            #    the difference in deltas from step 3
+            # (If the timezone does not have transitions, treat the offset
+            #  as if it were zero)
+            if unit in ("months", "years"):
+                scalar_text = f"td = pd.DateOffset({unit}=arg0)\n"
+                scalar_text += f"start_value = arg1.value\n"
+                scalar_text += "end_value = (pd.Timestamp(arg1.value) + td).value\n"
+                if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
+                    scalar_text += "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
+                    scalar_text += "end_trans = np.searchsorted(trans, end_value, side='right') - 1\n"
+                    scalar_text += "offset = deltas[start_trans] - deltas[end_trans]\n"
+                    scalar_text += (
+                        "td = pd.Timedelta(end_value - start_value + offset)\n"
+                    )
+                else:
+                    scalar_text += "td = pd.Timedelta(end_value - start_value)\n"
+
+            # Handle months/years via the following steps:
+            # 1. Find the starting ns
+            # 2. Find the ending ns by extracting the ns and adding the ns
+            #    value of the timedelta
+            # 3. Find the deltas in the starting & ending datetime by finding
+            #    their positions within the transition times array
+            # 4. Create a timedelta combines adds the ns value of the timedelta
+            #    with the difference in deltas from step 3
+            # (If the timezone does not have transitions, skip these steps
+            #  and just use the Timedelta used for step 2)
+            else:
+                if unit == "nanoseconds":
+                    scalar_text = "td = pd.Timedelta(arg0)\n"
+                else:
+                    scalar_text = f"td = pd.Timedelta({unit}=arg0)\n"
+                if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
+                    scalar_text += f"start_value = arg1.value\n"
+                    scalar_text += "end_value = start_value + td.value\n"
+                    scalar_text += "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
+                    scalar_text += "end_trans = np.searchsorted(trans, end_value, side='right') - 1\n"
+                    scalar_text += "offset = deltas[start_trans] - deltas[end_trans]\n"
+                    scalar_text += "td = pd.Timedelta(td.value + offset)\n"
+
+            # Add the calculated timedelta to the original timestamp
+            scalar_text += f"res[i] = arg1 + td\n"
+
+            out_dtype = bodo.DatetimeArrayType(time_zone)
+
+        # Code path generated for timezone-native data by directly adding to
+        # a DateOffset or TimeDelta with the corresponding units
+        else:
+
+            # Scalars will return Timestamp values while vectors will remain
+            # in datetime64 format
+            unbox_str = "bodo.utils.conversion.unbox_if_timestamp" if is_vector else ""
+            box_str = "bodo.utils.conversion.box_if_dt64" if is_vector else ""
+
+            if unit in ("months", "years"):
+                scalar_text = f"res[i] = {unbox_str}({box_str}(arg1) + pd.DateOffset({unit}=arg0))\n"
+            elif unit == "nanoseconds":
+                scalar_text = (
+                    f"res[i] = {unbox_str}({box_str}(arg1) + pd.Timedelta(arg0))\n"
+                )
+            else:
+                scalar_text = f"res[i] = {unbox_str}({box_str}(arg1) + pd.Timedelta({unit}=arg0))\n"
+
+            out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
         return gen_vectorized(
             arg_names,
@@ -401,6 +478,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
             propagate_null,
             scalar_text,
             out_dtype,
+            extra_globals=extra_globals,
         )
 
     return overload_add_datetime_interval_util
