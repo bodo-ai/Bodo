@@ -3394,7 +3394,7 @@ def pivot_impl(
             func_text += "        for i in range(n_cols)\n"
             func_text += "    ]\n"
             func_text += f"    if tracing.is_tracing():\n"
-            func_text += "         for i in range(n_cols):"
+            func_text += "         for i in range(n_cols):\n"
             func_text += f"            ev_alloc.add_attribute('total_str_chars_out_column_{i}_' + str(i), total_lens_{i}[i])\n"
         else:
             func_text += f"    data_arrs_{i} = [\n"

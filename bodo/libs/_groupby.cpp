@@ -5729,6 +5729,17 @@ class GroupbyPipeline {
         }
 
         if (shuffle_before_update) {
+            // If we are using a subset of keys we need to use the hash function
+            // based on the actual number of shuffle keys. Note: This shouldn't
+            // matter in the other cases because we will recompute the hashes
+            // based on the number of shuffle keys if we update then shuffle and
+            // num_keys == n_shuffle_keys for nunique.
+            if (num_keys != n_shuffle_keys) {
+                delete[] hashes;
+                hashes = hash_keys_table(in_table, n_shuffle_keys,
+                                         SEED_HASH_PARTITION, is_parallel);
+            }
+
             // Code below is equivalent to:
             // table_info* in_table = shuffle_table(in_table, num_keys)
             // We do this more complicated construction because we may
