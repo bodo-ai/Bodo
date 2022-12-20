@@ -659,6 +659,7 @@ class BodoSQLContext:
                     "bodo": bodo,
                     "numba": numba,
                     "time": time,
+                    "pd": pd,
                 },
                 locs,
             )
@@ -691,6 +692,7 @@ class BodoSQLContext:
             "MetaType": bodo.utils.typing.MetaType,
             "numba": numba,
             "time": time,
+            "pd": pd,
         }
 
         glbls.update(lowered_globals)

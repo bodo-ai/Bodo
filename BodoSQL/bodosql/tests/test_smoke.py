@@ -359,7 +359,7 @@ FROM (
         RANK() OVER (PARTITION BY 1 ORDER BY datetime_col),
         AVG(int32_col) OVER (PARTITION BY 1 ORDER BY datetime_col ROWS BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING)
     FROM table1)
-WHERE R % 2 = 0 
+WHERE R % 2 = 0
 """
     check_query(
         query,

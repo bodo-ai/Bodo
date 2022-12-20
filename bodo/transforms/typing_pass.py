@@ -213,7 +213,9 @@ class BodoTypeInference(PartialTypeInference):
             rerun_typing = changed_after_typing or needs_transform
 
         dprint_func_ir(state.func_ir, "after typing pass")
+
         self._check_for_errors(state, curr_typing_pass_required or rerun_typing)
+
         return True
 
     def _check_for_errors(self, state, curr_typing_pass_required):
@@ -1148,7 +1150,11 @@ class TypingTransforms:
         # by BodoSQL
         require(
             len(call_list) == 2
-            and (isinstance(call_list[1], ir.Var) or call_list[1] == "pandas")
+            and (
+                isinstance(call_list[1], ir.Var)
+                or call_list[1] == "pandas"
+                or call_list[1] == "bodo.libs.bodosql_array_kernels"
+            )
         )
         if call_list[0] in ("notna", "isna", "notnull", "isnull"):
             return self._get_null_filter(
@@ -1156,6 +1162,13 @@ class TypingTransforms:
             )
         elif call_list[0] == "isin":
             return self._get_isin_filter(
+                call_list, call_def, func_ir, df_var, df_col_names
+            )
+        elif call_list == (
+            "is_in",
+            "bodo.libs.bodosql_array_kernels",
+        ):  # pragma: no cover
+            return self._get_bodosql_array_kernel_is_in_filter(
                 call_list, call_def, func_ir, df_var, df_col_names
             )
         elif (
@@ -1204,6 +1217,40 @@ class TypingTransforms:
         colname = self._get_col_name(call_list[1], df_var, df_col_names, func_ir)
         op = "in"
         return (colname, op, list_set_arg)
+
+    def _get_bodosql_array_kernel_is_in_filter(
+        self, call_list, call_def, func_ir, df_var, df_col_names
+    ):  # pragma: no cover
+        """
+        Function used by _get_partition_filters to extract isin related
+        filters from the bodosql is_in kernel.
+        """
+
+        # This is normally already be checked in _is_isin_filter_pushdown_func,
+        # However, we need to have this check here in case this expression is
+        # the a sub expression in a binop (i.e. filter = (df.A < 3) & is_in(df.B, pd.array([1, 2])))
+        arg1_arr_type = self.typemap.get(call_def.args[1].name, None)
+
+        # We require that arg1 is a replicated array to perform filter pushdown.
+        # In the bodoSQL codegen, this value should be lowered
+        # as a global, and all globals are required to be replicated.
+        is_arg1_global = isinstance(
+            guard(get_definition, self.func_ir, call_def.args[1].name),
+            numba.core.ir.Global,
+        )
+
+        # TODO: check if this requirement needs to be enforced
+        require(
+            is_arg1_global
+            and arg1_arr_type.dtype != bodo.datetime64ns
+            and not isinstance(
+                arg1_arr_type.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
+            )
+        )
+
+        colname = self._get_col_name(call_def.args[0], df_var, df_col_names, func_ir)
+        op = "in"
+        return (colname, op, call_def.args[1])
 
     def _get_starts_ends_with_filter(
         self, call_list, call_def, func_ir, df_var, df_col_names
@@ -4369,35 +4416,69 @@ class TypingTransforms:
         Does an expression match a supported isin call that can be
         used in filter pushdown.
 
-        Note: we only allow isin with lists/sets. We don't support Series/Array
+        Note: we only allow series isin with lists/sets. We don't support Series/Array
         because we don't want to worry about distributed data and tuples aren't
         supported in the isin API.
         """
-        if not (is_call(index_def) and index_call_name[0] == "isin"):
+
+        if not is_call(index_def):
+            # Immediately return false if we don't have a call
             return False
+        elif index_call_name[0] == "isin":
+            method_obj_type = self.typemap.get(index_call_name[1].name, None)
 
-        method_obj_type = self.typemap.get(index_call_name[1].name, None)
+            # rerun type inference if we don't have the method's object type yet
+            # read_sql_table (and other I/O calls in the future) is handled in typing pass
+            # so the Series type may not be available yet
+            if method_obj_type in (None, types.unknown, types.undefined):
+                self.needs_transform = True
+                return False
 
-        # rerun type inference if we don't have the method's object type yet
-        # read_sql_table (and other I/O calls in the future) is handled in typing pass
-        # so the Series type may not be available yet
-        if method_obj_type in (None, types.unknown, types.undefined):
-            self.needs_transform = True
-            return False
+            if not isinstance(method_obj_type, SeriesType):
+                return False
 
-        if not isinstance(method_obj_type, SeriesType):
-            return False
-
-        list_set_typ = self.typemap.get(index_def.args[0].name, None)
-        # We don't support casting pd_timestamp_tz_naive_type/datetime64 values in arrow, so we avoid
-        # filter pushdown in that situation.
-        return (
-            isinstance(list_set_typ, (types.List, types.Set))
-            and list_set_typ.dtype != bodo.datetime64ns
-            and not isinstance(
-                list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
+            list_set_typ = self.typemap.get(index_def.args[0].name, None)
+            # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
+            # filter pushdown in that situation.
+            return (
+                isinstance(list_set_typ, (types.List, types.Set))
+                and list_set_typ.dtype != bodo.datetime64ns
+                and not isinstance(
+                    list_set_typ.dtype,
+                    bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
+                )
             )
-        )
+        elif index_call_name == ("is_in", "bodo.libs.bodosql_array_kernels"):
+
+            # In the case that we're hadling the bodsql is_in array kernel, we expect arg1 to be
+            # an array. We need to rerun type inference if we don't have the type yet
+            arg1_arr_type = self.typemap.get(index_def.args[1].name, None)
+            if arg1_arr_type in (None, types.unknown, types.undefined):
+                self.needs_transform = True
+                return False
+
+            # We require that arg1 is a replicated array to perform filter pushdown.
+            # In the bodoSQL codegen, this value should be lowered
+            # as a global, and all globals are required to be replicated.
+            is_arg1_global = isinstance(
+                guard(get_definition, self.func_ir, index_def.args[1].name),
+                numba.core.ir.Global,
+            )
+
+            # TODO: verify if we have the same issue with datetime64ns/timestamps that the
+            # series isin implementation does.
+            return (
+                is_arg1_global
+                and arg1_arr_type.dtype != bodo.datetime64ns
+                and not isinstance(
+                    arg1_arr_type.dtype,
+                    bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
+                )
+            )
+
+        else:
+            # In all other cases, return False
+            return False
 
     def _starts_ends_with_filter_pushdown_func(self, index_def, index_call_name):
         """

@@ -25,6 +25,7 @@ A way of handling it in pandas (for non equality joins specifically)
 Once that's done, we have a variety of helper functions
 that can automatically compute the expected delta table, given the matched/not matched conditions/actions,
 and their ordering in the query.
+
 """
 
 # Skip this file until we merge the Iceberg branch

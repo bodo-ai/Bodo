@@ -1756,6 +1756,11 @@ class DistributedPass:
             rhs.args[2] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
+        # Note for both of these functions:
+        # Case 1: DIST DIST -> DIST, is_parallel=True
+        # Case 2: REP  REP  -> REP, is_parallel=False
+        # Case 3: DIST REP  -> DIST, is_parallel=False
+        # Case 4: REP  DIST:   Banned by construction
         if fdef == ("array_isin", "bodo.libs.array") and self._is_1D_or_1D_Var_arr(
             rhs.args[2].name
         ):
@@ -1766,6 +1771,13 @@ class DistributedPass:
                 ")"
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
+
+        if fdef == (
+            "is_in",
+            "bodo.libs.bodosql_array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[1].name):
+            self._set_last_arg_to_true(assign.value)
+            return
 
         if fdef == (
             "quantile",
