@@ -11,6 +11,7 @@ from bodo.libs.bodosql_numeric_array_kernels import *  # noqa
 from bodo.libs.bodosql_other_array_kernels import *  # noqa
 from bodo.libs.bodosql_regexp_array_kernels import *  # noqa
 from bodo.libs.bodosql_snowflake_conversion_array_kernels import *  # noqa
+from bodo.libs.bodosql_special_handling_array_kernels import *  # noqa
 from bodo.libs.bodosql_string_array_kernels import *  # noqa
 from bodo.libs.bodosql_time_array_kernels import *  # noqa
 from bodo.libs.bodosql_trig_array_kernels import *  # noqa

@@ -657,6 +657,11 @@ def overload_int_arr_astype(A, dtype, copy=True):
     # see convert_to_nullable_tup in array_kernels.py
     # see test_series_concat_convert_to_nullable
 
+    # Unwrap the dtype, if typeref
+    if isinstance(dtype, types.TypeRef):
+        # Unwrap TypeRef
+        dtype = dtype.instance_type
+
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
         raise_bodo_error(

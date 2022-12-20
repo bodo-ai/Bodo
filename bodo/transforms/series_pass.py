@@ -422,7 +422,7 @@ class SeriesPass:
             )
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
-        # simplify geitem on Series with constant Index values
+        # simplify getitem on Series with constant Index values
         # used for df.apply() UDF optimization
         if (
             isinstance(target_typ, (SeriesType, HeterogeneousSeriesType))

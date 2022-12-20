@@ -1611,6 +1611,26 @@ class DistributedAnalysis:
                 self._meet_several_array_dists(arrays, array_dists)
             return
 
+        if fdef == ("is_in", "bodo.libs.bodosql_array_kernels"):
+
+            # Case 1: DIST DIST -> DIST, is_parallel=True
+            # Case 2: REP  REP  -> REP, is_parallel=False
+            # Case 3: DIST REP  -> DIST, is_parallel=False
+            # Case 4: REP  DIST:   Banned by construction
+            if is_array_typ(self.typemap[rhs.args[0].name]):
+                # If the input array is distributed, then the output
+                # must be an array with matching distribution
+                assert is_array_typ(self.typemap[lhs])
+                new_dist = self._meet_array_dists(rhs.args[0].name, lhs, array_dists)
+
+            assert is_array_typ(self.typemap[rhs.args[1].name])
+
+            # if arg0 is replicated, then we must force arg1 to be replicated as well
+            if is_REP(array_dists.get(rhs.args[0].name, None)):
+                self._set_REP(rhs.args[1].name, array_dists)
+
+            return
+
         # I've confirmed that this actually runs on currently nightly, but we never hit it since
         # we don't include bodosql tests in the coverage, and all the tests for this function
         # are on the bodosql side
@@ -1644,15 +1664,20 @@ class DistributedAnalysis:
             return
 
         if fdef == ("array_isin", "bodo.libs.array"):
+            # Case 1: DIST DIST -> DIST, is_parallel=True
+            # Case 2: REP  REP  -> REP, is_parallel=False
+            # Case 3: DIST REP  -> DIST, is_parallel=False
+            # Case 4: REP  DIST:   Banned by construction
+
             # out_arr and in_arr should have the same distribution
             new_dist = self._meet_array_dists(
                 rhs.args[0].name, rhs.args[1].name, array_dists
             )
-            # values array can be distributed only if input is distributed
-            new_dist = Distribution(
-                min(new_dist.value, array_dists[rhs.args[2].name].value)
-            )
-            array_dists[rhs.args[2].name] = new_dist
+
+            # if the input is replicated, then we must force the values  to be replicated as well
+            if is_REP(new_dist) and _is_1D_or_1D_Var_arr(rhs.args[2].name, array_dists):
+                self._set_REP(rhs.args[2].name, array_dists)
+
             return
         if fdef == ("get_search_regex", "bodo.libs.array"):
             # out_arr and in_arr should have the same distribution

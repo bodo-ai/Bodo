@@ -36,6 +36,7 @@ import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.table.BodoSqlTable;
+import com.google.common.collect.Range;
 import java.util.*;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -53,6 +54,7 @@ import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.Sarg;
 
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
 public class PandasCodeGenVisitor extends RelVisitor {
@@ -289,7 +291,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     int id = node.getId();
     if (node.getTuples().size() != 0) {
       for (RexLiteral colLiteral : node.getTuples().get(0)) {
-        RexNodeVisitorInfo literalExpr = this.visitLiteralScan(colLiteral);
+        // We cannot be within a case statement since LogicalValues is a RelNode and
+        // cannot be inside a case statement (which is a RexNode)
+        RexNodeVisitorInfo literalExpr = this.visitLiteralScan(colLiteral, false);
         assert exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(colLiteral, id))
             == BodoSQLExprType.ExprType.SCALAR;
         exprCodes.add(literalExpr.getExprCode());
@@ -1049,7 +1053,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (node instanceof RexInputRef) {
       result = visitInputRef((RexInputRef) node, colNames, inputVar, isSingleRow, ctx);
     } else if (node instanceof RexLiteral) {
-      result = visitLiteralScan((RexLiteral) node);
+      result = visitLiteralScan((RexLiteral) node, isSingleRow);
     } else if (node instanceof RexOver) {
       // Windowed aggregation is special, since it needs to add generated
       // code in order to define functions to be used with groupby apply.
@@ -2844,19 +2848,82 @@ public class PandasCodeGenVisitor extends RelVisitor {
       boolean isSingleRow,
       BodoCtx ctx) {
     RexNodeVisitorInfo result;
+    String expr;
+    String name;
     SqlKind sqlOp = node.getOperator().getKind();
     switch (sqlOp) {
         /* TODO(Ritwika): investigate more possible internal operations as result of optimization rules*/
       case SEARCH:
-        // Lookup the expanded nodes previously generated
-        result =
-            visitRexNode(
-                searchMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)),
-                colNames,
-                id,
-                inputVar,
-                isSingleRow,
-                ctx);
+
+        // Determine if we can use the optimized is_in codepath. We can take this codepath if
+        // the second argument (the elements to search for) consists of exclusively discrete values,
+        // and
+        // we are not inside a case statement.
+        // We can't use the optimized implementation within a case statement due to the Sarg array
+        // being
+        // lowered as a global, and we can't lower globals within a case statement, as
+        // bodosql_case_placeholder
+        // doesn't have the doesn't have the same global state as
+        // the rest of the main generated code
+        SqlTypeName search_val_type = node.getOperands().get(1).getType().getSqlTypeName();
+        // TODO: add testing/support for sql types other than string/int:
+        // https://bodo.atlassian.net/browse/BE-4046
+        // TODO: allow lowering globals within case statements in BodoSQL:
+        //
+        boolean can_use_isin_codegen =
+            !isSingleRow
+                & (SqlTypeName.STRING_TYPES.contains(search_val_type)
+                    || SqlTypeName.INT_TYPES.contains(search_val_type));
+
+        RexLiteral sargNode = (RexLiteral) node.getOperands().get(1);
+        Sarg sargVal = (Sarg) sargNode.getValue();
+        Iterator<Range> iter = sargVal.rangeSet.asRanges().iterator();
+        // We expect the range to have at least one value,
+        // otherwise, this search should have been optimized out
+        assert iter.hasNext() : "Internal Error: search Sarg literal had no elements";
+        while (iter.hasNext() && can_use_isin_codegen) {
+          Range curRange = iter.next();
+          // Assert that each element of the range is scalar.
+          if (!(curRange.hasLowerBound()
+              && curRange.hasUpperBound()
+              && curRange.upperEndpoint() == curRange.lowerEndpoint())) {
+            can_use_isin_codegen = false;
+          }
+        }
+
+        if (can_use_isin_codegen) {
+          // use the isin array kernel in the case
+          // that the second argument does consists of
+          // exclusively discrete values
+          RexNodeVisitorInfo arg0Info =
+              visitRexNode(node.getOperands().get(0), colNames, id, inputVar, isSingleRow, ctx);
+          RexNodeVisitorInfo arg1Info =
+              visitRexNode(sargNode, colNames, id, inputVar, isSingleRow, ctx);
+
+          expr =
+              "bodo.libs.bodosql_array_kernels.is_in("
+                  + arg0Info.getExprCode()
+                  + ", "
+                  + arg1Info.getExprCode()
+                  + ")";
+          name = arg0Info.getName() + " in " + arg1Info.getName();
+          result = new RexNodeVisitorInfo(name, expr);
+        } else {
+          // Fallback to generating individual checks
+          // in the case that the second argument does not consist of
+          // exclusively discrete values
+
+          // Lookup the expanded nodes previously generated
+          result =
+              visitRexNode(
+                  searchMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)),
+                  colNames,
+                  id,
+                  inputVar,
+                  isSingleRow,
+                  ctx);
+        }
+
         break;
       default:
         throw new BodoSQLCodegenException(
@@ -3172,11 +3239,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * Visitor for Rex Literals.
    *
    * @param node RexLiteral being visited
+   * @param node isSingleRow flag for if table references refer to a single row or the whole table.
+   *     This is used for determining if an expr returns a scalar or a column. Only CASE statements
+   *     set this to True currently.
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public RexNodeVisitorInfo visitLiteralScan(RexLiteral node) {
-    String literal = generateLiteralCode(node);
+  public RexNodeVisitorInfo visitLiteralScan(RexLiteral node, boolean isSingleRow) {
+    String literal = generateLiteralCode(node, isSingleRow, this);
     return new RexNodeVisitorInfo(literal, literal);
   }
 

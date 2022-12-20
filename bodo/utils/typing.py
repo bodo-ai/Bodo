@@ -1024,7 +1024,7 @@ def get_index_names(t, func_name, default_name):
 
     err_msg = "{}: index name should be a constant string".format(func_name)
 
-    # MultIndex has multiple names
+    # MultiIndex has multiple names
     if isinstance(t, MultiIndexType):
         names = []
         for i, n_typ in enumerate(t.names_typ):
@@ -1278,7 +1278,7 @@ def unbox_func_literal(typ, obj, c):
 
 
 # groupby.agg() can take a constant dictionary with a UDF in values. Typer of Numba's
-# typed.Dict trys to get the type of the UDF value, which is not possible. This hack
+# typed.Dict tries to get the type of the UDF value, which is not possible. This hack
 # makes a dummy type available to Numba so that type inference works.
 types.MakeFunctionLiteral._literal_type_cache = types.MakeFunctionLiteral(lambda: 0)
 
