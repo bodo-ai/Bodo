@@ -188,7 +188,7 @@ def test_QUALIFY_no_bounds(bodosql_numeric_types, spark_info, memory_leak_check)
 
     if bodo.get_size() == 1:
         out_df = res["output_df"]
-        # ensure that the qualify filter acutally leaves some output, so we can actually test correctness
+        # ensure that the qualify filter actually leaves some output, so we can actually test correctness
         assert len(out_df) > 0, "Qualify filtered output is empty"
         # ensure that the qualify filter actually filters some of the output, so we can actually test correctness
         assert len(out_df) < len(
@@ -727,5 +727,71 @@ def test_QUALIFY_nested_queries(spark_info, memory_leak_check):
         sort_output=True,
         check_dtype=False,
         check_names=False,
+        only_jit_1DVar=True,
+    )
+
+
+@pytest.mark.tz_aware
+def test_qualify_tz_aware(memory_leak_check):
+    """Tests that qualify is supported with tz-aware data."""
+    query = "SELECT A, MIN(A) over (PARTITION BY C ORDER BY B ASC ROWS BETWEEN 1 PRECEDING and 1 FOLLOWING) as x FROM table1 QUALIFY x > A"
+    tz = "US/Pacific"
+    df = pd.DataFrame(
+        {
+            "A": [
+                pd.Timestamp(year=2022, month=1, day=1, tz=tz),
+                pd.Timestamp(year=2022, month=1, day=2, tz=tz),
+                pd.Timestamp(year=2022, month=11, day=1, tz=tz),
+                None,
+                pd.Timestamp(year=2022, month=1, day=15, tz=tz),
+            ]
+            * 4,
+            "B": np.arange(20),
+            "C": ["left", "right", "left", "left"] * 5,
+        }
+    )
+    ctx = {"table1": df}
+    # Compute the expected output of the max. To do this we leverage
+    # that the window is the current previous and next value and the
+    # Order by keeps the DataFrame in order.
+    x_list = []
+    right_offset = 4
+    right_modulo = 1
+    for i in range(len(df)):
+        # Determine if we are grouped by left or right
+        group = df["C"].iat[i]
+        if group == "right":
+            prev = i - right_offset
+            next = i + right_offset
+        else:
+            prev = i - 1
+            next = i + 1
+            if prev % right_offset == right_modulo:
+                prev -= 1
+            if next % right_offset == right_modulo:
+                next += 1
+        options = []
+        if prev > 0:
+            options.append(df["A"].iat[prev])
+        options.append(df["A"].iat[i])
+        if next < len(df):
+            options.append(df["A"].iat[next])
+        # Remove NA values as options
+        options = [x for x in options if pd.notna(x)]
+        x_list.append(min(options))
+    py_output = pd.DataFrame(
+        {
+            "A": df["A"],
+            "x": x_list,
+        }
+    )
+    # Now apply the qualify filter
+    filter = py_output["x"] > py_output["A"]
+    py_output = py_output[filter]
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
         only_jit_1DVar=True,
     )
