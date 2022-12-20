@@ -30,8 +30,8 @@ def gen_lead_lag_queries(
     if include_two_arg_test:
         arg_list.append((f"{col_name}, -3", "negative_3"))
 
-    # TODO: fix for binary constants [BE-3304]
-    if "X'" not in fill_value:
+    # TODO: fix for binary constants [BE-3304] and tz-aware constants
+    if "X'" not in fill_value and fill_value != "NULL":
         arg_list.append((f"{col_name}, 5, {fill_value}", "5_with_fill"))
 
     lead_lag_queries = ", ".join(
@@ -49,10 +49,12 @@ def gen_lead_lag_queries(
     "cols_to_use, window_frame",
     [
         pytest.param(
-            ["U8", "I64", "F64"], "PARTITION BY W1 ORDER BY W4", id="numerics"
+            ["U8", "I64", "F64", "BO"], "PARTITION BY W1 ORDER BY W4", id="numerics"
         ),
         pytest.param(
-            ["BO", "ST", "BI", "DT"], "PARTITION BY W2 ORDER BY W3", id="non_numerics"
+            ["ST", "BI", "DT", "TZ"],
+            "PARTITION BY W2 ORDER BY W3, W4",
+            id="non_numerics",
         ),
     ],
 )
@@ -69,6 +71,8 @@ def test_lead_lag_respect_nulls(
     selects = []
     include_two_arg_test = True
     cols_that_need_bytearray_conv = []
+    # Columns that need tz info removed before passing it to spark
+    cols_to_remove_tz = []
     for i, col in enumerate(cols_to_use):
         fill_value = all_window_col_names[col]
         lead_or_lag_value = "LEAD" if (i % 3) == 0 else "LAG"
@@ -82,6 +86,9 @@ def test_lead_lag_respect_nulls(
         )
         if col == "BI":
             cols_that_need_bytearray_conv.extend(lead_lag_names)
+        if col == "TZ":
+            tz = all_window_df["table1"]["TZ"].dtype.tz.zone
+            cols_to_remove_tz.append("TZ")
         selects.append(lead_lag_queries)
         include_two_arg_test = not include_two_arg_test
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
@@ -94,6 +101,7 @@ def test_lead_lag_respect_nulls(
         check_names=False,
         return_codegen=True,
         convert_columns_bytearray=cols_that_need_bytearray_conv,
+        convert_columns_tz_naive=cols_to_remove_tz,
         only_jit_1DVar=True,
     )["pandas_code"]
 

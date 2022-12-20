@@ -3516,7 +3516,7 @@ def index_contains(I, val):
     if isinstance(I, CategoricalIndexType):
 
         def impl(I, val):  # pragma: no cover
-            key = bodo.utils.conversion.unbox_if_timestamp(val)
+            key = bodo.utils.conversion.unbox_if_tz_naive_timestamp(val)
             if not is_null_value(I._dict):
                 _init_engine(I, False)
                 arr = bodo.utils.conversion.coerce_to_array(I)
@@ -3541,7 +3541,7 @@ def index_contains(I, val):
     # Note: does not work on implicit Timedelta via string
     # i.e. "1 days" in pd.TimedeltaIndex(["1 days", "2 hours"])
     def impl(I, val):  # pragma: no cover
-        key = bodo.utils.conversion.unbox_if_timestamp(val)
+        key = bodo.utils.conversion.unbox_if_tz_naive_timestamp(val)
         if not is_null_value(I._dict):
             _init_engine(I, False)
             return key in I._dict
@@ -3622,7 +3622,7 @@ def overload_index_get_loc(I, key, method=None, tolerance=None):
 
     def impl(I, key, method=None, tolerance=None):  # pragma: no cover
 
-        key = bodo.utils.conversion.unbox_if_timestamp(key)
+        key = bodo.utils.conversion.unbox_if_tz_naive_timestamp(key)
         # build the index dict if not initialized yet
         if not is_null_value(I._dict):
             _init_engine(I)
@@ -4094,7 +4094,7 @@ def overload_index_map(I, mapper, na_action=None):
     func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
     func_text += "    t2 = bodo.utils.conversion.box_if_dt64(A[i])\n"
     func_text += "    v = map_func(t2)\n"
-    func_text += "    S[i] = bodo.utils.conversion.unbox_if_timestamp(v)\n"
+    func_text += "    S[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(v)\n"
     func_text += "  return bodo.utils.conversion.index_from_array(S, name)\n"
 
     map_func = bodo.compiler.udf_jit(func)
@@ -4174,7 +4174,7 @@ def create_binary_op_overload(op):
                 bodo.hiframes.pd_timestamp_ext.pd_timedelta_type,
             ]:
                 func_text += (
-                    "  dt = bodo.utils.conversion.unbox_if_timestamp(rhs)\n"
+                    "  dt = bodo.utils.conversion.unbox_if_tz_naive_timestamp(rhs)\n"
                     "  return op(arr, dt)\n"
                 )
             else:
@@ -4202,7 +4202,7 @@ def create_binary_op_overload(op):
                 bodo.hiframes.pd_timestamp_ext.pd_timedelta_type,
             ]:
                 func_text += (
-                    "  dt = bodo.utils.conversion.unbox_if_timestamp(lhs)\n"
+                    "  dt = bodo.utils.conversion.unbox_if_tz_naive_timestamp(lhs)\n"
                     "  return op(dt, arr)\n"
                 )
             else:

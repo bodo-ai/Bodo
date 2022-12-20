@@ -11,6 +11,8 @@ from bodo.tests.timezone_common import sample_tz  # noqa
 from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest.mark.tz_aware
+
 
 def test_tz_series_tz_scalar_comparison(cmp_op, memory_leak_check):
     """Check that comparison operators work between
@@ -328,3 +330,26 @@ def test_pd_concat_series_error(memory_leak_check):
         match="Cannot concatenate the rows of Timestamp data with different timezones",
     ):
         impl(S1, S3)
+
+
+def test_series_shift(memory_leak_check, sample_tz):
+    """
+    Tests the functionality of Series.shift with tz-aware data.
+    """
+
+    def impl1(S, shift_amount):
+        return S.shift(shift_amount)
+
+    def impl2(S, shift_amount, fill_value):
+        return S.shift(shift_amount, fill_value=fill_value)
+
+    data = (
+        [None] * 4
+        + list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz=sample_tz))
+        + [None] * 4
+    )
+    shift_amount = 3
+    fill_value = pd.Timestamp("2019-1-24", tz=sample_tz)
+    S = pd.Series(data)
+    check_func(impl1, (S, shift_amount))
+    check_func(impl2, (S, shift_amount, fill_value))

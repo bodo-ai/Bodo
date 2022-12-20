@@ -80,7 +80,8 @@ public abstract class BodoSqlTable implements Table {
     for (BodoSQLColumn column : columns) {
       builder.add(
           column.getColumnName(),
-          column.convertToSqlType(rdtf, column.isNullable(), column.getTZInfo()));
+          column.convertToSqlType(
+              rdtf, column.isNullable(), column.getTZInfo(), column.getPrecision()));
       builder.nullable(true);
     }
     return builder.build();

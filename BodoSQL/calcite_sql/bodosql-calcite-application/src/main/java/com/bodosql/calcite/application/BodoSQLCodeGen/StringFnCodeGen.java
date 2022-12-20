@@ -114,7 +114,12 @@ public class StringFnCodeGen {
     } else if (equivalentPandasMethodMapColumns.containsKey(fnName)) {
       String pandas_method = equivalentPandasMethodMapColumns.get(fnName);
       return new RexNodeVisitorInfo(
-          new_fn_name, "pd.Series(" + arg1Expr + ")." + pandas_method + "().values");
+          new_fn_name,
+          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+              + arg1Expr
+              + ")."
+              + pandas_method
+              + "())");
     }
 
     // If we made it here, something has gone very wrong
@@ -521,7 +526,11 @@ public class StringFnCodeGen {
               + "\" \")";
     } else {
       outputExpr =
-          "pd.Series(" + stringToBeTrimmed.getExprCode() + ").str." + trimFn + "(\" \").values";
+          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+              + stringToBeTrimmed.getExprCode()
+              + ").str."
+              + trimFn
+              + "(\" \"))";
     }
     return new RexNodeVisitorInfo(outputName, outputExpr);
   }

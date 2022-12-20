@@ -23,11 +23,10 @@ def test_time_array_box_unbox(precision, memory_leak_check):
     query = "select * from table1"
     df = pd.DataFrame(
         {
-            "A": bodo.Time(0, 0, 0, precision=precision),
-            "B": bodo.Time(1, 1, 1, precision=precision),
-            "C": bodo.Time(2, 2, 2, precision=precision),
+            "A": [bodo.Time(0, 0, 0, precision=precision)] * 5,
+            "B": [bodo.Time(1, 1, 1, precision=precision)] * 5,
+            "C": [bodo.Time(2, 2, 2, precision=precision)] * 5,
         },
-        index=np.arange(3),
     )
     ctx = {"table1": df}
     expected_output = df
@@ -47,11 +46,10 @@ def test_time_box_array_unbox(precision, memory_leak_check):
     query = "select B from table1"
     df = pd.DataFrame(
         {
-            "A": bodo.Time(0, 0, 0, precision=precision),
-            "B": bodo.Time(1, 1, 1, precision=precision),
-            "C": bodo.Time(2, 2, 2, precision=precision),
+            "A": [bodo.Time(0, 0, 0, precision=precision)] * 5,
+            "B": [bodo.Time(1, 1, 1, precision=precision)] * 5,
+            "C": [bodo.Time(2, 2, 2, precision=precision)] * 5,
         },
-        index=np.arange(3),
     )
     ctx = {"table1": df}
     expected_output = df[["B"]]

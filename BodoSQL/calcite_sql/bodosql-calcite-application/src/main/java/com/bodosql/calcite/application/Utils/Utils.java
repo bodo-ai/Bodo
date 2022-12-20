@@ -1,5 +1,7 @@
 package com.bodosql.calcite.application.Utils;
 
+import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
+
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
@@ -312,95 +314,6 @@ public class Utils {
     return dtype;
   }
 
-  public static String sqlTypeToBodoArrayType(RelDataType type) {
-    boolean nullable = type.isNullable();
-    switch (type.getSqlTypeName()) {
-      case BOOLEAN:
-        if (nullable) {
-          return "bodo.boolean_array";
-        } else {
-          return "numba.core.types.Array(bodo.bool_, 1, 'C')";
-        }
-      case TINYINT:
-        // TODO: Add signed vs unsigned support
-        if (nullable) {
-          return "bodo.IntegerArrayType(bodo.int8)";
-        } else {
-          return "numba.core.types.Array(bodo.int8, 1, 'C')";
-        }
-      case SMALLINT:
-        // TODO: Add signed vs unsigned support
-        if (nullable) {
-          return "bodo.IntegerArrayType(bodo.int16)";
-        } else {
-          return "numba.core.types.Array(bodo.int16, 1, 'C')";
-        }
-      case INTEGER:
-        // TODO: Add signed vs unsigned support
-        if (nullable) {
-          return "bodo.IntegerArrayType(bodo.int32)";
-        } else {
-          return "numba.core.types.Array(bodo.int32, 1, 'C')";
-        }
-      case BIGINT:
-        // TODO: Add signed vs unsigned support
-        if (nullable) {
-          return "bodo.IntegerArrayType(bodo.int64)";
-        } else {
-          return "numba.core.types.Array(bodo.int64, 1, 'C')";
-        }
-      case FLOAT:
-        // TODO: Add nullable support
-        return "numba.core.types.Array(bodo.float32, 1, 'C')";
-      case DOUBLE:
-      case DECIMAL:
-        // TODO: Add nullable support
-        return "numba.core.types.Array(bodo.float64, 1, 'C')";
-      case DATE:
-        // TODO: Add proper date support
-      case TIMESTAMP:
-        // TODO: Add nullable support
-        return "numba.core.types.Array(bodo.datetime64ns, 1, 'C')";
-      case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
-        // TODO: Add nullable support
-        TZAwareSqlType tzAwareType = (TZAwareSqlType) type;
-        return String.format("bodo.DatetimeArrayType(%s)", tzAwareType.getTZInfo().getPyZone());
-      case TIME:
-        // TODO [BE-3649]: The precision needs to be handled here.
-        throw new BodoSQLCodegenException(
-            "Internal Error: Calcite Plan Produced an Unsupported TIME Type");
-      case VARCHAR:
-      case CHAR:
-        // TODO: Add nullable support
-        return "bodo.string_array_type";
-      case VARBINARY:
-      case BINARY:
-        // TODO: Add nullable support
-        return "bodo.binary_array_type";
-      case INTERVAL_DAY_HOUR:
-      case INTERVAL_DAY_MINUTE:
-      case INTERVAL_DAY_SECOND:
-      case INTERVAL_HOUR_MINUTE:
-      case INTERVAL_HOUR_SECOND:
-      case INTERVAL_MINUTE_SECOND:
-      case INTERVAL_HOUR:
-      case INTERVAL_MINUTE:
-      case INTERVAL_SECOND:
-      case INTERVAL_DAY:
-        // TODO: Add nullable support
-        return "numba.core.types.Array(bodo.timedelta64ns, 1, 'C')";
-      case INTERVAL_YEAR:
-      case INTERVAL_MONTH:
-      case INTERVAL_YEAR_MONTH:
-        // May later refactor this code to create DateOffsets, for now
-        // causes an error
-      default:
-        throw new BodoSQLCodegenException(
-            "Internal Error: Calcite Plan Produced an Unsupported Type: "
-                + type.getSqlTypeName().getName());
-    }
-  }
-
   /**
    * Calcite optimizes a large number of windowed aggregation functions into case statements, which
    * check if the window size is valid. This checks if the supplied node is one of those case
@@ -627,7 +540,7 @@ public class Utils {
     // errors later
     String bodyGlobal = pdVisitorClass.lowerAsGlobal("'" + lambdaFnStr + "'");
 
-    String outputArrayType = sqlTypeToBodoArrayType(outputType);
+    String outputArrayType = sqlTypeToBodoArrayType(outputType, false);
     String outputArrayTypeGlobal = pdVisitorClass.lowerAsGlobal(outputArrayType);
 
     return String.format(

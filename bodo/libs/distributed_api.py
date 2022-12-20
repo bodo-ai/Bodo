@@ -229,6 +229,17 @@ def isend(arr, size, pe, tag, cond=True):
 
         return impl_nullable
 
+    # TZ-Aware Timestamp arrays
+    if isinstance(arr, DatetimeArrayType):
+
+        def impl_tz_arr(arr, size, pe, tag, cond=True):  # pragma: no cover
+            # Just send the underlying data. TZ info is all in the type.
+            data_arr = arr._data
+            type_enum = get_type_enum(data_arr)
+            return _isend(data_arr.ctypes, size, type_enum, pe, tag, cond)
+
+        return impl_tz_arr
+
     # string arrays
     if is_str_arr_type(arr) or arr == binary_array_type:
         offset_typ_enum = np.int32(numba_to_c_type(offset_type))
@@ -314,6 +325,17 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
             return (data_req, null_req)
 
         return impl_nullable
+
+    # TZ-Aware Timestamp arrays
+    if isinstance(arr, DatetimeArrayType):
+
+        def impl_tz_arr(arr, size, pe, tag, cond=True):  # pragma: no cover
+            # Just recv the underlying data. TZ info is all in the type.
+            data_arr = arr._data
+            type_enum = get_type_enum(data_arr)
+            return _irecv(data_arr.ctypes, size, type_enum, pe, tag, cond)
+
+        return impl_tz_arr
 
     # string arrays
     if arr in [binary_array_type, string_array_type]:
@@ -2343,7 +2365,6 @@ def bcast_overload(data, root=MPI_ROOT):
     """broadcast array from rank root. 'data' array is assumed to be pre-allocated in
     non-root ranks.
     """
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "bodo.bcast()")
     # numpy arrays
     if isinstance(data, types.Array):
 
@@ -2394,6 +2415,16 @@ def bcast_overload(data, root=MPI_ROOT):
             return
 
         return bcast_impl_int_arr
+
+    # TZ-Aware Timestamp arrays
+    if isinstance(data, DatetimeArrayType):
+
+        def bcast_impl_tz_arr(data, root=MPI_ROOT):  # pragma: no cover
+            # Just bcast the underlying data. TZ info is all in the type.
+            bcast(data._data, root)
+            return
+
+        return bcast_impl_tz_arr
 
     # string arrays
     if is_str_arr_type(data) or data == binary_array_type:

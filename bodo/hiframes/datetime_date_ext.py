@@ -976,7 +976,7 @@ def create_datetime_array_date_cmp_op_overload(op):
                         else:
                             out_arr[i] = op(
                                 lhs[i],
-                                bodo.utils.conversion.unbox_if_timestamp(
+                                bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                                     pd.Timestamp(rhs)
                                 ),
                             )
@@ -999,7 +999,7 @@ def create_datetime_array_date_cmp_op_overload(op):
                         else:
                             out_arr[i] = op(
                                 lhs[i],
-                                bodo.utils.conversion.unbox_if_timestamp(
+                                bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                                     pd.Timestamp(rhs[i])
                                 ),
                             )
@@ -1020,7 +1020,7 @@ def create_datetime_array_date_cmp_op_overload(op):
                             bodo.libs.array_kernels.setna(out_arr, i)
                         else:
                             out_arr[i] = op(
-                                bodo.utils.conversion.unbox_if_timestamp(
+                                bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                                     pd.Timestamp(lhs)
                                 ),
                                 rhs[i],
@@ -1043,7 +1043,7 @@ def create_datetime_array_date_cmp_op_overload(op):
                             bodo.libs.array_kernels.setna(out_arr, i)
                         else:
                             out_arr[i] = op(
-                                bodo.utils.conversion.unbox_if_timestamp(
+                                bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                                     pd.Timestamp(lhs[i])
                                 ),
                                 rhs[i],

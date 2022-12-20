@@ -1,3 +1,5 @@
+import numpy as np
+import pandas as pd
 import pytest
 from bodosql.tests.test_window.window_common import (  # noqa
     count_window_applies,
@@ -159,3 +161,38 @@ def test_window_case(uint8_window_df, spark_info):
     # TODO: enable checking window fusion once window function calls inside
     # of CASE statements can be fused [BE-3962]
     # count_window_applies(pandas_code, 2, ["AVG", "COUNT", "LEAD"])
+
+
+@pytest.mark.tz_aware
+@pytest.mark.slow
+def test_tz_aware_partition_by(spark_info):
+    """
+    Test that tz-aware data can be used as the input to partition by.
+    """
+    df = pd.DataFrame(
+        {
+            "TZ": [
+                pd.Timestamp("2022-10-1", tz="US/Pacific"),
+                pd.Timestamp("2022-1-1", tz="US/Pacific"),
+                pd.Timestamp("2022-1-11", tz="US/Pacific"),
+                pd.Timestamp("2022-2-1", tz="US/Pacific"),
+                pd.Timestamp("2020-1-1", tz="US/Pacific"),
+                None,
+            ]
+            * 5,
+            "SORT_COl": np.arange(30),
+            "SUM_COL": -np.arange(30, 60),
+        }
+    )
+    ctx = {"table1": df}
+    query = "SELECT SORT_COl, SUM(SUM_COL) OVER (PARTITION BY TZ ORDER BY SORT_COl ROWS 2 PRECEDING) FROM TABLE1"
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        sort_output=True,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
+        convert_columns_tz_naive=["TZ"],
+    )

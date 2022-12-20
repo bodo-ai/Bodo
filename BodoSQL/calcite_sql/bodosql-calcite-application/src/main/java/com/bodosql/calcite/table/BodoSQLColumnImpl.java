@@ -35,6 +35,10 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   /** Is this column type nullable? */
   private final boolean nullable;
 
+  /** What is the precision for this type? Currently only used by Time. */
+  private final int precision;
+
+  /** What is the timezone info for this column if it is a tz-aware timestamp. */
   private final @Nullable BodoTZInfo tzInfo;
 
   /**
@@ -51,6 +55,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = BodoSQLColumnDataType.EMPTY;
     this.nullable = nullable;
     this.tzInfo = null;
+    this.precision = -1;
   }
 
   /**
@@ -69,6 +74,27 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = BodoSQLColumnDataType.EMPTY;
     this.nullable = nullable;
     this.tzInfo = tzInfo;
+    this.precision = -1;
+  }
+
+  /**
+   * Create a new column from a name, type, nullability and tzInfo.
+   *
+   * @param name the name that we will give the column
+   * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
+   * @param nullable Is the column type nullable?
+   * @param precision The precision to use when creating the type. Currently only used for Time
+   *     types.
+   */
+  public BodoSQLColumnImpl(
+      String name, BodoSQLColumnDataType type, boolean nullable, int precision) {
+    this.dataType = type;
+    this.readName = name;
+    this.writeName = name;
+    this.elemType = BodoSQLColumnDataType.EMPTY;
+    this.nullable = nullable;
+    this.tzInfo = null;
+    this.precision = precision;
   }
 
   /**
@@ -87,6 +113,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = BodoSQLColumnDataType.EMPTY;
     this.nullable = nullable;
     this.tzInfo = null;
+    this.precision = -1;
   }
 
   /**
@@ -97,19 +124,23 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
    * @param type the {@link BodoSQLColumnDataType} which maps to a Bodo type in Python
    * @param nullable Is the column type nullable?
    * @param tzInfo The timezone to use for this column if its timezone aware. This may be null.
+   * @param precision The precision to use when creating the type. Currently only used for Time
+   *     types.
    */
   public BodoSQLColumnImpl(
       String readName,
       String writeName,
       BodoSQLColumnDataType type,
       boolean nullable,
-      BodoTZInfo tzInfo) {
+      BodoTZInfo tzInfo,
+      int precision) {
     this.dataType = type;
     this.readName = readName;
     this.writeName = writeName;
     this.elemType = BodoSQLColumnDataType.EMPTY;
     this.nullable = nullable;
     this.tzInfo = tzInfo;
+    this.precision = precision;
   }
 
   /**
@@ -129,6 +160,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = elemType;
     this.nullable = nullable;
     this.tzInfo = null;
+    this.precision = -1;
   }
 
   /**
@@ -153,6 +185,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = elemType;
     this.nullable = nullable;
     this.tzInfo = tzInfo;
+    this.precision = -1;
   }
 
   /**
@@ -177,6 +210,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = elemType;
     this.nullable = nullable;
     this.tzInfo = null;
+    this.precision = -1;
   }
 
   /**
@@ -203,6 +237,7 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
     this.elemType = elemType;
     this.nullable = nullable;
     this.tzInfo = tzInfo;
+    this.precision = -1;
   }
 
   @Override
@@ -222,13 +257,13 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
 
   @Override
   public RelDataType convertToSqlType(
-      RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo) {
+      RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo, int precision) {
     BodoSQLColumnDataType dtype = this.dataType;
     if (this.dataType == BodoSQLColumnDataType.CATEGORICAL) {
       // Categorical code should be treated as its underlying elemType
       dtype = this.elemType;
     }
-    return dtype.convertToSqlType(typeFactory, nullable, tzInfo);
+    return dtype.convertToSqlType(typeFactory, nullable, tzInfo, precision);
   }
 
   @Override
@@ -249,6 +284,11 @@ public class BodoSQLColumnImpl implements BodoSQLColumn {
   @Override
   public BodoTZInfo getTZInfo() {
     return tzInfo;
+  }
+
+  @Override
+  public int getPrecision() {
+    return precision;
   }
 
   /**

@@ -211,7 +211,7 @@ def create_cast_util_overload(func_name):
                     scalar_text += f"  res[i] = {fname_to_equiv[func_name]}(ans)"
         elif func_name == "interval":
             unbox_str = (
-                "bodo.utils.conversion.unbox_if_timestamp"
+                "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
                 if bodo.utils.utils.is_array_typ(arr, True)
                 else ""
             )
