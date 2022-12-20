@@ -2496,6 +2496,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DAYNAME":
           case "WEEKDAY":
           case "LAST_DAY":
+          case "YEAROFWEEK":
           case "YEAROFWEEKISO":
             assert operandsInfo.size() == 1;
             return getSingleArgDatetimeFnInfo(
