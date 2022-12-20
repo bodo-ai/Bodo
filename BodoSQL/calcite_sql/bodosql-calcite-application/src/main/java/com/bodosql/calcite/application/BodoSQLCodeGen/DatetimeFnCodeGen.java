@@ -19,6 +19,7 @@ public class DatetimeFnCodeGen {
           "NEXT_DAY",
           "PREVIOUS_DAY",
           "WEEKDAY",
+          "YEAROFWEEK",
           "YEAROFWEEKISO");
 
   // HashMap of all trig functions which maps to array kernels
@@ -27,7 +28,11 @@ public class DatetimeFnCodeGen {
 
   static {
     for (String fn : fnList) {
-      equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels." + fn.toLowerCase());
+      if (fn.equals("YEAROFWEEK")) {
+        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.get_year");
+      } else {
+        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels." + fn.toLowerCase());
+      }
     }
   }
 

@@ -176,6 +176,7 @@ public class ExprTypeVisitor {
           "TRY_TO_DATE",
           "WEEKDAY",
           "WIDTH_BUCKET",
+          "YEAROFWEEK",
           "YEAROFWEEKISO",
           "YEARWEEK",
           "ZEROIFNULL");

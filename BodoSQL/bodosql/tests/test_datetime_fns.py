@@ -1536,8 +1536,9 @@ def test_subdate_td_scalars(
 
 
 def test_yearweek(spark_info, dt_fn_dataframe, memory_leak_check):
+    """Test for YEARWEEK, which returns a 6-character string
+    with the date's year and week (1-53) concatenated together"""
     query = "SELECT YEARWEEK(timestamps) from table1"
-    spark_query = "SELECT YEAR(timestamps) * 100 + WEEKOFYEAR(timestamps) from table1"
 
     expected_output = pd.DataFrame(
         {
@@ -1550,6 +1551,31 @@ def test_yearweek(spark_info, dt_fn_dataframe, memory_leak_check):
         query,
         dt_fn_dataframe,
         spark_info,
+        check_names=False,
+        check_dtype=False,
+        only_python=True,
+        expected_output=expected_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_yearweek(tz_aware_df, memory_leak_check):
+    """Test for YEARWEEK on timezone aware data.
+    YEARWEEK returns a 6-character string with the date's year
+    and week (1-53) concatenated together"""
+
+    query = "SELECT YEARWEEK(A) from table1"
+
+    expected_output = pd.DataFrame(
+        {
+            "expected": tz_aware_df["table1"]["A"].dt.year * 100
+            + tz_aware_df["table1"]["A"].dt.isocalendar().week
+        }
+    )
+    check_query(
+        query,
+        tz_aware_df,
+        spark=None,
         check_names=False,
         check_dtype=False,
         only_python=True,
@@ -1628,6 +1654,45 @@ def test_date_trunc(spark_info, dt_fn_dataframe, literal_str, memory_leak_check)
     )
 
 
+def test_yearofweek(dt_fn_dataframe, memory_leak_check):
+    """
+    Test Snowflake's yearofweek function on columns.
+    """
+    query = f"SELECT YEAROFWEEKISO(TIMESTAMPS) as A from table1"
+    # Use expected output because this function isn't in SparkSQL
+    expected_output = pd.DataFrame(
+        {
+            "A": dt_fn_dataframe["table1"]["timestamps"]
+            .dt.isocalendar()
+            .year.astype("Int64")
+        }
+    )
+    check_query(
+        query,
+        dt_fn_dataframe,
+        spark=None,
+        expected_output=expected_output,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_yearofweek(tz_aware_df, memory_leak_check):
+    """
+    Test Snowflake's yearofweek function on columns.
+    """
+    query = f"SELECT YEAROFWEEKISO(A) as A from table1"
+    # Use expected output because this function isn't in SparkSQL
+    expected_output = pd.DataFrame({"A": tz_aware_df["table1"]["A"].dt.year})
+    check_query(
+        query,
+        tz_aware_df,
+        spark=None,
+        expected_output=expected_output,
+        check_dtype=False,
+    )
+
+
 def test_yearofweekiso(spark_info, dt_fn_dataframe, memory_leak_check):
     """
     Test Snowflake's yearofweekiso function on columns.
@@ -1641,6 +1706,25 @@ def test_yearofweekiso(spark_info, dt_fn_dataframe, memory_leak_check):
         query,
         dt_fn_dataframe,
         spark_info,
+        expected_output=expected_output,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_yearofweekiso(tz_aware_df, memory_leak_check):
+    """
+    Test Snowflake's yearofweekiso function on timezone-aware columns.
+    """
+    query = f"SELECT YEAROFWEEKISO(A) as A from table1"
+    # Use expected output because this function isn't in SparkSQL
+    expected_output = pd.DataFrame(
+        {"A": tz_aware_df["table1"]["A"].dt.isocalendar().year}
+    )
+    check_query(
+        query,
+        tz_aware_df,
+        spark=None,
         expected_output=expected_output,
         check_dtype=False,
     )
@@ -1663,6 +1747,31 @@ def test_yearofweekiso_scalar(spark_info, dt_fn_dataframe, memory_leak_check):
         query,
         dt_fn_dataframe,
         spark_info,
+        expected_output=expected_output,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_yearofweekiso_scalar(tz_aware_df, memory_leak_check):
+    """
+    Test Snowflake's yearofweekiso function on timezone-aware scalars.
+    """
+    query = (
+        f"SELECT CASE WHEN YEAROFWEEKISO(A) > 2015 THEN 1 ELSE 0 END as A from table1"
+    )
+    # Use expected output because this function isn't in SparkSQL
+    expected_output = pd.DataFrame(
+        {
+            "A": tz_aware_df["table1"]["A"]
+            .dt.isocalendar()
+            .year.apply(lambda x: 1 if pd.notna(x) and x > 2015 else 0)
+        }
+    )
+    check_query(
+        query,
+        tz_aware_df,
+        spark=None,
         expected_output=expected_output,
         check_dtype=False,
     )
