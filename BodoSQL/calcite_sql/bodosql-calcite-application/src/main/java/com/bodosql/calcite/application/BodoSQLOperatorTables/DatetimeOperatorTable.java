@@ -12,6 +12,40 @@ import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 public final class DatetimeOperatorTable implements SqlOperatorTable {
+  /**
+   * Determine the return type for a function that outputs a timestamp (possibly tz-aware) based on
+   * the first or last argument, such as NEXT_DAY, PREVIOUS_DAY, DATEADD (Snowflake verison),
+   * DATEADD (MySQL verison) DATE_ADD, and ADDATE
+   *
+   * @param binding The operand bindings for the function signature.
+   * @return The return type of the first/last argument if either is a timezone-aware type,
+   *     otherwise TIMESTAMP
+   */
+  public static RelDataType timezoneFirstOrLastArgumentReturnType(SqlOperatorBinding binding) {
+    List<RelDataType> operandTypes = binding.collectOperandTypes();
+    // Determine if the output is nullable.
+    boolean nullable = isOutputNullableCompile(operandTypes);
+    RelDataTypeFactory typeFactory = binding.getTypeFactory();
+
+    // Determine output type based on the first/last argument
+    RelDataType firstArg = operandTypes.get(0);
+    RelDataType lastArg = operandTypes.get(operandTypes.size() - 1);
+    RelDataType returnType;
+    if (firstArg instanceof TZAwareSqlType) {
+      // If the input is tzAware the output is as well.
+      returnType = firstArg;
+    } else if (lastArg instanceof TZAwareSqlType) {
+      // If the input is tzAware the output is as well.
+      returnType = lastArg;
+    } else {
+      // Otherwise we output a tzNaive Timestamp.
+      // TODO: FIXME once we have proper date support.
+      // The output should actually always be a date type for some fns.
+      // https://docs.snowflake.com/en/sql-reference/functions/next_day.html
+      returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+    }
+    return typeFactory.createTypeWithNullability(returnType, nullable);
+  }
 
   private static @Nullable DatetimeOperatorTable instance;
 
@@ -32,7 +66,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "DATEADD",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           null,
           OperandTypes.or(
               OperandTypes.sequence(
@@ -54,7 +88,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -168,7 +202,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -502,34 +536,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               "DATE_PART(STRING, TIMESTAMP)", OperandTypes.STRING, OperandTypes.TIMESTAMP),
           SqlFunctionCategory.TIMEDATE);
 
-  /**
-   * Determine the return type for Next_Day/Previous_DAY
-   *
-   * @param binding The operand bindings for the function signature.
-   * @return The return type.
-   */
-  public static RelDataType previousNextDayReturnType(SqlOperatorBinding binding) {
-    List<RelDataType> operandTypes = binding.collectOperandTypes();
-    // Determine if the output is nullable.
-    boolean nullable = isOutputNullableCompile(operandTypes);
-    RelDataTypeFactory typeFactory = binding.getTypeFactory();
-
-    // Determine output type based on arg0
-    RelDataType arg0 = operandTypes.get(0);
-    RelDataType returnType;
-    if (arg0 instanceof TZAwareSqlType) {
-      // If the input is tzAware the output is as well.
-      returnType = arg0;
-    } else {
-      // Otherwise we output a tzNaive Timestamp.
-      // TODO: FIXME once we have proper date support.
-      // The output should actually always be a date type.
-      // https://docs.snowflake.com/en/sql-reference/functions/next_day.html
-      returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
-    }
-    return typeFactory.createTypeWithNullability(returnType, nullable);
-  }
-
   public static final SqlFunction NEXT_DAY =
       new SqlFunction(
           "NEXT_DAY",
@@ -537,7 +543,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> previousNextDayReturnType(opBinding),
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -556,7 +562,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> previousNextDayReturnType(opBinding),
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

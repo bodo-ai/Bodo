@@ -29,17 +29,6 @@ def timestamp_date_string_cols(request):
 
 @pytest.fixture(
     params=[
-        "DATEADD",
-        "DATE_ADD",
-        pytest.param("ADDDATE", marks=pytest.mark.slow),
-    ]
-)
-def adddate_equiv_fns(request):
-    return request.param
-
-
-@pytest.fixture(
-    params=[
         "DATE_SUB",
         pytest.param("SUBDATE", marks=pytest.mark.slow),
     ]
@@ -221,36 +210,6 @@ def dt_fn_dataframe():
                 "mo",
                 None,
             ],
-            "digit_strings": [
-                None,
-                "-13",
-                "0",
-                "-2",
-                "5",
-                "-66",
-                "42",
-                None,
-                "1234",
-                None,
-            ],
-            "valid_year_integers": pd.Series(
-                [
-                    2000,
-                    2100,
-                    None,
-                    1999,
-                    2020,
-                    None,
-                    2021,
-                    1998,
-                    2200,
-                    2012,
-                ],
-                dtype=pd.Int64Dtype(),
-            ),
-            "mixed_integers": pd.Series(
-                [None, 0, 1, -2, 3, -4, 5, -6, 7, None], dtype=pd.Int64Dtype()
-            ),
         }
     )
     return {"table1": df}
@@ -1025,7 +984,7 @@ def test_timestamp_add_cols(
 
 @pytest.fixture
 def dateadd_df():
-    """Returns the context used by test snowflake_dateadd"""
+    """Returns the context used by test_snowflake_dateadd"""
     return {
         "table1": pd.DataFrame(
             {
@@ -1285,6 +1244,97 @@ def test_snowflake_dateadd(dateadd_df, dateadd_queries, spark_info, memory_leak_
     )
 
 
+@pytest.fixture(
+    params=[
+        pytest.param(
+            ("'mm'", 158, "2035-5-12 20:30:00", "2036-1-6 0:45:00"), id="month"
+        ),
+        pytest.param(("'d'", 1, "2022-3-13 20:30:00", "2022-11-7 0:45:00"), id="day"),
+        pytest.param(("'h'", 8, "2022-3-13 4:30:00", "2022-11-6 8:45:00"), id="hour"),
+    ]
+)
+def tz_dateadd_args(request):
+    """Parametrization of several input values used by tz_dateadd_data to
+    construct its outputs for each timezone. Outputs 4-tuples in the
+    following format:
+
+    unit: the string literal provided to DATEADD to control which unit
+    is added to the timestamp
+
+    amt: the amount of the unit to add to the timestamp
+
+    springRes: the result of adding that amount of the unit to the timestamp
+    corresponding to shortly before the Spring daylight savings switch
+
+    fallRes: the result of adding that amount of the unit to the timestamp
+    corresponding to shortly before the Fall daylight savings switch
+    """
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        pytest.param("US/Pacific", id="pacific"),
+        pytest.param("GMT", id="gmt"),
+        pytest.param("US/Eastern", id="eastern", marks=pytest.mark.slow),
+    ]
+)
+def tz_dateadd_data(request, tz_dateadd_args):
+    """Returns the context, calculations and answers used by test_snowflake_tz_dateadd.
+    The timestamps correspond to a short period before the a daylight savings
+    time switch, and the units provided ensure that the values often
+    jump across a switch."""
+    unit, amt, springRes, fallRes = tz_dateadd_args
+    ctx = {
+        "table1": pd.DataFrame(
+            {
+                "dt_col": pd.Series(
+                    [pd.Timestamp("2022-3-12 20:30:00", tz=request.param)] * 3
+                    + [None]
+                    + [pd.Timestamp("2022-11-6 0:45:00", tz=request.param)] * 3
+                ),
+                "bool_col": pd.Series([True] * 7),
+            }
+        )
+    }
+    calculation = f"DATEADD({unit}, {amt}, dt_col)"
+    answer = pd.DataFrame(
+        {
+            0: pd.Series(
+                [pd.Timestamp(springRes, tz=request.param)] * 3
+                + [None]
+                + [pd.Timestamp(fallRes, tz=request.param)] * 3
+            )
+        }
+    )
+    return ctx, calculation, answer
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case"),
+    ],
+)
+def test_snowflake_tz_dateadd(tz_dateadd_data, case):
+    ctx, calculation, answer = tz_dateadd_data
+    if case:
+        query_fmt = "SELECT CASE WHEN bool_col THEN {:} ELSE NULL END FROM table1"
+    else:
+        query_fmt = "SELECT {:} FROM table1"
+    query = query_fmt.format(calculation)
+    check_query(
+        query,
+        ctx,
+        None,
+        sort_output=False,
+        expected_output=answer,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
 @pytest.mark.slow
 def test_timestamp_add_scalar(
     spark_info, mysql_interval_str, dt_fn_dataframe, memory_leak_check
@@ -1303,22 +1353,66 @@ def test_timestamp_add_scalar(
     )
 
 
-def test_adddate_cols_int_arg1(
-    adddate_equiv_fns,
-    dt_fn_dataframe,
-    timestamp_date_string_cols,
-    spark_info,
-    memory_leak_check,
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+    ],
+)
+@pytest.mark.parametrize(
+    "dateadd_fn, dt_val",
+    [
+        pytest.param("DATEADD", "datetime_strings", id="DATEADD-vector_string_dt"),
+        pytest.param("DATE_ADD", "'2020-10-13'", id="DATE_ADD-scalar_string_dt"),
+        pytest.param("ADDATE", "timestamps", id="ADDATE-vector_timestamp_dtr"),
+        pytest.param(
+            "DATEADD", "TIMESTAMP '2022-3-5'", id="DATEADD-scalar_timestamp_dtr"
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "amt_val",
+    [
+        pytest.param("mixed_integers", id="vector_amount"),
+        pytest.param("100", id="scalar_amount"),
+    ],
+)
+def test_mysql_dateadd(
+    dt_fn_dataframe, dateadd_fn, dt_val, amt_val, case, spark_info, memory_leak_check
 ):
-    "tests that date_add/adddate works when the second argument is an integer, on column values"
-    query = f"SELECT {adddate_equiv_fns}({timestamp_date_string_cols}, positive_integers) from table1"
-    spark_query = (
-        f"SELECT DATE_ADD({timestamp_date_string_cols}, positive_integers) from table1"
-    )
+    """Tests the MySQL version of DATEADD and all of its equivalent functions
+    with and without cases, scalar and vector data, and on all accepted input
+    types. Meanings of the parametrized arguments:
+
+    dt_fn_dataframe: The fixture containing the datetime-equivialent data
+
+    dateadd_fn: which function name is being used.
+
+    dt_val: The scalar string or column name representing the datetime that
+            the integer amount of days areadded to. Relevent column names:
+         - datetime_strings: strings that can be casted to timestamps
+         - timestamps: already in timestamp form
+         - tz_timestamps: timestamps with timezone data
+         - valid_year_integers: integers representing a year
+
+    amt_val: The scalar integer or column name representing the amount of days
+             to add to dt_val.
+
+    case: Should a case statement be used? If so, case on the value of
+          another column of dt_fn_dataframe (positive_integers)
+    """
+
+    if case:
+        query = f"SELECT CASE WHEN positive_integers < 100 THEN {dateadd_fn}({dt_val}, {amt_val}) ELSE NULL END from table1"
+        spark_query = f"SELECT CASE WHEN positive_integers < 100 THEN DATE_ADD({dt_val}, {amt_val}) ELSE NULL END from table1"
+    else:
+        query = f"SELECT {dateadd_fn}({dt_val}, {amt_val}) from table1"
+        spark_query = f"SELECT DATE_ADD({dt_val}, {amt_val}) from table1"
 
     # spark requires certain arguments of adddate to not
     # be of type bigint, but all pandas integer types are currently inerpreted as bigint.
-    cols_to_cast = {"table1": [("positive_integers", "int")]}
+    cols_to_cast = {"table1": [("mixed_integers", "int")]}
 
     check_query(
         query,
@@ -1331,32 +1425,71 @@ def test_adddate_cols_int_arg1(
     )
 
 
-@pytest.mark.slow
-def test_adddate_scalar_int_arg1(
-    adddate_equiv_fns,
-    dt_fn_dataframe,
-    timestamp_date_string_cols,
-    spark_info,
-    memory_leak_check,
-):
-    "tests that date_add/adddate works when the second argument is an integer, on scalar values"
+@pytest.mark.parametrize(
+    "dateadd_fn, case",
+    [
+        pytest.param("DATEADD", False, id="DATEADD-no_case"),
+        pytest.param("ADDDATE", True, id="ADDATE-with_case", marks=pytest.mark.slow),
+    ],
+)
+def test_tz_mysql_dateadd(dateadd_fn, case, memory_leak_check):
+    """A minor extension of test_mysql_dateadd specifically for tz-aware data"""
+    if case:
+        query = (
+            f"SELECT CASE WHEN N < 0 THEN NULL ELSE {dateadd_fn}(A, N) END from table1"
+        )
+    else:
+        query = f"SELECT {dateadd_fn}(A, N) from table1"
 
-    # Spark's date_add seems to truncate everything after the day in the scalar case, so we use normalized the output timestamp for bodosql
-    query = f"SELECT CASE WHEN {adddate_equiv_fns}({timestamp_date_string_cols}, positive_integers) < TIMESTAMP '1970-01-01' THEN TIMESTAMP '1970-01-01' ELSE TO_DATE(ADDDATE({timestamp_date_string_cols}, positive_integers)) END from table1"
-    spark_query = f"SELECT CASE WHEN DATE_ADD({timestamp_date_string_cols}, positive_integers) < TIMESTAMP '1970-01-01' THEN TIMESTAMP '1970-01-01' ELSE DATE_ADD({timestamp_date_string_cols}, positive_integers) END from table1"
-
-    # spark requires certain arguments of adddate to not
-    # be of type bigint, but all pandas integer types are currently inerpreted as bigint.
-    cols_to_cast = {"table1": [("positive_integers", "int")]}
+    timestamp_strings = [
+        "2025-5-3",
+        "2024-4-7",
+        None,
+        "2023-3-10",
+        "2022-2-13",
+        "2025-12-2",
+        None,
+        "2024-11-4",
+        "2023-10-6",
+    ]
+    day_offsets = [None, 10, 2, 1, 60, -30, None, 380, 33]
+    adjusted_timestamp_strings = [
+        None,
+        "2024-4-17",
+        None,
+        "2023-3-11",
+        "2022-4-14",
+        None if case else "2025-11-2",
+        None,
+        "2025-11-19",
+        "2023-11-8",
+    ]
+    tz_timestamps = pd.Series(
+        [
+            None if s is None else pd.Timestamp(s, tz="US/Pacific")
+            for s in timestamp_strings
+        ]
+    )
+    res = pd.Series(
+        [
+            None if s is None else pd.Timestamp(s, tz="US/Pacific")
+            for s in adjusted_timestamp_strings
+        ]
+    )
+    ctx = {
+        "table1": pd.DataFrame(
+            {"A": tz_timestamps, "N": pd.Series(day_offsets, dtype=pd.Int32Dtype())}
+        )
+    }
+    expected_output = pd.DataFrame({"res": res})
 
     check_query(
         query,
-        dt_fn_dataframe,
-        spark_info,
+        ctx,
+        None,
         check_names=False,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
-        spark_input_cols_to_cast=cols_to_cast,
+        expected_output=expected_output,
     )
 
 
@@ -1433,65 +1566,6 @@ def test_subdate_cols_td_arg1(
                 dt_fn_dataframe["table1"][timestamp_date_string_cols]
             )
             - dt_fn_dataframe["table1"]["intervals"]
-        }
-    )
-
-    check_query(
-        query,
-        dt_fn_dataframe,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        expected_output=expected_output,
-    )
-
-
-def test_adddate_cols_td_arg1(
-    adddate_equiv_fns,
-    dt_fn_dataframe,
-    timestamp_date_string_cols,
-    spark_info,
-    memory_leak_check,
-):
-    """tests that date_add/adddate works on timedelta 2nd arguments, with column inputs"""
-    query = f"SELECT {adddate_equiv_fns}({timestamp_date_string_cols}, intervals) from table1"
-
-    expected_output = pd.DataFrame(
-        {
-            "unknown_column_name": pd.to_datetime(
-                dt_fn_dataframe["table1"][timestamp_date_string_cols]
-            )
-            + dt_fn_dataframe["table1"]["intervals"]
-        }
-    )
-
-    check_query(
-        query,
-        dt_fn_dataframe,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        expected_output=expected_output,
-    )
-
-
-@pytest.mark.slow
-def test_adddate_td_scalars(
-    adddate_equiv_fns,
-    dt_fn_dataframe,
-    timestamp_date_string_cols,
-    spark_info,
-    memory_leak_check,
-):
-    """tests that adddate works on timedelta 2nd arguments, with scalar inputs"""
-    query = f"SELECT CASE WHEN {adddate_equiv_fns}({timestamp_date_string_cols}, intervals) < TIMESTAMP '1700-01-01' THEN TIMESTAMP '1970-01-01' ELSE {adddate_equiv_fns}({timestamp_date_string_cols}, intervals) END from table1"
-
-    expected_output = pd.DataFrame(
-        {
-            "unknown_column_name": pd.to_datetime(
-                dt_fn_dataframe["table1"][timestamp_date_string_cols]
-            )
-            + dt_fn_dataframe["table1"]["intervals"]
         }
     )
 

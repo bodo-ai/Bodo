@@ -2241,25 +2241,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
             SqlTypeName type = fnOperation.getOperands().get(0).getType().getSqlTypeName();
             boolean strNeedsCast = type.getFamily() == SqlTypeFamily.CHARACTER;
 
-            String arg1Expr;
-            // if the second argument is an integer, need to convert it to the int * days
-            if (SqlTypeName.INT_TYPES.contains(
-                fnOperation.getOperands().get(1).getType().getSqlTypeName())) {
-              arg1Expr =
-                  intExprToIntervalDays(
-                      operandsInfo.get(1).getExprCode(),
-                      exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
-            } else {
-              arg1Expr = operandsInfo.get(1).getExprCode();
-            }
+            String arg1Expr = operandsInfo.get(1).getExprCode();
 
             String addExpr =
-                generateDateAddCode(
+                generateMySQLDateAddCode(
                     operandsInfo.get(0).getExprCode(),
                     arg1Expr,
-                    dateAddGeneratesScalarCode,
-                    strNeedsCast);
+                    strNeedsCast,
+                    dateAddGeneratesScalarCode);
             return new RexNodeVisitorInfo(outputName, addExpr);
+
           case "SUBDATE":
           case "DATE_SUB":
             assert operandsInfo.size() == 2;
