@@ -468,6 +468,24 @@ def test_ratio_to_report(data_col, partition_col, answer, memory_leak_check):
             id="timestamp-overinclusive_prefix",
             marks=pytest.mark.slow,
         ),
+        pytest.param(
+            pd.Series(
+                [pd.Timestamp(f"201{y}-7-4", tz="US/Pacific") for y in "0110143224"]
+            ),
+            ("UNBOUNDED PRECEDING", "1 FOLLOWING"),
+            pd.DataFrame(
+                {
+                    0: pd.Series(
+                        [
+                            pd.Timestamp(f"201{y}-7-4", tz="US/Pacific")
+                            for y in "0101144244"
+                        ]
+                    )
+                }
+            ),
+            id="tz-aware-overinclusive_prefix",
+            marks=pytest.mark.tz_aware,
+        ),
     ],
 )
 def test_mode(data_col, bounds, answer, memory_leak_check):
