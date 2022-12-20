@@ -212,7 +212,7 @@ def to_char_util(arr):
         scalar_text += "  part_str = part_str + '.' + ms_str\n"
         scalar_text += "res[i] = part_str"
     elif is_valid_timedelta_arg(arr):
-        scalar_text = "v = bodo.utils.conversion.unbox_if_timestamp(arg0)\n"
+        scalar_text = "v = bodo.utils.conversion.unbox_if_tz_naive_timestamp(arg0)\n"
         scalar_text += "with bodo.objmode(r=bodo.string_type):\n"
         scalar_text += "    r = str(v)\n"
         scalar_text += "res[i] = r"
@@ -447,7 +447,7 @@ def to_date_util(
     ) or bodo.utils.utils.is_array_typ(optionalConversionFormatString, True)
 
     # When returning a scalar we return a pd.Timestamp type.
-    unbox_str = "unbox_if_timestamp" if is_out_arr else ""
+    unbox_str = "unbox_if_tz_naive_timestamp" if is_out_arr else ""
 
     # If the format string is specified, then arg0 must be string
     if not is_overload_none(optionalConversionFormatString):
@@ -526,7 +526,7 @@ def to_date_util(
         "int_to_datetime": int_to_datetime,
         "float_to_datetime": float_to_datetime,
         "convert_sql_date_format_str_to_py_format": convert_sql_date_format_str_to_py_format,
-        "unbox_if_timestamp": bodo.utils.conversion.unbox_if_timestamp,
+        "unbox_if_tz_naive_timestamp": bodo.utils.conversion.unbox_if_tz_naive_timestamp,
     }
     return gen_vectorized(
         arg_names,

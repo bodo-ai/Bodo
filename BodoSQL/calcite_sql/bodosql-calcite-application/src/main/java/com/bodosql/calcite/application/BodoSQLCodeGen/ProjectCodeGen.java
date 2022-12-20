@@ -1,6 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoScalarArrayType;
+import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
 import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.application.BodoSQLExprType;
@@ -9,9 +9,9 @@ import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeMap;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.type.SqlTypeName;
 
 /**
  * Class that returns the generated code for Project expressions after all inputs have been visited.
@@ -65,7 +65,7 @@ public class ProjectCodeGen {
       String outVar,
       List<RexNodeVisitorInfo> childExprs,
       List<BodoSQLExprType.ExprType> exprTypes,
-      List<SqlTypeName> sqlTypes,
+      List<RelDataType> sqlTypes,
       PandasCodeGenVisitor pdVisitorClass,
       int numInputTableColumns) {
 
@@ -128,7 +128,7 @@ public class ProjectCodeGen {
       if (exprTypes.get(idx) == BodoSQLExprType.ExprType.SCALAR) {
         // Scalars require separate code path to handle null.
         String globalName =
-            pdVisitorClass.lowerAsGlobal(sqlTypeToBodoScalarArrayType(sqlTypes.get(idx)));
+            pdVisitorClass.lowerAsGlobal(sqlTypeToBodoArrayType(sqlTypes.get(idx), true));
         outString
             .append("bodo.utils.conversion.coerce_scalar_to_array(")
             .append(childExprs.get(idx).getExprCode())

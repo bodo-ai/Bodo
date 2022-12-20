@@ -2646,9 +2646,13 @@ def ffill_bfill_overload(A, method, parallel=False):
     elif _dtype == types.bool_:
         null_value = "False"
     elif _dtype == bodo.datetime64ns:
-        null_value = "bodo.utils.conversion.unbox_if_timestamp(pd.to_datetime(0))"
+        null_value = (
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_datetime(0))"
+        )
     elif _dtype == bodo.timedelta64ns:
-        null_value = "bodo.utils.conversion.unbox_if_timestamp(pd.to_timedelta(0))"
+        null_value = (
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp(pd.to_timedelta(0))"
+        )
     else:
         null_value = "0"
 

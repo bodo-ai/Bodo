@@ -67,7 +67,10 @@ public class ExtractCodeGen {
         if (outputScalar) {
           extractCode = "bodosql.libs.generated_lib.sql_null_checking_weekofyear(" + column + ")";
         } else {
-          extractCode = "pd.Series(" + column + ").dt.isocalendar().week.values";
+          extractCode =
+              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                  + column
+                  + ").dt.isocalendar().week)";
         }
         break;
       default:

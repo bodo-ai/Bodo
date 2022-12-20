@@ -1333,7 +1333,7 @@ linear_kernels = {
 # shift -------------
 
 # dummy
-def shift():  # pragma: no cover
+def shift(in_arr, shift, parallel, default_fill_value=None):  # pragma: no cover
     return
 
 
@@ -1439,7 +1439,9 @@ def shift_seq(
             bodo.libs.array_kernels.setna_slice(output, slice(None, shift))
         else:
             for i in range(shift):
-                output[i] = bodo.utils.conversion.unbox_if_timestamp(default_fill_value)
+                output[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                    default_fill_value
+                )
 
     # range is shift..N for positive shift, 0..N+shift for negative shift
     start = max(shift, 0)
@@ -1457,7 +1459,9 @@ def shift_seq(
             bodo.libs.array_kernels.setna_slice(output, slice(shift, None))
         else:
             for i in range(end, N):
-                output[i] = bodo.utils.conversion.unbox_if_timestamp(default_fill_value)
+                output[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                    default_fill_value
+                )
 
     return output
 
@@ -1503,7 +1507,10 @@ def is_supported_shift_array_type(arr_type):
                 or arr_type.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
             )
         )
-        or isinstance(arr_type, (bodo.IntegerArrayType, bodo.DecimalArrayType))
+        or isinstance(
+            arr_type,
+            (bodo.IntegerArrayType, bodo.DecimalArrayType, bodo.DatetimeArrayType),
+        )
         or arr_type
         in (
             bodo.boolean_array,

@@ -1055,7 +1055,7 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     #         or bodo.libs.array_kernels.isna(rhs, i)):
     #       bodo.libs.array_kernels.setna(out_arr, i)
     #       continue
-    #     out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(op(lhs[i], rhs[i]))
+    #     out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(op(lhs[i], rhs[i]))
     #   return out_arr
     access_str1 = "lhs" if is_lhs_scalar else "lhs[i]"
     access_str2 = "rhs" if is_rhs_scalar else "rhs[i]"
@@ -1072,7 +1072,7 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     func_text += "        or {}):\n".format(na_str2)
     func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
     func_text += "      continue\n"
-    func_text += "    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(op({}, {}))\n".format(
+    func_text += "    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(op({}, {}))\n".format(
         access_str1, access_str2
     )
     func_text += "  return out_arr\n"
@@ -1108,7 +1108,7 @@ def get_int_array_op_pd_td(op):
                     if bodo.libs.array_kernels.isna(rhs, i):
                         bodo.libs.array_kernels.setna(out_arr, i)
                         continue
-                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                         op(lhs, rhs[i])
                     )
                 return out_arr
@@ -1123,7 +1123,7 @@ def get_int_array_op_pd_td(op):
                     if bodo.libs.array_kernels.isna(lhs, i):
                         bodo.libs.array_kernels.setna(out_arr, i)
                         continue
-                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                         op(lhs[i], rhs)
                     )
                 return out_arr

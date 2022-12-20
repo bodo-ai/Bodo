@@ -458,7 +458,9 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
 
             # Scalars will return Timestamp values while vectors will remain
             # in datetime64 format
-            unbox_str = "bodo.utils.conversion.unbox_if_timestamp" if is_vector else ""
+            unbox_str = (
+                "bodo.utils.conversion.unbox_if_tz_naive_timestamp" if is_vector else ""
+            )
             box_str = "bodo.utils.conversion.box_if_dt64" if is_vector else ""
 
             if unit in ("months", "years"):
@@ -706,7 +708,7 @@ def day_timestamp_util(arr):
     verify_int_arg(arr, "day_timestamp", "arr")
     # When returning a scalar we return a pd.Timestamp type.
     unbox_str = (
-        "bodo.utils.conversion.unbox_if_timestamp"
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if bodo.utils.utils.is_array_typ(arr, True)
         else ""
     )
@@ -737,7 +739,7 @@ def int_to_days_util(arr):
     verify_int_arg(arr, "int_to_days", "arr")
     # When returning a scalar we return a pd.Timestamp type.
     unbox_str = (
-        "bodo.utils.conversion.unbox_if_timestamp"
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if bodo.utils.utils.is_array_typ(arr, True)
         else ""
     )
@@ -769,7 +771,7 @@ def last_day_util(arr):
     verify_datetime_arg(arr, "LAST_DAY", "arr")
     # When returning a scalar we return a pd.Timestamp type.
     unbox_str = (
-        "bodo.utils.conversion.unbox_if_timestamp"
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if bodo.utils.utils.is_array_typ(arr, True)
         else ""
     )
@@ -801,7 +803,7 @@ def makedate_util(year, day):
     verify_int_arg(day, "MAKEDATE", "day")
     # When returning a scalar we return a pd.Timestamp type.
     unbox_str = (
-        "bodo.utils.conversion.unbox_if_timestamp"
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if bodo.utils.utils.is_array_typ(year, True)
         or bodo.utils.utils.is_array_typ(day, True)
         else ""
@@ -870,7 +872,7 @@ def next_day_util(arr0, arr1):
 
     # When returning a scalar we always return a pd.Timestamp type.
     unbox_str = (
-        "bodo.utils.conversion.unbox_if_timestamp"
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if not is_input_tz_aware
         and (
             bodo.utils.utils.is_array_typ(arr0, True)
@@ -931,7 +933,7 @@ def previous_day_util(arr0, arr1):
 
     # When returning a scalar we always return a pd.Timestamp type.
     unbox_str = (
-        "bodo.utils.conversion.unbox_if_timestamp"
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if not is_input_tz_aware
         and (
             bodo.utils.utils.is_array_typ(arr0, True)
@@ -1023,7 +1025,7 @@ def second_timestamp_util(arr):
     verify_int_arg(arr, "second_timestamp", "arr")
     # When returning a scalar we return a pd.Timestamp type.
     unbox_str = (
-        "bodo.utils.conversion.unbox_if_timestamp"
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if bodo.utils.utils.is_array_typ(arr, True)
         else ""
     )
