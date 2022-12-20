@@ -51,7 +51,10 @@ public class SinceEpochFnCodeGen {
               + TimeDeltaFromUnixEpoch
               + ")";
     } else {
-      daysSinceUnixEpoch = "pd.Series(" + TimeDeltaFromUnixEpoch + ").dt.days.values";
+      daysSinceUnixEpoch =
+          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+              + TimeDeltaFromUnixEpoch
+              + ").dt.days)";
     }
 
     List<String> args2 = Arrays.asList(daysSinceUnixEpoch, dayDeltaUnixY0);
@@ -94,7 +97,10 @@ public class SinceEpochFnCodeGen {
               + TimeDeltaFromUnixEpoch
               + "))";
     } else {
-      secondsSinceUnixEpoch = "pd.Series(" + TimeDeltaFromUnixEpoch + ").dt.total_seconds().values";
+      secondsSinceUnixEpoch =
+          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+              + TimeDeltaFromUnixEpoch
+              + ").dt.total_seconds())";
     }
 
     List<String> args2 = Arrays.asList(secondsSinceUnixEpoch, secondDeltaUnixY0);

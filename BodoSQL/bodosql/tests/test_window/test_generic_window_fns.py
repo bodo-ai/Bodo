@@ -96,8 +96,11 @@ def test_non_numeric_window_functions(
                 selects.append(
                     f"{funcs[i]}({col}) OVER ({window_frames[0][(i+j) % len(window_frames[0])]})"
                 )
+    # Convert the spark input to tz-naive bc it can't handle timezones
+    convert_columns_tz_naive = ["TZ"]
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     spark_query = get_equivalent_spark_agg_query(query)
+    # TODO: Generate an expected output instead so we properly support TZ-Aware
     pandas_code = check_query(
         query,
         all_window_df,
@@ -108,6 +111,7 @@ def test_non_numeric_window_functions(
         check_names=False,
         return_codegen=True,
         only_jit_1DVar=True,
+        convert_columns_tz_naive=convert_columns_tz_naive,
     )["pandas_code"]
 
     # Verify that fusion is working correctly. The term window_frames[1] refers
@@ -129,7 +133,7 @@ def test_first_last_any_nth(
     convert_columns_bytearray = []
     for i in range(len(batches)):
         funcs = batches[i]
-        for j, col in enumerate(["I64", "DT", "ST", "BI"]):
+        for j, col in enumerate(["I64", "DT", "ST", "BI", "TZ"]):
             if type(all_window_df["table1"][col].iloc[0]) == bytes:
                 convert_columns_bytearray.append(f"C_{i}_{j}")
             selects.append(
@@ -137,6 +141,8 @@ def test_first_last_any_nth(
             )
     query = f"SELECT W4, {', '.join(selects)} FROM table1"
     spark_query = get_equivalent_spark_agg_query(query)
+    # Convert the spark input to tz-naive bc it can't handle timezones
+    convert_columns_tz_naive = ["TZ"]
     pandas_code = check_query(
         query,
         all_window_df,
@@ -148,6 +154,7 @@ def test_first_last_any_nth(
         return_codegen=True,
         only_jit_1DVar=True,
         convert_columns_bytearray=convert_columns_bytearray,
+        convert_columns_tz_naive=convert_columns_tz_naive,
     )["pandas_code"]
 
     # Verify that fusion is working correctly. The term window_frames[1] refers
@@ -197,7 +204,7 @@ def test_first_value_last_value_optimized(
 
 def test_blended_fusion(memory_leak_check):
     """Tests fusion between RANK, AVG, MEDIAN, MODE and CONDITIONAL_CHANGE_EVENT.
-    This allows window funcitons that are not tested together to have one
+    This allows window functions that are not tested together to have one
     test that checks that they can all be fused into the same closure."""
     ctx = {
         "table1": pd.DataFrame(

@@ -10,6 +10,7 @@ import com.bodosql.calcite.application.BodoSQLCodegenException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Pair;
@@ -131,7 +132,7 @@ public class WindowAggCodeGen {
       final List<String> sortByList,
       final List<SqlKind> aggs,
       final List<String> aggNames,
-      final List<SqlTypeName> typs,
+      final List<RelDataType> typs,
       final List<Boolean> lowerBoundedFlags,
       final List<Boolean> upperBoundedFlags,
       final List<String> lowerBoundExprs,
@@ -350,7 +351,7 @@ public class WindowAggCodeGen {
            *   for j in range(len(arr0)):
            *     bodo.libs.array_kernels.setna(arr0, j)
            * else:
-           *   val0 = bodo.utils.conversion.unbox_if_timestamp(target_arr0[0])
+           *   val0 = target_arr0[0]
            *   arr0 = np.empty(argument_df_len, dtype="datetime64[ns]")
            *   for j in range(len(arr0)):
            *     arr0[j] = val0
@@ -377,13 +378,15 @@ public class WindowAggCodeGen {
              *
              * n = max(1, np.int32(3))
              * arr0 = np.empty(argument_df_len, dtype="datetime64[ns]")
+             * in_arr0 = bodo.hiframes.pd_series.ext.get_series_data(sorted_df["AGG_OP_0"])
              * for i in range(argument_df_len):
              *   cur_lower_bound = 0
              *   cur_upper_bound = max(0, i + np.int64(0) + 1)
-             *   if cur_lower_bound >= cur_upper_bound or cur_lower_bound + n - 1 >= argument_df_len or (cur_upper_bound - cur_lower_bound) < n:
+             *   cur_idx = cur_lower_bound + n - 1
+             *   if cur_lower_bound >= cur_upper_bound or cur_lower_bound + n - 1 >= argument_df_len or (cur_upper_bound - cur_lower_bound) < n or bodo.libs.array_kernels.isna(in_arr0, cur_idx):
              *     bodo.libs.array_kernels.setna(arr0, i)
              *   else:
-             *     arr0[i] = bodo.utils.conversion.unbox_if_timestamp(sorted_df["AGG_OP_0"].iloc[cur_lower_bound + n - 1])
+             *     arr0[i] = in_arr0[cur_idx]
              */
           } else {
             needsToRevertSort |= hasOrder;
@@ -461,7 +464,7 @@ public class WindowAggCodeGen {
      *    if slice0.count() == 0:
      *      bodo.libs.array_kernels.setna(arr0, i)
      *    else:
-     *      arr0[i] = bodo.utils.conversion.unbox_if_timestamp(slice0.min())
+     *      arr0[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(slice0.min())
      *    ...
      */
     if (loopAggNames.size() > 0) {
@@ -516,7 +519,7 @@ public class WindowAggCodeGen {
    */
   private static void generateFirstLastNth(
       StringBuilder funcText,
-      final List<SqlTypeName> typs,
+      final List<RelDataType> typs,
       final String partitionLength,
       final boolean lowerBounded,
       final boolean upperBounded,
@@ -527,32 +530,41 @@ public class WindowAggCodeGen {
       final List<String> arraysToSort,
       final int i) {
 
-    String ilocIndex;
+    String arrIdx;
 
     // Which index is the target value exctracted from
     if (aggName == "FIRST_VALUE" || aggName == "ANY_VALUE") {
       assertWithErrMsg(argsList.size() >= 1, aggName + " requires 1 argument");
-      ilocIndex = "cur_lower_bound";
+      arrIdx = "cur_lower_bound";
     } else if (aggName == "LAST_VALUE") {
       assertWithErrMsg(argsList.size() >= 1, aggName + " requires 1 argument");
-      ilocIndex = "cur_upper_bound - 1";
+      arrIdx = "cur_upper_bound - 1";
     } else {
       assertWithErrMsg(argsList.size() >= 1, aggName + " requires 2 arguments");
-      ilocIndex = "cur_lower_bound + n - 1";
+      arrIdx = "cur_lower_bound + n - 1";
       addIndent(funcText, 2);
       funcText.append("n = max(1, " + argsList.get(1).getExprString() + ")\n");
     }
 
     assertWithErrMsg(argsList.get(0).isDfCol(), aggName + " requires a column input");
 
-    String array_name = "arr" + String.valueOf(i);
+    String outputArrayName = "arr" + String.valueOf(i);
+    String inputArrayName = "in_arr" + String.valueOf(i);
     WindowedAggregationArgument arg0 = argsList.get(0);
     String arg0ColName = arg0.getExprString();
 
     // Build the array to store the output
     addIndent(funcText, 2);
-    funcText.append(array_name).append(" = ");
+    funcText.append(outputArrayName).append(" = ");
     funcText.append(sqlTypeToNullableBodoArray(partitionLength, typs.get(i)) + "\n");
+
+    // Load the input array
+    addIndent(funcText, 2);
+    funcText
+        .append(inputArrayName)
+        .append(" = bodo.hiframes.pd_series_ext.get_series_data(sorted_df[")
+        .append(makeQuoted(arg0ColName))
+        .append("])\n");
 
     // Loop over each entry and calculate the current upper/lower bound of the window
     // (handling defaults appropriately)
@@ -560,58 +572,54 @@ public class WindowAggCodeGen {
     funcText.append("for i in range(" + partitionLength + "):\n");
     if (lowerBounded) {
       addIndent(funcText, 3);
-      funcText.append("cur_lower_bound = max(0, i + " + lowerBound + ")\n");
+      funcText.append(
+          "cur_lower_bound = min(max(0, i + " + lowerBound + "), " + partitionLength + ")\n");
     } else {
       addIndent(funcText, 3);
       funcText.append("cur_lower_bound = 0\n");
     }
     if (upperBounded) {
       addIndent(funcText, 3);
-      funcText.append("cur_upper_bound = max(0, i + " + upperBound + " + 1)\n");
+      funcText.append(
+          "cur_upper_bound = min(max(0, i + " + upperBound + " + 1), " + partitionLength + ")\n");
     } else {
       addIndent(funcText, 3);
-      funcText.append("cur_upper_bound = " + partitionLength + " - 1\n");
+      funcText.append("cur_upper_bound = " + partitionLength + "\n");
     }
+    // Create the current index as its own variable.
+    addIndent(funcText, 3);
+    funcText.append("cur_idx = " + arrIdx + "\n");
 
-    // Add the condition to check whether or not the window frame is out
+    // Add the condition to check whether the window frame is out
     // of bounds
     addIndent(funcText, 3);
-    funcText
-        .append("if cur_lower_bound >= cur_upper_bound or ")
-        .append(ilocIndex)
-        .append(" >= ")
-        .append(partitionLength);
+    funcText.append("if (cur_lower_bound >= cur_upper_bound)");
 
     // For NTH value, also make sure that the window is wide enough to have
-    // at least n values inside of it
+    // at least n values inside it
     if (aggName == "NTH_VALUE") {
-      funcText.append(" or (cur_upper_bound - cur_lower_bound) < n");
+      funcText.append(" or ((cur_upper_bound - cur_lower_bound) < n)");
     }
+    // If the input is already NA the output should be NA.
     funcText
-        .append(" or bodo.libs.array_kernels.isna(sorted_df[")
-        .append(makeQuoted(arg0ColName))
-        .append("].values, ")
-        .append(ilocIndex)
-        .append("):\n");
+        .append(" or bodo.libs.array_kernels.isna(")
+        .append(inputArrayName)
+        .append(", cur_idx)");
+    funcText.append(":\n");
 
     // If its out of bounds (or too small), then the output is NULL
     addIndent(funcText, 4);
-    funcText.append("bodo.libs.array_kernels.setna(" + array_name + ", i)\n");
+    funcText.append("bodo.libs.array_kernels.setna(" + outputArrayName + ", i)\n");
 
     // Otherwise, extract the corresponding location of the input array
     // and place it in index i of the output array
     addIndent(funcText, 3);
     funcText.append("else:\n");
     addIndent(funcText, 4);
-    funcText
-        .append(array_name + "[i] = bodo.utils.conversion.unbox_if_timestamp(sorted_df[")
-        .append(makeQuoted(arg0ColName))
-        .append("].iloc[")
-        .append(ilocIndex)
-        .append("])\n");
+    funcText.append(outputArrayName + "[i] = ").append(inputArrayName).append("[cur_idx]\n");
 
     // Register the output array
-    arraysToSort.add(array_name);
+    arraysToSort.add(outputArrayName);
   }
 
   /**
@@ -632,7 +640,7 @@ public class WindowAggCodeGen {
    */
   private static void generateOptimizedFirstLast(
       StringBuilder funcText,
-      final List<SqlTypeName> typs,
+      final List<RelDataType> typs,
       final String partitionLength,
       final boolean lowerBounded,
       final boolean upperBounded,
@@ -646,8 +654,10 @@ public class WindowAggCodeGen {
     assertWithErrMsg(argsList.size() == 1, aggName + " requires 1 input");
     assertWithErrMsg(argsList.get(0).isDfCol(), aggName + " requires a column input");
 
-    SqlTypeName type_name = typs.get(i);
-    String array_name = "arr" + String.valueOf(i);
+    // Get the type and its name.
+    RelDataType typ = typs.get(i);
+    SqlTypeName type_name = typs.get(i).getSqlTypeName();
+    String outputArrayName = "arr" + String.valueOf(i);
     WindowedAggregationArgument arg0 = argsList.get(0);
     String arg0ColName = arg0.getExprString();
 
@@ -682,8 +692,7 @@ public class WindowAggCodeGen {
       } else {
         addIndent(na_arr_call, 3);
         na_arr_call.append(
-            String.format(
-                "arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, type_name)));
+            String.format("arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, typ)));
       }
       addIndent(na_arr_call, 3);
       na_arr_call.append(String.format("for j in range(len(arr%d)):\n", i));
@@ -699,10 +708,7 @@ public class WindowAggCodeGen {
       // Strings have an optimized path that don't require any intermediate allocations
       // so we don't generate a val.
       addIndent(fill_op, 3);
-      fill_op.append(
-          String.format(
-              "val%d = bodo.utils.conversion.unbox_if_timestamp(target_arr%d[%s])\n",
-              i, i, target_idx));
+      fill_op.append(String.format("val%d = target_arr%d[%s]\n", i, i, target_idx));
     }
     if (SqlTypeName.CHAR_TYPES.contains(type_name)) {
       // We generate a dummy array for gen_na_str_array_lens because we have an optimized path
@@ -723,7 +729,7 @@ public class WindowAggCodeGen {
     } else {
       addIndent(fill_op, 3);
       fill_op.append(
-          String.format("arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, type_name)));
+          String.format("arr%d = %s\n", i, sqlTypeToNullableBodoArray(partitionLength, typ)));
     }
     addIndent(fill_op, 3);
     fill_op.append(String.format("for j in range(len(arr%d)):\n", i));
@@ -753,7 +759,7 @@ public class WindowAggCodeGen {
     funcText.append("else:\n");
     funcText.append(fill_op);
 
-    arraysToSort.add(array_name);
+    arraysToSort.add(outputArrayName);
   }
 
   /**
@@ -775,7 +781,7 @@ public class WindowAggCodeGen {
    */
   private static void generateLoopBasedWindowFn(
       StringBuilder funcText,
-      final List<SqlTypeName> typs,
+      final List<RelDataType> typs,
       final String partitionLength,
       final List<Boolean> lowerBoundedFlags,
       final List<Boolean> upperBoundedFlags,
@@ -813,7 +819,7 @@ public class WindowAggCodeGen {
           // If MIN/MAX, verify that the inputs are not strings
         case "MAX":
         case "MIN":
-          if (SqlTypeName.STRING_TYPES.contains(typs.get(i))) {
+          if (SqlTypeName.STRING_TYPES.contains(typs.get(i).getSqlTypeName())) {
             throw new BodoSQLCodegenException(
                 "Windowed aggregation function "
                     + aggNames.get(i)
@@ -855,7 +861,7 @@ public class WindowAggCodeGen {
         funcText.append("cur_upper_bound = max(0, i + " + upperBound + " + 1)\n");
       }
 
-      // Handle count seperately by taking the difference between the upper
+      // Handle count separately by taking the difference between the upper
       // bound and the lower bound
       if (aggNames.get(i) == "COUNT(*)") {
 
@@ -916,7 +922,7 @@ public class WindowAggCodeGen {
       funcText
           .append(aggOutputs.get(i))
           .append("[i] = ")
-          .append("bodo.utils.conversion.unbox_if_timestamp(")
+          .append("bodo.utils.conversion.unbox_if_tz_naive_timestamp(")
           .append(columnAggCall)
           .append(")\n");
     }

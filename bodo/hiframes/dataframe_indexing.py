@@ -1003,7 +1003,7 @@ def overload_iat_setitem(I, idx, val):
         def impl_col_ind(I, idx, val):  # pragma: no cover
             df = I._obj
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
-            data[idx[0]] = bodo.utils.conversion.unbox_if_timestamp(val)
+            data[idx[0]] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(val)
 
         return impl_col_ind
 

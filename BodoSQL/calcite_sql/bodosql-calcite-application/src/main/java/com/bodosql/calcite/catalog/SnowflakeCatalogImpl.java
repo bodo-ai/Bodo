@@ -312,7 +312,9 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
             BodoSQLColumnDataType.fromJavaSqlType(JDBCType.valueOf(dataType));
         // The column is nullable unless we are certain it has no nulls.
         boolean nullable = tableInfo.getInt(11) != DatabaseMetaData.columnNoNulls;
-        columns.add(new BodoSQLColumnImpl(readName, writeName, type, nullable, tzInfo));
+        // The precision value is held in field 9, decimal digits
+        int precision = tableInfo.getInt(9);
+        columns.add(new BodoSQLColumnImpl(readName, writeName, type, nullable, tzInfo, precision));
       }
       return new CatalogTableImpl(tableName, schema, columns);
     } catch (SQLException e) {

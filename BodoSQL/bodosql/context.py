@@ -110,10 +110,6 @@ _numba_to_sql_column_type_map = {
     types.bool_: SqlTypeEnum.Bool.value,
     bodo.string_type: SqlTypeEnum.String.value,
     bodo.bytes_type: SqlTypeEnum.Binary.value,
-    bodo.TimeType(0): SqlTypeEnum.Time.value,
-    bodo.TimeType(3): SqlTypeEnum.Time.value,
-    bodo.TimeType(6): SqlTypeEnum.Time.value,
-    bodo.TimeType(9): SqlTypeEnum.Time.value,
     # Note date doesn't have native support yet, but the code to
     # cast to datetime64 is handled in the Java code.
     bodo.datetime_date_type: SqlTypeEnum.Date.value,
@@ -141,10 +137,6 @@ _numba_to_sql_param_type_map = {
     # and is support only for scalars
     bodo.date_offset_type: SqlTypeEnum.DateOffset.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
-    bodo.TimeType(0): SqlTypeEnum.Time.value,
-    bodo.TimeType(3): SqlTypeEnum.Time.value,
-    bodo.TimeType(6): SqlTypeEnum.Time.value,
-    bodo.TimeType(9): SqlTypeEnum.Time.value,
 }
 
 
@@ -170,6 +162,30 @@ def construct_tz_aware_column_type(typ, col_name, nullable):
     )
 
 
+def construct_time_column_type(
+    typ: Union[bodo.TimeArrayType, bodo.TimeType], col_name: str, nullable: bool
+):
+    """Construct a BodoSQL column type for a time
+    value.
+
+    Args:
+        typ (Union[bodo.TimeArrayType, bodo.TimeType]): A time Bodo type
+        col_name (str): Column name
+        nullable (bool): Is the column Nullable
+
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type.
+    """
+    # Create the BodoTzInfo Java object.
+    precision = typ.precision
+    return ColumnClass(
+        col_name,
+        ColumnTypeClass.fromTypeId(SqlTypeEnum.Time.value),
+        nullable,
+        precision,
+    )
+
+
 def get_sql_column_type(arr_type, col_name):
     """get SQL type for a given array type."""
     warning_msg = f"DataFrame column '{col_name}' with type {arr_type} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
@@ -177,6 +193,9 @@ def get_sql_column_type(arr_type, col_name):
     if isinstance(arr_type, bodo.DatetimeArrayType):
         # Timezone-aware Timestamp columns have their own special handling.
         return construct_tz_aware_column_type(arr_type, col_name, nullable)
+    elif isinstance(arr_type, bodo.TimeArrayType):
+        # Time array types have their own special handling for precision
+        return construct_time_column_type(arr_type, col_name, nullable)
     elif arr_type.dtype in _numba_to_sql_column_type_map:
         col_dtype = ColumnTypeClass.fromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
@@ -218,7 +237,10 @@ def get_sql_param_type(param_type, param_name):
         and unliteral_type.tz != None
     ):
         # Timezone-aware Timestamps have their own special handling.
-        return construct_tz_aware_column_type(param_name, param_type, nullable)
+        return construct_tz_aware_column_type(param_type, param_name, nullable)
+    elif isinstance(unliteral_type, bodo.TimeType):
+        # Time array types have their own special handling for precision
+        return construct_time_column_type(param_type, param_name, nullable)
     elif unliteral_type in _numba_to_sql_param_type_map:
         return (
             ColumnClass(

@@ -26,7 +26,10 @@ public interface BodoSQLColumn {
 
   BodoTZInfo getTZInfo();
 
-  RelDataType convertToSqlType(RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo);
+  int getPrecision();
+
+  RelDataType convertToSqlType(
+      RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo, int precision);
 
   /**
    * Does reading this column type need to be cast to another Bodo type to match the generated Java
@@ -154,7 +157,7 @@ public interface BodoSQLColumn {
     }
 
     public RelDataType convertToSqlType(
-        RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo) {
+        RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo, int precision) {
       RelDataType temp;
       switch (this) {
         case INT8:
@@ -188,7 +191,7 @@ public interface BodoSQLColumn {
           temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);
           break;
         case TIME:
-          temp = typeFactory.createSqlType(SqlTypeName.TIME);
+          temp = typeFactory.createSqlType(SqlTypeName.TIME, precision);
           break;
         case DATETIME:
           temp = typeFactory.createSqlType(SqlTypeName.TIMESTAMP);

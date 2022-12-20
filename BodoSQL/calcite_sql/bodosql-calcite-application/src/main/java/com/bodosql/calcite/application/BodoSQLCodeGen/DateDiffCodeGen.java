@@ -66,7 +66,8 @@ public class DateDiffCodeGen {
       return "bodosql.libs.generated_lib.sql_null_checking_pd_timedelta_days(" + expr + ")";
     } else {
       // TODO: use a direct array kernel
-      return String.format("pd.Series(%s).dt.days.values", expr);
+      return String.format(
+          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series(%s).dt.days)", expr);
     }
   }
 

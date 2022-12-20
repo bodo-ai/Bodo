@@ -46,7 +46,7 @@ import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.logical.*;
-import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.*;
@@ -579,13 +579,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
         this.varCache.put(nodeId, new Pair<>(projectOutVar, outputColumns));
       } else {
         List<RelDataTypeField> fields = node.getRowType().getFieldList();
-        List<SqlTypeName> sqlTypes = new ArrayList<>();
+        List<RelDataType> sqlTypes = new ArrayList<>();
         for (int i = 0; i < node.getNamedProjects().size(); i++) {
           Pair<RexNode, String> named_r = node.getNamedProjects().get(i);
           RexNode r = named_r.getKey();
           String alias = named_r.getValue();
           exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(r, nodeId)));
-          sqlTypes.add(fields.get(i).getType().getSqlTypeName());
+          sqlTypes.add(fields.get(i).getType());
 
           if (r instanceof RexOver) {
             windowAggList.add((RexOver) r);
@@ -1451,8 +1451,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       for (Integer j = 0; j < aggSet.size(); j++) {
         String outputDfColName = outputDfColnameList.get(j);
         String outputCode =
-            new StringBuilder(generatedDfName)
-                .append("[" + makeQuoted(outputDfColName) + "].values")
+            new StringBuilder("bodo.hiframes.pd_series_ext.get_series_data(")
+                .append(generatedDfName)
+                .append("[" + makeQuoted(outputDfColName) + "])")
                 .toString();
 
         // Map the output value back to the correct column location
@@ -1794,9 +1795,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           "Error, cannot currently perform windowed aggregation without a partition clause");
     }
 
-    List<SqlTypeName> typs = new ArrayList<>();
+    List<RelDataType> typs = new ArrayList<>();
     for (int i = 0; i < aggOperations.size(); i++) {
-      typs.add(aggOperations.get(i).getType().getSqlTypeName());
+      typs.add(aggOperations.get(i).getType());
     }
 
     List<String> outputColList;
@@ -2006,7 +2007,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         String expr = operandInfo.getExprCode();
         // Need to unbox scalar timestamp values.
         if (isSingleRow || (exprTypes.get(j) == BodoSQLExprType.ExprType.SCALAR)) {
-          expr = "bodo.utils.conversion.unbox_if_timestamp(" + expr + ")";
+          expr = "bodo.utils.conversion.unbox_if_tz_naive_timestamp(" + expr + ")";
           expr = generateNullCheck(inputVar, colNames, nullsets.get(j), "None", expr, isSingleRow);
         }
         codeExprs.add(expr);
@@ -2185,7 +2186,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
             if (isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR) {
               exprUppercase = expr + ".upper()";
             } else if (exprType == BodoSQLExprType.ExprType.COLUMN) {
-              exprUppercase = "pd.Series(" + expr + ").str.upper().values";
+              exprUppercase =
+                  "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                      + expr
+                      + ").str.upper())";
             } else {
               throw new BodoSQLCodegenException(
                   "Internal Error: Function: upper only supported for column and scalar types");
@@ -2200,7 +2204,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
             if (isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR) {
               exprLowercase = expr + ".lower()";
             } else if (exprType == BodoSQLExprType.ExprType.COLUMN) {
-              exprLowercase = "pd.Series(" + expr + ").str.lower().values";
+              exprLowercase =
+                  "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                      + expr
+                      + ").str.lower())";
             } else {
               throw new BodoSQLCodegenException(
                   "Internal Error: Function: lower only supported for column and scalar types");

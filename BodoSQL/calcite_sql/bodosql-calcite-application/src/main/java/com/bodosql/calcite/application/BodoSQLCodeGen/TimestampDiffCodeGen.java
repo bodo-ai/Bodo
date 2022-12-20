@@ -113,42 +113,59 @@ public class TimestampDiffCodeGen {
         if (allArgsScalar) {
           output = diffExpr + ".value";
         } else {
-          output = diffExpr + ".astype(\"Int64\").values";
+          output =
+              "bodo.hiframes.pd_series_ext.get_series_data(" + diffExpr + ".astype(\"Int64\"))";
         }
         break;
       case "MICROSECOND":
         if (allArgsScalar) {
           output = "np.int64(" + diffExpr + ".value / 1000" + ")";
         } else {
-          output = "(" + diffExpr + ".astype(\"Int64\") / 1000" + ").astype(\"Int64\").values";
+          output =
+              "bodo.hiframes.pd_series_ext.get_series_data(("
+                  + diffExpr
+                  + ".astype(\"Int64\") / 1000"
+                  + ").astype(\"Int64\"))";
         }
         break;
       case "SECOND":
         if (allArgsScalar) {
           output = "np.int64(" + diffExpr + ".value / 1000000000" + ")";
         } else {
-          output = diffExpr + ".dt.total_seconds().astype(\"Int64\").values";
+          output =
+              "bodo.hiframes.pd_series_ext.get_series_data("
+                  + diffExpr
+                  + ".dt.total_seconds().astype(\"Int64\"))";
         }
         break;
       case "MINUTE":
         if (allArgsScalar) {
           output = "np.int64(" + diffExpr + ".value / 60000000000)";
         } else {
-          output = "(" + diffExpr + ".dt.total_seconds() / 60).astype(\"Int64\").values";
+          output =
+              "bodo.hiframes.pd_series_ext.get_series_data(("
+                  + diffExpr
+                  + ".dt.total_seconds() / 60).astype(\"Int64\"))";
         }
         break;
       case "HOUR":
         if (allArgsScalar) {
           output = "np.int64(" + diffExpr + ".value / 3600000000000)";
         } else {
-          output = "(" + diffExpr + ".dt.total_seconds() / 3600).astype(\"Int64\").values";
+          output =
+              "bodo.hiframes.pd_series_ext.get_series_data(("
+                  + diffExpr
+                  + ".dt.total_seconds() / 3600).astype(\"Int64\"))";
         }
         break;
       case "DAY":
         if (allArgsScalar) {
           output = "np.int64(" + diffExpr + ".value / 86400000000000)";
         } else {
-          output = "(" + diffExpr + ".dt.total_seconds() / 86400).astype(\"Int64\").values";
+          output =
+              "bodo.hiframes.pd_series_ext.get_series_data(("
+                  + diffExpr
+                  + ".dt.total_seconds() / 86400).astype(\"Int64\"))";
         }
         break;
       case "WEEK":
@@ -160,7 +177,10 @@ public class TimestampDiffCodeGen {
         if (allArgsScalar) {
           output = "np.int64(" + diffExpr + ".value / 604800000000000)";
         } else {
-          output = "(" + diffExpr + ".dt.total_seconds() / 604800).astype(\"Int64\").values";
+          output =
+              "bodo.hiframes.pd_series_ext.get_series_data(("
+                  + diffExpr
+                  + ".dt.total_seconds() / 604800).astype(\"Int64\"))";
         }
         break;
         // For these cases, we need to use a custom helper function, since months do not all
@@ -177,13 +197,19 @@ public class TimestampDiffCodeGen {
           if (allArgsScalar) {
             output = "np.int64(" + output + " / 3)";
           } else {
-            output = "pd.Series(" + output + " / 3).astype(\"Int64\").values";
+            output =
+                "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                    + output
+                    + " / 3).astype(\"Int64\"))";
           }
         } else if (flagName.equals("YEAR")) {
           if (allArgsScalar) {
             output = "np.int64(" + output + " / 12)";
           } else {
-            output = "pd.Series(" + output + " / 12).astype(\"Int64\").values";
+            output =
+                "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                    + output
+                    + " / 12).astype(\"Int64\"))";
           }
         }
 

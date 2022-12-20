@@ -3310,11 +3310,13 @@ def overload_series_fillna(
                         bodo.libs.array_kernels.setna(out_arr, i)
                         continue
                     if bodo.libs.array_kernels.isna(in_arr, i):
-                        out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                        out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                             fill_arr[i]
                         )
                         continue
-                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(in_arr[i])
+                    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                        in_arr[i]
+                    )
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return fillna_series_impl
@@ -3361,14 +3363,14 @@ def overload_series_fillna(
             limit=None,
             downcast=None,
         ):  # pragma: no cover
-            value = bodo.utils.conversion.unbox_if_timestamp(value)
+            value = bodo.utils.conversion.unbox_if_tz_naive_timestamp(value)
             in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             n = len(in_arr)
             out_arr = bodo.utils.utils.alloc_type(n, _dtype, (-1,))
             for i in numba.parfors.parfor.internal_prange(n):
-                s = bodo.utils.conversion.unbox_if_timestamp(in_arr[i])
+                s = bodo.utils.conversion.unbox_if_tz_naive_timestamp(in_arr[i])
                 if bodo.libs.array_kernels.isna(in_arr, i):
                     s = value
                 out_arr[i] = s
@@ -3937,8 +3939,6 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
         module_name="Series",
     )
 
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.shift()")
-
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int, dt64, nullable int/bool/decimal/date,
     # and string arrays are supported
@@ -4319,7 +4319,7 @@ def create_explicit_binary_op_overload(op):
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 numba.parfors.parfor.init_prange()
                 # Unbox other if necessary.
-                other = bodo.utils.conversion.unbox_if_timestamp(other)
+                other = bodo.utils.conversion.unbox_if_tz_naive_timestamp(other)
                 n = len(arr)
                 out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, (-1,))
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -4601,7 +4601,9 @@ def create_binary_op_overload(op):
                     name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                     rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
                     # Unbox the other value in case its a scalar
-                    out_arr = op(arr, bodo.utils.conversion.unbox_if_timestamp(rhs_arr))
+                    out_arr = op(
+                        arr, bodo.utils.conversion.unbox_if_tz_naive_timestamp(rhs_arr)
+                    )
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return impl
@@ -4628,7 +4630,9 @@ def create_binary_op_overload(op):
                     name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
                     lhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
                     # Unbox the other value in case its a scalar
-                    out_arr = op(bodo.utils.conversion.unbox_if_timestamp(lhs_arr), arr)
+                    out_arr = op(
+                        bodo.utils.conversion.unbox_if_tz_naive_timestamp(lhs_arr), arr
+                    )
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return impl
@@ -5102,10 +5106,8 @@ def overload_np_where(condition, x, y):
     if isinstance(x_dtype, bodo.PDCategoricalDtype):
         func_text += "      out_codes[j] = x_codes[j]\n"
     else:
-        func_text += (
-            "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
-                "x[j]" if is_x_arr else "x"
-            )
+        func_text += "      out_arr[j] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({})\n".format(
+            "x[j]" if is_x_arr else "x"
         )
     func_text += "    else:\n"
     if is_y_arr:
@@ -5118,10 +5120,8 @@ def overload_np_where(condition, x, y):
         else:
             func_text += "      setna(out_arr, j)\n"
     else:
-        func_text += (
-            "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
-                "y[j]" if is_y_arr else "y"
-            )
+        func_text += "      out_arr[j] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({})\n".format(
+            "y[j]" if is_y_arr else "y"
         )
     func_text += "  return out_arr\n"
     loc_vars = {}

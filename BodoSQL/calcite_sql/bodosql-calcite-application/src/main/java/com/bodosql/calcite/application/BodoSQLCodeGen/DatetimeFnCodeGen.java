@@ -59,7 +59,7 @@ public class DatetimeFnCodeGen {
             .append("bodo.utils.conversion.box_if_dt64(")
             .append(equivalentFnMap.get(fnName))
             .append("(")
-            .append("bodo.utils.conversion.unbox_if_timestamp(")
+            .append("bodo.utils.conversion.unbox_if_tz_naive_timestamp(")
             .append(arg1Expr)
             .append(")))");
       } else {
@@ -101,9 +101,9 @@ public class DatetimeFnCodeGen {
             .append("bodo.utils.conversion.box_if_dt64(")
             .append(equivalentFnMap.get(fnName))
             .append("(")
-            .append("bodo.utils.conversion.unbox_if_timestamp(")
+            .append("bodo.utils.conversion.unbox_if_tz_naive_timestamp(")
             .append(arg1Expr)
-            .append("),bodo.utils.conversion.unbox_if_timestamp(")
+            .append("),bodo.utils.conversion.unbox_if_tz_naive_timestamp(")
             .append(arg2Expr)
             .append(")))");
       } else {
@@ -212,19 +212,19 @@ public class DatetimeFnCodeGen {
           // Month rounds down to the start of the Month.
           // We add 1 Day to avoid boundaries
           outputExpression =
-              "((pd.Series("
+              "bodo.hiframes.pd_series_ext.get_series_data(((pd.Series("
                   + arg2Info.getExprCode()
                   + ") + pd.Timedelta(days=1)) - pd.tseries.offsets.MonthBegin(n=1,"
-                  + " normalize=True)).values";
+                  + " normalize=True)))";
           break;
         case "WEEK":
           // Week rounds down to the Monday of that week.
           // We add 1 Day to avoid boundaries
           outputExpression =
-              "((pd.Series("
+              "bodo.hiframes.pd_series_ext.get_series_data(((pd.Series("
                   + arg2Info.getExprCode()
                   + ") + pd.Timedelta(days=1)) - pd.tseries.offsets.Week(n=1, weekday=0,"
-                  + " normalize=True)).values";
+                  + " normalize=True)))";
           break;
         case "QUARTER":
           // TODO [BE-2305]: Support QuarterBegin in the Engine
@@ -232,22 +232,40 @@ public class DatetimeFnCodeGen {
               "DATE_TRUNC(): Specifying 'Quarter' for <date_or_time_part> not supported.");
         case "DAY":
           // For all timedelta valid values we can use .dt.floor
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"D\").values";
+          outputExpression =
+              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                  + arg2Info.getExprCode()
+                  + ").dt.floor(\"D\"))";
           break;
         case "HOUR":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"H\").values";
+          outputExpression =
+              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                  + arg2Info.getExprCode()
+                  + ").dt.floor(\"H\"))";
           break;
         case "MINUTE":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"min\").values";
+          outputExpression =
+              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                  + arg2Info.getExprCode()
+                  + ").dt.floor(\"min\"))";
           break;
         case "SECOND":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"S\").values";
+          outputExpression =
+              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                  + arg2Info.getExprCode()
+                  + ").dt.floor(\"S\"))";
           break;
         case "MILLISECOND":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"ms\").values";
+          outputExpression =
+              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                  + arg2Info.getExprCode()
+                  + ").dt.floor(\"ms\"))";
           break;
         case "MICROSECOND":
-          outputExpression = "pd.Series(" + arg2Info.getExprCode() + ").dt.floor(\"us\").values";
+          outputExpression =
+              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                  + arg2Info.getExprCode()
+                  + ").dt.floor(\"us\"))";
           break;
         case "NANOSECOND":
           // Timestamps have nanosecond precision so we don't need to round.
@@ -293,11 +311,11 @@ public class DatetimeFnCodeGen {
               + ")";
     } else {
       outputExpression =
-          "pd.Series("
+          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
               + arg1Info.getExprCode()
               + ").dt.strftime("
               + pythonFormatString
-              + ").values";
+              + "))";
     }
 
     return new RexNodeVisitorInfo(name, outputExpression);
@@ -332,11 +350,11 @@ public class DatetimeFnCodeGen {
               + "))";
     } else {
       outputExpr =
-          "(pd.Series("
+          "bodo.hiframes.pd_series_ext.get_series_data((pd.Series("
               + arg0Expr
               + ").dt.year * 100 + pd.Series("
               + arg0Expr
-              + ").dt.isocalendar().week).values";
+              + ").dt.isocalendar().week))";
     }
 
     String name = "YEARWEEK(" + arg0Info.getName() + ")";

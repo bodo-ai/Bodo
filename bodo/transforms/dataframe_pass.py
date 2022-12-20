@@ -772,9 +772,7 @@ class DataFramePass:
                 func_text += "    else:\n"
                 # Add extra indent
                 func_text += "  "
-            func_text += (
-                f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"
-            )
+            func_text += f"    S{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(v{i})\n"
         if is_df_output:
             data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), df_index, __col_name_meta_value_dataframe_apply)\n"
@@ -848,9 +846,7 @@ class DataFramePass:
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += (
-            f"    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp({body_code})\n"
-        )
+        func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({body_code})\n"
         func_text += "  return out_arr\n"
 
         loc_vars = {}
@@ -2167,11 +2163,9 @@ class DataFramePass:
                 "    out_vals = bodo.hiframes.pd_series_ext.get_series_data(out)\n"
             )
             for i in range(n_out_cols - n_out_keys):
-                func_text += f"    arrs{i}[i] = bodo.utils.conversion.unbox_if_timestamp(out_vals[{i}])\n"
+                func_text += f"    arrs{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(out_vals[{i}])\n"
         else:
-            func_text += (
-                f"    arrs0[i] = bodo.utils.conversion.unbox_if_timestamp(out)\n"
-            )
+            func_text += f"    arrs0[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(out)\n"
         for i in range(n_keys):
             key_typ = df.data[df.column_index[grp_typ.keys[i]]]
             func_text += f"    if bodo.libs.array_kernels.isna(s_key{i}, starts[i]):\n"

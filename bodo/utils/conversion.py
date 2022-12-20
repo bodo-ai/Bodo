@@ -681,7 +681,7 @@ def overload_coerce_to_array(
             # NOTE: not using n to calculate n_chars since distributed pass will use
             # the global value of n and cannot replace it with the local version
             A = np.empty(n, _dtype)
-            data = bodo.utils.conversion.unbox_if_timestamp(data)
+            data = bodo.utils.conversion.unbox_if_tz_naive_timestamp(data)
             for i in numba.parfors.parfor.internal_prange(n):
                 A[i] = data
             return A
@@ -1625,13 +1625,14 @@ def overload_box_if_dt64(val):
     return lambda val: val  # pragma: no cover
 
 
-def unbox_if_timestamp(val):  # pragma: no cover
+def unbox_if_tz_naive_timestamp(val):  # pragma: no cover
     return val
 
 
-@overload(unbox_if_timestamp, no_unliteral=True)
-def overload_unbox_if_timestamp(val):
-    """If 'val' is Timestamp, "unbox" it to dt64 otherwise just return 'val'"""
+@overload(unbox_if_tz_naive_timestamp, no_unliteral=True)
+def overload_unbox_if_tz_naive_timestamp(val):
+    """If 'val' is Timestamp without a Timezone,
+    "unbox" it to dt64 otherwise just return 'val'"""
     # unbox Timestamp to dt64
     if val == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
         return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(

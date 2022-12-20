@@ -5,6 +5,7 @@ from bodosql.tests.test_window.window_common import count_window_applies
 from bodosql.tests.utils import check_query
 
 
+@pytest.mark.tz_aware
 @pytest.mark.parametrize(
     "partition_col, answer",
     [
@@ -21,6 +22,7 @@ from bodosql.tests.utils import check_query
                     "BI": [0, 0, 0, 0, 0, 1, 2, 3, 3, 4],
                     "S": [0, 0, 1, 2, 2, 3, 4, 5, 6, 6],
                     "TS": [0, 1, 2, 2, 3, 4, 5, 6, 6, 7],
+                    "TZ": [0, 1, 2, 2, 3, 4, 5, 6, 6, 7],
                 }
             ),
             id="single_partiton",
@@ -38,6 +40,7 @@ from bodosql.tests.utils import check_query
                     "BI": [0, 0, 0, 0, 0, 0, 1, 2, 2, 3],
                     "S": [0, 0, 1, 2, 2, 0, 1, 2, 3, 3],
                     "TS": [0, 1, 2, 2, 3, 0, 1, 2, 2, 3],
+                    "TZ": [0, 1, 2, 2, 3, 0, 1, 2, 2, 3],
                 }
             ),
             id="two_partitions",
@@ -77,11 +80,17 @@ def test_conditional_change_event(partition_col, answer, memory_leak_check):
                         for y in [0, 1, 0, 0, 1, 8, 0, 8, 8, 1]
                     ]
                 ),
+                "TZ": pd.Series(
+                    [
+                        pd.Timestamp(f"201{y}-01-01", tz="US/PACIFIC")
+                        for y in [0, 1, 0, 0, 1, 8, 0, 8, 8, 1]
+                    ]
+                ),
             }
         ),
     }
     selects = []
-    for col in ["U8", "I16", "U32", "I64", "BO", "BI", "S", "TS"]:
+    for col in ["U8", "I16", "U32", "I64", "BO", "BI", "S", "TS", "TZ"]:
         selects.append(
             f"CONDITIONAL_CHANGE_EVENT({col}) OVER (partition by P order by O)"
         )

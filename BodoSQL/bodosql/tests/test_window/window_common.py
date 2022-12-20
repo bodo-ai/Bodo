@@ -88,6 +88,24 @@ datetime64_col = pd.Series(
         for i in range(window_col_size)
     ]
 )
+tz_aware_col = pd.Series(
+    [
+        None if 1 / math.cos(i) < -1
+        # Assign random values to make the timestamps different
+        else pd.Timestamp(
+            year=2022,
+            month=(i % 12) + 1,
+            day=(i + 7) % 25 + 1,
+            hour=i % 17,
+            second=13,
+            microsecond=((i + 1) % 21) + 300,
+            # Spark drops nanoseconds so set to 0 to allow comparison
+            nanosecond=0,
+            tz="US/Pacific",
+        )
+        for i in range(window_col_size)
+    ]
+)
 
 
 def col_to_window_df(cols):
@@ -163,6 +181,11 @@ def all_numeric_window_col_names(request):
             datetime64_col,
             id="datetime64",
         ),
+        pytest.param(
+            tz_aware_col,
+            id="tz-aware-timestamp",
+            marks=pytest.mark.tz_aware,
+        ),
     ]
 )
 def all_types_window_df(request):
@@ -170,6 +193,7 @@ def all_types_window_df(request):
     return col_to_window_df({"A": request.param})
 
 
+@pytest.mark.tz_aware
 @pytest.fixture
 def all_window_df():
     """Same as all_types_window_df, but returns them all in the same DataFrame."""
@@ -182,9 +206,9 @@ def all_window_df():
             "ST": string_col,
             "BI": binary_col,
             "DT": datetime64_col,
+            "TZ": tz_aware_col,
             # [BE-3891] add Timedelta tests
             # [BE-3892] add Time tests
-            # [BE-4032] add Timezone-aware tests
         }
     )
 
@@ -205,6 +229,10 @@ def all_window_col_names():
         "ST": "'default'",
         "BI": "X'7fff'",
         "DT": "TIMESTAMP '2022-02-18'",
+        # TODO: We don't have support for a timestamp literal
+        # that includes a tz yet. In Snowflake this requires
+        # an extra session parameter.
+        "TZ": "NULL",
     }
 
 

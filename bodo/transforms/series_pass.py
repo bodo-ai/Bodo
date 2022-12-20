@@ -3233,7 +3233,7 @@ class SeriesPass:
                 "            bodo.libs.array_kernels.setna(S0, i)\n"
                 "        v = bodo.utils.conversion.box_if_dt64(A[i])\n"
                 "        if v in d:\n"
-                "            S0[i] = bodo.utils.conversion.unbox_if_timestamp(d[v])\n"
+                "            S0[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(d[v])\n"
                 "        else:\n"
                 "            bodo.libs.array_kernels.setna(S0, i)\n"
                 "    return bodo.hiframes.pd_series_ext.init_series(S0, index, name)\n"
@@ -3330,9 +3330,7 @@ class SeriesPass:
         else:
             func_text += f"    v0 = v\n"
         for i in range(n_out_cols):
-            func_text += (
-                f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"
-            )
+            func_text += f"    S{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(v{i})\n"
         glbls = {}
         if is_df_output:
             data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
