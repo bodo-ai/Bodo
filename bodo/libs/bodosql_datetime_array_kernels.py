@@ -1001,7 +1001,7 @@ def yearofweekiso_util(arr):
         int series/scalar: the year from the input timestamp(s)
     """
 
-    verify_datetime_arg(arr, "YEAROFWEEKISO", "arr")
+    verify_datetime_arg_allow_tz(arr, "YEAROFWEEKISO", "arr")
 
     arg_names = ["arr"]
     arg_types = [arr]
