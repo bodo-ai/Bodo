@@ -430,6 +430,7 @@ def _gen_pd_func_text_and_lowered_globals(
                 "numba": numba,
                 "bodo": bodo,
                 "time": time,
+                "pd": pd,
             },
             locs,
         )

@@ -301,3 +301,43 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
     # Confirm with spark read
     spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
     check_df_eq(expected_rows, spark_out)
+
+
+def test_iceberg_in_pushdown(memory_leak_check, iceberg_database, iceberg_table_conn):
+    """
+    Test in pushdown with loading from a iceberg table.
+    """
+
+    table_name = "simple_string_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        bc = bodosql.BodoSQLContext(
+            {
+                "iceberg_tbl": bodosql.TablePath(
+                    table_name,
+                    "sql",
+                    conn_str=conn,
+                    db_schema=db_schema,
+                )
+            }
+        )
+        df = bc.sql("select A from iceberg_tbl WHERE A in ('A', 'C')")
+        return df
+
+    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = py_out[["A"]][(py_out["A"] == "A") | (py_out["A"] == "C")]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    # make sure filter pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl, (table_name, conn, db_schema), py_output=py_out, reset_index=True
+        )
+        check_logger_msg(stream, "Columns loaded ['A']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")

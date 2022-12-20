@@ -662,3 +662,170 @@ def test_boolean_logic_filter_pushdown(datapath, memory_leak_check):
             bodo_func = bodo.jit(impl)
             bodo_func(filename, query)
             check_logger_msg(stream, "Filter pushdown successfully performed. ")
+
+
+def test_in_filter_pushdown(datapath):
+    """
+    Basic test for filter pushdown of the bodosql in kernel. Equivalent correctness/codegen
+    checks can be found in BodoSQL/bodosql/tests/test_in.py
+    """
+
+    test_in_query = """ SELECT * FROM table1 where part in ('a', 'b', 'Z')"""
+    filepath = datapath("sample-parquet-data/partitioned")
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filepath, "parquet"),
+        }
+    )
+
+    def impl(bc, test_in_query):
+        return bc.sql(test_in_query)
+
+    # Compare entirely to Pandas output to simplify the process.
+    # Load the data once and then filter for each query.
+    py_output = pd.read_parquet(filepath)
+    py_output["part"] = py_output["part"].astype(str)
+    py_output = py_output[(py_output["part"] == "a") | (py_output["part"] == "b")]
+
+    check_func(impl, (bc, test_in_query), py_output=py_output, reset_index=True)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(impl)
+        out = bodo_func(bc, test_in_query)
+        check_logger_msg(stream, "Filter pushdown successfully performed.")
+
+
+@pytest.mark.slow
+def test_in_filter_pushdown_e2e(datapath):
+    """
+    end to end test for filter pushdown of the bodosql in kernel. The equivalent correctness/codegen
+    check can be found in BodoSQL/bodosql/tests/test_in.py::test_in_e2e. This version of
+    the query has been slightly modified, to make sure that the 'X in Y' clause
+    is only filter that can be pushed
+    """
+
+    test_in_query = """
+    SELECT
+        r.engineering_prod_cd as engineering_prod_cd,
+        r.unit_serial_id as unit_serial_id,
+        r.unit_plant_cd as unit_plant_cd,
+        r.unit_manufacturing_week_nr as unit_manufacturing_week_nr,
+        r.unit_config_cd as unit_config_cd,
+        r.unit_type_cd as unit_type_cd,
+        r.module_part_id as module_part_id,
+        r.module_part_desc as module_part_desc,
+        r.module_serial_id as module_serial_id,
+        r.module_plant_cd as module_plant_cd,
+        r.module_manufacturing_week_nr as module_manufacturing_week_nr,
+        r.module_config_cd as module_config_cd,
+        r.lot_cd as lot_cd,
+        r.level_2_tech_comment_txt as level_2_tech_comment_txt,
+        r.dt_cd as dt_cd,
+        r.factory_local_ts as factory_local_ts,
+        r.module_scan_type_cd as module_scan_type_cd,
+        r.etl_change_batch_sk as etl_change_batch_sk,
+        r.unit_manufacturing_day_nr as unit_manufacturing_day_nr,
+        r.active_ind as active_ind,
+        r.info_desc as info_desc,
+        r.categ_cd as categ_cd,
+        r.uu_id as uu_id,
+        r.last_modified_dt as last_modified_dt,
+        r.last_modified_ts as last_modified_ts,
+        r.site_id as site_id,
+        r.version_id as version_id,
+        r.sending_type_cd as sending_type_cd,
+        r.filter_flag as filter_flag
+    FROM PDCA_MODULE AS r JOIN (
+    SELECT
+        t.engineering_prod_cd,
+        t.unit_serial_id,
+        t.unit_plant_cd,
+        t.unit_manufacturing_week_nr,
+        t.unit_config_cd,
+        t.unit_type_cd,
+        t.module_part_id,
+        t.module_part_desc,
+        t.module_serial_id,
+        t.module_plant_cd,
+        t.module_manufacturing_week_nr,
+        t.module_config_cd,
+        t.lot_cd,
+        t.level_2_tech_comment_txt,
+        t.dt_cd,
+        t.factory_local_ts,
+        t.module_scan_type_cd,
+        t.etl_change_batch_sk,
+        t.unit_manufacturing_day_nr,
+        t.active_ind,
+        t.info_desc,
+        t.categ_cd,
+        t.uu_id,
+        t.last_modified_dt,
+        t.last_modified_ts,
+        t.site_id,
+        t.version_id,
+        t.sending_type_cd,
+        t.filter_flag
+    FROM
+        WRK_MODULE_FATP t
+    ) AS s ON r.engineering_prod_cd = s.engineering_prod_cd
+    AND r.unit_serial_id = s.unit_serial_id
+    AND r.module_part_id = s.module_part_id
+    AND r.module_serial_id = s.module_serial_id
+    AND r.lot_cd = s.lot_cd
+    AND r.dt_cd = s.dt_cd
+    AND r.factory_local_ts = s.factory_local_ts
+    AND r.info_desc = s.info_desc
+    AND r.active_ind = s.active_ind
+    AND r.engineering_prod_cd in ('X2017', 'J407', 'D1763CG', 'J181', 'X1441', 'X1891', 'D5XCGA', 'D54', 'D52', 'R965', 'X1863', 'X1462', 'B222', 'D22', 'B298', 'X1653', 'J171', 'X1650', 'D17CSA',
+        'D351', 'D167', 'D16PAM', 'D221', 'J172', 'X1450', 'X1457', 'D49H', 'N188S', 'D17H', 'X2010B', 'N121S', 'B427A', 'B494', 'R661', 'N187B', 'X2061B', 'R761', 'X1866', 'D059', 'B635', 'D292', 'J311', 'D53A', 'X1814', 'X1458', 'X1914',
+        'B837A', 'X1673', 'N158B', 'X1497', 'D64H', 'D11', 'B520A', 'X1864', 'X1416', 'X1657S', 'X1934', 'X2071', 'X2097', 'N157S', 'X1916', 'J375', 'R831', 'X1856', 'D53GH', 'X1930', 'X2010S', 'D21', 'D17PAM', 'D17A', 'D64A', 'X1931',
+        'B332', 'N157', 'D32', 'X2316', 'R765', 'D166', 'D63A', 'J522', 'X1666', 'J517', 'D64CSA', 'D101', 'D17-DKF', 'D63', 'X1443', 'D43', 'X2061', 'B288', 'N158S', 'X1442', 'X1779', 'X1871', 'B390', 'X1888', 'N142S', 'A149', 'D53P',
+        'B520', 'D211', 'B688', 'X1769', 'D293', 'X1887', 'N140S', 'N142B', 'R865', 'X1417', 'D63-DKF', 'X1806', 'N140B', 'J518', 'B519', 'J42B', 'X1658B', 'X1699', 'D79', 'R665', 'D16', 'D54H', 'X1483', 'X2070', 'N121B', 'D63CSA',
+        'D64PAM', 'X2011B', 'X898', 'J523', 'X1940', 'X1680', 'R631', 'N104H', 'D16A', 'X1406', 'X1818B', 'D16H', 'X2012', 'D16CSA', 'X2138', 'B515', 'J182', 'B507', 'B389', 'X2061A', 'N104', 'J307', 'X1819B', 'X1819S', 'D42', 'J305',
+        'X897', 'X1642', 'N187S', 'X936', 'B882', 'B508', 'D52A', 'J524', 'X2013', 'J310', 'N157B', 'X935', 'X2571', 'B937', 'B372', 'X1879', 'N188B', 'X2125', 'X1657B', 'D64', 'D53', 'D10', 'D280', 'D64-DKF', 'X2007', 'B235', 'X1861',
+        'D63PAM', 'X1818S', 'X1862', 'D17', 'J71S')
+    """
+
+    filepath1 = datapath(
+        "sample-parquet-data/apple_sample_data/PDCA_MODULE_source_n1000_dest_n10000_match_percent70_null_percent10.pq/"
+    )
+    filepath2 = datapath(
+        "sample-parquet-data/apple_sample_data/WRK_MODULE_FATP_source_n1000_dest_n10000_match_percent70_null_percent10.pq/"
+    )
+
+    expected_output_path = datapath(
+        "sample-parquet-data/apple_sample_data/expected_query_output.pq"
+    )
+    expected_output = pd.read_parquet(expected_output_path)
+
+    bc = bodosql.BodoSQLContext(
+        {
+            "PDCA_MODULE": bodosql.TablePath(filepath1, "parquet"),
+            "WRK_MODULE_FATP": bodosql.TablePath(filepath2, "parquet"),
+        }
+    )
+
+    def impl(bc, test_in_query):
+        return bc.sql(test_in_query)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, test_in_query),
+            py_output=expected_output,
+            check_names=True,
+            check_dtype=False,
+            only_1DVar=True,  # Only running 1d var just to save time, since this is a larger query
+        )
+        assert "bodo.libs.bodosql_array_kernels.is_in" in bc.convert_to_pandas(
+            test_in_query
+        )
+
+        check_logger_msg(stream, "Filter pushdown successfully performed.")

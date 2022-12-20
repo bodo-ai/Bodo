@@ -2244,7 +2244,11 @@ def find_nested_dispatcher_and_args(
 ):
     """Finds a dispatcher in the IR and the arguments with which it was
     called for the given func_name (which matches the output of find_callname).
-    This dispatcher is assumed to be called
+
+    Note: This code assumes that if return_dispatcher=True, then the new
+    dispatch must be called with the Overload infrastructure. If any other infrastructure
+    is used, for example the generated_jit infrastructure, then the given
+    code may not work.
 
     Args:
         dispatcher (Dispatch): A numba/bodo dispatcher
@@ -2262,7 +2266,7 @@ def find_nested_dispatcher_and_args(
     if return_dispatcher:
         typemap = annotation.typemap
         arg_types = tuple([typemap[name] for name in arg_names])
-        # Find the coalesce dispatcher in the IR
+        # Find the dispatcher in the IR
         cached_info = typemap[var_name].templates[0]._impl_cache
         return cached_info[
             (numba.core.registry.cpu_target.typing_context, arg_types, ())
