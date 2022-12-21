@@ -1062,7 +1062,8 @@ def _gather_output(bodo_output):
 
 def _typeof(val):
     # Pandas returns an object array for .values or to_numpy() call on Series of
-    # nullable int, which can't be handled in typeof. Bodo returns a nullable int array
+    # nullable int/float, which can't be handled in typeof. Bodo returns a
+    # nullable int/float array
     # see test_series_to_numpy[numeric_series_val3] and
     # test_series_get_values[series_val4]
     if (
@@ -1072,15 +1073,9 @@ def _typeof(val):
             (isinstance(a, float) and np.isnan(a)) or isinstance(a, int) for a in val
         )
     ):
-        # TODO: Should this check be fixed? It seems like all floats should
-        # be an IntegerArray
         return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
     elif isinstance(val, pd.arrays.FloatingArray):
-        # TODO: Add proper support for floating array
-        # FloatingArrays are used somewhat extensively in Pandas >= 1.2.0
-        # so we need to add further support. This code is fragile and
-        # should not be considered reliable.
-        return numba.core.types.Array(numba.core.types.float64, 1, "C")
+        return bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
     # TODO: add handling of Series with Float64 values here
     elif isinstance(val, pd.DataFrame) and any(
         [
@@ -1092,7 +1087,9 @@ def _typeof(val):
         for i in range(len(val.columns)):
             S = val.iloc[:, i]
             if isinstance(S.dtype, pd.core.arrays.floating.FloatingDtype):
-                col_typs.append(typeof_pd_float_dtype(S.dtype))
+                col_typs.append(
+                    bodo.libs.float_arr_ext.typeof_pd_float_dtype(S.dtype, None)
+                )
             else:
                 col_typs.append(bodo.hiframes.boxing._infer_series_arr_type(S).dtype)
         col_typs = (dtype_to_array_type(typ) for typ in col_typs)
@@ -1103,7 +1100,7 @@ def _typeof(val):
         val.dtype, pd.core.arrays.floating.FloatingDtype
     ):
         return bodo.SeriesType(
-            typeof_pd_float_dtype(val.dtype),
+            bodo.libs.float_arr_ext.typeof_pd_float_dtype(val.dtype, None),
             index=numba.typeof(val.index),
             name_typ=numba.typeof(val.name),
         )
@@ -1111,22 +1108,6 @@ def _typeof(val):
         # function type isn't accurate, but good enough for the purposes of _typeof
         return types.FunctionType(types.none())
     return bodo.typeof(val)
-
-
-def typeof_pd_float_dtype(val):
-    """
-    Pandas 1.2.0 adds interpretting a nullable FloatingArray
-    This isn't supported yet in Bodo, so we convert these inputs
-    to floating point values.
-    """
-    # Warning: This code is unstable and doesn't currently change
-    # the actual underlying type. This is just used by _typeof inside
-    # test utils for distirbuted testing. It should not be used in
-    # actual Numba Code
-    bitwidth = 8 * val.itemsize
-    dtype = getattr(numba.types, "float{}".format(bitwidth))
-    # TODO: Add a custom FloatingDType() inside Bodo.
-    return dtype
 
 
 def is_bool_object_series(S):

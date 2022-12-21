@@ -2086,6 +2086,13 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if func_mod == "bodo.libs.float_arr_ext" and func_name in (
+            "get_float_arr_data",
+            "get_float_arr_bitmap",
+        ):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if func_mod == "bodo.libs.bool_arr_ext" and func_name in (
             "get_bool_arr_data",
             "get_bool_arr_bitmap",

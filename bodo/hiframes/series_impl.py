@@ -48,6 +48,7 @@ from bodo.libs.binary_arr_ext import (
 )
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.pd_datetime_arr_ext import unwrap_tz_array
 from bodo.libs.str_arr_ext import StringArrayType
@@ -1399,7 +1400,10 @@ def overload_series_idxmin(S, axis=0, skipna=True):
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
-        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
+        or isinstance(
+            S.data,
+            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.CategoricalArrayType),
+        )
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
@@ -1449,7 +1453,10 @@ def overload_series_idxmax(S, axis=0, skipna=True):
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
-        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
+        or isinstance(
+            S.data,
+            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.CategoricalArrayType),
+        )
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
@@ -2916,7 +2923,7 @@ def overload_series_describe(
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.datetime64ns
         )
-    ) and not isinstance(S.data, IntegerArrayType):
+    ) and not isinstance(S.data, (IntegerArrayType, FloatingArrayType)):
         raise BodoError(f"describe() column input type {S.data} not supported.")
 
     # TODO: Support non-numeric columns set columns (e.g. categorical, BooleanArrayType, string)
@@ -4131,6 +4138,7 @@ def _validate_self_other_mask_where(
         isinstance(arr, types.Array)
         or isinstance(arr, BooleanArrayType)
         or isinstance(arr, IntegerArrayType)
+        or isinstance(arr, FloatingArrayType)
         or (
             bodo.utils.utils.is_array_typ(arr, False)
             and (arr.dtype in [bodo.string_type, bodo.bytes_type])
@@ -4223,7 +4231,10 @@ def _validate_self_other_mask_where(
                     or (is_series_type(other) and arr.dtype == other.dtype)
                 )
             )
-            and (isinstance(arr, BooleanArrayType) or isinstance(arr, IntegerArrayType))
+            and (
+                isinstance(arr, BooleanArrayType)
+                or isinstance(arr, (IntegerArrayType, FloatingArrayType))
+            )
         )
     ):
 
@@ -4305,10 +4316,10 @@ def create_explicit_binary_op_overload(op):
         if is_scalar_type(other):
             args = (S.data, other)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-            # Pandas 1.0 returns nullable bool array for nullable int array
-            if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-                types.bool_, 1, "C"
-            ):
+            # Pandas 1.0 returns nullable bool array for nullable array
+            if isinstance(
+                S.data, (IntegerArrayType, FloatingArrayType)
+            ) and ret_dtype == types.Array(types.bool_, 1, "C"):
                 ret_dtype = boolean_array
 
             def impl_scalar(
@@ -4338,10 +4349,10 @@ def create_explicit_binary_op_overload(op):
 
         args = (S.data, types.Array(other.dtype, 1, "C"))
         ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-        # Pandas 1.0 returns nullable bool array for nullable int array
-        if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-            types.bool_, 1, "C"
-        ):
+        # Pandas 1.0 returns nullable bool array for nullable array
+        if isinstance(
+            S.data, (IntegerArrayType, FloatingArrayType)
+        ) and ret_dtype == types.Array(types.bool_, 1, "C"):
             ret_dtype = boolean_array
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
@@ -4400,10 +4411,10 @@ def create_explicit_binary_reverse_op_overload(op):
         if isinstance(other, types.Number):
             args = (other, S.data)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-            # Pandas 1.0 returns nullable bool array for nullable int array
-            if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-                types.bool_, 1, "C"
-            ):
+            # Pandas 1.0 returns nullable bool array for nullable array
+            if isinstance(
+                S.data, (IntegerArrayType, FloatingArrayType)
+            ) and ret_dtype == types.Array(types.bool_, 1, "C"):
                 ret_dtype = boolean_array
 
             def impl_scalar(
@@ -4432,10 +4443,10 @@ def create_explicit_binary_reverse_op_overload(op):
 
         args = (types.Array(other.dtype, 1, "C"), S.data)
         ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-        # Pandas 1.0 returns nullable bool array for nullable int array
-        if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-            types.bool_, 1, "C"
-        ):
+        # Pandas 1.0 returns nullable bool array for nullable array
+        if isinstance(
+            S.data, (IntegerArrayType, FloatingArrayType)
+        ) and ret_dtype == types.Array(types.bool_, 1, "C"):
             ret_dtype = boolean_array
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
@@ -5235,6 +5246,7 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
         isinstance(choicelist_array_typ, types.Array)
         or isinstance(choicelist_array_typ, BooleanArrayType)
         or isinstance(choicelist_array_typ, IntegerArrayType)
+        or isinstance(choicelist_array_typ, FloatingArrayType)
         or (
             bodo.utils.utils.is_array_typ(choicelist_array_typ, False)
             and (choicelist_array_typ.dtype in [bodo.string_type, bodo.bytes_type])
