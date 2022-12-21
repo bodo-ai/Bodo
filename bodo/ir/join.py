@@ -158,6 +158,8 @@ class Join(ir.Stmt):
         indicator_col_num: int,
         is_na_equal: bool,
         gen_cond_expr: str,
+        left_len_var: ir.Var,
+        right_len_var: ir.Var,
     ):
         """
         IR node used to represent join operations. These are produced
@@ -217,6 +219,8 @@ class Join(ir.Stmt):
         self.indicator_col_num = indicator_col_num
         self.is_na_equal = is_na_equal
         self.gen_cond_expr = gen_cond_expr
+        self.left_len_var = left_len_var
+        self.right_len_var = right_len_var
         # Columns within the output table type that are actually used.
         # These will be updated during optimzations. For more
         # information see 'join_remove_dead_column'.
@@ -657,7 +661,10 @@ def join_distributed_analysis(join_node, array_dists):
     for col_var in join_node.get_live_right_vars():
         array_dists[col_var.name] = right_dist
 
-    return
+    # save distributions in case all input vars are dead (cross join corner case)
+    # see _get_table_parallel_flags()
+    join_node.left_dist = left_dist
+    join_node.right_dist = right_dist
 
 
 distributed_analysis.distributed_analysis_extensions[Join] = join_distributed_analysis
@@ -688,6 +695,13 @@ def visit_vars_join(join_node, callback, cbdata):
             for var in join_node.get_live_out_vars()
         ]
     )
+    if join_node.how == "cross":
+        join_node.left_len_var = visit_vars_inner(
+            join_node.left_len_var, callback, cbdata
+        )
+        join_node.right_len_var = visit_vars_inner(
+            join_node.right_len_var, callback, cbdata
+        )
 
 
 # add call to visit Join variable
@@ -754,9 +768,7 @@ def remove_dead_join(
                     and col_num not in join_node.left_cond_cols
                 ):
                     join_node.left_dead_var_inds.add(col_num)
-                    if not join_node.is_left_table and not _is_cross_join_len(
-                        join_node
-                    ):
+                    if not join_node.is_left_table:
                         join_node.left_vars[col_num] = None
             elif orig == "right":
                 if (
@@ -764,9 +776,7 @@ def remove_dead_join(
                     and col_num not in join_node.right_cond_cols
                 ):
                     join_node.right_dead_var_inds.add(col_num)
-                    if not join_node.is_right_table and not _is_cross_join_len(
-                        join_node
-                    ):
+                    if not join_node.is_right_table:
                         join_node.right_vars[col_num] = None
 
         # Remove dead columns from the dictionary.
@@ -777,13 +787,13 @@ def remove_dead_join(
         if join_node.is_left_table:
             all_dead_set = set(range(join_node.n_left_table_cols))
             remove_table = not bool(all_dead_set - join_node.left_dead_var_inds)
-            if remove_table and not _is_cross_join_len(join_node):
+            if remove_table:
                 join_node.left_vars[0] = None
 
         if join_node.is_right_table:
             all_dead_set = set(range(join_node.n_right_table_cols))
             remove_table = not bool(all_dead_set - join_node.right_dead_var_inds)
-            if remove_table and not _is_cross_join_len(join_node):
+            if remove_table:
                 join_node.right_vars[0] = None
 
     if join_node.has_live_out_index_var:
@@ -996,6 +1006,10 @@ def join_usedefs(join_node, use_set=None, def_set=None):
     # output columns are defined
     def_set.update({v.name for v in join_node.get_live_out_vars()})
 
+    if join_node.how == "cross":
+        use_set.add(join_node.left_len_var.name)
+        use_set.add(join_node.right_len_var.name)
+
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
 
@@ -1035,6 +1049,10 @@ def apply_copies_join(
         [replace_vars_inner(var, var_dict) for var in join_node.get_live_out_vars()]
     )
 
+    if join_node.how == "cross":
+        join_node.left_len_var = replace_vars_inner(join_node.left_len_var, var_dict)
+        join_node.right_len_var = replace_vars_inner(join_node.right_len_var, var_dict)
+
 
 ir_utils.apply_copy_propagate_extensions[Join] = apply_copies_join
 
@@ -1057,7 +1075,14 @@ ir_utils.build_defs_extensions[Join] = build_join_definitions
 
 
 def _gen_cross_join_len(
-    join_node, out_table_type, typemap, calltypes, typingctx, targetctx, both_parallel
+    join_node,
+    out_table_type,
+    typemap,
+    calltypes,
+    typingctx,
+    targetctx,
+    left_parallel,
+    right_parallel,
 ):
     """generate join output nodes for cross join corner case where only the length of
     the output table is used.
@@ -1065,13 +1090,19 @@ def _gen_cross_join_len(
     See test_merge_cross_len_only.
     """
 
-    func_text = "def f(left, right):\n"
-    # if both tables are parallel, local chunks of one table have to be broadcast
-    # see cross_join_table()
-    if both_parallel:
-        func_text += "  n_rows = bodo.libs.distributed_api.dist_reduce(len(left), sum_op) * len(right)\n"
-    else:
-        func_text += "  n_rows = len(left) * len(right)\n"
+    func_text = "def f(left_len, right_len):\n"
+
+    # Bodo passes global lengths, which needs to be converted to local lengths to get
+    # the correct size of output chunk
+    n_pes = "bodo.libs.distributed_api.get_size()"
+    rank = "bodo.libs.distributed_api.get_rank()"
+
+    if left_parallel:
+        func_text += f"  left_len = bodo.libs.distributed_api.get_node_portion(left_len, {n_pes}, {rank})\n"
+    if right_parallel and not left_parallel:
+        func_text += f"  right_len = bodo.libs.distributed_api.get_node_portion(right_len, {n_pes}, {rank})\n"
+
+    func_text += "  n_rows = left_len * right_len\n"
     func_text += "  py_table = init_table(py_table_type, False)\n"
     func_text += "  py_table = set_table_len(py_table, n_rows)\n"
 
@@ -1087,7 +1118,109 @@ def _gen_cross_join_len(
         "bodo": bodo,
     }
 
-    arg_vars = [join_node.left_vars[0], join_node.right_vars[0]]
+    arg_vars = [join_node.left_len_var, join_node.right_len_var]
+    arg_typs = tuple(typemap[v.name] for v in arg_vars)
+
+    f_block = compile_to_numba_ir(
+        join_impl,
+        glbs,
+        typingctx=typingctx,
+        targetctx=targetctx,
+        arg_typs=arg_typs,
+        typemap=typemap,
+        calltypes=calltypes,
+    ).blocks.popitem()[1]
+    replace_arg_nodes(f_block, arg_vars)
+    nodes = f_block.body[:-3]
+    nodes[-1].target = join_node.out_data_vars[0]
+    return nodes
+
+
+def _gen_cross_join_repeat(
+    join_node,
+    out_table_type,
+    typemap,
+    calltypes,
+    typingctx,
+    targetctx,
+    left_parallel,
+    right_parallel,
+    left_is_dead,
+):
+    """generate code for cross join corner cases where all input data from one side
+    is dead.
+    Replicates the other side's data based on length of the dead side.
+    """
+
+    in_vars = join_node.right_vars if left_is_dead else join_node.left_vars
+    data_args = ", ".join(
+        f"t{i}" for i in range(len(in_vars)) if in_vars[i] is not None
+    )
+
+    n_in_data_cols = (
+        len(join_node.right_col_names)
+        if left_is_dead
+        else len(join_node.left_col_names)
+    )
+    is_in_table = join_node.is_right_table if left_is_dead else join_node.is_left_table
+    dead_in_inds = (
+        join_node.right_dead_var_inds if left_is_dead else join_node.left_dead_var_inds
+    )
+    # TODO(ehsan): support repeat on tables directly
+    data_cols = [
+        f"get_table_data(t0, {i})" if is_in_table else f"t{i}"
+        for i in range(n_in_data_cols)
+    ]
+    table_args = ", ".join(
+        f"bodo.libs.array_kernels.repeat_kernel({data_cols[i]}, repeats)"
+        if i not in dead_in_inds
+        else "None"
+        for i in range(n_in_data_cols)
+    )
+
+    n_out_cols = len(out_table_type.arr_types)
+    col_inds = [
+        join_node.out_to_input_col_map.get(i, (-1, -1))[1] for i in range(n_out_cols)
+    ]
+
+    # Bodo passes global length. If the dead side is distributed but the other side is
+    # not, we need to distribute the dead side's global len to get correct output.
+    n_pes = "bodo.libs.distributed_api.get_size()"
+    rank = "bodo.libs.distributed_api.get_rank()"
+    dead_in_len = "left_len" if left_is_dead else "right_len"
+    live_parallel = right_parallel if left_is_dead else left_parallel
+    dead_parallel = left_parallel if left_is_dead else right_parallel
+    dead_is_dist_live_rep = not live_parallel and dead_parallel
+
+    repeats = (
+        f"bodo.libs.distributed_api.get_node_portion({dead_in_len}, {n_pes}, {rank})"
+        if dead_is_dist_live_rep
+        else dead_in_len
+    )
+
+    func_text = f"def f({data_args}, left_len, right_len):\n"
+    func_text += f"  repeats = {repeats}\n"
+    func_text += f"  out_data = ({table_args},)\n"
+    func_text += f"  py_table = logical_table_to_table(out_data, (), col_inds, {n_in_data_cols}, out_table_type, used_cols)\n"
+
+    loc_vars = {}
+    exec(func_text, {}, loc_vars)
+    join_impl = loc_vars["f"]
+
+    glbs = {
+        "out_table_type": out_table_type,
+        "sum_op": np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value),
+        "bodo": bodo,
+        "used_cols": bodo.utils.typing.MetaType(tuple(join_node.out_used_cols)),
+        "col_inds": bodo.utils.typing.MetaType(tuple(col_inds)),
+        "logical_table_to_table": bodo.hiframes.table.logical_table_to_table,
+        "get_table_data": bodo.hiframes.table.get_table_data,
+    }
+
+    arg_vars = [v for v in in_vars if v is not None] + [
+        join_node.left_len_var,
+        join_node.right_len_var,
+    ]
     arg_typs = tuple(typemap[v.name] for v in arg_vars)
 
     f_block = compile_to_numba_ir(
@@ -1189,7 +1322,39 @@ def join_distributed_run(
             calltypes,
             typingctx,
             targetctx,
-            left_parallel and right_parallel,
+            left_parallel,
+            right_parallel,
+        )
+    # handle cross join corner case when left input is dead
+    elif join_node.how == "cross" and all(
+        i in join_node.left_dead_var_inds for i in range(len(join_node.left_col_names))
+    ):
+        return _gen_cross_join_repeat(
+            join_node,
+            out_table_type,
+            typemap,
+            calltypes,
+            typingctx,
+            targetctx,
+            left_parallel,
+            right_parallel,
+            True,
+        )
+    # handle cross join corner case when right input is dead
+    elif join_node.how == "cross" and all(
+        i in join_node.right_dead_var_inds
+        for i in range(len(join_node.right_col_names))
+    ):
+        return _gen_cross_join_repeat(
+            join_node,
+            out_table_type,
+            typemap,
+            calltypes,
+            typingctx,
+            targetctx,
+            left_parallel,
+            right_parallel,
+            False,
         )
 
     # Extra column refer: When doing a merge on column and index, the key
@@ -1990,9 +2155,19 @@ def _get_table_parallel_flags(join_node, array_dists):
     left_parallel = all(
         array_dists[v.name] in par_dists for v in join_node.get_live_left_vars()
     )
+    # use saved distribution if all input vars are dead (cross join corner case)
+    if not join_node.get_live_left_vars():
+        assert join_node.how == "cross", "cross join expected if left data is dead"
+        left_parallel = join_node.left_dist in par_dists
+
     right_parallel = all(
         array_dists[v.name] in par_dists for v in join_node.get_live_right_vars()
     )
+    # use saved distribution if all input vars are dead (cross join corner case)
+    if not join_node.get_live_right_vars():
+        assert join_node.how == "cross", "cross join expected if right data is dead"
+        right_parallel = join_node.right_dist in par_dists
+
     if not left_parallel:
         assert not any(
             array_dists[v.name] in par_dists for v in join_node.get_live_left_vars()
