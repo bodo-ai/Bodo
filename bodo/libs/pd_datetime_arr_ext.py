@@ -51,6 +51,57 @@ class PandasDatetimeTZDtype(types.Type):
         super(PandasDatetimeTZDtype, self).__init__(name=f"PandasDatetimeTZDtype[{tz}]")
 
 
+register_model(PandasDatetimeTZDtype)(models.OpaqueModel)
+
+
+@lower_constant(PandasDatetimeTZDtype)
+def lower_constant_pd_datetime_tz_dtype(context, builder, typ, pyval):
+    return context.get_dummy_value()
+
+
+@box(PandasDatetimeTZDtype)
+def box_pd_datetime_tzdtype(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    # Create the timezone type.
+    unit_str = c.context.get_constant_generic(c.builder, types.unicode_type, "ns")
+    # No need to incref because unit_str is a constant
+    unit_str_obj = c.pyapi.from_native_value(
+        types.unicode_type, unit_str, c.env_manager
+    )
+    if isinstance(typ.tz, str):
+        tz_str = c.context.get_constant_generic(c.builder, types.unicode_type, typ.tz)
+        # No need to incref because tz_str is a constant
+        tz_arg_obj = c.pyapi.from_native_value(
+            types.unicode_type, tz_str, c.env_manager
+        )
+    else:
+        # We store ns, but the Fixed offset constructor takes minutes.
+        offset = nanoseconds_to_offset(typ.tz)
+        tz_arg_obj = c.pyapi.unserialize(c.pyapi.serialize_object(offset))
+
+    res = c.pyapi.call_method(
+        pd_class_obj, "DatetimeTZDtype", (unit_str_obj, tz_arg_obj)
+    )
+    c.pyapi.decref(unit_str_obj)
+    c.pyapi.decref(tz_arg_obj)
+    c.pyapi.decref(pd_class_obj)
+    # decref() should be called on native value
+    # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
+    c.context.nrt.decref(c.builder, typ, val)
+    return res
+
+
+@unbox(PandasDatetimeTZDtype)
+def unbox_pd_datetime_tzdtype(typ, val, c):
+    return NativeValue(c.context.get_dummy_value())
+
+
+@typeof_impl.register(pd.DatetimeTZDtype)
+def typeof_pd_int_dtype(val, c):
+    return PandasDatetimeTZDtype(val.tz)
+
+
 def get_pytz_type_info(pytz_type):
     """
     Extracts the information used by Bodo when encountering a pytz
@@ -311,6 +362,17 @@ def overload_pd_datetime_tz_convert(A):
 
     def impl(A):  # pragma: no cover
         return init_pandas_datetime_array(A._data.copy(), tz)
+
+    return impl
+
+
+@overload_attribute(DatetimeArrayType, "dtype", no_unliteral=True)
+def overload_pd_datetime_dtype(A):
+    tz = A.tz
+    dtype = pd.DatetimeTZDtype("ns", tz)
+
+    def impl(A):  # pragma: no cover
+        return dtype
 
     return impl
 

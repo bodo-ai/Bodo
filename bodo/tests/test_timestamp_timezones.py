@@ -180,44 +180,6 @@ def test_tz_index_unsupported():
         bodo.jit(impl)(tz_idx)
 
 
-def test_tz_series_unsupported():
-    def impl(s):
-        return s.dtype
-
-    non_tz_s = pd.Series([pd.Timestamp(f"2020-01-0{i}") for i in range(1, 10)])
-    tz_s = pd.Series(
-        [pd.Timestamp(f"2020-01-0{i}", tz="US/Eastern") for i in range(1, 10)]
-    )
-
-    check_func(impl, (non_tz_s,))
-
-    with pytest.raises(
-        BodoError,
-        match=".*Timezone-aware series not yet supported.*",
-    ):
-        bodo.jit(impl)(tz_s)
-
-
-def test_tz_dataframe_unsupported(memory_leak_check):
-    def impl(df):
-        return df.astype("int64")
-
-    non_tz_df = pd.DataFrame(
-        {"a": [pd.Timestamp("2020-01-01")] * 10},
-    )
-    tz_df = pd.DataFrame(
-        {"a": [pd.Timestamp("2020-01-01", tz="US/Eastern")] * 10},
-    )
-
-    check_func(impl, (non_tz_df,))
-
-    with pytest.raises(
-        BodoError,
-        match=".*Timezone-aware columns not yet supported.*",
-    ):
-        bodo.jit(impl)(tz_df)
-
-
 def test_tz_date_scalar_cmp(sample_tz, cmp_op, memory_leak_check):
     """Check that scalar comparison operators work between dates and
     Timestamps

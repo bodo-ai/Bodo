@@ -726,8 +726,15 @@ def overload_fix_arr_dtype(
     operations where the casting behavior changes depending on if the input is a Series
     or an Array (specifically, S.astype(str) vs S.values.astype(str))
     """
-    if not is_overload_none(new_dtype):
-        # We don't support fix_arr_dtype if we have to cast the data.
+    # We don't support fix_arr_dtype if we have to cast the data.
+    # This means we support none and keeping the same type.
+    can_cast_tz_aware = False
+    if is_overload_none(new_dtype):
+        can_cast_tz_aware = True
+    elif isinstance(new_dtype, types.TypeRef):
+        can_cast_tz_aware = new_dtype.instance_type == data
+
+    if not can_cast_tz_aware:
         bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
             data, "fix_arr_dtype()"
         )
@@ -1033,6 +1040,8 @@ def overload_fix_arr_dtype(
             isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype)
             and data.dtype == nb_dtype.dtype
         )
+    elif bodo.utils.utils.is_array_typ(nb_dtype, False):
+        same_typ = data == nb_dtype
     else:
         same_typ = data.dtype == nb_dtype
 
