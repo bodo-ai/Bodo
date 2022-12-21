@@ -768,8 +768,15 @@ def last_day_util(arr):
         datetime series/scalar: the last day(s) from the month(s)
     """
 
-    verify_datetime_arg(arr, "LAST_DAY", "arr")
+    verify_datetime_arg_allow_tz(arr, "LAST_DAY", "arr")
+    time_zone = get_tz_if_exists(arr)
+
     # When returning a scalar we return a pd.Timestamp type.
+    box_str = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
     unbox_str = (
         "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
         if bodo.utils.utils.is_array_typ(arr, True)
@@ -779,9 +786,18 @@ def last_day_util(arr):
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0) + pd.tseries.offsets.MonthEnd(n=0, normalize=True))"
 
-    out_dtype = np.dtype("datetime64[ns]")
+    if time_zone is None:
+        scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) + pd.tseries.offsets.MonthEnd(n=0, normalize=True))"
+        out_dtype = np.dtype("datetime64[ns]")
+    else:
+        scalar_text = "y = arg0.year\n"
+        scalar_text += "m = arg0.month\n"
+        scalar_text += "d = bodo.hiframes.pd_offsets_ext.get_days_in_month(y, m)\n"
+        scalar_text += (
+            f"res[i] = pd.Timestamp(year=y, month=m, day=d, tz={repr(time_zone)})\n"
+        )
+        out_dtype = bodo.DatetimeArrayType(time_zone)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
