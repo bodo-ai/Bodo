@@ -528,7 +528,7 @@ def test_dayname(dates_scalar_vector, memory_leak_check):
     )
 
 
-def test_dayofmonth(dates_scalar_vector):
+def test_dayofmonth(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.dayofmonth(arr))
 
@@ -553,7 +553,7 @@ def test_dayofmonth(dates_scalar_vector):
     )
 
 
-def test_dayofweek(dates_scalar_vector):
+def test_dayofweek(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.dayofweek(arr))
 
@@ -587,7 +587,7 @@ def test_dayofweek(dates_scalar_vector):
     )
 
 
-def test_dayofweekiso(dates_scalar_vector):
+def test_dayofweekiso(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.dayofweekiso(arr))
 
@@ -623,7 +623,7 @@ def test_dayofweekiso(dates_scalar_vector):
     )
 
 
-def test_dayofyear(dates_scalar_vector):
+def test_dayofyear(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.dayofyear(arr))
 
@@ -743,6 +743,63 @@ def test_last_day(dates_scalar_vector, memory_leak_check):
     check_func(
         impl,
         (dates_scalar_vector,),
+        py_output=last_day_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp("2015-01-31", tz="US/Pacific"),
+                    pd.Timestamp("2016-02-29 01:36:01.737418240", tz="US/Pacific"),
+                    pd.Timestamp("2017-03-27 08:43:00", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2018-04-25 00:00:21", tz="US/Pacific"),
+                    pd.Timestamp("2019-05-23 16:00:00", tz="US/Pacific"),
+                    pd.Timestamp("2020-06-21 05:40:01", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2021-07-19", tz="US/Pacific"),
+                    pd.Timestamp("2022-08-17 07:48:01.254654976", tz="US/Pacific"),
+                    pd.Timestamp("2023-09-15 08:00:00", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2024-10-13 00:00:45.511627776", tz="US/Pacific"),
+                    pd.Timestamp("2025-11-11 16:15:00", tz="US/Pacific"),
+                    pd.Timestamp("2026-12-09 11:16:01.467226624", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2017-02-1", tz="US/Pacific"),
+                    pd.Timestamp("2020-03-1", tz="US/Pacific"),
+                    pd.Timestamp("2024-11-1", tz="US/Pacific"),
+                ]
+            ),
+            id="vector-pacific",
+        ),
+        pytest.param(pd.Timestamp("2022-3-1", tz="Poland"), id="scalar-poland"),
+    ],
+)
+def test_last_day_tz_aware(arr, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.last_day(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(arr, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.last_day(arr)
+
+    # Simulates LAST_DAY on a single row
+    def last_day_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem + pd.tseries.offsets.MonthEnd(n=0, normalize=True)
+
+    last_day_answer = vectorized_sol((arr,), last_day_scalar_fn, None)
+    check_func(
+        impl,
+        (arr,),
         py_output=last_day_answer,
         check_dtype=False,
         reset_index=True,
