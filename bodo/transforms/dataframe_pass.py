@@ -1615,6 +1615,10 @@ class DataFramePass:
         else:
             indicator_col_num = -1
 
+        # cross join needs input lengths to handle dead input cases
+        left_len_var = self._gen_len_call(left_df, nodes) if how == "cross" else None
+        right_len_var = self._gen_len_call(right_df, nodes) if how == "cross" else None
+
         nodes.append(
             bodo.ir.join.Join(
                 left_keys,
@@ -1637,6 +1641,8 @@ class DataFramePass:
                 indicator_col_num,
                 is_na_equal,
                 gen_cond_expr,
+                left_len_var,
+                right_len_var,
             )
         )
 
@@ -1657,6 +1663,24 @@ class DataFramePass:
             )
 
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
+
+    def _gen_len_call(self, var, nodes):
+        """generate a len() call on 'var' and append the IR nodes to 'nodes'
+
+        Args:
+            var (ir.Var): input variable to call len() on (array/series/dataframe type)
+            nodes (list(ir.Stmt)): IR node list to append nodes of len() call
+
+        Returns:
+            ir.Var: output variable of len() call
+        """
+        nodes += compile_func_single_block(
+            eval("lambda A: len(A)"),
+            (var,),
+            None,
+            self,
+        )
+        return nodes[-1].target
 
     def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
         """Transform groupby calls into an Aggregate IR node"""
