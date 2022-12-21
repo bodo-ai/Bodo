@@ -23,6 +23,9 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
+    _gather_output,
+    _get_dist_arg,
+    _test_equal,
     check_func,
     count_array_REPs,
     count_parfor_REPs,
@@ -895,12 +898,64 @@ def test_merge_cross_len_only(memory_leak_check):
     Test merge() with how="cross" with only length of output used (corner case)
     """
 
-    def test_impl1(df1, df2):
+    def impl(df1, df2):
         return len(df1.merge(df2, how="cross"))
 
     df1 = pd.DataFrame({"A": [1, 2, 3, 4], "B": [1, 3, 4, 11]})
     df2 = pd.DataFrame({"C": [3, 4, 5], "D": [6, 7, 8]})
-    check_func(test_impl1, (df1, df2))
+    check_func(impl, (df1, df2))
+
+    # test only one side being distributed
+    py_out = len(df1) * len(df2)
+    bodo_out = bodo.jit(distributed=["df1"])(impl)(_get_dist_arg(df1, True, True), df2)
+    assert bodo_out == py_out
+    bodo_out = bodo.jit(distributed=["df2"])(impl)(df1, _get_dist_arg(df2, True, True))
+    assert bodo_out == py_out
+
+
+def test_merge_cross_dead_input(memory_leak_check):
+    """
+    Test merge() with how="cross" when all columns from one side are dead
+    """
+
+    # left side is dead
+    def impl1(df1, df2):
+        df3 = df1.merge(df2, how="cross")
+        return df3[["D"]]
+
+    # right side is dead
+    def impl2(df1, df2):
+        df3 = df1.merge(df2, how="cross")
+        return df3[["A"]]
+
+    df1 = pd.DataFrame({"A": [1, 2, 3, 4], "B": [1, 3, 4, 11]})
+    df2 = pd.DataFrame({"C": [3, 4, 5], "D": [6, 7, 8]})
+    check_func(impl1, (df1, df2), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl2, (df1, df2), sort_output=True, reset_index=True, check_dtype=False)
+
+    # test only one side being distributed
+    out_df = _gather_output(
+        bodo.jit(distributed=["df1"])(impl1)(_get_dist_arg(df1, True, True), df2)
+    )
+    if bodo.get_rank() == 0:
+        _test_equal(
+            out_df,
+            impl1(df1, df2),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
+    out_df = _gather_output(
+        bodo.jit(distributed=["df2"])(impl2)(df1, _get_dist_arg(df2, True, True))
+    )
+    if bodo.get_rank() == 0:
+        _test_equal(
+            out_df,
+            impl2(df1, df2),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
 
 
 @pytest.mark.slow
