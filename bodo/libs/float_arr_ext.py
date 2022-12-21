@@ -46,6 +46,7 @@ from bodo.utils.indexing import (
 )
 from bodo.utils.typing import (
     BodoError,
+    check_unsupported_args,
     is_iterable_type,
     is_list_like_index_type,
     is_overload_false,
@@ -665,3 +666,168 @@ def overload_float_arr_astype(A, dtype, copy=True):  # pragma: no cover
     return lambda A, dtype, copy=True: bodo.libs.float_arr_ext.get_float_arr_data(
         A
     ).astype(nb_dtype)
+
+
+############################### numpy ufuncs #################################
+
+
+ufunc_aliases = {
+    "subtract": "sub",
+    "multiply": "mul",
+    "floor_divide": "floordiv",
+    "true_divide": "truediv",
+    "power": "pow",
+    "remainder": "mod",
+    "divide": "div",
+    "equal": "eq",
+    "not_equal": "ne",
+    "less": "lt",
+    "less_equal": "le",
+    "greater": "gt",
+    "greater_equal": "ge",
+}
+
+
+def create_op_overload(op, n_inputs):  # pragma: no cover
+    """creates overloads for operations on Floating arrays"""
+    if n_inputs == 1:
+
+        def overload_float_arr_op_nin_1(A):
+            if isinstance(A, FloatingArrayType):
+                return bodo.libs.int_arr_ext.get_nullable_array_unary_impl(op, A)
+
+        return overload_float_arr_op_nin_1
+    elif n_inputs == 2:
+
+        def overload_series_op_nin_2(lhs, rhs):
+            if isinstance(lhs, FloatingArrayType) or isinstance(rhs, FloatingArrayType):
+                return bodo.libs.int_arr_ext.get_nullable_array_binary_impl(
+                    op, lhs, rhs
+                )
+
+        return overload_series_op_nin_2
+    else:
+        raise RuntimeError(
+            "Don't know how to register ufuncs from ufunc_db with arity > 2"
+        )
+
+
+def _install_np_ufuncs():
+    import numba.np.ufunc_db
+
+    for ufunc in numba.np.ufunc_db.get_ufuncs():
+        overload_impl = create_op_overload(ufunc, ufunc.nin)
+        overload(ufunc, no_unliteral=True)(overload_impl)
+
+
+_install_np_ufuncs()
+
+
+####################### binary operators ###############################
+skips = [
+    operator.lt,
+    operator.le,
+    operator.eq,
+    operator.ne,
+    operator.gt,
+    operator.ge,
+    operator.add,
+    operator.sub,
+    operator.mul,
+    operator.truediv,
+    operator.floordiv,
+    operator.pow,
+    operator.mod,
+]
+
+
+def _install_binary_ops():
+    # install binary ops such as add, sub, pow, eq, ...
+    for op in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys():
+        if op in skips:
+            continue
+        overload_impl = create_op_overload(op, 2)
+        overload(op)(overload_impl)
+
+
+_install_binary_ops()
+
+
+####################### binary inplace operators #############################
+
+
+def _install_inplace_binary_ops():
+    # install inplace binary ops such as iadd, isub, ...
+    for op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys():
+        overload_impl = create_op_overload(op, 2)
+        overload(op, no_unliteral=True)(overload_impl)
+
+
+_install_inplace_binary_ops()
+
+########################## unary operators ###############################
+
+
+def _install_unary_ops():
+    # install unary operators: ~, -, +
+    for op in (operator.neg, operator.invert, operator.pos):
+        overload_impl = create_op_overload(op, 1)
+        overload(op, no_unliteral=True)(overload_impl)
+
+
+_install_unary_ops()
+
+
+# inlining in Series pass but avoiding inline="always" since there are Numba-only cases
+# that don't need inlining such as repeats.sum() in repeat_kernel()
+@overload_method(FloatingArrayType, "sum", no_unliteral=True)
+def overload_float_arr_sum(A, skipna=True, min_count=0):  # pragma: no cover
+    """A.sum() for nullable float arrays"""
+    unsupported_args = dict(skipna=skipna, min_count=min_count)
+    arg_defaults = dict(skipna=True, min_count=0)
+    check_unsupported_args("FloatingArray.sum", unsupported_args, arg_defaults)
+
+    def impl(A, skipna=True, min_count=0):  # pragma: no cover
+        numba.parfors.parfor.init_prange()
+        s = 0.0
+        for i in numba.parfors.parfor.internal_prange(len(A)):
+            val = 0.0
+            if not bodo.libs.array_kernels.isna(A, i):
+                val = A[i]
+            s += val
+        return s
+
+    return impl
+
+
+@overload_method(FloatingArrayType, "unique", no_unliteral=True)
+def overload_unique(A):  # pragma: no cover
+    dtype = A.dtype
+
+    def impl_float_arr(A):
+        # preserve order
+        data = []
+        mask = []
+        na_found = False  # write NA only once
+        s = set()
+        for i in range(len(A)):
+            val = A[i]
+            if bodo.libs.array_kernels.isna(A, i):
+                if not na_found:
+                    data.append(dtype(1))
+                    mask.append(False)
+                    na_found = True
+                continue
+            if val not in s:
+                s.add(val)
+                data.append(val)
+                mask.append(True)
+        new_data = np.array(data)
+        n = len(new_data)
+        n_bytes = (n + 7) >> 3
+        new_mask = np.empty(n_bytes, np.uint8)
+        for j in range(n):
+            bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, j, mask[j])
+        return init_float_array(new_data, new_mask)
+
+    return impl_float_arr

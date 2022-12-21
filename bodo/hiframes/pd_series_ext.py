@@ -30,6 +30,7 @@ from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.io import csv_cpp
+from bodo.libs.float_arr_ext import FloatDtype
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.libs.str_ext import string_type, unicode_to_utf8
@@ -76,6 +77,8 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         data = dtype_to_array_type(dtype) if data is None else data
         # store regular dtype instead of IntDtype to avoid errors
         dtype = dtype.dtype if isinstance(dtype, IntDtype) else dtype
+        # store regular dtype instead of FloatDtype to avoid errors
+        dtype = dtype.dtype if isinstance(dtype, FloatDtype) else dtype
         self.dtype = dtype
         self.data = data
         name_typ = types.none if name_typ is None else name_typ

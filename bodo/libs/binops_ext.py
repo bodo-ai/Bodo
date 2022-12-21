@@ -43,6 +43,7 @@ from bodo.hiframes.time_ext import TimeType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
@@ -364,6 +365,10 @@ def create_overload_arith_op(op):
         if isinstance(lhs, IntegerArrayType) or isinstance(rhs, IntegerArrayType):
             return bodo.libs.int_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
+        # nullable float array case
+        if isinstance(lhs, FloatingArrayType) or isinstance(rhs, FloatingArrayType):
+            return bodo.libs.float_arr_ext.create_op_overload(op, 2)(lhs, rhs)
+
         # boolean array
         if lhs == boolean_array or rhs == boolean_array:
             return bodo.libs.bool_arr_ext.create_op_overload(op, 2)(lhs, rhs)
@@ -540,6 +545,10 @@ def create_overload_cmp_operator(op):
         # int array
         if isinstance(lhs, IntegerArrayType) or isinstance(rhs, IntegerArrayType):
             return bodo.libs.int_arr_ext.create_op_overload(op, 2)(lhs, rhs)
+
+        # float array
+        if isinstance(lhs, FloatingArrayType) or isinstance(rhs, FloatingArrayType):
+            return bodo.libs.float_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
         if binary_array_cmp(lhs, rhs):
             return bodo.libs.binary_arr_ext.create_binary_cmp_op_overload(op)(lhs, rhs)
