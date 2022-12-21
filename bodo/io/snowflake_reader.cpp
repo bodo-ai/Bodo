@@ -15,7 +15,7 @@ class SnowflakeReader : public ArrowDataframeReader {
      * See snowflake_read function below for description of arguments.
      */
     SnowflakeReader(const char* _query, const char* _conn, bool _parallel,
-                    std::set<int> selected_fields,
+                    bool _is_independent, std::set<int> selected_fields,
                     std::vector<bool> is_nullable,
                     std::vector<int> str_as_dict_cols, int64_t* _total_nrows,
                     bool _only_length_query, bool _is_select_query)
@@ -24,6 +24,7 @@ class SnowflakeReader : public ArrowDataframeReader {
           conn(_conn),
           total_nrows(_total_nrows),
           only_length_query(_only_length_query),
+          is_independent(_is_independent),
           is_select_query(_is_select_query) {
         // Initialize reader
         init_arrow_reader(str_as_dict_cols, true);
@@ -51,13 +52,19 @@ class SnowflakeReader : public ArrowDataframeReader {
         PyObject* py_only_length_query = PyBool_FromLong(only_length_query);
         PyObject* py_is_select_query = PyBool_FromLong(is_select_query);
         PyObject* py_is_parallel = PyBool_FromLong(parallel);
+        PyObject* py_is_independent = PyBool_FromLong(this->is_independent);
         PyObject* ds_tuple = PyObject_CallMethod(
-            sf_mod, "get_dataset", "ssOOO", query, conn, py_only_length_query,
-            py_is_select_query, py_is_parallel);
+            sf_mod, "get_dataset", "ssOOOO", query, conn, py_only_length_query,
+            py_is_select_query, py_is_parallel, py_is_independent);
         if (ds_tuple == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
         Py_DECREF(sf_mod);
+        Py_DECREF(py_only_length_query);
+        Py_DECREF(py_is_select_query);
+        Py_DECREF(py_is_parallel);
+        Py_DECREF(py_is_independent);
+
         // PyTuple_GetItem borrows a reference
         PyObject* ds = PyTuple_GetItem(ds_tuple, 0);
         Py_INCREF(ds);  // call incref to keep the reference
@@ -139,6 +146,8 @@ class SnowflakeReader : public ArrowDataframeReader {
     // instance of snowflake.connector.connection.SnowflakeConnection, used to
     // read the batches
     PyObject* sf_conn = nullptr;
+    bool is_independent =
+        false;  // Are the ranks executing the function independently?
 };
 
 /**
@@ -147,6 +156,8 @@ class SnowflakeReader : public ArrowDataframeReader {
  * @param query : SQL query
  * @param conn : connection string URL
  * @param parallel: true if reading in parallel
+ * @param is_independent: true if all the ranks are executing the function
+ independently
  * @param n_fields : Number of fields (columns) in Arrow data to retrieve
  * @param is_nullable : array of bools that indicates which of the fields is
  * nullable
@@ -159,8 +170,8 @@ class SnowflakeReader : public ArrowDataframeReader {
  * @return table containing all the arrays read
  */
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,
-                           int64_t n_fields, int32_t* _is_nullable,
-                           int32_t* _str_as_dict_cols,
+                           bool is_independent, int64_t n_fields,
+                           int32_t* _is_nullable, int32_t* _str_as_dict_cols,
                            int32_t num_str_as_dict_cols, int64_t* total_nrows,
                            bool _only_length_query, bool _is_select_query) {
     try {
@@ -170,9 +181,10 @@ table_info* snowflake_read(const char* query, const char* conn, bool parallel,
         std::vector<int> str_as_dict_cols(
             {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});
 
-        SnowflakeReader reader(query, conn, parallel, selected_fields,
-                               is_nullable, str_as_dict_cols, total_nrows,
-                               _only_length_query, _is_select_query);
+        SnowflakeReader reader(query, conn, parallel, is_independent,
+                               selected_fields, is_nullable, str_as_dict_cols,
+                               total_nrows, _only_length_query,
+                               _is_select_query);
 
         return reader.read();
 

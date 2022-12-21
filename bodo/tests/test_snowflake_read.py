@@ -28,6 +28,64 @@ pytest_snowflake = pytest.mark.skipif(
 
 
 @pytest_snowflake
+def test_sql_snowflake_distributed_false(memory_leak_check):
+    """
+    Basic test for is_independent flag in Snowflake I/O, which is used to handle
+    independent I/O calls in @bodo.jit(distributed=False) cases
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+    bodo_df = bodo.jit(distributed=False)(impl)(query, conn)
+    pandas_df = impl(query, conn)
+
+    pd.testing.assert_frame_equal(
+        bodo_df, pandas_df, check_dtype=False, check_column_type=False
+    )
+
+
+@pytest_snowflake
+def test_sql_snowflake_independent(memory_leak_check):
+    """
+    Make sure all ranks execute independently in the
+    @bodo.jit(distributed) case that has a Snowflake read call.
+
+    By putting a barrier on rank 0 first, and then non-zero ranks
+    afterwards, we ensure that all other ranks must complete before rank 0,
+    which means that all ranks must execute independently.
+    """
+
+    def impl(query, conn):
+        df = pd.read_sql(query, conn)
+        return df
+
+    query = "SELECT * FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    if bodo.get_rank() == 0:
+        bodo.barrier()
+
+    bodo_df = bodo.jit(distributed=False)(impl)(query, conn)
+
+    if bodo.get_rank() != 0:
+        bodo.barrier()
+
+    pandas_df = impl(query, conn)
+    pd.testing.assert_frame_equal(
+        bodo_df, pandas_df, check_dtype=False, check_column_type=False
+    )
+
+
+@pytest_snowflake
 def test_sql_snowflake(memory_leak_check):
     def impl(query, conn):
         df = pd.read_sql(query, conn)

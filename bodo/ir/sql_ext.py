@@ -261,6 +261,7 @@ def sql_distributed_run(
     calltypes,
     typingctx,
     targetctx,
+    is_independent=False,
     meta_head_only_info=None,
 ):
     # Add debug info about column pruning
@@ -443,6 +444,7 @@ def sql_distributed_run(
         not sql_node.is_live_table,
         sql_node.is_select_query,
         sql_node.is_merge_into,
+        is_independent,
     )
 
     schema_type = types.none if sql_node.database_schema is None else string_type
@@ -853,6 +855,7 @@ def _gen_sql_reader_py(
     is_dead_table: bool,
     is_select_query: bool,
     is_merge_into: bool,
+    is_independent: bool,
 ):
     """
     Function that generates the main SQL implementation. There are
@@ -1096,6 +1099,7 @@ def _gen_sql_reader_py(
             f"    unicode_to_utf8(sql_request),\n"
             f"    unicode_to_utf8(conn),\n"
             f"    {parallel},\n"
+            f"    {is_independent},\n"
             f"    {len(nullable_cols_array)},\n"
             f"    nullable_cols_array.ctypes,\n"
             f"    snowflake_dict_cols_array.ctypes,\n"
@@ -1431,6 +1435,7 @@ _snowflake_read = types.ExternalFunction(
         types.voidptr,  # query
         types.voidptr,  # conn_str
         types.boolean,  # parallel
+        types.boolean,  # is_independent
         types.int64,  # n_fields
         types.voidptr,  # _is_nullable
         types.voidptr,  # _str_as_dict_cols
