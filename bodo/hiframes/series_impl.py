@@ -117,7 +117,6 @@ def overload_series_dtype(s):
     if s.dtype == bodo.string_type:
         raise BodoError("Series.dtype not supported for string Series yet")
 
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(s, "Series.dtype")
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(
         s
     ).dtype  # pragma: no cover
@@ -166,7 +165,6 @@ def overload_series_empty(s):
 
 @overload_attribute(SeriesType, "dtypes", inline="always")
 def overload_series_dtypes(s):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(s, "Series.dtypes")
     return lambda s: s.dtype  # pragma: no cover
 
 

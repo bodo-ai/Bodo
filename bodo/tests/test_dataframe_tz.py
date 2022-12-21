@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 import bodo
+from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
@@ -71,6 +72,46 @@ def test_pd_concat_df(memory_leak_check):
     )
 
 
+def test_df_dtypes(memory_leak_check, representative_tz):
+    """
+    Tests support for DataFrames.dtypes with various timezone types.
+    """
+
+    def impl(df):
+        return df.dtypes
+
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+            ).to_series(),
+            "B": [1.2, 1.5, 1.6] * 10,
+        }
+    )
+    check_func(impl, (df,), only_seq=True)
+
+
+def test_df_dtypes_astype(memory_leak_check, representative_tz):
+    """
+    Tests support for astype using DataFrames.dtypes and casting to the same
+    type. This is meant to emulate when the tz-aware type is unchanged but other
+    types are changed.
+    """
+
+    def impl(df):
+        return df.astype(df.dtypes, copy=False)
+
+    df = pd.DataFrame(
+        {
+            "A": pd.date_range(
+                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+            ).to_series(),
+            "B": [1.2, 1.5, 1.6] * 10,
+        }
+    )
+    check_func(impl, (df,))
+
+
 def test_pd_concat_dataframe_error(memory_leak_check):
     """Tests trying to concatenate rows of a Series
     with different Timezones throw reasonable errors.
@@ -129,3 +170,27 @@ def test_pd_concat_dataframe_error(memory_leak_check):
         match="Cannot concatenate the rows of Timestamp data with different timezones",
     ):
         impl(df1, df3)
+
+
+def test_tz_dataframe_unsupported(memory_leak_check):
+    """Test that an unsupported DataFrame operation gives a reasonable error
+    message.
+    """
+
+    def impl(df):
+        return df.values
+
+    non_tz_df = pd.DataFrame(
+        {"a": [pd.Timestamp("2020-01-01")] * 10},
+    )
+    tz_df = pd.DataFrame(
+        {"a": [pd.Timestamp("2020-01-01", tz="US/Eastern")] * 10},
+    )
+
+    check_func(impl, (non_tz_df,))
+
+    with pytest.raises(
+        BodoError,
+        match=".*Timezone-aware columns not yet supported.*",
+    ):
+        bodo.jit(impl)(tz_df)

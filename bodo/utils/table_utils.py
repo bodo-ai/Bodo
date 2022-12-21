@@ -12,6 +12,7 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.hiframes.table import TableType
 from bodo.utils.typing import (
+    get_castable_arr_dtype,
     get_overload_const_bool,
     get_overload_const_str,
     is_overload_constant_bool,
@@ -416,14 +417,7 @@ def table_astype(table, new_table_typ, copy, _bodo_nan_to_str, used_cols=None):
     seen_types = set()
     for typ, blk in new_table_typ.type_to_blk.items():
         if typ in changed_types:
-            # Most types are represented by their scalar values
-            if isinstance(typ, bodo.IntegerArrayType):
-                cast_typ = typ.get_pandas_scalar_type_instance.name
-            elif typ == bodo.dict_str_arr_type:
-                cast_typ = typ
-            else:
-                cast_typ = typ.dtype
-            glbls[f"typ_{blk}"] = cast_typ
+            glbls[f"typ_{blk}"] = get_castable_arr_dtype(typ)
             orig_types = changed_types[typ]
             for orig_typ in orig_types:
                 orig_table_blk = table.type_to_blk[orig_typ]

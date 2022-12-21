@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.timezone_common import sample_tz  # noqa
+from bodo.tests.timezone_common import representative_tz, sample_tz  # noqa
 from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
 
@@ -291,6 +291,20 @@ def test_pd_concat_series(memory_leak_check):
     check_func(impl3, (S1, S2), sort_output=True, reset_index=True)
 
 
+def test_series_dtype(memory_leak_check, representative_tz):
+    """
+    Tests support for Series.dtype on various timezone types.
+    """
+
+    def impl(S):
+        return S.dtype
+
+    S = pd.date_range(
+        start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+    ).to_series()
+    check_func(impl, (S,))
+
+
 def test_pd_concat_series_error(memory_leak_check):
     """Tests trying to concatenate rows of a Series
     with different Timezones throw reasonable errors.
@@ -353,3 +367,25 @@ def test_series_shift(memory_leak_check, sample_tz):
     S = pd.Series(data)
     check_func(impl1, (S, shift_amount))
     check_func(impl2, (S, shift_amount, fill_value))
+
+
+def test_tz_series_unsupported(memory_leak_check):
+    """Test that an unsupported series operation gives a reasonable error
+    message.
+    """
+
+    def impl(s):
+        return s.apply(lambda x: x)
+
+    non_tz_s = pd.Series([pd.Timestamp(f"2020-01-0{i}") for i in range(1, 10)])
+    tz_s = pd.Series(
+        [pd.Timestamp(f"2020-01-0{i}", tz="US/Eastern") for i in range(1, 10)]
+    )
+
+    check_func(impl, (non_tz_s,))
+
+    with pytest.raises(
+        BodoError,
+        match=".*Timezone-aware series not yet supported.*",
+    ):
+        bodo.jit(impl)(tz_s)

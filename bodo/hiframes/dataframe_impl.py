@@ -58,11 +58,7 @@ from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import (
-    BooleanArrayType,
-    boolean_array,
-    boolean_dtype,
-)
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.libs.int_arr_ext import IntegerArrayType
@@ -85,6 +81,7 @@ from bodo.utils.typing import (
     dtype_to_array_type,
     ensure_constant_arg,
     ensure_constant_values,
+    get_castable_arr_dtype,
     get_index_data_arr_types,
     get_index_names,
     get_literal_value,
@@ -288,7 +285,6 @@ def overload_dataframe_shape(df):
 def overload_dataframe_dtypes(df):
     """Support df.dtypes by getting dtype values from underlying arrays"""
     check_runtime_cols_unsupported(df, "DataFrame.dtypes")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.dtypes")
 
     func_text = "def impl(df):\n"
 
@@ -397,13 +393,11 @@ def overload_dataframe_astype(
     # This is used to get coverage parity with Spark's cast because some types are too generic
     # to do any actual cast in Pandas (i.e. object for datetime.date).
     check_runtime_cols_unsupported(df, "DataFrame.astype()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.astype()")
     # check unsupported arguments
     args_dict = {
-        "copy": copy,
         "errors": errors,
     }
-    args_default_dict = {"copy": True, "errors": "raise"}
+    args_default_dict = {"errors": "raise"}
     check_unsupported_args(
         "df.astype",
         args_dict,
@@ -417,6 +411,9 @@ def overload_dataframe_astype(
         raise_bodo_error(
             "DataFrame.astype(): 'dtype' when passed as string must be a constant value"
         )
+
+    if not is_overload_bool(copy):  # pragma: no cover
+        raise BodoError("DataFrame.astype(): 'copy' must be a boolean value")
 
     # just call astype() on all column arrays
     # TODO: support categorical, dt64, etc.
@@ -453,16 +450,10 @@ def overload_dataframe_astype(
             extra_globals = {}
             name_map = {}
             # Generate the global variables for the types. To match the existing astype
-            # implementation we convert each to a valid scalar type.
+            # implementation we convert certain arrays to scalars.
             for i, name in enumerate(schema_type.columns):
                 arr_typ = schema_type.data[i]
-                if isinstance(arr_typ, IntegerArrayType):
-                    scalar_type = bodo.libs.int_arr_ext.IntDtype(arr_typ.dtype)
-                elif arr_typ == boolean_array:
-                    scalar_type = boolean_dtype
-                else:
-                    scalar_type = arr_typ.dtype
-                extra_globals[f"_bodo_schema{i}"] = scalar_type
+                extra_globals[f"_bodo_schema{i}"] = get_castable_arr_dtype(arr_typ)
                 name_map[name] = f"_bodo_schema{i}"
             data_args = ", ".join(
                 f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {name_map[c]}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
