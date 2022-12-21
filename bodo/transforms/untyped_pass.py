@@ -86,7 +86,16 @@ class UntypedPass:
     type inference due to complexity such as pd.read_csv().
     """
 
-    def __init__(self, func_ir, typingctx, args, _locals, metadata, flags):
+    def __init__(
+        self,
+        func_ir,
+        typingctx,
+        args,
+        _locals,
+        metadata,
+        flags,
+        is_independent: bool = False,
+    ):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.args = args
@@ -102,6 +111,8 @@ class UntypedPass:
         # save names of arguments and return values to catch invalid dist annotation
         self._arg_names = set()
         self._return_varnames = set()
+        # Is code executing independently on each rank?
+        self._is_independent = is_independent
 
     def run(self):
         """run untyped pass transform"""
@@ -930,7 +941,7 @@ class UntypedPass:
             is_select_query,
             has_side_effects,
         ) = _get_sql_types_arr_colnames(
-            sql_const, con_const, _bodo_read_as_dict, lhs, rhs.loc
+            sql_const, con_const, _bodo_read_as_dict, lhs, rhs.loc, self._is_independent
         )
 
         index_ind = None
@@ -3065,7 +3076,9 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
     return columns, data_arrs, out_types
 
 
-def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, loc):
+def _get_sql_types_arr_colnames(
+    sql_const, con_const, _bodo_read_as_dict, lhs, loc, is_independent: bool
+):
     """
     Wrapper function to determine the db_type, column names,
     array variables, array types, any column names
@@ -3125,6 +3138,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
         sql_word,
         _bodo_read_as_dict,
         loc,
+        is_independent,
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
@@ -3154,7 +3168,14 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
 
 
 def _get_sql_df_type_from_db(
-    sql_const, con_const, db_type, is_select_query, sql_word, _bodo_read_as_dict, loc
+    sql_const,
+    con_const,
+    db_type,
+    is_select_query,
+    sql_word,
+    _bodo_read_as_dict,
+    loc,
+    is_independent: bool,
 ):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
@@ -3186,7 +3207,7 @@ def _get_sql_df_type_from_db(
 
     df_info = None
     message = ""
-    if bodo.get_rank() == 0:
+    if bodo.get_rank() == 0 or is_independent:
         try:
             if db_type == "snowflake":  # pragma: no cover
                 from bodo.io.snowflake import (
@@ -3294,18 +3315,27 @@ def _get_sql_df_type_from_db(
         except Exception as e:
             message = f"{type(e).__name__}:'{e}'"
 
-    message = comm.bcast(message)
+    if not is_independent:
+        message = comm.bcast(message)
     raise_error = bool(message)
     if raise_error:
         common_err_msg = f"pd.read_sql(): Error executing query `{sql_const}`."
         # raised general exception since except checks for multiple exceptions (sqlalchemy, snowflake)
         raise RuntimeError(f"{common_err_msg}\n{message}")
-    (
-        df_type,
-        converted_colnames,
-        unsupported_columns,
-        unsupported_arrow_types,
-    ) = comm.bcast(df_info)
+    if is_independent:
+        (
+            df_type,
+            converted_colnames,
+            unsupported_columns,
+            unsupported_arrow_types,
+        ) = df_info
+    else:
+        (
+            df_type,
+            converted_colnames,
+            unsupported_columns,
+            unsupported_arrow_types,
+        ) = comm.bcast(df_info)
     df_type = df_type.copy(data=tuple(t for t in df_type.data))
 
     return (

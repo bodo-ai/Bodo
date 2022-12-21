@@ -622,6 +622,7 @@ def get_dataset(
     only_fetch_length: Optional[bool] = False,
     is_select_query: Optional[bool] = True,
     is_parallel: Optional[bool] = True,
+    is_independent: Optional[bool] = False,
 ) -> Tuple[SnowflakeDataset, int]:  # pragma: no cover
     """Get snowflake dataset info required by Arrow reader in C++ and execute
     the Snowflake query
@@ -633,7 +634,9 @@ def get_dataset(
             than return a table? If so we just run a COUNT(*) query and broadcast
             the length without any batches.. Defaults to False.
         is_select_query (bool, optional): Is this query a select?
-        is_parallel (bool, optional): Is this called by all ranks?
+        is_parallel (bool, optional): Is the output data distributed?
+        is_independent(bool, optional): Is this called by all ranks independently
+        (e.g. distributed=False)?
 
     Raises:
         BodoError: Raises an error if Bodo returns the data in the wrong format.
@@ -647,6 +650,11 @@ def get_dataset(
     assert not (
         only_fetch_length and not is_select_query
     ), "The only length optimization can only be run with select queries"
+
+    # Data cannot be distributed if each rank is independent
+    assert not (
+        is_parallel and is_independent
+    ), "Snowflake get_dataset: is_parallel and is_independent cannot be True at the same time"
 
     # Snowflake import
     try:
@@ -678,6 +686,11 @@ def get_dataset(
     batches = []
     schema = pa.schema([])
 
+    is_rank_zero = bodo.get_rank() == 0
+
+    # The control flow for the below if-conditional clause:
+    #   1. If the rank is 0 or the ranks are independent from each other, i.e. each rank is executing the function independently, execute the query
+    #   2. If the ranks are not independent from each other, we want to broadcast the output to all ranks
     if only_fetch_length and is_select_query:
         # If we are loading 0 columns, the query will just be a COUNT(*).
         # In this case we can skip computing the query
@@ -685,7 +698,8 @@ def get_dataset(
         # with (distributed=False)
         # NOTE: it'll be unnecessary in case replicated case
         # and read is called by all ranks but we opted for that to simplify compiler work.
-        if bodo.get_rank() == 0 or not is_parallel:
+        num_rows = None
+        if is_rank_zero or is_independent:
             cur = conn.cursor()
             ev_query = tracing.Event("execute_length_query", is_parallel=False)
             cur.execute(query)
@@ -693,15 +707,15 @@ def get_dataset(
             # all of the data.
             arrow_data = cur.fetch_arrow_all()
             num_rows = arrow_data[0][0].as_py()  # type: ignore
-            if is_parallel:
-                num_rows = comm.bcast(num_rows)
             cur.close()
             ev_query.finalize()
-        else:
-            num_rows = comm.bcast(None)
+
+        # If the ranks are not independent from each other, broadcast num_rows
+        if not is_independent:
+            num_rows = comm.bcast(num_rows)
     else:
         # We need to actually submit a Snowflake query
-        if bodo.get_rank() == 0 or not is_parallel:
+        if is_rank_zero or is_independent:
             cur = conn.cursor()
             # do a cheap query to get the Arrow schema (other ranks need the schema
             # before they can start reading, so we want to get the schema asap)
@@ -757,10 +771,10 @@ def get_dataset(
                     )
 
             cur.close()
-            if is_parallel:
-                comm.bcast((num_rows, batches, schema))
-        else:
-            num_rows, batches, schema = comm.bcast(None)
+
+        # If the ranks are not independent from each other, broadcast the data
+        if not is_independent:
+            num_rows, batches, schema = comm.bcast((num_rows, batches, schema))
 
     ds = SnowflakeDataset(batches, schema, conn)
     ev.finalize()

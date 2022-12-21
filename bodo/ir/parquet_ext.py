@@ -367,6 +367,7 @@ def pq_distributed_run(
     calltypes,
     typingctx,
     targetctx,
+    is_independent=False,  # is_independent currently only used for sql_distributed_run for Snowflake
     meta_head_only_info=None,
 ):
     """lower ParquetReader into regular Numba nodes. Generates code for Parquet

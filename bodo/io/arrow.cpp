@@ -30,8 +30,8 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
 
 // --------- function defined in snowflake_reader.cpp ---------
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,
-                           int64_t n_fields, int32_t* _is_nullable,
-                           int32_t* str_as_dict_cols,
+                           bool is_independent, int64_t n_fields,
+                           int32_t* _is_nullable, int32_t* str_as_dict_cols,
                            int32_t num_str_as_dict_cols, int64_t* total_nrows,
                            bool _only_length_query, bool _is_select_query);
 

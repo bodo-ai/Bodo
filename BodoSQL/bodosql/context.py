@@ -355,6 +355,7 @@ def compute_df_types(df_list, is_bodo_type):
                         None,
                         ir.Var(None, "dummy_var", ir.Loc("dummy_loc", -1)),
                         ir.Loc("dummy_loc", -1),
+                        False,
                     )
                     # Future proof against additional return values that are unused
                     # by BodoSQL by returning a tuple.
