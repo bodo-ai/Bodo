@@ -293,6 +293,7 @@ class BodoUntypedPass(FunctionPass):
             state.locals,
             state.metadata,
             state.flags,
+            isinstance(state.pipeline, BodoCompilerSeq),
         )
         untyped_pass.run()
         return True
@@ -721,14 +722,32 @@ class LowerBodoIRExtSeq(FunctionPass):
             for inst in block.body:
                 if type(inst) in distributed_run_extensions:
                     f = distributed_run_extensions[type(inst)]
-                    out_nodes = f(
-                        inst,
-                        None,
-                        state.typemap,
-                        state.calltypes,
-                        state.typingctx,
-                        state.targetctx,
-                    )
+                    if isinstance(inst, bodo.ir.parquet_ext.ParquetReader) or (
+                        isinstance(inst, bodo.ir.sql_ext.SqlReader)
+                        and inst.db_type in ("iceberg", "snowflake")
+                    ):
+                        out_nodes = f(
+                            inst,
+                            None,
+                            state.typemap,
+                            state.calltypes,
+                            state.typingctx,
+                            state.targetctx,
+                            # is_independent -> Ranks will execute independently of
+                            # other ranks due to bodo.jit(distributed=False),
+                            # i.e., no collective operations should be used.
+                            is_independent=True,
+                            meta_head_only_info=None,
+                        )
+                    else:
+                        out_nodes = f(
+                            inst,
+                            None,
+                            state.typemap,
+                            state.calltypes,
+                            state.typingctx,
+                            state.targetctx,
+                        )
                     new_body += out_nodes
                 elif is_call_assign(inst):
                     rhs = inst.value

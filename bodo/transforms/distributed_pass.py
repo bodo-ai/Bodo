@@ -313,7 +313,8 @@ class DistributedPass:
                             self.calltypes,
                             self.typingctx,
                             self.targetctx,
-                            meta_head_only_info,
+                            is_independent=False,  # is_independent is False by default
+                            meta_head_only_info=meta_head_only_info,
                         )
                     else:
                         out_nodes = f(
