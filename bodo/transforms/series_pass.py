@@ -81,6 +81,7 @@ from bodo.libs.bool_arr_ext import (
     is_valid_boolean_array_logical_op,
 )
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
@@ -1293,6 +1294,24 @@ class SeriesPass:
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
+        # inline remaining Float array ops
+        if (
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+            and any(isinstance(t, FloatingArrayType) for t in (typ1, typ2))
+        ):
+            overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
+        if (
+            rhs.fn
+            in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+            and any(isinstance(t, FloatingArrayType) for t in (typ1, typ2))
+        ):  # pragma: no cover
+            overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
         # inline operator.or_ and operator.and_ for boolean arrays
         if (rhs.fn in [operator.or_, operator.and_]) and any(
             t == boolean_array for t in (typ1, typ2)
@@ -1366,9 +1385,15 @@ class SeriesPass:
             impl = overload_func(typ)
             return replace_func(self, impl, [arg])
 
-        if isinstance(typ, IntegerArrayType):
+        if isinstance(typ, IntegerArrayType):  # pragma: no cover
             assert rhs.fn in (operator.neg, operator.invert, operator.pos)
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 1)
+            impl = overload_func(typ)
+            return replace_func(self, impl, [arg])
+
+        if isinstance(typ, FloatingArrayType):  # pragma: no cover
+            assert rhs.fn in (operator.neg, operator.pos)
+            overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 1)
             impl = overload_func(typ)
             return replace_func(self, impl, [arg])
 
@@ -1466,6 +1491,16 @@ class SeriesPass:
         ):
             return self._handle_ufuncs_int_arr(func_name, rhs.args)
 
+        # inline ufuncs on FloatingArray
+        if (
+            func_mod in ("numpy", "ufunc")
+            and func_name in ufunc_names
+            and any(
+                isinstance(self.typemap[a.name], FloatingArrayType) for a in rhs.args
+            )
+        ):  # pragma: no cover
+            return self._handle_ufuncs_float_arr(func_name, rhs.args)
+
         # inline ufuncs on BooleanArray
         if (
             func_mod in ("numpy", "ufunc")
@@ -1547,16 +1582,6 @@ class SeriesPass:
                     kws=dict(rhs.kws),
                 )  # pragma: no cover
 
-        if fdef == ("apply_null_mask", "bodo.libs.int_arr_ext"):
-            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
-            impl = bodo.libs.int_arr_ext.apply_null_mask.py_func(*in_typs)
-            return replace_func(self, impl, rhs.args)
-
-        if fdef == ("merge_bitmaps", "bodo.libs.int_arr_ext"):
-            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
-            impl = bodo.libs.int_arr_ext.merge_bitmaps.py_func(*in_typs)
-            return replace_func(self, impl, rhs.args)
-
         if fdef == ("get_int_arr_data", "bodo.libs.int_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
@@ -1596,6 +1621,27 @@ class SeriesPass:
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
             impl = getattr(bodo.libs.int_arr_ext, "overload_int_arr_" + func_name)(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
+        # inline FloatingArrayType.copy()
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(self.typemap[func_mod.name], FloatingArrayType)
+            and func_name in ("copy", "astype", "sum")
+        ):  # pragma: no cover
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = getattr(bodo.libs.float_arr_ext, "overload_float_arr_" + func_name)(
                 *arg_typs, **kw_typs
             )
             return replace_func(
@@ -2233,10 +2279,15 @@ class SeriesPass:
                 typ = typ.instance_type
             dtype = None
             # nullable int array
-            if isinstance(typ, IntegerArrayType):
+            if isinstance(typ, IntegerArrayType):  # pragma: no cover
                 dtype = typ.dtype
                 impl = eval(
                     "lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)"
+                )
+            elif isinstance(typ, FloatingArrayType):  # pragma: no cover
+                dtype = typ.dtype
+                impl = eval(
+                    "lambda n, t, s=None: bodo.libs.float_arr_ext.alloc_float_array(n, _dtype)"
                 )
             elif isinstance(typ, types.Array):
                 dtype = typ.dtype
@@ -2839,6 +2890,15 @@ class SeriesPass:
     def _handle_ufuncs_int_arr(self, ufunc_name, args):
         np_ufunc = getattr(np, ufunc_name)
         overload_func = bodo.libs.int_arr_ext.create_op_overload(np_ufunc, np_ufunc.nin)
+        in_typs = tuple(self.typemap[a.name] for a in args)
+        impl = overload_func(*in_typs)
+        return replace_func(self, impl, args)
+
+    def _handle_ufuncs_float_arr(self, ufunc_name, args):
+        np_ufunc = getattr(np, ufunc_name)
+        overload_func = bodo.libs.float_arr_ext.create_op_overload(
+            np_ufunc, np_ufunc.nin
+        )
         in_typs = tuple(self.typemap[a.name] for a in args)
         impl = overload_func(*in_typs)
         return replace_func(self, impl, args)
@@ -3897,6 +3957,7 @@ def _fix_typ_undefs(new_typ, old_typ):
                 (
                     types.Array,
                     IntegerArrayType,
+                    FloatingArrayType,
                     SeriesType,
                     StringArrayType,
                     ArrayItemArrayType,

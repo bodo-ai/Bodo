@@ -892,14 +892,6 @@ def _infer_series_arr_type(S, array_metadata=None):
 
         return bodo.typeof(_fix_series_arr_type(S.array))
 
-    # Pandas float dtype
-    # We don't currently support pandas floating arrays (https://bodo.atlassian.net/browse/BE-41)
-    # So just throw an error to the user to cast to numpy dtype
-    if isinstance(S.dtype, pd.core.arrays.floating.FloatingDtype):  # pragma: no cover
-        raise BodoError(
-            "Bodo does not currently support Series constructed with Pandas FloatingArray.\nPlease use Series.astype() to convert any input Series input to Bodo JIT functions."
-        )
-
     # infer type of underlying data array
     try:
         arr_type = bodo.typeof(_fix_series_arr_type(S.array))
