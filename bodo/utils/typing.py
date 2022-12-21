@@ -2437,3 +2437,25 @@ CasePlaceholderTyper.prefer_literal = True
 
 
 gen_objmode_func_overload(warnings.warn, "none")
+
+
+def get_castable_arr_dtype(arr_type: types.Type):
+    """Convert a Bodo array type into a Type representation
+    that can be used for casting an array via fix_arr_dtype.
+
+    Args:
+        arr_type (types.Type): The array type to convert to a castable value.
+
+    Returns:
+        Any: The value used to generate the cast value.
+    """
+    if isinstance(arr_type, bodo.IntegerArrayType):
+        cast_typ = arr_type.get_pandas_scalar_type_instance.name
+    elif arr_type in (bodo.boolean_array, bodo.dict_str_arr_type) or isinstance(
+        arr_type, bodo.DatetimeArrayType
+    ):
+        cast_typ = arr_type
+    else:
+        # Most array types cast using the dtype.
+        cast_typ = arr_type.dtype
+    return cast_typ
