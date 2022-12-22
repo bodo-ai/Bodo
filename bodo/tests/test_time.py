@@ -280,52 +280,181 @@ def test_time_cmp(cmp_fn, a, b, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_time_sort(memory_leak_check):
+@pytest.mark.parametrize("precision", [0, 3, 6, 9])
+def test_time_sort(precision, memory_leak_check):
+    """Test sort by a Time column
+
+    Args:
+        precision (int): Time precision argument
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
     df = pd.DataFrame(
         {
             "A": [
-                bodo.Time(12, 0),
-                bodo.Time(1, 1, 3, 1),
-                bodo.Time(2),
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 1, 3, 1, precision=precision),
+                None,
+                bodo.Time(2, precision=precision),
+                bodo.Time(15, 0, 50, 10, 100, precision=precision),
+                bodo.Time(9, 1, 3, 10, precision=precision),
+                None,
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
             ]
         }
     )
 
     def impl(df):
-        df.sort_values(by="A")
-        return df
+        return df.sort_values(by="A")
 
-    check_func(impl, (df,))
+    check_func(impl, (df,), reset_index=True)
 
 
-@pytest.mark.slow
-def test_time_merge(memory_leak_check):
+@pytest.mark.parametrize("precision", [0, 3, 6, 9])
+def test_time_merge(precision, memory_leak_check):
+    """Test join on a Time column
+
+    Args:
+        precision (int): Time precision argument
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
     df = pd.DataFrame(
         {
             "A": [
-                bodo.Time(12, 0),
-                bodo.Time(1, 1, 3, 1),
-                bodo.Time(2),
-            ]
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 1, 3, 1, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(15, 0, 50, 10, 100, precision=precision),
+                bodo.Time(9, 1, 3, 10, precision=precision),
+                None,
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+            ],
+            "B": [
+                None,
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 11, 3, 1, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(14, 0, 50, 10, 100, precision=precision),
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.Time(9, 1, 30, 10, precision=precision),
+            ],
         }
     )
 
     df2 = pd.DataFrame(
         {
             "A": [
-                bodo.Time(12, 0),
-                bodo.Time(1, 1, 3, 1),
-                bodo.Time(2),
-            ]
-            * 15
+                None,
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 1, 3, 1, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(1, 10, precision=precision),
+                None,
+                bodo.Time(1, 11, 30, 100, precision=precision),
+                bodo.Time(12, precision=precision),
+            ],
+            "D": [
+                bodo.Time(11, 0, precision=precision),
+                None,
+                bodo.Time(6, 11, 3, 1, precision=precision),
+                bodo.Time(9, precision=precision),
+                bodo.Time(14, 10, 50, 10, 100, precision=precision),
+                bodo.Time(9, 1, 30, 10, precision=precision),
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.Time(11, 59, 59, 100, 1000, 50, precision=precision),
+            ],
         }
     )
 
     def impl(df, df2):
-        df.merge(df2, how="inner", on="A")
-        return df
+        return df.merge(df2, how="inner", on="A")
 
-    check_func(impl, (df, df2))
+    check_func(impl, (df, df2), sort_output=True, reset_index=True)
+
+    def impl2(df, df2):
+        return df.merge(df2, how="inner", on="left.A == right.A & left.B < right.D")
+
+    py_out = df.merge(df2, left_on=["A"], right_on=["A"])
+    py_out = py_out.query("B < D")
+    check_func(
+        impl2,
+        (df, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("precision", [0, 3, 6, 9])
+def test_time_groupby(precision, memory_leak_check):
+    """Test groupby with Time column as key with index=False and as an aggregation column
+        NOTE: [BE-4109] Not testing Time as groupby key with as_index=True
+        since Time is not supported as an index.
+
+    Args:
+        precision (int): Time precision argument
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
+    df = pd.DataFrame(
+        {
+            "A": [
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 1, 3, 1, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(15, 0, 50, 10, 100, precision=precision),
+                bodo.Time(9, 1, 3, 10, precision=precision),
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+            ],
+            "B": [0, 0, 1, 0, 0, 1],
+        }
+    )
+
+    # Test Time as column to compute aggregation on
+    def impl(df):
+        return df.groupby("B")["A"].agg(["min", "max", "first", "last"])
+
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                bodo.Time(12, 0, precision=precision),
+                None,
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(15, 0, 50, 10, 100, precision=precision),
+                None,
+                bodo.Time(2, precision=precision),
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+            ],
+            "B": [0, 0, 1, 0, 0, 1, 2, 1, -1],
+        }
+    )
+
+    # Test Time as column to compute aggregation on with None values
+    def impl2(df):
+        return df.groupby("B")["A"].max()
+
+    # Hard-code py_output (See [BE-4107])
+    py_output = df.dropna().groupby("B")["A"].max().append(pd.Series([None], name="A"))
+    check_func(impl2, (df,), py_output=py_output, sort_output=True, reset_index=True)
+
+    # Test Time as key with index=False and keeping None group
+    def impl3(df):
+        return df.groupby("A", as_index=False, dropna=False)["B"].min()
+
+    check_func(impl3, (df,), sort_output=True, reset_index=True)
+
+    # Test Time as key with index=False and dropping None group
+    def impl4(df):
+        return df.groupby("A", as_index=False)["B"].max()
+
+    check_func(impl4, (df,), sort_output=True, reset_index=True)
 
 
 @pytest.mark.slow
@@ -445,3 +574,27 @@ def test_time_array_setitem_none(memory_leak_check):
         return df
 
     check_func(impl, (df,))
+
+
+@pytest.mark.slow
+def test_comparison_error(memory_leak_check):
+
+    # Time vs. non-Time
+    def impl():
+        return bodo.Time(2) < None
+
+    with pytest.raises(
+        TypeError,
+        match="Cannot compare Time with non-Time type",
+    ):
+        impl()
+
+    # Time different precisions
+    def impl2():
+        return bodo.Time(2) < bodo.Time(2, precision=0)
+
+    with pytest.raises(
+        TypeError,
+        match="Cannot compare times with different precisions",
+    ):
+        impl2()

@@ -91,11 +91,15 @@ class Time:
         return self.value == other.value and self.precision == other.precision
 
     def _check_can_compare(self, other):
-        # raise an error if the precision is not the same to mimic sql time comparison
-        if self.precision != other.precision:  # pragma: no cover
-            raise BodoError(
-                f"Cannot compare times with different precisions: {self} and {other}"
-            )
+        # TODO: [BE-4107] Support comparison where other=None inside Pandas (outside Bodo jit).
+        if isinstance(other, Time):
+            # raise an error if the precision is not the same to mimic sql time comparison
+            if self.precision != other.precision:  # pragma: no cover
+                raise TypeError(
+                    f"Cannot compare times with different precisions: {self} and {other}"
+                )
+        else:
+            raise TypeError("Cannot compare Time with non-Time type")
 
     def __lt__(self, other):
         self._check_can_compare(other)
@@ -543,9 +547,10 @@ make_attribute_wrapper(TimeArrayType, "null_bitmap", "_null_bitmap")
 
 @overload_method(TimeArrayType, "copy", no_unliteral=True)
 def overload_time_arr_copy(A):
+    precision = A.precision
     """Copy a TimeArrayType by copying the underlying data and null bitmap"""
     return lambda A: bodo.hiframes.time_ext.init_time_array(
-        A._data.copy(), A._null_bitmap.copy()
+        A._data.copy(), A._null_bitmap.copy(), precision
     )  # pragma: no cover
 
 

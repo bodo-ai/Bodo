@@ -3039,17 +3039,16 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     3  "ef"  9
     """
     if (
-        isinstance(col_array_dtype, (IntegerArrayType, FloatingArrayType))
-        or col_array_dtype
-        in (bodo.libs.bool_arr_ext.boolean_array, bodo.binary_array_type)
-        or is_str_arr_type(col_array_dtype)
-        or (
-            isinstance(col_array_dtype, types.Array)
-            and (
-                col_array_dtype.dtype == bodo.datetime_date_type
-                or isinstance(col_array_dtype.dtype, bodo.TimeType)
-            )
+        isinstance(
+            col_array_dtype, (IntegerArrayType, FloatingArrayType, bodo.TimeArrayType)
         )
+        or col_array_dtype
+        in (
+            bodo.libs.bool_arr_ext.boolean_array,
+            bodo.binary_array_type,
+            bodo.datetime_date_array_type,
+        )
+        or is_str_arr_type(col_array_dtype)
     ):
         # These arrays use a null bitmap to store NA values.
         @intrinsic
