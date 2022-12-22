@@ -2529,11 +2529,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateDatePart(
                 operandsInfo, exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
           case "TO_DAYS":
-            return generateToDaysCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
+            return generateToDaysCode(operandsInfo.get(0));
           case "TO_SECONDS":
-            return generateToSecondsCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
+            return generateToSecondsCode(operandsInfo.get(0));
           case "FROM_DAYS":
-            return generateFromDaysCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
+            return generateFromDaysCode(operandsInfo.get(0));
           case "TIME":
           case "TO_TIME":
             return generateToTimeCode(

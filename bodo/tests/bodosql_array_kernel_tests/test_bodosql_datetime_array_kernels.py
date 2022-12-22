@@ -652,44 +652,6 @@ def test_dayofyear(dates_scalar_vector, memory_leak_check):
     "days",
     [
         pytest.param(
-            pd.Series(pd.array([0, 1, -2, 4, 8, None, -32, 10000])),
-            id="vector",
-        ),
-        pytest.param(
-            42,
-            id="scalar",
-        ),
-    ],
-)
-def test_day_timestamp(days, memory_leak_check):
-    def impl(days):
-        return pd.Series(bodo.libs.bodosql_array_kernels.day_timestamp(days))
-
-    # avoid pd.Series() conversion for scalar output
-    if isinstance(days, int):
-        impl = lambda days: bodo.libs.bodosql_array_kernels.day_timestamp(days)
-
-    # Simulates day_timestamp on a single row
-    def days_scalar_fn(days):
-        if pd.isna(days):
-            return None
-        else:
-            return pd.Timestamp(days, unit="D")
-
-    days_answer = vectorized_sol((days,), days_scalar_fn, "datetime64[ns]")
-    check_func(
-        impl,
-        (days,),
-        py_output=days_answer,
-        check_dtype=False,
-        reset_index=True,
-    )
-
-
-@pytest.mark.parametrize(
-    "days",
-    [
-        pytest.param(
             pd.Series(pd.array([0, 1, -2, 4, 8, None, -32])),
             id="vector",
         ),
@@ -993,6 +955,130 @@ def test_month_diff(args, memory_leak_check):
 
 
 @pytest.mark.parametrize(
+    "arg",
+    [
+        pd.Timestamp("2007-10-07"),
+        pd.Series(
+            [None] * 2
+            + list(pd.date_range("2020-10-01", freq="11D", periods=30))
+            + [None]
+        ).values,
+    ],
+)
+def test_to_days(arg, memory_leak_check):
+    args = (arg,)
+
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_days(arg))
+
+    # avoid Series conversion for scalar output
+    if isinstance(arg, pd.Timestamp):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.to_days(arg)
+
+    # Simulates to_days on a single row
+    def to_days_scalar_fn(dt64):
+        if pd.isna(dt64):
+            return None
+        else:
+            # Handle the scalar Timestamp case.
+            if isinstance(dt64, pd.Timestamp):
+                dt64 = dt64.value
+            return (np.int64(dt64) // 86400000000000) + 719528
+
+    to_days_answer = vectorized_sol((arg,), to_days_scalar_fn, pd.Int64Dtype())
+    check_func(
+        impl,
+        args,
+        py_output=to_days_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pd.Timestamp("2007-10-07"),
+        pd.Timestamp("2007-10-07", tz="US/Pacific"),
+        pd.Series(
+            [None] * 2
+            + list(pd.date_range("2020-10-01", freq="11D", periods=30))
+            + [None]
+        ).values,
+        pd.Series(
+            [None] * 2
+            + list(pd.date_range("2020-10-01", freq="11D", periods=30, tz="US/Pacific"))
+            + [None]
+        ).array,
+    ],
+)
+def test_to_seconds(arg, memory_leak_check):
+    args = (arg,)
+
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_seconds(arg))
+
+    # avoid Series conversion for scalar output
+    if isinstance(arg, pd.Timestamp):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.to_seconds(arg)
+
+    # Simulates to_seconds on a single row
+    def to_seconds_scalar_fn(dt64):
+        if pd.isna(dt64):
+            return None
+        else:
+            # Handle the scalar Timestamp case.
+            if isinstance(dt64, pd.Timestamp):
+                dt64 = dt64.value
+            return (np.int64(dt64) // 1000000000) + 62167219200
+
+    to_seconds_answer = vectorized_sol((arg,), to_seconds_scalar_fn, pd.Int64Dtype())
+    check_func(
+        impl,
+        args,
+        py_output=to_seconds_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        733321,
+        pd.Series(
+            [None] * 2 + list(np.arange(738064, 738394, 11)) + [None], dtype="Int64"
+        ).array,
+    ],
+)
+def test_from_days(arg, memory_leak_check):
+    args = (arg,)
+
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.from_days(arg))
+
+    # avoid Series conversion for scalar output
+    if isinstance(arg, int):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.from_days(arg)
+
+    # Simulates from_days on a single row
+    def from_days_scalar_fn(int_val):
+        if pd.isna(int_val):
+            return None
+        else:
+            return pd.Timestamp((int_val - 719528) * 86400000000000)
+
+    from_days_answer = vectorized_sol((arg,), from_days_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=from_days_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
     "args",
     [
         pytest.param(
@@ -1187,23 +1273,17 @@ def test_calendar_optional(memory_leak_check):
 
 @pytest.mark.slow
 def test_option_timestamp(memory_leak_check):
-    def impl(A, B, flag0, flag1):
-        arg0 = A if flag0 else None
-        arg1 = B if flag1 else None
-        return (
-            bodo.libs.bodosql_array_kernels.second_timestamp(arg0),
-            bodo.libs.bodosql_array_kernels.day_timestamp(arg1),
-        )
+    def impl(A, flag):
+        arg = A if flag else None
+        return bodo.libs.bodosql_array_kernels.second_timestamp(arg)
 
-    for flag0 in [True, False]:
-        for flag1 in [True, False]:
-            A0 = pd.Timestamp(1000000, unit="s") if flag0 else None
-            A1 = pd.Timestamp(10000, unit="D") if flag1 else None
-            check_func(
-                impl,
-                (1000000, 10000, flag0, flag1),
-                py_output=(A0, A1),
-            )
+    for flag in [True, False]:
+        A = pd.Timestamp(1000000, unit="s") if flag else None
+        check_func(
+            impl,
+            (1000000, flag),
+            py_output=A,
+        )
 
 
 @pytest.mark.slow
@@ -1232,3 +1312,48 @@ def test_option_month_diff(memory_leak_check):
                 (pd.Timestamp("2007-01-01"), pd.Timestamp("2010-07-04"), flag0, flag1),
                 py_output=answer,
             )
+
+
+@pytest.mark.slow
+def test_option_to_days(memory_leak_check):
+    def impl(A, flag):
+        arg = A if flag else None
+        return bodo.libs.bodosql_array_kernels.to_days(arg)
+
+    for flag in [True, False]:
+        answer = 733042 if flag else None
+        check_func(
+            impl,
+            (pd.Timestamp("2007-01-01"), flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.slow
+def test_option_from_days(memory_leak_check):
+    def impl(A, flag):
+        arg = A if flag else None
+        return bodo.libs.bodosql_array_kernels.from_days(arg)
+
+    for flag in [True, False]:
+        answer = pd.Timestamp("2007-01-01") if flag else None
+        check_func(
+            impl,
+            (733042, flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.slow
+def test_option_to_seconds(memory_leak_check):
+    def impl(A, flag):
+        arg = A if flag else None
+        return bodo.libs.bodosql_array_kernels.to_seconds(arg)
+
+    for flag in [True, False]:
+        answer = 63334828800 if flag else None
+        check_func(
+            impl,
+            (pd.Timestamp("2007-01-01"), flag),
+            py_output=answer,
+        )
