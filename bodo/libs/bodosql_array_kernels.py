@@ -22,6 +22,7 @@ broadcasted_fixed_arg_functions = {
     "abs",
     "acos",
     "acosh",
+    "add_interval",
     "add_interval_days",
     "add_interval_hours",
     "add_interval_microseconds",

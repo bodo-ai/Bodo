@@ -8,8 +8,6 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
-from bodo.tests.timezone_common import representative_tz  # noqa
-
 EQUIVALENT_SPARK_DT_FN_MAP = {
     "WEEK": "WEEKOFYEAR",
     "CURDATE": "CURRENT_DATE",
@@ -842,7 +840,7 @@ def test_extract_scalars(
                     "MO": [None, 1, 2, 5, 10],
                     "WE": [None, 2, 8, 19, 43],
                     "DA": [None, 17, 26, 9, 22],
-                    "DW": [None, 1, 7, 4, 3],
+                    "DW": [None, 0, 6, 3, 2],
                     "HR": [None, 0, 3, 16, 5],
                     "MI": [None, 0, 36, 43, 32],
                     "SE": [None, 0, 1, 16, 21],
@@ -859,7 +857,7 @@ def test_extract_scalars(
                     "MO": [None, 1, 2, 5, None],
                     "WE": [None, 2, 8, 19, None],
                     "DA": [None, 17, 26, 9, None],
-                    "DW": [None, 1, 7, 4, None],
+                    "DW": [None, 0, 6, 3, None],
                     "HR": [None, 0, 3, 16, None],
                     "MI": [None, 0, 36, 43, None],
                     "SE": [None, 0, 1, 16, None],
@@ -1365,7 +1363,7 @@ def test_timestamp_add_scalar(
     [
         pytest.param("DATEADD", "datetime_strings", id="DATEADD-vector_string_dt"),
         pytest.param("DATE_ADD", "'2020-10-13'", id="DATE_ADD-scalar_string_dt"),
-        pytest.param("ADDATE", "timestamps", id="ADDATE-vector_timestamp_dtr"),
+        pytest.param("ADDDATE", "timestamps", id="ADDDATE-vector_timestamp_dtr"),
         pytest.param(
             "DATEADD", "TIMESTAMP '2022-3-5'", id="DATEADD-scalar_timestamp_dtr"
         ),
@@ -2269,12 +2267,12 @@ def test_tz_aware_weekofyear_case(memory_leak_check):
 
 
 @pytest.mark.tz_aware
-def test_tz_aware_next_day(representative_tz, memory_leak_check):
+def test_tz_aware_next_day(memory_leak_check):
     query = "SELECT next_day(A, B) as m from table1"
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                start="1/1/2022", freq="16D5H", periods=30, tz="Africa/Casablanca"
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
         }
@@ -2291,14 +2289,13 @@ def test_tz_aware_next_day(representative_tz, memory_leak_check):
 
 @pytest.mark.tz_aware
 def test_tz_aware_next_day_case(
-    representative_tz,
     memory_leak_check,
 ):
     query = "SELECT CASE WHEN C THEN next_day(A, B) END as m from table1"
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                start="1/1/2022", freq="16D5H", periods=30, tz="Europe/Berlin"
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
             "C": [True, False, True, True, False] * 6,
@@ -2316,7 +2313,7 @@ def test_tz_aware_next_day_case(
 
 
 @pytest.mark.tz_aware
-def test_tz_aware_previous_day(representative_tz, memory_leak_check):
+def test_tz_aware_previous_day(memory_leak_check):
     query = "SELECT previous_day(A, B) as m from table1"
     df = pd.DataFrame(
         {
@@ -2338,14 +2335,13 @@ def test_tz_aware_previous_day(representative_tz, memory_leak_check):
 
 @pytest.mark.tz_aware
 def test_tz_aware_previous_day_case(
-    representative_tz,
     memory_leak_check,
 ):
     query = "SELECT CASE WHEN C THEN previous_day(A, B) END as m from table1"
     df = pd.DataFrame(
         {
             "A": pd.date_range(
-                start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                start="1/1/2022", freq="16D5H", periods=30, tz="Pacific/Honolulu"
             ).to_series(),
             "B": ["Monday", "Tuesday"] * 15,
             "C": [True, False, True, True, False] * 6,

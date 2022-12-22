@@ -76,8 +76,6 @@ def test_interval_func(bodosql_datetime_types, spark_info, timedelta_named_param
     Checks that named params can be used in a timestamp function
     """
     query = "select date_add(A, @a) from table1"
-    # Spark cannot use interval scalars in any function both BodoSQL and SparkSQL
-    # support.
     spark_query = "select A + @a from table1"
     check_query(
         query,

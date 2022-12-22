@@ -14,6 +14,23 @@ import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 
 
+@numba.generated_jit(nopython=True)
+def add_interval(start_dt, interval):
+    """Handles cases where adding intervals receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    args = [start_dt, interval]
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.add_interval_util", ["arr"], i
+            )
+
+    def impl(start_dt, interval):  # pragma: no cover
+        return add_interval_util(start_dt, interval)
+
+    return impl
+
+
 def add_interval_years(amount, start_dt):  # pragma: no cover
     return
 
@@ -291,6 +308,73 @@ def yearofweekiso(arr):
         return yearofweekiso_util(arr)
 
     return impl
+
+
+@numba.generated_jit(nopython=True)
+def add_interval_util(start_dt, interval):
+    """A dedicated kernel adding a timedelta to a datetime
+
+    Args:
+        start_dt (datetime array/series/scalar): the datetimes that are being
+        added to
+        interval (timedelta array/series/scalar): the offset being added to start_dt
+
+    Returns:
+        datetime series/scalar: start_dt + interval
+    """
+
+    verify_datetime_arg_allow_tz(start_dt, "add_interval", "start_dt")
+    time_zone = get_tz_if_exists(start_dt)
+
+    arg_names = ["start_dt", "interval"]
+    arg_types = [start_dt, interval]
+    propagate_null = [True] * 2
+    scalar_text = ""
+    is_vector = bodo.utils.utils.is_array_typ(
+        interval, True
+    ) or bodo.utils.utils.is_array_typ(start_dt, True)
+    extra_globals = None
+    # Modified logic from add_interval_xxx functions
+    if time_zone is not None:
+        if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
+            tz_obj = pytz.timezone(time_zone)
+            trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
+            deltas = np.array(tz_obj._transition_info)[:, 0]
+            deltas = (
+                (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
+                .astype(np.int64)
+                .values
+            )
+            extra_globals = {"trans": trans, "deltas": deltas}
+            scalar_text += f"start_value = arg0.value\n"
+            scalar_text += "end_value = start_value + arg0.value\n"
+            scalar_text += (
+                "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
+            )
+            scalar_text += (
+                "end_trans = np.searchsorted(trans, end_value, side='right') - 1\n"
+            )
+            scalar_text += "offset = deltas[start_trans] - deltas[end_trans]\n"
+            scalar_text += "arg1 = pd.Timedelta(arg1.value + offset)\n"
+        scalar_text += f"res[i] = arg0 + arg1\n"
+        out_dtype = bodo.DatetimeArrayType(time_zone)
+    else:
+        unbox_str = (
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp" if is_vector else ""
+        )
+        box_str = "bodo.utils.conversion.box_if_dt64" if is_vector else ""
+        scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) + arg1)\n"
+
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals=extra_globals,
+    )
 
 
 def add_interval_years_util(amount, start_dt):  # pragma: no cover
@@ -605,13 +689,22 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
     """
 
     def overload_dt_extract_fn(arr):
-        verify_datetime_arg_allow_tz(arr, fn_name, "arr")
+        if fn_name in (
+            "get_hour",
+            "get_minute",
+            "get_second",
+            "get_microsecond",
+            "get_millisecond",
+            "get_nanosecond",
+        ):
+            verify_time_or_datetime_arg_allow_tz(arr, fn_name, "arr")
+        else:
+            verify_datetime_arg_allow_tz(arr, fn_name, "arr")
         tz = get_tz_if_exists(arr)
-        box_str = (
-            "bodo.utils.conversion.box_if_dt64"
-            if bodo.utils.utils.is_array_typ(arr, True) and tz == None
-            else ""
-        )
+        box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+        # For Timestamp, ms and us are stored in the same value.
+        # For Time, they are stored seperately.
+        ms_str = "microsecond // 1000" if not is_valid_time_arg(arr) else "millisecond"
         format_strings = {
             "get_year": f"{box_str}(arg0).year",
             "get_quarter": f"{box_str}(arg0).quarter",
@@ -620,8 +713,8 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "get_hour": f"{box_str}(arg0).hour",
             "get_minute": f"{box_str}(arg0).minute",
             "get_second": f"{box_str}(arg0).second",
-            "get_millisecond": f"{box_str}(arg0).microsecond // 1000",
-            "get_microsecond": f"{box_str}(arg0).microsecond % 1000",
+            "get_millisecond": f"{box_str}(arg0).{ms_str}",
+            "get_microsecond": f"{box_str}(arg0).microsecond",
             "get_nanosecond": f"{box_str}(arg0).nanosecond",
             # [BE-4098] TODO: switch this to be dictionary-encoded output
             "dayname": f"{box_str}(arg0).day_name()",
@@ -647,7 +740,6 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "dayofweekiso": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
             "dayofyear": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
         }
-        verify_datetime_arg_allow_tz(arr, "DAYNAME", "arr")
 
         arg_names = ["arr"]
         arg_types = [arr]
@@ -851,11 +943,7 @@ def monthname_util(arr):
 
     verify_datetime_arg_allow_tz(arr, "MONTHNAME", "arr")
     tz = get_tz_if_exists(arr)
-    box_str = (
-        "bodo.utils.conversion.box_if_dt64"
-        if bodo.utils.utils.is_array_typ(arr, True) and tz == None
-        else ""
-    )
+    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
 
     arg_names = ["arr"]
     arg_types = [arr]
