@@ -517,8 +517,10 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_int<int32_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT32)
         return NumericComparison_int<uint32_t>(ptr1, ptr2, na_position);
-    // for DATE, the missing value is done via NULLABLE_INT_BOOL
-    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::DATE)
+    // for DATE/TIME, the missing value is done via NULLABLE_INT_BOOL
+    // TODO: [BE-4106] Split Time into Time32 and Time64
+    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::DATE ||
+        dtype == Bodo_CTypes::TIME)
         return NumericComparison_int<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT64)
         return NumericComparison_int<uint64_t>(ptr1, ptr2, na_position);

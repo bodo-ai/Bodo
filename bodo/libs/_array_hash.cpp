@@ -573,8 +573,10 @@ void hash_array(uint32_t* out_hashes, array_info* array, size_t n_rows,
             out_hashes, (uint64_t*)array->data1, n_rows, seed,
             (uint8_t*)array->null_bitmask, use_murmurhash);
     }
+    // TODO: [BE-4106] Split Time into Time32 and Time64
     if (array->dtype == Bodo_CTypes::DATE ||
         array->dtype == Bodo_CTypes::DATETIME ||
+        array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_inner<int64_t>(
             out_hashes, (int64_t*)array->data1, n_rows, seed,
@@ -773,8 +775,10 @@ void hash_array_combine(uint32_t* out_hashes, array_info* array, size_t n_rows,
             out_hashes, (uint64_t*)array->data1, n_rows, seed,
             (uint8_t*)array->null_bitmask);
     }
+    // TODO: [BE-4106] Split Time into Time32 and Time64
     if (array->dtype == Bodo_CTypes::DATE ||
         array->dtype == Bodo_CTypes::DATETIME ||
+        array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA) {
         return hash_array_combine_inner<int64_t>(
             out_hashes, (int64_t*)array->data1, n_rows, seed,
@@ -915,8 +919,10 @@ void coherent_hash_array(uint32_t* out_hashes, array_info* array,
         return hash_array(out_hashes, array, n_rows, seed, is_parallel, true);
     }
     // Now we are in NUMPY / NULLABLE_INT_BOOL. Getting into hot waters.
-    // For DATE / DATETIME / TIMEDELTA / DECIMAL no type conversion is allowed
+    // For DATE / TIME / DATETIME / TIMEDELTA / DECIMAL no type conversion is
+    // allowed
     if (array->dtype == Bodo_CTypes::DATE ||
+        array->dtype == Bodo_CTypes::TIME ||
         array->dtype == Bodo_CTypes::DATETIME ||
         array->dtype == Bodo_CTypes::TIMEDELTA ||
         array->dtype == Bodo_CTypes::DECIMAL ||

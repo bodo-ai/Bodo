@@ -1396,8 +1396,9 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         uint64_t* ptr = (uint64_t*)ptrdata;
         return std::to_string(*ptr);
     }
+    // TODO: [BE-4106] Split Time into Time32 and Time64
     if (dtype == Bodo_CTypes::DATE || dtype == Bodo_CTypes::DATETIME ||
-        dtype == Bodo_CTypes::TIMEDELTA) {
+        dtype == Bodo_CTypes::TIMEDELTA || dtype == Bodo_CTypes::TIME) {
         int64_t* ptr = (int64_t*)ptrdata;
         return std::to_string(*ptr);
     }
@@ -1802,6 +1803,7 @@ std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::FLOAT32) return "FLOAT32";
     if (dtype == Bodo_CTypes::FLOAT64) return "FLOAT64";
     if (dtype == Bodo_CTypes::STRING) return "STRING";
+    if (dtype == Bodo_CTypes::LIST_STRING) return "LIST_STRING";
     if (dtype == Bodo_CTypes::BINARY) return "BINARY";
     if (dtype == Bodo_CTypes::_BOOL) return "_BOOL";
     if (dtype == Bodo_CTypes::DECIMAL) return "DECIMAL";

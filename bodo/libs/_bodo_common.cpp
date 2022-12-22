@@ -24,6 +24,8 @@ void bodo_common_init() {
     numpy_item_size[Bodo_CTypes::DECIMAL] = BYTES_PER_DECIMAL;
     numpy_item_size[Bodo_CTypes::DATETIME] = sizeof(int64_t);
     numpy_item_size[Bodo_CTypes::DATE] = sizeof(int64_t);
+    // TODO: [BE-4106] TIME size should depend on precision.
+    numpy_item_size[Bodo_CTypes::TIME] = sizeof(int64_t);
     numpy_item_size[Bodo_CTypes::TIMEDELTA] = sizeof(int64_t);
     numpy_item_size[Bodo_CTypes::INT128] = BYTES_PER_DECIMAL;
 

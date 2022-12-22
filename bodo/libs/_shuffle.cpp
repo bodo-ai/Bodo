@@ -396,7 +396,9 @@ static void fill_send_array(array_info* send_arr, array_info* in_arr,
             n_rows, row_dest, filter, is_parallel);
     if (in_arr->dtype == Bodo_CTypes::DATE ||
         in_arr->dtype == Bodo_CTypes::DATETIME ||
+        in_arr->dtype == Bodo_CTypes::TIME ||
         in_arr->dtype == Bodo_CTypes::TIMEDELTA)
+        // TODO: [BE-4106] Split Time into Time32 and Time64
         return fill_send_array_inner<int64_t>(
             (int64_t*)send_arr->data1, (int64_t*)in_arr->data1, send_disp,
             n_rows, row_dest, filter, is_parallel);

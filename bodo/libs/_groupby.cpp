@@ -2061,6 +2061,9 @@ void cumulative_computation(array_info* arr, array_info* out_arr,
     if (dtype == Bodo_CTypes::DATE)
         return cumulative_computation_T<int64_t, Bodo_CTypes::DATE>(
             arr, out_arr, grp_info, ftype, skipna);
+    if (dtype == Bodo_CTypes::TIME)
+        return cumulative_computation_T<int64_t, Bodo_CTypes::TIME>(
+            arr, out_arr, grp_info, ftype, skipna);
     if (dtype == Bodo_CTypes::DATETIME)
         return cumulative_computation_T<int64_t, Bodo_CTypes::DATETIME>(
             arr, out_arr, grp_info, ftype, skipna);
@@ -2213,18 +2216,17 @@ void median_computation(array_info* arr, array_info* out_arr,
                         grouping_info const& grp_info, bool const& skipna) {
     size_t num_group = grp_info.group_to_first_row.size();
     size_t siztype = numpy_item_size[arr->dtype];
+    std::string error_msg = std::string("There is no median for the ") +
+                            std::string(GetDtype_as_string(arr->dtype));
     if (arr->arr_type == bodo_array_type::STRING ||
         arr->arr_type == bodo_array_type::LIST_STRING) {
-        Bodo_PyErr_SetString(
-            PyExc_RuntimeError,
-            "There is no median for the string or list string case");
+        Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
         return;
     }
-    if (arr->dtype == Bodo_CTypes::DATE ||
+    if (arr->dtype == Bodo_CTypes::DATE || arr->dtype == Bodo_CTypes::TIME ||
         arr->dtype == Bodo_CTypes::DATETIME ||
         arr->dtype == Bodo_CTypes::TIMEDELTA) {
-        Bodo_PyErr_SetString(PyExc_RuntimeError,
-                             "There is no median for the datetime case");
+        Bodo_PyErr_SetString(PyExc_RuntimeError, error_msg.c_str());
         return;
     }
     auto median_operation = [&](auto const& isnan_entry) -> void {
@@ -3823,6 +3825,53 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                                            Bodo_CTypes::DATE>(
                         in_col, out_col, aux_cols, grp_info);
             }
+        // TODO: [BE-4106] Split Time into Time32 and Time64
+        case Bodo_CTypes::TIME:
+            // NOTE: only min/max/first/last are supported.
+            // Others, the column will be dropped on Python side.
+            switch (ftype) {
+                case Bodo_FTypes::sum:
+                    return apply_to_column<int64_t, Bodo_FTypes::sum,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::min:
+                    return apply_to_column<int64_t, Bodo_FTypes::min,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::max:
+                    return apply_to_column<int64_t, Bodo_FTypes::max,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::prod:
+                    return apply_to_column<int64_t, Bodo_FTypes::prod,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::first:
+                    return apply_to_column<int64_t, Bodo_FTypes::first,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::last:
+                    return apply_to_column<int64_t, Bodo_FTypes::last,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::mean:
+                    return apply_to_column<int64_t, Bodo_FTypes::mean,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::var:
+                case Bodo_FTypes::std:
+                    return apply_to_column<int64_t, Bodo_FTypes::var,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmin:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmin,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+                case Bodo_FTypes::idxmax:
+                    return apply_to_column<int64_t, Bodo_FTypes::idxmax,
+                                           Bodo_CTypes::TIME>(
+                        in_col, out_col, aux_cols, grp_info);
+            }
         case Bodo_CTypes::DATETIME:
             switch (ftype) {
                 case Bodo_FTypes::sum:
@@ -4091,7 +4140,11 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
                         in_col, out_col, aux_cols, grp_info);
             }
         default:
-            std::cerr << "do_apply_to_column: invalid array dtype" << std::endl;
+            Bodo_PyErr_SetString(
+                PyExc_RuntimeError,
+                (std::string("do_apply_to_column: unsuported array dtype: ") +
+                 std::string(GetDtype_as_string(in_col->dtype)))
+                    .c_str());
             return;
     }
 }
@@ -4111,11 +4164,10 @@ void do_apply_to_column(array_info* in_col, array_info* out_col,
 void aggfunc_output_initialize_kernel(array_info* out_col, int ftype) {
     // Generate an error message for unsupported paths that includes the name
     // of the function and the dtype.
-    std::string error_msg =
-        std::string("unsupported/not implemented function: ") +
-        std::string(get_name_for_Bodo_FTypes(ftype)) +
-        std::string(" for column dtype: ") +
-        std::string(get_name_for_Bodo_FTypes(out_col->dtype));
+    std::string error_msg = std::string("unsupported aggregate function: ") +
+                            std::string(get_name_for_Bodo_FTypes(ftype)) +
+                            std::string(" for column dtype: ") +
+                            std::string(GetDtype_as_string(out_col->dtype));
     if (out_col->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
         bool init_val;
         if (ftype == Bodo_FTypes::min || ftype == Bodo_FTypes::max ||
@@ -4273,6 +4325,8 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype) {
                 case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
+                // TODO: [BE-4106] Split Time into Time32 and Time64
+                case Bodo_CTypes::TIME:
                     std::fill((int64_t*)out_col->data1,
                               (int64_t*)out_col->data1 + out_col->length,
                               std::numeric_limits<int64_t>::max());
@@ -4356,6 +4410,8 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype) {
                 case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
+                // TODO: [BE-4106] Split Time into Time32 and Time64
+                case Bodo_CTypes::TIME:
                     std::fill((int64_t*)out_col->data1,
                               (int64_t*)out_col->data1 + out_col->length,
                               std::numeric_limits<int64_t>::min());
@@ -4399,6 +4455,8 @@ void aggfunc_output_initialize_kernel(array_info* out_col, int ftype) {
                 case Bodo_CTypes::DATE:
                 case Bodo_CTypes::DATETIME:
                 case Bodo_CTypes::TIMEDELTA:
+                // TODO: [BE-4106] Split Time into Time32 and Time64
+                case Bodo_CTypes::TIME:
                     // nat representation for date values is int64_t min value
                     std::fill((int64_t*)out_col->data1,
                               (int64_t*)out_col->data1 + out_col->length,
@@ -5369,6 +5427,8 @@ class TransformColSet : public BasicColSet {
             case Bodo_CTypes::DATETIME:
             case Bodo_CTypes::TIMEDELTA:
             case Bodo_CTypes::INT64:
+            // TODO: [BE-4106] Split Time into Time32 and Time64
+            case Bodo_CTypes::TIME:
                 copy_values<int64_t>(this->update_cols[0], child_out_col,
                                      grp_info);
                 break;
