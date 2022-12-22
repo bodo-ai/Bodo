@@ -1626,19 +1626,25 @@ def pytest_collection_modifyitems(items):
     Also Marks the tests with marker "bodosql_<x>of4".
     """
     azure_1p_markers = [
-        pytest.mark.bodosql_1of4,
-        pytest.mark.bodosql_2of4,
-        pytest.mark.bodosql_3of4,
-        pytest.mark.bodosql_4of4,
+        pytest.mark.bodosql_1of6,
+        pytest.mark.bodosql_2of6,
+        pytest.mark.bodosql_3of6,
+        pytest.mark.bodosql_4of6,
+        pytest.mark.bodosql_5of6,
+        pytest.mark.bodosql_6of6,
     ]
     azure_2p_markers = [
-        pytest.mark.bodosql_1of7,
-        pytest.mark.bodosql_2of7,
-        pytest.mark.bodosql_3of7,
-        pytest.mark.bodosql_4of7,
-        pytest.mark.bodosql_5of7,
-        pytest.mark.bodosql_6of7,
-        pytest.mark.bodosql_7of7,
+        pytest.mark.bodosql_1of11,
+        pytest.mark.bodosql_2of11,
+        pytest.mark.bodosql_3of11,
+        pytest.mark.bodosql_4of11,
+        pytest.mark.bodosql_5of11,
+        pytest.mark.bodosql_6of11,
+        pytest.mark.bodosql_7of11,
+        pytest.mark.bodosql_8of11,
+        pytest.mark.bodosql_9of11,
+        pytest.mark.bodosql_10of11,
+        pytest.mark.bodosql_11of11,
     ]
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
