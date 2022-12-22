@@ -584,7 +584,7 @@ def verify_int_float_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
 
     raises: BodoError if the argument is not an integer/float/bool scalar/column, or NULL
     """

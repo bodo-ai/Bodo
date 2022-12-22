@@ -132,21 +132,6 @@ def get_nanosecond(arr):  # pragma: no cover
 
 
 @numba.generated_jit(nopython=True)
-def day_timestamp(arr):
-    """Handles cases where day_timestamp receives optional arguments and forwards
-    to the appropriate version of the real implementation"""
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.day_timestamp_util", ["arr"], 0
-        )
-
-    def impl(arr):  # pragma: no cover
-        return day_timestamp_util(arr)
-
-    return impl
-
-
-@numba.generated_jit(nopython=True)
 def int_to_days(arr):
     """Handles cases where int_to_days receives optional arguments and forwards
     to the appropriate version of the real implementation"""
@@ -785,37 +770,6 @@ _install_dt_extract_fn_overload()
 
 
 @numba.generated_jit(nopython=True)
-def day_timestamp_util(arr):
-    """A dedicated kernel for converting an integer (or integer column) to
-    a timestamp in days.
-
-
-    Args:
-        arr (int array/series/scalar): the number(s) to be converted to datetime(s)
-
-    Returns:
-        datetime series/scalar: the number/column in days
-    """
-
-    verify_int_arg(arr, "day_timestamp", "arr")
-    # When returning a scalar we return a pd.Timestamp type.
-    unbox_str = (
-        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if bodo.utils.utils.is_array_typ(arr, True)
-        else ""
-    )
-
-    arg_names = ["arr"]
-    arg_types = [arr]
-    propagate_null = [True]
-    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0, unit='D'))"
-
-    out_dtype = np.dtype("datetime64[ns]")
-
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
-
-
-@numba.generated_jit(nopython=True)
 def int_to_days_util(arr):
     """A dedicated kernel for converting an integer (or integer column) to
     interval days.
@@ -1196,3 +1150,250 @@ def yearofweekiso_util(arr):
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+def to_days(arr):  # pragma: no cover
+    pass
+
+
+@overload(to_days)
+def overload_to_days(arr):
+    """
+    Equivalent to MYSQL's TO_DAYS function. Returns the number of days passed since
+    YEAR 0 of the gregorian calendar.
+
+    Note: Since the SQL input must always be a Date we can assume the input always
+    Timestamp never has any values smaller than days.
+
+    Args:
+        arr (types.Type): A tz-naive datetime array or Timestamp scalar.
+
+    Returns:
+        types.Type: Integer or Integer Array
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.to_days_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return to_days_util(arr)
+
+    return impl
+
+
+def to_days_util(arr):  # pragma: no cover
+    pass
+
+
+@overload(to_days_util)
+def overload_to_days_util(arr):
+    """
+    Equivalent to MYSQL's TO_DAYS function. Returns the number of days passed since
+    YEAR 0 of the gregorian calendar.
+
+    Note: Since the SQL input must always be a Date we can assume the input always
+    Timestamp never has any values smaller than days.
+
+    Args:
+        arr (types.Type): A tz-naive datetime array or Timestamp scalar.
+
+    Returns:
+        types.Type: Integer or Integer Array
+    """
+    verify_datetime_arg(arr, "TO_DAYS", "arr")
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    # Value to add to days since unix time
+    prefix_code = "unix_days_to_year_zero = 719528\n"
+    # divisor to convert value -> days
+    prefix_code += "nanoseconds_divisor = 86400000000000\n"
+    out_dtype = bodo.IntegerArrayType(types.int64)
+    # Note if the input is an array then we just operate directly on datetime64
+    # to avoid Timestamp boxing.
+    is_input_arr = bodo.utils.utils.is_array_typ(arr, False)
+    if is_input_arr:
+        scalar_text = (
+            "  in_value = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg0)\n"
+        )
+    else:
+        scalar_text = "  in_value = arg0.value\n"
+    scalar_text += (
+        "  res[i] = (in_value // nanoseconds_divisor) + unix_days_to_year_zero\n"
+    )
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        prefix_code=prefix_code,
+    )
+
+
+def from_days(arr):  # pragma: no cover
+    pass
+
+
+@overload(from_days)
+def overload_from_days(arr):
+    """
+    Equivalent to MYSQL's FROM_DAYS function. Returns the Date created from the
+    number of days passed since YEAR 0 of the gregorian calendar.
+
+    Note: Since the SQL output should be a date but we will output tz-naive
+    Timestamp at this time.
+
+    Args:
+        arr (types.Type): A integer array or scalar.
+
+    Returns:
+        types.Type: dt64 array or Timestamp without a timezone
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.from_days_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return from_days_util(arr)
+
+    return impl
+
+
+def from_days_util(arr):  # pragma: no cover
+    pass
+
+
+@overload(from_days_util)
+def overload_from_days_util(arr):
+    """
+    Equivalent to MYSQL's FROM_DAYS function. Returns the Date created from the
+    number of days passed since YEAR 0 of the gregorian calendar.
+
+    Note: Since the SQL output should be a date but we will output tz-naive
+    Timestamp at this time.
+
+    Args:
+        arr (types.Type): A integer array or scalar.
+
+    Returns:
+        types.Type: dt64 array or Timestamp without a timezone
+    """
+    verify_int_arg(arr, "TO_DAYS", "arr")
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    is_input_arr = bodo.utils.utils.is_array_typ(arr, False)
+    if is_input_arr:
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    else:
+        out_dtype = bodo.pd_timestamp_tz_naive_type
+
+    # Value to subtract to days to get to unix time
+    prefix_code = "unix_days_to_year_zero = 719528\n"
+    # multiplier to convert days -> nanoseconds
+    prefix_code += "nanoseconds_divisor = 86400000000000\n"
+    scalar_text = (
+        "  nanoseconds = (arg0 - unix_days_to_year_zero) * nanoseconds_divisor\n"
+    )
+    if is_input_arr:
+        # Avoid unboxing into a Timestamp for the array case.
+        scalar_text += (
+            "  res[i] = bodo.hiframes.pd_timestamp_ext.integer_to_dt64(nanoseconds)\n"
+        )
+    else:
+        scalar_text += "  res[i] = pd.Timestamp(nanoseconds)\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        prefix_code=prefix_code,
+    )
+
+
+def to_seconds(arr):  # pragma: no cover
+    pass
+
+
+@overload(to_seconds)
+def overload_to_seconds(arr):
+    """
+    Equivalent to MYSQL's TO_SECONDS function. Returns the number of seconds passed since
+    YEAR 0 of the gregorian calendar.
+
+    Note: Since the SQL input truncates any values less than seconds.
+
+    Args:
+        arr (types.Type): A tz-naive or tz-aware array or Timestamp scalar.
+
+    Returns:
+        types.Type: Integer or Integer Array
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.to_seconds_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return to_seconds_util(arr)
+
+    return impl
+
+
+def to_seconds_util(arr):  # pragma: no cover
+    pass
+
+
+@overload(to_seconds_util)
+def overload_to_seconds_util(arr):
+    """
+    Equivalent to MYSQL's TO_SECONDS function. Returns the number of seconds passed since
+    YEAR 0 of the gregorian calendar.
+
+    Note: Since the SQL input truncates any values less than seconds.
+
+    Args:
+        arr (types.Type): A tz-naive or tz-aware array or Timestamp scalar.
+
+    Returns:
+        types.Type: Integer or Integer Array
+    """
+    verify_datetime_arg_allow_tz(arr, "TO_SECONDS", "arr")
+    timezone = get_tz_if_exists(arr)
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    # Value to add to seconds since unix time
+    prefix_code = "unix_seconds_to_year_zero = 62167219200\n"
+    # divisor to convert value -> seconds.
+    # Note: This function does a floordiv for < seconds
+    prefix_code += "nanoseconds_divisor = 1000000000\n"
+    out_dtype = bodo.IntegerArrayType(types.int64)
+    is_input_arr = bodo.utils.utils.is_array_typ(arr, False)
+    if is_input_arr and not timezone:
+        # Note if the input is an array then we just operate directly on datetime64
+        # to avoid Timestamp boxing.
+        scalar_text = (
+            f"  in_value = bodo.hiframes.pd_timestamp_ext.dt64_to_integer(arg0)\n"
+        )
+    else:
+        scalar_text = f"  in_value = arg0.value\n"
+    # Note: This function just calculates the seconds since via UTC time, so this is
+    # accurate for all timezones.
+    scalar_text += (
+        "  res[i] = (in_value // nanoseconds_divisor) + unix_seconds_to_year_zero\n"
+    )
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        prefix_code=prefix_code,
+    )

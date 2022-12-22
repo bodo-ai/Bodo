@@ -150,11 +150,6 @@ def generate_and_write_library():
             ),
             2,
         ),
-        (
-            "pd_timedelta_total_seconds",
-            generate_standard_method_call("total_seconds"),
-            1,
-        ),
         ("yearofweek", generate_atribute_reference("isocalendar()[0]"), 1),
         ("weekofyear", generate_atribute_reference("weekofyear"), 1),
         ("pd_timedelta_days", generate_atribute_reference("days"), 1),
