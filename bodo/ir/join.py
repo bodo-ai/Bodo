@@ -2099,9 +2099,20 @@ def _replace_column_accesses(
             na_check_fname = f"nacheck_{table_name}_val_{c_ind}"
             na_val_varname = f"_bodo_isna_{table_name}_val_{c_ind}"
             if (
-                isinstance(array_typ, bodo.libs.int_arr_ext.IntegerArrayType)
+                isinstance(
+                    array_typ,
+                    (
+                        bodo.libs.int_arr_ext.IntegerArrayType,
+                        bodo.FloatingArrayType,
+                        bodo.TimeArrayType,
+                    ),
+                )
                 or array_typ
-                in (bodo.libs.bool_arr_ext.boolean_array, bodo.binary_array_type)
+                in (
+                    bodo.libs.bool_arr_ext.boolean_array,
+                    bodo.binary_array_type,
+                    bodo.datetime_date_array_type,
+                )
                 or is_str_arr_type(array_typ)
             ):
                 func_text += f"  {na_val_varname} = {na_check_fname}({table_name}_null_bitmap, {table_name}_ind)\n"
