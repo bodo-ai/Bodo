@@ -514,9 +514,6 @@ table, and the matched records from the left table
 -   `FULL (OUTER) JOIN`: returns all records when there is a match
 in either left or right table
 
-Bodo SQL currently supports inner join on all conditions, but all
-outer joins are only supported on an equality between columns.
-
 ***Example Usage***
 
 ```py

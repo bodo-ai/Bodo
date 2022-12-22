@@ -36,7 +36,6 @@ public class JoinCodeGen {
       List<String> leftColNames,
       List<String> expectedOutColumns,
       String joinCond,
-      boolean hasEquals,
       HashSet<String> mergeCols) {
 
     List<String> allColNames = new ArrayList<>();
@@ -88,34 +87,12 @@ public class JoinCodeGen {
       }
     }
 
-    /* Do we generate a dummy column to do the merge. */
-    boolean hasDummy = false;
     boolean updateOnStr = false;
-
-    if (!hasEquals && !joinType.equals("cross")) {
-      /*
-       * Temporary workaround to support cross join with filters until it's supported in
-       * the engine. Creates a temporary column and merges on that column.
-       */
-      hasDummy = true;
-      generatedJoinCode.append(
-          String.format("  left_arr = np.ones(len(%s), np.int8)\n", leftTable));
-      generatedJoinCode.append(
-          String.format("  right_arr = np.ones(len(%s), np.int8)\n", rightTable));
-      /* Generate a unique column name to avoid possible collisions. */
-      String dummyColumn = getDummyColName(dummyCounter) + "_key";
-      leftTable =
-          String.format(
-              "pd.concat((%s, pd.DataFrame({\"%s\": left_arr})), axis=1)", leftTable, dummyColumn);
-      rightTable =
-          String.format(
-              "pd.concat((%s, pd.DataFrame({\"%s\": right_arr})), axis=1)",
-              rightTable, dummyColumn);
-      onStr = makeQuoted(dummyColumn);
-    } else if (!joinType.equals("cross")) {
+    if (!joinType.equals("cross")) {
       onStr = makeQuoted(joinCond);
       updateOnStr = true;
     }
+
     // If we have an outer join we need to create duplicate columns
     if (hasDuplicateNames) {
       // Give the key columns separate names to create duplicate columns
@@ -162,14 +139,7 @@ public class JoinCodeGen {
         .append(", how=")
         .append(makeQuoted(joinType))
         .append(", _bodo_na_equal=False)");
-    /* Drop the dummy column if it exists. */
-    if (hasDummy) {
-      joinBuilder.append(".loc[:, [");
-      for (String name : allColNames) {
-        joinBuilder.append(makeQuoted(name)).append(", ");
-      }
-      joinBuilder.append("]]");
-    }
+
     // Determine if we need to do a rename to convert names
     // back.
     if (hasDuplicateNames) {

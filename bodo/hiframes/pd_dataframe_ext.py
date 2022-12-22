@@ -2639,18 +2639,24 @@ class JoinTyper(AbstractTemplate):
         # Determine if this is a left outer join or a right outer join.
         is_left = how in {"left", "outer"}
         is_right = how in {"right", "outer"}
+
         columns = []
         data = []
-        if left_index:
-            left_key_type = bodo.utils.typing.get_index_data_arr_types(left_df.index)[0]
-        else:
-            left_key_type = left_df.data[left_df.column_index[left_on[0]]]
-        if right_index:
-            right_key_type = bodo.utils.typing.get_index_data_arr_types(right_df.index)[
-                0
-            ]
-        else:
-            right_key_type = right_df.data[right_df.column_index[right_on[0]]]
+
+        # get key data types for merge on index cases
+        if left_index or right_index:
+            if left_index:
+                left_key_type = bodo.utils.typing.get_index_data_arr_types(
+                    left_df.index
+                )[0]
+            else:
+                left_key_type = left_df.data[left_df.column_index[left_on[0]]]
+            if right_index:
+                right_key_type = bodo.utils.typing.get_index_data_arr_types(
+                    right_df.index
+                )[0]
+            else:
+                right_key_type = right_df.data[right_df.column_index[right_on[0]]]
 
         # merge between left_index and right column requires special
         # handling if the column also exists in left.
