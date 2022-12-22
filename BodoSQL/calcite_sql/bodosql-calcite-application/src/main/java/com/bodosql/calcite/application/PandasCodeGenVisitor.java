@@ -3330,21 +3330,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       Pair<String, Boolean> joinCondInfo =
           visitJoinCond(cond, leftColNames, rightColNames, mergeCols);
       String joinCond = joinCondInfo.getKey();
-      Boolean hasEquals = joinCondInfo.getValue();
+
       /* extract join type */
       String joinType = node.getJoinType().lowerName;
-      if (!hasEquals && !joinType.equals("inner")) {
-        // If there is no equality in the join we don't support it in the engine yet.
-        // We can handle inner join with a dummy column, but not outer joins.
-        throw new BodoSQLCodegenException(
-            "BodoSQL outer joins require at least 1 equality condition");
-      }
+
       // a join without any conditions is a cross join (how="cross" in pd.merge)
       if (joinCond.equals("True")) {
         joinType = "cross";
       }
-      // Do we need to apply a filter after the merge?
-      boolean filterOutput = !hasEquals && !joinCond.equals("True");
 
       String joinCode =
           generateJoinCode(
@@ -3356,21 +3349,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
               leftColNames,
               outputColNames,
               joinCond,
-              hasEquals,
               mergeCols);
       this.generatedCode.append(joinCode);
-      if (filterOutput) {
-        // BodoCtx is unused because we are never inside an apply.
-        RexNodeVisitorInfo filterOperation =
-            visitRexNode(node.getCondition(), outputColNames, nodeId, outVar, false, new BodoCtx());
-        String filterCode =
-            generateFilterCode(
-                outVar,
-                outVar,
-                filterOperation.getExprCode(),
-                exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node.getCondition(), nodeId)));
-        this.generatedCode.append(filterCode);
-      }
       this.varCache.put(nodeId, new Pair<>(outVar, outputColNames));
     }
     columnNamesStack.push(outputColNames);

@@ -2416,6 +2416,15 @@ def cross_join_table(
     right_table_t,
     left_parallel_t,
     right_parallel_t,
+    is_left_t,
+    is_right_t,
+    key_in_output_t,
+    need_typechange_t,
+    cond_func,
+    left_col_nums,
+    left_col_nums_len,
+    right_col_nums,
+    right_col_nums_len,
     num_rows_ptr_t,
 ):
     """
@@ -2432,6 +2441,15 @@ def cross_join_table(
                 lir.IntType(8).as_pointer(),
                 lir.IntType(1),
                 lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
                 lir.IntType(8).as_pointer(),
             ],
         )
@@ -2448,6 +2466,15 @@ def cross_join_table(
             right_table_t,
             types.boolean,
             types.boolean,
+            types.boolean,
+            types.boolean,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.int64,
+            types.voidptr,
+            types.int64,
             types.voidptr,
         ),
         codegen,
@@ -2894,7 +2921,12 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 col_ptr = builder.bitcast(
                     col_ptr, context.get_data_type(col_dtype).as_pointer()
                 )
-                return builder.load(builder.gep(col_ptr, [row_ind]))
+                # Similar to Numpy array getitem in Numba:
+                # https://github.com/numba/numba/blob/2298ad6186d177f39c564046890263b0f1c74ecc/numba/np/arrayobj.py#L130
+                # makes sure we don't get LLVM i1 vs i8 mismatches for bool scalars
+                return context.unpack_value(
+                    builder, col_dtype, builder.gep(col_ptr, [row_ind])
+                )
 
             return col_dtype(types.voidptr, types.int64), codegen
 

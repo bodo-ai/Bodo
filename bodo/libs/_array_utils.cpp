@@ -192,9 +192,69 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
     }
 }
 
+/**
+ * @brief Create a Numpy array by selecting elements from input array as
+ * specified by index function f.
+ *
+ * @tparam F function type with integer input/output
+ * @param in_arr Numpy array with input data
+ * @param f function that takes output array index and returns input array index
+ * to find corresponding data
+ * @param nRowOut number of rows in output array
+ * @param use_nullable_int use nullable integer data type if input data is
+ * integer
+ * @return array_info* output data array as specified by input
+ */
+template <typename F>
+array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr, F f,
+                                               size_t nRowOut,
+                                               bool use_nullable_int = false) {
+    array_info* out_arr = NULL;
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    uint64_t siztype = numpy_item_size[dtype];
+    std::vector<char> vectNaN = RetrieveNaNentry(dtype);
+    char* in_data1 = in_arr->data1;
+    // use nullable int array if dtype is integer and use_nullable_int is
+    // specified
+    if (use_nullable_int && is_integer(dtype)) {
+        out_arr = alloc_array(nRowOut, -1, -1,
+                              bodo_array_type::NULLABLE_INT_BOOL, dtype, 0, 0);
+        char* out_data1 = out_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            int64_t idx = f(iRow);
+            char* out_ptr = out_data1 + siztype * iRow;
+            char* in_ptr;
+            bool bit = false;
+            if (idx >= 0) {
+                in_ptr = in_data1 + siztype * idx;
+                memcpy(out_ptr, in_ptr, siztype);
+                bit = true;
+            }
+            out_arr->set_null_bit(iRow, bit);
+        }
+    } else {
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        char* out_data1 = out_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            int64_t idx = f(iRow);
+            char* out_ptr = out_data1 + siztype * iRow;
+            char* in_ptr;
+            // To allow NaN values in the column.
+            if (idx >= 0)
+                in_ptr = in_data1 + siztype * idx;
+            else
+                in_ptr = vectNaN.data();
+            memcpy(out_ptr, in_ptr, siztype);
+        }
+    }
+    return out_arr;
+}
+
 template <typename F>
 array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
-                                         size_t nRowOut) {
+                                         size_t nRowOut,
+                                         bool use_nullable_int = false) {
     array_info* out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
@@ -418,24 +478,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         }
     }
     if (arr_type == bodo_array_type::NUMPY) {
-        // In the case of NUMPY array we have only to put a single
-        // entry.
-        uint64_t siztype = numpy_item_size[dtype];
-        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-        char* in_data1 = in_arr->data1;
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
-        char* out_data1 = out_arr->data1;
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
-            char* out_ptr = out_data1 + siztype * iRow;
-            char* in_ptr;
-            // To allow NaN values in the column.
-            if (idx >= 0)
-                in_ptr = in_data1 + siztype * idx;
-            else
-                in_ptr = vectNaN.data();
-            memcpy(out_ptr, in_ptr, siztype);
-        }
+        out_arr = RetrieveArray_SingleColumn_F_numpy(in_arr, f, nRowOut,
+                                                     use_nullable_int);
     }
     if (arr_type == bodo_array_type::ARROW) {
         // Arrow builder for output array. builds it dynamically (buffer
@@ -470,10 +514,11 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
 };
 
 array_info* RetrieveArray_SingleColumn(array_info* in_arr,
-                                       std::vector<int64_t> const& ListIdx) {
+                                       std::vector<int64_t> const& ListIdx,
+                                       bool use_nullable_int) {
     return RetrieveArray_SingleColumn_F(
         in_arr, [&](size_t iRow) -> int64_t { return ListIdx[iRow]; },
-        ListIdx.size());
+        ListIdx.size(), use_nullable_int);
 }
 
 array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,

@@ -3389,13 +3389,6 @@ def overload_dataframe_merge(
             # make sure all right_keys is a valid column in right
             validate_keys(right_keys, right)
 
-    if (not left_on or not right_on) and not is_overload_none(on):
-        # If we have no left_on or right_on but we have an on, then
-        # we have a general condition that requires a cross join.
-        raise BodoError(
-            f"DataFrame.merge(): Merge condition '{get_overload_const_str(on)}' requires a cross join to implement, but cross join is not supported."
-        )
-
     if not is_overload_bool(indicator):
         raise_bodo_error("DataFrame.merge(): indicator must be a constant boolean")
     indicator_val = get_overload_const_bool(indicator)

@@ -17,7 +17,9 @@ def join_type(request):
     return request.param
 
 
-def test_join(join_dataframes, spark_info, comparison_ops, memory_leak_check):
+def test_join(
+    join_dataframes, spark_info, join_type, comparison_ops, memory_leak_check
+):
     """test simple join queries"""
     # For nullable intergers convert the pyspark output from
     # float to object
@@ -42,7 +44,7 @@ def test_join(join_dataframes, spark_info, comparison_ops, memory_leak_check):
     if comparison_ops == "<=>":
         # TODO: Add support for <=> from general-join cond
         return
-    query = f"select table1.B, C, D from table1 join table2 on table1.A {comparison_ops} table2.A"
+    query = f"select table1.B, C, D from table1 {join_type} join table2 on table1.A {comparison_ops} table2.A"
     result = check_query(
         query,
         join_dataframes,
@@ -383,9 +385,7 @@ def test_nested_and_join(join_dataframes, spark_info, memory_leak_check):
 
 def test_join_boolean(bodosql_boolean_types, spark_info, join_type, memory_leak_check):
     """test all possible join types on boolean table"""
-    if join_type != "INNER":
-        # [BS-664] Support outer join without equality condition
-        return
+
     newCtx = {
         "table1": bodosql_boolean_types["table1"],
         "table2": bodosql_boolean_types["table1"],

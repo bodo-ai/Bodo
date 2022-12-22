@@ -25,7 +25,7 @@ table_info* hash_join_table(
     table_info* left_table, table_info* right_table, bool left_parallel,
     bool right_parallel, int64_t n_key_t, int64_t n_data_left_t,
     int64_t n_data_right_t, int64_t* vect_same_key, bool* key_in_output,
-    int64_t* vect_need_typechange, bool is_left, bool is_right, bool is_join,
+    int64_t* use_nullable_arr_type, bool is_left, bool is_right, bool is_join,
     bool extra_data_col, bool indicator, bool is_na_equal,
     cond_expr_fn_t cond_func, uint64_t* cond_func_left_columns,
     uint64_t cond_func_left_column_len, uint64_t* cond_func_right_columns,
@@ -1181,13 +1181,13 @@ table_info* hash_join_table(
             } else {
                 // Check if a column may be eliminated from the output
                 bool check_key_in_output =
-                    (i < n_key) || (left_cond_func_cols_set.count(i));
+                    (i < n_key) || (left_cond_func_cols_set.contains(i));
                 array_info* left_arr = work_left_table->columns[i];
                 // We are in data case or in the case of a key that is taken
                 // only from one side. Therefore we have to plan for the
                 // possibility of additional NaN.
                 if (!check_key_in_output || key_in_output[key_in_output_idx]) {
-                    bool map_integer_type = vect_need_typechange[idx];
+                    bool map_integer_type = use_nullable_arr_type[idx];
                     array_info* right_arr = nullptr;
                     if (ChoiceOpt == 0) {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
@@ -1224,9 +1224,9 @@ table_info* hash_join_table(
                 array_info* right_arr = work_right_table->columns[i];
                 // Check if a column may be eliminated from the output.
                 bool check_key_in_output =
-                    is_new_key || (right_cond_func_cols_set.count(i));
+                    is_new_key || (right_cond_func_cols_set.contains(i));
                 if (!check_key_in_output || key_in_output[key_in_output_idx]) {
-                    bool map_integer_type = vect_need_typechange[idx];
+                    bool map_integer_type = use_nullable_arr_type[idx];
                     array_info* left_arr = nullptr;
                     if (ChoiceOpt == 0) {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
@@ -1344,25 +1344,200 @@ void cross_join_handle_dict_encoded(table_info* left_table,
 }
 
 /**
+ * @brief Create data structures for column data to match the format
+ * expected by cond_func. We create three vectors:
+ * the array_infos (which handle general types), and data1/nullbitmap pointers
+ * as a fast path for accessing numeric data. These include both keys
+ * and data columns as either can be used in the cond_func.
+ *
+ * @param table input table
+ * @return std::tuple<std::vector<array_info*>, std::vector<void*>,
+ * std::vector<void*>> vectors of array infos, data1 pointers, and null bitmap
+ * pointers
+ */
+std::tuple<std::vector<array_info*>, std::vector<void*>, std::vector<void*>>
+get_gen_cond_data_ptrs(table_info* table) {
+    std::vector<array_info*> table_infos = table->columns;
+    std::vector<void*> col_ptrs(table->ncols());
+    std::vector<void*> null_bitmaps(table->ncols());
+
+    for (size_t i = 0; i < table->ncols(); i++) {
+        col_ptrs[i] = static_cast<void*>(table->columns[i]->data1);
+        null_bitmaps[i] = static_cast<void*>(table->columns[i]->null_bitmask);
+    }
+    return std::make_tuple(table_infos, col_ptrs, null_bitmaps);
+}
+
+/**
+ * @brief Find unmatched outer join rows (using reduction over bit map if
+ * necessary) and add them to list of output row indices.
+ *
+ * @param bit_map bitmap of matched rows
+ * @param n_rows number of rows in input table
+ * @param table_idxs indices in input table used for output generation
+ * @param other_table_idxs indices in the other table used for output generation
+ * @param needs_reduction : whether the bitmap needs a reduction (the
+ * corresponding table is replicated, but the other table is distributed).
+ */
+void add_unmatched_rows(std::vector<uint8_t>& bit_map, size_t n_rows,
+                        std::vector<int64_t>& table_idxs,
+                        std::vector<int64_t>& other_table_idxs,
+                        bool needs_reduction) {
+    if (needs_reduction) {
+        int n_pes, myrank;
+        MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
+        MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+        MPI_Allreduce_bool_or(bit_map);
+        int pos = 0;
+        for (size_t i = 0; i < n_rows; i++) {
+            bool bit = GetBit(bit_map.data(), i);
+            // distribute the replicated input table rows across ranks
+            // to load balance the output
+            if (!bit) {
+                int node = pos % n_pes;
+                if (node == myrank) {
+                    table_idxs.emplace_back(i);
+                    other_table_idxs.emplace_back(-1);
+                }
+                pos++;
+            }
+        }
+    } else {
+        for (size_t i = 0; i < n_rows; i++) {
+            bool bit = GetBit(bit_map.data(), i);
+            if (!bit) {
+                table_idxs.emplace_back(i);
+                other_table_idxs.emplace_back(-1);
+            }
+        }
+    }
+}
+
+/**
+ * @brief Create output table for join given the row indices.
+ * Removes dead condition function columns from the output.
+ *
+ * @param left_table left input table
+ * @param right_table right input table
+ * @param left_idxs indices of left table rows in output
+ * @param right_idxs indices of right table rows in output
+ * @param key_in_output : a vector of booleans specifying if cond
+ * func columns are included in the output table. The booleans first contain
+ * all cond columns of the left table and then the right table.
+ * @param use_nullable_arr_type : a vector specifying whether a column's type
+ * needs to be changed to nullable or not. Only applicable to Numpy integer
+ * columns currently.
+ * @param cond_func_left_columns: Array of column numbers in the left table
+ * used by cond_func.
+ * @param cond_func_left_column_len: Length of cond_func_left_columns.
+ * @param cond_func_right_columns: Array of column numbers in the right table
+ * used by cond_func.
+ * @param cond_func_right_column_len: Length of cond_func_right_columns.
+ * @param decref_arrs whether input arrays should be decrefed after use.
+ * @return table_info* output table of join
+ */
+table_info* create_out_table(
+    table_info* left_table, table_info* right_table,
+    std::vector<int64_t>& left_idxs, std::vector<int64_t>& right_idxs,
+    bool* key_in_output, int64_t* use_nullable_arr_type,
+    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
+    bool decref_arrs = true) {
+    // Create sets for cond func columns. These columns act
+    // like key columns and are contained inside of key_in_output,
+    // so we need an efficient lookup.
+    UNORD_SET_CONTAINER<int64_t> left_cond_func_cols_set;
+    left_cond_func_cols_set.reserve(cond_func_left_column_len);
+
+    UNORD_SET_CONTAINER<int64_t> right_cond_func_cols_set;
+    right_cond_func_cols_set.reserve(cond_func_right_column_len);
+
+    for (size_t i = 0; i < cond_func_left_column_len; i++) {
+        uint64_t col_num = cond_func_left_columns[i];
+        left_cond_func_cols_set.insert(col_num);
+    }
+    for (size_t i = 0; i < cond_func_right_column_len; i++) {
+        uint64_t col_num = cond_func_right_columns[i];
+        right_cond_func_cols_set.insert(col_num);
+    }
+
+    // create output columns
+    std::vector<array_info*> out_arrs;
+    int idx = 0;
+    offset_t key_in_output_idx = 0;
+    // add left columns to output
+    for (size_t i = 0; i < left_table->ncols(); i++) {
+        array_info* in_arr = left_table->columns[i];
+
+        // cond columns may be dead
+        if (!left_cond_func_cols_set.contains(i) ||
+            key_in_output[key_in_output_idx++]) {
+            bool use_nullable_int = use_nullable_arr_type[idx];
+            out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, left_idxs,
+                                                             use_nullable_int));
+            idx++;
+        }
+        if (decref_arrs) {
+            decref_array(in_arr);
+        }
+    }
+
+    // add right columns to output
+    for (size_t i = 0; i < right_table->ncols(); i++) {
+        array_info* in_arr = right_table->columns[i];
+
+        // cond columns may be dead
+        if (!right_cond_func_cols_set.contains(i) ||
+            key_in_output[key_in_output_idx++]) {
+            bool use_nullable_int = use_nullable_arr_type[idx];
+            out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, right_idxs,
+                                                             use_nullable_int));
+            idx++;
+        }
+        if (decref_arrs) {
+            decref_array(in_arr);
+        }
+    }
+
+    return new table_info(out_arrs);
+}
+
+/**
  * @brief cross join two tables locally with a simple nested loop join.
  * steals references (decrefs) both inputs since it calls RetrieveTable.
  *
  * @param left_table left input table
  * @param right_table right input table
+ * @param is_left : whether we do an inner or outer merge on the left.
+ * @param is_right : whether we do an inner or outer merge on the right.
+ * @param cond_func function generated in Python to evaluate general join
+ * conditions. It takes data pointers for left/right tables and row indices.
  * @param parallel_trace parallel flag to pass to tracing calls
+ * @param left_idxs row indices of left table to fill for creating output table
+ * @param right_idxs row indices of right table to fill for creating output
+ * table
+ * @param left_row_is_matched bitmap of matched left table rows to fill (left
+ * join only)
+ * @param right_row_is_matched bitmap of matched right table rows to fill (right
+ * join only)
  * @return table_info* cross join output table
  */
-table_info* cross_join_table_local(table_info* left_table,
-                                   table_info* right_table,
-                                   bool parallel_trace) {
+void cross_join_table_local(table_info* left_table, table_info* right_table,
+                            bool is_left, bool is_right,
+                            cond_expr_fn_t cond_func, bool parallel_trace,
+                            std::vector<int64_t>& left_idxs,
+                            std::vector<int64_t>& right_idxs,
+                            std::vector<uint8_t>& left_row_is_matched,
+                            std::vector<uint8_t>& right_row_is_matched) {
     tracing::Event ev("cross_join_table_local", parallel_trace);
     size_t n_rows_left = left_table->nrows();
     size_t n_rows_right = right_table->nrows();
-    size_t n_rows_out = n_rows_left * n_rows_right;
-    std::vector<int64_t> left_idxs;
-    std::vector<int64_t> right_idxs;
-    left_idxs.reserve(n_rows_out);
-    right_idxs.reserve(n_rows_out);
+
+    auto [left_table_infos, col_ptrs_left, null_bitmap_left] =
+        get_gen_cond_data_ptrs(left_table);
+    auto [right_table_infos, col_ptrs_right, null_bitmap_right] =
+        get_gen_cond_data_ptrs(right_table);
 
     // set 500K block size to make sure block data of all cores fits in L3 cache
     int64_t block_size_bytes = 500 * 1024;
@@ -1395,27 +1570,39 @@ table_info* cross_join_table_local(table_info* left_table,
                      j < right_block_start + right_block_n_rows; j++) {
                     if ((i < (int64_t)n_rows_left) &&
                         (j < (int64_t)n_rows_right)) {
-                        left_idxs.emplace_back(i);
-                        right_idxs.emplace_back(j);
+                        bool match = (cond_func == nullptr) ||
+                                     cond_func(left_table_infos.data(),
+                                               right_table_infos.data(),
+                                               col_ptrs_left.data(),
+                                               col_ptrs_right.data(),
+                                               null_bitmap_left.data(),
+                                               null_bitmap_right.data(), i, j);
+                        if (match) {
+                            left_idxs.emplace_back(i);
+                            right_idxs.emplace_back(j);
+                            if (is_left) {
+                                SetBitTo(left_row_is_matched.data(), i, true);
+                            }
+                            if (is_right) {
+                                SetBitTo(right_row_is_matched.data(), j, true);
+                            }
+                        }
                     }
                 }
             }
         }
     }
-
-    table_info* out_left = RetrieveTable(left_table, left_idxs, -1);
-    table_info* out_right = RetrieveTable(right_table, right_idxs, -1);
-    std::vector<array_info*> out_arrs(out_left->columns);
-    out_arrs.insert(out_arrs.end(), (out_right->columns).begin(),
-                    (out_right->columns).end());
-    return new table_info(out_arrs);
 }
 
 // design overview:
 // https://bodo.atlassian.net/l/cp/Av2ijf9A
-table_info* cross_join_table(table_info* left_table, table_info* right_table,
-                             bool left_parallel, bool right_parallel,
-                             uint64_t* num_rows_ptr) {
+table_info* cross_join_table(
+    table_info* left_table, table_info* right_table, bool left_parallel,
+    bool right_parallel, bool is_left, bool is_right, bool* key_in_output,
+    int64_t* use_nullable_arr_type, cond_expr_fn_t cond_func,
+    uint64_t* cond_func_left_columns, uint64_t cond_func_left_column_len,
+    uint64_t* cond_func_right_columns, uint64_t cond_func_right_column_len,
+    uint64_t* num_rows_ptr) {
     cross_join_handle_dict_encoded(left_table, right_table, left_parallel,
                                    right_parallel);
 
@@ -1424,8 +1611,15 @@ table_info* cross_join_table(table_info* left_table, table_info* right_table,
         tracing::Event ev("cross_join_table", parallel_trace);
         table_info* out_table;
 
-        // handle parallel cross join by broadcasting table chunks from every
-        // rank
+        // handle parallel cross join by broadcasting one side's table chunks of
+        // from every rank (loop over all ranks). For outer join handling, the
+        // broadcast side's unmatched rows need to be added right after each
+        // iteration since joining on the broadcast table chunk is fully done.
+        // This needs a reduction of the bitmap to find all potential matches.
+        // Handling outer join for the non-broadcast table should be done
+        // after all iterations are done to find all potential matches.
+        // No need for reduction of bitmap since chunks are independent and not
+        // replicated.
         if (left_parallel && right_parallel) {
             int n_pes, myrank;
             MPI_Comm_size(MPI_COMM_WORLD, &n_pes);
@@ -1433,16 +1627,26 @@ table_info* cross_join_table(table_info* left_table, table_info* right_table,
             std::vector<table_info*> out_table_chunks;
             out_table_chunks.reserve(n_pes);
 
+            size_t n_rows_left = left_table->nrows();
+            size_t n_rows_right = right_table->nrows();
+
             // broadcast the smaller table to reduce overall communication
             int64_t left_table_size = table_global_memory_size(left_table);
             int64_t right_table_size = table_global_memory_size(right_table);
             bool left_table_bcast = left_table_size < right_table_size;
             table_info* bcast_table = left_table;
             table_info* other_table = right_table;
+            size_t n_bytes_other = is_right ? (n_rows_right + 7) >> 3 : 0;
             if (!left_table_bcast) {
                 bcast_table = right_table;
                 other_table = left_table;
+                n_bytes_other = is_left ? (n_rows_left + 7) >> 3 : 0;
             }
+
+            // bcast_row_is_matched is reset in each iteration, but
+            // other_row_is_matched is updated across iterations
+            std::vector<uint8_t> bcast_row_is_matched;
+            std::vector<uint8_t> other_row_is_matched(n_bytes_other, 0);
 
             for (int p = 0; p < n_pes; p++) {
                 // NOTE: broadcast_table steals a reference from bcast_table on
@@ -1451,19 +1655,84 @@ table_info* cross_join_table(table_info* left_table, table_info* right_table,
                 table_info* bcast_table_chunk =
                     broadcast_table(bcast_table, bcast_table,
                                     bcast_table->ncols(), parallel_trace, p);
+                bool is_bcast_outer = (is_left && left_table_bcast) ||
+                                      (is_right && !left_table_bcast);
+                size_t n_bytes_bcast =
+                    is_bcast_outer ? (bcast_table_chunk->nrows() + 7) >> 3 : 0;
+                bcast_row_is_matched.resize(n_bytes_bcast);
+                std::fill(bcast_row_is_matched.begin(),
+                          bcast_row_is_matched.end(), 0);
+
+                std::vector<int64_t> left_idxs;
+                std::vector<int64_t> right_idxs;
 
                 // incref other table since needed in next iterations and
                 // cross_join_table_local decrefs
+                if (left_table_bcast) {
+                    cross_join_table_local(
+                        bcast_table_chunk, other_table, is_left, is_right,
+                        cond_func, parallel_trace, left_idxs, right_idxs,
+                        bcast_row_is_matched, other_row_is_matched);
+                } else {
+                    cross_join_table_local(
+                        other_table, bcast_table_chunk, is_left, is_right,
+                        cond_func, parallel_trace, left_idxs, right_idxs,
+                        other_row_is_matched, bcast_row_is_matched);
+                }
+                // handle bcast table's unmatched rows if outer
+                if (is_left && left_table_bcast) {
+                    add_unmatched_rows(bcast_row_is_matched,
+                                       bcast_table_chunk->nrows(), left_idxs,
+                                       right_idxs, true);
+                }
+                if (is_right && !left_table_bcast) {
+                    add_unmatched_rows(bcast_row_is_matched,
+                                       bcast_table_chunk->nrows(), right_idxs,
+                                       left_idxs, true);
+                }
+                // incref since create_out_table() decrefs all arrays
                 incref_table_arrays(other_table);
-                table_info* out_table_chunk =
-                    left_table_bcast
-                        ? cross_join_table_local(bcast_table_chunk, other_table,
-                                                 parallel_trace)
-                        : cross_join_table_local(other_table, bcast_table_chunk,
-                                                 parallel_trace);
+                table_info* left_in_chunk = bcast_table_chunk;
+                table_info* right_in_chunk = other_table;
+                if (!left_table_bcast) {
+                    left_in_chunk = other_table;
+                    right_in_chunk = bcast_table_chunk;
+                }
+                table_info* out_table_chunk = create_out_table(
+                    left_in_chunk, right_in_chunk, left_idxs, right_idxs,
+                    key_in_output, use_nullable_arr_type,
+                    cond_func_left_columns, cond_func_left_column_len,
+                    cond_func_right_columns, cond_func_right_column_len);
+                out_table_chunks.emplace_back(out_table_chunk);
                 delete bcast_table_chunk;
+            }
+
+            // handle non-bcast table's unmatched rows of if outer
+            if (is_left && !left_table_bcast) {
+                std::vector<int64_t> left_idxs;
+                std::vector<int64_t> right_idxs;
+                add_unmatched_rows(other_row_is_matched, left_table->nrows(),
+                                   left_idxs, right_idxs, false);
+                table_info* out_table_chunk = create_out_table(
+                    left_table, right_table, left_idxs, right_idxs,
+                    key_in_output, use_nullable_arr_type,
+                    cond_func_left_columns, cond_func_left_column_len,
+                    cond_func_right_columns, cond_func_right_column_len, false);
                 out_table_chunks.emplace_back(out_table_chunk);
             }
+            if (is_right && left_table_bcast) {
+                std::vector<int64_t> left_idxs;
+                std::vector<int64_t> right_idxs;
+                add_unmatched_rows(other_row_is_matched, right_table->nrows(),
+                                   right_idxs, left_idxs, false);
+                table_info* out_table_chunk = create_out_table(
+                    left_table, right_table, left_idxs, right_idxs,
+                    key_in_output, use_nullable_arr_type,
+                    cond_func_left_columns, cond_func_left_column_len,
+                    cond_func_right_columns, cond_func_right_column_len, false);
+                out_table_chunks.emplace_back(out_table_chunk);
+            }
+
             decref_table_arrays(other_table);
 
             out_table = concat_tables(out_table_chunks);
@@ -1472,8 +1741,37 @@ table_info* cross_join_table(table_info* left_table, table_info* right_table,
         // isn't necessary (output's distribution will match the other input as
         // intended)
         else {
-            out_table =
-                cross_join_table_local(left_table, right_table, parallel_trace);
+            std::vector<int64_t> left_idxs;
+            std::vector<int64_t> right_idxs;
+
+            size_t n_bytes_left = is_left ? (left_table->nrows() + 7) >> 3 : 0;
+            size_t n_bytes_right =
+                is_right ? (right_table->nrows() + 7) >> 3 : 0;
+            std::vector<uint8_t> left_row_is_matched(n_bytes_left, 0);
+            std::vector<uint8_t> right_row_is_matched(n_bytes_right, 0);
+
+            cross_join_table_local(left_table, right_table, is_left, is_right,
+                                   cond_func, parallel_trace, left_idxs,
+                                   right_idxs, left_row_is_matched,
+                                   right_row_is_matched);
+
+            // handle unmatched rows of if outer
+            if (is_left) {
+                bool needs_reduction = !left_parallel && right_parallel;
+                add_unmatched_rows(left_row_is_matched, left_table->nrows(),
+                                   left_idxs, right_idxs, needs_reduction);
+            }
+            if (is_right) {
+                bool needs_reduction = !right_parallel && left_parallel;
+                add_unmatched_rows(right_row_is_matched, right_table->nrows(),
+                                   right_idxs, left_idxs, needs_reduction);
+            }
+
+            out_table = create_out_table(
+                left_table, right_table, left_idxs, right_idxs, key_in_output,
+                use_nullable_arr_type, cond_func_left_columns,
+                cond_func_left_column_len, cond_func_right_columns,
+                cond_func_right_column_len);
         }
         // NOTE: no need to delete table pointers since done in generated Python
         // code in join.py

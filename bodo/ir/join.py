@@ -2235,11 +2235,11 @@ def _gen_join_cpp_call(
             and not is_same_key
         )
 
-    # The vect_need_typechange is computed in the python code and is sent to C++.
+    # The use_nullable_arr_type is computed in the python code and is sent to C++.
     # This is a general approach for this kind of combinatorial problem: compute in python
     # preferably to C++. Compute in dataframe_pass.py preferably to the IR node.
     #
-    # The vect_need_typechange is for the need to change the type in some cases.
+    # The use_nullable_arr_type is for the need to change the type in some cases.
     # Following constraints have to be taken into account:
     # ---For NullableArrayType the output column has the same format as the input column
     # ---For numpy array of float the output column has the same format as the input column
@@ -2255,10 +2255,10 @@ def _gen_join_cpp_call(
     vect_same_key = join_node.vect_same_key
 
     # List of columns in the output that need to be cast.
-    vect_need_typechange = []
+    use_nullable_arr_type = []
     for i in range(len(left_key_types)):
         if left_key_in_output[i]:
-            vect_need_typechange.append(
+            use_nullable_arr_type.append(
                 needs_typechange(
                     matched_key_types[i], join_node.is_right, vect_same_key[i]
                 )
@@ -2282,14 +2282,14 @@ def _gen_join_cpp_call(
             load_arr = left_key_in_output[left_key_in_output_idx]
             left_key_in_output_idx += 1
         if load_arr:
-            vect_need_typechange.append(
+            use_nullable_arr_type.append(
                 needs_typechange(left_other_types[i], join_node.is_right, False)
             )
 
     for i in range(len(right_key_types)):
         if not vect_same_key[i] and not join_node.is_join:
             if right_key_in_output[right_key_in_output_idx]:
-                vect_need_typechange.append(
+                use_nullable_arr_type.append(
                     needs_typechange(matched_key_types[i], join_node.is_left, False)
                 )
             right_key_in_output_idx += 1
@@ -2306,7 +2306,7 @@ def _gen_join_cpp_call(
             load_arr = right_key_in_output[right_key_in_output_idx]
             right_key_in_output_idx += 1
         if load_arr:
-            vect_need_typechange.append(
+            use_nullable_arr_type.append(
                 needs_typechange(right_other_types[i], join_node.is_left, False)
             )
 
@@ -2358,7 +2358,7 @@ def _gen_join_cpp_call(
         func_text += "    table_right = arr_info_list_to_table(info_list_total_r)\n"
     # Add globals that will be used in the function call.
     glbs["vect_same_key"] = np.array(vect_same_key, dtype=np.int64)
-    glbs["vect_need_typechange"] = np.array(vect_need_typechange, dtype=np.int64)
+    glbs["use_nullable_arr_type"] = np.array(use_nullable_arr_type, dtype=np.int64)
     glbs["left_table_cond_columns"] = np.array(
         left_col_nums if len(left_col_nums) > 0 else [-1], dtype=np.int64
     )
@@ -2375,10 +2375,25 @@ def _gen_join_cpp_call(
 
     # single-element numpy array to return number of global rows from C++
     func_text += f"    total_rows_np = np.array([0], dtype=np.int64)\n"
-    if join_node.how == "cross":
+
+    # joins without equality condition should use nested loop implementation
+    if join_node.how == "cross" or not join_node.left_keys:
         func_text += (
-            f"    out_table = cross_join_table(table_left, table_right, "
-            f"{left_parallel}, {right_parallel}, total_rows_np.ctypes)\n"
+            f"    out_table = cross_join_table("
+            "table_left, "
+            "table_right, "
+            f"{left_parallel}, "
+            f"{right_parallel}, "
+            f"{join_node.is_left}, "
+            f"{join_node.is_right}, "
+            f"key_in_output.ctypes, "
+            f"use_nullable_arr_type.ctypes, "
+            f"cfunc_cond, "
+            f"left_table_cond_columns.ctypes, "
+            f"{len(left_col_nums)}, "
+            f"right_table_cond_columns.ctypes, "
+            f"{len(right_col_nums)}, "
+            f"total_rows_np.ctypes)\n"
         )
     else:
         func_text += (
@@ -2392,7 +2407,7 @@ def _gen_join_cpp_call(
             f"{len(right_data_logical_list)}, "
             f"vect_same_key.ctypes, "
             f"key_in_output.ctypes, "
-            f"vect_need_typechange.ctypes, "
+            f"use_nullable_arr_type.ctypes, "
             f"{join_node.is_left}, "
             f"{join_node.is_right}, "
             f"{join_node.is_join}, "

@@ -1955,6 +1955,18 @@ def test_merge_general_cond(memory_leak_check):
             how=how,
         )
 
+    # single non-equality term, no equality
+    def impl6(df1, df2):
+        return df1.merge(df2, on="right.D <= left.B + 1")
+
+    # multiple non-equality terms, no equality
+    def impl7(df1, df2, how):
+        return df1.merge(
+            df2,
+            on="(right.D < left.B + 1 | right.C > left.B)",
+            how=how,
+        )
+
     df1 = pd.DataFrame({"A": [1, 2, 1, 1, 3, 2, 3], "B": [1, 2, 3, 1, 2, 3, 1]})
     df2 = pd.DataFrame(
         {
@@ -2036,17 +2048,44 @@ def test_merge_general_cond(memory_leak_check):
         py_output=py_out,
     )
 
-    # # test left/right/outer cases, needs Spark to generate reference output
+    py_out = df1.merge(df2, how="cross")
+    py_out = py_out.query("D <= B + 1")
+    check_func(
+        impl6,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+    py_out = df1.merge(df4, how="cross")
+    py_out = py_out.query("D < B + 1 | C > B")
+    check_func(
+        impl7,
+        (df1, df4, "inner"),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+    # testing left/right/outer cases needs Spark to generate reference output
+    # avoid duplicated names for non-equi case
+    df3 = df2.rename(columns={"A": "A1"})
     from pyspark.sql import SparkSession
 
     spark = SparkSession.builder.getOrCreate()
     sdf1 = spark.createDataFrame(df1)
     sdf2 = spark.createDataFrame(df2)
+    sdf3 = spark.createDataFrame(df3)
     sdf1.createOrReplaceTempView("table1")
     sdf2.createOrReplaceTempView("table2")
+    sdf3.createOrReplaceTempView("table3")
     for how in ("left", "right", "outer"):
         # Spark requires "full outer" for some reason
         spark_how = "full outer" if how == "outer" else how
+        # test with equality
         py_out = spark.sql(
             f"select * from table1 {spark_how} join table2 on (table2.D < table1.B + 1 or table2.C > table1.B) and table1.A == table2.A"
         ).toPandas()
@@ -2062,6 +2101,37 @@ def test_merge_general_cond(memory_leak_check):
             check_dtype=False,
             py_output=py_out,
         )
+        # test without equality
+        py_out = spark.sql(
+            f"select * from table1 {spark_how} join table3 on (table3.D < table1.B + 1 or table3.C > table1.B)"
+        ).toPandas()
+        check_func(
+            impl7,
+            (df1, df3, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
+        # test only one side being distributed
+        out_df = _gather_output(
+            bodo.jit(distributed=["df1"])(impl7)(
+                _get_dist_arg(df1, True, True), df3, how
+            )
+        )
+        if bodo.get_rank() == 0:
+            _test_equal(
+                out_df, py_out, sort_output=True, reset_index=True, check_dtype=False
+            )
+        out_df = _gather_output(
+            bodo.jit(distributed=["df2"])(impl7)(
+                df1, _get_dist_arg(df3, True, True), how
+            )
+        )
+        if bodo.get_rank() == 0:
+            _test_equal(
+                out_df, py_out, sort_output=True, reset_index=True, check_dtype=False
+            )
 
 
 def test_merge_general_cond_na(memory_leak_check):
@@ -2656,6 +2726,10 @@ def test_merge_general_cond_rm_dead(memory_leak_check):
         df3 = df1.merge(df2, on="right.D2-5 >= left.C & left.A == right.A2")
         return df3[["A2", "B", "C", "E"]]
 
+    def impl2(df1, df2):
+        df3 = df1.merge(df2, on="right.D2-5 >= left.C")
+        return df3[["A2", "B", "C", "E"]]
+
     df1 = pd.DataFrame(
         {
             "A": [1, 2, 1, 1, 3, 2, 3],
@@ -2678,6 +2752,16 @@ def test_merge_general_cond_rm_dead(memory_leak_check):
     py_out = py_out.query("D2-5 >= C")[["A2", "B", "C", "E"]]
     check_func(
         impl,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df1.merge(df2, how="cross")
+    py_out = py_out.query("D2-5 >= C")[["A2", "B", "C", "E"]]
+    check_func(
+        impl2,
         (df1, df2),
         sort_output=True,
         reset_index=True,
