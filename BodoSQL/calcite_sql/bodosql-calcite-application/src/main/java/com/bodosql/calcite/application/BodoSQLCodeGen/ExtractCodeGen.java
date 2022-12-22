@@ -40,11 +40,7 @@ public class ExtractCodeGen {
       case "QUARTER":
       case "YEAR":
         extractCode =
-            "bodo.libs.bodosql_array_kernels.extract_"
-                + datetimeVal.toLowerCase()
-                + "("
-                + column
-                + ")";
+            "bodo.libs.bodosql_array_kernels.get_" + datetimeVal.toLowerCase() + "(" + column + ")";
         break;
       case "DAY":
       case "DAYOFMONTH":

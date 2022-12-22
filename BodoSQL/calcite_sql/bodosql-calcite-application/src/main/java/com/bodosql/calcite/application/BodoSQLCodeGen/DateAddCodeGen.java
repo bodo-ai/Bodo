@@ -156,20 +156,34 @@ public class DateAddCodeGen {
    * @param arg1 The amount of days to add to the starting datetime.
    * @param strNeedsCast Is arg0 a string that needs casting.
    * @param generateScalarCode Are the inputs scalars?
+   * @param manual_addition Is the second argument a timedelta?
    * @return The code generated that matches the DateAdd expression.
    */
   public static String generateMySQLDateAddCode(
-      String arg0, String arg1, boolean strNeedsCast, boolean generateScalarCode) {
+      String arg0,
+      String arg1,
+      boolean strNeedsCast,
+      boolean generateScalarCode,
+      boolean manual_addition) {
     StringBuilder addBuilder = new StringBuilder();
     if (strNeedsCast) {
       arg0 = generateCastCode(arg0, SqlTypeName.TIMESTAMP, generateScalarCode);
     }
-    addBuilder
-        .append("bodo.libs.bodosql_array_kernels.add_interval_days(")
-        .append(arg1)
-        .append(", ")
-        .append(arg0)
-        .append(")");
+    if (manual_addition) {
+      addBuilder
+          .append("bodo.libs.bodosql_array_kernels.add_interval(")
+          .append(arg0)
+          .append(", ")
+          .append(arg1)
+          .append(")");
+    } else {
+      addBuilder
+          .append("bodo.libs.bodosql_array_kernels.add_interval_days(")
+          .append(arg1)
+          .append(", ")
+          .append(arg0)
+          .append(")");
+    }
 
     return addBuilder.toString();
   }
