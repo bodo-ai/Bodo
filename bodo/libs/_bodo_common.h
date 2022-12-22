@@ -82,6 +82,7 @@ inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
     if (typ == Bodo_CTypes::INT16) return true;
     if (typ == Bodo_CTypes::INT32) return true;
     if (typ == Bodo_CTypes::INT64) return true;
+    if (typ == Bodo_CTypes::INT128) return true;
     return false;
 }
 
