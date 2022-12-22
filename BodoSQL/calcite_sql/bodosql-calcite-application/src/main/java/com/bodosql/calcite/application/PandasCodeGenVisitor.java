@@ -2223,6 +2223,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DATE_ADD":
           case "ADDDATE":
             assert operandsInfo.size() == 2;
+            // If the second argument is a timedelta, switch to manual addition
+            boolean manual_addition =
+                SqlTypeName.INTERVAL_TYPES.contains(
+                    fnOperation.getOperands().get(1).getType().getSqlTypeName());
             // Cast arg0 to from string to timestamp, if needed
             if (SqlTypeName.STRING_TYPES.contains(
                 fnOperation.getOperands().get(0).getType().getSqlTypeName())) {
@@ -2255,7 +2259,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
                     operandsInfo.get(0).getExprCode(),
                     arg1Expr,
                     strNeedsCast,
-                    dateAddGeneratesScalarCode);
+                    dateAddGeneratesScalarCode,
+                    manual_addition);
             return new RexNodeVisitorInfo(outputName, addExpr);
 
           case "SUBDATE":

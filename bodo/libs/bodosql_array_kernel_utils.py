@@ -883,7 +883,7 @@ def verify_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
         or is_valid_tz_aware_datetime_arg(arg)
     ):
         raise_bodo_error(
-            f"{f_name} {a_name} argument must be a datetime, datetime column, or null without a tz"
+            f"{f_name} {a_name} argument must be a datetime, datetime column, or null"
         )
 
 
@@ -902,6 +902,46 @@ def get_tz_if_exists(arg):  # pragma: no cover
         else:
             return arg.tz
     return None
+
+
+def is_valid_time_arg(arg):
+    """
+    Is the type an acceptable time argument for a BodoSQL array
+    kernel. This is a date time, array, or Series value.
+
+    Args:
+        arg (types.Type): A Bodo type.
+
+    Returns:
+        bool: Is this type a time type
+    """
+    return isinstance(arg, bodo.TimeType) or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and isinstance(arg.dtype, bodo.bodo.TimeType)
+    )
+
+
+def verify_time_or_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a time/datetime
+       (scalar or vector) that allows timezones.
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+
+    raises: BodoError if the argument is not a datetime, datetime column, or NULL
+    """
+    if not (
+        is_overload_none(arg)
+        or is_valid_date_arg(arg)
+        or is_valid_time_arg(arg)
+        or is_valid_tz_naive_datetime_arg(arg)
+        or is_valid_tz_aware_datetime_arg(arg)
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a time/datetime, time/datetime column, or null without a tz"
+        )
 
 
 def get_common_broadcasted_type(arg_types, func_name):
