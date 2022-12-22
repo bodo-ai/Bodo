@@ -11,7 +11,7 @@ dayDeltaUnixY0 = 719528
 secondDeltaUnixY0 = 62167219200
 
 
-def test_fromdays_cols(spark_info, basic_df, memory_leak_check):
+def test_from_days_cols(spark_info, basic_df, memory_leak_check):
     """tests from_days function on column values"""
 
     query = f"SELECT FROM_DAYS(A + {dayDeltaUnixY0}), FROM_DAYS(B + {dayDeltaUnixY0}), FROM_DAYS(C + {dayDeltaUnixY0}) from table1"
@@ -27,7 +27,7 @@ def test_fromdays_cols(spark_info, basic_df, memory_leak_check):
     )
 
 
-def test_fromdays_scalar(spark_info, basic_df, memory_leak_check):
+def test_from_days_scalar(spark_info, basic_df, memory_leak_check):
     """tests from_days function on scalar values"""
 
     query = f"SELECT CASE WHEN FROM_DAYS(B + {dayDeltaUnixY0}) = TIMESTAMP '1970-1-1' then TIMESTAMP '1970-1-2' ELSE FROM_DAYS(B + {dayDeltaUnixY0}) END from table1"
