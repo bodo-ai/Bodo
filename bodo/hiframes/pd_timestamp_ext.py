@@ -1224,57 +1224,6 @@ def is_leap_year(year):  # pragma: no cover
     return (year & 0x3) == 0 and ((year % 100) != 0 or (year % 400) == 0)
 
 
-def localize_objmode(year, month, day, hour, minute, second, microsecond, tz):
-    """
-    Compute the timezone aware datetime and its utc offset for computing the value
-    of a type.
-    """
-    # Compute the datetime value
-    dt = datetime.datetime(year, month, day, hour, minute, second, microsecond)
-    # Compute the timezone.
-    tz_info = pytz.timezone(tz)
-    # Copy pandas implementation
-    try:
-        # datetime.replace with pytz may be incorrect result
-        final_dt = tz_info.localize(dt)
-    except AttributeError:  # pragma: no cover
-        final_dt = dt.replace(tzinfo=tz_info)
-    # Determine the offset for the correct time.
-    offset = final_dt.utcoffset()
-    if offset is None:
-        offset_int = 0
-    else:
-        # Get the offset as an integer. This is the offset from UTC
-        # to get to the local time, so we negate it.
-        offset_int = -(pd.Timedelta(final_dt.utcoffset()).value)
-    return final_dt, offset_int
-
-
-@register_jitable
-def localize_value_timestamp(
-    year, month, day, hour, minute, second, microsecond, nanosecond, tz
-):  # pragma: no cover
-    with numba.objmode(dt_val=bodo.datetime_datetime_type, offset="int64"):
-        dt_val, offset = localize_objmode(
-            year, month, day, hour, minute, second, microsecond, tz
-        )
-
-    # Convert the modified time to an actual timestamp and include nanoseconds.
-    return (
-        npy_datetimestruct_to_datetime(
-            dt_val.year,
-            dt_val.month,
-            dt_val.day,
-            dt_val.hour,
-            dt_val.minute,
-            dt_val.second,
-            dt_val.microsecond,
-        )
-        + offset
-        + nanosecond
-    )
-
-
 @numba.generated_jit(nopython=True)
 def compute_val_for_timestamp(
     year,
@@ -1291,20 +1240,28 @@ def compute_val_for_timestamp(
     Computes the correct value for the given timezone and outputs the correct Timestamp
     given the appropriate field values.
     """
-    use_objmode = False
     delta_str = "0"
     tz_value = get_literal_value(tz)
+    deltas = None
+    trans = None
+    check_transitions = False
     if tz_has_transition_times(tz_value):
-        # Reconstructing the UTC for a local time is very complicated with transitions, so we defer to objmode.
-        # TODO [BE-4048]: Move calculation to JIT.
-        use_objmode = True
+        check_transitions = True
+        tz_obj = pytz.timezone(tz_value)
+        trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
+        deltas = np.array(tz_obj._transition_info)[:, 0]
+        deltas = (
+            (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
+            .astype(np.int64)
+            .values
+        )  # np.array(tz_obj._transition_info)[:, 0]
+        delta_str = "deltas[np.searchsorted(trans, original_value, side='right') - 1]"
     elif isinstance(tz_value, str):
         # Here we are certain there are no transition times so we can compute a fixed offset
         # from the timezone
         tz_obj = pytz.timezone(tz_value)
         # Convert to nanoseconds.
         delta_str = str(np.int64(tz_obj._utcoffset.total_seconds() * 1_000_000_000))
-        use_objmode = True
     elif isinstance(tz_value, int):
         # Integers are always the offset in nanoseconds
         delta_str = str(tz_value)
@@ -1314,21 +1271,25 @@ def compute_val_for_timestamp(
         )
 
     func_text = "def impl(year, month, day, hour, minute, second, microsecond, nanosecond, tz):\n"
-    if use_objmode:
-        func_text += f"  value = localize_value_timestamp(year, month, day, hour, minute, second, microsecond, nanosecond, tz)\n"
-    else:
-        # Subtract the offset
-        func_text += f"  original_value = npy_datetimestruct_to_datetime(year, month, day, hour, minute, second, microsecond) + nanosecond\n"
-        # In this case the delta is a fixed offset in nanoseconds that is the amount to add from utc to the current
-        # timezone. As a result we subtract this value.
-        # Example:
-        # In [1]: import pytz
-        # In [2]: pd.Timestamp('2020-03-15', tz=pytz.FixedOffset(8)).value
-        # Out[2]: 1584229920000000000
-        # In [3]: pd.Timestamp('2020-03-15').value
-        # Out[3]: 1584230400000000000
-        # Here delta would be 480000000000 (to convert from 3 to 2)
-        func_text += f"  value = original_value - {delta_str}\n"
+    # Subtract the offset
+    func_text += f"  original_value = npy_datetimestruct_to_datetime(year, month, day, hour, minute, second, microsecond) + nanosecond\n"
+    # In this case the delta is a fixed offset in nanoseconds that is the amount to add from utc to the current
+    # timezone. As a result we subtract this value.
+    # Example:
+    # In [1]: import pytz
+    # In [2]: pd.Timestamp('2020-03-15', tz=pytz.FixedOffset(8)).value
+    # Out[2]: 1584229920000000000
+    # In [3]: pd.Timestamp('2020-03-15').value
+    # Out[3]: 1584230400000000000
+    # Here delta would be 480000000000 (to convert from 3 to 2)
+    func_text += f"  value = original_value - {delta_str}\n"
+    if check_transitions:
+        func_text += (
+            "  start_trans = np.searchsorted(trans, original_value, side='right') - 1\n"
+        )
+        func_text += "  end_trans = np.searchsorted(trans, value, side='right') - 1\n"
+        func_text += "  offset = deltas[start_trans] - deltas[end_trans]\n"
+        func_text += "  value = value + offset\n"
     func_text += "  return init_timestamp(\n"
     func_text += "    year=year,\n"
     func_text += "    month=month,\n"
@@ -1349,7 +1310,8 @@ def compute_val_for_timestamp(
             "pd": pd,
             "init_timestamp": init_timestamp,
             "npy_datetimestruct_to_datetime": npy_datetimestruct_to_datetime,
-            "localize_value_timestamp": localize_value_timestamp,
+            "trans": trans,
+            "deltas": deltas,
         },
         loc_vars,
     )

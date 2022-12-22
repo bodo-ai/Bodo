@@ -362,3 +362,26 @@ def test_timestamp_now_with_tz_str(representative_tz, memory_leak_check):
     # Note: have to test this manually as pd.Timestamp.now() will return slightly differing values
     out = test_impl()
     assert pd.Timestamp.now(representative_tz) - out < pd.Timedelta(1, "min")
+
+
+def test_tz_constructor_values(representative_tz, memory_leak_check):
+    tz = representative_tz
+
+    def test_constructor_kw(year, month, day, hour):
+        # Test constructor with year/month/day passed as keyword arguments
+        return pd.Timestamp(year=year, month=month, day=day, hour=hour, tz=tz)
+
+    def test_constructor_kw_value(year, month, day, hour):
+        # Check the utc value
+        return pd.Timestamp(year=year, month=month, day=day, hour=hour, tz=tz).value
+
+    # Note: This checks both sides of daylight savings.
+    check_func(test_constructor_kw, (2022, 11, 6, 0))
+    check_func(test_constructor_kw, (2022, 11, 6, 3))
+    check_func(test_constructor_kw, (2022, 3, 13, 0))
+    check_func(test_constructor_kw, (2022, 3, 13, 3))
+
+    check_func(test_constructor_kw_value, (2022, 11, 6, 0))
+    check_func(test_constructor_kw_value, (2022, 11, 6, 3))
+    check_func(test_constructor_kw_value, (2022, 3, 13, 0))
+    check_func(test_constructor_kw_value, (2022, 3, 13, 3))
