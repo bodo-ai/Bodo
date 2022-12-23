@@ -131,31 +131,6 @@ public class BinOpCodeGen {
         scalarIsFunction = true;
         scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_true_division";
         break;
-      case OTHER_FUNCTION:
-        switch (binOpName) {
-          case "CONCAT_WS":
-          case "CONCAT":
-            columnOperator = "+";
-            scalarIsFunction = true;
-            scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_addition";
-            break;
-          default:
-            throw new BodoSQLCodegenException(
-                "Unsupported Operator, " + binOpName + " specified in query.");
-        }
-        break;
-      case OTHER:
-        switch (binOpName) {
-          case "||":
-            columnOperator = "+";
-            scalarIsFunction = true;
-            scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_addition";
-            break;
-          default:
-            throw new BodoSQLCodegenException(
-                "Unsupported Operator, " + binOpName + " specified in query.");
-        }
-        break;
       default:
         throw new BodoSQLCodegenException(
             "Unsupported Operator, " + binOpKind + " specified in query.");
