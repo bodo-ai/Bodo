@@ -439,7 +439,7 @@ def gen_vectorized(
     return impl
 
 
-def unopt_argument(func_name, arg_names, i, container_length=None):
+def unopt_argument(func_name, arg_names, i, container_arg=0, container_length=None):
     """Creates an impl that cases on whether or not a certain argument to a function
        is None in order to un-optionalize that argument
 
@@ -447,7 +447,9 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
         func_name (string): the name of the function with the optional arguments
         arg_names (string list): the name of each argument to the function
         i (integer): the index of the argument from arg_names being unoptionalized
-        container_length (optional int): if provided, treat the single arg_name as
+        container_arg (optional int): Which argument in the container are we checking?
+            Used alongside container_length.
+        container_length (optional int): if provided, treat the arg_names[i] as
         a container of this many arguments. Used so we can pass in arbitrary sized
         containers or arguments to handle SQL functions with variadic arguments,
         such as coalesce
@@ -456,22 +458,57 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
         function: the impl that re-calls func_name with arg_names[i] no longer optional
     """
     if container_length != None:
+        # If this path the one of the arguments is a tuple of arrays and the optional
+        # value is a member of the tuple. In this path we execute the follow steps.
+        # Step 1: Replace the tuple with a new tuple.
+        # Step 2: Generate the new function calls.
+
+        # Here is an example:
+        #   call(arg0, arg1, arg2)
+        #   i = 1
+        #   container_arg = 2
+        #   container_length = 3
+        #
+        # Here are the two different tuple options:
+        # args1_str = (arg1[0], arg1[1], None)
+        # args2_str = (arg1[0], arg1[1], bodo.utils.indexing.unoptional(arg1[2]))
+        #
+        # Then the total call becomes
+        # total_args1 = arg0, (arg1[0], arg1[1], None), arg2
+        # total_args2 = arg0, (arg1[0], arg1[1], bodo.utils.indexing.unoptional(arg1[2])), arg2
         args1 = [
-            f"{arg_names[0]}{[j]}" if j != i else "None"
+            f"{arg_names[i]}{[j]}" if j != container_arg else "None"
             for j in range(container_length)
         ]
+        # Note: (,) is not valid code.
+        extra_comma = "," if container_length != 0 else ""
+        args1_str = f"({', '.join(args1)}{extra_comma})"
         args2 = [
-            f"{arg_names[0]}{[j]}"
-            if j != i
-            else f"bodo.utils.indexing.unoptional({arg_names[0]}[{j}])"
+            f"{arg_names[i]}{[j]}"
+            if j != container_arg
+            else f"bodo.utils.indexing.unoptional({arg_names[i]}[{j}])"
             for j in range(container_length)
+        ]
+        args2_str = f"({', '.join(args2)}{extra_comma})"
+        total_args1 = [
+            arg_names[j] if j != i else args1_str for j in range(len(arg_names))
+        ]
+        total_args2 = [
+            arg_names[j] if j != i else args2_str for j in range(len(arg_names))
         ]
         func_text = f"def impl({', '.join(arg_names)}):\n"
-        func_text += f"   if {arg_names[0]}[{i}] is None:\n"
-        func_text += f"      return {func_name}(({', '.join(args1)}))\n"
+        func_text += f"   if {arg_names[i]}[{container_arg}] is None:\n"
+        func_text += f"      return {func_name}({', '.join(total_args1)})\n"
         func_text += f"   else:\n"
-        func_text += f"      return {func_name}(({', '.join(args2)}))\n"
+        func_text += f"      return {func_name}({', '.join(total_args2)})\n"
     else:
+        # In this path we just replace individual arguments.
+        #   call(arg0, arg1, arg2)
+        #   i = 1
+        #
+        # args1 = (arg0, None, arg2)
+        # args2 = (arg0, bodo.utils.indexing.unoptional(arg1), arg2)
+        #
         args1 = [arg_names[j] if j != i else "None" for j in range(len(arg_names))]
         args2 = [
             arg_names[j]

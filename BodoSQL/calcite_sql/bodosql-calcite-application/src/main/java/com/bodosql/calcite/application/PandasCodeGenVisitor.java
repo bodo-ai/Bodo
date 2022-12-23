@@ -2451,17 +2451,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "PI":
             return new RexNodeVisitorInfo("PI", "np.pi");
           case "CONCAT":
-            return generateConcatFnInfo(
-                operandsInfo, exprTypes, fnOperation.getOperator(), isSingleRow);
+            return generateConcatFnInfo(operandsInfo);
           case "CONCAT_WS":
             assert operandsInfo.size() >= 2;
             return generateConcatWSFnInfo(
-                operandsInfo.get(0),
-                exprTypes.get(0),
-                operandsInfo.subList(1, operandsInfo.size()),
-                exprTypes.subList(1, operandsInfo.size()),
-                fnOperation.getOperator(),
-                isSingleRow);
+                operandsInfo.get(0), operandsInfo.subList(1, operandsInfo.size()));
           case "GETDATE":
             assert operandsInfo.size() == 0;
             return new RexNodeVisitorInfo("GETDATE()", "pd.Timestamp.now().normalize()");
@@ -2972,6 +2966,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       names.add(info.getName());
       args.add(info.getExprCode());
       exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operand, id)));
+    }
+    if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
+      // Support the concat operator by using the concat array kernel.
+      List<RexNodeVisitorInfo> argInfos = new ArrayList<>();
+      for (int i = 0; i < names.size(); i++) {
+        argInfos.add(new RexNodeVisitorInfo(names.get(i), args.get(i)));
+      }
+      return generateConcatFnInfo(argInfos);
     }
     String name = generateBinOpName(names, binOp);
     String codeGen = generateBinOpCode(args, exprTypes, binOp, isSingleRow);
