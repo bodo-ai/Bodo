@@ -1584,7 +1584,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if func_name in broadcasted_fixed_arg_functions:
+        if (
+            func_name in broadcasted_fixed_arg_functions
+            and func_mod == "bodo.libs.bodosql_array_kernels"
+        ):
             # All of the arguments could be scalars or arrays, but all of the
             # arrays need to meet one another
             arrays = [lhs]
@@ -1595,7 +1598,10 @@ class DistributedAnalysis:
                 self._meet_several_array_dists(arrays, array_dists)
             return
 
-        if func_name in broadcasted_variadic_functions:
+        if (
+            func_name in broadcasted_variadic_functions
+            and func_mod == "bodo.libs.bodosql_array_kernels"
+        ):
             # Note: this will fail if the tuple argument is not constant,
             # but this should never happen because we control code generation
             elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
@@ -1607,6 +1613,26 @@ class DistributedAnalysis:
             for arg in elems:
                 if is_array_typ(self.typemap[arg.name]):
                     arrays.append(arg.name)
+            if len(arrays) > 1:
+                self._meet_several_array_dists(arrays, array_dists)
+            return
+
+        if fdef == ("concat_ws", "bodo.libs.bodosql_array_kernels"):
+            # Note: this will fail if the tuple argument is not constant,
+            # but this should never happen because we control code generation
+            elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
+            assert (
+                elems is not None
+            ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
+
+            arrays = [lhs]
+            for arg in elems:
+                if is_array_typ(self.typemap[arg.name]):
+                    arrays.append(arg.name)
+            # Get the information about the separator
+            sep_name = rhs.args[1].name
+            if is_array_typ(self.typemap[sep_name]):
+                arrays.append(sep_name)
             if len(arrays) > 1:
                 self._meet_several_array_dists(arrays, array_dists)
             return
