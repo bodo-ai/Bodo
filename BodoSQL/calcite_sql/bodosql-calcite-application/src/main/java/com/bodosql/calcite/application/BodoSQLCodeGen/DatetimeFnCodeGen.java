@@ -175,109 +175,17 @@ public class DatetimeFnCodeGen {
    *
    * @param arg1Info The VisitorInfo for the first argument. Currently, this is required to be a *
    *     constant string literal.
-   * @param arg2Info The VisitorInfo for the second argument.
-   * @param arg2ExprType Is arg2 a column or scalar?
-   * @param isSingleRow boolean value that determines if this function call is taking place within
-   *     an apply
-   * @return the rexNodeVisitorInfo for the result.
+   * @param arg2Info The VisitorInfo for the second argument. = * @return the rexNodeVisitorInfo for
+   *     the result.
    */
   public static RexNodeVisitorInfo generateDateTruncCode(
-      RexNodeVisitorInfo arg1Info,
-      RexNodeVisitorInfo arg2Info,
-      BodoSQLExprType.ExprType arg2ExprType,
-      boolean isSingleRow) {
-    if (!isStringLiteral(arg1Info.getExprCode())) {
-      throw new BodoSQLCodegenException(
-          "DATE_TRUNC(): Argument 0 must be a constant literal String");
-    }
-
+      RexNodeVisitorInfo arg1Info, RexNodeVisitorInfo arg2Info) {
     String name = "DATE_TRUNC(" + arg1Info.getName() + ", " + arg2Info.getName() + ")";
-    // Extract the literal and ensure its not case sensitive
-    String truncVal = getStringLiteralValue(arg1Info.getExprCode()).toUpperCase();
-    // Valid DATE_TRUNC values:
-    // https://docs.snowflake.com/en/sql-reference/functions-date-time.html#supported-date-and-time-parts
-    String outputExpression;
-
-    if (arg2ExprType == BodoSQLExprType.ExprType.SCALAR || isSingleRow) {
-      // TODO [BS-638]: Support Scalar Values
-      throw new BodoSQLCodegenException("DATE_TRUNC(): Not supported on scalar values.");
-    } else {
-      switch (truncVal) {
-          // For offset values we need to use DateOffset.
-        case "YEAR":
-          // TODO [BE-2304]: Support YearBegin in the Engine
-          throw new BodoSQLCodegenException(
-              "DATE_TRUNC(): Specifying 'YEAR' for <date_or_time_part> not supported.");
-        case "MONTH":
-          // Month rounds down to the start of the Month.
-          // We add 1 Day to avoid boundaries
-          outputExpression =
-              "bodo.hiframes.pd_series_ext.get_series_data(((pd.Series("
-                  + arg2Info.getExprCode()
-                  + ") + pd.Timedelta(days=1)) - pd.tseries.offsets.MonthBegin(n=1,"
-                  + " normalize=True)))";
-          break;
-        case "WEEK":
-          // Week rounds down to the Monday of that week.
-          // We add 1 Day to avoid boundaries
-          outputExpression =
-              "bodo.hiframes.pd_series_ext.get_series_data(((pd.Series("
-                  + arg2Info.getExprCode()
-                  + ") + pd.Timedelta(days=1)) - pd.tseries.offsets.Week(n=1, weekday=0,"
-                  + " normalize=True)))";
-          break;
-        case "QUARTER":
-          // TODO [BE-2305]: Support QuarterBegin in the Engine
-          throw new BodoSQLCodegenException(
-              "DATE_TRUNC(): Specifying 'Quarter' for <date_or_time_part> not supported.");
-        case "DAY":
-          // For all timedelta valid values we can use .dt.floor
-          outputExpression =
-              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                  + arg2Info.getExprCode()
-                  + ").dt.floor(\"D\"))";
-          break;
-        case "HOUR":
-          outputExpression =
-              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                  + arg2Info.getExprCode()
-                  + ").dt.floor(\"H\"))";
-          break;
-        case "MINUTE":
-          outputExpression =
-              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                  + arg2Info.getExprCode()
-                  + ").dt.floor(\"min\"))";
-          break;
-        case "SECOND":
-          outputExpression =
-              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                  + arg2Info.getExprCode()
-                  + ").dt.floor(\"S\"))";
-          break;
-        case "MILLISECOND":
-          outputExpression =
-              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                  + arg2Info.getExprCode()
-                  + ").dt.floor(\"ms\"))";
-          break;
-        case "MICROSECOND":
-          outputExpression =
-              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                  + arg2Info.getExprCode()
-                  + ").dt.floor(\"us\"))";
-          break;
-        case "NANOSECOND":
-          // Timestamps have nanosecond precision so we don't need to round.
-          outputExpression = arg2Info.getExprCode();
-          break;
-        default:
-          throw new BodoSQLCodegenException(
-              String.format("DATE_TRUNC(): Invalid <date_or_time_part> '%s'", truncVal));
-      }
-    }
-
-    return new RexNodeVisitorInfo(name, outputExpression);
+    String codeGen =
+        String.format(
+            "bodo.libs.bodosql_array_kernels.date_trunc(%s, %s)",
+            arg1Info.getExprCode(), arg2Info.getExprCode());
+    return new RexNodeVisitorInfo(name, codeGen);
   }
 
   /**

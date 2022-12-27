@@ -1254,7 +1254,7 @@ def compute_val_for_timestamp(
             (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
             .astype(np.int64)
             .values
-        )  # np.array(tz_obj._transition_info)[:, 0]
+        )
         delta_str = "deltas[np.searchsorted(trans, original_value, side='right') - 1]"
     elif isinstance(tz_value, str):
         # Here we are certain there are no transition times so we can compute a fixed offset
@@ -2293,7 +2293,6 @@ def toordinal(date):
 # https://github.com/pandas-dev/pandas/blob/009ffa8d2c019ffb757fb0a4b53cc7a9a948afdd/pandas/_libs/tslibs/timedeltas.pyx#L1219
 def overload_freq_methods(method):
     def freq_overload(td, freq, ambiguous="raise", nonexistent="raise"):
-        check_tz_aware_unsupported(td, f"Timestamp.{method}()")
         unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
         floor_defaults = dict(ambiguous="raise", nonexistent="raise")
         check_unsupported_args(
@@ -2321,6 +2320,10 @@ def overload_freq_methods(method):
             1000,
             1,
         ]
+        # Used by tz-aware timezones
+        deltas = None
+        trans = None
+        tz_literal = None
         func_text = "def impl(td, freq, ambiguous='raise', nonexistent='raise'):\n"
         for i, cond in enumerate(freq_conditions):
             cond_label = "if" if i == 0 else "elif"
@@ -2332,32 +2335,104 @@ def overload_freq_methods(method):
             func_text += "    return pd.Timedelta(unit_value * np.int64(np.{}(td.value / unit_value)))\n".format(
                 method
             )
-        elif td == pd_timestamp_tz_naive_type:
+        else:
+            assert isinstance(td, PandasTimestampType), "Value must be a timestamp"
+            func_text += f"    value = td.value\n"
+            tz_literal = td.tz
+            if tz_literal is not None:
+                # If we a timezone we need to remove the offset from UTC before computing
+                # the result.
+                # TODO: We can check the timezone offsets and only apply changes to the offset
+                # for frequencies >= minimum offset unit.
+                delta_str = "0"
+                has_transitions = False
+                if tz_has_transition_times(tz_literal):
+                    has_transitions = True
+                    tz_obj = pytz.timezone(tz_literal)
+                    trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view(
+                        "i8"
+                    )
+                    deltas = np.array(tz_obj._transition_info)[:, 0]
+                    deltas = (
+                        (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
+                        .astype(np.int64)
+                        .values
+                    )
+                    delta_str = (
+                        "deltas[np.searchsorted(trans, value, side='right') - 1]"
+                    )
+                elif isinstance(tz_literal, str):
+                    # Here we are certain there are no transition times so we can compute a fixed offset
+                    # from the timezone
+                    tz_obj = pytz.timezone(tz_literal)
+                    # Convert to nanoseconds.
+                    delta_str = str(
+                        np.int64(tz_obj._utcoffset.total_seconds() * 1_000_000_000)
+                    )
+                elif isinstance(tz_literal, int):
+                    # Integers are always the offset in nanoseconds
+                    delta_str = str(tz_literal)
+                func_text += f"    delta = {delta_str}\n"
+                func_text += f"    value = value + delta\n"
+
             if method == "ceil":
-                func_text += (
-                    "    value = td.value + np.remainder(-td.value, unit_value)\n"
-                )
+                func_text += "    value = value + np.remainder(-value, unit_value)\n"
             if method == "floor":
-                func_text += (
-                    "    value = td.value - np.remainder(td.value, unit_value)\n"
-                )
+                func_text += "    value = value - np.remainder(value, unit_value)\n"
             if method == "round":
                 # Unit value is always even except value = 1
                 func_text += "    if unit_value == 1:\n"
-                func_text += "        value = td.value\n"
+                func_text += "        value = value\n"
                 func_text += "    else:\n"
                 func_text += (
-                    "        quotient, remainder = np.divmod(td.value, unit_value)\n"
+                    "        quotient, remainder = np.divmod(value, unit_value)\n"
                 )
                 func_text += "        mask = np.logical_or(remainder > (unit_value // 2), np.logical_and(remainder == (unit_value // 2), quotient % 2))\n"
                 func_text += "        if mask:\n"
                 func_text += "            quotient = quotient + 1\n"
                 func_text += "        value = quotient * unit_value\n"
-            func_text += "    return pd.Timestamp(value)\n"
+            if tz_literal is not None:
+                if has_transitions:
+                    func_text += f"    original_value = value\n"
+                    func_text += "    start_trans = deltas[np.searchsorted(trans, original_value, side='right') - 1]\n"
+                    # Restore the delta which may have changed
+                    func_text += "    value = value - start_trans\n"
+                    func_text += "    end_trans = deltas[np.searchsorted(trans, value, side='right') - 1]\n"
+                    # There are rare cases where start_trans is not the actual correct delta. This
+                    # occurs because deltas[np.searchsorted(trans, original_value, side='right') - 1]
+                    # has its values set by the UTC values, which is the result we are calculating.
+                    #
+                    # If we are wrong then the proposed UTC time will actually use a different offset
+                    # than the starting time. We account for this by adjusting the transition time
+                    # accordingly.
+                    #
+                    # For example this timestamp calculate would be wrong
+                    # In [49]: pd.Timestamp("2022-11-06 03:00:00").value
+                    # Out[49]: 1667703600000000000 -- this is the original_value
+                    # In [50]: value = pd.Timestamp("2022-11-06 03:00:00").value
+                    # In [51]: deltas[np.searchsorted(trans, value, side='right') - 1]
+                    # Out[51]: -14400000000000 -- This is start_trans
+                    # In [52]: pd.Timestamp("2022-11-06 03:00:00", tz="US/Eastern").value
+                    # Out[52]: 1667721600000000000 -- This should be the final value.
+                    # In [53]: value = pd.Timestamp("2022-11-06 03:00:00", tz="US/Eastern").value
+                    # In [54]: deltas[np.searchsorted(trans, value, side='right') - 1]
+                    # Out[54]: -18000000000000 -- This is the actual value/end_trans
+                    func_text += "    offset = start_trans - end_trans\n"
+                    func_text += "    value = value + offset\n"
+                else:
+                    # Restore the delta which hasn't changed.
+                    func_text += f"    value = value - delta\n"
+            func_text += "    return pd.Timestamp(value, tz=tz_literal)\n"
         loc_vars = {}
         exec(
             func_text,
-            {"np": np, "pd": pd},
+            {
+                "np": np,
+                "pd": pd,
+                "deltas": deltas,
+                "trans": trans,
+                "tz_literal": tz_literal,
+            },
             loc_vars,
         )
         impl = loc_vars["impl"]

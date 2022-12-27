@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
+from bodo.tests.timezone_common import generate_date_trunc_func
 from bodo.tests.utils import check_func
 
 
@@ -1197,6 +1198,108 @@ def test_yearofweekiso(dates_scalar_vector, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "part",
+    [
+        "quarter",
+        "yyyy",
+        "week",
+        "mm",
+        "days",
+        "hour",
+        "minute",
+        "S",
+        "ms",
+        "us",
+        "nsecond",
+    ],
+)
+@pytest.mark.parametrize(
+    "ts_input",
+    [
+        pytest.param(
+            pd.Timestamp(
+                year=2022,
+                month=11,
+                day=6,
+                hour=11,
+                minute=4,
+                second=12,
+                microsecond=241,
+                nanosecond=31,
+            ),
+            id="scalar-tz-naive",
+        ),
+        pytest.param(
+            pd.Timestamp(
+                year=2022,
+                month=11,
+                day=6,
+                hour=11,
+                minute=4,
+                second=12,
+                microsecond=241,
+                nanosecond=31,
+                tz="Australia/Lord_Howe",
+            ),
+            id="scalar-tz-aware",
+        ),
+        pytest.param(
+            pd.Series(
+                [None] * 4
+                + list(
+                    pd.date_range(
+                        "2022-11-6 04:12:41.432433", periods=20, freq="11D3H5us"
+                    )
+                )
+                + [None] * 2
+            ).values,
+            id="vector-tz-naive",
+        ),
+        pytest.param(
+            pd.Series(
+                [None] * 4
+                + list(
+                    pd.date_range(
+                        "2022-11-6 04:12:41.432433",
+                        periods=20,
+                        freq="11D3H5us",
+                        tz="US/Pacific",
+                    )
+                )
+                + [None] * 2
+            ).array,
+            id="vector-tz-aware",
+        ),
+    ],
+)
+def test_date_trunc(part, ts_input, memory_leak_check):
+    """
+    Tests date_trunc array kernel on various inputs, testing all the different code paths
+    in the generated kernel.
+    """
+
+    def impl(part, arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.date_trunc(part, arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(ts_input, pd.Timestamp):
+        impl = lambda part, arr: bodo.libs.bodosql_array_kernels.date_trunc(part, arr)
+
+    # Simulates date_trunc on a single row
+    def date_trunc_scalar_fn(part, ts_input):
+        return generate_date_trunc_func(part)(ts_input)
+
+    answer = vectorized_sol((part, ts_input), date_trunc_scalar_fn, None)
+    check_func(
+        impl,
+        (part, ts_input),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 def test_add_interval_optional(memory_leak_check):
     def impl(tz_naive_ts, tz_aware_ts, int_val, flag0, flag1):
         arg0 = tz_naive_ts if flag0 else None
@@ -1357,3 +1460,29 @@ def test_option_to_seconds(memory_leak_check):
             (pd.Timestamp("2007-01-01"), flag),
             py_output=answer,
         )
+
+
+@pytest.mark.slow
+def test_option_date_trunc(memory_leak_check):
+    """
+    Tests date_trunc array kernel on optional inputs
+    """
+
+    def impl(part, ts, flag0, flag1):
+        arg0 = part if flag0 else None
+        arg1 = ts if flag1 else None
+        return bodo.libs.bodosql_array_kernels.date_trunc(arg0, arg1)
+
+    part = "day"
+    ts = pd.Timestamp("2022-11-6 12:40:45", tz="US/Pacific")
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (
+                pd.Timestamp("2022-11-6", tz="US/Pacific") if flag0 and flag1 else None
+            )
+            check_func(
+                impl,
+                (part, ts, flag0, flag1),
+                py_output=answer,
+            )

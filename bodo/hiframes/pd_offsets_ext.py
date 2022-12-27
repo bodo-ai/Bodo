@@ -200,14 +200,16 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
         return impl
 
     # rhs is a timestamp
-    if lhs == month_begin_type and rhs == pd_timestamp_tz_naive_type:
+    if lhs == month_begin_type and isinstance(rhs, PandasTimestampType):
+
+        tz_literal = rhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
             year, month, day = calculate_month_begin_date(
                 rhs.year, rhs.month, rhs.day, lhs.n
             )
             if lhs.normalize:
-                return pd.Timestamp(year=year, month=month, day=day)
+                return pd.Timestamp(year=year, month=month, day=day, tz=tz_literal)
             else:
                 return pd.Timestamp(
                     year=year,
@@ -218,6 +220,7 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
                     second=rhs.second,
                     microsecond=rhs.microsecond,
                     nanosecond=rhs.nanosecond,
+                    tz=tz_literal,
                 )
 
         return impl
@@ -235,9 +238,9 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
 
     # rhs is the offset
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_tz_naive_type, datetime_date_type]
-        and rhs == month_begin_type
-    ):
+        isinstance(lhs, PandasTimestampType)
+        or lhs in [datetime_datetime_type, datetime_date_type]
+    ) and rhs == month_begin_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return rhs + lhs
@@ -399,14 +402,16 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
         return impl
 
     # rhs is a timestamp
-    if lhs == month_end_type and rhs == pd_timestamp_tz_naive_type:
+    if lhs == month_end_type and isinstance(rhs, PandasTimestampType):
+
+        tz_literal = rhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
             year, month, day = calculate_month_end_date(
                 rhs.year, rhs.month, rhs.day, lhs.n
             )
             if lhs.normalize:
-                return pd.Timestamp(year=year, month=month, day=day)
+                return pd.Timestamp(year=year, month=month, day=day, tz=tz_literal)
             else:
                 return pd.Timestamp(
                     year=year,
@@ -417,6 +422,7 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
                     second=rhs.second,
                     microsecond=rhs.microsecond,
                     nanosecond=rhs.nanosecond,
+                    tz=tz_literal,
                 )
 
         return impl
@@ -434,9 +440,9 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
 
     # rhs is the offset
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_tz_naive_type, datetime_date_type]
-        and rhs == month_end_type
-    ):
+        isinstance(lhs, PandasTimestampType)
+        or lhs in [datetime_datetime_type, datetime_date_type]
+    ) and rhs == month_end_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return rhs + lhs

@@ -483,15 +483,15 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
-              "DATE_TRUNC(STRING_LITERAL, TIMESTAMP)",
-              OperandTypes.LITERAL,
-              OperandTypes.TIMESTAMP),
+              "DATE_TRUNC(STRING_LITERAL, DATETIME)",
+              OperandTypes.CHARACTER,
+              OperandTypes.DATETIME),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
