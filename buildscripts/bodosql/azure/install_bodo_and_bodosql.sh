@@ -15,7 +15,7 @@ echo "bodosql_artifactory_channel: $bodosql_artifactory_channel"
 export PATH=$HOME/miniconda3/bin:${PATH}
 source activate $CONDA_ENV
 
-CONDA_INSTALL="conda install -q -y"
+CONDA_INSTALL="conda install -y"
 BODO_BODOSQL_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
 
 # Install Bodo first, followed by the iceberg connector, and then install BodoSQL so we don't install Bodo from the wrong

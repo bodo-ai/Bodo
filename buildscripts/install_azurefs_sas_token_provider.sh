@@ -5,7 +5,7 @@ export PATH=$HOME/miniconda3/bin:$PATH
 
 
 # ---- Create Conda Env ----
-MAMBA_INSTALL="mamba install -q -y"
+MAMBA_INSTALL="mamba install -y"
 # Deactivate if another script has already activated the env
 source deactivate || true
 
