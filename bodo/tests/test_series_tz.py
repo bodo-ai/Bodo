@@ -389,3 +389,34 @@ def test_tz_series_unsupported(memory_leak_check):
         match=".*Timezone-aware series not yet supported.*",
     ):
         bodo.jit(impl)(tz_s)
+
+
+@pytest.mark.parametrize("freq", ["D", "H", "T", "S", "ms", "L", "U", "us", "N"])
+def test_series_dt_freq_methods(freq, representative_tz, memory_leak_check):
+    """Tests the Series.dt freq methods with various frequencies"""
+
+    S = pd.Series(
+        [None] * 4
+        + list(
+            pd.date_range(
+                start="1/1/2022 4:31:15.4814",
+                freq="16D5H",
+                periods=30,
+                tz=representative_tz,
+            )
+        )
+        + [None] * 4
+    )
+
+    def impl1(S, freq):
+        return S.dt.ceil(freq)
+
+    def impl2(S, freq):
+        return S.dt.floor(freq)
+
+    def impl3(S, freq):
+        return S.dt.round(freq)
+
+    check_func(impl1, (S, freq))
+    check_func(impl2, (S, freq))
+    check_func(impl3, (S, freq))

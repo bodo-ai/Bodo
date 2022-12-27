@@ -8,6 +8,8 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+from bodo.tests.timezone_common import generate_date_trunc_func
+
 EQUIVALENT_SPARK_DT_FN_MAP = {
     "WEEK": "WEEKOFYEAR",
     "CURDATE": "CURRENT_DATE",
@@ -32,6 +34,25 @@ def timestamp_date_string_cols(request):
     ]
 )
 def subdate_equiv_fns(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        "quarter",
+        "yyy",
+        "MONTH",
+        "WEEK",
+        "DAY",
+        "HOUR",
+        "MINUTE",
+        "SECOND",
+        "ms",
+        "microsecond",
+        "nanosecs",
+    ]
+)
+def date_trunc_literal(request):
     return request.param
 
 
@@ -1704,26 +1725,15 @@ def test_to_date_scalar(
     )
 
 
-@pytest.mark.parametrize(
-    "literal_str",
-    [
-        "MONTH",
-        "WEEK",
-        "DAY",
-        "HOUR",
-        "MINUTE",
-        "SECOND",
-        # Spark doesn't support millisecond, microsecond, or nanosecond.
-        # TODO: Test
-    ],
-)
-def test_date_trunc(spark_info, dt_fn_dataframe, literal_str, memory_leak_check):
-    query = f"SELECT DATE_TRUNC('{literal_str}', TIMESTAMPS) as A from table1"
-    check_query(
-        query,
-        dt_fn_dataframe,
-        spark_info,
+def test_date_trunc(dt_fn_dataframe, date_trunc_literal, memory_leak_check):
+    query = (
+        f"SELECT DATE_TRUNC('{date_trunc_literal}', TIMESTAMPS) as output from table1"
     )
+    scalar_func = generate_date_trunc_func(date_trunc_literal)
+    py_output = pd.DataFrame(
+        {"output": dt_fn_dataframe["table1"]["timestamps"].map(scalar_func)}
+    )
+    check_query(query, dt_fn_dataframe, None, expected_output=py_output)
 
 
 def test_yearofweek(dt_fn_dataframe, memory_leak_check):
@@ -2356,3 +2366,44 @@ def test_tz_aware_previous_day_case(
     week_series[~df.C] = None
     py_output = pd.DataFrame({"m": week_series})
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
+
+
+def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
+    query = f"SELECT DATE_TRUNC('{date_trunc_literal}', A) as output from table1"
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                )
+            )
+            + [None] * 2,
+            "B": [True, False, True, True] * 8,
+        }
+    )
+    ctx = {"table1": df}
+    scalar_func = generate_date_trunc_func(date_trunc_literal)
+    py_output = pd.DataFrame({"output": df["A"].map(scalar_func)})
+    check_query(query, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
+    query = f"SELECT CASE WHEN B THEN DATE_TRUNC('{date_trunc_literal}', A) END as output from table1"
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                )
+            )
+            + [None] * 2,
+            "B": [True, False, True, True] * 8,
+        }
+    )
+    ctx = {"table1": df}
+    scalar_func = generate_date_trunc_func(date_trunc_literal)
+    S = df["A"].map(scalar_func)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query, ctx, None, expected_output=py_output)

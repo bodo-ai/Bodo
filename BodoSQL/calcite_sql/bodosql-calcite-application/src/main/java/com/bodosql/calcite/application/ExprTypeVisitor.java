@@ -116,6 +116,7 @@ public class ExprTypeVisitor {
           "DATE_PART",
           "DATEADD",
           "DATEDIFF",
+          "DATE_TRUNC",
           "DECODE",
           "DIV0",
           "EDITDISTANCE",
@@ -434,11 +435,6 @@ public class ExprTypeVisitor {
         // PI/Rand take no arguments and output scalar.
         // TODO: Fix Rand as it should output a column in some cases
         exprTypes.put(key, BodoSQLExprType.ExprType.SCALAR);
-      } else if (fnName.equals("DATE_TRUNC")) {
-        // DATE_TRUNC's type is the output of the operand 1
-        RexNode child = node.operands.get(1);
-        String childKey = generateRexNodeKey(child, id);
-        exprTypes.put(key, exprTypes.get(childKey));
       } else if (arg0KindFunctions.contains(node.getOperator().getKind())
           || arg0NamedFunctions.contains(fnName)) {
         // Functions that use arg0

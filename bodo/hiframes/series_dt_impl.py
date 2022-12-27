@@ -544,8 +544,8 @@ def create_timedelta_freq_overload(method):
             )
         ):  # pragma: no cover
             return
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
-            S_dt, f"Series.dt.{method}()"
+        is_tz_aware = isinstance(
+            S_dt.stype.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
         )
         unsupported_args = dict(ambiguous=ambiguous, nonexistent=nonexistent)
         floor_defaults = dict(ambiguous="raise", nonexistent="raise")
@@ -565,6 +565,8 @@ def create_timedelta_freq_overload(method):
         func_text += "    n = len(A)\n"
         if S_dt.stype.dtype == types.NPTimedelta("ns"):
             func_text += "    B = np.empty(n, np.dtype('timedelta64[ns]'))\n"
+        elif is_tz_aware:
+            func_text += "    B = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, tz_literal)\n"
         else:
             func_text += "    B = np.empty(n, np.dtype('datetime64[ns]'))\n"
         func_text += "    for i in numba.parfors.parfor.internal_prange(n):\n"
@@ -579,16 +581,23 @@ def create_timedelta_freq_overload(method):
                 "bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp"
             )
             back_convert = "bodo.hiframes.pd_timestamp_ext.integer_to_dt64"
-        func_text += "        B[i] = {}({}(A[i]).{}(freq).value)\n".format(
-            back_convert, front_convert, method
-        )
+        if is_tz_aware:
+            func_text += f"        B[i] = A[i].{method}(freq)\n"
+        else:
+            func_text += "        B[i] = {}({}(A[i]).{}(freq).value)\n".format(
+                back_convert, front_convert, method
+            )
         func_text += (
             "    return bodo.hiframes.pd_series_ext.init_series(B, index, name)\n"
         )
         loc_vars = {}
+        # Add the tz_literal to the globals for tz-aware data.
+        tz_literal = None
+        if is_tz_aware:
+            tz_literal = S_dt.stype.dtype.tz
         exec(
             func_text,
-            {"numba": numba, "np": np, "bodo": bodo},
+            {"numba": numba, "np": np, "bodo": bodo, "tz_literal": tz_literal},
             loc_vars,
         )
         impl = loc_vars["impl"]
