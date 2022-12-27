@@ -14,6 +14,120 @@ import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 
 
+def standardize_snowflake_date_time_part(part_str):  # pragma: no cover
+    pass
+
+
+@overload(standardize_snowflake_date_time_part)
+def overload_standardize_snowflake_date_time_part(part_str):
+    """
+    Standardizes all of the valid snowflake aliases for
+    Date and Time parts into the standard categories.
+    See: https://docs.snowflake.com/en/sql-reference/functions-date-time.html#label-supported-date-time-parts
+
+    Args:
+        part_str (types.unicode_type): String representing the name or time part or alias.
+
+    Raises:
+        ValueError: An invalid string is passed in.
+
+    Returns:
+        types.unicode_type: The date or time part converting all aliases to standard part.
+    """
+    # Note we lower arrays to reduce compilation time as there would be many large
+    # tuples or lists
+
+    # Date values with aliases
+    year_aliases = pd.array(["year", "y", "yy", "yyy", "yyyy", "yr", "years", "yrs"])
+    month_aliases = pd.array(["month", "mm", "mon", "mons", "months"])
+    day_aliases = pd.array(["day", "d", "dd", "days", "dayofmonth"])
+    dayofweek_aliases = pd.array(["dayofweek", "weekday", "dow", "dw"])
+    week_aliases = pd.array(["week", "w", "wk", "weekofyear", "woy", "wy"])
+    weekiso_aliases = pd.array(
+        ["weekiso", "week_iso", "weekofyeariso", "weekofyear_iso"]
+    )
+    quarter_aliases = pd.array(["quarter", "q", "qtr", "qtrs", "quarters"])
+
+    # Time values with aliases
+    hour_aliases = pd.array(["hour", "h", "hh", "hr", "hours", "hrs"])
+    minute_aliases = pd.array(["minute", "m", "mi", "min", "minutes", "mins"])
+    second_aliases = pd.array(["second", "s", "sec", "seconds", "secs"])
+    millisecond_aliases = pd.array(["millisecond", "ms", "msec", "milliseconds"])
+    microsecond_aliases = pd.array(["microsecond", "us", "usec", "microseconds"])
+    nanosecond_aliases = pd.array(
+        [
+            "nanosecond",
+            "ns",
+            "nsec",
+            "nanosec",
+            "nsecond",
+            "nanoseconds",
+            "nanosecs",
+            "nseconds",
+        ]
+    )
+    epoch_second_aliases = pd.array(["epoch_second", "epoch", "epoch_seconds"])
+    epoch_millisecond_aliases = pd.array(["epoch_millisecond", "epoch_milliseconds"])
+    epoch_microsecond_aliases = pd.array(["epoch_microsecond", "epoch_microseconds"])
+    epoch_nanosecond_aliases = pd.array(["epoch_nanosecond", "epoch_nanoseconds"])
+    timezone_hour_aliases = pd.array(["timezone_hour", "tzh"])
+    timezone_minute_aliases = pd.array(["timezone_minute", "tzm"])
+
+    # These values map to themselves and have no aliases
+    no_aliases = pd.array(["yearofweek", "yearofweekiso"])
+
+    def impl(part_str):  # pragma: no cover
+        # Snowflake date/time parts are case insensitive
+        part_str = part_str.lower()
+        if part_str in year_aliases:
+            return "year"
+        elif part_str in month_aliases:
+            return "month"
+        elif part_str in day_aliases:
+            return "day"
+        elif part_str in dayofweek_aliases:
+            return "dayofweek"
+        elif part_str in week_aliases:
+            return "week"
+        elif part_str in weekiso_aliases:
+            return "weekiso"
+        elif part_str in quarter_aliases:
+            return "quarter"
+        elif part_str in hour_aliases:
+            return "hour"
+        elif part_str in minute_aliases:
+            return "minute"
+        elif part_str in second_aliases:
+            return "second"
+        elif part_str in millisecond_aliases:
+            return "millisecond"
+        elif part_str in microsecond_aliases:
+            return "microsecond"
+        elif part_str in nanosecond_aliases:
+            return "nanosecond"
+        elif part_str in epoch_second_aliases:
+            return "epoch_second"
+        elif part_str in epoch_millisecond_aliases:
+            return "epoch_millisecond"
+        elif part_str in epoch_microsecond_aliases:
+            return "epoch_microsecond"
+        elif part_str in epoch_nanosecond_aliases:
+            return "epoch_nanosecond"
+        elif part_str in timezone_hour_aliases:
+            return "timezone_hour"
+        elif part_str in timezone_minute_aliases:
+            return "timezone_minute"
+        elif part_str in no_aliases:
+            return part_str
+        else:
+            # TODO: Add part_str in the error when we can have non constant exceptions
+            raise ValueError(
+                "Invalid date or time part passed into Snowflake array kernel"
+            )
+
+    return impl
+
+
 @numba.generated_jit(nopython=True)
 def add_interval(start_dt, interval):
     """Handles cases where adding intervals receives optional arguments and forwards
@@ -767,6 +881,138 @@ def _install_dt_extract_fn_overload():
 
 
 _install_dt_extract_fn_overload()
+
+
+def date_trunc(date_or_time_part, ts_arg):  # pragma: no cover
+    pass
+
+
+@overload(date_trunc)
+def overload_date_trunc(date_or_time_part, ts_arg):
+    """
+    Truncates a given Timestamp argument to the provided
+    date_or_time_part. This corresponds to DATE_TRUNC inside snowflake
+
+    Args:
+        date_or_time_part (types.Type): A string scalar or array stating how to truncate
+            the timestamp
+        tz_arg (types.Type): A tz-aware or tz-naive Timestamp or Timestamp array to be truncated.
+
+    Returns:
+        types.Type: A tz-aware or tz-naive Timestamp or Timestamp array
+    """
+    if isinstance(date_or_time_part, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.date_trunc",
+            ["date_or_time_part", "ts_arg"],
+            0,
+        )
+    if isinstance(ts_arg, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.date_trunc",
+            ["date_or_time_part", "ts_arg"],
+            1,
+        )
+
+    def impl(date_or_time_part, ts_arg):  # pragma: no cover
+        return date_trunc_util(date_or_time_part, ts_arg)
+
+    return impl
+
+
+def date_trunc_util(date_or_time_part, ts_arg):  # pragma: no cover
+    pass
+
+
+@overload(date_trunc_util)
+def overload_date_trunc_util(date_or_time_part, ts_arg):
+    """
+    Truncates a given Timestamp argument to the provided
+    date_or_time_part. This corresponds to DATE_TRUNC inside snowflake
+
+    Args:
+        date_or_time_part (types.Type): A string scalar or array stating how to truncate
+            the timestamp
+        tz_arg (types.Type): A tz-aware or tz-naive Timestamp or Timestamp array to be truncated.
+
+    Returns:
+        types.Type: A tz-aware or tz-naive Timestamp or Timestamp array
+    """
+    verify_string_arg(date_or_time_part, "DATE_TRUNC", "date_or_time_part")
+    verify_datetime_arg_allow_tz(ts_arg, "DATE_TRUNC", "ts_arg")
+    tz_literal = get_tz_if_exists(ts_arg)
+
+    arg_names = ["date_or_time_part", "ts_arg"]
+    arg_types = [date_or_time_part, ts_arg]
+    propagate_null = [True, True]
+    # We perform computation on Timestamp types.
+    box_str = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(ts_arg, True)
+        else ""
+    )
+    # When returning a scalar we return a pd.Timestamp type.
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(ts_arg, True)
+        else ""
+    )
+    # Standardize the input to limit the condition in the loop
+    scalar_text = "part_str = bodo.libs.bodosql_array_kernels.standardize_snowflake_date_time_part(arg0)\n"
+    if tz_literal is None:
+        scalar_text += f"arg1 = {box_str}(arg1)\n"
+    scalar_text += "if part_str == 'quarter':\n"
+    scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month= (3*(arg1.quarter - 1)) + 1, day=1, tz=tz_literal)\n"
+    scalar_text += "elif part_str == 'year':\n"
+    scalar_text += (
+        "    out_val = pd.Timestamp(year=arg1.year, month=1, day=1, tz=tz_literal)\n"
+    )
+    scalar_text += "elif part_str == 'month':\n"
+    scalar_text += "    out_val = pd.Timestamp(year=arg1.year, month=arg1.month, day=1, tz=tz_literal)\n"
+    scalar_text += "elif part_str == 'day':\n"
+    scalar_text += "    out_val = arg1.normalize()\n"
+    scalar_text += "elif part_str == 'week':\n"
+    # If we are already at the start of the week just normalize.
+    scalar_text += "    if arg1.dayofweek == 0:\n"
+    scalar_text += "        out_val = arg1.normalize()\n"
+    scalar_text += "    else:\n"
+    scalar_text += (
+        "        out_val = arg1.normalize() - pd.tseries.offsets.Week(n=1, weekday=0)\n"
+    )
+    scalar_text += "elif part_str == 'hour':\n"
+    scalar_text += "    out_val = arg1.floor('H')\n"
+    scalar_text += "elif part_str == 'minute':\n"
+    scalar_text += "    out_val = arg1.floor('min')\n"
+    scalar_text += "elif part_str == 'second':\n"
+    scalar_text += "    out_val = arg1.floor('S')\n"
+    scalar_text += "elif part_str == 'millisecond':\n"
+    scalar_text += "    out_val = arg1.floor('ms')\n"
+    scalar_text += "elif part_str == 'microsecond':\n"
+    scalar_text += "    out_val = arg1.floor('us')\n"
+    scalar_text += "elif part_str == 'nanosecond':\n"
+    scalar_text += "    out_val = arg1\n"
+    scalar_text += "else:\n"
+    # TODO: Include part_str when non-constant exception strings are supported.
+    scalar_text += "    raise ValueError('Invalid date or time part for DATE_TRUNC')\n"
+    if tz_literal is None:
+        # In the tz-naive array case we have to convert the Timestamp to dt64
+        scalar_text += f"res[i] = {unbox_str}(out_val)\n"
+    else:
+        scalar_text += f"res[i] = out_val\n"
+
+    if tz_literal is None:
+        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    else:
+        out_dtype = bodo.DatetimeArrayType(tz_literal)
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        extra_globals={"tz_literal": tz_literal},
+    )
 
 
 @numba.generated_jit(nopython=True)

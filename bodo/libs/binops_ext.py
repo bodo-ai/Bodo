@@ -685,8 +685,8 @@ def sub_offset_to_datetime_or_timestamp(lhs, rhs):
     ]
     tz_aware_classes = (bodo.PandasTimestampType,)
     # offsets
-    tz_aware_offset_types = (week_type,)
-    tz_naive_offset_types = (date_offset_type, month_begin_type, month_end_type)
+    tz_aware_offset_types = (week_type, month_begin_type, month_end_type)
+    tz_naive_offset_types = (date_offset_type,)
     # Here we support all bodo.PandasTimestampType only with tz_aware_offset_types and
     # all other types with all offset types.
     return (rhs in tz_aware_offset_types and isinstance(lhs, tz_aware_classes)) or (

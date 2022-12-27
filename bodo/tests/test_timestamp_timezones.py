@@ -12,6 +12,8 @@ from bodo.tests.timezone_common import representative_tz, sample_tz  # noqa
 from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
 
+pytestmark = pytest.mark.tz_aware
+
 
 @pytest.fixture(
     params=[
@@ -385,3 +387,95 @@ def test_tz_constructor_values(representative_tz, memory_leak_check):
     check_func(test_constructor_kw_value, (2022, 11, 6, 3))
     check_func(test_constructor_kw_value, (2022, 3, 13, 0))
     check_func(test_constructor_kw_value, (2022, 3, 13, 3))
+
+
+def test_tz_add_month_begin(representative_tz, memory_leak_check):
+    """
+    Add tests for adding TZ-Aware timezones with a Pandas
+    MonthBegin type.
+    """
+
+    def impl(lhs, rhs):
+        return lhs + rhs
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+    offset = pd.tseries.offsets.MonthBegin(n=4, normalize=True)
+    check_func(impl, (ts, offset))
+    check_func(impl, (offset, ts))
+    # Check normalize=False
+    offset = pd.tseries.offsets.MonthBegin(n=4, normalize=False)
+    check_func(impl, (ts, offset))
+    check_func(impl, (offset, ts))
+
+
+def test_tz_sub_month_begin(representative_tz, memory_leak_check):
+    """
+    Add tests for subtracting a Pandas
+    MonthBeing type from TZ-Aware timezones.
+    """
+
+    def impl(lhs, rhs):
+        return lhs - rhs
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+    offset = pd.tseries.offsets.MonthBegin(n=3, normalize=True)
+    check_func(impl, (ts, offset))
+    # Check normalize=False
+    offset = pd.tseries.offsets.MonthBegin(n=3, normalize=False)
+    check_func(impl, (ts, offset))
+
+
+def test_tz_add_month_end(representative_tz, memory_leak_check):
+    """
+    Add tests for adding TZ-Aware timezones with a Pandas
+    MonthEnd type.
+    """
+
+    def impl(lhs, rhs):
+        return lhs + rhs
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+    offset = pd.tseries.offsets.MonthEnd(n=4, normalize=True)
+    check_func(impl, (ts, offset))
+    check_func(impl, (offset, ts))
+    # Check normalize=False
+    offset = pd.tseries.offsets.MonthEnd(n=4, normalize=False)
+    check_func(impl, (ts, offset))
+    check_func(impl, (offset, ts))
+
+
+def test_tz_sub_month_end(representative_tz, memory_leak_check):
+    """
+    Add tests for subtracting a Pandas
+    MonthEnd type from TZ-Aware timezones.
+    """
+
+    def impl(lhs, rhs):
+        return lhs - rhs
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+    offset = pd.tseries.offsets.MonthEnd(n=3, normalize=True)
+    check_func(impl, (ts, offset))
+    # Check normalize=False
+    offset = pd.tseries.offsets.MonthEnd(n=3, normalize=False)
+    check_func(impl, (ts, offset))
+
+
+@pytest.mark.parametrize("freq", ["D", "H", "T", "S", "ms", "L", "U", "us", "N"])
+def test_timestamp_freq_methods(freq, representative_tz, memory_leak_check):
+    """Tests the timestamp freq methods with various frequencies"""
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+
+    def impl1(ts, freq):
+        return ts.ceil(freq)
+
+    def impl2(ts, freq):
+        return ts.floor(freq)
+
+    def impl3(ts, freq):
+        return ts.round(freq)
+
+    check_func(impl1, (ts, freq))
+    check_func(impl2, (ts, freq))
+    check_func(impl3, (ts, freq))

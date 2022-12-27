@@ -2671,14 +2671,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "INITCAP":
             return generateInitcapInfo(operandsInfo);
           case "DATE_TRUNC":
-            if (!(operandsInfo.size() == 2
-                && exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid argument types passed to DATE_TRUNC");
-            } else {
-              return generateDateTruncCode(
-                  operandsInfo.get(0), operandsInfo.get(1), exprTypes.get(1), isSingleRow);
-            }
+            return generateDateTruncCode(operandsInfo.get(0), operandsInfo.get(1));
           case "MICROSECOND":
           case "SECOND":
           case "MINUTE":
