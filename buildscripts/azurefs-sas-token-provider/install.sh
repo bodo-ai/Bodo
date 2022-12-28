@@ -7,7 +7,7 @@ set -exo pipefail
 # https://github.com/numba/numba/blob/master/buildscripts/incremental/install_miniconda.sh
 wget -qO- https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
 mkdir -p ~/micromamba
-eval "$(./bin/micromamba shell hook -s posix)"  # Limited time Use
+eval "$(bash bin/micromamba shell hook -s posix)"  # Limited time Use
 
 
 # ---- Setup Base Env ----

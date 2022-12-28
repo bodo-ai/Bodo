@@ -23,7 +23,7 @@ jobs:
 
   - script: |
       set -eo pipefail
-      buildscripts/setup_conda.sh
+      bash buildscripts/setup_conda.sh
       export PATH=$HOME/miniconda3/bin:$PATH
     displayName: 'Setup Miniconda'
 

@@ -26,7 +26,7 @@ then
       echo Error
     fi
     chmod +x miniconda.sh
-    ./miniconda.sh -b
+    bash miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
   fi
   conda create -n $CONDA_ENV -y -c conda-forge python=$PYTHON_VERSION mamba
