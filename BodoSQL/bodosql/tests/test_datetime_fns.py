@@ -402,7 +402,6 @@ def test_get_format(get_format_str, dt_fn_dataframe, spark_info, memory_leak_che
 @pytest.fixture(
     params=[
         "CURRENT_TIMESTAMP",
-        pytest.param("LOCALTIME", marks=pytest.mark.slow),
         pytest.param("LOCALTIMESTAMP", marks=pytest.mark.slow),
         pytest.param("NOW", marks=pytest.mark.slow),
     ]
@@ -453,22 +452,37 @@ def test_getdate(query, spark_info, memory_leak_check):
     )
 
 
-def test_now_equivalents(basic_df, spark_info, now_equivalent_fns, memory_leak_check):
-    """Tests the group of equivalent functions which return the current time as a timestamp
+def test_now_equivalents_cols(basic_df, now_equivalent_fns, memory_leak_check):
+    """Tests the group of equivalent functions which return the current timestamp
     This one needs special handling, as the timestamps returned by each call will be
     slightly different, depending on when the function was run.
     """
-    query = f"SELECT A, EXTRACT(DAY from {now_equivalent_fns}()), (EXTRACT(HOUR from {now_equivalent_fns}()) + EXTRACT(MINUTE from {now_equivalent_fns}()) + EXTRACT(SECOND from {now_equivalent_fns}()) ) >= 1  from table1"
-    spark_query = "SELECT A, EXTRACT(DAY from NOW()), (EXTRACT(HOUR from NOW()) + EXTRACT(MINUTE from NOW()) + EXTRACT(SECOND from NOW()) ) >= 1  from table1"
-
-    check_query(
-        query,
-        basic_df,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        equivalent_spark_query=spark_query,
+    query = f"SELECT A, DATE_TRUNC('DAY', {now_equivalent_fns}()) as normalized, (EXTRACT(HOUR from {now_equivalent_fns}()) + EXTRACT(MINUTE from {now_equivalent_fns}()) + EXTRACT(SECOND from {now_equivalent_fns}()) ) >= 1 as now_not_normalized from table1"
+    kept_col = basic_df["table1"]["A"]
+    py_output = pd.DataFrame(
+        {
+            "A": kept_col,
+            "normalized": pd.Timestamp.now(tz="UTC").normalize(),
+            "now_not_normalized": True,
+        }
     )
+
+    check_query(query, basic_df, None, expected_output=py_output, check_dtype=False)
+
+
+def test_now_equivalents_case(now_equivalent_fns, memory_leak_check):
+    """Tests the group of equivalent functions which return the current timestamp
+    in case.
+    """
+    df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
+    ctx = {"table1": df}
+    query = f"SELECT CASE WHEN A THEN DATE_TRUNC('DAY', {now_equivalent_fns}()) END as normalized from table1"
+    S = pd.Series(pd.Timestamp.now(tz="UTC").normalize(), index=np.arange(len(df)))
+    S[~df.A] = None
+    py_output = pd.DataFrame(
+        {"normalized": S},
+    )
+    check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
 @pytest.mark.slow

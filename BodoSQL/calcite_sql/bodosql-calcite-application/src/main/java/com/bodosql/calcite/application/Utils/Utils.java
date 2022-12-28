@@ -536,9 +536,8 @@ public class Utils {
     inputDataStr.append(")");
     initCode.append(")");
     String initGlobal = pdVisitorClass.lowerAsMetaType(initCode.toString());
-    // have to use single quotes here since lambdaFnStr has double quotes inside leading to syntax
-    // errors later
-    String bodyGlobal = pdVisitorClass.lowerAsGlobal("'" + lambdaFnStr + "'");
+    // have to use triple quotes here since lambdaFnStr can contain " or '
+    String bodyGlobal = pdVisitorClass.lowerAsGlobal("\"\"\"" + lambdaFnStr + "\"\"\"");
 
     String outputArrayType = sqlTypeToBodoArrayType(outputType, false);
     String outputArrayTypeGlobal = pdVisitorClass.lowerAsGlobal(outputArrayType);
