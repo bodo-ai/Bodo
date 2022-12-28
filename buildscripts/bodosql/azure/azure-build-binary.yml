@@ -18,7 +18,7 @@ jobs:
 
   - script: |
       set -eo pipefail
-      buildscripts/bodosql/install.sh
+      bash buildscripts/bodosql/install.sh
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
       PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
