@@ -18,7 +18,7 @@ jobs:
 
   - script: |
       set -eo pipefail
-      buildscripts/azurefs-sas-token-provider/install.sh
+      bash buildscripts/azurefs-sas-token-provider/install.sh
     env:
       PYTHON_VERSION: ${{ parameters.pythonVersion }}
     displayName: 'Setup Conda Installation + Dependencies'

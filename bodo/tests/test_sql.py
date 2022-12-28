@@ -550,6 +550,7 @@ def test_mysql_describe(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgre_show(memory_leak_check):
     """Test PostgreSQL: SHOW query"""
 
@@ -570,6 +571,7 @@ postgres_user_pass_and_hostname = "bodo:edJEh6RCUWMefuoZXTIy@bodo-postgre-test.c
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_basic(memory_leak_check):
     """Test simple SQL query with PostgreSQL DBMS"""
 
@@ -608,6 +610,7 @@ def test_postgres_read_sql_basic(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_count(memory_leak_check):
     """Test SQL query count(*) and a single column PostgreSQL DB"""
 
@@ -627,6 +630,7 @@ def test_postgres_read_sql_count(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_join(memory_leak_check):
     """Test SQL query join PostgreSQL DB"""
 
@@ -684,6 +688,7 @@ def test_postgres_read_sql_join(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_gb(memory_leak_check):
     """Test SQL query group by, column alias, and round PostgreSQL DB"""
 
@@ -723,6 +728,7 @@ def test_postgres_read_sql_gb(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_having(memory_leak_check):
     """Test SQL query HAVING PostgreSQL DB"""
 
@@ -743,6 +749,7 @@ def test_postgres_read_sql_having(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 @pytest.mark.parametrize("is_distributed", [True, False])
 def test_to_sql_postgres(is_distributed, memory_leak_check):
     """

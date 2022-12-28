@@ -186,7 +186,7 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/mambaforge/bin:$PATH
       source activate $CONDA_ENV
-      mamba install -y 'matplotlib<=3.5.1' -c conda-forge
+      mamba install -y 'matplotlib<=3.5.1' 'openjdk=11' -c conda-forge
     displayName: 'Matplotlib'
 
   - script: |
@@ -214,12 +214,13 @@ jobs:
       fi
     displayName: 'Setup Oracle Database testing'
 
-  - script: |
-      set -eo pipefail
-      export PATH=$HOME/mambaforge/bin:$PATH
-      source activate $CONDA_ENV
-      mamba install -y -c conda-forge psycopg2
-    displayName: 'Setup PostgreSQL testing'
+  # TODO: Re-enable (https://bodo.atlassian.net/browse/BE-4122)
+  # - script: |
+  #     set -eo pipefail
+  #     export PATH=$HOME/mambaforge/bin:$PATH
+  #     source activate $CONDA_ENV
+  #     mamba install -y -c conda-forge psycopg2
+  #   displayName: 'Setup PostgreSQL testing'
 
   - script: |
       set -eo pipefail
