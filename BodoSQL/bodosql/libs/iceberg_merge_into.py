@@ -80,21 +80,9 @@ def delta_table_setitem_common_code(n_out_cols: int, from_target_table=True):
     index 'output_tbl_idx' in each of the output series. The source of the values to use (delta table
     or source table) is specified by the argument `from_target_table`. Example codegen:
 
-      if bodo.libs.array_kernels.isna(target_table_col_0, i):
-        bodo.libs.array_kernels.setna(arr0, output_tbl_idx)
-      else:
-        val = target_table_col_0[i]
-        arr0[output_tbl_idx] = val
-      if bodo.libs.array_kernels.isna(target_table_col_1, i):
-        bodo.libs.array_kernels.setna(arr1, output_tbl_idx)
-      else:
-        val = target_table_col_1[i]
-        arr1[output_tbl_idx] = val
-      if bodo.libs.array_kernels.isna(target_table_col_2, i):
-        bodo.libs.array_kernels.setna(arr2, output_tbl_idx)
-      else:
-        val = target_table_col_2[i]
-        arr2[output_tbl_idx] = val
+      bodo.libs.array_kernels.copy_array_element(arr0, output_tbl_idx, target_table_col_0, i)
+      bodo.libs.array_kernels.copy_array_element(arr1, output_tbl_idx, target_table_col_1, i)
+      bodo.libs.array_kernels.copy_array_element(arr2, output_tbl_idx, target_table_col_2, i)
 
     Args:
         n_out_cols (int): The number of output columns to set
@@ -110,11 +98,7 @@ def delta_table_setitem_common_code(n_out_cols: int, from_target_table=True):
 
     for out_col_idx in range(n_out_cols):
         colname = f"{prefix}_col_{out_col_idx}"
-        func_text += f"{indent}if bodo.libs.array_kernels.isna({colname}, {idx_var}):\n"
-        func_text += f"{indent}  bodo.libs.array_kernels.setna(arr{out_col_idx}, output_tbl_idx)\n"
-        func_text += f"{indent}else:\n"
-        func_text += f"{indent}  val = {colname}[{idx_var}]\n"
-        func_text += f"{indent}  arr{out_col_idx}[output_tbl_idx] = val\n"
+        func_text += f"{indent}bodo.libs.array_kernels.copy_array_element(arr{out_col_idx}, output_tbl_idx, {colname}, {idx_var})\n"
 
     return func_text
 
@@ -149,41 +133,17 @@ def merge_sorted_dataframes(target_df, delta_df):
       output_tbl_idx = 0
       for target_df_index in range(target_df_len):
         if delta_df_index >= delta_df_len or (target_df_row_id_col[target_df_index] != delta_df_row_id_col[delta_df_index]):
-          if bodo.libs.array_kernels.isna(target_table_col_0, target_df_index):
-            bodo.libs.array_kernels.setna(arr0, output_tbl_idx)
-          else:
-            val = target_table_col_0[target_df_index]
-            arr0[output_tbl_idx] = val
-          if bodo.libs.array_kernels.isna(target_table_col_1, target_df_index):
-            bodo.libs.array_kernels.setna(arr1, output_tbl_idx)
-          else:
-            val = target_table_col_1[target_df_index]
-            arr1[output_tbl_idx] = val
-          if bodo.libs.array_kernels.isna(target_table_col_2, target_df_index):
-            bodo.libs.array_kernels.setna(arr2, output_tbl_idx)
-          else:
-            val = target_table_col_2[target_df_index]
-            arr2[output_tbl_idx] = val
+          bodo.libs.array_kernels.copy_array_element(arr0, output_tbl_idx, target_table_col_0, target_df_index)
+          bodo.libs.array_kernels.copy_array_element(arr1, output_tbl_idx, target_table_col_1, target_df_index)
+          bodo.libs.array_kernels.copy_array_element(arr2, output_tbl_idx, target_table_col_2, target_df_index)
         else:
           if delta_df_merge_into_change_col[delta_df_index] == 0:
             delta_df_index += 1
             continue
           if delta_df_merge_into_change_col[delta_df_index] == 2:
-            if bodo.libs.array_kernels.isna(delta_table_col_0, delta_df_index):
-              bodo.libs.array_kernels.setna(arr0, output_tbl_idx)
-            else:
-              val = delta_table_col_0[delta_df_index]
-              arr0[output_tbl_idx] = val
-            if bodo.libs.array_kernels.isna(delta_table_col_1, delta_df_index):
-              bodo.libs.array_kernels.setna(arr1, output_tbl_idx)
-            else:
-              val = delta_table_col_1[delta_df_index]
-              arr1[output_tbl_idx] = val
-            if bodo.libs.array_kernels.isna(delta_table_col_2, delta_df_index):
-              bodo.libs.array_kernels.setna(arr2, output_tbl_idx)
-            else:
-              val = delta_table_col_2[delta_df_index]
-              arr2[output_tbl_idx] = val
+            bodo.libs.array_kernels.copy_array_element(arr0, output_tbl_idx, delta_table_col_0, delta_df_index)
+            bodo.libs.array_kernels.copy_array_element(arr1, output_tbl_idx, delta_table_col_1, delta_df_index)
+            bodo.libs.array_kernels.copy_array_element(arr2, output_tbl_idx, delta_table_col_2, delta_df_index)
           delta_df_index += 1
         output_tbl_idx += 1
       return bodo.hiframes.pd_dataframe_ext.init_dataframe((arr0, arr1, arr2,), bodo.hiframes.pd_index_ext.init_range_index(0, (target_df_len - num_deletes), 1, None), __col_name_meta_value_delta_merge)
