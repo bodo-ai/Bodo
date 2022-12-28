@@ -1673,9 +1673,12 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if fdef == (
-            "get_str_arr_item_copy",
-            "bodo.libs.str_arr_ext",
+        if fdef in (
+            (
+                "get_str_arr_item_copy",
+                "bodo.libs.str_arr_ext",
+            ),
+            ("copy_array_element", "bodo.libs.array_kernels"),
         ):
             out = []
             # output string array
@@ -4415,6 +4418,7 @@ class DistributedPass:
                 ("get_str_arr_str_length", "bodo.libs.str_arr_ext"),
                 ("inplace_eq", "bodo.libs.str_arr_ext"),
                 ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"),
+                ("copy_array_element", "bodo.libs.array_kernels"),
                 ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),

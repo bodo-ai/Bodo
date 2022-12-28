@@ -412,7 +412,12 @@ def remove_hiframes(rhs, lives, call_list):
 
     # the call is dead if the updated array is dead
     if (
-        call_list == ["setna", "array_kernels", "libs", bodo]
+        call_list
+        in (
+            ["setna", "array_kernels", "libs", bodo],
+            ["copy_array_element", "array_kernels", "libs", bodo],
+            ["get_str_arr_item_copy", "str_arr_ext", "libs", bodo],
+        )
         and rhs.args[0].name not in lives
     ):
         return True

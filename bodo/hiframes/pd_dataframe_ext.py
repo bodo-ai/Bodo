@@ -3439,22 +3439,12 @@ def pivot_impl(
         func_text += "            col_idx = (j * len(pivot_values)) + pivot_idx\n"
         func_text += "            col_arr = data_arrs_0[col_idx]\n"
         func_text += "            values_arr = values_arrs[j]\n"
-        func_text += "            if bodo.libs.array_kernels.isna(values_arr, i):\n"
-        func_text += "                bodo.libs.array_kernels.setna(col_arr, row_idx)\n"
-        func_text += "            else:\n"
-        func_text += "                col_arr[row_idx] = values_arr[i]\n"
+        func_text += "            bodo.libs.array_kernels.copy_array_element(col_arr, row_idx, values_arr, i)\n"
     else:
         # If we need to generate multiple lists, generate code per list
         for i, data_arr_typ in enumerate(data_arr_typs):
             func_text += f"        col_arr_{i} = data_arrs_{i}[pivot_idx]\n"
-            func_text += (
-                f"        if bodo.libs.array_kernels.isna(values_tup[{i}], i):\n"
-            )
-            func_text += (
-                f"            bodo.libs.array_kernels.setna(col_arr_{i}, row_idx)\n"
-            )
-            func_text += f"        else:\n"
-            func_text += f"            col_arr_{i}[row_idx] = values_tup[{i}][i]\n"
+            func_text += f"        bodo.libs.array_kernels.copy_array_element(col_arr_{i}, row_idx, values_tup[{i}], i)\n"
     # Convert the index array to a proper index.
     if len(index_names) == 1:
         func_text += "    index = bodo.utils.conversion.index_from_array(unique_index_arr_tup[0], index_names_lit)\n"
