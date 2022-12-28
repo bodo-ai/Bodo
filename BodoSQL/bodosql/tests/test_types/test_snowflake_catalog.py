@@ -604,3 +604,43 @@ def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame):
     df1 = df1.reset_index(drop=True)
     df2 = df2.reset_index(drop=True)
     pd.testing.assert_frame_equal(df1, df2)
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_current_timestamp_case(
+    snowflake_sample_data_snowflake_catalog, memory_leak_check
+):
+    """Tests CURRENT_TIMESTAMP and equivalents with a snowflake catalog to verify that
+    the output uses the default Snowflake timezone.
+    """
+
+    def impl(bc):
+        return bc.sql(
+            "SELECT DATE_TRUNC('DAY', NOW()) as NOW_TRUNC, DATE_TRUNC('DAY', LOCALTIMESTAMP()) as LOCAL_TRUNC, CASE WHEN A THEN DATE_TRUNC('DAY', CURRENT_TIMESTAMP()) END as normalized from __bodolocal__.table1"
+        )
+
+    bc = bodosql.BodoSQLContext(catalog=snowflake_sample_data_snowflake_catalog)
+    df = pd.DataFrame({"A": [True, False, False, True, True] * 6})
+    bc = bc.add_or_replace_view("table1", df)
+    normalize_val = pd.Timestamp.now(tz="US/Pacific").normalize()
+    S = pd.Series(normalize_val, index=np.arange(len(df)))
+    S[~df.A] = None
+    py_output = pd.DataFrame(
+        {
+            "NOW_TRUNC": normalize_val,
+            "LOCAL_TRUNC": normalize_val,
+            "normalized": S,
+        },
+    )
+    check_func(
+        impl,
+        (bc,),
+        None,
+        py_output=py_output,
+        check_dtype=False,
+        sort_output=True,
+        reset_index=True,
+    )

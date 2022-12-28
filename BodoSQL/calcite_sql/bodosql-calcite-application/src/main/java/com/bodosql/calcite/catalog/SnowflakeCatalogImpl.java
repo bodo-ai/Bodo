@@ -552,6 +552,21 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   }
 
   /**
+   * Fetch the default timezone for this catalog. If the catalog doesn't influence the default
+   * timezone it should return UTC.
+   *
+   * @return BodoTZInfo for the default timezone.
+   */
+  @Override
+  public BodoTZInfo getDefaultTimezone() {
+    try {
+      return getSnowflakeTimezone(true);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
    * Verify that a query can be executed inside Snowflake by performing the EXPLAIN QUERY
    * functionality. This is done to provide a better error message than a random failure inside
    * Bodo.
