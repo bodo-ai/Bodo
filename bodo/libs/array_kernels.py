@@ -377,9 +377,58 @@ def setna_overload(arr, ind, int_nan_const=0):
     return lambda arr, ind, int_nan_const=0: None  # pragma: no cover
 
 
+def copy_array_element(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
+    pass
+
+
+@overload(copy_array_element)
+def overload_copy_array_element(out_arr, out_ind, in_arr, in_ind):
+    """Copy array element from input array to output array with specified indices.
+    Handles NAs and uses optimized implementation based on array types. For example,
+    the string array case avoids allocating an intermediate string value.
+    """
+
+    # string array case (input can be dict-encoded too in get_str_arr_item_copy)
+    if out_arr == bodo.string_array_type and is_str_arr_type(in_arr):
+
+        def impl_str(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
+            if bodo.libs.array_kernels.isna(in_arr, in_ind):
+                bodo.libs.array_kernels.setna(out_arr, out_ind)
+            else:
+                bodo.libs.str_arr_ext.get_str_arr_item_copy(
+                    out_arr, out_ind, in_arr, in_ind
+                )
+
+        return impl_str
+
+    # tz-aware datetime array case (avoid Timestamp value creation overheads)
+    if (
+        isinstance(out_arr, DatetimeArrayType)
+        and isinstance(in_arr, DatetimeArrayType)
+        and out_arr.tz == in_arr.tz
+    ):
+
+        # data values can be copied directly if timezones match (no Timestamp values)
+        def impl_dt(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
+            if bodo.libs.array_kernels.isna(in_arr, in_ind):
+                bodo.libs.array_kernels.setna(out_arr, out_ind)
+            else:
+                out_arr._data[out_ind] = in_arr._data[in_ind]
+
+        return impl_dt
+
+    # general case
+    def impl(out_arr, out_ind, in_arr, in_ind):  # pragma: no cover
+        if bodo.libs.array_kernels.isna(in_arr, in_ind):
+            bodo.libs.array_kernels.setna(out_arr, out_ind)
+        else:
+            out_arr[out_ind] = in_arr[in_ind]
+
+    return impl
+
+
 def setna_tup(arr_tup, ind, int_nan_const=0):  # pragma: no cover
-    for arr in arr_tup:
-        arr[ind] = np.nan
+    pass
 
 
 @overload(setna_tup, no_unliteral=True)

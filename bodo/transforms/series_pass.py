@@ -663,7 +663,7 @@ class SeriesPass:
             val_def = guard(get_definition, self.func_ir, inst.value)
             if (
                 is_expr(val_def, "getitem") or is_expr(val_def, "static_getitem")
-            ) and self.typemap[val_def.value.name] == string_array_type:
+            ) and is_str_arr_type(self.typemap[val_def.value.name]):
                 val_idx = get_getsetitem_index_var(val_def, self.typemap, nodes)
                 return nodes + compile_func_single_block(
                     eval(
