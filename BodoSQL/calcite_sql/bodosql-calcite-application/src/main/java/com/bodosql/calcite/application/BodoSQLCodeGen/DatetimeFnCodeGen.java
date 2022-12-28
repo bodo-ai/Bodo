@@ -8,7 +8,7 @@ import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import java.util.*;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.*;
 
 public class DatetimeFnCodeGen {
   static List<String> fnList =
@@ -150,9 +150,16 @@ public class DatetimeFnCodeGen {
     return new RexNodeVisitorInfo(name, outputExpr);
   }
 
-  public static RexNodeVisitorInfo generateCurtimeCode(String opName) {
+  /**
+   * Generate code for computing a timestamp for the current time in the default timezone.
+   *
+   * @param opName The name of the function. Several functions map to the same operation.
+   * @param tzInfo The Timezone information with which to create the Timestamp.
+   * @return
+   */
+  public static RexNodeVisitorInfo generateCurrTimestampCode(String opName, BodoTZInfo tzInfo) {
     String fnName = opName + "()";
-    String fnExpression = "pd.Timestamp.now()";
+    String fnExpression = String.format("pd.Timestamp.now(%s)", tzInfo.getPyZone());
     return new RexNodeVisitorInfo(fnName, fnExpression);
   }
 

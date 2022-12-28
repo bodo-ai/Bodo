@@ -7,7 +7,7 @@ import javax.annotation.Nullable;
 import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.fun.SqlDatePartFunction;
+import org.apache.calcite.sql.fun.*;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
@@ -276,7 +276,11 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
+          opBinding ->
+              opBinding
+                  .getTypeFactory()
+                  .createTZAwareSqlType(
+                      opBinding.getTypeFactory().getTypeSystem().getDefaultTZInfo()),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

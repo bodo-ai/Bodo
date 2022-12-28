@@ -1423,10 +1423,18 @@ Bodo SQL currently supports the following Timestamp functions:
 #### NOW
 -   `NOW()`
 
-    Computes a timestamp equal to the current system time
+    Computes a timestamp equal to the current time in the session's timezone.
+    By default the current timezone is UTC and it can be updated as a parameter
+    when using the Snowflake Catalog.
 
 #### LOCALTIMESTAMP
 -   `LOCALTIMESTAMP()`
+
+    Equivalent to `NOW`
+
+
+#### CURRENT_TIMESTAMP
+-   `CURRENT_TIMESTAMP()`
 
     Equivalent to `NOW`
 

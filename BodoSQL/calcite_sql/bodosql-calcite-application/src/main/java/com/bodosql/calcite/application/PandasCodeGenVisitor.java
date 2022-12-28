@@ -50,8 +50,7 @@ import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.*;
-import org.apache.calcite.sql.type.SqlTypeFamily;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Sarg;
@@ -2462,9 +2461,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "CURRENT_TIMESTAMP":
           case "NOW":
           case "LOCALTIMESTAMP":
-          case "LOCALTIME":
             assert operandsInfo.size() == 0;
-            return generateCurtimeCode(fnName);
+            assert fnOperation.getType() instanceof TZAwareSqlType;
+            BodoTZInfo tzInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
+            return generateCurrTimestampCode(fnName, tzInfo);
           case "UTC_TIMESTAMP":
             assert operandsInfo.size() == 0;
             return generateUTCTimestampCode();

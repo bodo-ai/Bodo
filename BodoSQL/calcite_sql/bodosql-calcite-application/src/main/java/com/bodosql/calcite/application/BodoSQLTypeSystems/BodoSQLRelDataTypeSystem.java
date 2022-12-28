@@ -3,7 +3,7 @@ package com.bodosql.calcite.application.BodoSQLTypeSystems;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.*;
 
 /**
  * Class for the RelDataTypeSystem used by BodoSQL. This recycles the default type system but
@@ -13,6 +13,16 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
   // A copy of the default type system. This will be used whenever
   // we don't need custom behavior.
   private RelDataTypeSystem defaultTypeSystem = RelDataTypeSystem.DEFAULT;
+
+  private final BodoTZInfo defaultTZInfo;
+
+  public BodoSQLRelDataTypeSystem() {
+    this(BodoTZInfo.UTC);
+  }
+
+  public BodoSQLRelDataTypeSystem(BodoTZInfo tzInfo) {
+    defaultTZInfo = tzInfo;
+  }
 
   /**
    * Convert finding a common type on multiple Char to VarChar. This ensures we won't append extra
@@ -103,5 +113,10 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
   @Override
   public boolean isSchemaCaseSensitive() {
     return defaultTypeSystem.isSchemaCaseSensitive();
+  }
+
+  @Override
+  public BodoTZInfo getDefaultTZInfo() {
+    return defaultTZInfo;
   }
 }

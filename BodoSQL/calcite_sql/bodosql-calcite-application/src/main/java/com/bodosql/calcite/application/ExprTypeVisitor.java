@@ -422,7 +422,6 @@ public class ExprTypeVisitor {
       } else if (fnName.equals("RAND")
           || fnName.equals("PI")
           || fnName.equals("CURRENT_TIMESTAMP")
-          || fnName.equals("LOCALTIME")
           || fnName.equals("LOCALTIMESTAMP")
           || fnName.equals("GETDATE")
           || fnName.equals("NOW")
