@@ -1524,13 +1524,14 @@ def box_str_arr(typ, val, c):
 @intrinsic
 def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert str_arr_typ == string_array_type
+    assert str_arr_typ in (
+        string_array_type,
+        binary_array_type,
+    ), "str_arr_is_na: string/binary array expected"
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, str_arr_typ)
         null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
             context, builder, payload.null_bitmap
         ).data
@@ -1558,13 +1559,14 @@ def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
 @intrinsic
 def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert str_arr_typ == string_array_type
+    assert str_arr_typ in [
+        string_array_type,
+        binary_array_type,
+    ], "str_arr_set_na: string/binary array expected"
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, str_arr_typ)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1590,23 +1592,24 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
         mask = builder.xor(mask, lir.Constant(lir.IntType(8), -1))
         # unset masked bit
         builder.store(builder.and_(byte, mask), byte_ptr)
-        if str_arr_typ == string_array_type:
-            # NOTE: sometimes during construction, setna may be called before setting
-            # the actual value (see struct array unboxing). setting the last offset can
-            # make output of num_total_chars() invalid
-            # TODO: refactor string array to avoid C code
-            # if ind+1 != num_strings
-            #   offsets[ind+1] = offsets[ind]
-            ind_plus1 = builder.add(ind, lir.Constant(lir.IntType(64), 1))
-            is_na_cond = builder.icmp_unsigned("!=", ind_plus1, payload.n_arrays)
-            with builder.if_then(is_na_cond):
-                builder.store(
-                    builder.load(builder.gep(offsets, [ind])),
-                    builder.gep(
-                        offsets,
-                        [ind_plus1],
-                    ),
-                )
+
+        # NOTE: sometimes during construction, setna may be called before setting
+        # the actual value (see struct array unboxing). setting the last offset can
+        # make output of num_total_chars() invalid
+        # TODO: refactor string array to avoid C code
+        # if ind+1 != num_strings
+        #   offsets[ind+1] = offsets[ind]
+        ind_plus1 = builder.add(ind, lir.Constant(lir.IntType(64), 1))
+        is_na_cond = builder.icmp_unsigned("!=", ind_plus1, payload.n_arrays)
+        with builder.if_then(is_na_cond):
+            builder.store(
+                builder.load(builder.gep(offsets, [ind])),
+                builder.gep(
+                    offsets,
+                    [ind_plus1],
+                ),
+            )
+
         return context.get_dummy_value()
 
     return types.void(str_arr_typ, types.intp), codegen
@@ -1615,13 +1618,14 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
 @intrinsic
 def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert str_arr_typ == string_array_type
+    assert str_arr_typ in [
+        binary_array_type,
+        string_array_type,
+    ], "str_arr_set_not_na: string/binary array expected"
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, str_arr_typ)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
