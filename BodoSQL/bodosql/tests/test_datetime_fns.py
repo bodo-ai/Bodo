@@ -2130,7 +2130,7 @@ def test_tz_aware_month_case(memory_leak_check):
         ),
         pytest.param(
             ("US/Eastern", "6/12/2021", "1234567891234ns"),
-            id="no_ts-by_many_ns",
+            id="eastern-by_many_ns",
             marks=pytest.mark.slow,
         ),
     ]
