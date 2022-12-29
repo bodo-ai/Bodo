@@ -50,7 +50,8 @@ public class DateAddCodeGen {
       case "\"qtr\"":
       case "\"qtrs\"":
       case "\"quarters\"":
-        throw new BodoSQLCodegenException("DATEADD unit quarters not supported yet");
+        unit = "quarters";
+        break;
 
       case "\"month\"":
       case "\"mm\"":

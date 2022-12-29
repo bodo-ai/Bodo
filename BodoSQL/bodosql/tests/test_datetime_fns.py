@@ -1255,7 +1255,7 @@ def dateadd_queries(request):
     return request.param
 
 
-def test_snowflake_dateadd(dateadd_df, dateadd_queries, spark_info, memory_leak_check):
+def test_snowflake_dateadd(dateadd_df, dateadd_queries, memory_leak_check):
     """Tests the Snowflake version of DATEADD with inputs (unit, amount, dt_val).
     Currently takes in the unit as a scalar string instead of a DT unit literal.
     Does not currently support quarter, or check any of the alternative
@@ -1269,11 +1269,86 @@ def test_snowflake_dateadd(dateadd_df, dateadd_queries, spark_info, memory_leak_
     check_query(
         query,
         dateadd_df,
-        spark_info,
+        None,
         check_names=False,
         check_dtype=False,
         expected_output=answers,
         only_jit_1DVar=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "time_zone, has_case",
+    [
+        pytest.param(None, False, id="no_tz-no_case"),
+        pytest.param(None, True, id="no_tz-with_case", marks=pytest.mark.slow),
+        pytest.param("US/Pacific", False, id="with_tz-no_case", marks=pytest.mark.slow),
+        pytest.param("Europe/Berlin", True, id="with_tz-with_case"),
+    ],
+)
+def test_snowflake_quarter_dateadd(time_zone, has_case, memory_leak_check):
+    """Followup to test_snowflake_dateadd but for the QUARTER unit"""
+    if has_case:
+        query = "SELECT DT, CASE WHEN YEAR(DT) < 2000 THEN NULL ELSE DATEADD('quarter', N, DT) END FROM table1"
+    else:
+        query = "SELECT DT, DATEADD('quarter', N, DT) FROM table1"
+    input_strings = [
+        "2020-01-14 00:00:00.000",
+        "2020-02-29 07:00:00.000",
+        "2020-04-15 14:00:00.000",
+        "2020-05-31 21:00:00.000",
+        "2020-07-17 04:00:00.000",
+        "2020-09-01 11:00:00.000",
+        "2020-10-17 18:00:00.000",
+        "2020-12-03 01:00:00.000",
+        "2021-01-18 08:00:00.000",
+        "2021-03-05 15:00:00.000",
+        "2021-04-20 22:00:00.000",
+        "2021-06-06 05:00:00.000",
+        "2021-07-22 12:00:00.000",
+        "2021-09-06 19:00:00.000",
+        "2021-10-23 02:00:00.000",
+    ]
+    # Answers obtained from Snowflake. The correct bebhavior is for the date to
+    # advance by exactly 3 months per quarted added without the day of month or
+    # the time of day changing. If that day of month does not exist for the
+    # new month, then it is rounded back to the last day of the new month.
+    # For example, adding 4 quarters to Feb. 29 of a leap year will get you
+    # to Feb. 28 of the next year.
+    answer_strings = [
+        "2016-07-14 00:00:00.000",
+        "2023-02-28 07:00:00.000",
+        "2022-01-15 14:00:00.000",
+        "2020-11-30 21:00:00.000",
+        "2019-10-17 04:00:00.000",
+        "2018-09-01 11:00:00.000",
+        "2017-07-17 18:00:00.000",
+        "2024-03-03 01:00:00.000",
+        "2023-01-18 08:00:00.000",
+        "2021-12-05 15:00:00.000",
+        "2020-10-20 22:00:00.000",
+        "2019-09-06 05:00:00.000",
+        "2018-07-22 12:00:00.000",
+        "2025-03-06 19:00:00.000",
+        "2024-01-23 02:00:00.000",
+    ]
+    df = pd.DataFrame(
+        {
+            "DT": [pd.Timestamp(ts, tz=time_zone) for ts in input_strings],
+            "N": [-14, 12, 7, 2, -3, -8, -13, 13, 8, 3, -2, -7, -12, 14, 9],
+        }
+    )
+    answer = pd.DataFrame(
+        {0: df.DT, 1: [pd.Timestamp(ts, tz=time_zone) for ts in answer_strings]}
+    )
+
+    check_query(
+        query,
+        {"table1": df},
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
     )
 
 
