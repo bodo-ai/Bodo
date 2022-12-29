@@ -984,7 +984,11 @@ def log_util(arr, base):
 
 @numba.generated_jit(nopython=True)
 def negate_util(arr):
-    """A dedicated kernel for unary negation in SQL
+    """A dedicated kernel for unary negation in SQL.
+
+    Note: This kernel is shared by the - operator and the negate
+    function and any "negate" operations we generate. As a result,
+    we don't do a type check.
 
 
     Args:
@@ -993,24 +997,19 @@ def negate_util(arr):
     Returns:
         numeric series/scalar: the opposite of the input array
     """
-
-    verify_int_float_arg(arr, "negate", "arr")
-
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
 
-    # Extract the underly scalar dtype, default int32
-    if arr == bodo.none:
-        scalar_type = types.int32
-    elif bodo.utils.utils.is_array_typ(arr, False):
+    # Extract the underlying scalar dtype for casting integers
+    if bodo.utils.utils.is_array_typ(arr, False):
         scalar_type = arr.dtype
     elif bodo.utils.utils.is_array_typ(arr, True):
         scalar_type = arr.data.dtype
     else:
         scalar_type = arr
 
-    # If the dtype is unsigned, manually upcast then make it signed before negating
+    # If we have an unsigned integer, manually upcast then make it signed before negating
     scalar_text = {
         types.uint8: "res[i] = -np.int16(arg0)",
         types.uint16: "res[i] = -np.int32(arg0)",
@@ -1025,9 +1024,16 @@ def negate_util(arr):
         types.uint64: types.int64,
     }.get(scalar_type, scalar_type)
 
-    out_dtype = bodo.utils.typing.to_nullable_type(
-        bodo.utils.typing.dtype_to_array_type(scalar_type)
-    )
+    if isinstance(scalar_type, types.Integer):
+        # Only integers have a changed dtype. This path is avoided
+        # in case we are negating a scalar without an array.
+        out_dtype = bodo.utils.typing.dtype_to_array_type(scalar_type)
+    else:
+        # If we don't modify the code just return the same type.
+        out_dtype = arr
+
+    # Ensure the output is nullable.
+    out_dtype = bodo.utils.typing.to_nullable_type(out_dtype)
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
