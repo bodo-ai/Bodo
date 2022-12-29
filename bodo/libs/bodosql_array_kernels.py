@@ -30,6 +30,7 @@ broadcasted_fixed_arg_functions = {
     "add_interval_minutes",
     "add_interval_months",
     "add_interval_nanoseconds",
+    "add_interval_quarters",
     "add_interval_seconds",
     "add_interval_weeks",
     "add_interval_years",
