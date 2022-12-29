@@ -7,12 +7,14 @@ import numba
 import numpy as np
 import pandas as pd
 from numba.core import types
-from numba.extending import register_jitable
+from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
 from bodo.utils.typing import (
+    get_literal_value,
     get_overload_const_bool,
+    is_literal_type,
     is_overload_none,
     raise_bodo_error,
 )
@@ -220,9 +222,9 @@ def to_char_util(arr):
         if is_valid_tz_aware_datetime_arg(arr):
             # strftime returns (-/+) HHMM for UTC offset, when the default Bodo
             # timezone format is (-/+) HH:MM. So we must manually insert a ":" character
-            scalar_text = "tz_raw = t.strftime('%z')\n"
+            scalar_text = "tz_raw = arg0.strftime('%z')\n"
             scalar_text += 'tz = tz_raw[:3] + ":" + tz_raw[3:]\n'
-            scalar_text += "res[i] = t.isoformat(' ') + tz\n"
+            scalar_text += "res[i] = arg0.isoformat(' ') + tz\n"
         else:
             scalar_text = "res[i] = pd.Timestamp(arg0).isoformat(' ')\n"
     elif is_valid_float_arg(arr):
@@ -469,7 +471,7 @@ def to_date_util(
         https://docs.snowflake.com/en/user-guide/date-time-input-output.html#date-formats. All of the examples listed are
         handled by pd.to_datetime() in Bodo jit code.
 
-        It will also check if the string is covnertable to int, IE '12345' or '-4321'"""
+        It will also check if the string is convertable to int, IE '12345' or '-4321'"""
 
         # Conversion needs to be done incase arg0 is unichr array
         scalar_text = "arg0 = str(arg0)\n"
@@ -535,4 +537,166 @@ def to_date_util(
         scalar_text,
         out_dtype,
         extra_globals=extra_globals,
+    )
+
+
+def cast_tz_naive_to_tz_aware(arr, tz):  # pragma: no cover
+    pass
+
+
+@overload(cast_tz_naive_to_tz_aware, no_unliteral=True)
+def overload_cast_tz_naive_to_tz_aware(arr, tz):
+    if not is_literal_type(tz):
+        raise_bodo_error("cast_tz_naive_to_tz_aware(): 'tz' must be a literal value")
+    if isinstance(arr, types.optional):
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.cast_tz_naive_to_tz_aware",
+            ["arr", "tz"],
+            0,
+        )
+
+    def impl(arr, tz):  # pragma: no cover
+        return cast_tz_naive_to_tz_aware_util(arr, tz)
+
+    return impl
+
+
+def cast_tz_naive_to_tz_aware_util(arr, tz):  # pragma: no cover
+    pass
+
+
+@overload(cast_tz_naive_to_tz_aware_util, no_unliteral=True)
+def overload_cast_tz_naive_to_tz_aware_util(arr, tz):
+    if not is_literal_type(tz):
+        raise_bodo_error("cast_tz_naive_to_tz_aware(): 'tz' must be a literal value")
+    verify_datetime_arg(arr, "cast_tz_naive_to_tz_aware", "arr")
+    arg_names = ["arr", "tz"]
+    arg_types = [arr, tz]
+    # tz can never be null
+    propagate_null = [True, False]
+    # If we have an array input we must cast to a timestamp
+    box_str = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr)
+        else ""
+    )
+    scalar_text = f"res[i] = {box_str}(arg0).tz_localize(arg1)"
+    tz = get_literal_value(tz)
+    out_dtype = bodo.DatetimeArrayType(tz)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def cast_tz_aware_to_tz_naive(arr, normalize):  # pragma: no cover
+    pass
+
+
+@overload(cast_tz_aware_to_tz_naive, no_unliteral=True)
+def overload_cast_tz_aware_to_tz_naive(arr, normalize):
+    if not is_overload_constant_bool(normalize):
+        raise_bodo_error(
+            "cast_tz_aware_to_tz_naive(): 'normalize' must be a literal value"
+        )
+    if isinstance(arr, types.optional):
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive",
+            ["arr", "normalize"],
+            0,
+        )
+
+    def impl(arr, normalize):  # pragma: no cover
+        return cast_tz_aware_to_tz_naive_util(arr, normalize)
+
+    return impl
+
+
+def cast_tz_aware_to_tz_naive_util(arr, normalize):  # pragma: no cover
+    pass
+
+
+@overload(cast_tz_aware_to_tz_naive_util, no_unliteral=True)
+def overload_cast_tz_aware_to_tz_naive_util(arr, normalize):
+    if not is_overload_constant_bool(normalize):
+        raise_bodo_error(
+            "cast_tz_aware_to_tz_naive(): 'normalize' must be a literal value"
+        )
+    normalize = get_overload_const_bool(normalize)
+    verify_datetime_arg_require_tz(arr, "cast_tz_aware_to_tz_naive", "arr")
+    arg_names = ["arr", "normalize"]
+    arg_types = [arr, normalize]
+    # normalize can never be null
+    propagate_null = [True, False]
+    # If we have an array we must cast the output to a datetime64
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(arr)
+        else ""
+    )
+    scalar_text = ""
+    if normalize:
+        scalar_text += (
+            "ts = pd.Timestamp(year=arg0.year, month=arg0.month, day=arg0.day)\n"
+        )
+    else:
+        scalar_text += "ts = arg0.tz_localize(None)\n"
+    scalar_text += f"res[i] = {unbox_str}(ts)"
+    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def cast_str_to_tz_aware(arr, tz):  # pragma: no cover
+    pass
+
+
+@overload(cast_str_to_tz_aware, no_unliteral=True)
+def overload_cast_str_to_tz_aware(arr, tz):
+    if not is_literal_type(tz):
+        raise_bodo_error("cast_str_to_tz_aware(): 'tz' must be a literal value")
+    if isinstance(arr, types.optional):
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.cast_str_to_tz_aware",
+            ["arr", "tz"],
+            0,
+        )
+
+    def impl(arr, tz):  # pragma: no cover
+        return cast_str_to_tz_aware_util(arr, tz)
+
+    return impl
+
+
+def cast_str_to_tz_aware_util(arr, tz):  # pragma: no cover
+    pass
+
+
+@overload(cast_str_to_tz_aware_util, no_unliteral=True)
+def overload_cast_str_to_tz_aware_util(arr, tz):
+    if not is_literal_type(tz):
+        raise_bodo_error("cast_str_to_tz_aware(): 'tz' must be a literal value")
+    verify_string_arg(arr, "cast_str_to_tz_aware", "arr")
+    arg_names = ["arr", "tz"]
+    arg_types = [arr, tz]
+    # tz can never be null
+    propagate_null = [True, False]
+    # Note: pd.to_datetime doesn't support tz as an argument.
+    scalar_text = f"res[i] = pd.to_datetime(arg0).tz_localize(arg1)"
+    tz = get_literal_value(tz)
+    out_dtype = bodo.DatetimeArrayType(tz)
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
     )

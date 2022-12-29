@@ -2303,8 +2303,10 @@ def test_tz_aware_next_day(memory_leak_check):
     )
     ctx = {"table1": df}
     out_series = df.apply(
-        lambda row: row["A"].normalize()
-        + pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1),
+        lambda row: (
+            row["A"].normalize()
+            + pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1)
+        ).tz_localize(None),
         axis=1,
     )
     py_output = pd.DataFrame({"m": out_series})
@@ -2327,8 +2329,10 @@ def test_tz_aware_next_day_case(
     )
     ctx = {"table1": df}
     week_series = df.apply(
-        lambda row: row["A"].normalize()
-        + pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1),
+        lambda row: (
+            row["A"].normalize()
+            + pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1)
+        ).tz_localize(None),
         axis=1,
     )
     week_series[~df.C] = None
@@ -2349,8 +2353,10 @@ def test_tz_aware_previous_day(memory_leak_check):
     )
     ctx = {"table1": df}
     out_series = df.apply(
-        lambda row: row["A"].normalize()
-        - pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1),
+        lambda row: (
+            row["A"].normalize()
+            - pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1)
+        ).tz_localize(None),
         axis=1,
     )
     py_output = pd.DataFrame({"m": out_series})
@@ -2373,8 +2379,10 @@ def test_tz_aware_previous_day_case(
     )
     ctx = {"table1": df}
     week_series = df.apply(
-        lambda row: row["A"].normalize()
-        - pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1),
+        lambda row: (
+            row["A"].normalize()
+            - pd.offsets.Week(n=1, weekday=0 if row["B"] == "Monday" else 1)
+        ).tz_localize(None),
         axis=1,
     )
     week_series[~df.C] = None

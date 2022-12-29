@@ -2,6 +2,7 @@
 """
 Test correctness of SQL cast queries on BodoSQL
 """
+import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
@@ -320,4 +321,49 @@ def test_timestamp_col_to_str(bodosql_datetime_types, spark_info):
         equivalent_spark_query=spark_query,
         check_names=False,
         check_dtype=False,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_datetime_to_char_cast(tz_aware_df, memory_leak_check):
+    """simplest test for TO_CHAR on timezone aware data"""
+    query = "SELECT CAST(A as VARCHAR) as A from table1"
+
+    expected_output = pd.DataFrame({"A": tz_aware_df["table1"]["A"].astype(str)})
+    check_query(
+        query,
+        tz_aware_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_datetime_to_timestamp_cast(tz_aware_df, memory_leak_check):
+    """Test Casting TZ-Aware data to Timestamp and dates"""
+    query1 = "SELECT CAST(A as Timestamp) as A from table1"
+    expected_output1 = pd.DataFrame(
+        {"A": tz_aware_df["table1"]["A"].dt.tz_localize(None)}
+    )
+    check_query(
+        query1,
+        tz_aware_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output1,
+    )
+    query2 = "SELECT CAST(A as Date) as A from table1"
+    expected_output2 = pd.DataFrame(
+        {"A": tz_aware_df["table1"]["A"].dt.tz_localize(None).dt.normalize()}
+    )
+    check_query(
+        query2,
+        tz_aware_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output2,
     )
