@@ -1052,9 +1052,7 @@ def pd_series_overload(
             nb_dtype = bodo.utils.typing.parse_dtype(dtype, "pandas.Series")
             if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
                 _arr_dtype = bodo.IntegerArrayType(nb_dtype.dtype)
-            elif isinstance(
-                nb_dtype, bodo.libs.float_arr_ext.FloatDtype
-            ):  # pragma: no cover
+            elif isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype):
                 _arr_dtype = bodo.FloatingArrayType(nb_dtype.dtype)
             elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
                 _arr_dtype = bodo.boolean_array
