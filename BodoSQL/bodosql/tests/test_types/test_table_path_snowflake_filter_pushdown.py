@@ -210,8 +210,5 @@ def test_snowflake_in_pushdown(memory_leak_check):
     with set_logging_stream(logger, 1):
         bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
         bodo_func(table_name, conn_str)
-        fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-        assert hasattr(fir, "meta_head_only_info")
-        assert fir.meta_head_only_info[0] is not None
         check_logger_msg(stream, "Columns loaded ['mycol']")
         check_logger_msg(stream, "Filter pushdown successfully performed")
