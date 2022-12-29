@@ -383,7 +383,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<String> colNames = node.getRowType().getFieldNames();
 
     this.generatedCode.append(
-        generateIntersectCode(outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames));
+        generateIntersectCode(
+            outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames, node.all));
 
     varGenStack.push(outVar);
     columnNamesStack.push(colNames);
