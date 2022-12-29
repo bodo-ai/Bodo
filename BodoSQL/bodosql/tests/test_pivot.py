@@ -129,3 +129,32 @@ def test_tz_aware_pivot(memory_leak_check):
         expected_output=py_output,
         is_out_distributed=False,
     )
+
+
+@pytest.mark.slow
+def test_float_pivot(spark_info, memory_leak_check):
+    """
+    Basic test for PIVOT that verifies that float values are handling
+    with optional types.
+    """
+    query = """
+    select SUM_AMOUNT_2, SUM_AMOUNT_3 from table1
+                    PIVOT (sum(amount)
+                    for id in (2 as SUM_AMOUNT_2, 3 as SUM_AMOUNT_3) )
+    """
+    df = pd.DataFrame(
+        {
+            "id": [1, 2, 2, 3] * 5,
+            "amount": [0.5, 0.1, 2.3, 11.1, 23] * 4,
+        }
+    )
+    ctx = {"table1": df}
+    # set check_dtype=False because of int64 vs Int64 difference
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        convert_float_nan=True,
+        check_dtype=False,
+        is_out_distributed=False,
+    )
