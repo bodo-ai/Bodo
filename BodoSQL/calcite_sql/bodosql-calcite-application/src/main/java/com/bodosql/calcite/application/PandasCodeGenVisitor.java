@@ -2234,7 +2234,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                       operandsInfo.get(0).getExprCode(),
                       inputType,
                       outputType,
-                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR | isSingleRow);
+                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
               operandsInfo.set(
                   0, new RexNodeVisitorInfo(operandsInfo.get(0).getName(), casted_expr));
             }
@@ -2242,20 +2242,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
             outputName =
                 generateDateAddName(operandsInfo.get(0).getName(), operandsInfo.get(1).getName());
 
-            // DateAdd should generate scalar code when inside an apply, or all the arguments are
-            // scalar
-            boolean dateAddGeneratesScalarCode =
-                isSingleRow
-                    | (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR
-                        && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR);
-
             String arg1Expr = operandsInfo.get(1).getExprCode();
             String addExpr =
                 generateMySQLDateAddCode(
-                    operandsInfo.get(0).getExprCode(),
-                    arg1Expr,
-                    dateAddGeneratesScalarCode,
-                    manual_addition);
+                    operandsInfo.get(0).getExprCode(), arg1Expr, manual_addition);
             return new RexNodeVisitorInfo(outputName, addExpr);
 
           case "SUBDATE":
@@ -2274,7 +2264,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                       operandsInfo.get(0).getExprCode(),
                       inputType,
                       outputType,
-                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR | isSingleRow);
+                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
               operandsInfo.set(
                   0, new RexNodeVisitorInfo(operandsInfo.get(0).getName(), casted_expr));
             }
@@ -2284,7 +2274,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // scalar
             boolean dateSubGeneratesScalarCode =
                 isSingleRow
-                    | (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR
+                    || (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR
                         && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR);
 
             // if the second argument is an integer, need to convert it to the int * days

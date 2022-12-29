@@ -56,7 +56,7 @@ def is_in_overload(arr_to_check, arr_search_vals, is_parallel=False):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.is_in",
-                ["arr_to_check", "arr_search_vals", "is_parallel"],
+                ["arr_to_check", "arr_search_vals", "is_parallel=False"],
                 i,
             )
 

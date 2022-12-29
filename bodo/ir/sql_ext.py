@@ -659,7 +659,25 @@ def _get_snowflake_sql_literal(filter_value):
         types.bool_,
     )
     filter_type = types.unliteral(filter_value)
-    if isinstance(filter_type, types.List) and (
+    if (
+        isinstance(
+            filter_type,
+            (
+                types.List,
+                types.Array,
+                bodo.IntegerArrayType,
+                bodo.FloatingArrayType,
+                bodo.DatetimeArrayType,
+            ),
+        )
+        or filter_type
+        in (
+            bodo.string_array_type,
+            bodo.dict_str_arr_type,
+            bodo.boolean_array,
+            bodo.datetime_date_array_type,
+        )
+    ) and (
         isinstance(filter_type.dtype, scalar_isinstance)
         or filter_type.dtype in scalar_equals
     ):
