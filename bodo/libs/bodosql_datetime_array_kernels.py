@@ -150,6 +150,10 @@ def add_interval_years(amount, start_dt):  # pragma: no cover
     return
 
 
+def add_interval_quarters(amount, start_dt):  # pragma: no cover
+    return
+
+
 def add_interval_months(amount, start_dt):  # pragma: no cover
     return
 
@@ -502,6 +506,10 @@ def add_interval_years_util(amount, start_dt):  # pragma: no cover
     return
 
 
+def add_interval_quarters_util(amount, start_dt):  # pragma: no cover
+    return
+
+
 def add_interval_months_util(amount, start_dt):  # pragma: no cover
     return
 
@@ -615,8 +623,11 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
             #    the difference in deltas from step 3
             # (If the timezone does not have transitions, treat the offset
             #  as if it were zero)
-            if unit in ("months", "years"):
-                scalar_text = f"td = pd.DateOffset({unit}=arg0)\n"
+            if unit in ("months", "quarters", "years"):
+                if unit == "quarters":
+                    scalar_text = f"td = pd.DateOffset(months=3*arg0)\n"
+                else:
+                    scalar_text = f"td = pd.DateOffset({unit}=arg0)\n"
                 scalar_text += f"start_value = arg1.value\n"
                 scalar_text += "end_value = (pd.Timestamp(arg1.value) + td).value\n"
                 if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
@@ -670,6 +681,8 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
 
             if unit in ("months", "years"):
                 scalar_text = f"res[i] = {unbox_str}({box_str}(arg1) + pd.DateOffset({unit}=arg0))\n"
+            elif unit == "quarters":
+                scalar_text = f"res[i] = {unbox_str}({box_str}(arg1) + pd.DateOffset(months=3*arg0))\n"
             elif unit == "nanoseconds":
                 scalar_text = (
                     f"res[i] = {unbox_str}({box_str}(arg1) + pd.Timedelta(arg0))\n"
@@ -695,6 +708,7 @@ def _install_add_interval_overload():
     """Creates and installs the overloads for interval addition functions"""
     funcs_utils_names = [
         ("years", add_interval_years, add_interval_years_util),
+        ("quarters", add_interval_quarters, add_interval_quarters_util),
         ("months", add_interval_months, add_interval_months_util),
         ("weeks", add_interval_weeks, add_interval_weeks_util),
         ("days", add_interval_days, add_interval_days_util),
