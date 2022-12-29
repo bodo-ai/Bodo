@@ -1978,6 +1978,20 @@ def test_merge_general_cond(memory_leak_check):
     # larger tables to test short/long table control flow in _join.cpp
     df3 = pd.concat([df1] * 10)
     df4 = pd.concat([df2] * 10)
+    # nullable float
+    df5 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 1, 1, 3, 2, 3], "Float64"),
+            "B": pd.array([1, 2, 3, 1, 2, 3, 1], "Float32"),
+        }
+    )
+    df6 = pd.DataFrame(
+        {
+            "A": pd.array([4, 1, 2, 3, 2, 1, 4], "Float64"),
+            "C": pd.array([3, 2, 1, 3, 2, 1, 2], "Float32"),
+            "D": pd.array([1, 2, 3, 4, 5, 6, 7], "Float64"),
+        }
+    )
 
     py_out = df1.merge(df2, on="A")
     check_func(
@@ -2073,15 +2087,22 @@ def test_merge_general_cond(memory_leak_check):
     # testing left/right/outer cases needs Spark to generate reference output
     # avoid duplicated names for non-equi case
     df3 = df2.rename(columns={"A": "A1"})
+    df7 = df6.rename(columns={"A": "A1"})
     from pyspark.sql import SparkSession
 
     spark = SparkSession.builder.getOrCreate()
     sdf1 = spark.createDataFrame(df1)
     sdf2 = spark.createDataFrame(df2)
     sdf3 = spark.createDataFrame(df3)
+    sdf5 = spark.createDataFrame(df5)
+    sdf6 = spark.createDataFrame(df6)
+    sdf7 = spark.createDataFrame(df7)
     sdf1.createOrReplaceTempView("table1")
     sdf2.createOrReplaceTempView("table2")
     sdf3.createOrReplaceTempView("table3")
+    sdf5.createOrReplaceTempView("table5")
+    sdf6.createOrReplaceTempView("table6")
+    sdf7.createOrReplaceTempView("table7")
     for how in ("left", "right", "outer"):
         # Spark requires "full outer" for some reason
         spark_how = "full outer" if how == "outer" else how
@@ -2132,6 +2153,35 @@ def test_merge_general_cond(memory_leak_check):
             _test_equal(
                 out_df, py_out, sort_output=True, reset_index=True, check_dtype=False
             )
+        # ---- Test nullable float arrays ----
+        # test with equality
+        py_out = spark.sql(
+            f"select * from table5 {spark_how} join table6 on (table6.D < table5.B + 1 or table6.C > table5.B) and table5.A == table6.A"
+        ).toPandas()
+        # spark duplicates key columns with nulls
+        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
+        py_out = py_out.drop(columns="A")
+        py_out.insert(0, "A", py_out_A)
+        check_func(
+            impl5,
+            (df5, df6, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
+        # test without equality
+        py_out = spark.sql(
+            f"select * from table5 {spark_how} join table7 on (table7.D < table5.B + 1 or table7.C > table5.B)"
+        ).toPandas()
+        check_func(
+            impl7,
+            (df5, df7, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
 
 
 def test_merge_general_cond_na(memory_leak_check):
@@ -2248,6 +2298,20 @@ def test_merge_general_cond_na_float(memory_leak_check):
     # larger tables to test short/long table control flow in _join.cpp
     df3 = pd.concat([df1] * 10)
     df4 = pd.concat([df2] * 10)
+    # nullable float input
+    df5 = pd.DataFrame(
+        {
+            "A": [1, 2, 1, 1, 3, 2, 3],
+            "B": pd.Series([1, None, 3, None, 2, 3, 1], dtype="Float64"),
+        }
+    )
+    df6 = pd.DataFrame(
+        {
+            "A": [4, 1, 2, 3, 2, 1, 4],
+            "C": [3, 2, 1, 3, 2, 1, 2],
+            "D": pd.Series([None, 2, 3, 4, 5, 6, 7], dtype="Float32"),
+        }
+    )
 
     py_out = df1.merge(df2, left_on=["A"], right_on=["A"])
     # Note we can't use df.query in Pandas because it can't
@@ -2262,6 +2326,19 @@ def test_merge_general_cond_na_float(memory_leak_check):
         check_dtype=False,
         py_output=py_out,
     )
+
+    py_out = df5.merge(df6, left_on=["A"], right_on=["A"])
+    filter_cond = py_out["D"] <= (py_out["B"] + 1)
+    py_out = py_out[filter_cond]
+    check_func(
+        impl1,
+        (df5, df6),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
     py_out = df3.merge(df2, left_on=["A"], right_on=["A"])
     filter_cond = (py_out["C"] + py_out["D"] - 5) >= py_out["B"]
     py_out = py_out[filter_cond]
@@ -3720,6 +3797,29 @@ def test_merge_asof_parallel(datapath, memory_leak_check):
                         [1, 1, None, None, None, None, 1, 1], dtype="Int64"
                     ),
                     "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Int64"),
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="Float64"),
+                    "B1": pd.Series([1, 2, None, 3] * 3, dtype="Float64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="Float64"),
+                    "B2": pd.Series([None, 2, 4, 3] * 3, dtype="Float64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, 5, 5, 5, 1, 1, 1, 1], dtype="Float64"),
+                    "B1": pd.Series(
+                        [1, 1, None, None, None, None, 1, 1], dtype="Float64"
+                    ),
+                    "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Float64"),
                 }
             ),
         ),
