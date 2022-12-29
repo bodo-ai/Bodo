@@ -46,19 +46,15 @@ jobs:
       set -eo pipefail
       export PATH=$HOME/mambaforge/bin:${PATH}
       source activate $CONDA_ENV
-      if [[ "${{ parameters.useNumbaDev }}" == "true" ]]; then
-        mamba install -y numba -c numba/label/dev -c conda-forge
-        echo "Using Numba-Dev"
-      else
-        echo "Skipping..."
-      fi
+      mamba install -y numba -c numba/label/dev -c conda-forge
     displayName: 'Install Numba-Dev'
+    condition: and(succeeded(), eq('${{ parameters.useNumbaDev }}', 'true'))
 
   - task: DownloadSecureFile@1
     name: secret_file
-    displayName: 'Download secrets file'
     inputs:
       secureFile: 'publish_binary_secrets'
+    displayName: 'Download Secrets File'
 
   - script: |
       set -eo pipefail
@@ -77,7 +73,7 @@ jobs:
       export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
       cd $(System.DefaultWorkingDirectory)
       ./buildscripts/azure/install_bodo.sh $BODO_VERSION $PLATFORM_DEV_RELEASE
-    displayName: 'Install Bodo from conda'
+    displayName: 'Install Bodo from Mamba'
 
   - script: |
       set -eo pipefail
@@ -97,11 +93,11 @@ jobs:
       else
         cp -r $(System.DefaultWorkingDirectory)/bodo/tests bodo
       fi
-    displayName: 'Copy test data'
+    displayName: 'Copy Test Data'
 
   - script: |
       buildscripts/setup_minio.sh
-    displayName: 'Setup minio'
+    displayName: 'Setup Minio'
 
   - script: |
       set -eo pipefail
@@ -111,21 +107,21 @@ jobs:
       # Cap the botocore version at 1.20.105 because 1.20.106 is incompatable
       # with fsspec.
       mamba install -y -c conda-forge fsspec>=2021.09 boto3 botocore=1.20.105 s3fs
-    displayName: 'Setup s3_testing'
+    displayName: 'Setup S3 Testing'
 
   - script: |
       set -eo pipefail
       export PATH=$HOME/mambaforge/bin:$PATH
       source activate $CONDA_ENV
       mamba install -y -c conda-forge 'gcsfs>=2022.1'
-    displayName: 'Setup gcs_testing'
+    displayName: 'Setup GCS Testing'
 
   - script: |
       set -eo pipefail
       export PATH=$HOME/mambaforge/bin:$PATH
       source activate $CONDA_ENV
       pip install deltalake
-    displayName: 'Setup deltalake testing'
+    displayName: 'Setup Deltalake Testing'
 
   - script: |
       set -eo pipefail
@@ -140,7 +136,7 @@ jobs:
       export PATH=$HOME/mambaforge/bin:$PATH
       source activate $CONDA_ENV
       mamba install -y -c conda-forge scikit-learn='1.1.*'
-    displayName: 'Setup scikit-learn testing'
+    displayName: 'Setup Scikit-Learn Testing'
 
   - script: |
       set -eo pipefail
@@ -153,7 +149,7 @@ jobs:
       else
         echo "Skipping..."
       fi
-    displayName: 'Download Hadoop for ADLS testing (only linux)'
+    displayName: 'Download Hadoop for ADLS Testing (only Linux)'
 
   - script: |
       set -eo pipefail
@@ -174,13 +170,13 @@ jobs:
       export PATH=$HOME/mambaforge/bin:$PATH
       source activate $CONDA_ENV
       mamba install -y -c conda-forge xlrd xlsxwriter openpyxl
-    displayName: 'Setup excel testing'
+    displayName: 'Setup Excel Testing'
 
   - task: DownloadSecureFile@1
     name: testLicense
-    displayName: 'Download test license'
     inputs:
       secureFile: 'bodo.lic'
+    displayName: 'Download Test License'
 
   - script: |
       set -eo pipefail
@@ -212,7 +208,7 @@ jobs:
         wget https://download.oracle.com/otn_software/mac/instantclient/198000/instantclient-basic-macos.x64-19.8.0.0.0dbru.zip
         sudo unzip instantclient-basic-macos.x64-19.8.0.0.0dbru.zip -d /usr/local/lib
       fi
-    displayName: 'Setup Oracle Database testing'
+    displayName: 'Setup Oracle Database Testing'
 
   # TODO: Re-enable (https://bodo.atlassian.net/browse/BE-4122)
   # - script: |
@@ -220,7 +216,7 @@ jobs:
   #     export PATH=$HOME/mambaforge/bin:$PATH
   #     source activate $CONDA_ENV
   #     mamba install -y -c conda-forge psycopg2
-  #   displayName: 'Setup PostgreSQL testing'
+  #   displayName: 'Setup PostgreSQL Testing'
 
   - script: |
       set -eo pipefail
@@ -228,6 +224,20 @@ jobs:
       source activate $CONDA_ENV
       mamba install -y pyspark=3.2 'openjdk=11' -c conda-forge
     displayName: 'PySpark'
+
+  - script: |
+      set -eo pipefail
+      export PATH=$HOME/mambaforge/bin:$PATH
+      source activate $CONDA_ENV
+
+      mkdir env
+      mamba env export | tee env/environment.yml
+      mamba list --explicit > env/package-list.txt
+      pip list | tee env/requirements.txt
+    displayName: Export Environment Spec
+
+  - publish: $(System.DefaultWorkingDirectory)/env
+    artifact: TestEnv-${{ parameters.name }}
 
   - script: |
       set -eo pipefail
@@ -296,4 +306,4 @@ jobs:
         # Invalid env variables for AWS credentials in the pipeline, s3 access is denied unless we run it by resetting them
         AWS_ACCESS_KEY_ID="" AWS_SECRET_ACCESS_KEY="" mpiexec -n 4 python bodo_queries.py --folder s3://bodo-example-data/tpch/SF1
       fi
-    displayName: 'Run Bodo Examples for major release'
+    displayName: 'Run Bodo Examples for Major Release'

@@ -32,7 +32,7 @@ stages:
       vmImage: macOS-latest
     steps:
     - script: |
-        set -eo pipefail
+        set -exo pipefail
         export BUILD_DATE=`date  +"%Y-%m-%d"`
         export FILE_SUFFIX=built-${BUILD_DATE}
         echo "##vso[task.setvariable variable=fileSuffix;isOutput=true]$FILE_SUFFIX"
