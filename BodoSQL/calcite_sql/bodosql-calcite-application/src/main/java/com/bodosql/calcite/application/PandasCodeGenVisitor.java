@@ -1928,10 +1928,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // The first argument is required to be an interval symbol.
     assert fnOperation.getOperands().get(0) instanceof RexLiteral;
-    String flag = ((RexLiteral) fnOperation.getOperands().get(0)).getValue().toString();
-    boolean bothArgsCol =
-        exprTypes.get(1) == BodoSQLExprType.ExprType.COLUMN
-            && exprTypes.get(2) == BodoSQLExprType.ExprType.COLUMN;
 
     // Extract all the inputs to the current function
     List<RexNodeVisitorInfo> operandsInfo =
@@ -1943,7 +1939,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           }
         };
 
-    return generateTimestampDiffInfo(inputVar, exprTypes, operandsInfo, isSingleRow, ctx);
+    return generateTimestampDiffInfo(inputVar, exprTypes, operandsInfo, ctx);
   }
 
   /**
