@@ -78,6 +78,14 @@ def overload_coerce_to_ndarray(
             data
         )  # pragma: no cover
 
+    # nullable float array
+    if isinstance(
+        data, bodo.libs.float_arr_ext.FloatingArrayType
+    ) and not is_overload_none(use_nullable_array):
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.float_arr_ext.get_float_arr_data(
+            data
+        )  # pragma: no cover
+
     # nullable boolean array
     if data == bodo.libs.bool_arr_ext.boolean_array and not is_overload_none(
         use_nullable_array
@@ -307,6 +315,23 @@ def overload_coerce_to_ndarray(
 
             return impl_null_integer
 
+        if not is_overload_none(use_nullable_array) and isinstance(dtype, types.Float):
+
+            def impl_null_float(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = scalar_to_arr_len
+                out_arr = bodo.libs.float_arr_ext.alloc_float_array(n, dtype)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    out_arr[i] = data
+                return out_arr
+
+            return impl_null_float
+
         if not is_overload_none(use_nullable_array) and dtype == types.bool_:
 
             def impl_null_bool(
@@ -484,6 +509,7 @@ def overload_coerce_to_array(
         data,
         (
             bodo.libs.int_arr_ext.IntegerArrayType,
+            bodo.libs.float_arr_ext.FloatingArrayType,
             DecimalArrayType,
             bodo.libs.interval_arr_ext.IntervalArrayType,
             bodo.libs.tuple_arr_ext.TupleArrayType,

@@ -2041,7 +2041,7 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         # their init functions
         if isinstance(data, IntegerArrayType):
             init_func = bodo.libs.int_arr_ext.init_integer_array
-        if isinstance(data, FloatingArrayType):  # pragma: no cover
+        if isinstance(data, FloatingArrayType):
             init_func = bodo.libs.float_arr_ext.init_float_array
         if isinstance(data, DecimalArrayType):
             precision = data.precision
