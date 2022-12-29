@@ -61,6 +61,7 @@ from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import MapArrayType
@@ -3459,6 +3460,7 @@ def common_validate_merge_merge_asof_spec(
         CategoricalArrayType,
         types.Array,
         IntegerArrayType,
+        FloatingArrayType,
         DecimalArrayType,
         IntervalArrayType,
         bodo.DatetimeArrayType,
