@@ -64,15 +64,15 @@ public class SetOpCodeGen {
         }
       }
       unionBuilder.append(expr);
+      /* Union All includes duplicates, Union doesn't. preemptively dropping duplicate here to reduce size of the concat */
+      if (!isAll) {
+        unionBuilder.append(".drop_duplicates()");
+      }
       if (!renameMap.isEmpty()) {
         unionBuilder
             .append(".rename(columns=")
             .append(renameColumns(renameMap))
             .append(", copy=False)");
-      }
-      /* Union All includes duplicates, Union doesn't. preemptively dropping duplicate here to reduce size of the concat */
-      if (!isAll) {
-        unionBuilder.append(".drop_duplicates()");
       }
       unionBuilder.append(",");
     }
@@ -98,6 +98,7 @@ public class SetOpCodeGen {
    * @param rhsColNames The names of columns of the left hand table
    * @param lhsColNames The names of columns of the left hand table
    * @param columnNames a list containing the expected output column names
+   * @param isAll Is the intersect an IntersectAll Expression.
    * @return The code generated for the Intersect expression.
    */
   public static String generateIntersectCode(
@@ -106,7 +107,11 @@ public class SetOpCodeGen {
       List<String> lhsColNames,
       String rhsExpr,
       List<String> rhsColNames,
-      List<String> columnNames) {
+      List<String> columnNames,
+      boolean isAll) {
+    if (isAll) {
+      throw new BodoSQLCodegenException("Intersect All is not supported yet");
+    }
     // we need there to be at least one column, in the right/left table, so we can perform the merge
     // This may be incorrect if Calcite does not optimize out empty intersects
     assert lhsColNames.size() == rhsColNames.size()
@@ -125,16 +130,21 @@ public class SetOpCodeGen {
       rhsRenameMap.put(rhsColNames.get(i), columnNames.get(i));
     }
 
+    intersectBuilder.append(indent).append(outVar).append(" = ").append(lhsExpr);
+    if (!isAll) {
+      intersectBuilder.append(".drop_duplicates()");
+    }
     intersectBuilder
-        .append(indent)
-        .append(outVar)
-        .append(" = ")
-        .append(lhsExpr)
         .append(".rename(columns=")
         .append(renameColumns(lhsRenameMap))
         .append(", copy=False)")
         .append(".merge(")
-        .append(rhsExpr)
+        .append(rhsExpr);
+    /* IntersectAll includes duplicates, Intersect doesn't. preemptively dropping duplicate here to reduce size of the concat */
+    if (!isAll) {
+      intersectBuilder.append(".drop_duplicates()");
+    }
+    intersectBuilder
         .append(".rename(columns=")
         .append(renameColumns(rhsRenameMap))
         .append(", copy=False), on = [");
@@ -142,8 +152,12 @@ public class SetOpCodeGen {
     for (int i = 0; i < lhsColNames.size(); i++) {
       intersectBuilder.append(makeQuoted(columnNames.get(i))).append(", ");
     }
-    // Intersect removes duplicate entries
-    intersectBuilder.append("]).drop_duplicates()\n");
+    intersectBuilder.append("])");
+    /* Need to perform a final drop to account for values in both tables */
+    if (!isAll) {
+      intersectBuilder.append(".drop_duplicates()");
+    }
+    intersectBuilder.append("\n");
 
     return intersectBuilder.toString();
   }
