@@ -1608,6 +1608,9 @@ def _infer_ndarray_obj_dtype(val):
         return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
 
     first_val = val[i]
+    # For compilation purposes we also impose a limit to the size
+    # of the struct as very large structs cannot be efficiently compiled.
+    struct_size_limit = 100
     if isinstance(first_val, str):
         return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
     elif isinstance(first_val, (bytes, bytearray)):
@@ -1642,8 +1645,10 @@ def _infer_ndarray_obj_dtype(val):
     # means all keys are string and match across dictionaries, and all values with same
     # key have same data type
     # TODO: distinguish between Struct and Map arrays properly
-    elif isinstance(first_val, (dict, Dict)) and all(
-        isinstance(k, str) for k in first_val.keys()
+    elif (
+        isinstance(first_val, (dict, Dict))
+        and (len(first_val.keys()) <= struct_size_limit)
+        and all(isinstance(k, str) for k in first_val.keys())
     ):
         field_names = tuple(first_val.keys())
         # TODO: handle None value in first_val elements
