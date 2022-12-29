@@ -58,7 +58,7 @@ from bodo.utils.typing import BodoError, BodoWarning
         pd.DataFrame(
             {
                 "A": np.array([1, 8, 4, 0, 3], dtype=np.uint8),
-                "B": np.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype=np.float32),
+                "B": pd.array([1.1, np.nan, 4.2, 3.1, -1.1], dtype="Float32"),
             },
             pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
         ),
@@ -94,6 +94,7 @@ from bodo.utils.typing import BodoError, BodoWarning
                 "A": pd.date_range(start="2018-04-24", end="2018-04-29", periods=5),
                 "B": pd.date_range(start="2013-09-04", end="2013-09-29", periods=5),
                 "C": [1.1, np.nan, 4.2, 3.1, -1.3],
+                "D": pd.array([1.1, None, 4.2, 3.1, -1.3], "Float64"),
             },
             [-2, 1, 3, 5, 9],
         ),
@@ -558,10 +559,11 @@ def test_sort_values_1col_np_array(dtype, memory_leak_check):
         (np.uint8, np.int32),
         (np.int16, np.float64),
         (np.uint16, np.float32),
+        ("Float32", "Float64"),
     ],
 )
 @pytest.mark.slow
-def test_sort_values_2col_np_array(dtype1, dtype2, memory_leak_check):
+def test_sort_values_2col_pd_array(dtype1, dtype2, memory_leak_check):
     """
     Test sort_values(): with two columns, two types
     """
@@ -571,8 +573,8 @@ def test_sort_values_2col_np_array(dtype1, dtype2, memory_leak_check):
         return df2
 
     def get_quasi_random_dtype(n, dtype1, dtype2):
-        eListA = np.array([0] * n, dtype=dtype1)
-        eListB = np.array([0] * n, dtype=dtype2)
+        eListA = pd.array([0] * n, dtype=dtype1)
+        eListB = pd.array([0] * n, dtype=dtype2)
         for i in range(n):
             eValA = i * i % 34
             eValB = i * (i - 1) % 23
