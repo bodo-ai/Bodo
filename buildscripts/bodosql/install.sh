@@ -1,5 +1,5 @@
 #!/bin/bash
-set -xeo pipefail
+set -exo pipefail
 
 
 # Only download miniforge if we're not at runtime.
@@ -55,10 +55,12 @@ MAMBA_INSTALL="mamba install -y"
 # Deactivate env in case this was called by another file that
 # activated the env. This only happens on AWS and causes errors
 # on Azure with MacOS
+set +x
 if [[ "$CI_SOURCE" == "AWS" ]]; then
     source deactivate || true
 fi
 source activate $CONDA_ENV
+set -x
 
 # ---- Install packages from Conda ----
 

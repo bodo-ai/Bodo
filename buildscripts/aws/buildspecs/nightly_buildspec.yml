@@ -18,12 +18,12 @@ phases:
         commands:
         - buildscripts/setup_conda.sh
         - buildscripts/aws/test_installs.sh
+        - buildscripts/aws/export_env.sh
 
     build:
         commands:
         - echo Building Obfuscated Binary
         - buildscripts/aws/build_obfuscated.sh
-
 
     post_build:
         commands:
@@ -32,3 +32,10 @@ phases:
         - buildscripts/install_iceberg_connector.sh
         - buildscripts/install_azurefs_sas_token_provider.sh
         - buildscripts/aws/run_nightly_tests.sh
+
+artifacts:
+  files:
+    - environment.yml
+    - package-list.txt
+    - requirements.txt
+  name: env-info

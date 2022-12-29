@@ -1,5 +1,6 @@
 #!/bin/bash
 set -eo pipefail
+set +x
 
 # Installations needed to run unittests. All placed in 1 file for the AWS Codebuild install step.
 
