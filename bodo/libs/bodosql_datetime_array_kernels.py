@@ -8,10 +8,11 @@ import numpy as np
 import pandas as pd
 import pytz
 from numba.core import types
-from numba.extending import overload
+from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.utils.typing import raise_bodo_error
 
 
 def standardize_snowflake_date_time_part(part_str):  # pragma: no cover
@@ -205,6 +206,46 @@ def dayofyear(arr):  # pragma: no cover
     return
 
 
+def diff_day(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_hour(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_microsecond(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_minute(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_month(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_nanosecond(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_quarter(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_second(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_week(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_year(arr0, arr1):  # pragma: no cover
+    return
+
+
 def get_year(arr):  # pragma: no cover
     return
 
@@ -303,25 +344,6 @@ def monthname(arr):
 
     def impl(arr):  # pragma: no cover
         return monthname_util(arr)
-
-    return impl
-
-
-@numba.generated_jit(nopython=True)
-def month_diff(arr0, arr1):
-    """Handles cases where month_diff receives optional arguments and forwards
-    to the appropriate version of the real implementation"""
-    args = [arr0, arr1]
-    for i in range(2):
-        if isinstance(args[i], types.optional):  # pragma: no cover
-            return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.month_diff",
-                ["arr0", "arr1"],
-                i,
-            )
-
-    def impl(arr0, arr1):  # pragma: no cover
-        return month_diff_util(arr0, arr1)
 
     return impl
 
@@ -883,6 +905,222 @@ def _install_dt_extract_fn_overload():
 _install_dt_extract_fn_overload()
 
 
+def diff_day_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_hour_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_microsecond_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_minute_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_month_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_nanosecond_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_quarter_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_second_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_week_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+def diff_year_util(arr0, arr1):  # pragma: no cover
+    return
+
+
+@register_jitable
+def get_iso_weeks_between_years(year0, year1):  # pragma: no cover
+    """Takes in two years and returns the number of ISO weeks between the first
+       week of the first year and the first week of the second year.
+
+       Logic for the calculations based on: https://en.wikipedia.org/wiki/ISO_week_date
+
+    Args:
+        year0 (integer): the first year
+        year1 (integer): the second year
+
+    Returns: the number of ISO weeks betwen year0 and year1
+    """
+    sign = 1
+    if year1 < year0:
+        year0, year1 = year1, year0
+        sign = -1
+    weeks = 0
+    for y in range(year0, year1):
+        weeks += 52
+        # Calculate the starting day-of-week of the first week of the current
+        # and previous year. If the current is a Thursday, or the previous is a
+        # Wednesday, then the year has 53 weeks instead of 52
+        dow_curr = (y + (y // 4) - (y // 100) + (y // 400)) % 7
+        dow_prev = ((y - 1) + ((y - 1) // 4) - ((y - 1) // 100) + ((y - 1) // 400)) % 7
+        if dow_curr == 4 or dow_prev == 3:
+            weeks += 1
+    return sign * weeks
+
+
+def create_dt_diff_fn_overload(unit):  # pragma: no cover
+    def overload_func(arr0, arr1):
+        """Handles cases where this dt difference function recieves optional
+        arguments and forwards to the appropriate version of the real implementation"""
+        args = [arr0, arr1]
+        for i in range(len(args)):
+            if isinstance(args[i], types.optional):
+                return unopt_argument(
+                    f"bodo.libs.bodosql_array_kernels.diff_{unit}",
+                    ["arr0", "arr1"],
+                    i,
+                )
+
+        func_text = "def impl(arr0, arr1):\n"
+        func_text += (
+            f"  return bodo.libs.bodosql_array_kernels.diff_{unit}_util(arr0, arr1)"
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+
+        return loc_vars["impl"]
+
+    return overload_func
+
+
+def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
+    """Creates an overload function to support datetime difference functions.
+
+    Args:
+        unt: the unit that the difference shoud be returned in terms of.
+
+    Returns:
+        (function): a utility that takes in a two datetimes (either can be scalars
+        or vectors) and returns the difference in the specified unit
+
+    Note: the output dtype is int64 for NANOSECONDS and int32 for all other units,
+    in agreement with Calcite's typing rules.
+    """
+
+    def overload_dt_diff_fn(arr0, arr1):
+        verify_datetime_arg_allow_tz(arr0, "diff_" + unit, "arr0")
+        verify_datetime_arg_allow_tz(arr1, "diff_" + unit, "arr1")
+        tz = get_tz_if_exists(arr0)
+        if get_tz_if_exists(arr1) != tz:
+            raise_bodo_error(f"diff_{unit}: both arguments must have the same timezone")
+
+        arg_names = ["arr0", "arr1"]
+        arg_types = [arr0, arr1]
+        propagate_null = [True] * 2
+        extra_globals = None
+
+        # A dictionary of variable definitions shared between the kernels
+        diff_defns = {
+            "yr_diff": "arg1.year - arg0.year",
+            "qu_diff": "arg1.quarter - arg0.quarter",
+            "mo_diff": "arg1.month - arg0.month",
+            "y0, w0, _": "arg0.isocalendar()",
+            "y1, w1, _": "arg1.isocalendar()",
+            "iso_yr_diff": "bodo.libs.bodosql_array_kernels.get_iso_weeks_between_years(y0, y1)",
+            "wk_diff": "w1 - w0",
+            "da_diff": "(pd.Timestamp(arg1.year, arg1.month, arg1.day) - pd.Timestamp(arg0.year, arg0.month, arg0.day)).days",
+            "ns_diff": "arg1.value - arg0.value",
+        }
+        # A dictionary mapping each kernel to the list of definitions needed'
+        req_defns = {
+            "year": ["yr_diff"],
+            "quarter": ["yr_diff", "qu_diff"],
+            "month": ["yr_diff", "mo_diff"],
+            "week": ["y0, w0, _", "y1, w1, _", "iso_yr_diff", "wk_diff"],
+            "day": ["da_diff"],
+            "nanosecond": ["ns_diff"],
+        }
+
+        scalar_text = ""
+        if tz == None:
+            scalar_text += "arg0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
+            scalar_text += "arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
+
+        # Load in all of the required definitions
+        for req_defn in req_defns.get(unit, []):
+            scalar_text += f"{req_defn} = {diff_defns[req_defn]}\n"
+
+        if unit == "nanosecond":
+            out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
+        else:
+            out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
+
+        if unit == "year":
+            scalar_text += "res[i] = yr_diff"
+        elif unit == "quarter":
+            scalar_text += "res[i] = 4 * yr_diff + qu_diff"
+        elif unit == "month":
+            scalar_text += "res[i] = 12 * yr_diff + mo_diff"
+        elif unit == "week":
+            scalar_text += "res[i] = iso_yr_diff + wk_diff"
+        elif unit == "day":
+            scalar_text += "res[i] = da_diff"
+        elif unit == "nanosecond":
+            scalar_text += "res[i] = ns_diff"
+        else:
+            if unit == "hour":
+                divisor = 3600000000000
+            if unit == "minute":
+                divisor = 60000000000
+            if unit == "second":
+                divisor = 1000000000
+            if unit == "microsecond":
+                divisor = 1000
+            scalar_text += f"res[i] = np.floor_divide((arg1.value), ({divisor})) - np.floor_divide((arg0.value), ({divisor}))\n"
+
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+            extra_globals=extra_globals,
+        )
+
+    return overload_dt_diff_fn
+
+
+def _install_dt_diff_fn_overload():
+    """Creates and installs the overloads for datetime difference functions"""
+    funcs_utils_names = [
+        ("day", diff_day, diff_day_util),
+        ("hour", diff_hour, diff_hour_util),
+        ("microsecond", diff_microsecond, diff_microsecond_util),
+        ("minute", diff_minute, diff_minute_util),
+        ("month", diff_month, diff_month_util),
+        ("nanosecond", diff_nanosecond, diff_nanosecond_util),
+        ("quarter", diff_quarter, diff_quarter),
+        ("second", diff_second, diff_second_util),
+        ("week", diff_week, diff_week_util),
+        ("year", diff_year, diff_year_util),
+    ]
+    for unit, func, util in funcs_utils_names:
+        func_overload_impl = create_dt_diff_fn_overload(unit)
+        overload(func)(func_overload_impl)
+        util_overload_impl = create_dt_diff_fn_util_overload(unit)
+        overload(util)(util_overload_impl)
+
+
+_install_dt_diff_fn_overload()
+
+
 def date_trunc(date_or_time_part, ts_arg):  # pragma: no cover
     pass
 
@@ -1275,42 +1513,6 @@ def previous_day_util(arr0, arr1):
         out_dtype,
         prefix_code=prefix_code,
     )
-
-
-@numba.generated_jit(nopython=True)
-def month_diff_util(arr0, arr1):
-    """A dedicated kernel for obtaining the floor of the difference in months
-    between two Datetimes (or columns)
-
-
-    Args:
-        arr0 (datetime array/series/scalar): the date(s) being subtracted from
-        arr1 (datetime array/series/scalar): the date(s) being subtracted
-
-    Returns:
-        int series/scalar: the difference in months between the two dates
-    """
-
-    verify_datetime_arg(arr0, "month_diff", "arr0")
-    verify_datetime_arg(arr1, "month_diff", "arr1")
-
-    arg_names = ["arr0", "arr1"]
-    arg_types = [arr0, arr1]
-    propagate_null = [True] * 2
-    scalar_text = "A0 = bodo.utils.conversion.box_if_dt64(arg0)\n"
-    scalar_text += "A1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
-    scalar_text += "delta = 12 * (A0.year - A1.year) + (A0.month - A1.month)\n"
-    scalar_text += "remainder = ((A0 - pd.DateOffset(months=delta)) - A1).value\n"
-    scalar_text += "if delta > 0 and remainder < 0:\n"
-    scalar_text += "   res[i] = -(delta - 1)\n"
-    scalar_text += "elif delta < 0 and remainder > 0:\n"
-    scalar_text += "   res[i] = -(delta + 1)\n"
-    scalar_text += "else:\n"
-    scalar_text += "   res[i] = -delta"
-
-    out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
-
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
 
 
 @numba.generated_jit(nopython=True)

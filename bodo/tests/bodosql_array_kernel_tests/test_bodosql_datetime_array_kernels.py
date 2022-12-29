@@ -881,81 +881,6 @@ def test_monthname(dates_scalar_vector, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "args",
-    [
-        pytest.param(
-            (
-                pd.concat(
-                    [
-                        pd.Series(
-                            [
-                                pd.Timestamp(d)
-                                for d in pd.date_range(
-                                    "2018-01-01", "2019-01-01", periods=20
-                                )
-                            ]
-                            + [None, None]
-                        )
-                    ]
-                ),
-                pd.Series(pd.date_range("2005-01-01", "2020-01-01", periods=22)),
-            ),
-            id="all_vector",
-        ),
-        pytest.param(
-            (
-                pd.Series(
-                    [
-                        pd.Timestamp(d)
-                        for d in pd.date_range("2018-01-01", "2019-01-01", periods=20)
-                    ]
-                    + [None, None]
-                ),
-                pd.Timestamp("2018-06-05"),
-            ),
-            id="vector_scalar",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            (pd.Timestamp("2000-10-29"), pd.Timestamp("1992-03-25")), id="all_scalar"
-        ),
-    ],
-)
-def test_month_diff(args, memory_leak_check):
-    def impl(arr0, arr1):
-        return pd.Series(bodo.libs.bodosql_array_kernels.month_diff(arr0, arr1))
-
-    # avoid pd.Series() conversion for scalar output
-    if not isinstance(args[0], pd.Series) and not isinstance(args[1], pd.Series):
-        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.month_diff(arr0, arr1)
-
-    # Simulates month diff on a single row
-    def md_scalar_fn(ts1, ts2):
-        if pd.isna(ts1) or pd.isna(ts2):
-            return None
-        else:
-            floored_delta = (ts1.year - ts2.year) * 12 + (ts1.month - ts2.month)
-            remainder = ((ts1 - pd.DateOffset(months=floored_delta)) - ts2).value
-            remainder = 1 if remainder > 0 else (-1 if remainder < 0 else 0)
-            if floored_delta > 0 and remainder < 0:
-                actual_month_delta = floored_delta - 1
-            elif floored_delta < 0 and remainder > 0:
-                actual_month_delta = floored_delta + 1
-            else:
-                actual_month_delta = floored_delta
-            return -actual_month_delta
-
-    days_answer = vectorized_sol(args, md_scalar_fn, pd.Int32Dtype())
-    check_func(
-        impl,
-        args,
-        py_output=days_answer,
-        check_dtype=False,
-        reset_index=True,
-    )
-
-
-@pytest.mark.parametrize(
     "arg",
     [
         pd.Timestamp("2007-10-07"),
@@ -1398,23 +1323,6 @@ def test_option_int_to_days(memory_leak_check):
     for flag in [True, False]:
         answer = pd.Timedelta(days=10) if flag else None
         check_func(impl, (10, flag), py_output=answer)
-
-
-@pytest.mark.slow
-def test_option_month_diff(memory_leak_check):
-    def impl(A, B, flag0, flag1):
-        arg0 = A if flag0 else None
-        arg1 = B if flag1 else None
-        return bodo.libs.bodosql_array_kernels.month_diff(arg0, arg1)
-
-    for flag0 in [True, False]:
-        for flag1 in [True, False]:
-            answer = 42 if flag0 and flag1 else None
-            check_func(
-                impl,
-                (pd.Timestamp("2007-01-01"), pd.Timestamp("2010-07-04"), flag0, flag1),
-                py_output=answer,
-            )
 
 
 @pytest.mark.slow
