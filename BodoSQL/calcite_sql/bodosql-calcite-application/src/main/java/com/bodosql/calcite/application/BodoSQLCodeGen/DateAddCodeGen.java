@@ -1,11 +1,8 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastCode;
-
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import java.util.List;
-import org.apache.calcite.sql.type.SqlTypeName;
 
 /**
  * Class that returns the generated code for a DateAdd expression after all inputs have been
@@ -154,21 +151,13 @@ public class DateAddCodeGen {
    *
    * @param arg0 The first starting datetime (or string).
    * @param arg1 The amount of days to add to the starting datetime.
-   * @param strNeedsCast Is arg0 a string that needs casting.
    * @param generateScalarCode Are the inputs scalars?
    * @param manual_addition Is the second argument a timedelta?
    * @return The code generated that matches the DateAdd expression.
    */
   public static String generateMySQLDateAddCode(
-      String arg0,
-      String arg1,
-      boolean strNeedsCast,
-      boolean generateScalarCode,
-      boolean manual_addition) {
+      String arg0, String arg1, boolean generateScalarCode, boolean manual_addition) {
     StringBuilder addBuilder = new StringBuilder();
-    if (strNeedsCast) {
-      arg0 = generateCastCode(arg0, SqlTypeName.TIMESTAMP, generateScalarCode);
-    }
     if (manual_addition) {
       addBuilder
           .append("bodo.libs.bodosql_array_kernels.add_interval(")

@@ -2225,10 +2225,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // Cast arg0 to from string to timestamp, if needed
             if (SqlTypeName.STRING_TYPES.contains(
                 fnOperation.getOperands().get(0).getType().getSqlTypeName())) {
+              RelDataType inputType = fnOperation.getOperands().get(0).getType();
+              // The output type will always be the timestamp the string is being cast to.
+              RelDataType outputType = fnOperation.getType();
               String casted_expr =
                   generateCastCode(
                       operandsInfo.get(0).getExprCode(),
-                      SqlTypeName.TIMESTAMP,
+                      inputType,
+                      outputType,
                       exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR | isSingleRow);
               operandsInfo.set(
                   0, new RexNodeVisitorInfo(operandsInfo.get(0).getName(), casted_expr));
@@ -2243,17 +2247,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 isSingleRow
                     | (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR
                         && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR);
-            // IF the first argument is a string, then we need to generate cast
-            SqlTypeName type = fnOperation.getOperands().get(0).getType().getSqlTypeName();
-            boolean strNeedsCast = type.getFamily() == SqlTypeFamily.CHARACTER;
 
             String arg1Expr = operandsInfo.get(1).getExprCode();
-
             String addExpr =
                 generateMySQLDateAddCode(
                     operandsInfo.get(0).getExprCode(),
                     arg1Expr,
-                    strNeedsCast,
                     dateAddGeneratesScalarCode,
                     manual_addition);
             return new RexNodeVisitorInfo(outputName, addExpr);
@@ -2265,10 +2264,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // Cast arg0 to from string to timestamp, if needed
             if (SqlTypeName.STRING_TYPES.contains(
                 fnOperation.getOperands().get(0).getType().getSqlTypeName())) {
+              RelDataType inputType = fnOperation.getOperands().get(0).getType();
+              // The output type will always be the timestamp the string is being cast to.
+              RelDataType outputType = fnOperation.getType();
               String casted_expr =
                   generateCastCode(
                       operandsInfo.get(0).getExprCode(),
-                      SqlTypeName.TIMESTAMP,
+                      inputType,
+                      outputType,
                       exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR | isSingleRow);
               operandsInfo.set(
                   0, new RexNodeVisitorInfo(operandsInfo.get(0).getName(), casted_expr));
@@ -2469,8 +2472,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateUTCDateCode();
           case "MAKEDATE":
             assert operandsInfo.size() == 2;
-            return generateMakeDateInfo(
-                inputVar, operandsInfo.get(0), operandsInfo.get(1), isSingleRow, ctx);
+            return generateMakeDateInfo(operandsInfo.get(0), operandsInfo.get(1));
           case "DATE_FORMAT":
             if (!(operandsInfo.size() == 2
                 && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR)) {
@@ -2497,22 +2499,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "YEAROFWEEKISO":
             assert operandsInfo.size() == 1;
             return getSingleArgDatetimeFnInfo(
-                fnName,
-                inputVar,
-                operandsInfo.get(0).getExprCode(),
-                operandsInfo.get(0).getName(),
-                exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(0).getName());
           case "NEXT_DAY":
           case "PREVIOUS_DAY":
             assert operandsInfo.size() == 2;
             return getDoubleArgDatetimeFnInfo(
                 fnName,
-                inputVar,
                 operandsInfo.get(0).getExprCode(),
                 operandsInfo.get(0).getName(),
                 operandsInfo.get(1).getExprCode(),
-                operandsInfo.get(1).getName(),
-                exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+                operandsInfo.get(1).getName());
           case "DATE_PART":
             assert operandsInfo.size() == 2;
             assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
@@ -3159,7 +3155,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
-    SqlTypeName typeName = operation.getType().getSqlTypeName();
+    RelDataType inputType = operation.operands.get(0).getType();
+    RelDataType outputType = operation.getType();
 
     boolean outputScalar =
         isSingleRow
@@ -3167,8 +3164,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 == BodoSQLExprType.ExprType.SCALAR);
     RexNodeVisitorInfo child =
         visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
-    String name = generateCastName(child.getName(), typeName);
-    String exprCode = generateCastCode(child.getExprCode(), typeName, outputScalar);
+    String name = generateCastName(child.getName(), outputType.getSqlTypeName());
+    String exprCode = generateCastCode(child.getExprCode(), inputType, outputType, outputScalar);
     return new RexNodeVisitorInfo(name, exprCode);
   }
 

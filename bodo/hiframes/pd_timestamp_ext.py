@@ -62,6 +62,7 @@ from bodo.utils.typing import (
     get_overload_const_int,
     get_overload_const_str,
     is_iterable_type,
+    is_literal_type,
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
@@ -1044,14 +1045,84 @@ def overload_pd_timestamp_tz_localize(ptt, tz, ambiguous="raise", nonexistent="r
         package_name="pandas",
         module_name="Timestamp",
     )
+    # Create a fast path for a naive timezone that remains naive
+    if is_overload_none(tz) and ptt.tz is None:
+        # Create a fast path for a naive timezone that remains naive
+        return (
+            lambda ptt, tz, ambiguous="raise", nonexistent="raise": ptt
+        )  # pragma: no cover
     if is_overload_none(tz):
-        return lambda ptt, tz, ambiguous="raise", nonexistent="raise": convert_val_to_timestamp(
-            ptt.value, is_convert=False
+        # If we are converting to naive then we add
+        # the delta for the current timestamp.
+        tz_value = ptt.tz
+        negate = False
+    else:
+        # If we are converting from naive to tz-aware then
+        # we need to subtract the delta.
+        if not is_literal_type(tz):  # pragma: no cover
+            raise_bodo_error(
+                "Timestamp.tz_localize(): tz value must be a literal string, integer, or None"
+            )
+        tz_value = get_literal_value(tz)
+        negate = True
+
+    deltas = None
+    trans = None
+    check_transitions = False
+    if tz_has_transition_times(tz_value):
+        # We only need to check transitions if we are converting
+        # from UTC.
+        check_transitions = negate
+        tz_obj = pytz.timezone(tz_value)
+        trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
+        deltas = np.array(tz_obj._transition_info)[:, 0]
+        deltas = (
+            (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
+            .astype(np.int64)
+            .values
         )
-    elif is_overload_constant_str(tz):
-        return lambda ptt, tz, ambiguous="raise", nonexistent="raise": convert_val_to_timestamp(
-            ptt.value, tz=tz, is_convert=False
+        delta_str = "deltas[np.searchsorted(trans, value, side='right') - 1]"
+    elif isinstance(tz_value, str):
+        # Here we are certain there are no transition times so we can compute a fixed offset
+        # from the timezone
+        tz_obj = pytz.timezone(tz_value)
+        # Convert to nanoseconds.
+        delta_str = str(np.int64(tz_obj._utcoffset.total_seconds() * 1_000_000_000))
+    elif isinstance(tz_value, int):
+        # Integers are always the offset in nanoseconds
+        delta_str = str(tz_value)
+    else:  # pragma: no cover
+        raise_bodo_error(
+            "Timestamp.tz_localize(): tz value must be a literal string, integer, or None"
         )
+
+    if negate:
+        sign = "-"
+    else:
+        sign = "+"
+
+    func_text = "def impl(ptt, tz, ambiguous='raise', nonexistent='raise'):\n"
+    func_text += f"    value =  ptt.value\n"
+    func_text += f"    delta =  {delta_str}\n"
+    func_text += f"    new_value = value {sign} delta\n"
+    if check_transitions:
+        func_text += "    end_delta = deltas[np.searchsorted(trans, new_value, side='right') - 1]\n"
+        func_text += "    offset = delta - end_delta\n"
+        func_text += "    new_value = new_value + offset\n"
+    func_text += f"    return convert_val_to_timestamp(new_value, tz=tz)\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {
+            "np": np,
+            "convert_val_to_timestamp": convert_val_to_timestamp,
+            "trans": trans,
+            "deltas": deltas,
+        },
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
 
 
 # TODO: support general string formatting
