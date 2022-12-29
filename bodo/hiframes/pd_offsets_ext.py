@@ -1429,19 +1429,6 @@ def overload_calculate_week_date(n, weekday, input_date_or_ts):
         # that may require handling transition times. These are
         # times that change the UTC offset (e.g. Daylight savings).
 
-        # Compute the timezone.
-        tz_obj = pytz.timezone(input_date_or_ts.tz)
-        # This timezone must be a pytz.tzinfo.DstTzInfo.
-        # Here we will lower the transition + delta info as arrays
-        # to compute the required offset.
-        trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
-        deltas = np.array(tz_obj._transition_info)[:, 0]
-        deltas = (
-            (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
-            .astype(np.int64)
-            .values
-        )
-
         def impl_tz_aware(n, weekday, input_date_or_ts):  # pragma: no cover
             # Compute the original Timedelta
             if weekday == -1:
@@ -1458,17 +1445,7 @@ def overload_calculate_week_date(n, weekday, input_date_or_ts):
 
             # Now that we have the timedelta we need to check if we cross a daylight
             # savings boundary. If so we need to update the offset.
-            start_value = input_date_or_ts.value
-            end_value = start_value + td.value
-
-            # If the index into trans changes we have cross a boundary. As a result
-            # We need to update how the UTC offset changes to maintain the same
-            # local info.
-            start_trans = np.searchsorted(trans, start_value, side="right") - 1
-            end_trans = np.searchsorted(trans, end_value, side="right") - 1
-            offset = deltas[start_trans] - deltas[end_trans]
-
-            return pd.Timedelta(td.value + offset)
+            return update_timedelta_with_transition(input_date_or_ts, td)
 
         return impl_tz_aware
     else:
@@ -1489,6 +1466,65 @@ def overload_calculate_week_date(n, weekday, input_date_or_ts):
             return pd.Timedelta(weeks=n, days=offset)
 
         return impl
+
+
+def update_timedelta_with_transition(ts_value, timedelta):  # pragma: no cover
+    pass
+
+
+@overload(update_timedelta_with_transition)
+def overload_update_timedelta_with_transition(ts, td):
+    """Helper function used when converting an "offset"
+    used to move forward an amount of time in an attribute (e.g. 1 month)
+    and convert it to a change to the UTC time. This function takes the Timestamp
+    value and a previously calculated Timedelta that would be correct if the
+    value maintained the same UTC offset and adds an "adjustment" if the start
+    and end time have different UTC offsets.
+
+    Args:
+        ts (bodo.PandasTimestampType): Original Timestamp used for updating the timedelta.
+        td (pd_timedelta_type): Timedelta to move assuming we never change UTC offsets.
+
+    Returns:
+        pd_timedelta_type: New timedelta with the adjustment.
+    """
+
+    if tz_has_transition_times(ts.tz):
+        # If there are transition times then we may need to update the
+        # Timedelta to account for the different in UTC offsets.
+
+        # Compute the timezone.
+        tz_obj = pytz.timezone(ts.tz)
+        # This timezone must be a pytz.tzinfo.DstTzInfo.
+        # Here we will lower the transition + delta info as arrays
+        # to compute the required offset.
+        trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
+        deltas = np.array(tz_obj._transition_info)[:, 0]
+        deltas = (
+            (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
+            .astype(np.int64)
+            .values
+        )
+
+        def impl_tz_aware(ts, td):  # pragma: no cover
+            # We need to check if we cross a daylight
+            # savings boundary. If so we need to update the offset.
+            start_value = ts.value
+            end_value = start_value + td.value
+
+            # If the index into trans changes we have cross a boundary. As a result
+            # We need to update how the UTC offset changes to maintain the same
+            # local info.
+            start_trans = np.searchsorted(trans, start_value, side="right") - 1
+            end_trans = np.searchsorted(trans, end_value, side="right") - 1
+            offset = deltas[start_trans] - deltas[end_trans]
+            return pd.Timedelta(td.value + offset)
+
+        return impl_tz_aware
+
+    else:
+        # If there are no transitions just return the original timedelta
+        return lambda ts, td: td  # pragma: no cover
 
 
 date_offset_unsupported_attrs = {

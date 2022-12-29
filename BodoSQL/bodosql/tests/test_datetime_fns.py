@@ -1,6 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-Test correctness of SQL dateime functions with BodoSQL
+Test correctness of SQL datetime functions with BodoSQL
 """
 
 import numpy as np
@@ -8,12 +8,50 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
-from bodo.tests.timezone_common import generate_date_trunc_func
+from bodo.tests.timezone_common import (  # noqa
+    generate_date_trunc_func,
+    representative_tz,
+)
 
 EQUIVALENT_SPARK_DT_FN_MAP = {
     "WEEK": "WEEKOFYEAR",
     "CURDATE": "CURRENT_DATE",
 }
+
+
+def interval_day_add_func(num_days: int):
+    """
+    Generates a function to be passed
+    to Series.map to emulate the result of adding
+    an interval to Timestamp value. This moves by
+    N days, in the local timezone.
+
+    Args:
+        num_days (int): Number of days to move
+
+    Returns
+        (Function): Function that can be used
+        in Series.map to move each row by num_days.
+    """
+    offset = pd.Timedelta(days=num_days)
+
+    def map_func(val):
+        if pd.isna(val):
+            return None
+        new_ts = val + offset
+        return pd.Timestamp(
+            year=new_ts.year,
+            month=new_ts.month,
+            day=new_ts.day,
+            hour=val.hour,
+            minute=val.minute,
+            second=val.second,
+            microsecond=val.microsecond,
+            nanosecond=val.nanosecond,
+            tz=new_ts.tz,
+        )
+
+    return map_func
 
 
 @pytest.fixture(
@@ -2504,3 +2542,336 @@ def test_date_trunc_tz_aware_case(date_trunc_literal, memory_leak_check):
     S[~df.B] = None
     py_output = pd.DataFrame({"output": S})
     check_query(query, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_add_sub_interval_year(representative_tz, memory_leak_check):
+    """
+    Test +/- Interval Year on tz-aware data.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                )
+            )
+            + [None, None],
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT A + Interval 1 Year as output from table1"
+    query2 = "SELECT A - Interval 2 Year as output from table1"
+    py_output = pd.DataFrame({"output": df.A + pd.DateOffset(years=1)})
+    check_query(query1, ctx, None, expected_output=py_output)
+    py_output = pd.DataFrame({"output": df.A - pd.DateOffset(years=2)})
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_add_sub_interval_year_case(representative_tz, memory_leak_check):
+    """
+    Test +/- Interval Year on tz-aware data with case.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                )
+            )
+            + [None, None],
+            "B": [True, False, True, True] * 8,
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT CASE WHEN B THEN A + Interval 1 Year END as output from table1"
+    query2 = "SELECT CASE WHEN B THEN A - Interval 2 Year END as output from table1"
+    S = df.A + pd.DateOffset(years=1)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query1, ctx, None, expected_output=py_output)
+    S = df.A - pd.DateOffset(years=2)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_add_sub_interval_month(representative_tz, memory_leak_check):
+    """
+    Test +/- Interval Month on tz-aware data.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                )
+            )
+            + [None, None],
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT A + Interval 1 Month as output from table1"
+    query2 = "SELECT A - Interval 2 Month as output from table1"
+    py_output = pd.DataFrame({"output": df.A + pd.DateOffset(months=1)})
+    check_query(query1, ctx, None, expected_output=py_output)
+    py_output = pd.DataFrame({"output": df.A - pd.DateOffset(months=2)})
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_add_sub_interval_month_case(representative_tz, memory_leak_check):
+    """
+    Test +/- Interval Month on tz-aware data with case.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                )
+            )
+            + [None, None],
+            "B": [True, False, True, True] * 8,
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT CASE WHEN B THEN A + Interval 1 Month END as output from table1"
+    query2 = "SELECT CASE WHEN B THEN A - Interval 2 Month END as output from table1"
+    S = df.A + pd.DateOffset(months=1)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query1, ctx, None, expected_output=py_output)
+    S = df.A - pd.DateOffset(months=2)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_add_sub_interval_day(representative_tz, memory_leak_check):
+    """
+    Test +/- Interval Day on tz-aware data.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                )
+            )
+            + [None, None],
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT A + Interval 1 Day as output from table1"
+    query2 = "SELECT A - Interval 2 Day as output from table1"
+    # Function used to simulate the result of adding by a day
+    scalar_add_func = interval_day_add_func(1)
+    # Function used to simulate the result of subtracting 2 days
+    scalar_sub_func = interval_day_add_func(-2)
+    py_output = pd.DataFrame({"output": df.A.map(scalar_add_func)})
+    check_query(query1, ctx, None, expected_output=py_output)
+    py_output = pd.DataFrame({"output": df.A.map(scalar_sub_func)})
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_add_sub_interval_day_case(representative_tz, memory_leak_check):
+    """
+    Test +/- Interval Day on tz-aware data with case.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+                )
+            )
+            + [None, None],
+            "B": [True, False, True, True] * 8,
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT CASE WHEN B THEN A + Interval 1 Day END as output from table1"
+    query2 = "SELECT CASE WHEN B THEN A - Interval 2 Day END as output from table1"
+    # Function used to simulate the result of adding by a day
+    scalar_add_func = interval_day_add_func(1)
+    # Function used to simulate the result of subtracting 2 days
+    scalar_sub_func = interval_day_add_func(-2)
+    S = df.A.map(scalar_add_func)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query1, ctx, None, expected_output=py_output)
+    S = df.A.map(scalar_sub_func)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_subdate_integer(memory_leak_check):
+    """
+    Test subdate on tz-aware data with an integer argument.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                )
+            )
+            + [None, None],
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT SUBDATE(A, 3) as output from table1"
+    query2 = "SELECT DATE_SUB(A, 3) as output from table1"
+
+    # Function used to simulate the result of subtracting 3 days
+    scalar_sub_func = interval_day_add_func(-3)
+    py_output = pd.DataFrame({"output": df.A.map(scalar_sub_func)})
+    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_subdate_integer_case(memory_leak_check):
+    """
+    Test subdate on tz-aware data with an integer argument and case.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                )
+            )
+            + [None, None],
+            "B": [True, False, True, True] * 8,
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT CASE WHEN B THEN SUBDATE(A, 3) END as output from table1"
+    query2 = "SELECT CASE WHEN B THEN DATE_SUB(A, 3) END as output from table1"
+
+    # Function used to simulate the result of subtracting 3 days
+    scalar_sub_func = interval_day_add_func(-3)
+    S = df.A.map(scalar_sub_func)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_subdate_interval_day(memory_leak_check):
+    """
+    Test subdate on tz-aware data with a Day Interval argument.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                )
+            )
+            + [None, None],
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT SUBDATE(A, Interval 2 Days) as output from table1"
+    query2 = "SELECT DATE_SUB(A, Interval 2 Days) as output from table1"
+
+    # Function used to simulate the result of subtracting 2 days
+    scalar_sub_func = interval_day_add_func(-2)
+
+    py_output = pd.DataFrame({"output": df.A.map(scalar_sub_func)})
+    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_subdate_interval_day_case(memory_leak_check):
+    """
+    Test subdate on tz-aware data with a Day Interval argument and case.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                )
+            )
+            + [None, None],
+            "B": [True, False, True, True] * 8,
+        }
+    )
+    ctx = {"table1": df}
+    query1 = (
+        "SELECT CASE WHEN B THEN SUBDATE(A, Interval 2 Days) END as output from table1"
+    )
+    query2 = (
+        "SELECT CASE WHEN B THEN DATE_SUB(A, Interval 2 Days) END as output from table1"
+    )
+
+    # Function used to simulate the result of subtracting 2 days
+    scalar_sub_func = interval_day_add_func(-2)
+    S = df.A.map(scalar_sub_func)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_subdate_interval_month(memory_leak_check):
+    """
+    Test subdate on tz-aware data with a Month Interval argument.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                )
+            )
+            + [None, None],
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT SUBDATE(A, Interval 4 Months) as output from table1"
+    query2 = "SELECT DATE_SUB(A, Interval 4 Months) as output from table1"
+
+    py_output = pd.DataFrame({"output": df.A - pd.DateOffset(months=4)})
+    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(query2, ctx, None, expected_output=py_output)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_subdate_interval_month_case(memory_leak_check):
+    """
+    Test subdate on tz-aware data with a Month Interval argument and case.
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="16D5H", periods=30, tz="US/Pacific"
+                )
+            )
+            + [None, None],
+            "B": [True, False, True, True] * 8,
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "SELECT CASE WHEN B THEN SUBDATE(A, Interval 4 Months) END as output from table1"
+    query2 = "SELECT CASE WHEN B THEN DATE_SUB(A, Interval 4 Months) END as output from table1"
+
+    S = df.A - pd.DateOffset(months=4)
+    S[~df.B] = None
+    py_output = pd.DataFrame({"output": S})
+    check_query(query1, ctx, None, expected_output=py_output)
+    check_query(query2, ctx, None, expected_output=py_output)

@@ -1865,3 +1865,127 @@ def overload_to_seconds_util(arr):
         out_dtype,
         prefix_code=prefix_code,
     )
+
+
+def tz_aware_interval_add(tz_arg, interval_arg):  # pragma: no cover
+    pass
+
+
+@overload(tz_aware_interval_add)
+def overload_tz_aware_interval_add(tz_arg, interval_arg):
+    """
+    Equivalent to adding a SQL interval type to a Timezone aware
+    Timestamp argument. The interval type can either be a pd.DatetimeOffset
+    or a pd.Timedelta. In either case the Timestamp value should move by the
+    effective amount of time, updating the Timestamp by additional time if we
+    have to cross a UTC offset, no matter the unit, so the local time is always
+    updated.
+
+    For example if the Timestamp is
+
+        Timestamp('2022-11-06 00:59:59-0400', tz='US/Eastern')
+
+    and we add 2 hours, then the end time is
+
+        Timestamp('2022-11-06 02:59:59-0500', tz='US/Eastern')
+
+
+    We make this decision because although time has advanced more than 2 hours,
+    this ensures all extractable fields (e.g. Days, Hours, etc.) advance by the
+    desired amount of time. There is not well defined behavior here as Snowflake
+    never handles Daylight Savings, so we opt to resemble Snowflake's output. This
+    could change in the future based on customer feedback.
+
+    Args:
+        tz_arg (types.Type): A tz-aware array or Timestamp scalar.
+        interval_arg (types.Type): The interval, either a Timedelta scalar/array or a DateOffset.
+
+    Returns:
+        types.Type: A tz-aware array or Timestamp scalar.
+    """
+    if isinstance(tz_arg, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.tz_aware_interval_add",
+            ["tz_arg", "interval_arg"],
+            0,
+        )
+    if isinstance(interval_arg, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.tz_aware_interval_add",
+            ["tz_arg", "interval_arg"],
+            1,
+        )
+
+    def impl(tz_arg, interval_arg):  # pragma: no cover
+        return tz_aware_interval_add_util(tz_arg, interval_arg)
+
+    return impl
+
+
+def tz_aware_interval_add_util(tz_arg, interval_arg):  # pragma: no cover
+    pass
+
+
+@overload(tz_aware_interval_add_util)
+def overload_tz_aware_interval_add_util(tz_arg, interval_arg):
+    """
+    Equivalent to adding a SQL interval type to a Timezone aware
+    Timestamp argument. The interval type can either be a pd.DatetimeOffset
+    or a pd.Timedelta. In either case the Timestamp value should move by the
+    effective amount of time, updating the Timestamp by additional time if we
+    have to cross a UTC offset, no matter the unit, so the local time is always
+    updated.
+
+    For example if the Timestamp is
+
+        Timestamp('2022-11-06 00:59:59-0400', tz='US/Eastern')
+
+    and we add 2 hours, then the end time is
+
+        Timestamp('2022-11-06 02:59:59-0500', tz='US/Eastern')
+
+
+    We make this decision because although time has advanced more than 2 hours,
+    this ensures all extractable fields (e.g. Days, Hours, etc.) advance by the
+    desired amount of time. There is not well defined behavior here as Snowflake
+    never handles Daylight Savings, so we opt to resemble Snowflake's output. This
+    could change in the future based on customer feedback.
+
+    Args:
+        tz_arg (types.Type): A tz-aware array or Timestamp scalar.
+        interval_arg (types.Type): The interval, either a Timedelta scalar/array or a DateOffset.
+
+    Returns:
+        types.Type: A tz-aware array or Timestamp scalar.
+    """
+    verify_datetime_arg_require_tz(tz_arg, "INTERVAL_ADD", "tz_arg")
+    verify_sql_interval(interval_arg, "INTERVAL_ADD", "interval_arg")
+    timezone = get_tz_if_exists(tz_arg)
+    arg_names = ["tz_arg", "interval_arg"]
+    arg_types = [tz_arg, interval_arg]
+    propagate_null = [True, True]
+    if timezone is not None:
+        out_dtype = bodo.DatetimeArrayType(timezone)
+    else:
+        # Handle a default case if the timezone value is NA.
+        # Note this doesn't matter because we will output NA.
+        out_dtype = bodo.datetime64ns
+    # Note: We don't have support for TZAware + pd.DateOffset yet.
+    # As a result we must compute a Timedelta from the DateOffset instead.
+    if interval_arg == bodo.date_offset_type:
+        # Although the pd.DateOffset should just have months and n, its unclear if
+        # months >= 12 can ever roll over into months and years. As a result we convert
+        # the years into months to be more robust (via years * 12).
+        scalar_text = "  timedelta = bodo.libs.pd_datetime_arr_ext.convert_months_offset_to_days(arg0.year, arg0.month, arg0.day, ((arg1._years * 12) + arg1._months) * arg1.n)\n"
+    else:
+        scalar_text = "  timedelta = arg1\n"
+    # Check for changing utc offsets
+    scalar_text += "  timedelta = bodo.hiframes.pd_offsets_ext.update_timedelta_with_transition(arg0, timedelta)\n"
+    scalar_text += "  res[i] = arg0 + timedelta\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )

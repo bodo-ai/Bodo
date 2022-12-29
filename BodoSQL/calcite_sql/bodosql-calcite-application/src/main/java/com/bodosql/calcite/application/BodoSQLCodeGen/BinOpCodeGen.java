@@ -8,8 +8,10 @@ import com.bodosql.calcite.application.BodoSQLExprType;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.type.*;
 
 /**
  * Class that returns the generated code for a BinOp expression after all inputs have been visited.
@@ -24,13 +26,28 @@ public class BinOpCodeGen {
    * @param exprTypes The exprType of each argument.
    * @param binOp The Binary operator to apply to each pair of arguments.
    * @param isScalar Is this function used inside an apply and should always generate scalar code.
+   * @param argDataTypes List of SQL data types for the input to the binary operation.
    * @return The code generated for the BinOp call.
    */
   public static String generateBinOpCode(
       List<String> args,
       List<BodoSQLExprType.ExprType> exprTypes,
       SqlOperator binOp,
-      boolean isScalar) {
+      boolean isScalar,
+      List<RelDataType> argDataTypes) {
+    SqlKind binOpKind = binOp.getKind();
+    if (argDataTypes.size() == 2
+        && (binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS))) {
+      // If we are passing a pair of arguments to +/-, check if we are adding a tz-aware
+      // value with an interval. If so we have to take a specialized code path.
+      boolean isArg0TZAware = argDataTypes.get(0) instanceof TZAwareSqlType;
+      boolean isArg1TZAware = argDataTypes.get(1) instanceof TZAwareSqlType;
+      boolean isArg0Interval = argDataTypes.get(0) instanceof IntervalSqlType;
+      boolean isArg1Interval = argDataTypes.get(1) instanceof IntervalSqlType;
+      if ((isArg0TZAware && isArg1Interval) || (isArg1TZAware && isArg0Interval)) {
+        return genTZAwareIntervalArithCode(args, binOpKind, isArg0TZAware);
+      }
+    }
     // add pd.Series() around column arguments since binary operators assume Series input
     // (arrays don't have full support)
     List<String> update_args = new ArrayList<>();
@@ -41,8 +58,7 @@ public class BinOpCodeGen {
       }
       update_args.add(new_arg);
     }
-    return generateBinOpCodeHelper(
-        update_args, exprTypes, binOp.getKind(), binOp.getName(), isScalar);
+    return generateBinOpCodeHelper(update_args, exprTypes, binOpKind, binOp.getName(), isScalar);
   }
   /**
    * Helper function that returns the necessary generated code for a BinOp Call. This function may
@@ -249,5 +265,39 @@ public class BinOpCodeGen {
       }
     }
     return newArg.toString();
+  }
+
+  /**
+   * Generate code for Adding or Subtracting an interval from tz_aware data.
+   *
+   * @param args List of length 2 with the generated code for the arguments.
+   * @param binOp The SQLkind for the binop. Either SqlKind.PLUS or SqlKind.MINUS.
+   * @param isArg0TZAware Is arg0 the tz aware argument. This is used for generating standard code.
+   * @return The generated code that creates the BodoSQL array kernel call.
+   */
+  public static String genTZAwareIntervalArithCode(
+      List<String> args, SqlKind binOp, boolean isArg0TZAware) {
+    assert args.size() == 2;
+    final String arg0;
+    String arg1;
+    // Standardize the kernel to always put the tz aware argument
+    // in the first slot to limit computation + simplify the kernels.
+    // This is fine because + commutes.
+    if (isArg0TZAware) {
+      arg0 = args.get(0);
+      arg1 = args.get(1);
+    } else {
+      arg0 = args.get(1);
+      arg1 = args.get(0);
+    }
+    if (binOp.equals(SqlKind.MINUS)) {
+      assert isArg0TZAware;
+      // Negate the input for Minus
+      arg1 = String.format("bodo.libs.bodosql_array_kernels.negate(%s)", arg1);
+    } else {
+      assert binOp.equals(SqlKind.PLUS);
+    }
+    return String.format(
+        "bodo.libs.bodosql_array_kernels.tz_aware_interval_add(%s, %s)", arg0, arg1);
   }
 }

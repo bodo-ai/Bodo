@@ -1123,6 +1123,120 @@ def test_yearofweekiso(dates_scalar_vector, memory_leak_check):
     )
 
 
+@pytest.mark.tz_aware
+@pytest.mark.parametrize(
+    "ts_val",
+    [
+        pd.Timestamp("2022-11-07 04:23:12", tz="US/Pacific"),
+        pd.Series(
+            [None] * 4
+            + list(
+                pd.date_range("1/1/2022", periods=30, freq="7D6H7s", tz="US/Pacific")
+            )
+            + [None] * 2
+        ),
+    ],
+)
+def test_tz_aware_interval_add_date_offset(ts_val, memory_leak_check):
+    """
+    Tests tz_aware_interval_add with a date_offset as the interval.
+    """
+
+    def impl(ts_val, date_offset):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.tz_aware_interval_add(ts_val, date_offset)
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(ts_val, pd.Timestamp):
+        impl = lambda ts_val, date_offset: bodo.libs.bodosql_array_kernels.tz_aware_interval_add(
+            ts_val, date_offset
+        )
+
+    date_offset = pd.DateOffset(months=-2)
+
+    # Simulates the add on a single row
+    def tz_aware_interval_add_scalar_fn(ts_val, date_offset):
+        if pd.isna(ts_val):
+            return None
+        else:
+            return ts_val + date_offset
+
+    answer = vectorized_sol(
+        (ts_val, date_offset), tz_aware_interval_add_scalar_fn, None
+    )
+    check_func(
+        impl,
+        (ts_val, date_offset),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.tz_aware
+@pytest.mark.parametrize(
+    "ts_val",
+    [
+        pd.Timestamp("2022-11-07 04:23:12", tz="US/Pacific"),
+        pd.Series(
+            [None] * 4
+            + list(
+                pd.date_range("1/1/2022", periods=30, freq="7D6H7s", tz="US/Pacific")
+            )
+            + [None] * 2
+        ),
+    ],
+)
+def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
+    """
+    Tests tz_aware_interval_add with a timedelta as the interval.
+    """
+
+    def impl(ts_val, timedelta):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.tz_aware_interval_add(ts_val, timedelta)
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(ts_val, pd.Timestamp):
+        impl = lambda ts_val, timedelta: bodo.libs.bodosql_array_kernels.tz_aware_interval_add(
+            ts_val, timedelta
+        )
+
+    # Note we assume the days as the only unit in the expected output
+    timedelta = pd.Timedelta(days=2)
+
+    # Simulates the add on a single row
+    def tz_aware_interval_add_scalar_fn(ts_val, timedelta):
+        if pd.isna(ts_val):
+            return None
+        else:
+            # First compute the day movement.
+            new_ts = ts_val.normalize() + timedelta
+            # Now restore the fields
+            return pd.Timestamp(
+                year=new_ts.year,
+                month=new_ts.month,
+                day=new_ts.day,
+                hour=ts_val.hour,
+                minute=ts_val.minute,
+                second=ts_val.second,
+                microsecond=ts_val.microsecond,
+                nanosecond=ts_val.nanosecond,
+                tz=new_ts.tz,
+            )
+
+    answer = vectorized_sol((ts_val, timedelta), tz_aware_interval_add_scalar_fn, None)
+    check_func(
+        impl,
+        (ts_val, timedelta),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.parametrize(
     "part",
     [
@@ -1368,6 +1482,58 @@ def test_option_to_seconds(memory_leak_check):
             (pd.Timestamp("2007-01-01"), flag),
             py_output=answer,
         )
+
+
+@pytest.mark.tz_aware
+@pytest.mark.slow
+def test_option_tz_aware_interval_add_date_offset(memory_leak_check):
+    """
+    Tests tz_aware_interval_add optional support with a date_offset as the interval.
+    """
+
+    def impl(ts_val, date_offset, flag0, flag1):
+        arg0 = ts_val if flag0 else None
+        arg1 = date_offset if flag1 else None
+        return bodo.libs.bodosql_array_kernels.tz_aware_interval_add(arg0, arg1)
+
+    ts_val = pd.Timestamp("2022-11-05", tz="US/Pacific")
+    date_offset = pd.DateOffset(months=2)
+    expected_add = ts_val + date_offset
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = expected_add if flag0 and flag1 else None
+            check_func(
+                impl,
+                (ts_val, date_offset, flag0, flag1),
+                py_output=answer,
+            )
+
+
+@pytest.mark.tz_aware
+@pytest.mark.slow
+def test_option_tz_aware_interval_add_timedelta(memory_leak_check):
+    """
+    Tests tz_aware_interval_add optional support with a timedelta as the interval.
+    """
+
+    def impl(ts_val, date_offset, flag0, flag1):
+        arg0 = ts_val if flag0 else None
+        arg1 = date_offset if flag1 else None
+        return bodo.libs.bodosql_array_kernels.tz_aware_interval_add(arg0, arg1)
+
+    ts_val = pd.Timestamp("2022-11-05 04:23:12", tz="US/Pacific")
+    date_offset = pd.Timedelta(days=2)
+    expected_add = pd.Timestamp("2022-11-07 04:23:12", tz="US/Pacific")
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = expected_add if flag0 and flag1 else None
+            check_func(
+                impl,
+                (ts_val, date_offset, flag0, flag1),
+                py_output=answer,
+            )
 
 
 @pytest.mark.slow
