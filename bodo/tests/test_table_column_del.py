@@ -1949,6 +1949,23 @@ def test_table_astype_ret_df_output(datapath, memory_leak_check):
         )
 
 
+def test_table_astype_multiple_cols_different_cast(datapath, memory_leak_check):
+    """
+    Test table_astype properly handles the case where we're casting two
+    columns of of the same type, to a different type.
+
+    """
+    filename = datapath(f"many_columns.parquet")
+
+    def impl():
+        df1 = pd.read_parquet(filename)
+        # All columns being casted are originally int
+        df2 = df1.astype({"Column0": np.float32, "Column3": np.float64})
+        return df2
+
+    check_func(impl, (), check_dtype=False)
+
+
 def test_filter_del_cols(datapath, memory_leak_check):
     """
     Test table_filter properly creates del_column
