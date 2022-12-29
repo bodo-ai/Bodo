@@ -824,7 +824,7 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
         tz = get_tz_if_exists(arr)
         box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
         # For Timestamp, ms and us are stored in the same value.
-        # For Time, they are stored seperately.
+        # For Time, they are stored separately.
         ms_str = "microsecond // 1000" if not is_valid_time_arg(arr) else "millisecond"
         format_strings = {
             "get_year": f"{box_str}(arg0).year",
@@ -1415,8 +1415,7 @@ def next_day_util(arr0, arr1):
     # When returning a scalar we always return a pd.Timestamp type.
     unbox_str = (
         "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if not is_input_tz_aware
-        and (
+        if (
             bodo.utils.utils.is_array_typ(arr0, True)
             or bodo.utils.utils.is_array_typ(arr1, True)
         )
@@ -1437,12 +1436,11 @@ def next_day_util(arr0, arr1):
         arg0_timestamp = "arg0"
     else:
         arg0_timestamp = "bodo.utils.conversion.box_if_dt64(arg0)"
-    scalar_text += f"res[i] = {unbox_str}({arg0_timestamp}.normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed]))\n"
+    scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() + pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
+    # The output is suppose to be a date. Since we output a Timestamp still we need to make it naive.
+    scalar_text += f"res[i] = {unbox_str}(new_timestamp.tz_localize(None))\n"
 
-    if is_input_tz_aware:
-        out_dtype = bodo.DatetimeArrayType(arr0.tz)
-    else:
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
     return gen_vectorized(
         arg_names,
@@ -1476,8 +1474,7 @@ def previous_day_util(arr0, arr1):
     # When returning a scalar we always return a pd.Timestamp type.
     unbox_str = (
         "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
-        if not is_input_tz_aware
-        and (
+        if (
             bodo.utils.utils.is_array_typ(arr0, True)
             or bodo.utils.utils.is_array_typ(arr1, True)
         )
@@ -1498,12 +1495,11 @@ def previous_day_util(arr0, arr1):
         arg0_timestamp = "arg0"
     else:
         arg0_timestamp = "bodo.utils.conversion.box_if_dt64(arg0)"
-    scalar_text += f"res[i] = {unbox_str}({arg0_timestamp}.normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed]))\n"
+    scalar_text += f"new_timestamp = {arg0_timestamp}.normalize() - pd.tseries.offsets.Week(weekday=dow_map[arg1_trimmed])\n"
+    # The output is suppose to be a date. Since we output a Timestamp still we need to make it naive.
+    scalar_text += f"res[i] = {unbox_str}(new_timestamp.tz_localize(None))\n"
 
-    if is_input_tz_aware:
-        out_dtype = bodo.DatetimeArrayType(arr0.tz)
-    else:
-        out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
     return gen_vectorized(
         arg_names,
@@ -1565,7 +1561,12 @@ def weekday_util(arr):
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = "dt = pd.Timestamp(arg0)\n"
+    box_str = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
+    scalar_text = f"dt = {box_str}(arg0)\n"
     scalar_text += "res[i] = bodo.hiframes.pd_timestamp_ext.get_day_of_week(dt.year, dt.month, dt.day)"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)
@@ -1592,7 +1593,12 @@ def yearofweekiso_util(arr):
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
-    scalar_text = "dt = pd.Timestamp(arg0)\n"
+    box_str = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
+    scalar_text = f"dt = {box_str}(arg0)\n"
     scalar_text += "res[i] = dt.isocalendar()[0]"
 
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int32)

@@ -85,17 +85,22 @@ def test_timestamp_tz_convert(representative_tz):
 
 
 def test_timestamp_tz_localize(representative_tz):
-    def test_impl(ts, tz):
+    def test_impl1(ts, tz):
         return ts.tz_localize(tz=tz)
+
+    def test_impl2(ts):
+        return ts.tz_localize(None)
 
     ts = pd.Timestamp("09-30-2020 14:00")
     check_func(
-        test_impl,
+        test_impl1,
         (
             ts,
             representative_tz,
         ),
     )
+    ts = pd.Timestamp("09-30-2020 14:00", tz=representative_tz)
+    check_func(test_impl2, (ts,))
 
 
 def test_timestamp_tz_ts_input():

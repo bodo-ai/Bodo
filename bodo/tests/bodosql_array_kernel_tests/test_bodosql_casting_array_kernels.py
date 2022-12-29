@@ -13,6 +13,7 @@ from bodo.libs.bodosql_array_kernels import *
 from bodo.tests.bodosql_array_kernel_tests.test_bodosql_snowflake_conversion_array_kernels import (
     str_to_bool,
 )
+from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.utils import check_func
 
 
@@ -187,7 +188,7 @@ def dt_arrays(request):
     return request.param
 
 
-def test_cast_float64(numeric_arrays):
+def test_cast_float64(numeric_arrays, memory_leak_check):
     args = numeric_arrays
 
     def impl(arr):
@@ -214,7 +215,7 @@ def test_cast_float64(numeric_arrays):
     )
 
 
-def test_cast_float32(numeric_arrays):
+def test_cast_float32(numeric_arrays, memory_leak_check):
     args = numeric_arrays
 
     def impl(arr):
@@ -245,7 +246,7 @@ def _round_float(f):
     return np.int64(np.fix(f + 0.5 * np.sign(f)))
 
 
-def test_cast_int64(numeric_arrays):
+def test_cast_int64(numeric_arrays, memory_leak_check):
     args = numeric_arrays
 
     def impl(arr):
@@ -286,7 +287,7 @@ def test_cast_int64(numeric_arrays):
     )
 
 
-def test_cast_int32(numeric_arrays):
+def test_cast_int32(numeric_arrays, memory_leak_check):
     args = numeric_arrays
 
     def impl(arr):
@@ -325,7 +326,7 @@ def test_cast_int32(numeric_arrays):
     )
 
 
-def test_cast_int16(numeric_arrays):
+def test_cast_int16(numeric_arrays, memory_leak_check):
     args = numeric_arrays
 
     def impl(arr):
@@ -367,7 +368,7 @@ def test_cast_int16(numeric_arrays):
     )
 
 
-def test_cast_int8(numeric_arrays):
+def test_cast_int8(numeric_arrays, memory_leak_check):
     args = numeric_arrays
 
     def impl(arr):
@@ -409,7 +410,7 @@ def test_cast_int8(numeric_arrays):
     )
 
 
-def test_cast_boolean(numeric_arrays):
+def test_cast_boolean(numeric_arrays, memory_leak_check):
     args = numeric_arrays
 
     def impl(arr):
@@ -449,7 +450,8 @@ def test_cast_boolean(numeric_arrays):
                         bodo.Time(1, 2, 3, 4, 5, 6),
                         bodo.Time(1, 52, 33, 443, 534, 632),
                         None,
-                    ] * 4
+                    ]
+                    * 4
                 ),
             ),
             id="Time",
@@ -462,14 +464,15 @@ def test_cast_boolean(numeric_arrays):
                         bytes.fromhex("deadbeef"),
                         bytes(0),
                         None,
-                    ] * 4
+                    ]
+                    * 4
                 ),
             ),
             id="Bytes",
         ),
     ],
 )
-def test_cast_char_other(args):
+def test_cast_char_other(args, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.cast_char(arr))
 
@@ -493,7 +496,7 @@ def test_cast_char_other(args):
     )
 
 
-def test_cast_char_nums(numeric_arrays):
+def test_cast_char_nums(numeric_arrays, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.cast_char(arr))
 
@@ -522,7 +525,7 @@ def test_cast_char_nums(numeric_arrays):
     )
 
 
-def test_cast_char_times(time_arrays):
+def test_cast_char_times(time_arrays, memory_leak_check):
     args = time_arrays
 
     def impl(arr):
@@ -551,7 +554,7 @@ def test_cast_char_times(time_arrays):
     )
 
 
-def test_cast_dt64(dt_arrays):
+def test_cast_dt64(dt_arrays, memory_leak_check):
     args = dt_arrays
 
     def impl(arr):
@@ -602,7 +605,7 @@ def test_cast_dt64(dt_arrays):
         ),
     ],
 )
-def test_cast_interval(args):
+def test_cast_interval(args, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.cast_interval(arr))
 
@@ -622,8 +625,179 @@ def test_cast_interval(args):
     )
 
 
+@pytest.mark.parametrize(
+    "ts_val",
+    [
+        pytest.param(
+            pd.Timestamp("2022-11-05 23:13:12.242"),
+            id="scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [None] * 3 + list(pd.date_range("2022-1-1", periods=21, freq="40D5H4S"))
+            ).values,
+            id="vector",
+        ),
+    ],
+)
+def test_cast_tz_naive_to_tz_aware(ts_val, representative_tz, memory_leak_check):
+    tz_literal = representative_tz
+
+    def impl(ts_val):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.cast_tz_naive_to_tz_aware(
+                ts_val, tz_literal
+            )
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(ts_val, pd.Timestamp):
+        impl = lambda ts_val: bodo.libs.bodosql_array_kernels.cast_tz_naive_to_tz_aware(
+            ts_val, tz_literal
+        )
+
+    def localize_scalar_fn(ts_val):
+        if pd.isna(ts_val):
+            return None
+        else:
+            return pd.Timestamp(ts_val).tz_localize(tz_literal)
+
+    answer = vectorized_sol((ts_val,), localize_scalar_fn, None)
+    check_func(
+        impl,
+        (ts_val,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "ts_val",
+    [
+        pytest.param(
+            pd.Timestamp("2022-11-05 23:13:12.242", tz="Australia/Lord_Howe"),
+            id="scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [None] * 3
+                + list(
+                    pd.date_range(
+                        "2022-1-1", periods=21, freq="40D5H4S", tz="US/Pacific"
+                    )
+                )
+            ).array,
+            id="vector",
+        ),
+    ],
+)
+def test_cast_tz_aware_to_tz_naive(ts_val, memory_leak_check):
+    def impl1(ts_val):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(ts_val, True)
+        )
+
+    def impl2(ts_val):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(ts_val, False)
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(ts_val, pd.Timestamp):
+        impl1 = (
+            lambda ts_val: bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(
+                ts_val, True
+            )
+        )
+        impl2 = (
+            lambda ts_val: bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(
+                ts_val, False
+            )
+        )
+
+    def generate_localize_scalar_fn(normalize):
+        def localize_scalar_fn(ts_val):
+            if pd.isna(ts_val):
+                return None
+            else:
+                ts = ts_val.tz_localize(None)
+                if normalize:
+                    ts = ts.normalize()
+                return ts
+
+        return localize_scalar_fn
+
+    answer1 = vectorized_sol((ts_val,), generate_localize_scalar_fn(True), None)
+    check_func(
+        impl1,
+        (ts_val,),
+        py_output=answer1,
+        check_dtype=False,
+        reset_index=True,
+    )
+    answer2 = vectorized_sol((ts_val,), generate_localize_scalar_fn(False), None)
+    check_func(
+        impl2,
+        (ts_val,),
+        py_output=answer2,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "ts_val",
+    [
+        pytest.param(
+            "2022-11-05 23:13:12.242",
+            id="scalar",
+        ),
+        pytest.param(
+            pd.Series(
+                [None] * 3
+                + list(
+                    pd.date_range("2022-1-1", periods=21, freq="40D5H4S")
+                    .to_series()
+                    .astype("str")
+                )
+            ).values,
+            id="vector",
+        ),
+    ],
+)
+def test_cast_str_to_tz_aware(ts_val, representative_tz, memory_leak_check):
+    tz_literal = representative_tz
+
+    def impl(ts_val):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.cast_str_to_tz_aware(ts_val, tz_literal)
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(ts_val, str):
+        impl = lambda ts_val: bodo.libs.bodosql_array_kernels.cast_str_to_tz_aware(
+            ts_val, tz_literal
+        )
+
+    def localize_scalar_fn(ts_val):
+        if pd.isna(ts_val):
+            return None
+        else:
+            return pd.Timestamp(ts_val).tz_localize(tz_literal)
+
+    answer = vectorized_sol((ts_val,), localize_scalar_fn, None)
+    check_func(
+        impl,
+        (ts_val,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.slow
-def test_cast_float_opt():
+def test_cast_float_opt(memory_leak_check):
     def impl(a, b, flag0, flag1):
         arg0 = a if flag0 else None
         arg1 = b if flag1 else None
@@ -646,7 +820,7 @@ def test_cast_float_opt():
 
 
 @pytest.mark.slow
-def test_cast_int_opt():
+def test_cast_int_opt(memory_leak_check):
     def impl(a, b, c, d, flag0, flag1, flag2, flag3):
         arg0 = a if flag0 else None
         arg1 = b if flag1 else None
@@ -677,7 +851,7 @@ def test_cast_int_opt():
 
 
 @pytest.mark.slow
-def test_cast_boolean_opt():
+def test_cast_boolean_opt(memory_leak_check):
     def impl(a, b, flag0, flag1):
         arg0 = a if flag0 else None
         arg1 = b if flag1 else None
@@ -697,7 +871,7 @@ def test_cast_boolean_opt():
 
 
 @pytest.mark.slow
-def test_cast_char_opt():
+def test_cast_char_opt(memory_leak_check):
     def impl(a, b, c, d, flag0, flag1, flag2, flag3):
         arg0 = a if flag0 else None
         arg1 = b if flag1 else None
@@ -737,7 +911,7 @@ def test_cast_char_opt():
                     )
 
 
-def test_cast_timestamp_opt():
+def test_cast_timestamp_opt(memory_leak_check):
     def impl(a, b, flag0, flag1):
         arg0 = a if flag0 else None
         arg1 = b if flag1 else None
@@ -759,7 +933,7 @@ def test_cast_timestamp_opt():
             )
 
 
-def test_cast_date_opt():
+def test_cast_date_opt(memory_leak_check):
     def impl(a, b, flag0, flag1):
         arg0 = a if flag0 else None
         arg1 = b if flag1 else None
@@ -779,3 +953,66 @@ def test_cast_date_opt():
                 ("2020-01-01", 1231231231, flag0, flag1),
                 py_output=answer,
             )
+
+
+def test_cast_tz_naive_to_tz_aware_opt(memory_leak_check):
+    tz_literal = "US/Pacific"
+
+    def impl(a, flag):
+        arg0 = a if flag else None
+        return bodo.libs.bodosql_array_kernels.cast_tz_naive_to_tz_aware(
+            arg0, tz_literal
+        )
+
+    ts = pd.Timestamp("2022-11-06 00:52:31")
+    for flag in [True, False]:
+        answer = ts.tz_localize(tz_literal) if flag else None
+        check_func(
+            impl,
+            (ts, flag),
+            py_output=answer,
+        )
+
+
+def test_cast_tz_aware_to_tz_naive_opt(memory_leak_check):
+    def impl1(a, flag):
+        arg0 = a if flag else None
+        return bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(arg0, False)
+
+    def impl2(a, flag):
+        arg0 = a if flag else None
+        return bodo.libs.bodosql_array_kernels.cast_tz_aware_to_tz_naive(arg0, True)
+
+    ts = pd.Timestamp("2022-11-06 00:52:31", tz="US/Pacific")
+    localized_ts = ts.tz_localize(None)
+    normalized_ts = localized_ts.normalize()
+    for flag in [True, False]:
+        answer1 = localized_ts if flag else None
+        check_func(
+            impl1,
+            (ts, flag),
+            py_output=answer1,
+        )
+        answer2 = normalized_ts if flag else None
+        check_func(
+            impl2,
+            (ts, flag),
+            py_output=answer2,
+        )
+
+
+def test_cast_str_to_tz_aware_opt(memory_leak_check):
+    tz_literal = "US/Pacific"
+
+    def impl(a, flag):
+        arg0 = a if flag else None
+        return bodo.libs.bodosql_array_kernels.cast_str_to_tz_aware(arg0, tz_literal)
+
+    ts_str = "2022-11-06 00:52:31"
+    for flag in [True, False]:
+        answer = pd.to_datetime(ts_str).tz_localize(tz_literal) if flag else None
+        check_func(
+            impl,
+            (ts_str, flag),
+            py_output=answer,
+        )

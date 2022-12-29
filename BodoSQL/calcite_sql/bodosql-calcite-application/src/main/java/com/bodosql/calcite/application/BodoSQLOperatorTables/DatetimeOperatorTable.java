@@ -14,8 +14,8 @@ import org.apache.calcite.sql.validate.SqlNameMatcher;
 public final class DatetimeOperatorTable implements SqlOperatorTable {
   /**
    * Determine the return type for a function that outputs a timestamp (possibly tz-aware) based on
-   * the first or last argument, such as NEXT_DAY, PREVIOUS_DAY, DATEADD (Snowflake verison),
-   * DATEADD (MySQL verison) DATE_ADD, and ADDATE
+   * the first or last argument, such as DATEADD (Snowflake verison), DATEADD (MySQL verison)
+   * DATE_ADD, and ADDATE
    *
    * @param binding The operand bindings for the function signature.
    * @return The return type of the first/last argument if either is a timezone-aware type,
@@ -41,7 +41,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       // Otherwise we output a tzNaive Timestamp.
       // TODO: FIXME once we have proper date support.
       // The output should actually always be a date type for some fns.
-      // https://docs.snowflake.com/en/sql-reference/functions/next_day.html
+      // https://docs.snowflake.com/en/sql-reference/functions/dateadd.html
       returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
     }
     return typeFactory.createTypeWithNullability(returnType, nullable);
@@ -547,9 +547,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
+          ReturnTypes.DATE_NULLABLE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to None.
           null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
@@ -566,9 +566,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
+          ReturnTypes.DATE_NULLABLE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to None.
           null,
           // What Input Types does the function accept.
           OperandTypes.sequence(

@@ -1063,7 +1063,7 @@ try:
     import snowflake.connector
 
     snowflake_connector_cursor_python_type = snowflake.connector.cursor.SnowflakeCursor
-except ImportError:
+except (ImportError, AttributeError):
     snowflake_connector_cursor_python_type = None
 
 SnowflakeConnectorCursorType = install_py_obj_class(

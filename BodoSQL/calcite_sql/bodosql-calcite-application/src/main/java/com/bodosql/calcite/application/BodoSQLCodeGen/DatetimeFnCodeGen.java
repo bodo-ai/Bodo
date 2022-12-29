@@ -6,7 +6,6 @@ import static com.bodosql.calcite.application.Utils.Utils.*;
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
-import com.bodosql.calcite.application.Utils.BodoCtx;
 import java.util.*;
 import org.apache.calcite.sql.type.*;
 
@@ -42,29 +41,17 @@ public class DatetimeFnCodeGen {
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
    * @param arg1Name The name of arg1
-   * @param isSingleRow boolean value that determines if this function call is taking place within
-   *     an apply
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo getSingleArgDatetimeFnInfo(
-      String fnName, String inputVar, String arg1Expr, String arg1Name, boolean isSingleRow) {
+      String fnName, String arg1Expr, String arg1Name) {
     StringBuilder name = new StringBuilder();
     name.append(fnName).append("(").append(arg1Name).append(")");
     StringBuilder expr_code = new StringBuilder();
 
     // If the functions has a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
-      if (isSingleRow) {
-        expr_code
-            .append("bodo.utils.conversion.box_if_dt64(")
-            .append(equivalentFnMap.get(fnName))
-            .append("(")
-            .append("bodo.utils.conversion.unbox_if_tz_naive_timestamp(")
-            .append(arg1Expr)
-            .append(")))");
-      } else {
-        expr_code.append(equivalentFnMap.get(fnName)).append("(").append(arg1Expr).append(")");
-      }
+      expr_code.append(equivalentFnMap.get(fnName)).append("(").append(arg1Expr).append(")");
       return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
     }
 
@@ -78,43 +65,25 @@ public class DatetimeFnCodeGen {
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
    * @param arg1Name The name of arg1
-   * @param isSingleRow boolean value that determines if this function call is taking place within
-   *     an apply
+   * @param arg2Expr The string expression of arg2
+   * @param arg2Name The name of arg2
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo getDoubleArgDatetimeFnInfo(
-      String fnName,
-      String inputVar,
-      String arg1Expr,
-      String arg1Name,
-      String arg2Expr,
-      String arg2Name,
-      boolean isSingleRow) {
+      String fnName, String arg1Expr, String arg1Name, String arg2Expr, String arg2Name) {
     StringBuilder name = new StringBuilder();
-    name.append(fnName).append("(").append(arg1Name).append(")");
+    name.append(fnName).append("(").append(arg1Name).append(", ").append(arg2Name).append(")");
     StringBuilder expr_code = new StringBuilder();
 
     // If the functions has a broadcasted array kernel, always use it
     if (equivalentFnMap.containsKey(fnName)) {
-      if (isSingleRow) {
-        expr_code
-            .append("bodo.utils.conversion.box_if_dt64(")
-            .append(equivalentFnMap.get(fnName))
-            .append("(")
-            .append("bodo.utils.conversion.unbox_if_tz_naive_timestamp(")
-            .append(arg1Expr)
-            .append("),bodo.utils.conversion.unbox_if_tz_naive_timestamp(")
-            .append(arg2Expr)
-            .append(")))");
-      } else {
-        expr_code
-            .append(equivalentFnMap.get(fnName))
-            .append("(")
-            .append(arg1Expr)
-            .append(",")
-            .append(arg2Expr)
-            .append(")");
-      }
+      expr_code
+          .append(equivalentFnMap.get(fnName))
+          .append("(")
+          .append(arg1Expr)
+          .append(",")
+          .append(arg2Expr)
+          .append(")");
       return new RexNodeVisitorInfo(name.toString(), expr_code.toString());
     }
 
@@ -125,17 +94,12 @@ public class DatetimeFnCodeGen {
   /**
    * Helper function that handles codegen for makedate
    *
-   * @param inputVar Name of dataframe which Columns expressions reference
    * @param arg1Info The VisitorInfo for the first argument
    * @param arg2Info The VisitorInfo for the second argument
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo generateMakeDateInfo(
-      String inputVar,
-      RexNodeVisitorInfo arg1Info,
-      RexNodeVisitorInfo arg2Info,
-      boolean isSingleRow,
-      BodoCtx ctx) {
+      RexNodeVisitorInfo arg1Info, RexNodeVisitorInfo arg2Info) {
     String name = "MAKEDATE(" + arg1Info.getName() + ", " + arg2Info.getName() + ")";
 
     String outputExpr =
@@ -144,9 +108,6 @@ public class DatetimeFnCodeGen {
             + ", "
             + arg2Info.getExprCode()
             + ")";
-    if (isSingleRow) {
-      outputExpr = "bodo.utils.conversion.box_if_dt64(" + outputExpr + ")";
-    }
     return new RexNodeVisitorInfo(name, outputExpr);
   }
 

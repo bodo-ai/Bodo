@@ -1037,7 +1037,7 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
             ts = ts + td
 
             if dateoffset._weekday != -1:
-                # roll foward by determining the difference in day of the week
+                # roll forward by determining the difference in day of the week
                 # We only accept labeling a day of the week 0..6
                 curr_weekday = ts.weekday()
                 days_forward = (dateoffset._weekday - curr_weekday) % 7
