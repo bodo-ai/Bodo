@@ -1,5 +1,6 @@
 #!/bin/bash
-set -exo pipefail
+set -eo pipefail
+set +x
 
 # Used to run unit tests inside AWS codebuild
 
@@ -8,6 +9,8 @@ set -exo pipefail
 source deactivate || true
 export PATH=$HOME/miniconda3/bin:$PATH
 source activate $CONDA_ENV
+set -x
+
 conda install -c conda-forge unzip libaio
 wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip
 unzip instantclient-basic-linux.x64-21.5.0.0.0dbru.zip -d /usr/local/lib
