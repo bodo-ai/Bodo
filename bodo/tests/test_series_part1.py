@@ -1,7 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
 import operator
-import re
 from decimal import Decimal
 
 import numba
@@ -1106,6 +1105,12 @@ def test_series_iat_setitem(series_val, memory_leak_check):
         with pytest.raises(BodoError, match="Series string setitem not supported yet"):
             bodo.jit(test_impl)(series_val, val)
         return
+    elif isinstance(series_val.iat[0], bytes) and not isinstance(
+        series_val.dtype, pd.CategoricalDtype
+    ):
+        with pytest.raises(BodoError, match="Series binary setitem not supported yet"):
+            bodo.jit(test_impl)(series_val, val)
+        return
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -1262,7 +1267,7 @@ def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
     elif isinstance(series_val.iat[0], bytes):
         with pytest.raises(
             BodoError,
-            match=r"setitem for Binary Array only supported with bytes value and integer indexing",
+            match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val.copy(deep=True), val)
     else:
@@ -1281,7 +1286,7 @@ def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
     elif isinstance(series_val.iat[0], bytes):
         with pytest.raises(
             BodoError,
-            match=r"setitem for Binary Array only supported with bytes value and integer indexing",
+            match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val.copy(deep=True), val)
     else:
@@ -1300,9 +1305,7 @@ def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
     elif isinstance(series_val.iat[0], bytes):
         with pytest.raises(
             BodoError,
-            match=re.escape(
-                r"setitem for Binary Array with indexing type BooleanArrayType() not supported."
-            ),
+            match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val.copy(deep=True), val)
     else:
@@ -1388,6 +1391,12 @@ def test_series_iloc_setitem_int(series_val, memory_leak_check):
         with pytest.raises(BodoError, match="Series string setitem not supported yet"):
             bodo.jit(test_impl)(series_val, val)
         return
+    elif isinstance(series_val.iat[0], bytes) and not isinstance(
+        series_val.dtype, pd.CategoricalDtype
+    ):
+        with pytest.raises(BodoError, match="Series binary setitem not supported yet"):
+            bodo.jit(test_impl)(series_val, val)
+        return
 
     # not supported for list(string) and array(item)
     if isinstance(series_val.values[0], list):
@@ -1443,11 +1452,13 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
         series_val.dtype, pd.CategoricalDtype
     ):
         with pytest.raises(
-            BodoError, match="setitem for Binary Array only supported with bytes value"
+            BodoError,
+            match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val, idx, val)
         with pytest.raises(
-            BodoError, match="setitem for Binary Array only supported with bytes value"
+            BodoError,
+            match="Binary array setitem with index .* and value .* not supported.",
         ):
             bodo.jit(test_impl2)(series_val, idx, val)
 
@@ -1488,12 +1499,13 @@ def test_series_iloc_setitem_list_bool(series_val, memory_leak_check):
         series_val.dtype, pd.CategoricalDtype
     ):
         with pytest.raises(
-            BodoError, match="setitem for Binary Array only supported with bytes value"
+            BodoError,
+            match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val, idx, val)
         with pytest.raises(
             BodoError,
-            match="setitem for Binary Array only supported with bytes value",
+            match="Binary array setitem with index .* and value .* not supported.",
         ):
             bodo.jit(test_impl2)(series_val, idx, val)
 
@@ -1569,14 +1581,11 @@ def test_series_iloc_setitem_scalar(series_val, memory_leak_check):
             ):
                 bodo.jit(test_impl)(series_val, idx, val)
             return
-
-        # binary setitem not supported yet
-        if isinstance(series_val.iat[0], bytes) and not isinstance(
+        elif isinstance(series_val.iat[0], bytes) and not isinstance(
             series_val.dtype, pd.CategoricalDtype
         ):
             with pytest.raises(
-                BodoError,
-                match="setitem for Binary Array with indexing type slice<a:b> not supported.",
+                BodoError, match="Series binary setitem not supported yet"
             ):
                 bodo.jit(test_impl)(series_val, idx, val)
             return
@@ -1592,7 +1601,10 @@ def test_series_iloc_setitem_scalar(series_val, memory_leak_check):
         else:
             # TODO: Test distributed implementation
             check_func(
-                test_impl, (series_val, idx, val), copy_input=True, dist_test=False
+                test_impl,
+                (series_val, idx, val),
+                copy_input=True,
+                dist_test=False,
             )
 
 
@@ -1632,17 +1644,9 @@ def test_series_iloc_setitem_slice(series_val, memory_leak_check):
     elif isinstance(series_val.iat[0], bytes) and not isinstance(
         series_val.dtype, pd.CategoricalDtype
     ):
-        with pytest.raises(
-            BodoError, match="setitem for Binary Array only supported with bytes value"
-        ):
+        with pytest.raises(BodoError, match="Series binary setitem not supported yet"):
             bodo.jit(test_impl)(series_val, val)
-        # TODO: many of the other types skip test_impl2 due to an issue with writing to
-        # immutable arrays. While we currently get the correct error for binary types,
-        # this may become an issue when trying to implement this later.
-        with pytest.raises(
-            BodoError, match="setitem for Binary Array only supported with bytes value"
-        ):
-            bodo.jit(test_impl2)(series_val, val)
+        # TODO: Prevent writing to immutable array for test_impl2.
 
     # not supported for list(string) and array(item)
     elif isinstance(series_val.values[0], list):
@@ -1685,16 +1689,10 @@ def test_series_iloc_setitem_slice(series_val, memory_leak_check):
         series_val.dtype, pd.CategoricalDtype
     ):
         with pytest.raises(
-            BodoError, match="setitem for Binary Array only supported with bytes value"
+            BodoError,
+            match="Series binary setitem not supported yet",
         ):
             bodo.jit(test_impl)(series_val, val)
-        # TODO: many of the other types skip test_impl2 due to an issue with writing to
-        # immutable arrays. While we currently get the correct error for binary types,
-        # this may become an issue when trying to implement this later.
-        with pytest.raises(
-            BodoError, match="setitem for Binary Array only supported with bytes value"
-        ):
-            bodo.jit(test_impl2)(series_val, val)
 
     # not supported for list(string) and array(item)
     elif isinstance(series_val.values[0], list):
@@ -1766,19 +1764,10 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
     ):
         with pytest.raises(
             BodoError,
-            match=re.escape(
-                "Series.iloc[] setitem using BinaryArrayType() not supported"
-            ),
+            match="Series binary setitem not supported yet",
         ):
-            bodo.jit(test_impl)(series_val, idx, val)
-        # TODO: many of the other tests skip test_impl2 due to an issue with writing to
-        # immutable arrays. While we currently get the correct error for binary types,
-        # this may become an issue when trying to implement this later.
-        with pytest.raises(
-            BodoError,
-            match=re.escape("setitem for Binary Array only supported with bytes value"),
-        ):
-            bodo.jit(test_impl2)(series_val, idx, val)
+            bodo.jit(test_impl)(series_val, val, idx)
+        # TODO: Prevent writing to immutable array for test_impl2.
 
     # not supported for list(string) and array(item)
     elif isinstance(series_val.values[0], list):
@@ -1824,21 +1813,10 @@ def test_series_iloc_setitem_list_int(series_val, idx, memory_leak_check):
     ):
         with pytest.raises(
             BodoError,
-            match=re.escape(
-                "Series.iloc[] setitem using reflected list(readonly bytes(uint8, 1d, C))<iv=None> not supported"
-            ),
+            match="Series binary setitem not supported yet",
         ):
-            bodo.jit(test_impl)(series_val, idx, val)
-        # TODO: many of the other tests skip test_impl2 due to an issue with writing to
-        # immutable arrays. While we currently get the correct error for binary types,
-        # this may become an issue when trying to implement this later.
-        with pytest.raises(
-            BodoError,
-            match=re.escape(
-                "Series.iloc[] setitem using reflected list(readonly bytes(uint8, 1d, C))<iv=None> not supported"
-            ),
-        ):
-            bodo.jit(test_impl)(series_val, idx, val)
+            bodo.jit(test_impl)(series_val, val, idx)
+        # TODO: Prevent writing to immutable array for test_impl2.
 
     # not supported for list(string) and array(item)
     elif isinstance(series_val.values[0], list):
@@ -1969,7 +1947,7 @@ def test_series_setitem_int(series_val, memory_leak_check):
         return
 
     # string setitem not supported yet
-    if isinstance(series_val.iat[0], str):
+    if isinstance(series_val.iat[0], str) or isinstance(series_val.iat[0], bytes):
         return
     val = series_val.iat[0]
 

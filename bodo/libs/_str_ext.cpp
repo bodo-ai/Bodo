@@ -67,6 +67,8 @@ void* pd_pyarrow_array_from_string_array(const array_info* str_arr);
 void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
                           int64_t index);
+void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
+                          char* str, int64_t len, int64_t index);
 int64_t get_utf8_size(char* str, int64_t len, int kind);
 
 void set_string_array_range(offset_t* out_offsets, char* out_data,
@@ -165,6 +167,9 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
         PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
     PyObject_SetAttrString(m, "setitem_string_array",
                            PyLong_FromVoidPtr((void*)(&setitem_string_array)));
+    PyObject_SetAttrString(m, "setitem_binary_array",
+                           PyLong_FromVoidPtr((void*)(&setitem_binary_array)));
+
     PyObject_SetAttrString(
         m, "set_string_array_range",
         PyLong_FromVoidPtr((void*)(&set_string_array_range)));
@@ -375,6 +380,30 @@ void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
     } else {
         utf8_len = unicode_to_utf8(&data[start], str, len, kind);
     }
+
+    CHECK(utf8_len < std::numeric_limits<offset_t>::max(),
+          "string array too large");
+    CHECK(start + utf8_len <= n_bytes, "out of bounds string array setitem");
+    offsets[index + 1] = start + utf8_len;
+    return;
+#undef CHECK
+}
+
+void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
+                          char* str, int64_t len, int64_t index) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return;                        \
+    }
+    offset_t utf8_len = (offset_t)len;
+
+    if (index == 0) offsets[index] = 0;
+    offset_t start = offsets[index];
+
+    // Bytes objects in python are always just an array of chars,
+    // so we should never need to do any decoding
+    memcpy(&data[start], str, len);
 
     CHECK(utf8_len < std::numeric_limits<offset_t>::max(),
           "string array too large");

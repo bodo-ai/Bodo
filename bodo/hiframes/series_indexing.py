@@ -126,9 +126,12 @@ def overload_series_iat_setitem(I, idx, val):
     if isinstance(I, SeriesIatType):
         if not isinstance(idx, types.Integer):
             raise BodoError("iAt based indexing can only have integer indexers")
-        # check string setitem
+        # check string/binary setitem
         if I.stype.dtype == bodo.string_type and val is not types.none:
             raise BodoError("Series string setitem not supported yet")
+        if I.stype.dtype == bodo.bytes_type and val is not types.none:
+            raise BodoError("Series binary setitem not supported yet")
+
         # Bodo Restriction, cannot set item with immutable array.
         if is_immutable_array(I.stype.data):
             raise BodoError(
@@ -303,12 +306,16 @@ def overload_series_iloc_getitem(I, idx):
 @overload(operator.setitem, no_unliteral=True)
 def overload_series_iloc_setitem(I, idx, val):
     if isinstance(I, SeriesIlocType):
-        # check string setitem
+        # check string/binary setitem
         if I.stype.dtype == bodo.string_type and val is not types.none:
-            # TODO: error-checking test
             raise BodoError(
                 "Series string setitem not supported yet"
             )  # pragma: no cover
+        if I.stype.dtype == bodo.bytes_type and val is not types.none:
+            raise BodoError(
+                "Series binary setitem not supported yet"
+            )  # pragma: no cover
+
         # Bodo Restriction, cannot set item with immutable array.
         if is_immutable_array(I.stype.data):
             raise BodoError(
@@ -702,6 +709,11 @@ def overload_series_setitem(S, idx, val):
             and not (is_list_like_index_type(idx) and idx.dtype == types.bool_)
         ):
             raise BodoError("Series string setitem not supported yet")
+        elif S.dtype == bodo.bytes_type:
+            # NOTE: we can loosen the above restriction to be the same as the string
+            # array restriction, if we implement boolean list index setitem
+            # on the underlying binary array type.
+            raise BodoError("Series binary setitem not supported yet")
 
         # integer case same as iat
         if isinstance(idx, types.Integer):
