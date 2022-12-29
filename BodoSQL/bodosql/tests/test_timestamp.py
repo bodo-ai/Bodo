@@ -7,8 +7,6 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
-import bodo
-
 
 def test_datetime_condition(spark_info, memory_leak_check):
     """test selecting column satisfying condition on timestamp type column"""
@@ -180,51 +178,4 @@ def test_str_date_case_stmt(spark_info, memory_leak_check):
         spark_info,
         check_names=False,
         check_dtype=False,
-    )
-
-
-def test_ts_now_in_case(memory_leak_check):
-    """
-    Tests that CURRENT_TIMESTAMP works inside of case statements.
-
-    """
-
-    df = pd.DataFrame(
-        {
-            "C": [0, 1, 13] * 4,
-            "B": [
-                pd.Timestamp.now() - pd.Timedelta(1, unit="D"),
-                pd.Timestamp.now() - pd.Timedelta(2, unit="D"),
-                pd.Timestamp.now() + pd.Timedelta(3, unit="D"),
-            ]
-            * 4,
-        }
-    )
-
-    # Make sure we have the exact same data on each rank
-    df = bodo.scatterv(df)
-    df = bodo.allgatherv(df)
-
-    ctx = {
-        "table1": df,
-    }
-    expected_out = pd.DataFrame(
-        {
-            "B": [
-                pd.Timestamp.now().floor("d") - pd.Timedelta(1, unit="D"),
-                pd.Timestamp.now().floor("d") - pd.Timedelta(2, unit="D"),
-                pd.Timestamp.now().floor("d"),
-            ]
-            * 4
-        }
-    )
-
-    query = "select CASE WHEN B < CURRENT_TIMESTAMP() THEN TO_DATE(B) ELSE TO_DATE(CURRENT_TIMESTAMP()) END from table1"
-    check_query(
-        query,
-        ctx,
-        None,
-        check_names=False,
-        check_dtype=False,
-        expected_output=expected_out,
     )

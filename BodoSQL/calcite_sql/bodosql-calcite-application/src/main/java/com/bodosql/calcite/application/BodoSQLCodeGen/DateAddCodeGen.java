@@ -152,12 +152,10 @@ public class DateAddCodeGen {
    *
    * @param arg0 The first starting datetime (or string).
    * @param arg1 The amount of days to add to the starting datetime.
-   * @param generateScalarCode Are the inputs scalars?
    * @param manual_addition Is the second argument a timedelta?
    * @return The code generated that matches the DateAdd expression.
    */
-  public static String generateMySQLDateAddCode(
-      String arg0, String arg1, boolean generateScalarCode, boolean manual_addition) {
+  public static String generateMySQLDateAddCode(String arg0, String arg1, boolean manual_addition) {
     StringBuilder addBuilder = new StringBuilder();
     if (manual_addition) {
       addBuilder
