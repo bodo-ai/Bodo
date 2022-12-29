@@ -2262,9 +2262,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DATE_SUB":
             assert operandsInfo.size() == 2;
 
+            RelDataType arg0Type = fnOperation.getOperands().get(0).getType();
+
             // Cast arg0 to from string to timestamp, if needed
-            if (SqlTypeName.STRING_TYPES.contains(
-                fnOperation.getOperands().get(0).getType().getSqlTypeName())) {
+            if (SqlTypeName.STRING_TYPES.contains(arg0Type.getSqlTypeName())) {
               RelDataType inputType = fnOperation.getOperands().get(0).getType();
               // The output type will always be the timestamp the string is being cast to.
               RelDataType outputType = fnOperation.getType();
@@ -2296,10 +2297,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
             } else {
               arg1Expr = operandsInfo.get(1).getExprCode();
             }
-
-            String subExpr =
-                generateDateSubCode(
-                    operandsInfo.get(0).getExprCode(), arg1Expr, dateSubGeneratesScalarCode);
+            final String subExpr;
+            if (arg0Type instanceof TZAwareSqlType) {
+              List<String> args = List.of(operandsInfo.get(0).getExprCode(), arg1Expr);
+              subExpr = genTZAwareIntervalArithCode(args, SqlKind.MINUS, true);
+            } else {
+              subExpr =
+                  generateDateSubCode(
+                      operandsInfo.get(0).getExprCode(), arg1Expr, dateSubGeneratesScalarCode);
+            }
             return new RexNodeVisitorInfo(outputName, subExpr);
 
           case "DATEDIFF":
@@ -2947,11 +2953,22 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // Handle OR separately because it needs to handle NULL for short circuiting
       return visitORScan(operation, colNames, id, inputVar, isSingleRow, ctx);
     }
+    // Store the argument types for TZ-Aware data
+    List<RelDataType> argDataTypes = new ArrayList<>();
     for (RexNode operand : operation.operands) {
       RexNodeVisitorInfo info = visitRexNode(operand, colNames, id, inputVar, isSingleRow, ctx);
       names.add(info.getName());
       args.add(info.getExprCode());
       exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operand, id)));
+      argDataTypes.add(operand.getType());
+    }
+    if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
+      // Support the concat operator by using the concat array kernel.
+      List<RexNodeVisitorInfo> argInfos = new ArrayList<>();
+      for (int i = 0; i < names.size(); i++) {
+        argInfos.add(new RexNodeVisitorInfo(names.get(i), args.get(i)));
+      }
+      return generateConcatFnInfo(argInfos);
     }
     if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
       // Support the concat operator by using the concat array kernel.
@@ -2962,7 +2979,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       return generateConcatFnInfo(argInfos);
     }
     String name = generateBinOpName(names, binOp);
-    String codeGen = generateBinOpCode(args, exprTypes, binOp, isSingleRow);
+    String codeGen = generateBinOpCode(args, exprTypes, binOp, isSingleRow, argDataTypes);
     return new RexNodeVisitorInfo(name, codeGen);
   }
 

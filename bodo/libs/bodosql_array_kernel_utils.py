@@ -939,9 +939,29 @@ def verify_datetime_arg_require_tz(arg, f_name, a_name):  # pragma: no cover
         )
 
 
+def verify_sql_interval(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is an acceptable
+    interval. This is either a valid Timedelta scalar or array, None, or
+    pd.DateOffset.
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+    raises: BodoError if the argument is a valid interval type
+    """
+    if not (
+        is_overload_none(arg)
+        or is_valid_timedelta_arg(arg)
+        or arg == bodo.date_offset_type
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a Timedelta scalar/column, DateOffset, or null"
+        )
+
+
 def get_tz_if_exists(arg):  # pragma: no cover
     """Returns the timezone from a scalar or vector datetime/timestamp argument,
-       or None if it has no timestamp.
+        or None if it has no timestamp.
 
     Args:
         arg (dtype): the dtype of the argument whose timezone is being extracted.

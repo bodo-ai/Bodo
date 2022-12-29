@@ -19,6 +19,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -641,3 +642,32 @@ def overload_add_operator_datetime_arr(lhs, rhs):
             raise BodoError(
                 f"add operator not supported between {lhs} and Timezone-aware timestamp. Please convert to timezone naive with ts.tz_convert(None)"
             )
+
+
+@register_jitable
+def convert_months_offset_to_days(
+    curr_year, curr_month, curr_day, num_months
+):  # pragma: no cover
+    """Converts the number of months to move forward from a current
+    year, month, and day into a Timedelta with the appropriate number of days.
+    This is used to convert a DateOffset of only months into an equivalent
+    pd.Timedelta for us in BodoSQL array kernels
+
+    Args:
+        curr_year (types.int64): Current year number
+        curr_month (types.int64): Current month number (1-12)
+        curr_day (types.int64): Current day number (1-31)
+        num_months (types.int64): Number of months to add (either + or -)
+    """
+    # Account for the 1-indexing in computing the new month
+    month_total = (curr_month + num_months) - 1
+    new_month = (month_total % 12) + 1
+    num_years = month_total // 12
+    new_year = curr_year + num_years
+    # Make sure the day is still valid in this month, otherwise we truncate
+    # to the last day of the month.
+    max_day = bodo.hiframes.pd_timestamp_ext.get_days_in_month(new_year, new_month)
+    new_day = min(max_day, curr_day)
+    curr_ts = pd.Timestamp(year=curr_year, month=curr_month, day=curr_day)
+    new_ts = pd.Timestamp(year=new_year, month=new_month, day=new_day)
+    return new_ts - curr_ts

@@ -159,7 +159,7 @@ class SeriesPass:
         self.typemap = typemap
         self.calltypes = calltypes
         self.locals = _locals
-        # dataframe transformation module to try on each statement
+        # DataFrame transformation module to try on each statement
         self.dataframe_pass = DataFramePass(
             func_ir, typingctx, targetctx, typemap, calltypes
         )
@@ -174,15 +174,15 @@ class SeriesPass:
         # topo_order necessary so Series data replacement optimization can be
         # performed in one pass
         topo_order = find_topo_order(blocks)
-        # find the potentially updated dataframes to avoid optimizing out
+        # find the potentially updated DataFrames to avoid optimizing out
         # get_dataframe_data() calls incorrectly
         self.dataframe_pass._updated_dataframes = self._get_updated_dataframes(
             blocks, topo_order
         )
-        # Keep track of the updated dataframes already visited on this pass.
+        # Keep track of the updated DataFrames already visited on this pass.
         self.dataframe_pass._visited_updated_dataframes = set()
 
-        # NOTE: this is iterating in topological order; we're poping from the reversed ordering.
+        # NOTE: this is iterating in topological order; we're popping from the reversed ordering.
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         changed = False
         while work_list:
