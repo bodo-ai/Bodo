@@ -1669,6 +1669,12 @@ def to_nullable_type(t):
         if isinstance(t.dtype, types.Integer):
             return bodo.libs.int_arr_ext.IntegerArrayType(t.dtype)
 
+        if (
+            isinstance(t.dtype, types.Float)
+            and bodo.libs.float_arr_ext._use_nullable_float
+        ):
+            return bodo.libs.float_arr_ext.FloatingArrayType(t.dtype)
+
     return t
 
 
@@ -1818,7 +1824,13 @@ def get_nullable_and_non_nullable_types(array_of_types):
         if typ == bodo.libs.bool_arr_ext.boolean_array:
             all_types.append(types.Array(types.bool_, 1, "C"))
 
-        elif isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
+        elif isinstance(
+            typ,
+            (
+                bodo.libs.int_arr_ext.IntegerArrayType,
+                bodo.libs.float_arr_ext.FloatingArrayType,
+            ),
+        ):
             all_types.append(types.Array(typ.dtype, 1, "C"))
 
         elif isinstance(typ, types.Array):
@@ -1827,6 +1839,9 @@ def get_nullable_and_non_nullable_types(array_of_types):
 
             if isinstance(typ.dtype, types.Integer):
                 all_types.append(bodo.libs.int_arr_ext.IntegerArrayType(typ.dtype))
+
+            if isinstance(typ.dtype, types.Float):
+                all_types.append(bodo.libs.float_arr_ext.FloatingArrayType(typ.dtype))
 
         all_types.append(typ)
 

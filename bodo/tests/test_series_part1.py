@@ -661,9 +661,7 @@ def test_dataframe_concat_cat_dynamic():
     )
 
 
-# TODO (Nick): Readd the memory leak check when constant lower leak is fixed.
-# Categorical input has a constant lowering step so it leaks memory.
-def test_series_concat_convert_to_nullable():
+def test_series_concat_convert_to_nullable(memory_leak_check):
     """make sure numpy integer/bool arrays are converted to nullable integer arrays in
     concatenation properly
     """
@@ -687,6 +685,12 @@ def test_series_concat_convert_to_nullable():
     )
     S2 = pd.Series([True, False, False, True, True, False, False], dtype="bool").values
     check_func(impl2, (S1, S2), sort_output=True, reset_index=True)
+
+    # Float case
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        S1 = pd.Series([3, 2, 1, -4, None, 11, 21, 31, None] * 2, dtype="Float64")
+        S2 = pd.Series(np.arange(11) * 2.1, dtype="float32")
+        check_func(impl1, (S1, S2), sort_output=True, reset_index=True)
 
 
 def test_series_notna(series_val, memory_leak_check):
@@ -1042,6 +1046,14 @@ def test_series_to_list(series_val, memory_leak_check):
         message = "Not supported for NA values"
         with pytest.raises(ValueError, match=message):
             bodo.jit(impl)(series_val)
+    # Bodo uses nan for nullable float arrays due to type stability
+    elif isinstance(series_val.dtype, (pd.Float32Dtype, pd.Float64Dtype)):
+        check_func(
+            impl,
+            (series_val,),
+            only_seq=True,
+            py_output=series_val.astype("float64").to_list(),
+        )
     else:
         check_func(impl, (series_val,), only_seq=True)
 

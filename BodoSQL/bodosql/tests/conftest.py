@@ -137,14 +137,24 @@ def bodosql_numeric_types(request):
             "table1": pd.DataFrame(
                 {
                     "A": [4, 1, 2, 3] * 4,
-                    "B": pd.array([1.0, 2.0, 3.0, 4.0] * 4, "Float64"),
+                    "B": pd.array(
+                        [1.0, 2.0, 3.0, 4.0] * 4,
+                        "Float64"
+                        if bodo.libs.float_arr_ext._use_nullable_float
+                        else "float64",
+                    ),
                     "C": ["bird", "dog", "flamingo", "cat"] * 4,
                 }
             ),
             "table2": pd.DataFrame(
                 {
                     "A": [3, 1, 2, 4] * 4,
-                    "B": pd.array([1.0, 2.0, 4.0, 3.0] * 4, "Float64"),
+                    "B": pd.array(
+                        [1.0, 2.0, 4.0, 3.0] * 4,
+                        "Float64"
+                        if bodo.libs.float_arr_ext._use_nullable_float
+                        else "float64",
+                    ),
                     "D": [
                         pd.Timestamp(2021, 5, 19),
                         pd.Timestamp(1999, 12, 31),
