@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
+
 
 @dataclass
 class SeriesReplace:
@@ -29,6 +31,13 @@ class WhereNullable:
 
 
 GLOBAL_VAL = 2
+
+
+nullable_float_marker = pytest.mark.skipif(
+    not bodo.libs.float_arr_ext._use_nullable_float,
+    reason="nullable float not fully supported yet",
+)
+
 
 # using length of 5 arrays to enable testing on 3 ranks (2, 2, 1 distribution)
 # zero length chunks on any rank can cause issues, TODO: fix
@@ -172,6 +181,14 @@ GLOBAL_VAL = 2
             ),
             id="series_val22",
         ),
+        # nullable float
+        pytest.param(
+            pd.Series(
+                pd.array([1.1, None, 4.2, 3.1, -3.5], "Float32"), [3, 7, 9, 2, 1]
+            ),
+            id="series_val23",
+            marks=nullable_float_marker,
+        ),
     ]
 )
 def series_val(request):
@@ -183,6 +200,10 @@ def series_val(request):
     params=[
         pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
         pd.Series([1.1, np.nan, 4.1, 1.4, -2.1]),
+        pytest.param(
+            pd.Series([1.1, None, 4.1, 1.4, -2.1], dtype="Float64"),
+            marks=nullable_float_marker,
+        ),
         pytest.param(
             pd.Series([1, 8, 4, 10, 3], dtype=np.uint8), marks=pytest.mark.slow
         ),
@@ -201,6 +222,10 @@ def numeric_series_val(request):
 @pytest.fixture(
     params=[
         pd.Series([np.nan, -1.0, -1.0, 0.0, 78.0]),
+        pytest.param(
+            pd.Series([None, -1.0, -1.0, 0.0, 78.0], dtype="Float64"),
+            marks=nullable_float_marker,
+        ),
         pd.Series([1.0, 2.0, 3.0, 42.3]),
         pd.Series([1, 2, 3, 42]),
         pytest.param(

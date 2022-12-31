@@ -11,6 +11,11 @@ from numba.core import types
 import bodo
 from bodo.tests.utils import check_func
 
+nullable_float_marker = pytest.mark.skipif(
+    not bodo.libs.float_arr_ext._use_nullable_float,
+    reason="nullable float not fully supported yet",
+)
+
 
 @pytest.fixture(
     params=[
@@ -148,6 +153,7 @@ def test_float_arr_int_array_indexing(float_dtype, index_arr, memory_leak_check)
         pytest.param(
             lambda arr: arr.iloc[1:3].astype(np.float32),
             id="iloc[1:3].astype(np.float32)",
+            marks=nullable_float_marker,
         ),
     ],
 )
@@ -157,7 +163,7 @@ def test_float_arr_series_iloc(iloc_fn, float_dtype, memory_leak_check):
     check_func(iloc_fn, (series,), check_dtype=False, dist_test=False)
 
 
-@pytest.mark.slow
+@nullable_float_marker
 def test_float_arr_coerce_scalar(memory_leak_check):
     arr_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
 
@@ -165,7 +171,7 @@ def test_float_arr_coerce_scalar(memory_leak_check):
     scalar_float = 1.0
     full_output = pd.array([scalar_float] * n, dtype=pd.Float64Dtype())
     null_output = pd.arrays.FloatingArray(
-        np.array([np.NaN] * 50), np.array([False] * 50)
+        np.array([np.NaN] * 50), np.array([True] * 50)
     )
 
     def impl1(arg, len):
@@ -304,6 +310,7 @@ SERIES_BINOP_ARGS = [
 ]
 
 
+@nullable_float_marker
 @pytest.mark.slow
 @pytest.mark.parametrize(
     # avoiding isnat since only supported for datetime/timedelta
@@ -316,36 +323,12 @@ SERIES_BINOP_ARGS = [
     ],
 )
 def test_float_arr_unary_ufunc(ufunc):
-    # As of 1.3.*, these functions still do not properly put NA masks on the output
-    # and do not produce the correct result
-    if ufunc in (np.isnan, np.isinf, np.isfinite, np.signbit):
-        return
-
     def test_impl(A):
         return ufunc(A)
 
     A = NULLABLE_FLOAT_ARR
 
-    # As of 1.3.*, these functions still do not properly put NA masks on the output
-    # But still produce the correct result
-    if ufunc in (
-        np.log,
-        np.log2,
-        np.log10,
-        np.log1p,
-        np.sqrt,
-        np.arcsin,
-        np.arccos,
-        np.arccosh,
-        np.arctanh,
-    ):
-        expected_out = test_impl(A)
-        for i in range(len(expected_out)):
-            if pd.isna(expected_out[i]):
-                expected_out[i] = np.NaN
-        check_func(test_impl, (A,), py_output=expected_out, check_dtype=False)
-    else:
-        check_func(test_impl, (A,))
+    check_func(test_impl, (A,))
 
 
 @pytest.mark.slow

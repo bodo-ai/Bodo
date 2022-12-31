@@ -912,6 +912,10 @@ def _test_equal(
                 pd.testing.assert_extension_array_equal(
                     bodo_out, pd.array(py_out, "string[pyarrow]")
                 )
+            elif isinstance(bodo_out, pd.arrays.FloatingArray):
+                pd.testing.assert_extension_array_equal(
+                    bodo_out, pd.array(py_out, bodo_out.dtype)
+                )
             else:
                 np.testing.assert_array_equal(bodo_out, py_out)
     # check for array since is_extension_array_dtype() matches dtypes also
