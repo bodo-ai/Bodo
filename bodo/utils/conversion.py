@@ -96,8 +96,12 @@ def overload_coerce_to_ndarray(
 
     # numpy array
     if isinstance(data, types.Array):
-        if not is_overload_none(use_nullable_array) and isinstance(
-            data.dtype, (types.Boolean, types.Integer)
+        if not is_overload_none(use_nullable_array) and (
+            isinstance(data.dtype, (types.Boolean, types.Integer))
+            or (
+                isinstance(data.dtype, types.Float)
+                and bodo.libs.float_arr_ext._use_nullable_float
+            )
         ):
             if data.dtype == types.bool_:
                 if data.layout != "C":
@@ -107,6 +111,19 @@ def overload_coerce_to_ndarray(
                     )  # pragma: no cover
                 else:
                     return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
+                        data, np.full((len(data) + 7) >> 3, 255, np.uint8)
+                    )  # pragma: no cover
+            elif (
+                isinstance(data.dtype, types.Float)
+                and bodo.libs.float_arr_ext._use_nullable_float
+            ):
+                if data.layout != "C":
+                    return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.float_arr_ext.init_float_array(
+                        np.ascontiguousarray(data),
+                        np.full((len(data) + 7) >> 3, 255, np.uint8),
+                    )  # pragma: no cover
+                else:
+                    return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.float_arr_ext.init_float_array(
                         data, np.full((len(data) + 7) >> 3, 255, np.uint8)
                     )  # pragma: no cover
             else:  # Integer case
@@ -315,7 +332,11 @@ def overload_coerce_to_ndarray(
 
             return impl_null_integer
 
-        if not is_overload_none(use_nullable_array) and isinstance(dtype, types.Float):
+        if (
+            not is_overload_none(use_nullable_array)
+            and isinstance(dtype, types.Float)
+            and bodo.libs.float_arr_ext._use_nullable_float
+        ):
 
             def impl_null_float(
                 data,
@@ -1055,6 +1076,11 @@ def overload_fix_arr_dtype(
             isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype)
             and data.dtype == nb_dtype.dtype
         )
+    elif isinstance(data, bodo.libs.float_arr_ext.FloatingArrayType):
+        same_typ = (
+            isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype)
+            and data.dtype == nb_dtype.dtype
+        )
     elif bodo.utils.utils.is_array_typ(nb_dtype, False):
         same_typ = data == nb_dtype
     else:
@@ -1072,10 +1098,7 @@ def overload_fix_arr_dtype(
 
     # nullable int array case
     if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
-        if isinstance(nb_dtype, types.Integer):
-            _dtype = nb_dtype
-        else:
-            _dtype = nb_dtype.dtype
+        _dtype = nb_dtype.dtype
 
         if isinstance(data.dtype, types.Float):
 
@@ -1143,8 +1166,41 @@ def overload_fix_arr_dtype(
 
             return impl
 
+    # nullable float array case
+    if isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype):
+        _dtype = nb_dtype.dtype
+
+        def impl(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
+            n = len(data)
+            numba.parfors.parfor.init_prange()
+            B = bodo.libs.float_arr_ext.alloc_float_array(n, _dtype)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(data, i):
+                    bodo.libs.array_kernels.setna(B, i)
+                else:
+                    B[i] = float(data[i])
+            return B
+
+        return impl
+
     # nullable int array to non-nullable int array case
     if isinstance(nb_dtype, types.Integer) and isinstance(data.dtype, types.Integer):
+
+        def impl(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
+            return data.astype(nb_dtype)
+
+        return impl
+
+    # nullable float array to non-nullable int array case
+    if (
+        isinstance(nb_dtype, types.Float)
+        and isinstance(data.dtype, types.Float)
+        and bodo.libs.float_arr_ext._use_nullable_float
+    ):
 
         def impl(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False

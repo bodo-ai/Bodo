@@ -206,7 +206,7 @@ def setna(arr, ind, int_nan_const=0):  # pragma: no cover
 @overload(setna, no_unliteral=True)
 def setna_overload(arr, ind, int_nan_const=0):
 
-    if isinstance(arr.dtype, types.Float):
+    if isinstance(arr, types.Array) and isinstance(arr.dtype, types.Float):
         return setna
 
     if isinstance(arr.dtype, (types.NPDatetime, types.NPTimedelta)):
@@ -1860,6 +1860,41 @@ def concat_overload(arr_list):
 
         return impl_bool_arr_list
 
+    # Floating array input, or mix of Floating array and Numpy float array
+    if (
+        isinstance(arr_list, (types.UniTuple, types.List))
+        and isinstance(arr_list.dtype, FloatingArrayType)
+        or (
+            isinstance(arr_list, types.BaseTuple)
+            and all(isinstance(t.dtype, types.Float) for t in arr_list.types)
+            and any(isinstance(t, FloatingArrayType) for t in arr_list.types)
+        )
+    ):
+
+        def impl_float_arr_list(arr_list):  # pragma: no cover
+            arr_list_converted = convert_to_nullable_tup(arr_list)
+            all_data = []
+            n_all = 0
+            for A in arr_list_converted:
+                all_data.append(A._data)
+                n_all += len(A)
+            out_data = bodo.libs.array_kernels.concat(all_data)
+            n_bytes = (n_all + 7) >> 3
+            new_mask = np.empty(n_bytes, np.uint8)
+            curr_bit = 0
+            for A in arr_list_converted:
+                old_mask = A._null_bitmap
+                for j in range(len(A)):
+                    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)
+                    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)
+                    curr_bit += 1
+            return bodo.libs.float_arr_ext.init_float_array(
+                out_data,
+                new_mask,
+            )
+
+        return impl_float_arr_list
+
     # categorical arrays
     if isinstance(arr_list, (types.UniTuple, types.List)) and isinstance(
         arr_list.dtype, CategoricalArrayType
@@ -1994,8 +2029,8 @@ def convert_to_nullable_tup(arr_tup):
 
 @overload(convert_to_nullable_tup, no_unliteral=True)
 def overload_convert_to_nullable_tup(arr_tup):
-    """converts a tuple of integer/bool arrays to nullable integer/bool arrays with
-    common dtype
+    """converts a tuple of integer/float/bool arrays to nullable integer/float/bool
+    arrays with common dtype
     """
     # no need for conversion if already nullable int
     if isinstance(arr_tup, (types.UniTuple, types.List)) and isinstance(
@@ -2003,7 +2038,9 @@ def overload_convert_to_nullable_tup(arr_tup):
     ):
         return lambda arr_tup: arr_tup  # pragma: no cover
 
-    assert isinstance(arr_tup, types.BaseTuple)
+    assert isinstance(
+        arr_tup, types.BaseTuple
+    ), "convert_to_nullable_tup: tuple expected"
     count = len(arr_tup.types)
     comm_dtype = find_common_np_dtype(arr_tup.types)
     out_dtype = None
@@ -2011,13 +2048,17 @@ def overload_convert_to_nullable_tup(arr_tup):
     if isinstance(comm_dtype, types.Integer):
         out_dtype = bodo.libs.int_arr_ext.IntDtype(comm_dtype)
         astype_str = ".astype(out_dtype, False)"
+    if (
+        isinstance(comm_dtype, types.Float)
+        and bodo.libs.float_arr_ext._use_nullable_float
+    ):
+        out_dtype = bodo.libs.float_arr_ext.FloatDtype(comm_dtype)
+        astype_str = ".astype(out_dtype, False)"
 
     func_text = "def f(arr_tup):\n"
     func_text += "  return ({}{})\n".format(
         ",".join(
-            "bodo.utils.conversion.coerce_to_array(arr_tup[{}], use_nullable_array=True){}".format(
-                i, astype_str
-            )
+            f"bodo.utils.conversion.coerce_to_array(arr_tup[{i}], use_nullable_array=True){astype_str}"
             for i in range(count)
         ),
         "," if count == 1 else "",
