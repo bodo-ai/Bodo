@@ -22,7 +22,14 @@ def test_with_multiple_tables(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -55,7 +62,14 @@ def test_with_select_tables(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -99,7 +113,14 @@ def test_nested_with(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):

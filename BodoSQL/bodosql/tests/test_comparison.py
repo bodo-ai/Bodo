@@ -148,7 +148,7 @@ def test_where_and(join_dataframes, spark_info, memory_leak_check):
     """
     Tests an and expression within a where clause.
     """
-    # For join dataframes, A and B must share a common type across both tables
+    # For join DataFrames, A and B must share a common type across both tables
 
     if isinstance(join_dataframes["table1"]["A"].values[0], bytes):
         pytest.skip(
@@ -193,7 +193,7 @@ def test_where_or(join_dataframes, spark_info, memory_leak_check):
     """
     Tests an or expression within a where clause.
     """
-    # For join dataframes, A and B must share a common type across both tables
+    # For join DataFrames, A and B must share a common type across both tables
     if isinstance(join_dataframes["table1"]["A"].values[0], bytes):
         pytest.skip(
             "No support for binary literals: https://bodo.atlassian.net/browse/BE-3304"
