@@ -21,7 +21,7 @@ def test_join(
     join_dataframes, spark_info, join_type, comparison_ops, memory_leak_check
 ):
     """test simple join queries"""
-    # For nullable intergers convert the pyspark output from
+    # For nullable integers convert the pyspark output from
     # float to object
     if any(
         [
@@ -49,6 +49,7 @@ def test_join(
         query,
         join_dataframes,
         spark_info,
+        check_dtype=False,
         check_names=False,
         return_codegen=True,
         convert_float_nan=convert_float_nan,
@@ -64,7 +65,14 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
 
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -125,6 +133,7 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
         join_dataframes,
         spark_info,
         check_names=False,
+        check_dtype=False,
         convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
     )
@@ -138,7 +147,14 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -179,7 +195,14 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
 
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -210,7 +233,14 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
     """test all possible join types"""
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -240,13 +270,20 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
     check_efficient_join(pandas_code)
 
 
-def test_join_differentsize_tables(
+def test_join_different_size_tables(
     join_dataframes, spark_info, join_type, memory_leak_check
 ):
     """tests that join operations still works when the dataframes have different sizes"""
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -323,7 +360,7 @@ def test_nested_join(join_dataframes, spark_info, memory_leak_check):
 def test_nested_or_join(join_dataframes, spark_info, memory_leak_check):
     """tests that nested joins work with implicit joins using 'or'"""
 
-    # for context, the nested outter join should create a number of null values in table4.A and table4.B,
+    # for context, the nested outer join should create a number of null values in table4.A and table4.B,
     # which we then use in the join condition for the top level join
     # assumedly, the null values in table4.A/B shouldn't match to anything, and shouldn't raise an error
     if any(
@@ -429,7 +466,7 @@ def test_multikey_join_types(join_dataframes, spark_info, join_type, memory_leak
 
 
 @pytest.mark.slow
-def test_trimmed_multikey_cond_innerjoin(
+def test_trimmed_multikey_cond_inner_join(
     join_dataframes, spark_info, memory_leak_check
 ):
     """test that with inner join, equality conditions that are used in AND become keys and don't appear in the filter."""

@@ -9,7 +9,7 @@ from bodosql.tests.utils import check_plan_length, check_query
 
 
 @pytest.mark.slow
-def test_trival_project_removed(basic_df, spark_info, memory_leak_check):
+def test_trivial_project_removed(basic_df, spark_info, memory_leak_check):
     """
     Test that verifies that trivial project nodes are removed
     """
@@ -22,7 +22,7 @@ def test_trival_project_removed(basic_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_trival_nested_removed(basic_df, spark_info, memory_leak_check):
+def test_trivial_nested_removed(basic_df, spark_info, memory_leak_check):
     """
     Test that verifies that all trivial project nodes are removed
     """
@@ -107,7 +107,14 @@ def test_as_on_colnames(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -175,7 +182,14 @@ def test_as_on_tablenames(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -243,7 +257,14 @@ def test_cyclic_alias(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -282,7 +303,14 @@ def test_col_aliased_to_tablename(join_dataframes, spark_info, memory_leak_check
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -320,7 +348,14 @@ def test_table_aliased_to_colname(join_dataframes, spark_info, memory_leak_check
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -358,7 +393,14 @@ def test_multitable_renamed_projection(join_dataframes, spark_info, memory_leak_
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -406,13 +448,20 @@ def test_multitable_renamed_projection(join_dataframes, spark_info, memory_leak_
 
 
 @pytest.mark.slow
-def test_implicite_table_alias(join_dataframes, spark_info, memory_leak_check):
+def test_implicit_table_alias(join_dataframes, spark_info, memory_leak_check):
     """
     Test that aliasing tables with the implicit syntax works as intended
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
