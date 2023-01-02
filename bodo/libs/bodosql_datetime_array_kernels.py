@@ -595,7 +595,19 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
 
     def overload_add_datetime_interval_util(amount, start_dt):
         verify_int_arg(amount, "add_interval_" + unit, "amount")
-        verify_datetime_arg_allow_tz(start_dt, "add_interval_" + unit, "start_dt")
+        if unit in (
+            "hours",
+            "minutes",
+            "seconds",
+            "milliseconds",
+            "microseconds",
+            "nanoseconds",
+        ):
+            verify_time_or_datetime_arg_allow_tz(
+                start_dt, "add_interval_" + unit, "start_dt"
+            )
+        else:
+            verify_datetime_arg_allow_tz(start_dt, "add_interval_" + unit, "start_dt")
         time_zone = get_tz_if_exists(start_dt)
 
         arg_names = ["amount", "start_dt"]
@@ -606,8 +618,30 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
         ) or bodo.utils.utils.is_array_typ(start_dt, True)
         extra_globals = None
 
+        # Code path generated for time data
+        if is_valid_time_arg(start_dt):
+            precision = start_dt.precision
+            if unit == "hours":
+                unit_val = 3600000000000
+            elif unit == "minutes":
+                unit_val = 60000000000
+            elif unit == "seconds":
+                unit_val = 1000000000
+            elif unit == "milliseconds":
+                precision = max(precision, 3)
+                unit_val = 1000000
+            elif unit == "microseconds":
+                precision = max(precision, 6)
+                unit_val = 1000
+            elif unit == "nanoseconds":
+                precision = max(precision, 9)
+                unit_val = 1
+            scalar_text = f"amt = bodo.hiframes.time_ext.cast_time_to_int(arg1) + {unit_val} * arg0\n"
+            scalar_text += f"res[i] = bodo.hiframes.time_ext.cast_int_to_time(amt % 86400000000000, precision={precision})"
+            out_dtype = types.Array(bodo.hiframes.time_ext.TimeType(precision), 1, "C")
+
         # Code path generated for timezone-aware data
-        if time_zone is not None:
+        elif time_zone is not None:
 
             # Find the transition times / deltas for the timezone in question.
             # These arrays will be lowered via global variables in the exec env

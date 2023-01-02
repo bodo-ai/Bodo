@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
+from bodo import Time
 from bodo.tests.timezone_common import (  # noqa
     generate_date_trunc_func,
     representative_tz,
@@ -1478,6 +1479,151 @@ def test_snowflake_tz_dateadd(tz_dateadd_data, case):
         expected_output=answer,
         check_names=False,
         check_dtype=False,
+        only_jit_1DVar=True,
+    )
+
+
+@pytest.fixture
+def timeadd_dataframe():
+    time_args_list = [
+        (0, 0, 0, 0),
+        (1, 1, 1, 1),
+        (2, 4, 8, 16),
+        None,
+        (14, 52, 48, 20736),
+        (16, 25, 37, 28561),
+        (18, 1, 44, 38416),
+    ]
+    return {
+        "table1": pd.DataFrame(
+            {
+                "T": [
+                    None
+                    if t is None
+                    else Time(hour=t[0], minute=t[1], second=t[2], nanosecond=t[3])
+                    for t in time_args_list
+                ],
+                "N": [-50, 7, -22, 13, -42, -17, 122],
+            }
+        )
+    }
+
+
+@pytest.fixture(
+    params=[
+        "hour",
+        "minute",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+    ]
+)
+def timeadd_arguments(request, timeadd_dataframe):
+    time_args_lists = {
+        "hour": [
+            (22, 0, 0, 0),
+            (8, 1, 1, 1),
+            (4, 4, 8, 16),
+            None,
+            (20, 52, 48, 20736),
+            (23, 25, 37, 28561),
+            (20, 1, 44, 38416),
+        ],
+        "minute": [
+            (23, 10, 0, 0),
+            (1, 8, 1, 1),
+            (1, 42, 8, 16),
+            None,
+            (14, 10, 48, 20736),
+            (16, 8, 37, 28561),
+            (20, 3, 44, 38416),
+        ],
+        "second": [
+            (23, 59, 10, 0),
+            (1, 1, 8, 1),
+            (2, 3, 46, 16),
+            None,
+            (14, 52, 6, 20736),
+            (16, 25, 20, 28561),
+            (18, 3, 46, 38416),
+        ],
+        "millisecond": [
+            (23, 59, 59, 950000000),
+            (1, 1, 1, 7000001),
+            (2, 4, 7, 978000016),
+            None,
+            (14, 52, 47, 958020736),
+            (16, 25, 36, 983028561),
+            (18, 1, 44, 122038416),
+        ],
+        "microsecond": [
+            (23, 59, 59, 999950000),
+            (1, 1, 1, 7001),
+            (2, 4, 7, 999978016),
+            None,
+            (14, 52, 47, 999978736),
+            (16, 25, 37, 11561),
+            (18, 1, 44, 160416),
+        ],
+        "nanosecond": [
+            (23, 59, 59, 999999950),
+            (1, 1, 1, 8),
+            (2, 4, 7, 999999994),
+            None,
+            (14, 52, 48, 20694),
+            (16, 25, 37, 28544),
+            (18, 1, 44, 38538),
+        ],
+    }
+    answer = pd.DataFrame(
+        {
+            0: timeadd_dataframe["table1"]["T"],
+            1: [
+                None
+                if t is None
+                else Time(hour=t[0], minute=t[1], second=t[2], nanosecond=t[3])
+                for t in time_args_lists[request.param]
+            ],
+        }
+    )
+    return request.param, answer
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(
+            True,
+            id="with_case",
+            marks=pytest.mark.skip(reason="TODO: support time in CASE statements"),
+        ),
+    ],
+)
+def test_timeadd(timeadd_dataframe, timeadd_arguments, use_case, memory_leak_check):
+    unit, answer = timeadd_arguments
+    # Decide which function to use based on the unit
+    func = {
+        "hour": "DATEADD",
+        "minute": "TIMEADD",
+        "second": "DATEADD",
+        "millisecond": "TIMEADD",
+        "microsecond": "DATEADD",
+        "nanosecond": "TIMEADD",
+    }[unit]
+    if use_case:
+        query = f"SELECT T, CASE WHEN N < -100 THEN NULL ELSE {func}('{unit}', N, T) END FROM TABLE1"
+    else:
+        query = f"SELECT T, {func}('{unit}', N, T) FROM TABLE1"
+    check_query(
+        query,
+        timeadd_dataframe,
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=answer,
+        only_jit_1DVar=True,
     )
 
 
@@ -1568,6 +1714,7 @@ def test_mysql_dateadd(
         check_dtype=False,
         equivalent_spark_query=spark_query,
         spark_input_cols_to_cast=cols_to_cast,
+        only_jit_1DVar=True,
     )
 
 
