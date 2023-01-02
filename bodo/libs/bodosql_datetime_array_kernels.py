@@ -190,8 +190,19 @@ def add_interval_nanoseconds(amount, start_dt):  # pragma: no cover
     return
 
 
+@numba.generated_jit(nopython=True)
 def dayname(arr):  # pragma: no cover
-    return
+    """Handles cases where DAYNAME receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.dayname_util", ["arr"], 0
+        )
+
+    def impl(arr):  # pragma: no cover
+        return dayname_util(arr)
+
+    return impl
 
 
 def dayofmonth(arr):  # pragma: no cover
@@ -729,10 +740,6 @@ def _install_add_interval_overload():
 _install_add_interval_overload()
 
 
-def dayname_util(arr):  # pragma: no cover
-    return
-
-
 def dayofmonth_util(arr):  # pragma: no cover
     return
 
@@ -851,29 +858,10 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "get_millisecond": f"{box_str}(arg0).{ms_str}",
             "get_microsecond": f"{box_str}(arg0).microsecond",
             "get_nanosecond": f"{box_str}(arg0).nanosecond",
-            # [BE-4098] TODO: switch this to be dictionary-encoded output
-            "dayname": f"{box_str}(arg0).day_name()",
             "dayofmonth": f"{box_str}(arg0).day",
             "dayofweek": f"({box_str}(arg0).dayofweek + 1) % 7",
             "dayofweekiso": f"{box_str}(arg0).dayofweek + 1",
             "dayofyear": f"{box_str}(arg0).dayofyear",
-        }
-        dtypes = {
-            "get_year": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "get_quarter": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "get_month": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "get_week": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "get_hour": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "get_minute": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "get_second": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "get_millisecond": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "get_microsecond": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "get_nanosecond": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "dayname": bodo.string_array_type,
-            "dayofmonth": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "dayofweek": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "dayofweekiso": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
-            "dayofyear": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
         }
 
         arg_names = ["arr"]
@@ -881,7 +869,7 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
         propagate_null = [True]
         scalar_text = f"res[i] = {format_strings[fn_name]}"
 
-        out_dtype = dtypes[fn_name]
+        out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
 
         return gen_vectorized(
             arg_names, arg_types, propagate_null, scalar_text, out_dtype
@@ -903,7 +891,6 @@ def _install_dt_extract_fn_overload():
         ("get_millisecond", get_millisecond, get_millisecond_util),
         ("get_microsecond", get_microsecond, get_microsecond_util),
         ("get_nanosecond", get_nanosecond, get_nanosecond_util),
-        ("dayname", dayname, dayname_util),
         ("dayofmonth", dayofmonth, dayofmonth_util),
         ("dayofweek", dayofweek, dayofweek_util),
         ("dayofweekiso", dayofweekiso, dayofweekiso_util),
@@ -1268,6 +1255,62 @@ def overload_date_trunc_util(date_or_time_part, ts_arg):
 
 
 @numba.generated_jit(nopython=True)
+def dayname_util(arr):
+    """A dedicated kernel for returning the name of the day of the week of
+       a datetime (or column of datetimes).
+
+
+    Args:
+        arr (datetime array/series/scalar): the datetime(s) whose day name's
+        are being sought.
+
+    Returns:
+        string array/scalar: the name of the day of the week of the datetime(s).
+        Returns a dictionary encoded array if the input is an array.
+    """
+    verify_datetime_arg_allow_tz(arr, "dayname", "arr")
+    tz = get_tz_if_exists(arr)
+    box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    scalar_text = f"res[i] = {box_str}(arg0).day_name()"
+    out_dtype = bodo.string_array_type
+
+    # If the input is an array, make the output dictionary encoded
+    synthesize_dict_if_vector = ["V"]
+    dows = pd.array(
+        [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ],
+    )
+    extra_globals = {"day_of_week_dict_arr": dows}
+
+    synthesize_dict_setup_text = "dict_res = day_of_week_dict_arr"
+    synthesize_dict_scalar_text = f"res[i] = {box_str}(arg0).dayofweek"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        synthesize_dict_if_vector=synthesize_dict_if_vector,
+        synthesize_dict_setup_text=synthesize_dict_setup_text,
+        synthesize_dict_scalar_text=synthesize_dict_scalar_text,
+        extra_globals=extra_globals,
+        synthesize_dict_global=True,
+        synthesize_dict_unique=True,
+    )
+
+
+@numba.generated_jit(nopython=True)
 def int_to_days_util(arr):
     """A dedicated kernel for converting an integer (or integer column) to
     interval days.
@@ -1391,20 +1434,52 @@ def monthname_util(arr):
 
     Returns:
         string series/scalar: the month name from the input timestamp(s)
+        Returns a dictionary encoded array if the input is an array.
     """
-
-    verify_datetime_arg_allow_tz(arr, "MONTHNAME", "arr")
+    verify_datetime_arg_allow_tz(arr, "monthname", "arr")
     tz = get_tz_if_exists(arr)
     box_str = "bodo.utils.conversion.box_if_dt64" if tz is None else ""
-
     arg_names = ["arr"]
     arg_types = [arr]
     propagate_null = [True]
     scalar_text = f"res[i] = {box_str}(arg0).month_name()"
-
     out_dtype = bodo.string_array_type
 
-    return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+    # If the input is an array, make the output dictionary encoded
+    synthesize_dict_if_vector = ["V"]
+    mons = pd.array(
+        [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ],
+    )
+    extra_globals = {"month_names_dict_arr": mons}
+    synthesize_dict_setup_text = "dict_res = month_names_dict_arr"
+    synthesize_dict_scalar_text = f"res[i] = {box_str}(arg0).month - 1"
+
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        synthesize_dict_if_vector=synthesize_dict_if_vector,
+        synthesize_dict_setup_text=synthesize_dict_setup_text,
+        synthesize_dict_scalar_text=synthesize_dict_scalar_text,
+        extra_globals=extra_globals,
+        synthesize_dict_global=True,
+        synthesize_dict_unique=True,
+    )
 
 
 @numba.generated_jit(nopython=True)

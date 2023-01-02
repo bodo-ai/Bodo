@@ -33,6 +33,30 @@ from bodo.utils.typing import (
 )
 
 
+def indent_block(text, indentation):
+    """Adjusts the indentation of a multiline string so that it can be injected
+       another multiline string at a specified indentation level.
+
+    Args:
+        text (string): the (potentially multiline) string that needs to have
+        its indentation adjusted
+        indentation (integer): the amount of spaces that should occur before
+        the smallest level of indentation in the block of code
+
+    Returns:
+        string: the same multiline string with the indendation of all lines adjusted
+        so that the first line has the indentation specified, with a trailing
+        newline character. If the input stringis None, an empty string is returned instead.
+    """
+    if text is None:
+        return ""
+    first_line = text.splitlines()[0]
+    i = len(first_line) - len(first_line.lstrip())
+    return (
+        "\n".join([" " * indentation + line[i:] for line in text.splitlines()]) + "\n"
+    )
+
+
 def gen_vectorized(
     arg_names,
     arg_types,
@@ -49,6 +73,11 @@ def gen_vectorized(
     res_list=False,
     extra_globals=None,
     alloc_array_scalars=True,
+    synthesize_dict_if_vector=None,
+    synthesize_dict_setup_text=None,
+    synthesize_dict_scalar_text=None,
+    synthesize_dict_global=False,
+    synthesize_dict_unique=False,
 ):
     """Creates an impl for a column compute function that has several inputs
        that could all be scalars, nulls, or arrays by broadcasting appropriately.
@@ -92,6 +121,21 @@ def gen_vectorized(
             values with get_str_arr_item_copy). If this is False the scalar text should never reference
             array values using the local variable names and is responsible for directly using the
             optimized implementation.
+        synthesize_dict_if_vector (optional string list): if provided, dictates that dictionary
+            encoded synthesis should be done if the arguments in 'V' locations are vectors,
+            'S' locations are scalars, and '?' locations are either. For example,
+            if ['V', '?', 'S'], dictionary encoding synthesis would be enabled
+            if the first argument was a vector and the third argument was a scalar.
+        synthesize_dict_setup_text (optional string): if provided, specifies the string to
+            embed to initialize the dictionary encoded array's dictionary when performing
+            dictionary synthesis. The dictionary should be named dict_res.
+        synthesize_dict_scalar_text (optional string): if provided, specifies the string to
+            embed to fill in the index array for each row of the inputs when performing
+            dictionary synthesis.
+        synthesize_dict_global (bool): if dictionary synthesis is used, is the dictionary
+            global? Default is False.
+        synthesize_dict_unique (bool): if dictionary synthesis is used, is the dictionary
+            unique? Default is False.
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -155,6 +199,23 @@ def gen_vectorized(
     out_null = any(
         [propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none]
     )
+    # Construct a dictionary encoded output from a non-dictionary encoded input
+    # if the 'V'/'?' arguments in synthesize_dict_if_vector are arrays and the
+    # 'S'/'?' arguments are scalars.
+    use_dict_synthesis = False
+    if synthesize_dict_if_vector is not None:
+        assert (
+            synthesize_dict_setup_text is not None
+        ), "synthesize_dict_setup_text must be provided if synthesize_dict_if_vector is provided"
+        assert (
+            synthesize_dict_scalar_text is not None
+        ), "synthesize_dict_scalar_text must be provided if synthesize_dict_if_vector is provided"
+        use_dict_synthesis = True
+        for i in range(len(arg_types)):
+            if are_arrays[i] and synthesize_dict_if_vector[i] == "S":
+                use_dict_synthesis = False
+            if not are_arrays[i] and synthesize_dict_if_vector[i] == "V":
+                use_dict_synthesis = False
 
     # The output is dictionary-encoded if exactly one of the inputs is
     # dictionary encoded, the rest are all scalars, and the output dtype
@@ -188,20 +249,6 @@ def gen_vectorized(
         )
     )
 
-    # Calculate the indentation of the prefix_code so that it can be removed
-    if prefix_code is not None:
-        prefix_line = prefix_code.splitlines()[0]
-        prefix_indentation = len(prefix_line) - len(prefix_line.lstrip())
-
-    # Calculate the indentation of the scalar_text so that it can be removed
-    first_line = scalar_text.splitlines()[0]
-    base_indentation = len(first_line) - len(first_line.lstrip())
-
-    # Calculate the indentation of the suffix_code so that it can be removed
-    if suffix_code is not None:
-        suffix_line = suffix_code.splitlines()[0]
-        suffix_indentation = len(suffix_line) - len(suffix_line.lstrip())
-
     if arg_string is None:
         arg_string = ", ".join(arg_names)
 
@@ -220,25 +267,21 @@ def gen_vectorized(
         if out_null:
             func_text += "   return None"
         else:
-            if prefix_code is not None:
-                for line in prefix_code.splitlines():
-                    func_text += " " * 3 + line[prefix_indentation:] + "\n"
+            func_text += indent_block(prefix_code, 3)
 
             for i in range(len(arg_names)):
                 func_text += f"   arg{i} = {arg_names[i]}\n"
-            for line in scalar_text.splitlines():
-                func_text += (
-                    " " * 3
-                    + line[base_indentation:]
-                    # res[i] is now stored as answer, since there is no res array
-                    .replace("res[i] =", "answer =")
-                    # Calls to setna mean that the answer is NULL, so they are
-                    # replaced with "return None".
-                    .replace("bodo.libs.array_kernels.setna(res, i)", "return None")
-                    # NOTE: scalar_text should not contain any isna calls in
-                    # the case where all of the inputs are scalar.
-                    + "\n"
-                )
+            scalar_version = (
+                scalar_text
+                # res[i] is now stored as answer, since there is no res array
+                .replace("res[i] =", "answer =")
+                # Calls to setna mean that the answer is NULL, so they are
+                # replaced with "return None".
+                .replace("bodo.libs.array_kernels.setna(res, i)", "return None")
+                # NOTE: scalar_text should not contain any isna calls in
+                # the case where all of the inputs are scalar.
+            )
+            func_text += indent_block(scalar_version, 3)
             func_text += "   return answer"
 
     else:
@@ -299,15 +342,23 @@ def gen_vectorized(
         # If prefix_code was provided, embed it before the loop
         # (unless the output is all-null)
         if prefix_code is not None and not out_null:
-            for line in prefix_code.splitlines():
-                func_text += " " * 3 + line[prefix_indentation:] + "\n"
+            func_text += indent_block(prefix_code, 3)
+
+        # If creating a dictionary encoded output from scratch, embed the text
+        # to create the dictionary itself before the main loop
+        if use_dict_synthesis:
+            func_text += indent_block(synthesize_dict_setup_text, 3)
+            out_dtype = bodo.libs.dict_arr_ext.dict_indices_arr_type
+            func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
+            func_text += "   numba.parfors.parfor.init_prange()\n"
+            func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
 
         # If dictionary encoded outputs are not being used, then the output is
         # still bodo.string_array_type, the number of loop iterations is still the
         # length of the indices, and scalar_text/propagate_null should work the
         # same because isna checks the data & indices, and scalar_text uses the
         # arguments extracted by getitem.
-        if use_dict_encoding:
+        elif use_dict_encoding:
 
             # Add a null value at the end of the dictionary and compute the scalar
             # kernel output for null values if we are not just propagating input nulls
@@ -362,10 +413,16 @@ def gen_vectorized(
                 else:
                     func_text += f"      arg{i} = {arg_names[i]}\n"
 
-            # Add the scalar computation. The text must use the argument variables
-            # in the form arg0, arg1, etc. and store its final answer in res[i].
-            for line in scalar_text.splitlines():
-                func_text += " " * 6 + line[base_indentation:] + "\n"
+            if not use_dict_synthesis:
+
+                # Add the scalar computation. The text must use the argument variables
+                # in the form arg0, arg1, etc. and store its final answer in res[i].
+                func_text += indent_block(scalar_text, 6)
+
+            else:
+                # If using dictionary encoded synthesis, do the same but where res[i]
+                # will store the index in the dictionary calculated earlier
+                func_text += indent_block(synthesize_dict_scalar_text, 6)
 
         # If using dictionary encoding, construct the output from the
         # new dictionary + the indices
@@ -409,11 +466,13 @@ def gen_vectorized(
                 func_text += "   res = res2\n"
 
         # If prefix_text was provided, embed it after the loop
-        if suffix_code is not None:
-            for line in suffix_code.splitlines():
-                func_text += " " * 3 + line[suffix_indentation:] + "\n"
+        func_text += indent_block(suffix_code, 3)
 
-        func_text += "   return res"
+        # If using dictionary encoded synthesis, construct the final dict-encoded array
+        if use_dict_synthesis:
+            func_text += f"   return bodo.libs.dict_arr_ext.init_dict_arr(dict_res, res, {synthesize_dict_global}, {synthesize_dict_unique})\n"
+        else:
+            func_text += "   return res"
     loc_vars = {}
 
     exec_globals = {
