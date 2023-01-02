@@ -80,6 +80,19 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
                   OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER))),
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction TIMEADD =
+      new SqlFunction(
+          "TIMEADD",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.TIME_NULLABLE,
+          null,
+          OperandTypes.sequence(
+              "TIMEADD(UNIT, VALUE, TIME)",
+              OperandTypes.STRING,
+              OperandTypes.INTEGER,
+              OperandTypes.DATETIME),
+          SqlFunctionCategory.TIMEDATE);
+
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction DATE_ADD =
       new SqlFunction(
@@ -610,6 +623,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           TO_TIME,
           TIME_FROM_PARTS,
           TIME,
+          TIMEADD,
           DATE_TRUNC,
           YEAROFWEEK,
           YEAROFWEEKISO,
