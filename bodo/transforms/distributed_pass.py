@@ -1466,30 +1466,6 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if func_mod == "bodo.libs.array_kernels" and func_name in {"cummin", "cummax"}:
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                in_arr_var = rhs.args[0]
-                lhs_var = assign.target
-                # TODO: compute inplace if input array is dead
-                func_text = (
-                    ""
-                    "def impl(A):\n"
-                    "    B = np.empty_like(A)\n"
-                    "    _func(A, B)\n"
-                    "    return B\n"
-                )
-
-                loc_vars = {}
-                exec(func_text, globals(), loc_vars)
-                func = getattr(bodo.libs.distributed_api, "dist_" + func_name)
-                return compile_func_single_block(
-                    loc_vars["impl"],
-                    [in_arr_var],
-                    lhs_var,
-                    self,
-                    extra_globals={"_func": func},
-                )
-
         # numpy direct functions
         if isinstance(func_mod, str) and func_mod == "numpy":
             return self._run_call_np(
@@ -1810,6 +1786,13 @@ class DistributedPass:
         if fdef == ("unique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
+        if fdef == (
+            "accum_func",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             self._set_last_arg_to_true(assign.value)
             return [assign]
 

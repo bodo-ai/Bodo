@@ -223,6 +223,10 @@ def check_func(
     ):
         run_seq = False
 
+    # convert float input to nullable float to test new nullable float functionality
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        args = convert_to_nullable_float(args)
+
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     w = None
 
@@ -302,7 +306,7 @@ def check_func(
         if not dist_test:
             return
 
-        if is_out_distributed is None:
+        if is_out_distributed is None and py_output is not pd.NA:
             # assume all distributable output is distributed if not specified
             py_out_typ = _typeof(py_output)
             is_out_distributed = is_distributable_typ(
@@ -431,6 +435,33 @@ def check_func(
             use_table_format=True if use_table_format is None else use_table_format,
             use_dict_encoded_strings=True,
         )
+
+
+def convert_to_nullable_float(arg):
+    """Convert float array/Series/DataFrame to nullable float"""
+    # tuple
+    if isinstance(arg, tuple):
+        return tuple(convert_to_nullable_float(a) for a in arg)
+
+    # Numpy float array
+    if (
+        isinstance(arg, np.ndarray)
+        and arg.dtype in (np.float32, np.float64)
+        and arg.ndim == 1
+    ):
+        return pd.array(arg)
+
+    # Series with float data
+    if isinstance(arg, pd.Series) and arg.dtype in (np.float32, np.float64):
+        return arg.astype("Float32" if arg.dtype == np.float32 else "Float64")
+
+    # DataFrame float columns
+    if isinstance(arg, pd.DataFrame) and any(
+        a in (np.float32, np.float64) for a in arg.dtypes
+    ):
+        return pd.DataFrame({c: convert_to_nullable_float(arg[c]) for c in arg.columns})
+
+    return arg
 
 
 def _type_has_str_array(t):
@@ -982,6 +1013,10 @@ def _test_equal(
         )
     elif py_out is pd.NaT:
         assert py_out is bodo_out
+    # Bodo returns np.nan instead of pd.NA for nullable float data to avoid typing
+    # issues
+    elif py_out is pd.NA and np.isnan(bodo_out):
+        pass
     else:
         np.testing.assert_equal(bodo_out, py_out)
 

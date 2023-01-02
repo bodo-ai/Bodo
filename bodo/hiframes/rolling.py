@@ -1509,7 +1509,12 @@ def is_supported_shift_array_type(arr_type):
         )
         or isinstance(
             arr_type,
-            (bodo.IntegerArrayType, bodo.DecimalArrayType, bodo.DatetimeArrayType),
+            (
+                bodo.IntegerArrayType,
+                bodo.FloatingArrayType,
+                bodo.DecimalArrayType,
+                bodo.DatetimeArrayType,
+            ),
         )
         or arr_type
         in (
@@ -2102,11 +2107,11 @@ def alloc_pct_change(n, A):  # pragma: no cover
 def alloc_pct_change_overload(n, A):
     """allocate output array for pct_change(). The output is float for int input."""
 
-    # output of int is float
+    # output of Numpy int is float to set NAs
     if isinstance(A.dtype, types.Integer):
         return lambda n, A: np.empty(n, np.float64)  # pragma: no cover
 
-    return lambda n, A: np.empty(n, A.dtype)  # pragma: no cover
+    return lambda n, A: bodo.utils.utils.alloc_type(n, A, (-1,))  # pragma: no cover
 
 
 def prep_values(A):  # pragma: no cover
