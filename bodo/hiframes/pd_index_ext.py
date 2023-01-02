@@ -38,6 +38,7 @@ from bodo.hiframes.pd_series_ext import SeriesType
 from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.pd_datetime_arr_ext import DatetimeArrayType
 from bodo.libs.str_arr_ext import string_array_type
@@ -131,6 +132,26 @@ def typeof_pd_index(val, c):
             dtype,
             get_val_type_maybe_str_literal(val.name),
             IntegerArrayType(dtype),
+        )
+    # handle nullable float Index
+    if (
+        val.inferred_type == "floating"
+        or pd._libs.lib.infer_dtype(val, True) == "floating"
+    ):
+        # At least some index values contain the actual dtype in
+        # Pandas 1.4.
+        if isinstance(val.dtype, (pd.Float32Dtype, pd.Float64Dtype)):
+            # Get the numpy dtype
+            numpy_dtype = val.dtype.numpy_dtype
+            # Convert the numpy dtype to the Numba type
+            dtype = numba.np.numpy_support.from_dtype(numpy_dtype)
+        else:
+            # we don't have the dtype default to float64
+            dtype = types.float64
+        return NumericIndexType(
+            dtype,
+            get_val_type_maybe_str_literal(val.name),
+            FloatingArrayType(dtype),
         )
     if (
         val.inferred_type == "boolean"
@@ -3135,7 +3156,8 @@ def array_type_to_index(arr_typ, name_typ=None):
         return BinaryIndexType(name_typ)
 
     assert isinstance(
-        arr_typ, (types.Array, IntegerArrayType, bodo.CategoricalArrayType)
+        arr_typ,
+        (types.Array, IntegerArrayType, FloatingArrayType, bodo.CategoricalArrayType),
     ) or arr_typ in (
         bodo.datetime_date_array_type,
         bodo.boolean_array,

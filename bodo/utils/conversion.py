@@ -71,17 +71,17 @@ def overload_coerce_to_ndarray(
 
     # TODO: handle NAs?
     # nullable int array
-    if isinstance(
-        data, bodo.libs.int_arr_ext.IntegerArrayType
-    ) and not is_overload_none(use_nullable_array):
+    if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType) and is_overload_none(
+        use_nullable_array
+    ):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.int_arr_ext.get_int_arr_data(
             data
         )  # pragma: no cover
 
     # nullable float array
-    if isinstance(
-        data, bodo.libs.float_arr_ext.FloatingArrayType
-    ) and not is_overload_none(use_nullable_array):
+    if isinstance(data, bodo.libs.float_arr_ext.FloatingArrayType) and is_overload_none(
+        use_nullable_array
+    ):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.float_arr_ext.get_float_arr_data(
             data
         )  # pragma: no cover
@@ -445,6 +445,30 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type):
             return bodo.utils.conversion.coerce_to_array(scalar, True, None, length)
 
     return impl
+
+
+def ndarray_if_nullable_arr(data):
+    pass
+
+
+@overload(ndarray_if_nullable_arr)
+def overload_ndarray_if_nullable_arr(data):
+    """convert input to Numpy array if it is a nullable array but return any other input as-is."""
+    if (
+        isinstance(
+            data,
+            (
+                bodo.libs.int_arr_ext.IntegerArrayType,
+                bodo.libs.float_arr_ext.FloatingArrayType,
+            ),
+        )
+        or data == bodo.libs.bool_arr_ext.boolean_array
+    ):
+        return lambda data: bodo.utils.conversion.coerce_to_ndarray(
+            data
+        )  # pragma: no cover
+
+    return lambda data: data  # pragma: no cover
 
 
 # TODO: use generated_jit with IR inlining

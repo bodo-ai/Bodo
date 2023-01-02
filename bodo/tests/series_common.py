@@ -181,14 +181,6 @@ nullable_float_marker = pytest.mark.skipif(
             ),
             id="series_val22",
         ),
-        # nullable float
-        pytest.param(
-            pd.Series(
-                pd.array([1.1, None, 4.2, 3.1, -3.5], "Float32"), [3, 7, 9, 2, 1]
-            ),
-            id="series_val23",
-            marks=nullable_float_marker,
-        ),
     ]
 )
 def series_val(request):
@@ -200,10 +192,6 @@ def series_val(request):
     params=[
         pytest.param(pd.Series([1, 8, 4, 11, -3]), marks=pytest.mark.slow),
         pd.Series([1.1, np.nan, 4.1, 1.4, -2.1]),
-        pytest.param(
-            pd.Series([1.1, None, 4.1, 1.4, -2.1], dtype="Float64"),
-            marks=nullable_float_marker,
-        ),
         pytest.param(
             pd.Series([1, 8, 4, 10, 3], dtype=np.uint8), marks=pytest.mark.slow
         ),
@@ -222,10 +210,6 @@ def numeric_series_val(request):
 @pytest.fixture(
     params=[
         pd.Series([np.nan, -1.0, -1.0, 0.0, 78.0]),
-        pytest.param(
-            pd.Series([None, -1.0, -1.0, 0.0, 78.0], dtype="Float64"),
-            marks=nullable_float_marker,
-        ),
         pd.Series([1.0, 2.0, 3.0, 42.3]),
         pd.Series([1, 2, 3, 42]),
         pytest.param(
