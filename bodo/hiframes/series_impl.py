@@ -944,7 +944,9 @@ def overload_series_cumsum(S, axis=None, skipna=True):
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(A.cumsum(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(
+            bodo.libs.array_kernels.accum_func(A, "cumsum"), index, name
+        )
 
     return impl
 
@@ -973,7 +975,9 @@ def overload_series_cumprod(S, axis=None, skipna=True):
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(A.cumprod(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(
+            bodo.libs.array_kernels.accum_func(A, "cumprod"), index, name
+        )
 
     return impl
 
@@ -997,19 +1001,12 @@ def overload_series_cummin(S, axis=None, skipna=True):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.cummin()")
 
     # TODO: support skipna
-    #
-    # The big difference between cumsum/cumprod and cummin/cummax
-    # is that cumsum/cumprod are part of numpy and implemented in NUMBA,
-    # but cummin/cummax are not implemented in numpy and therefore not in numba.
-    # Thus for cummin/cummax we need to roll out our own implementation.
-    # We cannot use parfor as it is not easily parallelizable and thus requires a
-    # hand crafted parallelization (see dist_cummin/dist_cummax)
     def impl(S, axis=None, skipna=True):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.array_kernels.cummin(arr), index, name
+            bodo.libs.array_kernels.accum_func(arr, "cummin"), index, name
         )
 
     return impl
@@ -1041,7 +1038,7 @@ def overload_series_cummax(S, axis=None, skipna=True):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.array_kernels.cummax(arr), index, name
+            bodo.libs.array_kernels.accum_func(arr, "cummax"), index, name
         )
 
     return impl
@@ -1120,13 +1117,22 @@ def overload_series_abs(S):
 
     # TODO [BE-2453]: Better errorchecking in general?
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.abs()")
+    out_arr_type = S.data
 
     # TODO: timedelta
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(np.abs(A), index, name)
+        numba.parfors.parfor.init_prange()
+        n = len(A)
+        out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            out_arr[i] = np.abs(A[i])
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -3866,10 +3872,26 @@ def overload_series_np_dot(a, b, out=None):
         raise BodoError("np.dot(): 'out' parameter not supported yet")
 
     # just call np.dot on underlying arrays
+    if isinstance(a, SeriesType) and isinstance(b, SeriesType):
+
+        def impl(a, b, out=None):  # pragma: no cover
+            arr = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(a)
+            )
+            arr2 = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(b)
+            )
+            return np.dot(arr, arr2)
+
+        return impl
+
     if isinstance(a, SeriesType):
 
         def impl(a, b, out=None):  # pragma: no cover
-            arr = bodo.hiframes.pd_series_ext.get_series_data(a)
+            arr = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(a)
+            )
+            b = bodo.utils.conversion.ndarray_if_nullable_arr(b)
             return np.dot(arr, b)
 
         return impl
@@ -3877,7 +3899,10 @@ def overload_series_np_dot(a, b, out=None):
     if isinstance(b, SeriesType):
 
         def impl(a, b, out=None):  # pragma: no cover
-            arr = bodo.hiframes.pd_series_ext.get_series_data(b)
+            a = bodo.utils.conversion.ndarray_if_nullable_arr(a)
+            arr = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(b)
+            )
             return np.dot(a, arr)
 
         return impl
@@ -5459,8 +5484,11 @@ def overload_series_between(S, left, right, inclusive="both"):
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        out_arr = np.empty(n, np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
             val = bodo.utils.conversion.box_if_dt64(arr[i])
             if inclusive == "both":
                 out_arr[i] = val <= right and val >= left

@@ -970,6 +970,10 @@ def parse_dtype(dtype, func_name=None):
             return bodo.libs.int_arr_ext.typeof_pd_int_dtype(
                 pd.api.types.pandas_dtype(d_str), None
             )
+        if d_str.startswith("Float"):
+            return bodo.libs.float_arr_ext.typeof_pd_float_dtype(
+                pd.api.types.pandas_dtype(d_str), None
+            )
         if d_str == "boolean":
             return bodo.libs.bool_arr_ext.boolean_dtype
         if d_str == "str":
@@ -2464,7 +2468,7 @@ def get_castable_arr_dtype(arr_type: types.Type):
     Returns:
         Any: The value used to generate the cast value.
     """
-    if isinstance(arr_type, bodo.IntegerArrayType):
+    if isinstance(arr_type, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
         cast_typ = arr_type.get_pandas_scalar_type_instance.name
     elif arr_type in (bodo.boolean_array, bodo.dict_str_arr_type) or isinstance(
         arr_type, bodo.DatetimeArrayType

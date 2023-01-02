@@ -1008,6 +1008,8 @@ def select_k_nonan_overload(A, index_arr, m, k):
 def nlargest(A, index_arr, k, is_largest, cmp_f):  # pragma: no cover
     # algorithm: keep a min heap of k largest values, if a value is greater
     # than the minimum (root) in heap, replace the minimum and rebuild the heap
+    # avoid nullable arrays (TODO: support directly)
+    A = bodo.utils.conversion.coerce_to_ndarray(A)
     m = len(A)
 
     # return empty arrays for k=0 corner case (min_heap_vals[0] below would be invalid)
@@ -1061,6 +1063,8 @@ def nlargest_parallel(A, I, k, is_largest, cmp_f):  # pragma: no cover
     # of A, gather the result and return the largest k
     # TODO: support cases where k is not too small
     my_rank = bodo.libs.distributed_api.get_rank()
+    # avoid nullable arrays (TODO: support directly)
+    A = bodo.utils.conversion.coerce_to_ndarray(A)
     local_res, local_res_ind = nlargest(A, I, k, is_largest, cmp_f)
     all_largest = bodo.libs.distributed_api.gatherv(local_res)
     all_largest_ind = bodo.libs.distributed_api.gatherv(local_res_ind)
@@ -2104,50 +2108,73 @@ def unique(A, dropna=False, parallel=False):  # pragma: no cover
     pass
 
 
-def cummin(A):  # pragma: no cover
+def accum_func(A, func_name, parallel=False):  # pragma: no cover
     pass
 
 
-@overload(cummin, no_unliteral=True)
-def cummin_overload(A):
-    if isinstance(A.dtype, types.Float):
-        neutral_val = np.finfo(A.dtype(1).dtype).max
-    else:  # TODO: Add support for dates
-        neutral_val = np.iinfo(A.dtype(1).dtype).max
-    # No parallel code here. This cannot be done via parfor usual stuff but instead
-    # by the more complicated mpi_exscan
+@overload(accum_func, no_unliteral=True)
+def accum_func_overload(A, func_name, parallel=False):
+    """General kernel for cumulative functions: cumsum/cumprod/cummin/cummax
 
-    def impl(A):
+    Args:
+        A (array): input data array
+        func_name (string literal): cumulative function name
+        parallel (bool, optional): flag for running in parallel. Defaults to False.
+
+    Returns:
+        array: output array of cumulative operation
+    """
+
+    assert is_overload_constant_str(func_name), "accum_func: func_name should be const"
+    fname = get_overload_const_str(func_name)
+    assert fname in (
+        "cumsum",
+        "cumprod",
+        "cummin",
+        "cummax",
+    ), "accum_func: invalid func_name"
+
+    if fname == "cumsum":
+        neutral_val = A.dtype(0)
+        op = np.int32(Reduce_Type.Sum.value)
+        func = np.add
+    if fname == "cumprod":
+        neutral_val = A.dtype(1)
+        op = np.int32(Reduce_Type.Prod.value)
+        func = np.multiply
+    if fname == "cummin":
+        if isinstance(A.dtype, types.Float):
+            neutral_val = np.finfo(A.dtype(1).dtype).max
+        else:  # TODO: Add support for dates
+            neutral_val = np.iinfo(A.dtype(1).dtype).max
+        op = np.int32(Reduce_Type.Min.value)
+        func = min
+    if fname == "cummax":
+        if isinstance(A.dtype, types.Float):
+            neutral_val = np.finfo(A.dtype(1).dtype).min
+        else:
+            neutral_val = np.iinfo(A.dtype(1).dtype).min
+        op = np.int32(Reduce_Type.Max.value)
+        func = max
+
+    out_arr_type = A
+
+    def impl(A, func_name, parallel=False):
         n = len(A)
-        out_arr = np.empty(n, A.dtype)
         curr_cumulative = neutral_val
+        if parallel:
+            for i in range(n):
+                if not bodo.libs.array_kernels.isna(A, i):
+                    curr_cumulative = func(curr_cumulative, A[i])
+            curr_cumulative = bodo.libs.distributed_api.dist_exscan(curr_cumulative, op)
+            if bodo.get_rank() == 0:
+                curr_cumulative = neutral_val
+        out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))
         for i in range(n):
-            curr_cumulative = min(curr_cumulative, A[i])
-            out_arr[i] = curr_cumulative
-        return out_arr
-
-    return impl
-
-
-def cummax(A):  # pragma: no cover
-    pass
-
-
-@overload(cummax, no_unliteral=True)
-def cummax_overload(A):
-    if isinstance(A.dtype, types.Float):
-        neutral_val = np.finfo(A.dtype(1).dtype).min
-    else:  # TODO: Add support for dates
-        neutral_val = np.iinfo(A.dtype(1).dtype).min
-    # No parallel code here. This cannot be done via parfor usual stuff but instead
-    # by the more complicated mpi_exscan
-
-    def impl(A):
-        n = len(A)
-        out_arr = np.empty(n, A.dtype)
-        curr_cumulative = neutral_val
-        for i in range(n):
-            curr_cumulative = max(curr_cumulative, A[i])
+            if bodo.libs.array_kernels.isna(A, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            curr_cumulative = func(curr_cumulative, A[i])
             out_arr[i] = curr_cumulative
         return out_arr
 
@@ -2632,7 +2659,7 @@ def overload_sort(arr, ascending, inplace):
 
 
 def overload_array_max(A):
-    if isinstance(A, IntegerArrayType) or A == boolean_array:
+    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array:
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).max()
@@ -2646,7 +2673,7 @@ overload(max, inline="always", no_unliteral=True)(overload_array_max)
 
 
 def overload_array_min(A):
-    if isinstance(A, IntegerArrayType) or A == boolean_array:
+    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array:
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).min()
@@ -2660,7 +2687,7 @@ overload(min, inline="always", no_unliteral=True)(overload_array_min)
 
 
 def overload_array_sum(A):
-    if isinstance(A, IntegerArrayType) or A == boolean_array:
+    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array:
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).sum()
@@ -2675,7 +2702,7 @@ overload(sum, inline="always", no_unliteral=True)(overload_array_sum)
 
 @overload(np.prod, inline="always", no_unliteral=True)
 def overload_array_prod(A):
-    if isinstance(A, IntegerArrayType) or A == boolean_array:
+    if isinstance(A, (IntegerArrayType, FloatingArrayType)) or A == boolean_array:
 
         def impl(A):  # pragma: no cover
             return pd.Series(A).prod()
@@ -3611,7 +3638,7 @@ def _overload_nan_argmin(arr):
     # we are operating on 1D arrays
 
     if (
-        isinstance(arr, IntegerArrayType)
+        isinstance(arr, (IntegerArrayType, FloatingArrayType))
         or arr in [boolean_array, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
     ):
@@ -3669,7 +3696,7 @@ def _overload_nan_argmax(arr):
     # we are operating on 1D arrays
 
     if (
-        isinstance(arr, IntegerArrayType)
+        isinstance(arr, (IntegerArrayType, FloatingArrayType))
         or arr in [boolean_array, datetime_date_array_type]
         or arr.dtype == bodo.timedelta64ns
     ):

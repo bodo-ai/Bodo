@@ -581,6 +581,11 @@ def overload_float_arr_ndim(A):  # pragma: no cover
     return lambda A: 1
 
 
+@overload_attribute(FloatingArrayType, "size")
+def overload_float_size(A):
+    return lambda A: len(A._data)  # pragma: no cover
+
+
 @overload_attribute(FloatingArrayType, "nbytes")
 def float_arr_nbytes_overload(A):  # pragma: no cover
     return lambda A: A._data.nbytes + A._null_bitmap.nbytes  # pragma: no cover

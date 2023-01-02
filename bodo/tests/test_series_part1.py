@@ -159,11 +159,13 @@ def test_series_cov_ddof(memory_leak_check):
 
     s1 = pd.Series([0.90010907, 0.13484424, 0.62036035])
     s2 = pd.Series([0.12528585, 0.26962463, 0.51111198])
-    check_func(test_impl, (s1, s2, 0))
-    check_func(test_impl, (s1, s2, 1))
-    check_func(test_impl, (s1, s2, 2))
-    check_func(test_impl, (s1, s2, 3))
-    check_func(test_impl, (s1, s2, 4))
+    # passing py_output here since check_func may convert input to nullable
+    # float, which Pandas doesn't handle in cov()
+    check_func(test_impl, (s1, s2, 0), py_output=test_impl(s1, s2, 0))
+    check_func(test_impl, (s1, s2, 1), py_output=test_impl(s1, s2, 1))
+    check_func(test_impl, (s1, s2, 2), py_output=test_impl(s1, s2, 2))
+    check_func(test_impl, (s1, s2, 3), py_output=test_impl(s1, s2, 3))
+    check_func(test_impl, (s1, s2, 4), py_output=test_impl(s1, s2, 4))
     check_func(test_impl, (pd.Series([], dtype=float), pd.Series([], dtype=float)))
 
 
@@ -539,7 +541,7 @@ def test_series_between(memory_leak_check):
         return S.between(1, 4, inclusive="neither")
 
     S = pd.Series([2, 0, 4, 8, np.nan])
-    check_func(impl, (S,))
+    check_func(impl, (S,), check_dtype=False)
     check_func(impl_inclusive, (S,))
 
 
@@ -832,7 +834,12 @@ def test_series_astype_str(series_val):
         return
 
     # XXX str(float) not consistent with Python yet
-    if series_val.dtype == np.float64:
+    if series_val.dtype in (
+        np.float32,
+        np.float64,
+        pd.Float32Dtype(),
+        pd.Float64Dtype(),
+    ):
         return
 
     if series_val.dtype == np.dtype("datetime64[ns]"):
@@ -1047,7 +1054,12 @@ def test_series_to_list(series_val, memory_leak_check):
         with pytest.raises(ValueError, match=message):
             bodo.jit(impl)(series_val)
     # Bodo uses nan for nullable float arrays due to type stability
-    elif isinstance(series_val.dtype, (pd.Float32Dtype, pd.Float64Dtype)):
+    elif series_val.dtype in (
+        pd.Float32Dtype(),
+        pd.Float64Dtype(),
+        np.float32,
+        np.float64,
+    ):
         check_func(
             impl,
             (series_val,),
@@ -1292,7 +1304,15 @@ def test_series_loc_setitem_array_bool(series_val, memory_leak_check):
         )
     # Test with a list
     val = list(val)
-    if isinstance(series_val.iat[0], list):
+    # avoid pd.NA typing issues for nullable float arrays
+    if series_val.dtype in (
+        pd.Float32Dtype(),
+        pd.Float64Dtype(),
+        np.float32,
+        np.float64,
+    ):
+        pass
+    elif isinstance(series_val.iat[0], list):
         with pytest.raises(BodoError, match=err_msg):
             bodo.jit(test_impl)(series_val.copy(deep=True), val)
     elif isinstance(series_val.iat[0], bytes):
@@ -1340,7 +1360,10 @@ def test_series_diff(numeric_series_val, memory_leak_check):
         return S.diff()
 
     # TODO: Support nullable arrays
-    if isinstance(numeric_series_val.dtype, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(
+        numeric_series_val.dtype,
+        (pd.core.arrays.integer._IntegerDtype, pd.Float32Dtype, pd.Float64Dtype),
+    ):
         with pytest.raises(
             BodoError, match="Series.diff.* column input type .* not supported"
         ):
@@ -2490,7 +2513,7 @@ def test_series_combine_kws(memory_leak_check):
     S1 = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     S2 = pd.Series([6.0, 21.0, 3.6, 5.0, 0.0])
     fill = 1237.56
-    check_func(test_impl, (S1, S2, fill))
+    check_func(test_impl, (S1, S2, fill), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2501,7 +2524,7 @@ def test_series_combine_kws_int(memory_leak_check):
     S1 = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     S2 = pd.Series([6.0, 21.0, 3.6, 5.0, 0.0])
     fill = 2
-    check_func(test_impl, (S1, S2, fill))
+    check_func(test_impl, (S1, S2, fill), check_dtype=False)
 
 
 def test_series_combine_no_fill(memory_leak_check):
@@ -2602,7 +2625,7 @@ def test_series_apply_df_output(memory_leak_check):
 
     S = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0])
     check_func(impl1, (S,))
-    check_func(impl2, (S,))
+    check_func(impl2, (S,), check_dtype=False)
     _check_IR_no_const_arr(impl3, (S,))
     _check_IR_no_const_arr(impl4, (S,))
 
@@ -2814,6 +2837,7 @@ def test_series_groupby_by_arg_supported_types(series_val, memory_leak_check):
         test_impl_by,
         (S, series_val.values),
         check_names=False,
+        check_dtype=False,
         sort_output=True,
         reset_index=True,
     )
