@@ -1526,3 +1526,116 @@ def test_dict_insert(args):
     )
 
     verify_dictionary_optimization(impl, args, "str_capitalize", output_encoded)
+
+
+def test_dict_dayname():
+    def impl(
+        arr,
+    ):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayname(arr)).str.upper()
+
+    arr = pd.Series(
+        [
+            None if ts.month_name()[0] == "J" else ts
+            for ts in pd.date_range("2020", "2021", freq="22D")
+        ]
+    )
+    answer = pd.Series(
+        [
+            None,
+            None,
+            "FRIDAY",
+            "SATURDAY",
+            "SUNDAY",
+            "MONDAY",
+            "TUESDAY",
+            None,
+            None,
+            None,
+            "SATURDAY",
+            "SUNDAY",
+            "MONDAY",
+            "TUESDAY",
+            "WEDNESDAY",
+            "THURSDAY",
+            "FRIDAY",
+        ]
+    )
+
+    check_func(
+        impl,
+        (arr,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
+    verify_dictionary_optimization(impl, (arr,), "str_upper", True)
+
+
+def test_dict_monthname():
+    def impl(
+        arr,
+    ):
+        return pd.Series(bodo.libs.bodosql_array_kernels.monthname(arr)).str.upper()
+
+    arr = pd.Series(
+        [
+            None if ts.day_name()[0] == "F" else ts
+            for ts in pd.date_range("2020", "2024", freq="37D")
+        ]
+    )
+    answer = pd.Series(
+        [
+            "JANUARY",
+            None,
+            "MARCH",
+            "APRIL",
+            "MAY",
+            "JULY",
+            "AUGUST",
+            "SEPTEMBER",
+            None,
+            "NOVEMBER",
+            "JANUARY",
+            "FEBRUARY",
+            "MARCH",
+            "APRIL",
+            "JUNE",
+            None,
+            "AUGUST",
+            "SEPTEMBER",
+            "OCTOBER",
+            "DECEMBER",
+            "JANUARY",
+            "FEBRUARY",
+            None,
+            "MAY",
+            "JUNE",
+            "JULY",
+            "AUGUST",
+            "SEPTEMBER",
+            "NOVEMBER",
+            None,
+            "JANUARY",
+            "FEBRUARY",
+            "MARCH",
+            "MAY",
+            "JUNE",
+            "JULY",
+            None,
+            "OCTOBER",
+            "NOVEMBER",
+            "DECEMBER",
+        ]
+    )
+
+    check_func(
+        impl,
+        (arr,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
+    verify_dictionary_optimization(impl, (arr,), "str_upper", True)
