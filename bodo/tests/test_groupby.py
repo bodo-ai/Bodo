@@ -49,6 +49,20 @@ from bodo.utils.typing import BodoError
         pytest.param(
             pd.DataFrame(
                 {
+                    "A": [2, 1, 1, 1, 2, 2, 1],
+                    "B": pd.Series(
+                        [float(i) if i % 2 == 0 else None for i in range(7)],
+                        dtype="Float64",
+                    ),
+                    "C": [3, 5, 6, 5, 4, 4, 3],
+                }
+            ),
+            marks=pytest.mark.slow,
+            id="nullable_float",
+        ),
+        pytest.param(
+            pd.DataFrame(
+                {
                     "A": [2.1, -1.5, 0.0, -1.5, 2.1, 2.1, 1.5],
                     "B": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan, -7.0],
                     "C": [3.4, 2.5, 9.6, 1.5, -4.3, 4.3, -3.7],
@@ -234,6 +248,39 @@ def test_nullable_int(memory_leak_check):
     check_func(impl_select_colE, (df,), sort_output=True)
     # pandas 1.0 has a regression here: output is int64 instead of UInt32
     check_func(impl_select_colH, (df,), sort_output=True, check_dtype=False)
+
+
+@pytest.mark.slow
+def test_groupby_nullable_float(memory_leak_check):
+    def impl(df):
+        A = df.groupby("A").sum()
+        return A
+
+    def impl_select_colB(df):
+        A = df.groupby("A")["B"].sum()
+        return A
+
+    def impl_select_colC(df):
+        A = df.groupby("A")["C"].sum()
+        return A
+
+    df = pd.DataFrame(
+        {
+            "A": pd.array([2, 1, 1, 1, 21, 2, 11], "Int64"),
+            "B": pd.Series(
+                np.array([np.nan, 3.14, 2.0, np.nan, np.nan, np.nan, 20]),
+                dtype="Float32",
+            ),
+            "C": pd.Series(
+                np.array([np.nan, 3.14, 2.0, np.nan, np.nan, np.nan, 20]),
+                dtype="Float64",
+            ),
+        }
+    )
+
+    check_func(impl, (df,), sort_output=True)
+    check_func(impl_select_colB, (df,), sort_output=True)
+    check_func(impl_select_colC, (df,), sort_output=True)
 
 
 @pytest.mark.parametrize(
@@ -4573,6 +4620,16 @@ def test_idxmin_idxmax(memory_leak_check):
             ),
             marks=pytest.mark.slow,
         ),
+        # nullable float
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 3],
+                    "B": pd.Series([1.1, 2.2, 3.3, None, 5.5], dtype="Float64"),
+                }
+            ),
+            marks=pytest.mark.slow,
+        ),
         # boolean
         pytest.param(
             pd.DataFrame(
@@ -5387,6 +5444,15 @@ def test_cumulatives_supported_cases(memory_leak_check):
                 {"A": [2, 1, 1, 2, 3], "B": pd.array([True, False, None, True, True])}
             )
         ),
+        # nullable float
+        pytest.param(
+            pd.DataFrame(
+                {
+                    "A": [2, 1, 1, 2, 3],
+                    "B": pd.array([1.1, 2.2, None, 4.4, 1.1], dtype="Float64"),
+                }
+            )
+        ),
         # binary
         pytest.param(
             pd.DataFrame(
@@ -5617,6 +5683,13 @@ def test_shift_supported_types(test_size_df, memory_leak_check):
                 "B": pd.Series([1, 2, 3, 4, 5], dtype="Int64"),
             }
         ),
+        # nullable float
+        pd.DataFrame(
+            {
+                "A": [2, 1, 1, 2, 3],
+                "B": pd.Series([1.1, 2.2, 3.3, 4.4, 5.5], dtype="float64"),
+            }
+        ),
         # boolean
         pd.DataFrame(
             {
@@ -5705,6 +5778,7 @@ def test_groupby_transform_count(memory_leak_check):
             "H": [b"foo", b"foo", b"foo", b"bar", b"foo", b"bar"],
             "E": [-8.3, np.nan, 3.8, 1.3, 5.4, np.nan],
             "G": pd.Series(np.array([np.nan, 8, 2, np.nan, np.nan, 20]), dtype="Int8"),
+            "F": pd.Series(pd.array([1.1, 2.2, 3.3, None, 5.5, 6.6], dtype="Float64")),
         }
     )
     check_func(impl_count, (df,))
@@ -5799,6 +5873,16 @@ def test_groupby_apply_na_key(dropna, memory_leak_check):
             {
                 "A": pd.Series(
                     [np.nan, 1, 11, 1, 11, np.nan, np.nan, 3, 3], dtype="Int64"
+                ),
+                "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
+            }
+        ),
+        # nullable float
+        pd.DataFrame(
+            {
+                "A": pd.Series(
+                    [np.nan, 1.1, 2.2, 1.1, 2.2, np.nan, np.nan, 3.3, 3.3],
+                    dtype="Float64",
                 ),
                 "B": [2.2, 3.3, 4.4, 3.3, 3.3, 4.4, 5.5, 6.6, 6.6],
             }
@@ -6011,6 +6095,9 @@ def test_head(memory_leak_check):
             "I": [True, True, False, True, True, False, False],
             "J": pd.array([True, False, None, True, True, False, True]),
             "K": [b"ab", b"cd", np.nan, b"ef", b"mm", b"", b"xxx"],
+            "L": pd.array(
+                [float(i) if i % 2 else None for i in range(7)], dtype="float64"
+            ),
         }
     )
     check_func(impl1, (df,))
@@ -6353,6 +6440,8 @@ def test_groupby_num_shuffle_keys(memory_leak_check):
         # Test on float types
         (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="float32"), True),
         (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="float64"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Float32"), True),
+        (pd.Series(([0, 1, 2, None, 4, 5] + [0, None] * 3), dtype="Float64"), True),
         (
             pd.Series(
                 (
@@ -6454,6 +6543,7 @@ def test_boolagg_or_invalid(data_col, memory_leak_check):
         match="boolor_agg, only columns of type integer, float, Decimal, or boolean type are allowed",
     ):
         impl(df)
+
 
 @pytest.mark.tz_awware
 def test_tz_aware_gb_apply(memory_leak_check):
