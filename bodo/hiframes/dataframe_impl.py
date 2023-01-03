@@ -1604,7 +1604,14 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
-            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
+            or isinstance(
+                coltype,
+                (
+                    bodo.IntegerArrayType,
+                    bodo.FloatingArrayType,
+                    bodo.CategoricalArrayType,
+                ),
+            )
             or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
@@ -1642,7 +1649,14 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
-            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
+            or isinstance(
+                coltype,
+                (
+                    bodo.IntegerArrayType,
+                    bodo.FloatingArrayType,
+                    bodo.CategoricalArrayType,
+                ),
+            )
             or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
@@ -1935,7 +1949,7 @@ def overload_dataframe_cumsum(df, axis=None, skipna=True):
 def _is_describe_type(data):
     """Check if df.data has supported datatype for describe"""
     return (
-        isinstance(data, IntegerArrayType)
+        isinstance(data, (IntegerArrayType, FloatingArrayType))
         or (isinstance(data, types.Array) and isinstance(data.dtype, (types.Number)))
         or data.dtype == bodo.datetime64ns
     )
@@ -5900,7 +5914,7 @@ def is_df_values_numpy_supported_dftyp(df_typ):
     """helper function that checks if the dataframe type contains only numeric/boolean/dt64/td64 values"""
     for col_typ in df_typ.data:
         if not (
-            isinstance(col_typ, IntegerArrayType)
+            isinstance(col_typ, (IntegerArrayType, FloatingArrayType))
             or isinstance(col_typ.dtype, types.Number)
             or col_typ.dtype in (bodo.datetime64ns, bodo.timedelta64ns)
         ):
