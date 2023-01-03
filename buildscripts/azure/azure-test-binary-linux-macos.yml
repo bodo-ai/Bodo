@@ -245,7 +245,7 @@ jobs:
       sudo cp $(testLicense.secureFilePath) $HOME/bodo-inc
       export PATH=$HOME/mambaforge/bin:${PATH}
       source activate $CONDA_ENV
-      pip install pytest pytest-azurepipelines
+      pip install pytest pytest-azurepipelines pytest-mock
       unamestr=`uname`
       if [[ "$unamestr" == 'Linux' ]]; then
         export LD_LIBRARY_PATH=/usr/local/lib/instantclient_21_5:$LD_LIBRARY_PATH

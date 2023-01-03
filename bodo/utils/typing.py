@@ -14,6 +14,7 @@ import numba
 import numba.cpython.unicode
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from numba.core import cgutils, ir, ir_utils, types
 from numba.core.errors import NumbaError
 from numba.core.imputils import RefType, iternext_impl
@@ -51,7 +52,7 @@ INDEX_SENTINEL = "$_bodo_index_"
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
 Index = Union[str, Dict, None]
-FileSchema = Tuple[List[str], List, Index, List[int], List, List, List]
+FileSchema = Tuple[List[str], List, Index, List[int], List, List, List, pa.Schema]
 
 
 def is_timedelta_type(in_type):

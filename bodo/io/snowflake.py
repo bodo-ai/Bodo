@@ -141,6 +141,8 @@ def gen_snowflake_schema(column_names, column_datatypes):
                         )
                     )
                 precision = 6
+            else:
+                raise ValueError("Unsupported Precision Found in Bodo Time Array")
             sf_schema[col_name] = f"TIME({precision})"
         elif isinstance(col_type, types.Array):
             numpy_type = col_type.dtype.name
@@ -557,6 +559,7 @@ def get_schema(
         converted_colnames,
         unsupported_columns,
         unsupported_arrow_types,
+        pa.schema(pa_fields),
         dict_encode_timeout_info,
     )
 
@@ -619,10 +622,11 @@ class FakeArrowJSONResultBatch:
 def get_dataset(
     query: str,
     conn_str: str,
-    only_fetch_length: Optional[bool] = False,
-    is_select_query: Optional[bool] = True,
-    is_parallel: Optional[bool] = True,
-    is_independent: Optional[bool] = False,
+    schema: pa.Schema,
+    only_fetch_length: bool = False,
+    is_select_query: bool = True,
+    is_parallel: bool = True,
+    is_independent: bool = False,
 ) -> Tuple[SnowflakeDataset, int]:  # pragma: no cover
     """Get snowflake dataset info required by Arrow reader in C++ and execute
     the Snowflake query
@@ -684,9 +688,6 @@ def get_dataset(
     # 0 columns
     num_rows = -1
     batches = []
-    schema = pa.schema([])
-
-    is_rank_zero = bodo.get_rank() == 0
 
     # The control flow for the below if-conditional clause:
     #   1. If the rank is 0 or the ranks are independent from each other, i.e. each rank is executing the function independently, execute the query
@@ -698,8 +699,7 @@ def get_dataset(
         # with (distributed=False)
         # NOTE: it'll be unnecessary in case replicated case
         # and read is called by all ranks but we opted for that to simplify compiler work.
-        num_rows = None
-        if is_rank_zero or is_independent:
+        if bodo.get_rank() == 0 or is_independent:
             cur = conn.cursor()
             ev_query = tracing.Event("execute_length_query", is_parallel=False)
             cur.execute(query)
@@ -715,32 +715,9 @@ def get_dataset(
             num_rows = comm.bcast(num_rows)
     else:
         # We need to actually submit a Snowflake query
-        if is_rank_zero or is_independent:
-            cur = conn.cursor()
-            # do a cheap query to get the Arrow schema (other ranks need the schema
-            # before they can start reading, so we want to get the schema asap)
-            # TODO is there a way to get Arrow schema without loading data?
-            ev_get_schema = tracing.Event("get_schema", is_parallel=False)
-            if is_select_query:
-                query_probe = f"select * from ({query}) x LIMIT {100}"
-                arrow_data: Optional[pa.Table] = cur.execute(query_probe).fetch_arrow_all()  # type: ignore
-            else:
-                arrow_data = None
-            if arrow_data is None:
-                # If we don't load any data we construct a schema from describe.
-                described_query = cur.describe(query)
-                # Construct the arrow schema from the describe info
-                pa_fields = [
-                    pa.field(x.name, FIELD_TYPE_TO_PA_TYPE[x.type_code])
-                    for x in described_query
-                ]
-                schema = pa.schema(pa_fields)
-            else:
-                schema = arrow_data.schema
-
-            ev_get_schema.finalize()
-
+        if bodo.get_rank() == 0 or is_independent:
             # Execute query
+            cur = conn.cursor()
             ev_query = tracing.Event("execute_query", is_parallel=False)
             cur.execute(query)
             ev_query.finalize()

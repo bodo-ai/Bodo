@@ -8,6 +8,8 @@ import sys
 num_processes = int(sys.argv[1])
 # all other args go to pytest
 pytest_args = sys.argv[2:]
+# Get File-Level Timeout Info from Environment Variable (in seconds)
+file_timeout = int(os.environ.get("BODO_RUNTESTS_TIMEOUT", 7200))
 
 logfile_name = "splitting_logs/logfile-07-18-22.txt"
 
@@ -131,6 +133,7 @@ for i, m in enumerate(modules):
         mod_pytest_args[mark_arg_idx + 1] += " and single_mod"
     except ValueError:
         mod_pytest_args += ["-m", "single_mod"]
+
     # run tests with mpiexec + pytest always. If you just use
     # pytest then out of memory won't tell you which test failed.
     cmd = [
@@ -147,7 +150,8 @@ for i, m in enumerate(modules):
     ] + mod_pytest_args
     print("Running", " ".join(cmd))
     p = subprocess.Popen(cmd, shell=False)
-    rc = p.wait()
+    rc = p.wait(timeout=file_timeout)
+
     if rc not in (0, 5):  # pytest returns error code 5 when no tests found
         # raise RuntimeError("An error occurred when running the command " + str(cmd))
         tests_failed = True
