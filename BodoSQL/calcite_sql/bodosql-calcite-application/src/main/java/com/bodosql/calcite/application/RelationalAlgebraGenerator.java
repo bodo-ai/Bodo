@@ -492,9 +492,6 @@ public class RelationalAlgebraGenerator {
               .addRuleInstance(LogicalFilterReorderConditionRule.Config.DEFAULT.toRule())
               // Push a limit before a project (e.g. select col as alias from table limit 10)
               .addRuleInstance(LimitProjectTransposeRule.Config.DEFAULT.toRule())
-              // For an intersect where all=False we drop duplicates on the input tables and convert
-              // to a union
-              .addRuleInstance(IntersectToDistinctRule.Config.DEFAULT.toRule())
               .build();
 
     } else {
