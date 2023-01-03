@@ -9,12 +9,13 @@
 // --------- functions defined in parquet_reader.cpp ---------
 table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
                     PyObject* expr_filters, PyObject* storage_options,
-                    int64_t tot_rows_to_read, int32_t* _selected_cols,
-                    int32_t num_selected_cols, int32_t* _is_nullable,
-                    int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
-                    int32_t num_partition_cols, int32_t* str_as_dict_cols,
-                    int32_t num_str_as_dict_cols, int64_t* total_rows_out,
-                    bool input_file_name_col, bool use_hive);
+                    PyObject* pyarrow_schema, int64_t tot_rows_to_read,
+                    int32_t* _selected_cols, int32_t num_selected_cols,
+                    int32_t* _is_nullable, int32_t* selected_part_cols,
+                    int32_t* part_cols_cat_dtype, int32_t num_partition_cols,
+                    int32_t* str_as_dict_cols, int32_t num_str_as_dict_cols,
+                    int64_t* total_rows_out, bool input_file_name_col,
+                    bool use_hive);
 
 // --------- functions defined in iceberg_parquet_reader.cpp --------
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,
@@ -22,16 +23,16 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             int64_t tot_rows_to_read, PyObject* dnf_filters,
                             PyObject* expr_filters, int32_t* _selected_fields,
                             int32_t num_selected_fields, int32_t* _is_nullable,
-                            PyObject* pyarrow_table_schema,
-                            int32_t* str_as_dict_cols,
+                            PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
                             int32_t num_str_as_dict_cols,
                             bool is_merge_into_cow, int64_t* total_rows_out,
                             PyObject** file_list_ptr, int64_t* snapshot_id_ptr);
 
 // --------- function defined in snowflake_reader.cpp ---------
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,
-                           bool is_independent, int64_t n_fields,
-                           int32_t* _is_nullable, int32_t* str_as_dict_cols,
+                           bool is_independent, PyObject* pyarrow_schema,
+                           int64_t n_fields, int32_t* _is_nullable,
+                           int32_t* str_as_dict_cols,
                            int32_t num_str_as_dict_cols, int64_t* total_nrows,
                            bool _only_length_query, bool _is_select_query);
 

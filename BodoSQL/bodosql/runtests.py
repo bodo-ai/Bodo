@@ -12,6 +12,8 @@ import sys
 num_processes = int(sys.argv[1])
 # all other args go to pytest
 pytest_args = sys.argv[2:]
+# Get File-Level Timeout Info from Environment Variable (in seconds)
+file_timeout = int(os.environ.get("BODO_RUNTESTS_TIMEOUT", 7200))
 
 # run pytest with --collect-only to find Python modules containing tests
 # (this doesn't execute any tests)
@@ -66,7 +68,8 @@ for i, m in enumerate(modules):
     ] + mod_pytest_args
     print(f"Running: {' '.join(cmd)} with module {m}")
     p = subprocess.Popen(cmd, shell=False)
-    rc = p.wait()
+    rc = p.wait(timeout=file_timeout)
+
     if rc not in (0, 5):  # pytest returns error code 5 when no tests found
         # raise RuntimeError("An error occurred when running the command " + str(cmd))
         print(

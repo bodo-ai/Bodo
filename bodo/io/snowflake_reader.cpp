@@ -15,11 +15,13 @@ class SnowflakeReader : public ArrowDataframeReader {
      * See snowflake_read function below for description of arguments.
      */
     SnowflakeReader(const char* _query, const char* _conn, bool _parallel,
-                    bool _is_independent, std::set<int> selected_fields,
+                    bool _is_independent, PyObject* pyarrow_schema,
+                    std::set<int> selected_fields,
                     std::vector<bool> is_nullable,
                     std::vector<int> str_as_dict_cols, int64_t* _total_nrows,
                     bool _only_length_query, bool _is_select_query)
-        : ArrowDataframeReader(_parallel, -1, selected_fields, is_nullable),
+        : ArrowDataframeReader(_parallel, pyarrow_schema, -1, selected_fields,
+                               is_nullable),
           query(_query),
           conn(_conn),
           total_nrows(_total_nrows),
@@ -47,19 +49,21 @@ class SnowflakeReader : public ArrowDataframeReader {
         PyObject* sf_mod = PyImport_ImportModule("bodo.io.snowflake");
         if (PyErr_Occurred()) throw std::runtime_error("python");
 
-        // ds = bodo.io.snowflake.get_dataset(query, conn, only_length,
-        // is_select_query, is_parallel)
+        // ds = bodo.io.snowflake.get_dataset(query, conn, pyarrow_schema,
+        //   only_length, is_select_query, is_parallel, is_independent)
         PyObject* py_only_length_query = PyBool_FromLong(only_length_query);
         PyObject* py_is_select_query = PyBool_FromLong(is_select_query);
         PyObject* py_is_parallel = PyBool_FromLong(parallel);
         PyObject* py_is_independent = PyBool_FromLong(this->is_independent);
         PyObject* ds_tuple = PyObject_CallMethod(
-            sf_mod, "get_dataset", "ssOOOO", query, conn, py_only_length_query,
-            py_is_select_query, py_is_parallel, py_is_independent);
+            sf_mod, "get_dataset", "ssOOOOO", query, conn, pyarrow_schema,
+            py_only_length_query, py_is_select_query, py_is_parallel,
+            py_is_independent);
         if (ds_tuple == NULL && PyErr_Occurred()) {
             throw std::runtime_error("python");
         }
         Py_DECREF(sf_mod);
+        Py_DECREF(pyarrow_schema);
         Py_DECREF(py_only_length_query);
         Py_DECREF(py_is_select_query);
         Py_DECREF(py_is_parallel);
@@ -80,22 +84,13 @@ class SnowflakeReader : public ArrowDataframeReader {
         return ds;
     }
 
-    virtual std::shared_ptr<arrow::Schema> get_schema(PyObject* dataset) {
-        PyObject* schema_py = PyObject_GetAttrString(dataset, "schema");
-        // see
-        // https://arrow.apache.org/docs/python/extending.html#using-pyarrow-from-c-and-cython-code
-        auto schema_ = arrow::py::unwrap_schema(schema_py).ValueOrDie();
-        Py_DECREF(schema_py);
-        return schema_;
-    }
-
     virtual void read_all(TableBuilder& builder) {
         tracing::Event ev("reader::read_all", parallel);
         size_t num_pieces = get_num_pieces();
         int64_t to_arrow_time = 0;
         int64_t append_time = 0;
-
         ev.add_attribute("num_pieces", num_pieces);
+
         for (size_t piece_idx = 0; piece_idx < num_pieces; piece_idx++) {
             int64_t offset = 0;
             if (piece_idx == 0) {
@@ -114,6 +109,11 @@ class SnowflakeReader : public ArrowDataframeReader {
             to_arrow_time +=
                 std::chrono::duration_cast<std::chrono::microseconds>((t2 - t1))
                     .count();
+
+            // Upcast Arrow table to expected schema
+            // TODO: Integrate within TableBuilder
+            table = ArrowDataframeReader::cast_arrow_table(table);
+
             int64_t length = std::min(rows_left, table->num_rows() - offset);
             // pass zero-copy slice to TableBuilder to append to read data
             builder.append(table->Slice(offset, length));
@@ -170,8 +170,9 @@ class SnowflakeReader : public ArrowDataframeReader {
  * @return table containing all the arrays read
  */
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,
-                           bool is_independent, int64_t n_fields,
-                           int32_t* _is_nullable, int32_t* _str_as_dict_cols,
+                           bool is_independent, PyObject* arrow_schema,
+                           int64_t n_fields, int32_t* _is_nullable,
+                           int32_t* _str_as_dict_cols,
                            int32_t num_str_as_dict_cols, int64_t* total_nrows,
                            bool _only_length_query, bool _is_select_query) {
     try {
@@ -182,9 +183,9 @@ table_info* snowflake_read(const char* query, const char* conn, bool parallel,
             {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols});
 
         SnowflakeReader reader(query, conn, parallel, is_independent,
-                               selected_fields, is_nullable, str_as_dict_cols,
-                               total_nrows, _only_length_query,
-                               _is_select_query);
+                               arrow_schema, selected_fields, is_nullable,
+                               str_as_dict_cols, total_nrows,
+                               _only_length_query, _is_select_query);
 
         return reader.read();
 
