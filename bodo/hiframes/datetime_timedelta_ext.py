@@ -1402,7 +1402,7 @@ def dt_timedelta_arr_getitem(A, ind):
         def impl_bool(A, ind):  # pragma: no cover
             # Heavily influenced by array_getitem_bool_index.
             # Just replaces calls for new data with all 3 arrays
-            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
             new_days_data = A._days_data[ind_t]
             new_seconds_data = A._seconds_data[ind_t]
@@ -1421,7 +1421,7 @@ def dt_timedelta_arr_getitem(A, ind):
         def impl(A, ind):  # pragma: no cover
             # Heavily influenced by array_getitem_int_index.
             # Just replaces calls for new data with all 3 arrays
-            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
             new_days_data = A._days_data[ind_t]
             new_seconds_data = A._seconds_data[ind_t]

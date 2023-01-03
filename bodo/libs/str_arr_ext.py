@@ -1961,7 +1961,7 @@ def str_arr_getitem_int(A, ind):
 
         def bool_impl(A, ind):  # pragma: no cover
             # convert potential Series to array
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind = bodo.utils.conversion.coerce_to_array(ind)
             n = len(A)
             n_strs = 0
             n_chars = 0
@@ -2021,7 +2021,7 @@ def str_arr_getitem_int(A, ind):
 
         def str_arr_arr_impl(A, ind):  # pragma: no cover
             # convert potential Series to array
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind = bodo.utils.conversion.coerce_to_array(ind)
             n = len(ind)
             n_chars = 0
             for i in range(n):
@@ -2232,7 +2232,7 @@ def str_arr_setitem(A, idx, val):
             def impl_bool_scalar(A, idx, val):  # pragma: no cover
                 n = len(A)
                 # NOTE: necessary to convert potential Series to array
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 out_arr = pre_alloc_string_array(n, -1)
                 for i in numba.parfors.parfor.internal_prange(n):
                     if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:

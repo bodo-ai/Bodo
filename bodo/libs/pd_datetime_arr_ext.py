@@ -402,7 +402,7 @@ def overload_getitem(A, ind):
     ):
 
         def impl_bool(A, ind):  # pragma: no cover
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind = bodo.utils.conversion.coerce_to_array(ind)
             new_data = ensure_contig_if_np(A._data[ind])
             return init_pandas_datetime_array(new_data, tz)
 
@@ -412,7 +412,7 @@ def overload_getitem(A, ind):
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
         def impl_int_arr(A, ind):  # pragma: no cover
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind = bodo.utils.conversion.coerce_to_array(ind)
             new_data = ensure_contig_if_np(A._data[ind])
             return init_pandas_datetime_array(new_data, tz)
 
