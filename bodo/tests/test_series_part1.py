@@ -540,7 +540,7 @@ def test_series_between(memory_leak_check):
     def impl(S):
         return S.between(1, 4, inclusive="neither")
 
-    S = pd.Series([2, 0, 4, 8, np.nan])
+    S = pd.Series([2, 0, 4, 8, np.nan], dtype="Float64")
     check_func(impl, (S,), check_dtype=False)
     check_func(impl_inclusive, (S,))
 
