@@ -1,5 +1,6 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import datetime
+import glob
 import io
 import os
 import random
@@ -1584,8 +1585,6 @@ def test_read_parquet_list_of_globs(memory_leak_check):
         "bodo/tests/data/test_partitioned.pq/A=7/part-0000[5-7]-bfd81e52-9210-4ee9-84a0-5ee2ab5e6345.c000.snappy.parquet",
     ]
 
-    import glob
-
     # construct expected pandas output manually (pandas doesn't support list of files)
     files = []
     for globstring in globstrings:
@@ -1612,7 +1611,7 @@ def test_read_parquet_list_files(datapath, memory_leak_check):
 
     def test_impl():
         return pd.read_parquet(
-            ["bodo/tests/data/example.parquet", "bodo/tests/data/example2.parquet"]
+            ["bodo/tests/data/example.parquet", "bodo/tests/data/example2.parquet"]  # type: ignore
         )
 
     def test_impl2(fpaths):
@@ -1643,6 +1642,7 @@ def test_pq_non_constant_filepath_error(datapath):
                 "three": bodo.boolean_array,
                 "four": bodo.float64[:],
                 "five": bodo.string_array_type,
+                "__index_level_0__": bodo.int64[:],
             }
         }
     )
@@ -2155,7 +2155,7 @@ def test_read_parquet_unsupported_storage_options_arg(memory_leak_check):
         return df
 
     def test_impl3():
-        df = pd.read_parquet("some_file.pq", storage_options="invalid")
+        df = pd.read_parquet("some_file.pq", storage_options="invalid")  # type: ignore
         return df
 
     with pytest.raises(
@@ -2197,6 +2197,7 @@ def test_read_parquet_non_bool_storage_options_anon(memory_leak_check):
         bodo.jit(distributed=["df"])(test_impl)()
 
 
+@pytest.mark.slow
 def test_read_parquet_path_hive_partitions(datapath, memory_leak_check):
     filepath = datapath(os.path.join("hive-part-sample-pq", "data"))
 
@@ -2492,6 +2493,7 @@ def test_pq_schema(datapath, memory_leak_check):
                 "three": bodo.bool_[:],
                 "four": bodo.float64[:],
                 "five": bodo.string_array_type,
+                "__index_level_0__": bodo.int64[:],
             }
         },
     )(impl)

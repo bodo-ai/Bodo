@@ -1,6 +1,7 @@
-"""Utility functions for testing such as check_func() that tests a function.
-"""
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
+"""
+Utility functions for testing such as check_func() that tests a function.
+"""
 import io
 import os
 import random
@@ -12,6 +13,7 @@ from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
 from typing import Dict, TypeVar
+from urllib.parse import urlencode
 from uuid import uuid4
 
 import numba
@@ -2097,7 +2099,7 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
 
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
 # are stored there (to avoid failing on AWS or our local machines)
-def get_snowflake_connection_string(db, schema, user=1):
+def get_snowflake_connection_string(db, schema, conn_params=None, user=1):
     """
     Generates a common snowflake connection string. Some details (how to determine
     username and password) seem unlikely to change, whereas as some tests could require
@@ -2118,8 +2120,10 @@ def get_snowflake_connection_string(db, schema, user=1):
     else:
         raise ValueError("Invalid user")
 
-    warehouse = "DEMO_WH"
-    conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
+    params = {"warehouse": "DEMO_WH"} if conn_params is None else conn_params
+    conn = (
+        f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urlencode(params)}"
+    )
     return conn
 
 

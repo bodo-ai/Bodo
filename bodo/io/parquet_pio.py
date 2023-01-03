@@ -338,8 +338,8 @@ def get_parquet_dataset(
     read_categories: bool = False,
     is_parallel=False,  # only used with get_row_counts=True
     tot_rows_to_read: Optional[int] = None,
-    use_hive: bool = True,
     typing_pa_schema: Optional[pa.Schema] = None,
+    use_hive: bool = True,
     partitioning="hive",
 ) -> ParquetDataset:
     """
@@ -359,8 +359,7 @@ def get_parquet_dataset(
             read_parquet()
         typing_pa_schema: PyArrow schema determined at compile time. When provided,
             we should validate that the unified schema of all files matches this schema,
-            and throw an error otherwise. Currently this is only used in the case
-            of iceberg, but should be expanded to all use cases.
+            and throw an error otherwise. Currently this is only used in runtime.
             https://bodo.atlassian.net/browse/BE-2787
     """
 
@@ -667,6 +666,7 @@ def get_parquet_dataset(
                 filesystem=dataset.filesystem,
                 partitioning=dataset.partitioning,
             )
+
             for piece, frag in zip(pieces[start:end], dataset_.get_fragments()):
 
                 # The validation (and unification) step needs to happen before the
@@ -802,7 +802,7 @@ https://docs.bodo.ai/latest/file_io/#parquet-section.
     if get_row_counts:
         ev.finalize()
 
-    if validate_schema and is_parallel:
+    if validate_schema:
         if tracing.is_tracing():
             ev_unify_schemas = tracing.Event("unify_schemas_across_ranks")
         error = None
@@ -1308,6 +1308,7 @@ def parquet_file_schema(
         partition_names,
         unsupported_columns,
         unsupported_arrow_types,
+        pa_schema,
     )
 
 

@@ -3,11 +3,13 @@
 // Implementation of ArrowDataframeReader, ColumnBuilder subclasses and
 // helper code to read Arrow data into Bodo.
 
-#include "arrow_reader.h"
+#include <arrow/compute/api.h>
+
 #include "../libs/_array_utils.h"
 #include "../libs/_datetime_ext.h"
 #include "../libs/_datetime_utils.h"
 #include "../libs/_distributed.h"
+#include "arrow_reader.h"
 
 using arrow::Type;
 
@@ -1001,7 +1003,6 @@ void ArrowDataframeReader::init_arrow_reader(
     gil_held = true;
 
     PyObject* ds = get_dataset();
-    schema = get_schema(ds);
 
     create_dict_encoding_from_strings = create_dict_from_string;
     for (auto i : str_as_dict_cols) {
@@ -1161,4 +1162,66 @@ void ArrowDataframeReader::init_arrow_reader(
         ev.add_attribute("g_total_rows", total_rows);
     }
     initialized = true;
+}
+
+std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
+    std::shared_ptr<arrow::Table> table) {
+    if (!table->schema()->Equals(this->schema)) {
+        arrow::ChunkedArrayVector new_cols;
+        for (int i = 0; i < table->num_columns(); i++) {
+            // We should do a quick check to ensure that we only perform
+            // upcasting and no nullability changes
+            auto col = table->column(i);
+
+            auto exp_type = this->schema->field(i)->type();
+            auto exp_nullable = this->schema->field(i)->nullable();
+            auto act_type = col->type();
+            auto act_nullable = table->schema()->field(i)->nullable();
+
+            // Either
+            // 1) Expected nullable and actually nullable
+            // 2) Expected not nullable and actually not nullable
+            // 3) Expected nullable and actually not nullable
+            auto nullable_eq = exp_nullable == act_nullable || !act_nullable;
+            // TableBuilder currently will allow for nullable floating-point or
+            // timestamp arrays to be appended to non-nullable variants (by
+            // converting NA to NaN or NaT) Thus, we shouldn't bother checking
+            // for nullability in these cases
+            if (exp_type->id() == Type::FLOAT ||
+                exp_type->id() == Type::DOUBLE ||
+                exp_type->id() == Type::TIMESTAMP)
+                nullable_eq = true;
+
+            if (act_type->Equals(exp_type) && nullable_eq) {
+                new_cols.push_back(col);
+
+                // Dont bother checking if types are compatible, should
+                // be done at compile-time. Only sizes can change
+            } else if (act_type->bit_width() < exp_type->bit_width() &&
+                       nullable_eq) {
+                // bit-width is we-defined for all types with a fixed width. For
+                // other types, such as strings it's always set to -1, and hence
+                // should be safe to compare.
+                // (https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4NK5arrow8DataType9bit_widthEv)
+
+                auto res = arrow::compute::Cast(col, exp_type);
+                // TODO: Use std::format after fixing C++ compiler errors
+                CHECK_ARROW(res.status(),
+                            "Unable to upcast from " + col->type()->ToString() +
+                                " to " + exp_type->ToString() +
+                                " before appending to TableBuilder");
+                auto casted_datum = res.ValueOrDie();
+                new_cols.push_back(casted_datum.chunked_array());
+
+            } else {
+                // TODO: Use std::format after fixing C++ compiler errors
+                throw std::runtime_error("Invalid Downcast from " +
+                                         col->type()->ToString() + " to " +
+                                         exp_type->ToString());
+            }
+        }
+        table = arrow::Table::Make(this->schema, new_cols, table->num_rows());
+    }
+
+    return table;
 }

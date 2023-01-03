@@ -1,11 +1,11 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """
-Implementation of pd.read_sql in BODO.
+Implementation of pd.read_sql in Bodo.
 We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
-from typing import List, Optional
+from typing import Any, List, Optional
 from urllib.parse import urlparse
 
 import numba
@@ -75,9 +75,8 @@ class SqlReader(ir.Stmt):
         index_column_name,
         index_column_type,
         database_schema,
-        # Only relevant for Iceberg at the moment,
-        # but potentially for Snowflake in the future
-        pyarrow_table_schema,
+        # Only relevant for Iceberg and Snowflake
+        pyarrow_schema: Optional[pa.Schema],
         # Only relevant for Iceberg MERGE INTO COW
         is_merge_into: bool,
         file_list_type,
@@ -125,7 +124,7 @@ class SqlReader(ir.Stmt):
         # This is the PyArrow schema object.
         # Only relevant for Iceberg at the moment,
         # but potentially for Snowflake in the future
-        self.pyarrow_table_schema = pyarrow_table_schema
+        self.pyarrow_schema = pyarrow_schema
         # Is this table load done as part of a merge into operation.
         # If so we have special behavior regarding filtering.
         self.is_merge_into = is_merge_into
@@ -144,7 +143,7 @@ class SqlReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
-        return f"{out_varnames} = ReadSql(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_table_schema={self.pyarrow_table_schema}, is_merge_into={self.is_merge_into})"
+        return f"{out_varnames} = ReadSql(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into})"
 
 
 def parse_dbtype(con_str):
@@ -255,7 +254,7 @@ def remove_dead_sql(
 
 
 def sql_distributed_run(
-    sql_node,
+    sql_node: SqlReader,
     array_dists,
     typemap,
     calltypes,
@@ -440,7 +439,7 @@ def sql_distributed_run(
         parallel,
         typemap,
         sql_node.filters,
-        sql_node.pyarrow_table_schema,
+        sql_node.pyarrow_schema,
         not sql_node.is_live_table,
         sql_node.is_select_query,
         sql_node.is_merge_into,
@@ -834,7 +833,7 @@ def req_limit(sql_request):
     """
     Processes a SQL requests and search for a LIMIT in the outermost
     query. If it encounters just a limit, it returns the max rows requested.
-    Otherwise, it returns None (which incidates a count calculation will need
+    Otherwise, it returns None (which indicates a count calculation will need
     to be added to the query).
     """
     import re
@@ -858,8 +857,8 @@ def req_limit(sql_request):
 
 def _gen_sql_reader_py(
     col_names: List[str],
-    col_typs,
-    index_column_name: str,
+    col_typs: List[Any],
+    index_column_name: Optional[str],
     index_column_type,
     out_used_cols: List[int],
     typingctx,
@@ -868,8 +867,8 @@ def _gen_sql_reader_py(
     limit: Optional[int],
     parallel: bool,
     typemap,
-    filters,
-    pyarrow_table_schema: Optional[pa.Schema],
+    filters: Optional[Any],
+    pyarrow_schema: Optional[pa.Schema],
     is_dead_table: bool,
     is_select_query: bool,
     is_merge_into: bool,
@@ -882,35 +881,35 @@ def _gen_sql_reader_py(
         - Snowflake (calls the Snowflake connector)
         - Regular SQL (uses SQLAlchemy)
 
-    Keyword arguments:
-    col_names -- Names of column output from the original query.
-                 This includes dead columns.
-    col_typs -- Types of column output from the original query.
-                This includes dead columns.
-    index_column_name -- Name of column used as the index var or None
-                         if no column should be loaded.
-    index_column_type -- Type of column used as the index var or
-                         types.none if no column should be loaded.
-    out_used_cols -- List holding the values of columns that
-                          are live. For example if this is [0, 1, 3]
-                          it means all columns except for col_names[0],
-                          col_names[1], and col_names[3] are dead and
-                          should not be loaded (not including index).
-    typingctx -- Typing context used for compiling code.
-    targetctx -- Target context used for compiling code.
-    db_type -- Type of SQL source used to distinguish between backends.
-    limit -- Does the query contain a limit? This is only used to divide
-             data with regular SQL.
-    parallel -- Is the implementation parallel?
-    typemap -- Maps variables name -> types. Used by iceberg for filters.
-    filters -- DNF Filter info used by iceberg to generate runtime filters.
-               This should only be used if db_type == "iceberg".
-    pyarrow_table_schema -- pyarrow schema for the table. This should only
-                            be used if db_type == "iceberg".
-    is_select_query -- Are we executing a select?
-    is_merge_into -- Does this query result from a merge into query? If so
-                     this limits the filtering we can do with Iceberg as we
-                     must load entire files.
+    Args:
+        col_names: Names of column output from the original query.
+            This includes dead columns.
+        col_typs: Types of column output from the original query.
+            This includes dead columns.
+        index_column_name: Name of column used as the index var or None
+            if no column should be loaded.
+        index_column_type: Type of column used as the index var or
+            types.none if no column should be loaded.
+        out_used_cols: List holding the values of columns that
+            are live. For example if this is [0, 1, 3]
+            it means all columns except for col_names[0],
+            col_names[1], and col_names[3] are dead and
+            should not be loaded (not including index).
+        typingctx: Typing context used for compiling code.
+        targetctx: Target context used for compiling code.
+        db_type: Type of SQL source used to distinguish between backends.
+        limit: Does the query contain a limit? This is only used to divide
+            data with regular SQL.
+        parallel: Is the implementation parallel?
+        typemap: Maps variables name -> types. Used by iceberg for filters.
+        filters: DNF Filter info used by iceberg to generate runtime filters.
+            This should only be used for Iceberg.
+        pyarrow_schema: PyArrow schema for the source table. This should only
+            be used for Iceberg or Snowflake.
+        is_select_query: Are we executing a select?
+        is_merge_into: Does this query result from a merge into query? If so
+            this limits the filtering we can do with Iceberg as we
+            must load entire files.
     """
     # a unique int used to create global variables with unique names
     call_id = next_label()
@@ -961,8 +960,8 @@ def _gen_sql_reader_py(
     )
     if db_type == "iceberg":
         assert (
-            pyarrow_table_schema is not None
-        ), "SQLNode must contain a pyarrow_table_schema if reading from an Iceberg database"
+            pyarrow_schema is not None
+        ), "SQLNode must contain a pyarrow_schema if reading from an Iceberg database"
 
         # Generate the partition filters and predicate filters. Note we pass
         # all col names as possible partitions via partition names.
@@ -986,7 +985,7 @@ def _gen_sql_reader_py(
         # Note that this does not include any locally generated columns (row id, file list, ...)
         # TODO: Update for schema evolution, when Iceberg Schema != Parquet Schema
         selected_cols: List[int] = [
-            pyarrow_table_schema.get_field_index(col_names[i])
+            pyarrow_schema.get_field_index(col_names[i])
             for i in out_used_cols
             if i != merge_into_row_id_col_idx
         ]
@@ -1022,7 +1021,7 @@ def _gen_sql_reader_py(
             f"    {len(selected_cols)},\n"
             #     TODO Confirm that we're computing is_nullable correctly
             f"    nullable_cols_arr_{call_id}.ctypes,\n"
-            f"    pyarrow_table_schema_{call_id},\n"
+            f"    pyarrow_schema_{call_id},\n"
             f"    {dict_str_cols_str},\n"
             f"    {is_merge_into},\n"
             f"  )\n"
@@ -1094,7 +1093,28 @@ def _gen_sql_reader_py(
             "  return (total_rows, table_var, index_var, file_list, snapshot_id)\n"
         )
 
-    elif db_type == "snowflake":
+    elif db_type == "snowflake":  # pragma: no cover
+        assert (
+            pyarrow_schema is not None
+        ), "SQLNode must contain a pyarrow_schema if reading from Snowflake"
+
+        # Filter the schema by selected columns only
+        selected_fields = []
+        for field_name in used_col_names:
+            idx = pyarrow_schema.get_field_index(field_name)
+            # If idx is -1, couldn't find a schema field with name `field_name`
+            # To follow Pandas semantics, we convert uppercase column names to lowercase
+            # but the PyArrow schema will still use the uppercase names
+            # Thus, we may need need to convert back to find the correct field
+            if idx < 0 and field_name.islower():
+                idx = pyarrow_schema.get_field_index(field_name.upper())
+            if idx < 0:
+                raise BodoError(
+                    f"SQLReader Snowflake: Column {field_name} is not in source schema"
+                )
+            selected_fields.append(pyarrow_schema.field(idx))
+        pyarrow_schema = pa.schema(selected_fields)
+
         col_indices_map = {c: i for i, c in enumerate(out_used_cols)}
         snowflake_dict_cols = [
             col_indices_map[i]
@@ -1118,6 +1138,7 @@ def _gen_sql_reader_py(
             f"    unicode_to_utf8(conn),\n"
             f"    {parallel},\n"
             f"    {is_independent},\n"
+            f"    pyarrow_schema_{call_id},\n"
             f"    {len(nullable_cols_array)},\n"
             f"    nullable_cols_array.ctypes,\n"
             f"    snowflake_dict_cols_array.ctypes,\n"
@@ -1247,13 +1268,14 @@ def _gen_sql_reader_py(
     if db_type in ("iceberg", "snowflake"):
         glbls.update(
             {
+                f"table_idx_{call_id}": table_idx,
+                f"pyarrow_schema_{call_id}": pyarrow_schema,
                 "unicode_to_utf8": unicode_to_utf8,
                 "check_and_propagate_cpp_exception": check_and_propagate_cpp_exception,
                 "info_to_array": info_to_array,
                 "info_from_table": info_from_table,
                 "delete_table": delete_table,
                 "cpp_table_to_py_table": cpp_table_to_py_table,
-                f"table_idx_{call_id}": table_idx,
                 "set_table_len": bodo.hiframes.table.set_table_len,
                 "get_node_portion": bodo.libs.distributed_api.get_node_portion,
             }
@@ -1268,7 +1290,6 @@ def _gen_sql_reader_py(
                 f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),  # type: ignore
                 f"dict_str_cols_arr_{call_id}": np.array(str_as_dict_cols, np.int32),  # type: ignore
                 f"py_table_type_{call_id}": py_table_type,
-                f"pyarrow_table_schema_{call_id}": pyarrow_table_schema,
                 "get_filters_pyobject": bodo.io.parquet_pio.get_filters_pyobject,
                 "iceberg_read": _iceberg_pq_read,
             }
@@ -1313,7 +1334,7 @@ def _gen_sql_reader_py(
 
 
 parquet_predicate_type = ParquetPredicateType()
-pyarrow_table_schema_type = PyArrowTableSchemaType()
+pyarrow_schema_type = PyArrowTableSchemaType()
 
 
 @intrinsic
@@ -1360,7 +1381,7 @@ def _iceberg_pq_read(
         selected_cols (types.voidptr): C pointers of integers for selected columns
         num_selected_cols (types.int64): Length of selected_cols
         nullable_cols (types.voidptr): C pointers of 0 or 1 for if each selected column is nullable
-        pyarrow_schema (pyarrow_table_schema_type): Pyobject with the pyarrow schema for the output.
+        pyarrow_schema (pyarrow_schema_type): Pyobject with the pyarrow schema for the output.
         dict_encoded_cols (types.voidptr): Array fo column numbers that are dictionary encoded.
         num_dict_encoded_cols (_type_): Length of dict_encoded_cols
         is_merge_into_cow (bool): Are we doing a merge?
@@ -1439,7 +1460,7 @@ def _iceberg_pq_read(
         types.voidptr,
         types.int32,
         types.voidptr,
-        pyarrow_table_schema_type,
+        pyarrow_schema_type,
         types.voidptr,
         types.int32,
         types.boolean,
@@ -1454,11 +1475,12 @@ _snowflake_read = types.ExternalFunction(
         types.voidptr,  # conn_str
         types.boolean,  # parallel
         types.boolean,  # is_independent
+        pyarrow_schema_type,
         types.int64,  # n_fields
         types.voidptr,  # _is_nullable
         types.voidptr,  # _str_as_dict_cols
         types.int32,  # num_str_as_dict_cols
-        types.voidptr,  # total_rows
+        types.voidptr,  # total_nrows
         types.boolean,  # _only_length_query
         types.boolean,  # _is_select_query
     ),

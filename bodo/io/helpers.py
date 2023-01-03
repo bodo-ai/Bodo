@@ -80,6 +80,12 @@ def typeof_pyarrow_table_schema(val, c):
 
 @lower_constant(PyArrowTableSchemaType)
 def lower_pyarrow_table_schema(context, builder, ty, pyval):
+    # TODO: Cant lower metadata in schema because we can't hash metadata
+    # (represented as a dictionary)
+    # We are currently removing metadata in the necessary spots
+    # See _gen_pq_reader_py in parquet_ext.py
+    # To do so here, add the following line:
+    # pyval = pyval.remove_metadata()
     pyapi = context.get_python_api(builder)
     return pyapi.unserialize(pyapi.serialize_object(pyval))
 

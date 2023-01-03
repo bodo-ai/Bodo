@@ -1,10 +1,12 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 """IR node for the parquet data access"""
+from typing import List
 
 import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from numba.core import ir, ir_utils, typeinfer, types
 from numba.core.ir_utils import (
     compile_to_numba_ir,
@@ -18,12 +20,17 @@ from numba.extending import NativeValue, models, register_model, unbox
 
 import bodo
 import bodo.ir.connector
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 from bodo.hiframes.table import Table, TableType  # noqa
 from bodo.io.fs_io import (
     get_storage_options_pyobject,
     storage_options_dict_type,
 )
-from bodo.io.helpers import is_nullable
+from bodo.io.helpers import (
+    is_nullable,
+    numba_to_pyarrow_schema,
+    pyarrow_table_schema_type,
+)
 from bodo.io.parquet_pio import (
     ParquetFileInfo,
     get_filters_pyobject,
@@ -142,6 +149,7 @@ class ParquetHandler:
                     partition_names,
                     unsupported_columns,
                     unsupported_arrow_types,
+                    arrow_schema,
                 ) = typ.schema
             else:
                 (
@@ -152,6 +160,7 @@ class ParquetHandler:
                     partition_names,
                     unsupported_columns,
                     unsupported_arrow_types,
+                    arrow_schema,
                 ) = parquet_file_schema(
                     file_name_str,
                     columns,
@@ -161,23 +170,33 @@ class ParquetHandler:
                     use_hive,
                 )
         else:
-            col_names_total = list(table_types.keys())
+            all_col_names: List[str] = list(table_types.keys())
             # Create a map for efficient index lookup
-            col_names_total_map = {c: i for i, c in enumerate(col_names_total)}
+            all_col_names_map = {c: i for i, c in enumerate(all_col_names)}
             col_types_total = [t for t in table_types.values()]
-            index_col = "index" if "index" in col_names_total_map else None
+
             # TODO: allow specifying types of only selected columns
-            selected_columns = col_names_total if columns is None else columns
-            col_indices = [col_names_total_map[c] for c in selected_columns]
-            col_types = [
-                col_types_total[col_names_total_map[c]] for c in selected_columns
-            ]
-            col_names = selected_columns
-            index_col = index_col if index_col in col_names else None
+            col_names: List[str] = all_col_names if columns is None else columns
+            col_indices = [all_col_names_map[c] for c in col_names]
+            col_types = [col_types_total[all_col_names_map[c]] for c in col_names]
+
+            # We currently assume, when locals is provided, that the index
+            # column is a Parquet column of the form `__index__level__{i}__`
+            # for some integer i. This was Arrow's standard behavior for a
+            # while; newer versions added options to specify the index in
+            # metadata only. Need to investigate and/or have another parameter
+            # TODO: https://bodo.atlassian.net/browse/BE-4110
+            index_col = next(
+                (x for x in col_names if x.startswith("__index_level_")), None
+            )
+
             partition_names = []
             # If a user provides the schema, all types must be valid Bodo types.
             unsupported_columns = []
             unsupported_arrow_types = []
+            arrow_schema = numba_to_pyarrow_schema(
+                DataFrameType(data=tuple(col_types), columns=tuple(col_names))
+            )
 
         index_colname = (
             None if (isinstance(index_col, dict) or index_col is None) else index_col
@@ -217,6 +236,7 @@ class ParquetHandler:
                 input_file_name_col,
                 unsupported_columns,
                 unsupported_arrow_types,
+                arrow_schema,
                 use_hive,
             )
         ]
@@ -242,6 +262,7 @@ class ParquetReader(ir.Stmt):
         input_file_name_col,
         unsupported_columns,
         unsupported_arrow_types,
+        arrow_schema,
         use_hive,
     ):
         self.connector_typ = "parquet"
@@ -282,6 +303,7 @@ class ParquetReader(ir.Stmt):
         # get eliminated.
         self.unsupported_columns = unsupported_columns
         self.unsupported_arrow_types = unsupported_arrow_types
+        self.arrow_schema = arrow_schema
         # Is the variable currently alive. This should be replaced with more
         # robust handling in connectors.
         self.is_live_table = True
@@ -289,7 +311,7 @@ class ParquetReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         # TODO
-        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
+        return "({}) = ReadParquet({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})".format(
             self.df_out,
             self.file_name.name,
             self.df_colnames,
@@ -307,6 +329,7 @@ class ParquetReader(ir.Stmt):
             self.input_file_name_col,
             self.unsupported_columns,
             self.unsupported_arrow_types,
+            self.arrow_schema,
         )
 
 
@@ -479,6 +502,7 @@ def pq_distributed_run(
         pq_node.index_column_type,
         pq_node.input_file_name_col,
         not pq_node.is_live_table,
+        pq_node.arrow_schema,
         pq_node.use_hive,
     )
 
@@ -538,6 +562,7 @@ def _gen_pq_reader_py(
     index_column_type,
     input_file_name_col,
     is_dead_table,
+    pyarrow_schema: pa.Schema,
     use_hive: bool,
 ):
     # a unique int used to create global variables with unique names
@@ -676,6 +701,7 @@ def _gen_pq_reader_py(
         f"        dnf_filters,\n"
         f"        expr_filters,\n"
         f"        storage_options_py,\n"
+        f"        pyarrow_schema_{call_id},\n"
         f"        {tot_rows_to_read},\n"
         f"        selected_cols_arr_{call_id}.ctypes,\n"
         f"        {len(selected_cols)},\n"
@@ -779,6 +805,7 @@ def _gen_pq_reader_py(
         f"table_idx_{call_id}": table_idx,
         f"selected_cols_arr_{call_id}": np.array(selected_cols, np.int32),
         f"nullable_cols_arr_{call_id}": np.array(nullable_cols, np.int32),
+        f"pyarrow_schema_{call_id}": pyarrow_schema.remove_metadata(),
         "index_arr_type": index_arr_type,
         "cpp_table_to_py_table": cpp_table_to_py_table,
         "info_to_array": info_to_array,
@@ -854,6 +881,7 @@ _pq_read = types.ExternalFunction(
         parquet_predicate_type,  # dnf_filters
         parquet_predicate_type,  # expr_filters
         storage_options_dict_type,  # storage_options
+        pyarrow_table_schema_type,  # pyarrow_schema
         types.int64,  # tot_rows_to_read
         types.voidptr,  # _selected_fields
         types.int32,  # num_selected_fields

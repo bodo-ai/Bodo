@@ -940,6 +940,7 @@ class UntypedPass:
             unsupported_arrow_types,
             is_select_query,
             has_side_effects,
+            pyarrow_table_schema,
         ) = _get_sql_types_arr_colnames(
             sql_const, con_const, _bodo_read_as_dict, lhs, rhs.loc, self._is_independent
         )
@@ -979,7 +980,7 @@ class UntypedPass:
                 index_col_name,
                 index_arr_typ,
                 None,  # database_schema
-                None,  # pyarrow_table_schema
+                pyarrow_table_schema,
                 False,  # is_merge_into
                 types.none,  # file_list_type
                 types.none,  # snapshot_id_type
@@ -3130,6 +3131,7 @@ def _get_sql_types_arr_colnames(
         converted_colnames,
         unsupported_columns,
         unsupported_arrow_types,
+        pyarrow_table_schema,
     ) = _get_sql_df_type_from_db(
         sql_const,
         con_const,
@@ -3164,6 +3166,7 @@ def _get_sql_types_arr_colnames(
         unsupported_arrow_types,
         is_select_query,
         has_side_effects,
+        pyarrow_table_schema,
     )
 
 
@@ -3205,8 +3208,13 @@ def _get_sql_df_type_from_db(
             )
             raise BodoError(message)
 
-    df_info = None
     message = ""
+    df_type = None
+    converted_colnames = None
+    unsupported_columns = None
+    unsupported_arrow_types = None
+    pyarrow_table_schema = None
+
     if bodo.get_rank() == 0 or is_independent:
         try:
             if db_type == "snowflake":  # pragma: no cover
@@ -3220,6 +3228,7 @@ def _get_sql_df_type_from_db(
                     converted_colnames,
                     unsupported_columns,
                     unsupported_arrow_types,
+                    pyarrow_table_schema,
                     dict_encode_timeout,
                 ) = get_schema(
                     con_const,
@@ -3271,6 +3280,7 @@ def _get_sql_df_type_from_db(
                 # Unsupported arrow columns is unused by other paths.
                 unsupported_columns = []
                 unsupported_arrow_types = []
+                pyarrow_table_schema = None
                 # MySQL+DESCRIBE: has fixed DataFrameType. Created upfront.
                 # SHOW has many variation depending on object to show
                 # so it will fall in the else-stmt
@@ -3306,12 +3316,7 @@ def _get_sql_df_type_from_db(
             # int for example, but later rows could have NAs
             # Q: Is this needed for snowflake?
             df_type = to_nullable_type(df_type)
-            df_info = (
-                df_type,
-                converted_colnames,
-                unsupported_columns,
-                unsupported_arrow_types,
-            )
+
         except Exception as e:
             message = f"{type(e).__name__}:'{e}'"
 
@@ -3322,20 +3327,23 @@ def _get_sql_df_type_from_db(
         common_err_msg = f"pd.read_sql(): Error executing query `{sql_const}`."
         # raised general exception since except checks for multiple exceptions (sqlalchemy, snowflake)
         raise RuntimeError(f"{common_err_msg}\n{message}")
-    if is_independent:
+
+    if not is_independent:
         (
             df_type,
             converted_colnames,
             unsupported_columns,
             unsupported_arrow_types,
-        ) = df_info
-    else:
-        (
-            df_type,
-            converted_colnames,
-            unsupported_columns,
-            unsupported_arrow_types,
-        ) = comm.bcast(df_info)
+            pyarrow_table_schema,
+        ) = comm.bcast(
+            (
+                df_type,
+                converted_colnames,
+                unsupported_columns,
+                unsupported_arrow_types,
+                pyarrow_table_schema,
+            )
+        )
     df_type = df_type.copy(data=tuple(t for t in df_type.data))
 
     return (
@@ -3343,6 +3351,7 @@ def _get_sql_df_type_from_db(
         converted_colnames,
         unsupported_columns,
         unsupported_arrow_types,
+        pyarrow_table_schema,
     )
 
 
