@@ -943,7 +943,7 @@ def overload_full_type(n, val, t):
         )  # pragma: no cover
 
     # nullable float array
-    if isinstance(typ, FloatingArrayType):  # pragma: no cover
+    if isinstance(typ, FloatingArrayType):
         dtype = numba.np.numpy_support.as_dtype(typ.dtype)
         return lambda n, val, t: bodo.libs.float_arr_ext.init_float_array(
             np.full(n, val, dtype),
