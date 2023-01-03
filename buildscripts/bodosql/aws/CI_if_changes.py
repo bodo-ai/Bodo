@@ -17,6 +17,8 @@ def run_ci():
     res = subprocess.run(["git", "diff", "--name-only", "develop"], capture_output=True)
     files = res.stdout.decode("utf-8").strip().split("\n")
     for filename in files:
+        if filename.startswith("bodo/docs"):
+            continue
         if (
             # We should run BodoSQL CI if there's been changes in Bodo
             # or in the BodoSQL sub module
