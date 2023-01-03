@@ -29,22 +29,14 @@ theme:
 
 
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
+    - media: '(prefers-color-scheme: light)'
       primary: bodo-light
       accent: bodo-green
-      toggle:
-        icon: material/toggle-switch
-        name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: bodo-dark
+    - media: '(prefers-color-scheme: dark)'
+      primary: bodo-light
       accent: bodo-green
-      toggle:
-        icon: material/toggle-switch-off-outline
-        name: Switch to light mode
   font:
-    text: Roboto
+    text: Archivo
     code: Roboto Mono
   favicon: assets/favicon.png
   logo: assets/bodo-logo.png
@@ -163,6 +155,7 @@ nav:
       - Using Regular Python inside Bodo (Object Mode): objmode.md
   - Bodo in your Pipeline:
       - Bodo Platform SDK: integrating_bodo/platform_sdk.md
+      - Native SQL with Catalogs : integrating_bodo/database_catalog.md
       - Migration from Spark:
           - Spark Examples: integrating_bodo/spark.md
           - Bodo Spark Cheatsheet: integrating_bodo/sparkcheatsheet.md
