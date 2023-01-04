@@ -2874,8 +2874,8 @@ def get_search_regex(in_arr, case, match, pat, out_arr):  # pragma: no cover
 
 
 def _gen_row_access_intrinsic(col_array_typ, c_ind):
-    """Generate an intrinsic for loading a value from a table column with 'col_dtype'
-    data type. 'c_ind' is the index of the column within the table.
+    """Generate an intrinsic for loading a value from a table column with
+    'col_array_typ' array type. 'c_ind' is the index of the column within the table.
     The intrinsic's input is an array of pointers for the table's data either array
     info or data depending on the type and a row index.
 
@@ -2963,12 +2963,18 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 size = cgutils.alloca_once(builder, lir.IntType(64))
                 args = (col_ptr, row_ind, size)
                 data_ptr = builder.call(getitem_fn, args)
-                return context.make_tuple(
-                    builder, sig.return_type, [data_ptr, builder.load(size)]
+                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                return context.compile_internal(
+                    builder,
+                    lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
+                        data, length
+                    ),
+                    decode_sig,
+                    [data_ptr, builder.load(size)],
                 )
 
             return (
-                types.Tuple([types.voidptr, types.int64])(types.voidptr, types.int64),
+                bodo.string_type(types.voidptr, types.int64),
                 codegen,
             )
 
@@ -3041,12 +3047,18 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 size = cgutils.alloca_once(builder, lir.IntType(64))
                 args = (dictionary_ptr, dict_loc, size)
                 data_ptr = builder.call(getitem_fn, args)
-                return context.make_tuple(
-                    builder, sig.return_type, [data_ptr, builder.load(size)]
+                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                return context.compile_internal(
+                    builder,
+                    lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
+                        data, length
+                    ),
+                    decode_sig,
+                    [data_ptr, builder.load(size)],
                 )
 
             return (
-                types.Tuple([types.voidptr, types.int64])(types.voidptr, types.int64),
+                bodo.string_type(types.voidptr, types.int64),
                 codegen,
             )
 
