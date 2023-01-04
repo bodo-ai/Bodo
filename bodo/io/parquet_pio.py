@@ -1021,8 +1021,12 @@ def get_pandas_metadata(schema, num_pieces):
 
         for col_dict in pandas_metadata["columns"]:
             col_name = col_dict["name"]
-            if col_dict["pandas_type"].startswith("int") and col_name is not None:
-                if col_dict["numpy_type"].startswith("Int"):
+            col_pd_type = col_dict["pandas_type"]
+            if (
+                col_pd_type.startswith("int") or col_pd_type.startswith("float")
+            ) and col_name is not None:
+                col_np_type = col_dict["numpy_type"]
+                if col_np_type.startswith("Int") or col_np_type.startswith("Float"):
                     nullable_from_metadata[col_name] = True
                 else:
                     nullable_from_metadata[col_name] = False

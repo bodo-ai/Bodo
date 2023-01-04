@@ -228,6 +228,8 @@ def test_read_write_parquet(memory_leak_check):
             "UInt32",
             "Int64",
             "UInt64",
+            "Float32",
+            "Float64",
             "Decimal",
             "Date",
             "Datetime",
@@ -253,6 +255,10 @@ def test_read_write_parquet(memory_leak_check):
             elif dtype.startswith("Int") or dtype.startswith("UInt"):
                 # missing values every 5 elements
                 data = [x if x % 5 != 0 else np.nan for x in range(num_elements)]
+                df[col_name] = pd.Series(data, dtype=dtype)
+            elif dtype.startswith("Float"):
+                # missing values every 5 elements
+                data = [x if x % 5 != 0 else None for x in range(num_elements)]
                 df[col_name] = pd.Series(data, dtype=dtype)
             elif dtype == "Decimal":
                 assert num_elements % 8 == 0

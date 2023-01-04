@@ -1644,8 +1644,8 @@ def test_pivot_to_parquet(df, memory_leak_check):
                 ]
                 cols_metadata = bodo_table.schema.pandas_metadata.get("columns")
                 # Generate expected typenames for Int64 and string
-                pd_type = "Int64" if py_output.b.dtype == np.float64 else "unicode"
-                np_type = "int64" if py_output.b.dtype == np.float64 else "object"
+                pd_type = "int64" if py_output.b.dtype == np.float64 else "unicode"
+                np_type = "Int64" if py_output.b.dtype == np.float64 else "object"
                 total_columns = py_output.columns.to_list() + [py_output.index.name]
                 for col_metadata in cols_metadata:
                     assert col_metadata["name"] in total_columns, "Name doesn't match"
