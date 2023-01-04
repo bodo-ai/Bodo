@@ -3,7 +3,7 @@ import sys
 import traceback
 import warnings
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, Dict, List, Literal, Optional, Tuple
 from urllib.parse import parse_qsl, urlparse
 from uuid import uuid4
 
@@ -30,13 +30,13 @@ from bodo.utils.typing import BodoError, BodoWarning, is_str_arr_type
 # Imports for typechecking
 if TYPE_CHECKING:  # pragma: no cover  Built-in Python Attribute. False during runtime
     from snowflake.connector import SnowflakeConnection
-    from snowflake.connector.cursor import SnowflakeCursor
+    from snowflake.connector.cursor import ResultMetadata, SnowflakeCursor
     from snowflake.connector.result_batch import JSONResultBatch, ResultBatch
 
-# Maximum number of rows to read from Snowflake in the probe query
-# to determine the output PyArrow schema. This is currently only applied
-# to SELECT queries.
-SF_READ_SCHEMA_PROBE_ROW_LIMIT = 100
+# How long the schema / typeof probe query should run for in the worst case.
+# This is to guard against increasing compilation time prohibitively in case there are
+# issues with Snowflake, the data, etc.
+SF_READ_SCHEMA_PROBE_TIMEOUT = 5
 
 # Whether to do a probe query to determine whether string columns should be
 # dictionary-encoded. This doesn't effect the _bodo_read_as_dict argument.
@@ -71,38 +71,54 @@ SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT = 100_000_000
 # Mapping of the Snowflake field types to the pyarrow types taken
 # from the snowflake connector. These are not fully accurate and don't match
 # the arrow types. However, they can be used when the returned data is empty.
-# TODO: Improve this information to only require describe.
-# https://github.com/snowflakedb/snowflake-connector-python/blob/a73a602f96678e4c761a63d89676fed182ef5093/src/snowflake/connector/result_batch.py#L671
+# https://github.com/snowflakedb/snowflake-connector-python/blob/dcf10e8c7ce13a5288104b28329d3c9e8ffffc5a/src/snowflake/connector/constants.py#L35
 # https://docs.snowflake.com/en/user-guide/python-connector-api.html#label-python-connector-type-codes
-FIELD_TYPE_TO_PA_TYPE = [
-    # Number/Int. TODO: handle signed/unsigned + bitwidth
-    pa.int64(),
-    # Float/Double. TODO: handle bitwidth
-    pa.float64(),
-    # String data
-    pa.string(),
-    # Date data. TODO: handle bitwidth
-    pa.date32(),
-    pa.timestamp("ns"),
-    # Variant
-    pa.string(),
-    # Timestamp stored in utc TIMESTAMP_LTZ
-    pa.timestamp("ns"),
-    # Timestamp with a timezone, TIMESTAMP_TZ. TODO: handle timestamp
-    pa.timestamp("ns"),
-    # Timestamp without a timezone, TIMESTAMP_NTZ
-    pa.timestamp("ns"),
-    # Object
-    pa.string(),
-    # Array TODO: Fix ME???
-    pa.string(),
+SCALE_TO_UNIT_PRECISION: Dict[int, Literal["s", "ms", "us", "ns"]] = {
+    0: "s",
+    3: "ms",
+    6: "us",
+    9: "ns",
+}
+TYPE_CODE_TO_ARROW_TYPE: List[Callable[["ResultMetadata", str], pa.DataType]] = [
+    # Number / Int - Always Signed
+    lambda m, _: pa.int64() if m.scale == 0 else pa.float64(),
+    # Float / Double
+    lambda _, __: pa.float64(),
+    # String
+    lambda _, __: pa.string(),
+    # Dates - Snowflake stores in days (aka 32-bit)
+    lambda _, __: pa.date32(),
+    # Timestamp - Seems to be unused?
+    lambda _, __: pa.time64("ns"),
+    # Variant / Union Type
+    lambda _, __: pa.string(),
+    # Timestamp stored in UTC - TIMESTAMP_LTZ
+    lambda m, tz: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz),
+    # Timestamp with a timezone offset per item - TIMESTAMP_TZ
+    lambda m, tz: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale], tz=tz),
+    # Timestamp without a timezone - TIMESTAMP_NTZ
+    lambda m, _: pa.timestamp(SCALE_TO_UNIT_PRECISION[m.scale]),
+    # Object / Struct - Connector doesn't support pa.struct
+    lambda _, __: pa.string(),
+    # Array - Connector doesn't support pa.list
+    lambda _, __: pa.string(),
     # Binary
-    pa.binary(),
-    # Time. Not supported in bodo. TODO: handle bitwidth
-    pa.time64("ns"),
+    lambda _, __: pa.binary(),
+    # Time
+    lambda m, _: (
+        {0: pa.time32("s"), 3: pa.time32("ms"), 6: pa.time64("us"), 9: pa.time64("ns")}
+    )[m.scale],
     # Boolean
-    pa.bool_(),
+    lambda _, __: pa.bool_(),
+    # Geographic - No Core Arrow Equivalent
+    lambda _, __: pa.string(),
 ]
+INT_BITSIZE_TO_ARROW_DATATYPE = {
+    1: pa.int8(),
+    2: pa.int16(),
+    4: pa.int32(),
+    8: pa.int64(),
+}
 
 
 def gen_snowflake_schema(column_names, column_datatypes):
@@ -270,7 +286,40 @@ SF_AZURE_WRITE_SAS_TOKEN_FILE_LOCATION = os.path.join(
 )
 
 
-def snowflake_connect(conn_str: str, is_parallel: bool = False):  # pragma: no cover
+def execute_query(
+    cursor: "SnowflakeCursor",
+    query: str,
+    timeout: Optional[int],
+) -> Optional["SnowflakeCursor"]:  # pragma: no cover
+    """
+    Execute a Snowflake Query with Special Timeout Handling
+    This function executes independently of ranks
+
+    Returns:
+        None if the query timed out, otherwise the resulting cursor
+
+    Raises:
+        Any other snowflake.connector.errors.ProgrammingError
+        unrelated to timeouts
+    """
+    try:
+        return cursor.execute(query, timeout=timeout)
+    except snowflake.connector.errors.ProgrammingError as e:
+        # Catch timeouts
+        if "SQL execution canceled" in str(e):
+            return None
+        else:
+            raise
+
+
+def escape_col_name(col_name: str) -> str:
+    """Helper Function to Escape Snowflake Column Names"""
+    return '"{}"'.format(col_name.replace('"', '""'))
+
+
+def snowflake_connect(
+    conn_str: str, is_parallel: bool = False
+) -> "SnowflakeConnection":  # pragma: no cover
     """
     From Snowflake connection URL, connect to Snowflake.
 
@@ -288,7 +337,7 @@ def snowflake_connect(conn_str: str, is_parallel: bool = False):  # pragma: no c
             ranks, and False otherwise
 
     Returns
-        conn (snowflake.connection): Snowflake connection
+        conn: Snowflake Connection object
     """
     ev = tracing.Event("snowflake_connect", is_parallel=is_parallel)
 
@@ -388,71 +437,115 @@ def snowflake_connect(conn_str: str, is_parallel: bool = False):  # pragma: no c
     return conn
 
 
-def get_schema(
-    conn_str: str,
-    sql_const: str,
+def get_schema_from_metadata(
+    cursor: "SnowflakeCursor",
+    sql_query: str,
     is_select_query: bool,
-    _bodo_read_as_dict: Optional[List[str]],
-):  # pragma: no cover
-    conn = snowflake_connect(conn_str)
+) -> Tuple[List[pa.Field], List, List[int], List[pa.DataType]]:  # pragma: no cover
+    """
+    Determine the Arrow schema and Bodo types of the query output
+    The approach is described in a Confluence Doc:
+    https://bodo.atlassian.net/wiki/spaces/B/pages/1238433836/Snowflake+Read+Table+Schema+Inference
+    This function executes independently on ranks.
 
-    # Import after snowflake_connect since it should be safe now.
-    import snowflake.connector
+    Args:
+        cursor: Snowflake Cursor to Perform Operations in
+        sql_query: Base SQL Query Operation
+        is_select_query: sql_query is a SELECT query
 
-    if is_select_query:
+    Returns:
+        pa_fields: List of PyArrow Fields for Each Column
+            Contains source column name, type, and nullability
+        col_types: List of Output Bodo Types for Each Column
+        unsupported_columns: Output Column Names with Unsupported Types
+            Bodo can't read the column in but should still recognize it for
+            other uses, like column pruning
+        unsupported_arrow_types: Arrow Types of Each Unsupported Column
+    """
+
+    # Get Snowflake Metadata for Query
+    # Use it to determine the general / broad Snowflake types
+    # The actual Arrow result may use smaller types for columns (initially int64, use int8)
+    query_field_metadata = cursor.describe(sql_query)
+    # Session Timezone, should be populated by the describe operation
+    tz: str = cursor._timezone  # type: ignore
+
+    arrow_fields: List[pa.Field] = []  # Equivalent PyArrow Fields
+    cols_to_check: Dict[str, int] = {}  # Columns to get typeof metadata for
+    for i, field_meta in enumerate(query_field_metadata):
+        dtype = TYPE_CODE_TO_ARROW_TYPE[field_meta.type_code](field_meta, tz)
+        arrow_fields.append(pa.field(field_meta.name, dtype, field_meta.is_nullable))
+        if pa.types.is_int64(dtype):
+            cols_to_check[field_meta.name] = i
+
+    # For any NUMBER columns, fetch SYSTEM$TYPEOF metadata to determine
+    # the smallest viable integer type (number of bytes)
+    if is_select_query and len(cols_to_check) != 0:
         schema_probe_query = (
-            f"select * from ({sql_const}) x LIMIT {SF_READ_SCHEMA_PROBE_ROW_LIMIT}"
+            "SELECT "
+            + ", ".join(
+                f"SYSTEM$TYPEOF({escape_col_name(x)})" for x in cols_to_check.keys()
+            )
+            + f" FROM ({sql_query}) LIMIT 1"
         )
-    else:
-        schema_probe_query = f"{sql_const}"
 
-    cursor = conn.cursor()
-    described_query = cursor.describe(schema_probe_query)
-    col_names = []
-    is_nullable = []
-    for x in described_query:
-        col_names.append(x.name)
-        is_nullable.append(x.is_nullable)
-    # TODO: Avoid executing the query once its possible to determine
-    # the exact arrow types.
-    if is_select_query:
-        # We can only execute a sample query if we are performing a select.
-        executed_query: "SnowflakeCursor" = cursor.execute(schema_probe_query)  # type: ignore
-        arrow_data: Optional[pa.Table] = executed_query.fetch_arrow_all()
-    else:
-        arrow_data = None
-    if arrow_data is None:
-        # If there is no data to load, construct the types based on the metadata
-        pa_fields = [
-            pa.field(x.name, FIELD_TYPE_TO_PA_TYPE[x.type_code])
-            for x in described_query
-        ]
-    else:
-        pa_fields = [arrow_data.schema.field(i) for i in range(len(col_names))]
+        probe_res = execute_query(
+            cursor, schema_probe_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
+        )
+        if probe_res is not None:
+            typing_table: pa.Table = probe_res.fetch_arrow_all()  # type: ignore
 
+            # Undo Escaped Col Name in Form SYSTEM$TYPEOF("_____")
+            offset_start = len('SYSTEM$TYPEOF("')  # Expected to be 15
+            offset_end = -len('")')  # Expected to be 2
+            for name, typing_info in typing_table.to_pylist()[0].items():
+                idx = cols_to_check[name[offset_start:offset_end].replace('""', '"')]
+                # Parse output NUMBER(__,_)[SBx] to get the byte width x
+                byte_size = int(typing_info[-2])
+                out_type = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]
+                arrow_fields[idx] = arrow_fields[idx].with_type(out_type)
+
+    # Convert Arrow Types to Bodo Types
     col_types = []
     unsupported_columns = []
     unsupported_arrow_types = []
-    for i, _ in enumerate(col_names):
-        field = pa_fields[i]
+    for i, field in enumerate(arrow_fields):
         dtype, supported = _get_numba_typ_from_pa_typ(
             field,
             False,  # index_col
-            is_nullable[i],  # nullable_from_metadata
+            field.nullable,  # nullable_from_metadata
             None,  # category_info
         )
         col_types.append(dtype)
         if not supported:
             unsupported_columns.append(i)
-            # Store the unsupported arrow type for future
-            # error messages.
+            # Store the unsupported arrow type for future error messages
             unsupported_arrow_types.append(field.type)
+
+    return arrow_fields, col_types, unsupported_columns, unsupported_arrow_types
+
+
+def get_schema(
+    conn_str: str,
+    sql_query: str,
+    is_select_query: bool,
+    _bodo_read_as_dict: Optional[List[str]],
+):  # pragma: no cover
+    conn = snowflake_connect(conn_str)
+    cursor = conn.cursor()
+
+    (
+        pa_fields,
+        col_types,
+        unsupported_columns,
+        unsupported_arrow_types,
+    ) = get_schema_from_metadata(cursor, sql_query, is_select_query)
 
     str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
     str_col_name_to_ind = {}
     for i, t in enumerate(col_types):
         if t == string_array_type:
-            str_col_name_to_ind[col_names[i]] = i
+            str_col_name_to_ind[pa_fields[i].name] = i
 
     # Map the snowflake original column name to the name that
     # is used from Python. This is used for comparing with
@@ -496,26 +589,19 @@ def get_schema(
         # to prevent a hang/timeout
         predict_cardinality_call = (
             f"select count(*),{', '.join(query_args)}"
-            f"from ( select * from ({sql_const}) limit {probe_limit} ) SAMPLE (1)"
+            f"from ( select * from ({sql_query}) limit {probe_limit} ) SAMPLE (1)"
         )
 
-        prediction_query_timed_out = False
-        try:
-            prediction_query = cursor.execute(
-                predict_cardinality_call, timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT
-            )
-        except snowflake.connector.errors.ProgrammingError as e:
-            # Catch timeouts
-            if "SQL execution canceled" in str(e):
-                prediction_query_timed_out = True
-            else:
-                raise
+        prediction_query = execute_query(
+            cursor,
+            predict_cardinality_call,
+            timeout=SF_READ_DICT_ENCODING_PROBE_TIMEOUT,
+        )
 
-        if prediction_query_timed_out:  # pragma: no cover
+        if prediction_query is None:  # pragma: no cover
             # It is hard to get Snowflake to consistently
             # and deterministically time out, so this branch
             # isn't tested in the unit tests.
-
             dict_encode_timeout_info = (probe_limit, query_args)
 
             if SF_READ_DICT_ENCODING_IF_TIMEOUT:
@@ -544,15 +630,15 @@ def get_schema(
     # it means it is case insensitive or it was inserted as all
     # uppercase with double quotes. In both of these situations
     # pd.read_sql() returns the name with all lower case
-    new_colnames = []
+    final_colnames: List[str] = []
     converted_colnames = set()
-    for x in col_names:
-        if x.isupper():
-            converted_colnames.add(x.lower())
-            new_colnames.append(x.lower())
+    for x in pa_fields:
+        if x.name.isupper():
+            converted_colnames.add(x.name.lower())
+            final_colnames.append(x.name.lower())
         else:
-            new_colnames.append(x)
-    df_type = DataFrameType(data=tuple(col_types), columns=tuple(new_colnames))
+            final_colnames.append(x.name)
+    df_type = DataFrameType(data=tuple(col_types), columns=tuple(final_colnames))
 
     return (
         df_type,
@@ -612,8 +698,9 @@ class FakeArrowJSONResultBatch:
         # constructor
         pylist = []
         for row in self._json_batch.create_iter():
+            # TODO: Check if isinstance(row, Exception) and handle somehow
             pylist.append(
-                {self._schema.names[i]: col_val for i, col_val in enumerate(row)}
+                {self._schema.names[i]: col_val for i, col_val in enumerate(row)}  # type: ignore
             )
         table = pa.Table.from_pylist(pylist, schema=self._schema)
         return table
@@ -719,6 +806,7 @@ def get_dataset(
             # Execute query
             cur = conn.cursor()
             ev_query = tracing.Event("execute_query", is_parallel=False)
+            cur = conn.cursor()
             cur.execute(query)
             ev_query.finalize()
 

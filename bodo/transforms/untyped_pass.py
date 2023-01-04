@@ -3105,7 +3105,7 @@ def _get_sql_types_arr_colnames(
     # Ex. : Create, insert, update, delete, drop, ...
     # SELECT goes to full path of getting type, split across ranks, ...
     # Other will be executed by all ranks as it's.
-    # Snowflake+Bodo only supports SELECT
+    # Snowflake + Bodo only supports SELECT
     # Snowflake: Show and Describe don't work with get_dataset
     # Only supported by MySQL.
     # Oracle: cx_oracle doesn't support them. Bodo displays same error as Pandas.
