@@ -77,8 +77,8 @@ class Time:
 
     def __repr__(self):
         return (
-            f"Time({self.hour}, {self.minute}, {self.second}, "
-            f"{self.millisecond}, {self.microsecond}, {self.nanosecond}, "
+            f"Time(hour={self.hour}, minute={self.minute}, second={self.second}, "
+            f"millisecond={self.millisecond}, microsecond={self.microsecond}, nanosecond={self.nanosecond}, "
             f"precision={self.precision})"
         )
 

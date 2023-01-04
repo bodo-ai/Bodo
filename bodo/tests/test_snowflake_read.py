@@ -738,7 +738,7 @@ def test_snowflake_use_index_dead_index(memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['l_suppkey']")
 
 
-def test_snowflake_count(memory_leak_check):
+def test_snowflake_groupby(memory_leak_check):
     """
     Test that using a sql function without an alias doesn't cause issues with
     dead column elimination.
@@ -755,7 +755,7 @@ def test_snowflake_count(memory_leak_check):
     schema = "TPCH_SF1"
     conn = get_snowflake_connection_string(db, schema)
     # need to sort the output to make sure pandas and Bodo get the same rows
-    query = "SELECT L_ORDERKEY, count(*) FROM LINEITEM GROUP BY L_ORDERKEY ORDER BY L_ORDERKEY LIMIT 70"
+    query = 'SELECT L_ORDERKEY, count(*), min(L_PARTKEY) as min_key, max("L_ORDERKEY") FROM LINEITEM GROUP BY L_ORDERKEY ORDER BY L_ORDERKEY LIMIT 70'
     # Pandas will load Int64 instead of the Int16 we can get from snowflake.
     check_func(impl, (query, conn), check_dtype=False)
 
@@ -1455,6 +1455,7 @@ def test_snowflake_zero_cols(memory_leak_check):
         check_logger_msg(stream, "Columns loaded []")
 
     check_func(test_impl_index, (query, conn))
+
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
