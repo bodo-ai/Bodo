@@ -387,11 +387,15 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
             int64_t idx = f(iRow);
             // To allow NaN values in the column.
             bool bit = false;
+            char* out_ptr = out_data1 + siztype * iRow;
             if (idx >= 0) {
-                char* out_ptr = out_data1 + siztype * iRow;
                 char* in_ptr = in_data1 + siztype * idx;
                 memcpy(out_ptr, in_ptr, siztype);
                 bit = in_indices->get_null_bit(idx);
+            } else {
+                // set index value to zero in case some other code accesses it
+                // by mistake. see https://bodo.atlassian.net/browse/BE-4146
+                memset(out_ptr, 0, siztype);
             }
             out_indices->set_null_bit(iRow, bit);
         }
@@ -702,12 +706,16 @@ array_info* RetrieveArray_TwoColumns(
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
             bool bit = false;
+            char* out_ptr = out_indices->data1 + siztype * iRow;
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
-                char* out_ptr = out_indices->data1 + siztype * iRow;
                 char* in_ptr = e_col->info2->data1 + siztype * ArrRow.second;
                 memcpy(out_ptr, in_ptr, siztype);
                 bit = e_col->info2->get_null_bit(ArrRow.second);
+            } else {
+                // set index value to zero in case some other code accesses it
+                // by mistake. see https://bodo.atlassian.net/browse/BE-4146
+                memset(out_ptr, 0, siztype);
             }
             out_indices->set_null_bit(iRow, bit);
         }
