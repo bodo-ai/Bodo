@@ -561,9 +561,10 @@ def escape_column_names(col_names, db_type, converted_colnames):
     if db_type == "snowflake":
         # Snowflake needs to lower-case names back to uppercase
         # and needs to escape double quotes (by doubling them)
+        from bodo.io.snowflake import escape_col_name
+
         col_str = ", ".join(
-            bodo.io.snowflake.escape_col_name(convert_col_name(x, converted_colnames))
-            for x in col_names
+            escape_col_name(convert_col_name(x, converted_colnames)) for x in col_names
         )
 
     elif db_type == "oracle":
