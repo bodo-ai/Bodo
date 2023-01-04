@@ -59,22 +59,22 @@ MPI_ROOT = 0
 class SqlReader(ir.Stmt):
     def __init__(
         self,
-        sql_request,
-        connection,
+        sql_request: str,
+        connection: str,
         df_out,
         df_colnames,
         out_vars,
         out_types,
-        converted_colnames,
-        db_type,
+        converted_colnames: List[str],
+        db_type: str,
         loc,
-        unsupported_columns,
-        unsupported_arrow_types,
-        is_select_query,
-        has_side_effects,
-        index_column_name,
+        unsupported_columns: List[str],
+        unsupported_arrow_types: List[pa.DataType],
+        is_select_query: bool,
+        has_side_effects: bool,
+        index_column_name: str,
         index_column_type,
-        database_schema,
+        database_schema: Optional[str],
         # Only relevant for Iceberg and Snowflake
         pyarrow_schema: Optional[pa.Schema],
         # Only relevant for Iceberg MERGE INTO COW
@@ -143,7 +143,7 @@ class SqlReader(ir.Stmt):
 
     def __repr__(self):  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
-        return f"{out_varnames} = ReadSql(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into})"
+        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into})"
 
 
 def parse_dbtype(con_str):
@@ -558,9 +558,16 @@ def escape_column_names(col_names, db_type, converted_colnames):
     # In Snowflake/Oracle we avoid functions by wrapping column names in quotes.
     # This makes the name case sensitive, so we avoid this by undoing any
     # conversions in the output as needed.
-    if db_type in ("snowflake", "oracle"):
-        # Snowflake/Oracle needs to convert all lower case strings back to uppercase
+    if db_type == "snowflake":
+        # Snowflake needs to lower-case names back to uppercase
+        # and needs to escape double quotes (by doubling them)
+        col_str = ", ".join(
+            bodo.io.snowflake.escape_col_name(convert_col_name(x, converted_colnames))
+            for x in col_names
+        )
 
+    elif db_type == "oracle":
+        # Oracle needs to convert all lower case strings back to uppercase
         used_col_names = []
         for x in col_names:
             used_col_names.append(convert_col_name(x, converted_colnames))
@@ -1485,11 +1492,3 @@ _snowflake_read = types.ExternalFunction(
         types.boolean,  # _is_select_query
     ),
 )
-
-
-import llvmlite.binding as ll
-
-from bodo.io import arrow_cpp
-
-ll.add_symbol("snowflake_read", arrow_cpp.snowflake_read)
-ll.add_symbol("iceberg_pq_read", arrow_cpp.iceberg_pq_read)

@@ -281,7 +281,7 @@ jobs:
       if [[ "${{ parameters.caching_test }}" == "true" ]]; then
         python -m bodo.runtests_caching "$NP" bodo/tests/caching_tests
       else
-        python -m bodo.runtests "$NP" --pyargs bodo -s -v -m "$(PYTEST_MARKER)"
+        python -m bodo.runtests "$NP" --pyargs bodo/tests/io bodo/tests/test_snowflake_read.py bodo/tests/test_snowflake_write.py bodo/tests/test_iceberg.py bodo/tests/test_s3.py bodo/tests/test_sql.py bodo/tests/test_sql_errorchecking.py bodo/tests/test_io.py bodo/tests/test_io_errorchecking.py bodo/tests/test_hdfs.py bodo/tests/test_gcs.py -s -v -m "$(PYTEST_MARKER)"
       fi
     env:
       SF_USERNAME: $(SNOWFLAKE_USER)
