@@ -2023,6 +2023,9 @@ def _gen_general_cond_cfunc(
         na_check_name,
         join_node.is_right_table,
     )
+    # use short-circuit boolean operators to avoid invalid access of NA locations
+    # see https://bodo.atlassian.net/browse/BE-4146
+    expr = expr.replace(" & ", " and ").replace(" | ", " or ")
     func_text += f"  return {expr}"
 
     loc_vars = {}
@@ -2072,19 +2075,20 @@ def _replace_column_accesses(
         if cname not in expr:
             continue
         getitem_fname = f"getitem_{table_name}_val_{c_ind}"
-        val_varname = f"_bodo_{table_name}_val_{c_ind}"
         if is_table_var:
             array_typ = typemap[col_vars[0].name].arr_types[c_ind]
         else:
             array_typ = typemap[col_vars[c_ind].name]
+
+        # Not creating intermediate variables for val_varname to avoid invalid access of
+        # NA locations (null checks should run before getitems)
+        # see https://bodo.atlassian.net/browse/BE-4146
         if is_str_arr_type(array_typ) or array_typ == bodo.binary_array_type:
             # If we have unicode we pass the table variable which is an array info
-            func_text += f"  {val_varname}, {val_varname}_size = {getitem_fname}({table_name}_table, {table_name}_ind)\n"
-            # Create proper Python string.
-            func_text += f"  {val_varname} = bodo.libs.str_arr_ext.decode_utf8({val_varname}, {val_varname}_size)\n"
+            val_varname = f"{getitem_fname}({table_name}_table, {table_name}_ind)\n"
         else:
             # If we have a numeric type we just pass the data pointers
-            func_text += f"  {val_varname} = {getitem_fname}({table_name}_data1, {table_name}_ind)\n"
+            val_varname = f"{getitem_fname}({table_name}_data1, {table_name}_ind)\n"
 
         physical_ind = logical_to_physical_ind[c_ind]
 
