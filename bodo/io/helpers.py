@@ -37,6 +37,7 @@ from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
@@ -277,14 +278,14 @@ def _get_numba_typ_from_pa_typ(
     ):
         arr_typ = IntegerArrayType(dtype)
 
-    # TODO: uncomment once nullable float array is fully supported
-    # if (
-    #     _use_nullable_pd_arr
-    #     and not is_index
-    #     and isinstance(dtype, types.Float)
-    #     and pa_typ.nullable
-    # ):
-    #     arr_typ = FloatingArrayType(dtype)
+    if (
+        _use_nullable_pd_arr
+        and bodo.libs.float_arr_ext._use_nullable_float
+        and not is_index
+        and isinstance(dtype, types.Float)
+        and pa_typ.nullable
+    ):
+        arr_typ = FloatingArrayType(dtype)
 
     return arr_typ, supported
 

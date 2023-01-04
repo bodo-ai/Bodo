@@ -3618,10 +3618,12 @@ def gen_pandas_parquet_metadata(
             pandas_type = numpy_type = "object"
         elif isinstance(col_type, IntegerArrayType):
             dtype_name = col_type.dtype.name
+            # Pandas dtype is int8/uint8/int16/...
+            # numpy dtype is Int8/UInt8/Int16/... (capitalize to specify nullable array)
             if dtype_name.startswith("int"):
-                pandas_type = "Int" + dtype_name[3:]
+                numpy_type = "Int" + dtype_name[3:]
             elif dtype_name.startswith("uint"):
-                pandas_type = "UInt" + dtype_name[4:]
+                numpy_type = "UInt" + dtype_name[4:]
             else:  # pragma: no cover
                 if is_runtime_columns:
                     # If columns are determined at runtime we don't have names
@@ -3631,7 +3633,13 @@ def gen_pandas_parquet_metadata(
                         col_name, col_type
                     )
                 )
-            numpy_type = col_type.dtype.name
+            pandas_type = col_type.dtype.name
+        elif isinstance(col_type, bodo.FloatingArrayType):
+            dtype_name = col_type.dtype.name
+            # Pandas dtype is float32/float64
+            # numpy dtype is Float32/Float64 (capitalize to specify nullable array)
+            pandas_type = dtype_name
+            numpy_type = dtype_name.capitalize()
         elif col_type == datetime_date_array_type:
             pandas_type = "datetime"
             numpy_type = "object"
