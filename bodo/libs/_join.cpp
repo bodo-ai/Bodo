@@ -1650,8 +1650,12 @@ table_info* cross_join_table(
 
             for (int p = 0; p < n_pes; p++) {
                 // NOTE: broadcast_table steals a reference from bcast_table on
-                // root rank. since all ranks become root in this loop
-                // eventually, bcast_table is decrefed everywhere.
+                // root rank. We need to keep bcast_table alive throughout this
+                // loop since dictionary values are necessary as part of the
+                // "reference" table on all ranks.
+                if (myrank == p) {
+                    incref_table_arrays(bcast_table);
+                }
                 table_info* bcast_table_chunk =
                     broadcast_table(bcast_table, bcast_table,
                                     bcast_table->ncols(), parallel_trace, p);
@@ -1733,7 +1737,8 @@ table_info* cross_join_table(
                 out_table_chunks.emplace_back(out_table_chunk);
             }
 
-            decref_table_arrays(other_table);
+            decref_table_arrays(left_table);
+            decref_table_arrays(right_table);
 
             out_table = concat_tables(out_table_chunks);
         }
