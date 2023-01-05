@@ -188,6 +188,8 @@ def gen_snowflake_schema(column_names, column_datatypes):
         # TODO: differentiate between unsigned vs. signed, 8, 16, 32, 64
         elif isinstance(col_type, bodo.IntegerArrayType):
             sf_schema[col_name] = "NUMBER(38, 0)"
+        elif isinstance(col_type, bodo.FloatingArrayType):
+            sf_schema[col_name] = "REAL"
         elif isinstance(col_type, bodo.DecimalArrayType):
             sf_schema[col_name] = "NUMBER(38, 18)"
         elif isinstance(col_type, (ArrayItemArrayType, StructArrayType)):
@@ -195,8 +197,7 @@ def gen_snowflake_schema(column_names, column_datatypes):
             sf_schema[col_name] = "VARIANT"
         else:
             raise BodoError(
-                "Conversion from Bodo array type {} to snowflake type not supported yet.",
-                col_type,
+                f"Conversion from Bodo array type {col_type} to snowflake type for {col_name} not supported yet."
             )
 
     return sf_schema
