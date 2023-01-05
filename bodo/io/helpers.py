@@ -395,7 +395,7 @@ def _numba_to_pyarrow_type(numba_type: types.ArrayCompatible, is_iceberg: bool =
     elif isinstance(numba_type, types.Array) and numba_type.dtype == bodo.timedelta64ns:
         dtype = pa.duration("ns")
     elif (
-        isinstance(numba_type, (types.Array, IntegerArrayType))
+        isinstance(numba_type, (types.Array, IntegerArrayType, FloatingArrayType))
         and numba_type.dtype in _numba_pyarrow_type_map
     ):
         dtype = _numba_pyarrow_type_map[numba_type.dtype]  # type: ignore
