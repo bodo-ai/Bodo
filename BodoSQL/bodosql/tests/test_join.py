@@ -70,7 +70,7 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -139,6 +139,40 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
     )
 
 
+def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check):
+    """test simple natural join queries"""
+    # For nullable integers convert the pyspark output from
+    # float to object
+    if any(
+        [
+            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            for x in join_dataframes["table1"].dtypes
+        ]
+    ):
+        convert_float_nan = True
+    else:
+        convert_float_nan = False
+    if any(
+        [
+            isinstance(join_dataframes["table1"][colname].values[0], bytes)
+            for colname in join_dataframes["table1"].columns
+        ]
+    ):
+        convert_columns_bytearray = ["B", "C", "D"]
+    else:
+        convert_columns_bytearray = None
+    query = f"select table1.B, C, D from table1 NATURAL {join_type} join table2"
+    check_query(
+        query,
+        join_dataframes,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
+        convert_float_nan=convert_float_nan,
+        convert_columns_bytearray=convert_columns_bytearray,
+    )
+
+
 @pytest.mark.slow
 def test_and_join(join_dataframes, spark_info, memory_leak_check):
     """
@@ -152,7 +186,7 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -200,7 +234,7 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -238,7 +272,7 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
@@ -281,7 +315,7 @@ def test_join_different_size_tables(
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes
