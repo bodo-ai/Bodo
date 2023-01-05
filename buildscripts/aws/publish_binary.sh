@@ -4,7 +4,7 @@ set -exo pipefail
 # Deactivate env in case this was called by another file that
 # activated the env
 source deactivate || true
-export PATH=$HOME/miniconda3/bin:$PATH
+export PATH=$HOME/mambaforge/bin:$PATH
 source activate $CONDA_ENV
 
 CHANNEL_NAME=${1:-bodo-binary}
@@ -15,7 +15,7 @@ echo "********** Publishing to Artifactory **********"
 USERNAME=`credstash -r us-east-2 get artifactory.ci.username`
 TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
 
-for package in `ls $HOME/miniconda3/envs/bodo_build/conda-bld/${OS_DIR}/bodo*.tar.bz2`; do
+for package in `ls $HOME/mambaforge/envs/bodo_build/conda-bld/${OS_DIR}/bodo*.tar.bz2`; do
     package_name=`basename $package`
     curl -u${USERNAME}:${TOKEN} -T $package "https://bodo.jfrog.io/artifactory/${CHANNEL_NAME}/${OS_DIR}/$package_name"
 done
@@ -27,7 +27,7 @@ curl -X POST https://$ADMIN_USERNAME:$ADMIN_TOKEN@bodo.jfrog.io/artifactory/api/
 
 # wait for reindex to complete
 set +e
-for package in `ls $HOME/miniconda3/envs/bodo_build/conda-bld/${OS_DIR}/bodo*.tar.bz2`; do
+for package in `ls $HOME/mambaforge/envs/bodo_build/conda-bld/${OS_DIR}/bodo*.tar.bz2`; do
     package_name=`basename $package`
     # package name looks like this: bodo-<version>-<build>.tar.bz2
     # for example: bodo-2022.05.2+10.gb5b9a120.dirty-py39h3fd9d12_10.tar.bz2

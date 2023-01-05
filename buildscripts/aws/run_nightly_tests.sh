@@ -2,16 +2,18 @@
 set -exo pipefail
 
 # Load the env first because credstash is installed on conda
-export PATH=$HOME/miniconda3/bin:$PATH
+export PATH=$HOME/mambaforge/bin:$PATH
 export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
 
+set +x
 source activate $CONDA_ENV
+set -x
 
 USERNAME=`credstash -r us-east-2 get artifactory.ci.username`
 TOKEN=`credstash -r us-east-2 get artifactory.ci.token`
 
 # ------ Install Bodo -----------
-mamba install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/bodo-binary -c conda-forge bodo=$BODO_VERSION 'openjdk=11'
+mamba install -c https://${USERNAME}:${TOKEN}@bodo.jfrog.io/artifactory/api/conda/bodo-binary -c conda-forge bodo=$BODO_VERSION
 
 # ------ Export environment variables for Snowflake tests -----
 export SF_USERNAME=`credstash -r us-east-2 get snowflake.bodopartner.ue1.username`
