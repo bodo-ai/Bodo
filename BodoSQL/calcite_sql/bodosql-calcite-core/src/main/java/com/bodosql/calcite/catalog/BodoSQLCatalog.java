@@ -89,6 +89,13 @@ public interface BodoSQLCatalog {
   String generateRemoteQuery(String query);
 
   /**
+   * Return the db location to which this Catalog refers.
+   *
+   * @return The source DB location.
+   */
+  public String getDBType();
+
+  /**
    * Fetch the default timezone for this catalog. If the catalog doesn't influence the default
    * timezone it should return UTC.
    *

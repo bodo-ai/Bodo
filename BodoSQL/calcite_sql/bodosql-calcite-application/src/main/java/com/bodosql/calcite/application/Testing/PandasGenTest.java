@@ -26,18 +26,26 @@ public class PandasGenTest {
     BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType, true);
     arr.add(column3);
 
-    BodoSqlTable table = new LocalTableImpl("table1", schema, arr, false, "table1", "", false);
-    schema.addTable(table);
+    BodoSqlTable table =
+        new LocalTableImpl(
+            "table1", schema, arr, true, "table1", "TABLE_1 WRITE HERE (%s, %s)", false, "MEMORY");
 
+    schema.addTable(table);
     arr = new ArrayList();
     arr.add(column);
     BodoSQLColumnImpl column4 = new BodoSQLColumnImpl("B", dataType, true);
     arr.add(column4);
     BodoSQLColumnImpl column5 = new BodoSQLColumnImpl("C", dataType, true);
     arr.add(column5);
-    BodoSqlTable table2 = new LocalTableImpl("table2", schema, arr, false, "table2", "", false);
+
+    BodoSqlTable table2 =
+        new LocalTableImpl(
+            "table2", schema, arr, true, "table2", "TABLE_2 WRITE HERE (%s, %s)", false, "MEMORY");
     schema.addTable(table2);
-    BodoSqlTable table3 = new LocalTableImpl("table3", schema, arr, false, "table3", "", false);
+    BodoSqlTable table3 =
+        new LocalTableImpl(
+            "table3", schema, arr, true, "table3", "TABLE_3 WRITE HERE (%s, %s)", false, "MEMORY");
+
     schema.addTable(table3);
 
     // Define the Parameter table
@@ -49,7 +57,16 @@ public class PandasGenTest {
     BodoSQLColumnImpl param2 = new BodoSQLColumnImpl("cwsfe_21", paramType, true);
     arr.add(param2);
     BodoSqlTable paramTable =
-        new LocalTableImpl(paramTableName, schema, arr, false, paramTableName, "", false);
+        new LocalTableImpl(
+            paramTableName,
+            schema,
+            arr,
+            true,
+            paramTableName,
+            "PARAM_TABLE WRITE HERE (%s, %s)",
+            false,
+            "MEMORY");
+
     schema.addTable(paramTable);
 
     RelationalAlgebraGenerator generator =

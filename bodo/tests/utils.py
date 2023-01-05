@@ -188,6 +188,7 @@ def check_func(
     - use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
     format for testing.
     If None, tests both formats if input arguments have string arrays.
+    - check_typing_issues:
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default

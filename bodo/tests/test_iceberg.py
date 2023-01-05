@@ -2943,8 +2943,8 @@ def test_merge_into_cow_simple_e2e_partitions(iceberg_database, iceberg_table_co
     passed = False
     if bodo.get_rank() == 0:
 
-        # We had issues with spark caching previously, this alleviates those issues
         spark = get_spark()
+        # We had issues with spark caching previously, this alleviates those issues
         spark.sql("CLEAR CACHE;")
         spark.sql(f"REFRESH TABLE hadoop_prod.{DATABASE_NAME}.{table_name};")
 

@@ -36,6 +36,7 @@ import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.table.BodoSqlTable;
+import com.bodosql.calcite.table.LocalTableImpl;
 import com.google.common.collect.Range;
 import java.util.*;
 import org.apache.calcite.prepare.RelOptTableImpl;
@@ -44,6 +45,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Join;
+import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.logical.*;
 import org.apache.calcite.rel.type.*;
@@ -54,6 +56,7 @@ import org.apache.calcite.sql.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
 import org.apache.calcite.util.Sarg;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
 public class PandasCodeGenVisitor extends RelVisitor {
@@ -68,6 +71,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private int colVarId = 1;
   private int groupByApplyFnId = 1;
   private int globalVarId = 1;
+
+  // Note that a given query can only have one MERGE INTO statement. Therefore,
+  // we can statically define the variable names we'll use for the iceberg file list and snapshot
+  // id,
+  // since we'll only be using these variables once per query
+  private static final String icebergFileListVarName = "__bodo_Iceberg_file_list";
+  private static final String icebergSnapshotIDName = "__bodo_Iceberg_snapshot_id";
+
+  private static final String ROW_ID_COL_NAME = "_bodo_row_id";
+  private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
 
   // Mapping from a unique key per node to exprTypes
   private final HashMap<String, BodoSQLExprType.ExprType> exprTypesMap;
@@ -121,6 +134,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // information can be shown.
   private final int verboseLevel;
 
+  // These Variables track the target table for merge into
+  private @Nullable String targetTableDf;
+  // Extra arguments to pass to the write code for the fileList and Snapshot
+  // id in the form of "argName1=varName1, argName2=varName2"
+  private @Nullable String fileListAndSnapshotIdArgs;
+
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
       HashMap<String, RexNode> searchMap,
@@ -135,6 +154,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
     this.debuggingDeltaTable = debuggingDeltaTable;
+    this.targetTableDf = null;
+    this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
   }
 
@@ -681,27 +702,75 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node
    */
   public void visitMergeInto(LogicalTableModify node) {
+    assert node.getOperation() == TableModify.Operation.MERGE;
+
+    this.visit(node.getInput(0), 0, node);
+    String deltaDfVar = this.varGenStack.pop();
+    List<String> currentDeltaDfColNames = this.columnNamesStack.pop();
+
     if (this.debuggingDeltaTable) {
       // If this environment variable is set, we're only testing the generation of the delta table.
       // Just return the delta table.
-      this.visit(node.getInput(0), 0, node);
-      String outVar = this.varGenStack.pop();
-      List<String> colNames = this.columnNamesStack.pop();
       // We drop no-ops from the delta table, as a few Calcite Optimizations can result in their
       // being removed from the table, and their presence/lack thereof shouldn't impact anything in
       // the
       // final implementation, but it can cause issues when testing the delta table
       this.generatedCode
           .append(getBodoIndent())
-          .append(outVar)
+          .append(deltaDfVar)
           .append(" = ")
-          .append(outVar)
+          .append(deltaDfVar)
           .append(".dropna(subset=[")
-          .append(makeQuoted(colNames.get(colNames.size() - 1)))
+          .append(makeQuoted(currentDeltaDfColNames.get(currentDeltaDfColNames.size() - 1)))
           .append("])\n");
-      this.generatedCode.append(getBodoIndent()).append("return " + outVar);
+      this.generatedCode.append(getBodoIndent()).append("return " + deltaDfVar);
     } else {
-      throw new BodoSQLCodegenException("MERGE INTO not yet implemented.");
+      // Assert that we've encountered a LogicalTargetTableScan in the codegen, and
+      // set the appropriate variables
+      assert targetTableDf != null;
+      assert fileListAndSnapshotIdArgs != null;
+
+      RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
+      BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
+      if (!(bodoSqlTable.isWriteable() && bodoSqlTable.getDBType().equals("ICEBERG"))) {
+        throw new BodoSQLCodegenException(
+            "MERGE INTO is only supported with Iceberg table destinations provided via the the"
+                + " SQL TablePath API");
+      }
+
+      // note table.getColumnNames does NOT include ROW_ID or MERGE_ACTION_ENUM_COL_NAME column
+      // names,
+      // because of the way they are added plan in calcite (extension fields)
+      // We know that the row ID and merge columns exist in the input table due to our code
+      // invariants
+      List<String> targetTableFinalColumnNames = bodoSqlTable.getColumnNames();
+      List<String> deltaTableExpectedColumnNames;
+      deltaTableExpectedColumnNames = new ArrayList<>(targetTableFinalColumnNames);
+      deltaTableExpectedColumnNames.add(ROW_ID_COL_NAME);
+      deltaTableExpectedColumnNames.add(MERGE_ACTION_ENUM_COL_NAME);
+
+      StringBuilder outputCode = new StringBuilder();
+      String writebackDf = genDfVar();
+
+      outputCode.append(
+          handleRename(deltaDfVar, currentDeltaDfColNames, deltaTableExpectedColumnNames));
+      outputCode
+          .append(getBodoIndent())
+          .append(writebackDf)
+          .append(" = bodosql.libs.iceberg_merge_into.do_delta_merge_with_target(")
+          .append(this.targetTableDf)
+          .append(", ")
+          .append(deltaDfVar)
+          .append(")\n");
+
+      // TODO: this can just be cast, since we handled rename
+      outputCode.append(
+          handleCastAndRenameBeforeWrite(writebackDf, targetTableFinalColumnNames, bodoSqlTable));
+      outputCode
+          .append(getBodoIndent())
+          .append(bodoSqlTable.generateWriteCode(writebackDf, this.fileListAndSnapshotIdArgs))
+          .append("\n");
+      this.generatedCode.append(outputCode);
     }
   }
 
@@ -739,15 +808,30 @@ public class PandasCodeGenVisitor extends RelVisitor {
           "Insert Into is only supported with table destinations provided via the Snowflake"
               + "catalog or the SQL TablePath API");
     }
+
+    outputCode.append(handleCastAndRenameBeforeWrite(outVar, colNames, bodoSqlTable));
+    outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
+    this.generatedCode.append(outputCode);
+  }
+
+  public String handleCastAndRenameBeforeWrite(
+      String outVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
+    StringBuilder outputCode = new StringBuilder();
     String castExpr = bodoSqlTable.generateWriteCastCode(outVar);
     if (castExpr != "") {
       outputCode.append(getBodoIndent()).append(outVar).append(" = ").append(castExpr).append("\n");
     }
     // Update column names to the write names.
-    List<String> writeColNames = bodoSqlTable.getWriteColumnNames();
+    outputCode.append(handleRename(outVar, colNames, bodoSqlTable.getWriteColumnNames()));
+    return outputCode.toString();
+  }
+
+  public String handleRename(String outVar, List<String> oldColNames, List<String> newColNames) {
+    assert oldColNames.size() == newColNames.size();
+    StringBuilder outputCode = new StringBuilder();
     boolean hasRename = false;
-    for (int i = 0; i < writeColNames.size(); i++) {
-      if (!colNames.get(i).equals(writeColNames.get(i))) {
+    for (int i = 0; i < newColNames.size(); i++) {
+      if (!oldColNames.get(i).equals(newColNames.get(i))) {
         if (!hasRename) {
           // Only generate the rename if at least 1 column needs renaming to avoid any empty
           // dictionary issues.
@@ -759,17 +843,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
               .append(".rename(columns={");
           hasRename = true;
         }
-        outputCode.append(makeQuoted(colNames.get(i)));
+        outputCode.append(makeQuoted(oldColNames.get(i)));
         outputCode.append(" : ");
-        outputCode.append(makeQuoted(writeColNames.get(i)));
+        outputCode.append(makeQuoted(newColNames.get(i)));
         outputCode.append(", ");
       }
     }
     if (hasRename) {
       outputCode.append("}, copy=False)\n");
     }
-    outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
-    this.generatedCode.append(outputCode);
+    return outputCode.toString();
   }
 
   /**
@@ -3256,6 +3339,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node TableScan node being visited
    */
   public void visitTableScan(TableScan node) {
+
+    if (!(node instanceof LogicalTableScan || node instanceof LogicalTargetTableScan)) {
+      throw new BodoSQLCodegenException(
+          "Internal error: unsupported tableScan node generated:" + node.toString());
+    }
+    boolean isTargetTableScan = node instanceof LogicalTargetTableScan;
+
     // Determine how many \n characters have appears. This indicates the line
     // in which to insert the IO for table scans.
     String outVar = this.genDfVar();
@@ -3268,8 +3358,30 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else {
       RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
       BodoSqlTable table = (BodoSqlTable) relTable.table();
-      String readCode = table.generateReadCode();
-      String readAssign = String.format("  %s = %s\n", outVar, readCode);
+      String readCode;
+      String readAssign;
+      // Add the table to cached values
+      if (isTargetTableScan) {
+        // TODO: Properly restrict to Iceberg.
+        if (!(table instanceof LocalTableImpl) || !table.getDBType().equals("ICEBERG")) {
+          throw new BodoSQLCodegenException(
+              "Insert Into is only supported with Iceberg table destinations provided via"
+                  + " the the SQL TablePath API");
+        }
+        readCode = table.generateReadCode("_bodo_merge_into=True,");
+        this.fileListAndSnapshotIdArgs =
+            String.format(
+                "snapshot_id=%s, old_fnames=%s,", icebergSnapshotIDName, icebergFileListVarName);
+        readAssign =
+            String.format(
+                "  %s, %s, %s = %s\n",
+                outVar, icebergFileListVarName, icebergSnapshotIDName, readCode);
+        targetTableDf = outVar;
+      } else {
+        readCode = table.generateReadCode();
+        readAssign = String.format("  %s = %s\n", outVar, readCode);
+      }
+
       boolean readUsesIO = table.readRequiresIO();
       if (this.verboseLevel >= 1 && readUsesIO) {
         // If the user has set verbose level >= 1 and there is IO, we generate
@@ -3287,13 +3399,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
       } else {
         this.generatedCode.append(readAssign);
       }
+
       String castExpr = table.generateReadCastCode(outVar);
       if (castExpr != "") {
         this.generatedCode.append(String.format("  %s = %s\n", outVar, castExpr));
       }
-      // Add the table to cached values
-      this.varCache.put(node.getId(), new Pair<>(outVar, columnNames));
+      if (!isTargetTableScan) {
+        // Add the table to cached values. We only support this for regular
+        // tables and not the target table in merge into.
+        this.varCache.put(node.getId(), new Pair<>(outVar, columnNames));
+      }
     }
+
     columnNamesStack.push(columnNames);
     varGenStack.push(outVar);
   }
@@ -3315,10 +3432,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else {
       this.visit(node.getLeft(), 0, node);
       List<String> leftColNames = columnNamesStack.pop();
+      String leftTable = varGenStack.pop();
       this.visit(node.getRight(), 1, node);
       List<String> rightColNames = columnNamesStack.pop();
       String rightTable = varGenStack.pop();
-      String leftTable = varGenStack.pop();
 
       RexNode cond = node.getCondition();
 
