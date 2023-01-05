@@ -5,8 +5,7 @@ set -exo pipefail
 
 # Package Setup
 eval "$(./bin/micromamba shell hook -s posix)"
-micromamba activate
-micromamba install -y boa anaconda-client conda-verify curl -c conda-forge
+micromamba activate iceberg_build
 
 
 # Build Pakcage
