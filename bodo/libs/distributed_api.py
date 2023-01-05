@@ -12,6 +12,9 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+
+# See call_finalize for why this is commented out
+# from pyarrow.fs import finalize_s3
 from llvmlite import ir as lir
 from mpi4py import MPI
 from numba.core import cgutils, ir_utils, types
@@ -3406,13 +3409,10 @@ def dist_permutation_array_index(
 ########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
 
 
-from bodo.io import fsspec_reader, hdfs_reader, s3_reader
+from bodo.io import fsspec_reader, hdfs_reader
 
 ll.add_symbol("finalize", hdist.finalize)
 finalize = types.ExternalFunction("finalize", types.int32())
-
-ll.add_symbol("finalize_s3", s3_reader.finalize_s3)
-finalize_s3 = types.ExternalFunction("finalize_s3", types.int32())
 
 ll.add_symbol("finalize_fsspec", fsspec_reader.finalize_fsspec)
 finalize_fsspec = types.ExternalFunction("finalize_fsspec", types.int32())
@@ -3447,7 +3447,12 @@ def disconnect_hdfs_njit():  # pragma: no cover
 @numba.njit
 def call_finalize():  # pragma: no cover
     finalize()
-    finalize_s3()
+    # The S3 Finalizer packaged with PyArrow 9 is causing segfaults on MacOS
+    # x86 and sometimes on Linux (esp when using MinIO).
+    # It does not seem to actually do much except for some memory cleanup,
+    # which doesn't matter too much since we're calling it at the end of
+    # the program. Thus, lets skip it for now.
+    # finalize_s3()
     finalize_fsspec()
     _check_for_cpp_errors()
     disconnect_hdfs()

@@ -118,7 +118,6 @@ def pytest_collection_modifyitems(items):
         for item in items:
             if module_to_run == item.module.__name__.split(".")[-1] + ".py":
                 item.add_marker(pytest.mark.single_mod)
-    n = len(items)
 
     for i, item in enumerate(items):
         # Divide the tests evenly so long tests don't end up in 1 group
@@ -180,6 +179,9 @@ def minio_server():
     secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
     address = "{}:{}".format(host, port)
 
+    os.environ["MINIO_ROOT_USER"] = access_key
+    os.environ["MINIO_ROOT_PASSWORD"] = secret_key
+    # For compatibility with older MinIO versions.
     os.environ["MINIO_ACCESS_KEY"] = access_key
     os.environ["MINIO_SECRET_KEY"] = secret_key
     os.environ["AWS_S3_ENDPOINT"] = "http://{}/".format(address)

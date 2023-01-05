@@ -9,7 +9,6 @@ env:
   git-credential-helper: true
   variables:
       CONDA_ENV: "BodoCodeBuild"
-      RUN_NIGHTLY: "yes"
       RUNTIME: "yes"
       PYTHON_VERSION: 3.10
 
@@ -17,12 +16,10 @@ phases:
     install:
         commands:
         - buildscripts/setup_conda.sh
-        - buildscripts/aws/test_installs.sh
         - buildscripts/aws/export_env.sh
 
     build:
         commands:
-        - echo Building Obfuscated Binary
         - buildscripts/aws/build_obfuscated.sh
 
     post_build:
