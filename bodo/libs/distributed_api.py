@@ -2912,7 +2912,7 @@ def get_chunk_bounds_overload(A):
 
     def impl(A):  # pragma: no cover
         n_pes = get_size()
-        all_bounds = np.empty(n_pes, A.dtype)
+        all_bounds = np.empty(n_pes, np.int64)
         all_empty = np.empty(n_pes, np.int8)
 
         # using int64 min value in case the first chunk is empty. This will ensure
@@ -2923,7 +2923,7 @@ def get_chunk_bounds_overload(A):
             val = A[-1]
             empty = 0
 
-        allgather(all_bounds, val)
+        allgather(all_bounds, np.int64(val))
         allgather(all_empty, empty)
 
         # for empty chunks, use the boundary from previous rank to ensure empty output

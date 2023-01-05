@@ -382,7 +382,9 @@ def compute_df_types(df_list, is_bodo_type):
     return orig_bodo_types, df_types
 
 
-def add_table_type(table_name, schema, df_type, bodo_type, table_num, from_jit):
+def add_table_type(
+    table_name, schema, df_type, bodo_type, table_num, from_jit, write_type
+):
     """Add a SQL Table type in Java to the schema."""
     assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
     col_arr = ArrayClass()
@@ -395,15 +397,36 @@ def add_table_type(table_name, schema, df_type, bodo_type, table_num, from_jit):
     is_writeable = (
         isinstance(bodo_type, TablePathType) and bodo_type._file_type == "sql"
     )
+
     if is_writeable:
-        schema_code = (
+        schema_code_to_sql = (
             f"schema='{bodo_type._db_schema}'"
             if bodo_type._db_schema is not None
             else ""
         )
-        write_format_code = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code})"
+        if write_type == "MERGE":
+            # Note. We only support MERGE for Iceberg. We check this in the
+            # Java code to ensure we also handle catalogs. Note the
+            # last argument is for passing additional arguments as key=value pairs.
+            write_format_code = f"bodo.io.iceberg.iceberg_merge_cow_py('{bodo_type._file_path}', '{bodo_type._conn_str}', '{bodo_type._db_schema}', %s, %s)"
+        else:
+            write_format_code = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code_to_sql}, %s)"
     else:
         write_format_code = ""
+
+    # Determine the DB Type for generating java code.
+    if isinstance(bodo_type, TablePathType):
+        if bodo_type._file_type == "pq":
+            db_type = "PARQUET"
+        else:
+            assert (
+                bodo_type._file_type == "sql"
+            ), "TablePathType is only implement for parquet and SQL APIs"
+            const_conn_str = bodo_type._conn_str
+            db_type, _ = parse_dbtype(const_conn_str)
+    else:
+        db_type = "MEMORY"
+
     read_code = _generate_table_read(table_name, bodo_type, table_num, from_jit)
     table = LocalTableClass(
         table_name,
@@ -415,6 +438,7 @@ def add_table_type(table_name, schema, df_type, bodo_type, table_num, from_jit):
         # TablePath is a wrapper for a file so it results in an IO read.
         # The only other option is an in memory Pandas DataFrame.
         isinstance(bodo_type, TablePathType),
+        db_type,
     )
     schema.addTable(table)
 
@@ -447,21 +471,26 @@ def _generate_table_read(
         read_dict_list = (
             ""
             if bodo_type._bodo_read_as_dict is None
-            else f"_bodo_read_as_dict={bodo_type._bodo_read_as_dict}"
+            else f"_bodo_read_as_dict={bodo_type._bodo_read_as_dict},"
         )
         if file_type == "pq":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
-            read_line = f"pd.read_parquet('{file_path}', {read_dict_list})\n"
+            if read_dict_list:
+                read_line = f"pd.read_parquet('{file_path}', {read_dict_list}, %s)\n"
+            else:
+                read_line = f"pd.read_parquet('{file_path}', %s)\n"
         elif file_type == "sql":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
             conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(conn_str)
             if db_type == "iceberg":
-                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list})\n"
+                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list} %s)\n"
             else:
-                read_line = f"pd.read_sql('select * from {file_path}', '{conn_str}')\n"
+                read_line = (
+                    f"pd.read_sql('select * from {file_path}', '{conn_str}', %s)\n"
+                )
         else:
             raise BodoError(
                 f"Internal Error: Unsupported TablePathType for type: '{file_type}'"
@@ -501,7 +530,7 @@ def add_param_table(table_name, schema, param_keys, param_values):
     # a table scan. Instead the original Python variable names will always
     # be used.
     schema.addTable(
-        LocalTableClass(table_name, schema, param_arr, False, "", "", False)
+        LocalTableClass(table_name, schema, param_arr, False, "", "", False, "MEMORY")
     )
 
 
@@ -745,9 +774,16 @@ class BodoSQLContext:
                 generator = self._create_generator()
                 # Handle the parsing step.
                 generator.parseQuery(sql)
+                # Determine the write type
+                write_type = generator.getWriteType(sql)
                 # Update the schema with types.
                 update_schema(
-                    self.schema, self.names, self.df_types, self.orig_bodo_types, False
+                    self.schema,
+                    self.names,
+                    self.df_types,
+                    self.orig_bodo_types,
+                    False,
+                    write_type,
                 )
                 plan_or_err_msg = str(generator.getOptimizedPlanString(sql))
                 # Remove the named Params table
@@ -775,9 +811,16 @@ class BodoSQLContext:
                 generator = self._create_generator()
                 # Handle the parsing step.
                 generator.parseQuery(sql)
+                # Determine the write type
+                write_type = generator.getWriteType(sql)
                 # Update the schema with types.
                 update_schema(
-                    self.schema, self.names, self.df_types, self.orig_bodo_types, False
+                    self.schema,
+                    self.names,
+                    self.df_types,
+                    self.orig_bodo_types,
+                    False,
+                    write_type,
                 )
                 plan_or_err_msg = str(generator.getUnoptimizedPlanString(sql))
                 # Remove the named Params table
@@ -805,9 +848,16 @@ class BodoSQLContext:
         generator = self._create_generator()
         # Handle the parsing step.
         generator.parseQuery(sql)
+        # Determine the write type
+        write_type = generator.getWriteType(sql)
         # Update the schema with types.
         update_schema(
-            self.schema, self.names, self.df_types, self.orig_bodo_types, False
+            self.schema,
+            self.names,
+            self.df_types,
+            self.orig_bodo_types,
+            False,
+            write_type,
         )
 
         if optimized:
@@ -1014,6 +1064,7 @@ def update_schema(
     df_types: List[bodo.DataFrameType],
     bodo_types: List[types.Type],
     from_jit: bool,
+    write_type: str,
 ):
     """Update a local schema with local tables.
 
@@ -1024,10 +1075,19 @@ def update_schema(
         bodo_types (List[types.Type]): List of Bodo types for each table. This stores
             the original type, so a TablePath isn't converted to its
             DataFrameType, which it is for df_types.
+        write_type (str): String describing the type of write used for generating the write code.
+            Will be "MERGE" for MERGE INTO queries, and defaults to "INSERT" for all other
+            queries.
         from_jit (bool): Is this typing coming from JIT?
     """
     if bodo.get_rank() == 0:
         for i in range(len(table_names)):
             add_table_type(
-                table_names[i], schema, df_types[i], bodo_types[i], i, from_jit
+                table_names[i],
+                schema,
+                df_types[i],
+                bodo_types[i],
+                i,
+                from_jit,
+                write_type,
             )

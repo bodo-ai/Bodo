@@ -14,12 +14,6 @@ from bodo.tests.iceberg_database_helpers.utils import (
 )
 from bodo.tests.utils import check_func
 
-# Skip this file until we merge the Iceberg branch
-pytest.skip(
-    allow_module_level=True,
-    reason="Waiting for MERGE INTO support to fix the Calcite generated issue",
-)
-
 pytestmark = pytest.mark.iceberg
 
 bodo_datatype_cols = {
@@ -27,13 +21,14 @@ bodo_datatype_cols = {
     "float_col": pd.Series([np.float32(i) for i in range(10)], dtype=np.float32),
     "str_col": pd.Series([str(i) for i in range(10)], dtype="string[pyarrow]"),
     "bool_col": pd.Series([bool(i % 2) for i in range(10)], dtype=bool),
+    # TODO: resolve this issue: https://bodo.atlassian.net/browse/BE-4072
     # "ts_col": pd.Series(
     #     [pd.Timestamp("2020-01-01", tz="UTC") + pd.Timedelta(days=i) for i in range(10)],
     # ),
     "non_ascii_col": pd.Series(
         [str(i) + "é" for i in range(10)], dtype="string[pyarrow]"
     ),
-    "byte_col": pd.Series([bytes(i) for i in range(10)], dtype="bytes"),
+    "byte_col": pd.Series([bytes(str(i), "utf8") for i in range(10)], dtype="bytes"),
     "long_col": pd.Series([np.int64(i) for i in range(10)], dtype=np.int64),
     "double_col": pd.Series([np.float64(i) for i in range(10)], dtype=np.float64),
     "date_col": pd.Series(
@@ -56,6 +51,7 @@ bodo_datatype_expected_sql_types = {
     "float_col": "float",
     "str_col": "string",
     "bool_col": "boolean",
+    # TODO: resolve this issue: https://bodo.atlassian.net/browse/BE-4072
     # "ts_col": "timestamp",  # Spark writes timestamps with UTC timezone
     "non_ascii_col": "string",
     "byte_col": "binary",

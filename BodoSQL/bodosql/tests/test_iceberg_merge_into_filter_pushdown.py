@@ -17,10 +17,7 @@ from bodo.tests.iceberg_database_helpers import spark_reader
 from bodo.tests.iceberg_database_helpers.simple_tables import (
     TABLE_MAP as SIMPLE_TABLES_MAP,
 )
-from bodo.tests.iceberg_database_helpers.utils import (
-    create_iceberg_table,
-    get_spark,
-)
+from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table
 from bodo.tests.tracing_utils import TracingContextManager
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
@@ -28,12 +25,6 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import check_func
-
-# Skip this file until we merge the Iceberg branch
-pytest.skip(
-    allow_module_level=True,
-    reason="Waiting for MERGE INTO support to fix the Calcite generated issue",
-)
 
 pytestmark = pytest.mark.iceberg
 
@@ -60,17 +51,14 @@ def test_filter_pushdown_target(iceberg_database, iceberg_table_conn):
         # Read the result
         return bc.sql("select * from target_table")
 
-    # Select the iceberg table
+    # Create the Iceberg Table
     table_name = "merge_into_numeric_table1"
-    # Create the table
-    spark = get_spark()
     expected_output, sql_schema = SIMPLE_TABLES_MAP["numeric_table"]
     if bodo.get_rank() == 0:
         create_iceberg_table(
             expected_output,
             sql_schema,
             table_name,
-            spark,
         )
     bodo.barrier()
 
@@ -153,14 +141,12 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
     # Select the iceberg table
     table_name = "merge_into_numeric_table2"
     # Create the table
-    spark = get_spark()
     expected_output, sql_schema = SIMPLE_TABLES_MAP["numeric_table"]
     if bodo.get_rank() == 0:
         create_iceberg_table(
             expected_output,
             sql_schema,
             table_name,
-            spark,
         )
     bodo.barrier()
 
@@ -175,7 +161,6 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
     expected_output = expected_output[~filter]
 
     # open connection and create source table
-    spark = get_spark()
     table_name = "source_table_merge_into_pushdown"
     sql_schema = [("A", "bigint", False)]
     source_df = pd.DataFrame({"A": [-1, -7, -17, 1, 2, 3]})
@@ -184,7 +169,6 @@ def test_filter_pushdown_target_and_source(iceberg_database, iceberg_table_conn)
             source_df,
             sql_schema,
             table_name,
-            spark,
         )
     # Wait for the table to update in all ranks.
     bodo.barrier()
@@ -270,7 +254,6 @@ def test_filter_pushdown_self_merge(iceberg_database, iceberg_table_conn):
 
     # open connection and create source table
     db_schema, warehouse_loc = iceberg_database
-    spark = get_spark()
     table_name = "merge_into_unique_target"
     sql_schema = [("A", "bigint", False), ("B", "bigint", False)]
     source_df = pd.DataFrame({"A": np.arange(10), "B": np.arange(10)})
@@ -279,7 +262,6 @@ def test_filter_pushdown_self_merge(iceberg_database, iceberg_table_conn):
             source_df,
             sql_schema,
             table_name,
-            spark,
         )
     bodo.barrier()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)

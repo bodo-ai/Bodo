@@ -110,7 +110,7 @@ jobs:
       if [[ "$CACHE_TEST" == "true" ]]; then
         python -u -m bodosql.runtests_caching "$NP" bodosql/tests/caching_tests/
       else
-        python -u -m bodosql.runtests "$NP" -s -v -p no:faulthandler -m "$PYTEST_MARKER" bodosql/tests/test_types/
+        python -u -m bodosql.runtests "$NP" -s -v -p no:faulthandler -m "$PYTEST_MARKER" bodosql/tests/
       fi
 
     env:

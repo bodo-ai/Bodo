@@ -17,6 +17,7 @@ def test_count_head(datapath, memory_leak_check):
 
     This bug was spotted by Anudeep while trying to breakdown
     a query into components.
+
     """
 
     def impl(filename):

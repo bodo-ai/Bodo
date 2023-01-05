@@ -9,17 +9,8 @@ from numba.core import types
 
 import bodo
 from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
-from bodo.tests.iceberg_database_helpers.utils import (
-    create_iceberg_table,
-    get_spark,
-)
+from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table
 from bodo.tests.utils import check_func, find_funcname_in_annotation_ir
-
-# Skip this file until we merge the Iceberg branch
-pytest.skip(
-    allow_module_level=True,
-    reason="Waiting for MERGE INTO support to fix the Calcite generated issue",
-)
 
 pytestmark = pytest.mark.iceberg
 
@@ -92,12 +83,10 @@ def bodosql_dict_context(iceberg_database, iceberg_table_conn, source_table, req
     )
     sql_schema = [("a", "string", False), ("b", "string", False)]
     if bodo.get_rank() == 0:
-        spark = get_spark()
         create_iceberg_table(
             target_table,
             sql_schema,
             table_name,
-            spark,
         )
 
     bodo.barrier()
@@ -320,7 +309,6 @@ def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn)
     expected = target_table.copy()
 
     # open connection and create initial table
-    spark = get_spark()
     db_schema, warehouse_loc = iceberg_database
     table_name = "merge_into_dict_encoding2"
     sql_schema = [("a", "string", False), ("b", "string", False)]
@@ -329,7 +317,6 @@ def test_merge_into_dict_encoding_no_merge(iceberg_database, iceberg_table_conn)
             target_table,
             sql_schema,
             table_name,
-            spark,
         )
     bodo.barrier()
     conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)

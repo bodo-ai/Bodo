@@ -8,17 +8,12 @@ from bodo.tests.conftest import iceberg_database, iceberg_table_conn  # noqa
 from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table
 from bodo.tests.utils import check_func
 
-# Skip this file until we merge the Iceberg branch
-pytest.skip(
-    allow_module_level=True,
-    reason="Waiting for MERGE INTO support to fix the Calcite generated issue",
-)
-
 pytestmark = pytest.mark.iceberg
 
 
 def test_merge_into_full_example(iceberg_database, iceberg_table_conn):
     """
+
     Test that MERGE INTO works in a more realistic e2e scenario.
 
     The test will do the following:
@@ -127,10 +122,3 @@ def test_merge_into_full_example(iceberg_database, iceberg_table_conn):
         reset_index=True,
         sort_output=True,
     )
-
-    # impl(bc)
-
-    # # read back from iceberg
-    # if bodo.get_rank() == 0:
-    #     py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
-    #     pd.testing.assert_frame_equal(py_out, expected)
