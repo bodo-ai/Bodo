@@ -11,17 +11,16 @@ jobs:
     vmImage: ${{ parameters.vmImage }}
 
   steps:
-  - task: UsePythonVersion@0
-    inputs:
-      versionSpec: ${{ parameters.pythonVersion }}
-    displayName: 'Use Python ${{ parameters.pythonVersion }}'
-
+  # Install Micromamba and Create Environment. Reference:
+  # https://mamba.readthedocs.io/en/latest/installation.html#micromamba
   - script: |
-      set -eo pipefail
-      bash buildscripts/iceberg/install.sh
+      set -exo pipefail
+      curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
+      eval "$(./bin/micromamba shell hook -s posix)"
+      micromamba create -y -n iceberg_build python=$PYTHON_VERSION boa anaconda-client conda-verify -c conda-forge
     env:
       PYTHON_VERSION: ${{ parameters.pythonVersion }}
-    displayName: 'Setup Conda Installation + Dependencies'
+    displayName: 'Install Micromamba and Create Env'
 
   - task: DownloadSecureFile@1
     name: secret_file
