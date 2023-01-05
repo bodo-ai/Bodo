@@ -79,7 +79,8 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("c_acctbal", decimal_type, true));
     arr.add(new BodoSQLColumnImpl("c_mktsegment", fixed_text, true));
     arr.add(new BodoSQLColumnImpl("c_comment", variable_text, true));
-    BodoSqlTable table = new LocalTableImpl("customer", schema, arr, false, "customer", "", false);
+    BodoSqlTable table =
+        new LocalTableImpl("customer", schema, arr, false, "customer", "", false, "MEMORY");
     schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("o_orderkey", identifer_type, true));
@@ -91,7 +92,7 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("o_clerk", fixed_text, true));
     arr.add(new BodoSQLColumnImpl("o_shippriority", integer_type, true));
     arr.add(new BodoSQLColumnImpl("o_comment", variable_text, true));
-    table = new LocalTableImpl("orders", schema, arr, false, "orders", "", false);
+    table = new LocalTableImpl("orders", schema, arr, false, "orders", "", false, "MEMORY");
     schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("l_orderkey", identifer_type, true));
@@ -110,20 +111,20 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("l_shipinstruct", fixed_text, true));
     arr.add(new BodoSQLColumnImpl("l_shipmode", fixed_text, true));
     arr.add(new BodoSQLColumnImpl("l_comment", variable_text, true));
-    table = new LocalTableImpl("lineitem", schema, arr, false, "lineitem", "", false);
+    table = new LocalTableImpl("lineitem", schema, arr, false, "lineitem", "", false, "MEMORY");
     schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("n_nationkey", identifer_type, true));
     arr.add(new BodoSQLColumnImpl("n_name", fixed_text, true));
     arr.add(new BodoSQLColumnImpl("n_regionkey", identifer_type, true));
     arr.add(new BodoSQLColumnImpl("n_comment", variable_text, true));
-    table = new LocalTableImpl("nation", schema, arr, false, "nation", "", false);
+    table = new LocalTableImpl("nation", schema, arr, false, "nation", "", false, "MEMORY");
     schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("r_regionkey", identifer_type, true));
     arr.add(new BodoSQLColumnImpl("r_name", fixed_text, true));
     arr.add(new BodoSQLColumnImpl("r_comment", variable_text, true));
-    table = new LocalTableImpl("region", schema, arr, false, "region", "", false);
+    table = new LocalTableImpl("region", schema, arr, false, "region", "", false, "MEMORY");
     schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("s_suppkey", identifer_type, true));
@@ -133,7 +134,7 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("s_phone", fixed_text, true));
     arr.add(new BodoSQLColumnImpl("s_acctbal", decimal_type, true));
     arr.add(new BodoSQLColumnImpl("s_comment", variable_text, true));
-    table = new LocalTableImpl("supplier", schema, arr, false, "supplier", "", false);
+    table = new LocalTableImpl("supplier", schema, arr, false, "supplier", "", false, "MEMORY");
     schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("ps_partkey", identifer_type, true));
@@ -141,7 +142,7 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("ps_availqty", integer_type, true));
     arr.add(new BodoSQLColumnImpl("ps_supplycost", decimal_type, true));
     arr.add(new BodoSQLColumnImpl("ps_comment", variable_text, true));
-    table = new LocalTableImpl("partsupp", schema, arr, false, "partsupp", "", false);
+    table = new LocalTableImpl("partsupp", schema, arr, false, "partsupp", "", false, "MEMORY");
     schema.addTable(table);
     arr = new ArrayList();
     arr.add(new BodoSQLColumnImpl("p_partkey", identifer_type, true));
@@ -153,7 +154,7 @@ public class TPCHSchemaTest {
     arr.add(new BodoSQLColumnImpl("p_container", fixed_text, true));
     arr.add(new BodoSQLColumnImpl("p_retailprice", decimal_type, true));
     arr.add(new BodoSQLColumnImpl("p_comment", variable_text, true));
-    table = new LocalTableImpl("part", schema, arr, false, "part", "", false);
+    table = new LocalTableImpl("part", schema, arr, false, "part", "", false, "MEMORY");
     schema.addTable(table);
 
     RelationalAlgebraGenerator generator = new RelationalAlgebraGenerator(schema, "", 0);

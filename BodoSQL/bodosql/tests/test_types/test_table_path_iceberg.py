@@ -223,38 +223,7 @@ def test_tablepath_dict_encoding(
     check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
 
 
-@pytest.mark.skip("MERGE INTO Implementation")
 def test_merge_into_simple(iceberg_database, iceberg_table_conn):
-    def check_df_eq(py_output, bodo_output):
-        """wrapper around _test_equal_guard that handles distribution of input.
-        py_output, bodo_output must both be dataframes
-        """
-        from bodo.tests.utils import (
-            _gather_output,
-            _test_equal_guard,
-            reduce_sum,
-        )
-
-        bodo_output = bodo.gatherv(bodo_output)
-
-        bodo_output = _gather_output(bodo_output)
-
-        if bodo.get_rank() == 0:
-            passed = _test_equal_guard(
-                bodo_output,
-                py_output,
-                False,  # sort_output,
-                False,  # check_names,
-                False,  # check_dtype,
-                False,  # reset_index,
-                False,  # check_categorical,
-                1e-08,  # atol,
-                1e-05,  # rtol,
-            )
-
-        n_passed = reduce_sum(passed)
-        assert n_passed == bodo.get_size(), "Equality check failed"
-
     table_name = "test_merge_into_simple_tbl"
     db_schema, warehouse_loc = iceberg_database
     sql_schema = [
@@ -281,26 +250,87 @@ def test_merge_into_simple(iceberg_database, iceberg_table_conn):
         }
     )
 
-    @bodo.jit
-    def impl(bc):
-
-        bc.sql(
-            f"MERGE INTO {table_name} AS t USING source AS s "
-            "ON t.id = s.id "
-            "WHEN NOT MATCHED THEN "
-            "INSERT (id, dep) VALUES (1, null)",
-        )
-
-        # return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
-
-    expected_rows = pd.DataFrame(
-        {"id": [1, 2, 3], "dep": ["emp-id-1", "emp-id-2", "emp-id-3"]}
+    query = (
+        f"MERGE INTO {table_name} AS t USING source AS s "
+        "ON t.id = s.id "
+        "WHEN NOT MATCHED THEN "
+        "INSERT (id, dep) VALUES (1, s.dep)"
     )
-    actual_rows = impl(bc)
-    check_df_eq(expected_rows, actual_rows)
-    # Confirm with spark read
-    spark_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
-    check_df_eq(expected_rows, spark_out)
+
+    def impl(bc):
+        bc.sql(query)
+        return bc.sql(f"SELECT * FROM {table_name}")
+
+    expected_out = pd.DataFrame(
+        {"id": [1, 1, 1], "dep": ["foo", "emp-id-2", "emp-id-3"]}
+    )
+
+    check_func(
+        impl,
+        (bc,),
+        py_output=expected_out,
+        only_1DVar=True,
+        sort_output=True,
+        check_names=False,
+        check_dtype=False,
+        reset_index=True,
+        check_categorical=False,
+    )
+
+
+def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
+    table_name = "test_merge_into_simple_tbl"
+    db_schema, warehouse_loc = iceberg_database
+    sql_schema = [
+        ("id", "int", True),
+        ("dep", "string", True),
+    ]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            pd.DataFrame({"id": [1], "dep": ["foo"]}), sql_schema, table_name
+        )
+    bodo.barrier()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+    bc = bodosql.BodoSQLContext(
+        {
+            table_name: bodosql.TablePath(
+                table_name, "sql", conn_str=conn, db_schema=db_schema
+            ),
+            "source": pd.DataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "dep": ["emp-id-1", "emp-id-2", "emp-id-3"],
+                }
+            ),
+        }
+    )
+
+    query = (
+        f"MERGE INTO {table_name} AS t USING source AS s "
+        "ON t.id = s.id "
+        "WHEN NOT MATCHED THEN "
+        "INSERT (id, dep) VALUES (s.id, s.dep)"
+    )
+
+    def impl(bc):
+        bc.sql(query)
+        return bc.sql(f"SELECT * FROM {table_name}")
+
+    expected_out = pd.DataFrame(
+        {"id": [1, 2, 3], "dep": ["foo", "emp-id-2", "emp-id-3"]}
+    )
+
+    check_func(
+        impl,
+        (bc,),
+        py_output=expected_out,
+        only_1DVar=True,
+        sort_output=True,
+        check_names=False,
+        check_dtype=False,
+        reset_index=True,
+        check_categorical=False,
+    )
 
 
 def test_iceberg_in_pushdown(memory_leak_check, iceberg_database, iceberg_table_conn):

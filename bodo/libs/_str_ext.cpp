@@ -224,7 +224,6 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&box_dict_str_array)));
     PyObject_SetAttrString(m, "str_to_dict_str_array",
                            PyLong_FromVoidPtr((void*)(&str_to_dict_str_array)));
-
     PyObject_SetAttrString(m, "get_stats_alloc",
                            PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
     PyObject_SetAttrString(m, "get_stats_free",

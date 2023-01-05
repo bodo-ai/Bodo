@@ -156,6 +156,66 @@ public interface BodoSQLColumn {
       }
     }
 
+    public static BodoSQLColumnDataType fromSqlType(RelDataType relDataType) {
+      SqlTypeName typeName = relDataType.getSqlTypeName();
+      BodoSQLColumnDataType outType;
+      switch (typeName) {
+        case TINYINT:
+          outType = BodoSQLColumnDataType.INT8;
+          break;
+        case SMALLINT:
+          outType = BodoSQLColumnDataType.INT16;
+          break;
+        case INTEGER:
+          outType = BodoSQLColumnDataType.INT32;
+          break;
+        case BIGINT:
+          outType = BodoSQLColumnDataType.INT64;
+          break;
+        case FLOAT:
+          outType = BodoSQLColumnDataType.FLOAT32;
+          break;
+        case REAL:
+        case DOUBLE:
+        case DECIMAL:
+          outType = BodoSQLColumnDataType.FLOAT64;
+          break;
+        case DATE:
+          outType = BodoSQLColumnDataType.DATE;
+          break;
+        case CHAR:
+        case VARCHAR:
+          outType = BodoSQLColumnDataType.STRING;
+          break;
+        case TIMESTAMP:
+          outType = BodoSQLColumnDataType.DATETIME;
+          break;
+        case BOOLEAN:
+          outType = BodoSQLColumnDataType.BOOL8;
+          break;
+        case INTERVAL_DAY_HOUR:
+        case INTERVAL_DAY_MINUTE:
+        case INTERVAL_DAY_SECOND:
+        case INTERVAL_HOUR_MINUTE:
+        case INTERVAL_HOUR_SECOND:
+        case INTERVAL_MINUTE_SECOND:
+        case INTERVAL_HOUR:
+        case INTERVAL_MINUTE:
+        case INTERVAL_SECOND:
+        case INTERVAL_DAY:
+        case INTERVAL_YEAR:
+        case INTERVAL_MONTH:
+        case INTERVAL_YEAR_MONTH:
+          outType = BodoSQLColumnDataType.TIMEDELTA;
+          break;
+        default:
+          throw new RuntimeException(
+              "Internal Error: Calcite Plan Produced an Unsupported relDataType"
+                  + "for table extension Type");
+      }
+      return outType;
+    }
+
     public RelDataType convertToSqlType(
         RelDataTypeFactory typeFactory, boolean nullable, BodoTZInfo tzInfo, int precision) {
       RelDataType temp;

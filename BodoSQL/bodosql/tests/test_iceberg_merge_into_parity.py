@@ -16,12 +16,6 @@ from bodo.tests.iceberg_database_helpers.utils import (
 from bodo.tests.utils import check_func
 from bodo.utils.typing import BodoError
 
-# Skip this file until we merge the Iceberg branch
-pytest.skip(
-    allow_module_level=True,
-    reason="Waiting for MERGE INTO support to fix the Calcite generated issue",
-)
-
 pytestmark = pytest.mark.iceberg
 
 
@@ -240,6 +234,9 @@ def test_merge_with_only_delete_clause(
         py_output=expected_rows,
         reset_index=True,
         sort_output=True,
+        # check_typing_issues can cause issues when the input is small
+        # and we're running on multiple ranks
+        check_typing_issues=bodo.get_size() <= 2,
     )
 
 
@@ -613,7 +610,6 @@ def test_self_merge(
     )
 
 
-# @pytest.mark.skip("Need support for parsing the literals???")
 def test_merge_with_source_as_self_subquery(
     iceberg_database,
     iceberg_table_conn,
@@ -630,14 +626,14 @@ def test_merge_with_source_as_self_subquery(
             {"id": [1, 2], "v": ["v1", "v2"]},
         ),
         pd.DataFrame(
-            {"value": [1, None]},
+            {"temp_value": [1, None]},
         ),
     )
 
     def impl(bc):
         bc.sql(
-            f"MERGE INTO {table_name} t USING (SELECT id AS value FROM {table_name} r JOIN source ON r.id = source.value) s "
-            "ON t.id = s.value "
+            f"MERGE INTO {table_name} t USING (SELECT id AS temp_value FROM {table_name} r JOIN source ON r.id = source.temp_value) s "
+            "ON t.id = s.temp_value "
             "WHEN MATCHED AND t.id = 1 THEN "
             "  UPDATE SET v = 'x' "
             "WHEN NOT MATCHED THEN "
@@ -646,7 +642,7 @@ def test_merge_with_source_as_self_subquery(
 
         return bc.sql(f"SELECT * FROM {table_name} ORDER BY id")
 
-    expected_rows = pd.DataFrame({"id": [1, 2], "dep": ["x", "v2"]})
+    expected_rows = pd.DataFrame({"id": [1, 2], "v": ["x", "v2"]})
 
     check_func(
         impl,
@@ -705,6 +701,9 @@ def test_merge_with_extra_columns_in_source(
         py_output=expected_rows,
         reset_index=True,
         sort_output=True,
+        # check_typing_issues can cause issues when the input is small
+        # and we're running on multiple ranks
+        check_typing_issues=bodo.get_size() <= 2,
     )
 
 
@@ -751,6 +750,9 @@ def test_merge_with_nulls_in_target_and_source(
         py_output=expected_rows,
         reset_index=True,
         sort_output=True,
+        # check_typing_issues can cause issues when the input is small
+        # and we're running on multiple ranks
+        check_typing_issues=bodo.get_size() <= 2,
     )
 
 
@@ -905,6 +907,9 @@ def test_merge_with_null_action_conditions(
         py_output=expected_rows[0],
         reset_index=True,
         sort_output=True,
+        # check_typing_issues can cause issues when the input is small
+        # and we're running on multiple ranks
+        check_typing_issues=bodo.get_size() <= 2,
     )
     check_func(
         impl2,
@@ -913,6 +918,7 @@ def test_merge_with_null_action_conditions(
         py_output=expected_rows[1],
         reset_index=True,
         sort_output=True,
+        check_typing_issues=bodo.get_size() <= 2,
     )
 
 
@@ -959,6 +965,9 @@ def test_merge_with_multiple_matching_actions(
         py_output=expected_rows,
         reset_index=True,
         sort_output=True,
+        # check_typing_issues can cause issues when the input is small
+        # and we're running on multiple ranks
+        check_typing_issues=bodo.get_size() <= 2,
     )
 
 
