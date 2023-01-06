@@ -752,7 +752,7 @@ def test_merge_with_nulls_in_target_and_source(
         sort_output=True,
         # check_typing_issues can cause issues when the input is small
         # and we're running on multiple ranks
-        check_typing_issues=bodo.get_size() <= 2,
+        check_typing_issues=bodo.get_size() <= 1,
     )
 
 
@@ -965,9 +965,10 @@ def test_merge_with_multiple_matching_actions(
         py_output=expected_rows,
         reset_index=True,
         sort_output=True,
-        # check_typing_issues can cause issues when the input is small
+        # check_typing_issues can cause issues
+        # when the input is small
         # and we're running on multiple ranks
-        check_typing_issues=bodo.get_size() <= 2,
+        check_typing_issues=bodo.get_size() <= 1,
     )
 
 
@@ -1566,14 +1567,16 @@ def test_merge_with_invalid_columns_in_insert(
             "WHEN NOT MATCHED THEN " + "  INSERT (id) VALUES (s.c1)",
         )
 
-    with pytest.raises(
-        BodoError, match="Target column 'id' is assigned more than once"
-    ):
+    msg1 = "Target column 'id' is assigned more than once"
+    if bodo.get_rank() == 0:
+        msg2 = "Column c contains nulls but is expected to be non-nullable"
+    else:
+        msg2 = "See other ranks for runtime error"
+
+    with pytest.raises(BodoError, match=msg1):
         test_dup_insert_cols(bc)
 
-    with pytest.raises(
-        RuntimeError, match="Column c contains nulls but is expected to be non-nullable"
-    ):
+    with pytest.raises(RuntimeError, match=msg2):
         test_must_provide_all_dest_cols(bc)
 
 
