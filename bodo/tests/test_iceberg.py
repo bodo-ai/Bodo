@@ -895,26 +895,38 @@ def test_filter_pushdown_merge_into(iceberg_database, iceberg_table_conn):
     assert dnf_filters != "None", "No DNF filters were pushed"
     # Verify we don't have expr filters
     assert expr_filters == "None", "Expr filters were pushed unexpectedly"
-    # Check the files list + snapshot id
-    # Load the file list
-    files_frame = spark.sql(
-        f"""
-        select file_path from hadoop_prod.{db_schema}.{table_name}.files
-        """
-    )
-    files_frame = files_frame.toPandas()
-    # Convert to a set because Bodo will only return unique file names
-    files_set = set(files_frame["file_path"])
-    # We use a sorted list for easier comparison
-    files_set = sorted(list(files_set))
-    # Load the snapshot id
-    snapshot_frame = spark.sql(
-        f"""
-        select snapshot_id from hadoop_prod.{db_schema}.{table_name}.history where parent_id is NULL
-        """
-    )
-    snapshot_frame = snapshot_frame.toPandas()
-    spark_snapshot_id = snapshot_frame.iloc[0, 0]
+
+    files_set = None
+    spark_snapshot_id = None
+    if bodo.get_rank() == 0:
+        try:
+            # Check the files list + snapshot id
+            # Load the file list
+            files_frame = spark.sql(
+                f"""
+                select file_path from hadoop_prod.{db_schema}.{table_name}.files
+                """
+            )
+            files_frame = files_frame.toPandas()
+            # Convert to a set because Bodo will only return unique file names
+            files_set = set(files_frame["file_path"])
+            # We use a sorted list for easier comparison
+            files_set = sorted(list(files_set))
+            # Load the snapshot id
+            snapshot_frame = spark.sql(
+                f"""
+                select snapshot_id from hadoop_prod.{db_schema}.{table_name}.history where parent_id is NULL
+                """
+            )
+            snapshot_frame = snapshot_frame.toPandas()
+            spark_snapshot_id = snapshot_frame.iloc[0, 0]
+        except Exception as e:
+            err = e
+
+    files_set, spark_snapshot_id, err = comm.bcast((files_set, spark_snapshot_id, err))
+    if isinstance(err, Exception):
+        raise err
+
     check_func(
         impl2,
         (table_name, conn, db_schema),
