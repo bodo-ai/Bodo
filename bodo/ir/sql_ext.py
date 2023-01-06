@@ -432,6 +432,7 @@ def sql_distributed_run(
         sql_node.index_column_name,
         sql_node.index_column_type,
         sql_node.out_used_cols,
+        sql_node.converted_colnames,
         typingctx,
         targetctx,
         sql_node.db_type,
@@ -539,7 +540,7 @@ def sql_distributed_run(
     return nodes
 
 
-def convert_col_name(col_name, converted_colnames):
+def convert_col_name(col_name: str, converted_colnames: List[str]) -> str:
     if col_name in converted_colnames:
         return col_name.upper()
     return col_name
@@ -869,6 +870,7 @@ def _gen_sql_reader_py(
     index_column_name: Optional[str],
     index_column_type,
     out_used_cols: List[int],
+    converted_colnames: List[str],
     typingctx,
     targetctx,
     db_type: str,
@@ -903,6 +905,9 @@ def _gen_sql_reader_py(
             it means all columns except for col_names[0],
             col_names[1], and col_names[3] are dead and
             should not be loaded (not including index).
+        converted_colnames: List of column names that were modified from
+            the original source name to match Pandas conventions. This is
+            currently only used for Snowflake
         typingctx: Typing context used for compiling code.
         targetctx: Target context used for compiling code.
         db_type: Type of SQL source used to distinguish between backends.
@@ -1107,21 +1112,19 @@ def _gen_sql_reader_py(
         ), "SQLNode must contain a pyarrow_schema if reading from Snowflake"
 
         # Filter the schema by selected columns only
-        selected_fields = []
-        for field_name in used_col_names:
-            idx = pyarrow_schema.get_field_index(field_name)
-            # If idx is -1, couldn't find a schema field with name `field_name`
-            # To follow Pandas semantics, we convert uppercase column names to lowercase
-            # but the PyArrow schema will still use the uppercase names
-            # Thus, we may need need to convert back to find the correct field
-            if idx < 0 and field_name.islower():
-                idx = pyarrow_schema.get_field_index(field_name.upper())
-            if idx < 0:
-                raise BodoError(
-                    f"SQLReader Snowflake: Column {field_name} is not in source schema"
-                )
-            selected_fields.append(pyarrow_schema.field(idx))
-        pyarrow_schema = pa.schema(selected_fields)
+        # Only need to prune columns for SELECT queries
+        if is_select_query:
+            selected_fields = []
+            for col_name in used_col_names:
+                source_name = convert_col_name(col_name, converted_colnames)
+                idx = pyarrow_schema.get_field_index(source_name)
+                # If idx is -1, couldn't find a schema field with name `source_name`
+                if idx < 0:
+                    raise BodoError(
+                        f"SQLReader Snowflake: Column {source_name} is not in source schema"
+                    )
+                selected_fields.append(pyarrow_schema.field(idx))
+            pyarrow_schema = pa.schema(selected_fields)
 
         col_indices_map = {c: i for i, c in enumerate(out_used_cols)}
         snowflake_dict_cols = [

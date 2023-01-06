@@ -12,7 +12,7 @@ import warnings
 from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
-from typing import Dict, TypeVar
+from typing import Dict, Generator, TypeVar
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -2154,7 +2154,7 @@ def snowflake_cred_env_vars_present(user=1) -> bool:
 @contextmanager
 def create_snowflake_table(
     df: pd.DataFrame, base_table_name: str, db: str, schema: str
-) -> str:
+) -> Generator[str, None, None]:
     """Creates a new table in Snowflake derived from the base table name
     and using the DataFrame. The name from the base name is modified to help
     reduce the likelihood of conflicts during concurrent tests.
@@ -2170,9 +2170,9 @@ def create_snowflake_table(
     Returns:
         str: The final table name.
     """
+    comm = MPI.COMM_WORLD
+    table_name = None
     try:
-        comm = MPI.COMM_WORLD
-        table_name = None
         if bodo.get_rank() == 0:
             unique_name = str(uuid4()).replace("-", "_")
             table_name = f"{base_table_name}_{unique_name}".lower()

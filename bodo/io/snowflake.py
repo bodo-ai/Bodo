@@ -81,7 +81,9 @@ SCALE_TO_UNIT_PRECISION: Dict[int, Literal["s", "ms", "us", "ns"]] = {
 }
 TYPE_CODE_TO_ARROW_TYPE: List[Callable[["ResultMetadata", str], pa.DataType]] = [
     # Number / Int - Always Signed
-    lambda m, _: pa.int64() if m.scale == 0 else pa.float64(),
+    lambda m, _: pa.int64()
+    if m.scale == 0
+    else (pa.float64() if m.scale < 18 else pa.decimal128(m.precision, m.scale)),
     # Float / Double
     lambda _, __: pa.float64(),
     # String
@@ -472,20 +474,22 @@ def get_schema_from_metadata(
     tz: str = cursor._timezone  # type: ignore
 
     arrow_fields: List[pa.Field] = []  # Equivalent PyArrow Fields
-    cols_to_check: Dict[str, int] = {}  # Columns to get typeof metadata for
+    col_names_to_check: List[str] = []  # Columns to get typeof metadata for
+    col_idxs_to_check: List[int] = []  # Index of columns to get typeof metadata
     for i, field_meta in enumerate(query_field_metadata):
         dtype = TYPE_CODE_TO_ARROW_TYPE[field_meta.type_code](field_meta, tz)
         arrow_fields.append(pa.field(field_meta.name, dtype, field_meta.is_nullable))
         if pa.types.is_int64(dtype):
-            cols_to_check[field_meta.name] = i
+            col_names_to_check.append(field_meta.name)
+            col_idxs_to_check.append(i)
 
     # For any NUMBER columns, fetch SYSTEM$TYPEOF metadata to determine
     # the smallest viable integer type (number of bytes)
-    if is_select_query and len(cols_to_check) != 0:
+    if is_select_query and len(col_names_to_check) != 0:
         schema_probe_query = (
             "SELECT "
             + ", ".join(
-                f"SYSTEM$TYPEOF({escape_col_name(x)})" for x in cols_to_check.keys()
+                f"SYSTEM$TYPEOF({escape_col_name(x)})" for x in col_names_to_check
             )
             + f" FROM ({sql_query}) LIMIT 1"
         )
@@ -493,14 +497,25 @@ def get_schema_from_metadata(
         probe_res = execute_query(
             cursor, schema_probe_query, timeout=SF_READ_SCHEMA_PROBE_TIMEOUT
         )
-        if probe_res is not None:
-            typing_table: pa.Table = probe_res.fetch_arrow_all()  # type: ignore
+        if (
+            probe_res is not None
+            and (typing_table := probe_res.fetch_arrow_all()) is not None
+        ):
+            # Note, this assumes that the output metadata columns are in the
+            # same order as the columns we checked in the probe query
+            for i, (full_name, typing_info) in enumerate(
+                typing_table.to_pylist()[0].items()
+            ):
+                orig_col_name = col_names_to_check[i]
+                exp_col_names = (
+                    f"SYSTEM$TYPEOF({escape_col_name(orig_col_name)})",
+                    f"SYSTEM$TYPEOF({escape_col_name(orig_col_name.upper())})",
+                )
+                assert (
+                    full_name in exp_col_names
+                ), "Output of Snowflake Schema Probe Query Uses Unexpected Column Names"
 
-            # Undo Escaped Col Name in Form SYSTEM$TYPEOF("_____")
-            offset_start = len('SYSTEM$TYPEOF("')  # Expected to be 15
-            offset_end = -len('")')  # Expected to be 2
-            for name, typing_info in typing_table.to_pylist()[0].items():
-                idx = cols_to_check[name[offset_start:offset_end].replace('""', '"')]
+                idx = col_idxs_to_check[i]
                 # Parse output NUMBER(__,_)[SBx] to get the byte width x
                 byte_size = int(typing_info[-2])
                 out_type = INT_BITSIZE_TO_ARROW_DATATYPE[byte_size]

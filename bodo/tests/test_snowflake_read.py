@@ -6,6 +6,7 @@ import datetime
 import io
 import json
 import os
+import re
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -296,7 +297,7 @@ def test_snowflake_runtime_downcasting_int_fail(mocker: "MockerFixture"):
     conn = get_snowflake_connection_string(db, schema)
     query = "SELECT L_ORDERKEY, L_PARTKEY, L_SUPPKEY FROM LINEITEM ORDER BY L_ORDERKEY, L_PARTKEY, L_SUPPKEY LIMIT 70"
 
-    with pytest.raises(RuntimeError, match="Invalid Downcasting in Snowflake Reader"):
+    with pytest.raises(RuntimeError, match="Invalid Downcast from int32 to int8"):
         bodo.jit(impl)(query, conn)
 
 
@@ -341,8 +342,10 @@ def test_snowflake_runtime_downcasting_timestamp_fail(mocker: "MockerFixture"):
     conn = get_snowflake_connection_string(db, schema)
     # need to sort the output to make sure pandas and Bodo get the same rows
     query = "SELECT * FROM TIMESTAMP_FILTER_TEST ORDER BY DATE_COL"
-
-    with pytest.raises(RuntimeError, match="Invalid Downcasting in Snowflake Reader"):
+    with pytest.raises(
+        RuntimeError,
+        match=re.escape("Invalid Downcast from timestamp[ns] to timestamp[ms]"),
+    ):
         bodo.jit(impl)(query, conn)
 
 
