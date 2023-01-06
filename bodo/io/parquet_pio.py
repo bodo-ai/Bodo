@@ -1443,6 +1443,7 @@ def parquet_write_table_partitioned_cpp(
 ):
     """
     Call C++ parquet write partitioned function
+
     """
 
     def codegen(context, builder, sig, args):
