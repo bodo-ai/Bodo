@@ -282,7 +282,7 @@ def test_snowflake_catalog_insert_into_read(
     )
     # Rename columns for comparison with the default capitalization when
     # read from Snowflake.
-    py_output.columns = ["a", "b", "c"]
+    py_output.columns = ["a", "b", "c"]  # type: ignore
     # Create the table
     with create_snowflake_table(
         new_df, "bodosql_catalog_write_test3", db, schema
@@ -331,7 +331,7 @@ def test_snowflake_catalog_insert_into_null_literal(
             (new_df, pd.DataFrame({"B": "literal", "C": np.arange(1, 11)}))
         )
         # Rename columns for comparison
-        py_output.columns = ["a", "b", "c"]
+        py_output.columns = ["a", "b", "c"]  # type: ignore
         write_query = f"INSERT INTO {schema}.{table_name}(A, B, C) Select NULL as A, 'literal', A + 1 from __bodolocal__.table1"
         read_query = f"Select * from {schema}.{table_name}"
         # Only test with only_1D=True so we only insert into the table once.
@@ -505,13 +505,14 @@ def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
         # We run only 1 distribution because DELETE has side effects
         check_func(impl1, (query1, bc), only_1D=True, py_output=num_rows_to_delete)
         check_func(impl2, (query2, bc), only_1D=True, py_output=num_rows_to_delete)
-        output_df = None
+
         # Load the table on rank 0 to verify the drop.
+        output_df = None
         if bodo.get_rank() == 0:
             conn_str = get_snowflake_connection_string(db, schema)
             output_df = pd.read_sql(f"select * from {table_name}", conn_str)
             # Convert output to match the input.
-            output_df.columns = [colname.upper() for colname in output_df.columns]
+            output_df.columns = [colname.upper() for colname in output_df.columns]  # type: ignore
         output_df = comm.bcast(output_df)
         result_df = new_df[new_df.A == 3]
         assert_tables_equal(output_df, result_df)
