@@ -613,7 +613,9 @@ void pq_write_partitioned(const char *_path_name, table_info *table,
             pq_write(p.fpath.c_str(), part_table, col_names_arr_no_partitions,
                      nullptr, /*TODO*/ false, /*TODO*/ "", compression, false,
                      false, -1, -1, -1, /*TODO*/ "", bucket_region,
-                     row_group_size, prefix, tz);
+                     row_group_size, prefix,
+                     false /* TODO: convert_timedelta_to_int64*/, tz,
+                     false /* TODO: downcast_time_ns_to_us*/);
             delete_table_decref_arrays(part_table);
         }
         delete new_table;
