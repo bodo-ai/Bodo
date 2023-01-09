@@ -9,7 +9,7 @@ from bodo_iceberg_connector.py4j_support import (
     get_java_table_handler,
 )
 from bodo_iceberg_connector.schema_helper import arrow_to_iceberg_schema
-from py4j.protocol import Py4JJavaError
+from py4j.protocol import Py4JError
 
 
 @dataclass
@@ -111,7 +111,7 @@ def commit_write(
                 arrow_to_iceberg_schema(pa_schema),
                 False,
             )
-        except Py4JJavaError as e:
+        except Py4JError as e:
             print("Error during Iceberg table creation: ", e)
             return False
 
@@ -122,7 +122,7 @@ def commit_write(
                 arrow_to_iceberg_schema(pa_schema),
                 True,
             )
-        except Py4JJavaError as e:
+        except Py4JError as e:
             print("Error during Iceberg table replace: ", e)
             return False
 
@@ -134,7 +134,7 @@ def commit_write(
 
         try:
             handler.appendTable(file_info_str, iceberg_schema_id)
-        except Py4JJavaError as e:
+        except Py4JError as e:
             print("Error during Iceberg table append: ", e)
             return False
 
@@ -178,7 +178,8 @@ def commit_merge_cow(
 
     try:
         handler.mergeCOWTable(old_fnames_java, new_file_info_str, snapshot_id)
-    except Py4JJavaError as e:
+    except Py4JError as e:
+        # Note: Py4JError is the base class for all types of Py4j Exceptions.
         print("Error during Iceberg MERGE INTO COW:", e)
         return False
 

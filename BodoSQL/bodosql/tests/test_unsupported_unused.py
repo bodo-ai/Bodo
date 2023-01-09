@@ -130,8 +130,6 @@ def test_snowflake_table_path_unused_subquery(memory_leak_check):
     db = "TEST_DB"
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema)
-    # Add arrow_number_to_decimal to create a decimal array
-    conn = f"{conn}&arrow_number_to_decimal=True"
     query = "SELECT * FROM UNSUPPORTED2"
     py_output = pd.read_sql(query, conn)[["usedcol"]]
     py_output = py_output[py_output.usedcol == 1]

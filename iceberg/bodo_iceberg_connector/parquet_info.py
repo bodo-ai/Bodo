@@ -12,7 +12,7 @@ from bodo_iceberg_connector.config import DEFAULT_PORT
 from bodo_iceberg_connector.errors import IcebergJavaError
 from bodo_iceberg_connector.filter_to_java import convert_expr_to_java_parsable
 from bodo_iceberg_connector.py4j_support import get_java_table_handler
-from py4j.protocol import Py4JJavaError
+from py4j.protocol import Py4JError
 
 # Named Tuple for Parquet info
 BodoIcebergParquetInfo = namedtuple("BodoIcebergParquetInfo", "filepath start length")
@@ -92,7 +92,7 @@ def get_bodo_parquet_info(port, conn_str: str, db_name: str, table: str, filters
             bodo_iceberg_table_reader, filter_expr
         )
 
-    except Py4JJavaError as e:
+    except Py4JError as e:
         raise IcebergJavaError.from_java_error(e)
 
     return java_to_python(java_parquet_infos), warehouse_loc
