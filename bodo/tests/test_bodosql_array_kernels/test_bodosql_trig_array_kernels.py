@@ -44,7 +44,7 @@ single_arg_np_map = {
     "radians": "radians",
     "degrees": "degrees",
 }
-single_arg_np_list = list(single_arg_np_map.keys())
+single_arg_np_list = list(single_arg_np_map.keys()) + ["cot"]
 double_arg_np_map = {
     "atan2": "arctan2",
 }
@@ -53,7 +53,7 @@ double_arg_np_list = list(double_arg_np_map.keys())
 
 @pytest.mark.parametrize("arr", test_arrs)
 @pytest.mark.parametrize("func", single_arg_np_list)
-def test_trig_single_arg_funcs(arr, func):
+def test_trig_single_arg_funcs(arr, func, memory_leak_check):
     test_impl = "def impl(arr):\n"
     test_impl += f"  return pd.Series(bodo.libs.bodosql_array_kernels.{func}(arr))"
     impl_vars = {}
@@ -61,9 +61,16 @@ def test_trig_single_arg_funcs(arr, func):
 
     # Simulates CONV on a single row
     scalar_impl = "def impl(elem):\n"
-    scalar_impl += (
-        f"    return np.{single_arg_np_map[func]}(elem) if not pd.isna(elem) else None"
-    )
+    if func == "cot":
+        # COT doesn't have a 1 to 1 numpy mapping.
+        scalar_impl += (
+            f"    return np.divide(1, np.tan(elem)) if not pd.isna(elem) else None"
+        )
+        # We need to avoid divide by 0 issue
+        arr = arr.copy()
+        arr[arr == 0] = 1
+    else:
+        scalar_impl += f"    return np.{single_arg_np_map[func]}(elem) if not pd.isna(elem) else None"
     scalar_vars = {}
     exec(scalar_impl, {"np": np, "pd": pd}, scalar_vars)
 
@@ -78,7 +85,7 @@ def test_trig_single_arg_funcs(arr, func):
 
 
 @pytest.mark.parametrize("func", single_arg_np_list)
-def test_trig_single_arg_option(func):
+def test_trig_single_arg_option(func, memory_leak_check):
 
     test_impl = "def impl(a, flag0):\n"
     test_impl += "  arg0 = a if flag0 else None\n"
@@ -87,7 +94,11 @@ def test_trig_single_arg_option(func):
     exec(test_impl, {"bodo": bodo}, impl_vars)
 
     for flag0 in [True, False]:
-        answer = eval(f"np.{single_arg_np_map[func]}(0.75)") if flag0 else None
+        if func == "cot":
+            # COT doesn't have a 1 to 1 numpy mapping.
+            answer = np.divide(1, np.tan(0.75)) if flag0 else None
+        else:
+            answer = eval(f"np.{single_arg_np_map[func]}(0.75)") if flag0 else None
         check_func(impl_vars["impl"], (0.75, flag0), py_output=answer)
 
 
@@ -100,7 +111,7 @@ def test_trig_single_arg_option(func):
     [pd.Series(list(arr)[::-1], dtype=arr.dtype) for arr in test_arrs],
 )
 @pytest.mark.parametrize("func", double_arg_np_list)
-def test_trig_double_arg_funcs(arr0, arr1, func):
+def test_trig_double_arg_funcs(arr0, arr1, func, memory_leak_check):
     if len(arr0) != len(arr1):
         return
     test_impl = "def impl(arr0, arr1):\n"
@@ -127,7 +138,7 @@ def test_trig_double_arg_funcs(arr0, arr1, func):
 
 
 @pytest.mark.parametrize("func", double_arg_np_list)
-def test_trig_double_arg_option(func):
+def test_trig_double_arg_option(func, memory_leak_check):
     test_impl = "def impl(a, b, flag0, flag1):\n"
     test_impl += "  arg0 = a if flag0 else None\n"
     test_impl += "  arg1 = b if flag1 else None\n"

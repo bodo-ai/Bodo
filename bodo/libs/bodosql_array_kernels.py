@@ -72,6 +72,7 @@ broadcasted_fixed_arg_functions = {
     "conv",
     "cos",
     "cosh",
+    "cot",
     "date_trunc",
     "dayname",
     "dayofmonth",
