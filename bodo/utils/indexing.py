@@ -155,6 +155,7 @@ def array_setitem_bool_index_overload(A, idx, val):
     if bodo.utils.utils.is_array_typ(val) or bodo.utils.typing.is_iterable_type(val):
 
         def impl_arr(A, idx, val):  # pragma: no cover
+            idx = bodo.utils.conversion.coerce_to_array(idx)
             val = bodo.utils.conversion.coerce_to_array(val, use_nullable_array=True)
             n = len(idx)
             val_ind = 0
@@ -172,6 +173,7 @@ def array_setitem_bool_index_overload(A, idx, val):
     if bodo.utils.typing.is_scalar_type(val):
 
         def impl_scalar(A, idx, val):  # pragma: no cover
+            idx = bodo.utils.conversion.coerce_to_array(idx)
             n = len(idx)
             val_ind = 0
             for i in range(n):
