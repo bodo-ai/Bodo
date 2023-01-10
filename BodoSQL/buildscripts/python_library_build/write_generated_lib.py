@@ -113,13 +113,6 @@ def generate_and_write_library():
             generate_standard_python_fn_call("bodosql.libs.regex.sql_to_python"),
             1,
         ),
-        # string Fn's
-        ("strip", generate_standard_method_call("strip"), 2),
-        ("lstrip", generate_standard_method_call("lstrip"), 2),
-        ("rstrip", generate_standard_method_call("rstrip"), 2),
-        ("len", generate_standard_python_fn_call("len"), 1),
-        ("upper", generate_standard_method_call("upper"), 1),
-        ("lower", generate_standard_method_call("lower"), 1),
         # stuff for like
         ("in", (lambda args_list: f"({args_list[0]} in {args_list[1]})"), 2),
         (
