@@ -26,6 +26,7 @@ from bodo.io.fs_io import (
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
 from bodo.libs.str_ext import string_type
@@ -600,6 +601,12 @@ def _get_dtype_str(t):
         setattr(types, t_name, t)
         return t_name
 
+    if isinstance(t, FloatingArrayType):
+        # HACK: same issue as above
+        t_name = "float_arr_{}".format(dtype)
+        setattr(types, t_name, t)
+        return t_name
+
     if t == boolean_array:
         types.boolean_array = boolean_array
         return "boolean_array"
@@ -645,6 +652,11 @@ def _get_pd_dtype_str(t):
     # nullable int array
     if isinstance(t, IntegerArrayType):
         return '"{}Int{}"'.format("" if dtype.signed else "U", dtype.bitwidth)
+
+    # nullable float
+    if isinstance(t, FloatingArrayType):
+        # Float32 or Float64
+        return f'"{t.get_pandas_scalar_type_instance.name}"'
 
     if t == boolean_array:
         return "np.bool_"

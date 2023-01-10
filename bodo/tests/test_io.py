@@ -665,6 +665,17 @@ def test_csv_int_na2(datapath, memory_leak_check):
         remove_files(compressed_names)
 
 
+def test_csv_float_na(datapath, memory_leak_check):
+    """Test read_csv() with nullable float dtype specified manually"""
+    fname = datapath("csv_data_float_na.csv")
+
+    def test_impl(fname):
+        dtype = {"A": "float", "B": "Float32"}
+        return pd.read_csv(fname, names=list(dtype.keys()), dtype=dtype)
+
+    check_func(test_impl, (fname,))
+
+
 def test_csv_bool_na(datapath, memory_leak_check):
     fname = datapath("bool_nulls.csv")
 
