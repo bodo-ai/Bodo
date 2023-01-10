@@ -36,7 +36,7 @@ def array_getitem_bool_index(A, ind):  # pragma: no cover
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
     Covered by test_series_iloc_getitem_array_bool.
     """
-    ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+    ind = bodo.utils.conversion.coerce_to_array(ind)
     old_mask = A._null_bitmap
     new_data = A._data[ind]
     n = len(new_data)
@@ -65,7 +65,7 @@ def array_getitem_int_index(A, ind):  # pragma: no cover
     '_null_bitmap' attribute (e.g. int/bool/decimal/date).
     Covered by test_series_iloc_getitem_array_int.
     """
-    ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+    ind_t = bodo.utils.conversion.coerce_to_array(ind)
     old_mask = A._null_bitmap
     new_data = A._data[ind_t]
     n = len(new_data)
@@ -348,7 +348,7 @@ def none_optional_setitem_overload(A, idx, val):
         ):
 
             def setitem_none_int_arr(A, idx, val):  # pragma: no cover
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 for i in idx:
                     bodo.libs.array_kernels.setna(A, i)
 
@@ -361,10 +361,10 @@ def none_optional_setitem_overload(A, idx, val):
             # Handle string array specially because we need to copy the data
             if A == bodo.string_array_type:
 
-                def string_arr_impl(A, idx, val):
+                def string_arr_impl(A, idx, val):  # pragma: no cover
                     n = len(A)
                     # NOTE: necessary to convert potential Series to array
-                    idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                    idx = bodo.utils.conversion.coerce_to_array(idx)
                     out_arr = bodo.libs.str_arr_ext.pre_alloc_string_array(n, -1)
                     for i in numba.parfors.parfor.internal_prange(n):
                         if idx[i] or bodo.libs.array_kernels.isna(A, i):
@@ -378,7 +378,7 @@ def none_optional_setitem_overload(A, idx, val):
                 return string_arr_impl
 
             def setitem_none_bool_arr(A, idx, val):  # pragma: no cover
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 n = len(idx)
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
@@ -417,7 +417,7 @@ def none_optional_setitem_overload(A, idx, val):
         ):
 
             def setitem_optional_int_arr(A, idx, val):  # pragma: no cover
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 for i in idx:
                     if val is None:
                         bodo.libs.array_kernels.setna(A, i)
@@ -442,7 +442,7 @@ def none_optional_setitem_overload(A, idx, val):
                 return string_arr_impl
 
             def setitem_optional_bool_arr(A, idx, val):  # pragma: no cover
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 n = len(idx)
                 for i in range(n):
                     if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:

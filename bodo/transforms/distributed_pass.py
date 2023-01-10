@@ -313,7 +313,8 @@ class DistributedPass:
                             self.calltypes,
                             self.typingctx,
                             self.targetctx,
-                            meta_head_only_info,
+                            is_independent=False,  # is_independent is False by default
+                            meta_head_only_info=meta_head_only_info,
                         )
                     else:
                         out_nodes = f(
@@ -1465,30 +1466,6 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if func_mod == "bodo.libs.array_kernels" and func_name in {"cummin", "cummax"}:
-            if self._is_1D_or_1D_Var_arr(rhs.args[0].name):
-                in_arr_var = rhs.args[0]
-                lhs_var = assign.target
-                # TODO: compute inplace if input array is dead
-                func_text = (
-                    ""
-                    "def impl(A):\n"
-                    "    B = np.empty_like(A)\n"
-                    "    _func(A, B)\n"
-                    "    return B\n"
-                )
-
-                loc_vars = {}
-                exec(func_text, globals(), loc_vars)
-                func = getattr(bodo.libs.distributed_api, "dist_" + func_name)
-                return compile_func_single_block(
-                    loc_vars["impl"],
-                    [in_arr_var],
-                    lhs_var,
-                    self,
-                    extra_globals={"_func": func},
-                )
-
         # numpy direct functions
         if isinstance(func_mod, str) and func_mod == "numpy":
             return self._run_call_np(
@@ -1672,9 +1649,12 @@ class DistributedPass:
             out.append(assign)
             return out
 
-        if fdef == (
-            "get_str_arr_item_copy",
-            "bodo.libs.str_arr_ext",
+        if fdef in (
+            (
+                "get_str_arr_item_copy",
+                "bodo.libs.str_arr_ext",
+            ),
+            ("copy_array_element", "bodo.libs.array_kernels"),
         ):
             out = []
             # output string array
@@ -1756,6 +1736,11 @@ class DistributedPass:
             rhs.args[2] = true_var
             out = [ir.Assign(ir.Const(True, loc), true_var, loc), assign]
 
+        # Note for both of these functions:
+        # Case 1: DIST DIST -> DIST, is_parallel=True
+        # Case 2: REP  REP  -> REP, is_parallel=False
+        # Case 3: DIST REP  -> DIST, is_parallel=False
+        # Case 4: REP  DIST:   Banned by construction
         if fdef == ("array_isin", "bodo.libs.array") and self._is_1D_or_1D_Var_arr(
             rhs.args[2].name
         ):
@@ -1766,6 +1751,13 @@ class DistributedPass:
                 ")"
             )
             return compile_func_single_block(f, rhs.args, assign.target, self)
+
+        if fdef == (
+            "is_in",
+            "bodo.libs.bodosql_array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[1].name):
+            self._set_last_arg_to_true(assign.value)
+            return
 
         if fdef == (
             "quantile",
@@ -1794,6 +1786,13 @@ class DistributedPass:
         if fdef == ("unique", "bodo.libs.array_kernels") and self._is_1D_or_1D_Var_arr(
             rhs.args[0].name
         ):
+            self._set_last_arg_to_true(assign.value)
+            return [assign]
+
+        if fdef == (
+            "accum_func",
+            "bodo.libs.array_kernels",
+        ) and self._is_1D_or_1D_Var_arr(rhs.args[0].name):
             self._set_last_arg_to_true(assign.value)
             return [assign]
 
@@ -2106,6 +2105,16 @@ class DistributedPass:
                 assign.target,
                 self,
             )
+
+        # Iceberg Merge Into
+        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
+            # Dataframe is the 3rd argument (counting from 0)
+            df_arg = rhs.args[3].name
+            if self._is_1D_or_1D_Var_arr(df_arg) and self._set_last_arg_to_true(
+                assign.value
+            ):
+                self._set_last_arg_to_true(assign.value)
+                return [assign]
 
         # replace get_type_max_value(arr.dtype) since parfors
         # arr.dtype transformation produces invalid code for dt64
@@ -4392,6 +4401,7 @@ class DistributedPass:
                 ("get_str_arr_str_length", "bodo.libs.str_arr_ext"),
                 ("inplace_eq", "bodo.libs.str_arr_ext"),
                 ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"),
+                ("copy_array_element", "bodo.libs.array_kernels"),
                 ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
                 ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
@@ -4528,6 +4538,7 @@ class DistributedPass:
                             "table_filter",
                             "bodo.hiframes.table",
                         )
+                        and (rhs.args[0].name in arr_varnames)
                     ) or (is_expr(rhs, "getitem") and rhs.value.name in arr_varnames):
                         if is_call(rhs):
                             # table_format

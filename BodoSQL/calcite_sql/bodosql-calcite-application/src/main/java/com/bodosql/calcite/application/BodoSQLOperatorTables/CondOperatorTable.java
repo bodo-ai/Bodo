@@ -287,7 +287,7 @@ public class CondOperatorTable implements SqlOperatorTable {
           // What SqlKind should match?
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
-          // Obtains the least restructive union of all the argument types
+          // Obtains the least restrictive union of all the argument types
           // corresponding to outputs in the key-value pairs of arguments
           // (plus the optional default value argument)
           opBinding -> opBinding.getTypeFactory().leastRestrictive(collectOutputTypes(opBinding)),

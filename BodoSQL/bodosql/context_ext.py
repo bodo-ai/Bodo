@@ -389,8 +389,12 @@ def _gen_pd_func_text_and_lowered_globals(
                 failed = True
         if not failed:
             try:
+                # Determine the write type
+                write_type = generator.getWriteType(sql_str)
                 # Update the schema with types.
-                update_schema(schema, table_names, df_types, orig_bodo_types, True)
+                update_schema(
+                    schema, table_names, df_types, orig_bodo_types, True, write_type
+                )
                 if is_optimized:
                     pd_code = str(generator.getPandasString(sql_str))
                 else:
@@ -430,6 +434,7 @@ def _gen_pd_func_text_and_lowered_globals(
                 "numba": numba,
                 "bodo": bodo,
                 "time": time,
+                "pd": pd,
             },
             locs,
         )

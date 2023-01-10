@@ -1719,7 +1719,7 @@ def test_concat_1d_1dvar():
         check_dtype=False,
     )
 
-
+@pytest.mark.tz_aware
 def test_tz_aware_dataframe_getitem(memory_leak_check):
     def impl_iat(df):
         return df.iat[2, 0]

@@ -18,7 +18,7 @@ from bodo.hiframes.pd_series_ext import (
     is_datetime_date_series_typ,
     is_timedelta64_series_typ,
     pd_timedelta_type,
-    pd_timestamp_type,
+    pd_timestamp_tz_naive_type,
 )
 from bodo.utils.typing import (
     is_overload_bool,
@@ -28,8 +28,33 @@ from bodo.utils.typing import (
     is_overload_constant_str,
     is_overload_float,
     is_overload_int,
+    is_overload_none,
     raise_bodo_error,
 )
+
+
+def indent_block(text, indentation):
+    """Adjusts the indentation of a multiline string so that it can be injected
+       another multiline string at a specified indentation level.
+
+    Args:
+        text (string): the (potentially multiline) string that needs to have
+        its indentation adjusted
+        indentation (integer): the amount of spaces that should occur before
+        the smallest level of indentation in the block of code
+
+    Returns:
+        string: the same multiline string with the indendation of all lines adjusted
+        so that the first line has the indentation specified, with a trailing
+        newline character. If the input stringis None, an empty string is returned instead.
+    """
+    if text is None:
+        return ""
+    first_line = text.splitlines()[0]
+    i = len(first_line) - len(first_line.lstrip())
+    return (
+        "\n".join([" " * indentation + line[i:] for line in text.splitlines()]) + "\n"
+    )
 
 
 def gen_vectorized(
@@ -48,6 +73,11 @@ def gen_vectorized(
     res_list=False,
     extra_globals=None,
     alloc_array_scalars=True,
+    synthesize_dict_if_vector=None,
+    synthesize_dict_setup_text=None,
+    synthesize_dict_scalar_text=None,
+    synthesize_dict_global=False,
+    synthesize_dict_unique=False,
 ):
     """Creates an impl for a column compute function that has several inputs
        that could all be scalars, nulls, or arrays by broadcasting appropriately.
@@ -91,6 +121,21 @@ def gen_vectorized(
             values with get_str_arr_item_copy). If this is False the scalar text should never reference
             array values using the local variable names and is responsible for directly using the
             optimized implementation.
+        synthesize_dict_if_vector (optional string list): if provided, dictates that dictionary
+            encoded synthesis should be done if the arguments in 'V' locations are vectors,
+            'S' locations are scalars, and '?' locations are either. For example,
+            if ['V', '?', 'S'], dictionary encoding synthesis would be enabled
+            if the first argument was a vector and the third argument was a scalar.
+        synthesize_dict_setup_text (optional string): if provided, specifies the string to
+            embed to initialize the dictionary encoded array's dictionary when performing
+            dictionary synthesis. The dictionary should be named dict_res.
+        synthesize_dict_scalar_text (optional string): if provided, specifies the string to
+            embed to fill in the index array for each row of the inputs when performing
+            dictionary synthesis.
+        synthesize_dict_global (bool): if dictionary synthesis is used, is the dictionary
+            global? Default is False.
+        synthesize_dict_unique (bool): if dictionary synthesis is used, is the dictionary
+            unique? Default is False.
 
     Returns:
         function: a broadcasted version of the calculation described by
@@ -154,6 +199,23 @@ def gen_vectorized(
     out_null = any(
         [propagate_null[i] for i in range(len(arg_types)) if arg_types[i] == bodo.none]
     )
+    # Construct a dictionary encoded output from a non-dictionary encoded input
+    # if the 'V'/'?' arguments in synthesize_dict_if_vector are arrays and the
+    # 'S'/'?' arguments are scalars.
+    use_dict_synthesis = False
+    if synthesize_dict_if_vector is not None:
+        assert (
+            synthesize_dict_setup_text is not None
+        ), "synthesize_dict_setup_text must be provided if synthesize_dict_if_vector is provided"
+        assert (
+            synthesize_dict_scalar_text is not None
+        ), "synthesize_dict_scalar_text must be provided if synthesize_dict_if_vector is provided"
+        use_dict_synthesis = True
+        for i in range(len(arg_types)):
+            if are_arrays[i] and synthesize_dict_if_vector[i] == "S":
+                use_dict_synthesis = False
+            if not are_arrays[i] and synthesize_dict_if_vector[i] == "V":
+                use_dict_synthesis = False
 
     # The output is dictionary-encoded if exactly one of the inputs is
     # dictionary encoded, the rest are all scalars, and the output dtype
@@ -187,20 +249,6 @@ def gen_vectorized(
         )
     )
 
-    # Calculate the indentation of the prefix_code so that it can be removed
-    if prefix_code is not None:
-        prefix_line = prefix_code.splitlines()[0]
-        prefix_indentation = len(prefix_line) - len(prefix_line.lstrip())
-
-    # Calculate the indentation of the scalar_text so that it can be removed
-    first_line = scalar_text.splitlines()[0]
-    base_indentation = len(first_line) - len(first_line.lstrip())
-
-    # Calculate the indentation of the suffix_code so that it can be removed
-    if suffix_code is not None:
-        suffix_line = suffix_code.splitlines()[0]
-        suffix_indentation = len(suffix_line) - len(suffix_line.lstrip())
-
     if arg_string is None:
         arg_string = ", ".join(arg_names)
 
@@ -219,25 +267,21 @@ def gen_vectorized(
         if out_null:
             func_text += "   return None"
         else:
-            if prefix_code is not None:
-                for line in prefix_code.splitlines():
-                    func_text += " " * 3 + line[prefix_indentation:] + "\n"
+            func_text += indent_block(prefix_code, 3)
 
             for i in range(len(arg_names)):
                 func_text += f"   arg{i} = {arg_names[i]}\n"
-            for line in scalar_text.splitlines():
-                func_text += (
-                    " " * 3
-                    + line[base_indentation:]
-                    # res[i] is now stored as answer, since there is no res array
-                    .replace("res[i] =", "answer =")
-                    # Calls to setna mean that the answer is NULL, so they are
-                    # replaced with "return None".
-                    .replace("bodo.libs.array_kernels.setna(res, i)", "return None")
-                    # NOTE: scalar_text should not contain any isna calls in
-                    # the case where all of the inputs are scalar.
-                    + "\n"
-                )
+            scalar_version = (
+                scalar_text
+                # res[i] is now stored as answer, since there is no res array
+                .replace("res[i] =", "answer =")
+                # Calls to setna mean that the answer is NULL, so they are
+                # replaced with "return None".
+                .replace("bodo.libs.array_kernels.setna(res, i)", "return None")
+                # NOTE: scalar_text should not contain any isna calls in
+                # the case where all of the inputs are scalar.
+            )
+            func_text += indent_block(scalar_version, 3)
             func_text += "   return answer"
 
     else:
@@ -295,18 +339,26 @@ def gen_vectorized(
         # arguments extracted by getitem.
         func_text += f"   n = {size_text}\n"
 
-        # If prefix_code was provided, embed it before the loop (unless the output
-        # is all-null)
+        # If prefix_code was provided, embed it before the loop
+        # (unless the output is all-null)
         if prefix_code is not None and not out_null:
-            for line in prefix_code.splitlines():
-                func_text += " " * 3 + line[prefix_indentation:] + "\n"
+            func_text += indent_block(prefix_code, 3)
+
+        # If creating a dictionary encoded output from scratch, embed the text
+        # to create the dictionary itself before the main loop
+        if use_dict_synthesis:
+            func_text += indent_block(synthesize_dict_setup_text, 3)
+            out_dtype = bodo.libs.dict_arr_ext.dict_indices_arr_type
+            func_text += "   res = bodo.utils.utils.alloc_type(n, out_dtype, (-1,))\n"
+            func_text += "   numba.parfors.parfor.init_prange()\n"
+            func_text += "   for i in numba.parfors.parfor.internal_prange(n):\n"
 
         # If dictionary encoded outputs are not being used, then the output is
         # still bodo.string_array_type, the number of loop iterations is still the
         # length of the indices, and scalar_text/propagate_null should work the
         # same because isna checks the data & indices, and scalar_text uses the
         # arguments extracted by getitem.
-        if use_dict_encoding:
+        elif use_dict_encoding:
 
             # Add a null value at the end of the dictionary and compute the scalar
             # kernel output for null values if we are not just propagating input nulls
@@ -361,10 +413,16 @@ def gen_vectorized(
                 else:
                     func_text += f"      arg{i} = {arg_names[i]}\n"
 
-            # Add the scalar computation. The text must use the argument variables
-            # in the form arg0, arg1, etc. and store its final answer in res[i].
-            for line in scalar_text.splitlines():
-                func_text += " " * 6 + line[base_indentation:] + "\n"
+            if not use_dict_synthesis:
+
+                # Add the scalar computation. The text must use the argument variables
+                # in the form arg0, arg1, etc. and store its final answer in res[i].
+                func_text += indent_block(scalar_text, 6)
+
+            else:
+                # If using dictionary encoded synthesis, do the same but where res[i]
+                # will store the index in the dictionary calculated earlier
+                func_text += indent_block(synthesize_dict_scalar_text, 6)
 
         # If using dictionary encoding, construct the output from the
         # new dictionary + the indices
@@ -408,11 +466,13 @@ def gen_vectorized(
                 func_text += "   res = res2\n"
 
         # If prefix_text was provided, embed it after the loop
-        if suffix_code is not None:
-            for line in suffix_code.splitlines():
-                func_text += " " * 3 + line[suffix_indentation:] + "\n"
+        func_text += indent_block(suffix_code, 3)
 
-        func_text += "   return res"
+        # If using dictionary encoded synthesis, construct the final dict-encoded array
+        if use_dict_synthesis:
+            func_text += f"   return bodo.libs.dict_arr_ext.init_dict_arr(dict_res, res, {synthesize_dict_global}, {synthesize_dict_unique})\n"
+        else:
+            func_text += "   return res"
     loc_vars = {}
 
     exec_globals = {
@@ -438,7 +498,7 @@ def gen_vectorized(
     return impl
 
 
-def unopt_argument(func_name, arg_names, i, container_length=None):
+def unopt_argument(func_name, arg_names, i, container_arg=0, container_length=None):
     """Creates an impl that cases on whether or not a certain argument to a function
        is None in order to un-optionalize that argument
 
@@ -446,7 +506,9 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
         func_name (string): the name of the function with the optional arguments
         arg_names (string list): the name of each argument to the function
         i (integer): the index of the argument from arg_names being unoptionalized
-        container_length (optional int): if provided, treat the single arg_name as
+        container_arg (optional int): Which argument in the container are we checking?
+            Used alongside container_length.
+        container_length (optional int): if provided, treat the arg_names[i] as
         a container of this many arguments. Used so we can pass in arbitrary sized
         containers or arguments to handle SQL functions with variadic arguments,
         such as coalesce
@@ -455,22 +517,57 @@ def unopt_argument(func_name, arg_names, i, container_length=None):
         function: the impl that re-calls func_name with arg_names[i] no longer optional
     """
     if container_length != None:
+        # If this path the one of the arguments is a tuple of arrays and the optional
+        # value is a member of the tuple. In this path we execute the follow steps.
+        # Step 1: Replace the tuple with a new tuple.
+        # Step 2: Generate the new function calls.
+
+        # Here is an example:
+        #   call(arg0, arg1, arg2)
+        #   i = 1
+        #   container_arg = 2
+        #   container_length = 3
+        #
+        # Here are the two different tuple options:
+        # args1_str = (arg1[0], arg1[1], None)
+        # args2_str = (arg1[0], arg1[1], bodo.utils.indexing.unoptional(arg1[2]))
+        #
+        # Then the total call becomes
+        # total_args1 = arg0, (arg1[0], arg1[1], None), arg2
+        # total_args2 = arg0, (arg1[0], arg1[1], bodo.utils.indexing.unoptional(arg1[2])), arg2
         args1 = [
-            f"{arg_names[0]}{[j]}" if j != i else "None"
+            f"{arg_names[i]}{[j]}" if j != container_arg else "None"
             for j in range(container_length)
         ]
+        # Note: (,) is not valid code.
+        extra_comma = "," if container_length != 0 else ""
+        args1_str = f"({', '.join(args1)}{extra_comma})"
         args2 = [
-            f"{arg_names[0]}{[j]}"
-            if j != i
-            else f"bodo.utils.indexing.unoptional({arg_names[0]}[{j}])"
+            f"{arg_names[i]}{[j]}"
+            if j != container_arg
+            else f"bodo.utils.indexing.unoptional({arg_names[i]}[{j}])"
             for j in range(container_length)
+        ]
+        args2_str = f"({', '.join(args2)}{extra_comma})"
+        total_args1 = [
+            arg_names[j] if j != i else args1_str for j in range(len(arg_names))
+        ]
+        total_args2 = [
+            arg_names[j] if j != i else args2_str for j in range(len(arg_names))
         ]
         func_text = f"def impl({', '.join(arg_names)}):\n"
-        func_text += f"   if {arg_names[0]}[{i}] is None:\n"
-        func_text += f"      return {func_name}(({', '.join(args1)}))\n"
+        func_text += f"   if {arg_names[i]}[{container_arg}] is None:\n"
+        func_text += f"      return {func_name}({', '.join(total_args1)})\n"
         func_text += f"   else:\n"
-        func_text += f"      return {func_name}(({', '.join(args2)}))\n"
+        func_text += f"      return {func_name}({', '.join(total_args2)})\n"
     else:
+        # In this path we just replace individual arguments.
+        #   call(arg0, arg1, arg2)
+        #   i = 1
+        #
+        # args1 = (arg0, None, arg2)
+        # args2 = (arg0, bodo.utils.indexing.unoptional(arg1), arg2)
+        #
         args1 = [arg_names[j] if j != i else "None" for j in range(len(arg_names))]
         args2 = [
             arg_names[j]
@@ -583,7 +680,7 @@ def verify_int_float_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
 
     raises: BodoError if the argument is not an integer/float/bool scalar/column, or NULL
     """
@@ -644,7 +741,7 @@ def is_valid_datetime_or_date_arg(arg):
     and the columnar date/datetime types are both .
     """
 
-    return arg == pd_timestamp_type or (
+    return arg == pd_timestamp_tz_naive_type or (
         bodo.utils.utils.is_array_typ(arg, True)
         and (
             is_datetime_date_series_typ(arg)
@@ -791,9 +888,82 @@ def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
         )
 
 
+def is_valid_date_arg(arg):
+    """
+    Is the type an acceptable date argument for a BodoSQL array
+    kernel. This is a date scalar, array, or Series value.
+
+    Args:
+        arg (types.Type): A Bodo type.
+
+    Returns:
+        bool: Is this type one of the date types.
+    """
+    return arg == bodo.datetime_date_type or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and arg.dtype == bodo.datetime_date_type
+    )
+
+
+def is_valid_tz_naive_datetime_arg(arg):
+    """
+    Is the type an acceptable tz naive datetime argument for a BodoSQL array
+    kernel. This is a Timestamp scalar where tz == None, dt64 array, or
+    dt64 Series.
+
+    Args:
+        arg (types.Type): A Bodo type.
+
+    Returns:
+        bool: Is this type one of the tz-naive datetime types.
+    """
+    return arg in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type) or (
+        bodo.utils.utils.is_array_typ(arg, True) and arg.dtype == bodo.datetime64ns
+    )
+
+
+def is_valid_tz_aware_datetime_arg(arg):
+    """
+    Is the type an acceptable tz aware datetime argument for a BodoSQL array
+    kernel. This is a Timestamp scalar where tz != None, DatetimeArray, or
+    DatetimeArray Series.
+
+    Args:
+        arg (types.Type): A Bodo type.
+
+    Returns:
+        bool: Is this type one of the tz-aware datetime types.
+    """
+    return (isinstance(arg, bodo.PandasTimestampType) and arg.tz is not None) or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and isinstance(arg.dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype)
+    )
+
+
 def verify_datetime_arg(arg, f_name, a_name):  # pragma: no cover
     """Verifies that one of the arguments to a SQL function is a datetime
        (scalar or vector)
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being checked
+
+    raises: BodoError if the argument is not a datetime, datetime column, or NULL
+    """
+    if not (
+        is_overload_none(arg)
+        or is_valid_date_arg(arg)
+        or is_valid_tz_naive_datetime_arg(arg)
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a datetime, datetime column, or null without a tz"
+        )
+
+
+def verify_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a datetime
+       (scalar or vector) that allows timezones.
 
     Args:
         arg (dtype): the dtype of the argument being checked
@@ -802,18 +972,106 @@ def verify_datetime_arg(arg, f_name, a_name):  # pragma: no cover
 
     raises: BodoError if the argument is not a datetime, datetime column, or NULL
     """
-    if arg not in (
-        types.none,
-        bodo.datetime64ns,
-        bodo.pd_timestamp_type,
-        bodo.hiframes.datetime_date_ext.DatetimeDateType(),
-    ) and not (
-        bodo.utils.utils.is_array_typ(arg, True)
-        and arg.dtype
-        in (bodo.datetime64ns, bodo.hiframes.datetime_date_ext.DatetimeDateType())
+    if not (
+        is_overload_none(arg)
+        or is_valid_date_arg(arg)
+        or is_valid_tz_naive_datetime_arg(arg)
+        or is_valid_tz_aware_datetime_arg(arg)
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a datetime, datetime column, or null"
+        )
+
+
+def verify_datetime_arg_require_tz(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a datetime
+    (scalar or vector) that has a timezone.
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being checked
+    raises: BodoError if the argument is not a datetime, datetime column, or NULL
+    """
+    if not (is_overload_none(arg) or is_valid_tz_aware_datetime_arg(arg)):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a tz-aware datetime, datetime column, or null"
+        )
+
+
+def verify_sql_interval(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is an acceptable
+    interval. This is either a valid Timedelta scalar or array, None, or
+    pd.DateOffset.
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+    raises: BodoError if the argument is a valid interval type
+    """
+    if not (
+        is_overload_none(arg)
+        or is_valid_timedelta_arg(arg)
+        or arg == bodo.date_offset_type
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a Timedelta scalar/column, DateOffset, or null"
+        )
+
+
+def get_tz_if_exists(arg):  # pragma: no cover
+    """Returns the timezone from a scalar or vector datetime/timestamp argument,
+        or None if it has no timestamp.
+
+    Args:
+        arg (dtype): the dtype of the argument whose timezone is being extracted.
+
+    Returns: the timezone (if the argument has one) or None (if it does not)
+    """
+    if is_valid_tz_aware_datetime_arg(arg):
+        if bodo.utils.utils.is_array_typ(arg, True):
+            return arg.dtype.tz
+        else:
+            return arg.tz
+    return None
+
+
+def is_valid_time_arg(arg):
+    """
+    Is the type an acceptable time argument for a BodoSQL array
+    kernel. This is a date time, array, or Series value.
+
+    Args:
+        arg (types.Type): A Bodo type.
+
+    Returns:
+        bool: Is this type a time type
+    """
+    return isinstance(arg, bodo.TimeType) or (
+        bodo.utils.utils.is_array_typ(arg, True)
+        and isinstance(arg.dtype, bodo.bodo.TimeType)
+    )
+
+
+def verify_time_or_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a time/datetime
+       (scalar or vector) that allows timezones.
+
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being chekced
+
+    raises: BodoError if the argument is not a datetime, datetime column, or NULL
+    """
+    if not (
+        is_overload_none(arg)
+        or is_valid_date_arg(arg)
+        or is_valid_time_arg(arg)
+        or is_valid_tz_naive_datetime_arg(arg)
+        or is_valid_tz_aware_datetime_arg(arg)
+    ):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a time/datetime, time/datetime column, or null without a tz"
         )
 
 
@@ -986,9 +1244,12 @@ def gen_windowed(
             for i in range(n):
                 bodo.libs.array_kernels.setna(res, i)
         elif lower_bound <= -n+1 and n-1 <= upper_bound:
-            # <CONSTANT_BLOCK>
-            for i in range(n):
-                res[i] = constant_value
+            if S.count() == 0:
+                # << EMPTY_BLOCK >>
+            else:
+                # << CONSTANT_BLOCK >>
+                for i in range(n):
+                    res[i] = constant_value
         else:
             # Keep track of the first/last index of the current window,
             # the number of non-null entries in the window, and the current
@@ -1070,14 +1331,21 @@ def gen_windowed(
     func_text += "         bodo.libs.array_kernels.setna(res, i)\n"
     if constant_block != None:
         func_text += "   elif lower_bound <= -n+1 and n-1 <= upper_bound:\n"
+        func_text += "      if S.count() == 0:\n"
+        func_text += "         for i in range(n):\n"
+        func_text += (
+            "\n".join([" " * 12 + line[empty_indentation:] for line in empty_lines])
+            + "\n"
+        )
+        func_text += "      else:\n"
         func_text += (
             "\n".join(
-                [" " * 6 + line[constant_indentation:] for line in constant_lines]
+                [" " * 9 + line[constant_indentation:] for line in constant_lines]
             )
             + "\n"
         )
-        func_text += "      for i in range(n):\n"
-        func_text += "         res[i] = constant_value\n"
+        func_text += "         for i in range(n):\n"
+        func_text += "            res[i] = constant_value\n"
     func_text += "   else:\n"
     func_text += "      exiting = lower_bound\n"
     func_text += "      entering = upper_bound\n"

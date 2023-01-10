@@ -71,10 +71,18 @@ def overload_coerce_to_ndarray(
 
     # TODO: handle NAs?
     # nullable int array
-    if isinstance(
-        data, bodo.libs.int_arr_ext.IntegerArrayType
-    ) and not is_overload_none(use_nullable_array):
+    if isinstance(data, bodo.libs.int_arr_ext.IntegerArrayType) and is_overload_none(
+        use_nullable_array
+    ):
         return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.int_arr_ext.get_int_arr_data(
+            data
+        )  # pragma: no cover
+
+    # nullable float array
+    if isinstance(data, bodo.libs.float_arr_ext.FloatingArrayType) and is_overload_none(
+        use_nullable_array
+    ):
+        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.float_arr_ext.get_float_arr_data(
             data
         )  # pragma: no cover
 
@@ -88,8 +96,12 @@ def overload_coerce_to_ndarray(
 
     # numpy array
     if isinstance(data, types.Array):
-        if not is_overload_none(use_nullable_array) and isinstance(
-            data.dtype, (types.Boolean, types.Integer)
+        if not is_overload_none(use_nullable_array) and (
+            isinstance(data.dtype, (types.Boolean, types.Integer))
+            or (
+                isinstance(data.dtype, types.Float)
+                and bodo.libs.float_arr_ext._use_nullable_float
+            )
         ):
             if data.dtype == types.bool_:
                 if data.layout != "C":
@@ -99,6 +111,19 @@ def overload_coerce_to_ndarray(
                     )  # pragma: no cover
                 else:
                     return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.bool_arr_ext.init_bool_array(
+                        data, np.full((len(data) + 7) >> 3, 255, np.uint8)
+                    )  # pragma: no cover
+            elif (
+                isinstance(data.dtype, types.Float)
+                and bodo.libs.float_arr_ext._use_nullable_float
+            ):
+                if data.layout != "C":
+                    return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.float_arr_ext.init_float_array(
+                        np.ascontiguousarray(data),
+                        np.full((len(data) + 7) >> 3, 255, np.uint8),
+                    )  # pragma: no cover
+                else:
+                    return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: bodo.libs.float_arr_ext.init_float_array(
                         data, np.full((len(data) + 7) >> 3, 255, np.uint8)
                     )  # pragma: no cover
             else:  # Integer case
@@ -130,33 +155,22 @@ def overload_coerce_to_ndarray(
             if bodo.utils.typing.is_scalar_type(elem_type):
                 use_nullable_array = True
 
-        if isinstance(
-            elem_type, (types.Boolean, types.Integer, Decimal128Type)
-        ) or elem_type in [
-            bodo.hiframes.pd_timestamp_ext.pd_timestamp_type,
-            bodo.hiframes.datetime_date_ext.datetime_date_type,
-            bodo.hiframes.datetime_timedelta_ext.datetime_timedelta_type,
-        ]:
-            arr_typ = dtype_to_array_type(elem_type)
-            if not is_overload_none(use_nullable_array):
-                arr_typ = to_nullable_type(arr_typ)
+        arr_typ = dtype_to_array_type(elem_type)
+        if not is_overload_none(use_nullable_array):
+            arr_typ = to_nullable_type(arr_typ)
 
-            def impl(
-                data,
-                error_on_nonarray=True,
-                use_nullable_array=None,
-                scalar_to_arr_len=None,
-            ):  # pragma: no cover
-                n = len(data)
-                A = bodo.utils.utils.alloc_type(n, arr_typ, (-1,))
-                bodo.utils.utils.tuple_list_to_array(A, data, elem_type)
-                return A
+        def impl(
+            data,
+            error_on_nonarray=True,
+            use_nullable_array=None,
+            scalar_to_arr_len=None,
+        ):  # pragma: no cover
+            n = len(data)
+            A = bodo.utils.utils.alloc_type(n, arr_typ, (-1,))
+            bodo.utils.utils.tuple_list_to_array(A, data, elem_type)
+            return A
 
-            return impl
-
-        return lambda data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None: np.asarray(
-            data
-        )  # pragma: no cover
+        return impl
 
     # series
     if isinstance(data, SeriesType):
@@ -279,7 +293,7 @@ def overload_coerce_to_ndarray(
             return impl_ts
 
         # Timestamp values are stored as dt64 arrays
-        if data == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
+        if data == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
             dt64_dtype = np.dtype("datetime64[ns]")
 
             def impl_ts(
@@ -317,6 +331,27 @@ def overload_coerce_to_ndarray(
                 return out_arr
 
             return impl_null_integer
+
+        if (
+            not is_overload_none(use_nullable_array)
+            and isinstance(dtype, types.Float)
+            and bodo.libs.float_arr_ext._use_nullable_float
+        ):
+
+            def impl_null_float(
+                data,
+                error_on_nonarray=True,
+                use_nullable_array=None,
+                scalar_to_arr_len=None,
+            ):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = scalar_to_arr_len
+                out_arr = bodo.libs.float_arr_ext.alloc_float_array(n, dtype)
+                for i in numba.parfors.parfor.internal_prange(n):
+                    out_arr[i] = data
+                return out_arr
+
+            return impl_null_float
 
         if not is_overload_none(use_nullable_array) and dtype == types.bool_:
 
@@ -412,6 +447,30 @@ def overload_coerce_scalar_to_array(scalar, length, arr_type):
     return impl
 
 
+def ndarray_if_nullable_arr(data):
+    pass
+
+
+@overload(ndarray_if_nullable_arr)
+def overload_ndarray_if_nullable_arr(data):
+    """convert input to Numpy array if it is a nullable array but return any other input as-is."""
+    if (
+        isinstance(
+            data,
+            (
+                bodo.libs.int_arr_ext.IntegerArrayType,
+                bodo.libs.float_arr_ext.FloatingArrayType,
+            ),
+        )
+        or data == bodo.libs.bool_arr_ext.boolean_array
+    ):
+        return lambda data: bodo.utils.conversion.coerce_to_ndarray(
+            data
+        )  # pragma: no cover
+
+    return lambda data: data  # pragma: no cover
+
+
 # TODO: use generated_jit with IR inlining
 def coerce_to_array(
     data, error_on_nonarray=True, use_nullable_array=None, scalar_to_arr_len=None
@@ -495,6 +554,7 @@ def overload_coerce_to_array(
         data,
         (
             bodo.libs.int_arr_ext.IntegerArrayType,
+            bodo.libs.float_arr_ext.FloatingArrayType,
             DecimalArrayType,
             bodo.libs.interval_arr_ext.IntervalArrayType,
             bodo.libs.tuple_arr_ext.TupleArrayType,
@@ -662,11 +722,13 @@ def overload_coerce_to_array(
 
     # Timestamp/Timedelta scalars to array
     if not is_overload_none(scalar_to_arr_len) and data in [
-        bodo.pd_timestamp_type,
+        bodo.pd_timestamp_tz_naive_type,
         bodo.pd_timedelta_type,
     ]:
         _dtype = (
-            "datetime64[ns]" if data == bodo.pd_timestamp_type else "timedelta64[ns]"
+            "datetime64[ns]"
+            if data == bodo.pd_timestamp_tz_naive_type
+            else "timedelta64[ns]"
         )
 
         def impl_timestamp(
@@ -679,7 +741,7 @@ def overload_coerce_to_array(
             # NOTE: not using n to calculate n_chars since distributed pass will use
             # the global value of n and cannot replace it with the local version
             A = np.empty(n, _dtype)
-            data = bodo.utils.conversion.unbox_if_timestamp(data)
+            data = bodo.utils.conversion.unbox_if_tz_naive_timestamp(data)
             for i in numba.parfors.parfor.internal_prange(n):
                 A[i] = data
             return A
@@ -724,8 +786,15 @@ def overload_fix_arr_dtype(
     operations where the casting behavior changes depending on if the input is a Series
     or an Array (specifically, S.astype(str) vs S.values.astype(str))
     """
-    if not is_overload_none(new_dtype):
-        # We don't support fix_arr_dtype if we have to cast the data.
+    # We don't support fix_arr_dtype if we have to cast the data.
+    # This means we support none and keeping the same type.
+    can_cast_tz_aware = False
+    if is_overload_none(new_dtype):
+        can_cast_tz_aware = True
+    elif isinstance(new_dtype, types.TypeRef):
+        can_cast_tz_aware = new_dtype.instance_type == data
+
+    if not can_cast_tz_aware:
         bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
             data, "fix_arr_dtype()"
         )
@@ -1031,6 +1100,13 @@ def overload_fix_arr_dtype(
             isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype)
             and data.dtype == nb_dtype.dtype
         )
+    elif isinstance(data, bodo.libs.float_arr_ext.FloatingArrayType):
+        same_typ = (
+            isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype)
+            and data.dtype == nb_dtype.dtype
+        )
+    elif bodo.utils.utils.is_array_typ(nb_dtype, False):
+        same_typ = data == nb_dtype
     else:
         same_typ = data.dtype == nb_dtype
 
@@ -1046,10 +1122,7 @@ def overload_fix_arr_dtype(
 
     # nullable int array case
     if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
-        if isinstance(nb_dtype, types.Integer):
-            _dtype = nb_dtype
-        else:
-            _dtype = nb_dtype.dtype
+        _dtype = nb_dtype.dtype
 
         if isinstance(data.dtype, types.Float):
 
@@ -1117,8 +1190,41 @@ def overload_fix_arr_dtype(
 
             return impl
 
+    # nullable float array case
+    if isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype):
+        _dtype = nb_dtype.dtype
+
+        def impl(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
+            n = len(data)
+            numba.parfors.parfor.init_prange()
+            B = bodo.libs.float_arr_ext.alloc_float_array(n, _dtype)
+            for i in numba.parfors.parfor.internal_prange(n):
+                if bodo.libs.array_kernels.isna(data, i):
+                    bodo.libs.array_kernels.setna(B, i)
+                else:
+                    B[i] = float(data[i])
+            return B
+
+        return impl
+
     # nullable int array to non-nullable int array case
     if isinstance(nb_dtype, types.Integer) and isinstance(data.dtype, types.Integer):
+
+        def impl(
+            data, new_dtype, copy=None, nan_to_str=True, from_series=False
+        ):  # pragma: no cover
+            return data.astype(nb_dtype)
+
+        return impl
+
+    # nullable float array to non-nullable int array case
+    if (
+        isinstance(nb_dtype, types.Float)
+        and isinstance(data.dtype, types.Float)
+        and bodo.libs.float_arr_ext._use_nullable_float
+    ):
 
         def impl(
             data, new_dtype, copy=None, nan_to_str=True, from_series=False
@@ -1623,15 +1729,16 @@ def overload_box_if_dt64(val):
     return lambda val: val  # pragma: no cover
 
 
-def unbox_if_timestamp(val):  # pragma: no cover
+def unbox_if_tz_naive_timestamp(val):  # pragma: no cover
     return val
 
 
-@overload(unbox_if_timestamp, no_unliteral=True)
-def overload_unbox_if_timestamp(val):
-    """If 'val' is Timestamp, "unbox" it to dt64 otherwise just return 'val'"""
+@overload(unbox_if_tz_naive_timestamp, no_unliteral=True)
+def overload_unbox_if_tz_naive_timestamp(val):
+    """If 'val' is Timestamp without a Timezone,
+    "unbox" it to dt64 otherwise just return 'val'"""
     # unbox Timestamp to dt64
-    if val == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
+    if val == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
         return lambda val: bodo.hiframes.pd_timestamp_ext.integer_to_dt64(
             val.value
         )  # pragma: no cover
@@ -1649,7 +1756,7 @@ def overload_unbox_if_timestamp(val):
         )  # pragma: no cover
 
     # Optional(timestamp)
-    if val == types.Optional(bodo.hiframes.pd_timestamp_ext.pd_timestamp_type):
+    if val == types.Optional(bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type):
 
         def impl_optional(val):  # pragma: no cover
             if val is None:

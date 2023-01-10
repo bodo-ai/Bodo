@@ -2,10 +2,12 @@
 set -exo pipefail
 
 # Load the env first because credstash is installed on conda
-export PATH=$HOME/miniconda3/bin:$PATH
+export PATH=$HOME/mambaforge/bin:$PATH
 export BODO_VERSION=`python -c "import versioneer; print(versioneer.get_version())"`
 
+set +x
 source activate $CONDA_ENV
+set -x
 
 USERNAME=`credstash -r us-east-2 get artifactory.ci.username`
 TOKEN=`credstash -r us-east-2 get artifactory.ci.token`

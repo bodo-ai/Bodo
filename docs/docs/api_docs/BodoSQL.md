@@ -496,8 +496,8 @@ based on a related column between them:
 ```sql
 SELECT <COLUMN_NAMES>
   FROM <LEFT_TABLE_NAME>
-  <JOIN_TYPE<RIGHT_TABLE_NAME>
-  ON <LEFT_TABLE_COLUMN_NAME= <RIGHT_TABLE_COLUMN_NAME>
+  <JOIN_TYPE> <RIGHT_TABLE_NAME>
+  ON <LEFT_TABLE_COLUMN_NAME> OP <RIGHT_TABLE_COLUMN_NAME>
 ```
 For example:
 ```sql
@@ -513,9 +513,6 @@ and the matched records from the right table
 table, and the matched records from the left table
 -   `FULL (OUTER) JOIN`: returns all records when there is a match
 in either left or right table
-
-Bodo SQL currently supports inner join on all conditions, but all
-outer joins are only supported on an equality between columns.
 
 ***Example Usage***
 
@@ -562,6 +559,79 @@ outer joins are only supported on an equality between columns.
 4  Demetrius Chavez        WIRE
 5               NaN        VISA
 6               NaN        VISA
+```
+
+### NATURAL JOIN
+
+A natural join is a type of join that provides an equality condition on all
+columns with the same name and only returns 1 column for the keys. On cannot
+be provided because it is implied but all join types can be provided.
+
+```sql
+SELECT <COLUMN_NAMES>
+  FROM <LEFT_TABLE_NAME>
+  NATURAL <JOIN_TYPE> <RIGHT_TABLE_NAME>
+```
+For example:
+```sql
+SELECT table1.A, table1.B FROM table1 NATURAL JOIN table2
+```
+Here are the different types of the joins in SQL:
+
+-   `(INNER) JOIN`: returns records that have matching values in
+both tables
+-   `LEFT (OUTER) JOIN`: returns all records from the left table,
+and the matched records from the right table
+-   `RIGHT (OUTER) JOIN`: returns all records from the right
+table, and the matched records from the left table
+-   `FULL (OUTER) JOIN`: returns all records when there is a match
+in either left or right table
+
+***Example Usage***
+
+```py
+>>>@bodo.jit
+... def g1(df1, df2):
+...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
+...    query = "SELECT payments.* FROM customers NATURAL JOIN payments"
+...    res = bc.sql(query)
+...    return res
+
+>>>@bodo.jit
+... def g2(df1, df2):
+...    bc = bodosql.BodoSQLContext({"customers":df1, "payments":df2})
+...    query = "SELECT payments.* FROM customers NATURAL FULL JOIN payments"
+...    res = bc.sql(query)
+...    return res
+
+>>>customer_df = pd.DataFrame({
+...    "customerID": [0, 2, 4, 5, 7,],
+...    "name": ["Deangelo Todd","Nikolai Kent","Eden Heath", "Taliyah Martinez","Demetrius Chavez",],
+...    "address": ["223 Iroquois LanenWest New York, NJ 07093","37 Depot StreetnTaunton, MA 02780",
+...                "639 Maple St.nNorth Kingstown, RI 02852","93 Bowman Rd.nChester, PA 19013",
+...                "513 Manchester Ave.nWindsor, CT 06095",],
+...    "balance": [1123.34, 2133.43, 23.58, 8345.15, 943.43,]
+... })
+>>>payment_df = pd.DataFrame({
+...     "customerID": [0, 1, 4, 6, 7],
+...     "paymentType": ["VISA", "VISA", "AMEX", "VISA", "WIRE",],
+... })
+
+>>>g1(customer_df, payment_df) # INNER JOIN
+   customerID paymentType
+0           0        VISA
+1           4        AMEX
+2           7        WIRE
+
+>>>g2(customer_df, payment_df) # OUTER JOIN
+   customerID paymentType
+0           0        VISA
+1        <NA>        <NA>
+2           4        AMEX
+3        <NA>        <NA>
+4           7        WIRE
+5           1        VISA
+6           6        VISA
 ```
 
 ### UNION
@@ -1393,12 +1463,50 @@ Bodo SQL currently supports the following Timestamp functions:
     DATE_FORMAT(Timestamp '2020-01-12 13:39:12', 'The time was %T %p. It was a %u') =='The time was 13:39:12 PM. It was a Sunday'
     ```
 
+#### DATEADD
+-   `DATEADD(unit, amount, timestamp_val)`
+
+    Computes a timestamp column by adding the amount of the specified unit
+    to the timestamp val. For example, `DATEADD('day', 3, T)` adds 3 days to
+    column `T`. Allows the following units, with the specified
+    abbreviations as string literals:
+
+    -   YEAR: `year`, `years`, `yr`, `yrs`, `y`, `yy`, `yyy`, `yyyy`
+    -   QUARTER: `quarter`, `quarters`, `q`, `qtr`, `qtrs`
+    -   MONTH: `month`, `months`, `mm`, `mon`, `mons`
+    -   WEEK: `week`, `weeks`, `weekofyear`, `w`, `wk`, `woy`, `wy`
+    -   DAY: `day`, `days`, `dayofmonth`, `d`, `dd`
+    -   HOUR: `hour`, `hours`, `hrs`, `h`, `hr`, `hrs`
+    -   MINUTE: `minute`, `minutes`, `m`, `mi`, `min`, `mins`
+    -   SECOND: `second`, `seconds`, `s`, `sec`, `secs`
+    -   MILLISECOND: `millisecond`, `milliseconds`, `ms`, `msecs`
+    -   MICROSECOND: `microsecond`, `microseconds`, `us`, `usec`
+    -   NANOSECOND: `nanosecond`, `nanoseconds`, `nanosec`, `nsec`, `nsecs`, `nsecond`, `ns`, `nanonsecs`
+
+    Supported with timezone-aware data.
+
+-   `DATEADD(timestamp_val, amount)`
+
+    Equivalent to `DATEADD('day', amount, timestamp_val)`
+
+
+#### TIMEADD
+-   `TIMEADD(unit, amount, timestamp_val)`
+
+    Equivalent to `DATEADD`.
+
+
 #### DATE_ADD
 -   `DATE_ADD(timestamp_val, interval)`
 
     Computes a timestamp column by adding an interval column/scalar to a
     timestamp value. If the first argument is a string representation of a
     timestamp, Bodo will cast the value to a timestamp.
+
+
+-   `DATE_ADD(timestamp_val, amount)`
+
+    Equivalent to `DATE_ADD('day', amount, timestamp_val)`
 
 #### DATE_SUB
 -   `DATE_SUB(timestamp_val, interval)`
@@ -1426,12 +1534,21 @@ Bodo SQL currently supports the following Timestamp functions:
 #### NOW
 -   `NOW()`
 
-    Computes a timestamp equal to the current system time
+    Computes a timestamp equal to the current time in the session's timezone.
+    By default the current timezone is UTC and it can be updated as a parameter
+    when using the Snowflake Catalog.
 
 #### LOCALTIMESTAMP
 -   `LOCALTIMESTAMP()`
 
     Equivalent to `NOW`
+
+
+#### CURRENT_TIMESTAMP
+-   `CURRENT_TIMESTAMP()`
+
+    Equivalent to `NOW`
+
 
 #### CURDATE
 -   `CURDATE()`
@@ -1441,6 +1558,12 @@ Bodo SQL currently supports the following Timestamp functions:
 
 #### CURRENT_DATE
 -   `CURRENT_DATE()`
+
+    Equivalent to `CURDATE`
+
+
+#### GETDATE
+-   `GETDATE()`
 
     Equivalent to `CURDATE`
 
@@ -1463,6 +1586,25 @@ Bodo SQL currently supports the following Timestamp functions:
     -   `YEAR`
 
     TimeUnits are not case sensitive.
+
+
+#### DATE_PART
+-   `DATE_PART(unit, timestamp_val)`
+
+    Equivalent to `EXTRACT(unit FROM timestamp_val)` with the following unit
+    string literals:
+    -   YEAR: `year`, `years`, `yr`, `yrs`, `y`, `yy`, `yyy`, `yyyy`
+    -   QUARTER: `quarter`, `quarters`, `q`, `qtr`, `qtrs`
+    -   MONTH: `month`, `months`, `mm`, `mon`, `mons`
+    -   WEEK: `week`, `weeks`, `weekofyear`, `w`, `wk`, `woy`, `wy`
+    -   DAY: `day`, `days`, `dayofmonth`, `d`, `dd`
+    -   HOUR: `hour`, `hours`, `hrs`, `h`, `hr`, `hrs`
+    -   MINUTE: `minute`, `minutes`, `m`, `mi`, `min`, `mins`
+    -   SECOND: `second`, `seconds`, `s`, `sec`, `secs`
+    -   MILLISECOND: `millisecond`, `milliseconds`, `ms`, `msecs`
+    -   MICROSECOND: `microsecond`, `microseconds`, `us`, `usec`
+    -   NANOSECOND: `nanosecond`, `nanoseconds`, `nanosec`, `nsec`, `nsecs`, `nsecond`, `ns`, `nanonsecs`
+    Supported with timezone-aware data.
 
 #### MICROSECOND
 -   `MICROSECOND(timestamp_val)`
@@ -1575,8 +1717,12 @@ Bodo SQL currently supports the following Timestamp functions:
 #### TIMESTAMPDIFF
 -   `TIMESTAMPDIFF(unit, timestamp_val1, timestamp_val2)`
 
-    Returns timestamp_val1 - timestamp_val2 rounded down to the provided
-    unit.
+    Returns the amount of time that has passed since `timestamp_val1` until
+    `timestamp_val2` in terms of the unit specified, ignoring all smaller units.
+    E.g., December 31 of 2020 and January 1 of 2021 count as 1 year apart.
+    Note: for all units larger than `NANOSECOND`, the output type is `INTEGER`
+    instead of `BIGINT`, so any difference values that cannot be stored as
+    signed 32-bit integers might not be returned correct.
 
 #### WEEKDAY
 -   `WEEKDAY(timestamp_val)`
@@ -1756,20 +1902,25 @@ Bodo SQL currently supports the following string functions:
 #### LTRIM
 -   `LTRIM(str)`
 
-    returns the input string, will remove all spaces from the
-    left of the string
+    Returns the input string, will remove all spaces from the
+    left of the string.
 
 #### RTRIM
 -   `RTRIM(str)`
 
-    returns the input string, will remove all spaces from the
-    right of the string
+    Returns the input string, will remove all spaces from the
+    right of the string.
+
+#### RTRIMMED_LENGTH
+-   `RTRIMMED_LENGTH(str)`
+
+    Equivalent to `LENGTH(RTRIM(STR))`.
 
 #### TRIM
 -   `TRIM(str)`
 
-    returns the input string, will remove all spaces from the
-    left and right of the string
+    Returns the input string, will remove all spaces from the
+    left and right of the string.
 
 #### SUBSTRING_INDEX
 -   `SUBSTRING_INDEX(str, delimiter_str, n)`
@@ -1859,7 +2010,7 @@ Bodo SQL currently supports the following string functions:
     If the part is out of bounds, '' is returned.
 
 
- #### STRTOK
+#### STRTOK
 -   `STRTOK(source[, delimeter[, part]])`
 
     Tokenizes the source string by occurrences of any character in the
@@ -1871,6 +2022,45 @@ Bodo SQL currently supports the following string functions:
     case where the only possible output is '', the output is `NULL`.
     The delimeter is optional and defaults to ' '. The part is optional
     and defaults to 1.
+
+
+#### POSITION
+-   `POSITION(str1, str2)`
+
+    Returns the 1-indexed location where `str1` first occurs in `str2`, or 0 if
+    there is no occurrences of `str1` in `str2`. Note: does not currently support
+    alternate syntax `POSITION(str1, str2)`, or binary data.
+
+
+#### CHARINDEX
+-   `CHARINDEX(str1, str2[, start_position])`
+
+    Equiavelnt to `POSITION(str1, str2)` when 2 arguments are provided. When the
+    optional third argument is provided, it only starts searching at that index.
+    Note: not currently supported on binary data.
+
+
+#### STARTSWITH
+-   `STARTSWITH(str1, str2)`
+
+    Returns whether or not `str2` is a prefix of `str1`.
+
+
+#### ENDSWITH
+-   `ENDSWITH(str1, str2)`
+
+    Returns whether or not `str2` is a suffix of `str1`.
+
+
+#### INSERT
+-   `INSERT(str1, pos, len, str2)`
+
+    Inserts `str2` into `str1` at position `pos` (1-indexed), replacing
+    the first `len` characters after `pos` in the process. If `len` is zero,
+    inserts `str2` into `str1` without deleting any characters. If `pos` is one,
+    prepends `str2` to `str1`. If `pos` is larger than the length of `str1`, appends
+    `str2` to `str1. Note: behavior when `pos` or `len` are negative is not well
+    defined at this time.
 
 
 ###  Regex Functions
@@ -2249,6 +2439,9 @@ SELECT SUM(A) OVER (PARTITION BY B ORDER BY C ROWS BETWEEN UNBOUNDED PRECEDING A
 ```
 This query computes the cumulative sum over a row and all of its preceding rows.
 
+Note: for most window functions, BodoSQL returns `NULL` if the specified window frame
+is empty or all `NULL`. Exceptions to this behavior are noted.
+
 Window functions perform a series of steps as followed:
 
 1.  Partition the data by `PARTITION_COLUMN`. This is effectively a groupby operation on `PARTITION_COLUMN`.
@@ -2270,68 +2463,75 @@ Currently BodoSQL supports the following Window functions:
 #### COUNT
 -   `COUNT(*)`
 
-    Compute the number of entries in a window.
+    Compute the number of entries in a window, including `NULL`.
 
 #### SUM
 -   `SUM(COLUMN_EXPRESSION)`
 
-    Compute the sum over the window or `NULL` if the window is
-    empty.
+    Compute the sum of non-null entries in the window.
 
 #### AVG
 -   `AVG(COLUMN_EXPRESSION)`
 
-    Compute the average over the window or `NULL` if the window
-    is empty.
+    Compute the average over the window.
 
 
 #### STDDEV
 -   `STDDEV(COLUMN_EXPRESSION)`
 
-    Compute the standard deviation for a sample over the
-    window or `NULL` if the window is empty.
+    Compute the standard deviation for a sample over the window.
 
 #### STDDEV_POP
 -   `STDDEV_POP(COLUMN_EXPRESSION)`
 
-    Compute the standard deviation for a population over the
-    window or `NULL` if the window is empty.
+    Compute the standard deviation for a population over the window.
 
 #### VARIANCE
 -   `VARIANCE(COLUMN_EXPRESSION)`
 
-    Compute the variance for a sample over the window or `NULL`
-    if the window is empty.
+    Compute the variance for a sample over the window.
 
 #### VAR_POP
 -   `VAR_POP(COLUMN_EXPRESSION)`
 
-    Compute the variance for a population over the window or
-    `NULL` if the window is empty.
+    Compute the variance for a population over the window.
 
 #### MAX
 -   `MAX(COLUMN_EXPRESSION)`
 
-    Compute the maximum value over the window or NULL if the
-    window is empty.
+    Compute the maximum value over the window.
 
 #### MIN
 -   `MIN(COLUMN_EXPRESSION)`
 
-    Compute the minimum value over the window or NULL if the
-    window is empty.
+    Compute the minimum value over the window.
 
 #### COUNT
 
 -   `COUNT(COLUMN_EXPRESSION)`
 
-    Compute the number of non-NULL entries in a window.
+    Compute the number of non-NULL entries in a window, or zero if the window
+    is empty.
 
 #### COUNT_IF
 
 -   `COUNT_IF(BOOLEAN_COLUMN_EXPRESSION)`
 
-    Compute the number of `true` entries in a boolean column.
+    Compute the number of `true` entries in a boolean column, or zero if the window
+    is empty.
+
+
+#### MEDIAN
+-   `MEDIAN(COLUMN_EXPRESSION)`
+
+    Compute the median over the window.
+
+
+#### MODE
+-   `MODE(COLUMN_EXPRESSION)`
+
+    Returns the most frequent element in the window. Note: In case of a tie,
+    BodoSQL will choose a value arbitrarily based on performance considerations.
 
 
 #### LEAD
@@ -2365,29 +2565,25 @@ Currently BodoSQL supports the following Window functions:
 #### FIRST_VALUE
 -   `FIRST_VALUE(COLUMN_EXPRESSION)`
 
-    Select the first value in the window or `NULL` if the window
-    is empty.
+    Select the first value in the window.
 
 #### LAST_VALUE
 -   `LAST_VALUE(COLUMN_EXPRESSION)`
 
-    Select the last value in the window or `NULL` if the window
-    is empty.
+    Select the last value in the window.
 
 #### NTH_VALUE
 -   `NTH_VALUE(COLUMN_EXPRESSION, N)`
 
-    Select the Nth value in the window (1-indexed) or `NULL` if
-    the window is empty. If N is greater or than the window
-    size, this returns `NULL`.
+    Select the Nth value in the window (1-indexed). If N is greater or than the
+    window size, this returns `NULL`.
 
 
 #### ANY_VALUE
 -   `ANY_VALUE(COLUMN_EXPRESSION)`
 
-    Select an arbitrary value in the window or `NULL` if the window
-    is empty. Note: currently BodoSQL always selects the first value,
-    but this is subject to change at any time.
+    Select an arbitrary value in the window. Note: currently BodoSQL always
+    selects the first value, but this is subject to change at any time.
 
 
 #### NTILE
@@ -2396,11 +2592,16 @@ Currently BodoSQL supports the following Window functions:
     Divides the partitioned groups into N buckets based on
     ordering. For example if N=3 and there are 30 rows in a
     partition, the first 10 are assigned 1, the next 10 are
-    assigned 2, and the final 10 are assigned 3.
+    assigned 2, and the final 10 are assigned 3. In cases where
+    the number of rows cannot be evenly divided by the number
+    of buckets, the first buckets will have one more value
+    than the last bucket. For example, if N=4 and there are
+    22 rows in a partition, the first 6 are assigned 1, the
+    next 6 are assigned 2, the next 5 are assigned 3, and
+    the last 5 are assigned 4.
 
 #### RANK
 -   `RANK()`
-
 
     Compute the rank of each row based on the value(s) in the row relative to all value(s) within the partition.
     The rank begins with 1 and increments by one for each succeeding value. Duplicate value(s) will produce
@@ -2452,6 +2653,15 @@ Currently BodoSQL supports the following Window functions:
     Computes a counter within each partition that starts at zero and increases by 1 each
     time the value inside the window changes. `NULL` does not count as a new/changed value.
     `ORDER BY` is required for this function.
+
+
+#### RATIO_TO_REPORT
+-   `RATIO_TO_REPORT(COLUMN_EXPRESSION)`
+
+    Returns an element in the window frame divided by the sum of all elements in the
+    same window frame, or NULL if the window frame has a sum of zero. For example,
+    if calculating `RATIO_TO_REPORT` on `[2, 5, NULL, 10, 3]` where the window
+    is the entire partition, the answer is `[0.1, 0.25, NULL, 0.5, 0.15]`.
 
 
 ### Casting / Conversion Functions

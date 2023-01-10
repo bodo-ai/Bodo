@@ -1,6 +1,5 @@
 import os
 import shutil
-import types
 import warnings
 import weakref
 from tempfile import gettempdir
@@ -190,4 +189,6 @@ class LazyTemporaryDirectory:
         ):
             self._rmtree(self.name, ignore_errors=self._ignore_cleanup_errors)
 
-    __class_getitem__ = classmethod(types.GenericAlias)
+    # TODO: uncomment after deprecating Python 3.8
+    # New in version 3.9. https://docs.python.org/3/library/types.html#types.GenericAlias
+    # __class_getitem__ = classmethod(types.GenericAlias)

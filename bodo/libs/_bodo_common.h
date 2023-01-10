@@ -82,6 +82,7 @@ inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
     if (typ == Bodo_CTypes::INT16) return true;
     if (typ == Bodo_CTypes::INT32) return true;
     if (typ == Bodo_CTypes::INT64) return true;
+    if (typ == Bodo_CTypes::INT128) return true;
     return false;
 }
 
@@ -395,7 +396,7 @@ array_info* alloc_categorical(int64_t length, Bodo_CTypes::CTypeEnum typ_enum,
 
 array_info* alloc_nullable_array(int64_t length,
                                  Bodo_CTypes::CTypeEnum typ_enum,
-                                 int64_t extra_null_bytes);
+                                 int64_t extra_null_bytes = 0);
 
 array_info* alloc_nullable_array_no_nulls(int64_t length,
                                           Bodo_CTypes::CTypeEnum typ_enum,
@@ -406,7 +407,7 @@ array_info* alloc_nullable_array_all_nulls(int64_t length,
                                            int64_t extra_null_bytes);
 
 array_info* alloc_string_array(int64_t length, int64_t n_chars,
-                               int64_t extra_null_bytes);
+                               int64_t extra_null_bytes = 0);
 
 array_info* alloc_list_string_array(int64_t n_lists, array_info* string_arr,
                                     int64_t extra_null_bytes);
@@ -505,6 +506,13 @@ struct table_info {
     const array_info* operator[](size_t idx) const { return columns[idx]; }
 };
 
+/* Compute the total memory of local chunk of the table on current rank
+ *
+ * @param table : The input table
+ * @return the total size of the local chunk of the table
+ */
+int64_t table_local_memory_size(table_info* table);
+
 /* Compute the total memory of the table accross all processors.
  *
  * @param table : The input table
@@ -538,6 +546,20 @@ void delete_table_decref_arrays(table_info* table);
  * Free an array of a table
  */
 void decref_table_array(table_info* table, int arr_no);
+
+/**
+ * @brief incref all arrays in a table
+ *
+ * @param table input table
+ */
+void incref_table_arrays(table_info* table);
+
+/**
+ * @brief decref all arrays in a table
+ *
+ * @param table input table
+ */
+void decref_table_arrays(table_info* table);
 
 /**
  * decref Bodo array and free all memory if refcount is zero.
@@ -637,6 +659,22 @@ std::string_view ArrowStrArrGetView(std::shared_ptr<ARROW_ARRAY_TYPE> str_arr,
         reinterpret_cast<const char*>(str_arr->raw_data() + pos),
         raw_value_offsets[i + 1] - pos);
 }
+
+// C++20 magic to support "heterogeneous" access to unordered containers
+// makes the key "transparent", allowing std::string_view to be used similar to
+// std::string https://www.cppstories.com/2021/heterogeneous-access-cpp20/
+struct string_hash {
+    using is_transparent = void;
+    [[nodiscard]] size_t operator()(const char* txt) const {
+        return std::hash<std::string_view>{}(txt);
+    }
+    [[nodiscard]] size_t operator()(std::string_view txt) const {
+        return std::hash<std::string_view>{}(txt);
+    }
+    [[nodiscard]] size_t operator()(const std::string& txt) const {
+        return std::hash<std::string>{}(txt);
+    }
+};
 
 #ifdef __cplusplus
 // Define constructor outside of the struct to fix C linkage warning

@@ -1,12 +1,13 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
+import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.isOutputNullableCompile;
+
 import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;
-import org.apache.calcite.sql.type.SqlTypeFamily;
+import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 /**
@@ -97,7 +98,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
-          // For conversion to string, snowflake any expresison type. If the first argument is
+          // For conversion to string, snowflake any expression type. If the first argument is
           // numeric,
           // datetime/timestamp, or binary, then an optional format string is allowed as a second
           // argument.
@@ -111,6 +112,48 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.USER_DEFINED_FUNCTION);
 
+  /**
+   * Generate the return type for TO_DATE and TRY_TO_DATE
+   *
+   * @param binding The Operand inputs
+   * @param runtimeFailureIsNull Can a runtime failure cause a null output? True for TRY_TO_DATE and
+   *     false for TO_DATE (because it raises an exception instead).
+   * @return The function's return type.
+   */
+  public static RelDataType toDateReturnType(
+      SqlOperatorBinding binding, boolean runtimeFailureIsNull) {
+    List<RelDataType> operandTypes = binding.collectOperandTypes();
+    // Determine if the output is nullable.
+    boolean nullable = isOutputNullableCompile(operandTypes);
+    RelDataTypeFactory typeFactory = binding.getTypeFactory();
+
+    // Determine output type based on arg0
+    RelDataType arg0 = operandTypes.get(0);
+    RelDataType returnType;
+    if (arg0 instanceof TZAwareSqlType) {
+      // If the input is tzAware the output is as well.
+      returnType = arg0;
+    } else {
+      // Otherwise we output a tzNaive Timestamp.
+      // TODO: FIXME once we have proper date support.
+      // The output should actually always be a date type.
+      https: // docs.snowflake.com/en/sql-reference/functions/to_date.html
+      returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+      if (runtimeFailureIsNull) {
+        // Note this path includes arguments for 0 that can fail at runtime.
+        // If this runtimeFailureIsNull is set then failed conversions make
+        // the output NULL and therefore the type nullable.
+        // NOTE: Timestamp/Date will never fail to convert so they won't
+        // make the output nullable.
+        SqlTypeName typeName = arg0.getSqlTypeName();
+        boolean conversionCantFail =
+            typeName.equals(SqlTypeName.TIMESTAMP) || typeName.equals(SqlTypeName.DATE);
+        nullable = nullable || conversionCantFail;
+      }
+    }
+    return typeFactory.createTypeWithNullability(returnType, nullable);
+  }
+
   public static final SqlFunction TO_DATE =
       new SqlFunction(
           "TO_DATE",
@@ -118,7 +161,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.DATE_NULLABLE,
+          opBinding -> toDateReturnType(opBinding, false),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -143,7 +186,7 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.DATE_NULLABLE,
+          opBinding -> toDateReturnType(opBinding, true),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,

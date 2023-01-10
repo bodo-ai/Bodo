@@ -1,16 +1,51 @@
 package com.bodosql.calcite.application.BodoSQLOperatorTables;
 
-import java.util.Arrays;
-import java.util.List;
+import static com.bodosql.calcite.application.BodoSQLOperatorTables.OperatorTableUtils.isOutputNullableCompile;
+
+import java.util.*;
 import javax.annotation.Nullable;
 import org.apache.calcite.avatica.util.TimeUnit;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.fun.SqlDatePartFunction;
-import org.apache.calcite.sql.type.OperandTypes;
-import org.apache.calcite.sql.type.ReturnTypes;
+import org.apache.calcite.sql.fun.*;
+import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
 public final class DatetimeOperatorTable implements SqlOperatorTable {
+  /**
+   * Determine the return type for a function that outputs a timestamp (possibly tz-aware) based on
+   * the first or last argument, such as DATEADD (Snowflake verison), DATEADD (MySQL verison)
+   * DATE_ADD, and ADDATE
+   *
+   * @param binding The operand bindings for the function signature.
+   * @return The return type of the first/last argument if either is a timezone-aware type,
+   *     otherwise TIMESTAMP
+   */
+  public static RelDataType timezoneFirstOrLastArgumentReturnType(SqlOperatorBinding binding) {
+    List<RelDataType> operandTypes = binding.collectOperandTypes();
+    // Determine if the output is nullable.
+    boolean nullable = isOutputNullableCompile(operandTypes);
+    RelDataTypeFactory typeFactory = binding.getTypeFactory();
+
+    // Determine output type based on the first/last argument
+    RelDataType firstArg = operandTypes.get(0);
+    RelDataType lastArg = operandTypes.get(operandTypes.size() - 1);
+    RelDataType returnType;
+    if (firstArg instanceof TZAwareSqlType) {
+      // If the input is tzAware the output is as well.
+      returnType = firstArg;
+    } else if (lastArg instanceof TZAwareSqlType) {
+      // If the input is tzAware the output is as well.
+      returnType = lastArg;
+    } else {
+      // Otherwise we output a tzNaive Timestamp.
+      // TODO: FIXME once we have proper date support.
+      // The output should actually always be a date type for some fns.
+      // https://docs.snowflake.com/en/sql-reference/functions/dateadd.html
+      returnType = binding.getTypeFactory().createSqlType(SqlTypeName.TIMESTAMP);
+    }
+    return typeFactory.createTypeWithNullability(returnType, nullable);
+  }
 
   private static @Nullable DatetimeOperatorTable instance;
 
@@ -31,7 +66,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
       new SqlFunction(
           "DATEADD",
           SqlKind.OTHER_FUNCTION,
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           null,
           OperandTypes.or(
               OperandTypes.sequence(
@@ -45,6 +80,19 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
                   OperandTypes.or(OperandTypes.INTERVAL, OperandTypes.INTEGER))),
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction TIMEADD =
+      new SqlFunction(
+          "TIMEADD",
+          SqlKind.OTHER_FUNCTION,
+          ReturnTypes.TIME_NULLABLE,
+          null,
+          OperandTypes.sequence(
+              "TIMEADD(UNIT, VALUE, TIME)",
+              OperandTypes.STRING,
+              OperandTypes.INTEGER,
+              OperandTypes.DATETIME),
+          SqlFunctionCategory.TIMEDATE);
+
   // TODO: Extend the Library Operator and use the builtin Libraries
   public static final SqlFunction DATE_ADD =
       new SqlFunction(
@@ -53,7 +101,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -126,7 +174,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -147,7 +195,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -167,7 +215,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -241,7 +289,11 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
+          opBinding ->
+              opBinding
+                  .getTypeFactory()
+                  .createTZAwareSqlType(
+                      opBinding.getTypeFactory().getTypeSystem().getDefaultTZInfo()),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -320,6 +372,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           OperandTypes.TIMESTAMP,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction DAYOFWEEKISO =
+      new SqlDatePartFunction("DAYOFWEEKISO", TimeUnit.ISODOW);
 
   public static final SqlFunction MONTHNAME =
       new SqlFunction(
@@ -445,18 +500,33 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          opBinding -> timezoneFirstOrLastArgumentReturnType(opBinding),
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
-              "DATE_TRUNC(STRING_LITERAL, TIMESTAMP)",
-              OperandTypes.LITERAL,
-              OperandTypes.TIMESTAMP),
+              "DATE_TRUNC(STRING_LITERAL, DATETIME)",
+              OperandTypes.CHARACTER,
+              OperandTypes.DATETIME),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction YEAROFWEEK =
+      new SqlFunction(
+          "YEAROFWEEK",
+          // What SqlKind should match?
+          // TODO: Extend SqlKind with our own functions
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.INTEGER_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          // What Input Types does the function accept.
+          OperandTypes.TIMESTAMP,
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
   public static final SqlFunction YEAROFWEEKISO =
       new SqlFunction(
           "YEAROFWEEKISO",
@@ -490,9 +560,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          ReturnTypes.DATE_NULLABLE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to None.
           null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
@@ -509,9 +579,9 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP_NULLABLE,
+          ReturnTypes.DATE_NULLABLE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to None.
           null,
           // What Input Types does the function accept.
           OperandTypes.sequence(
@@ -520,6 +590,8 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
               OperandTypes.or(OperandTypes.STRING, OperandTypes.LITERAL)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
+
+  public static final SqlFunction DAY = new SqlDatePartFunction("DAY", TimeUnit.DAY);
 
   private List<SqlOperator> functionList =
       Arrays.asList(
@@ -535,6 +607,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           UTC_TIMESTAMP,
           UTC_DATE,
           DAYNAME,
+          DAYOFWEEKISO,
           MONTHNAME,
           MICROSECOND,
           WEEKOFYEAR,
@@ -550,10 +623,13 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           TO_TIME,
           TIME_FROM_PARTS,
           TIME,
+          TIMEADD,
           DATE_TRUNC,
+          YEAROFWEEK,
           YEAROFWEEKISO,
           NEXT_DAY,
-          PREVIOUS_DAY);
+          PREVIOUS_DAY,
+          DAY);
 
   @Override
   public void lookupOperatorOverloads(

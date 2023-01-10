@@ -19,6 +19,17 @@
 #include "arrow/table.h"
 #include "arrow/type.h"
 
+#define CHECK_ARROW(expr, msg)                                               \
+    if (!(expr.ok())) {                                                      \
+        std::string err_msg = std::string("Error in Arrow Reader: ") + msg + \
+                              " " + expr.ToString();                         \
+        throw std::runtime_error(err_msg);                                   \
+    }
+
+#define CHECK_ARROW_AND_ASSIGN(res, msg, lhs) \
+    CHECK_ARROW(res.status(), msg)            \
+    lhs = std::move(res).ValueOrDie();
+
 // --------- TableBuilder ---------
 
 /**
@@ -42,6 +53,16 @@ class TableBuilder {
                  std::vector<bool>& is_nullable,
                  const std::set<std::string>& str_as_dict_cols,
                  const bool create_dict_from_string);
+
+    /**
+     * @brief Construct a new Table Builder object with the same column types as
+     * 'table'. Currently used in concat_tables() but will probably be replaced
+     * with a better implementation (e.g. with Arrow's Concatenate when
+     * possible).
+     *
+     * @param table Bodo table to use for typing
+     */
+    TableBuilder(table_info* table, const int64_t num_rows);
 
     ~TableBuilder() {
         for (auto col : columns) delete col;
@@ -93,6 +114,7 @@ class ArrowDataframeReader {
    public:
     /**
      * @param parallel : true if reading in parallel
+     * @param pyarrow_schema: PyArrow schema of source
      * @param tot_rows_to_read : total number of global rows to read from the
      * dataset (starting from the beginning). Read all rows if is -1
      * @param selected_fields : Fields to select from the Arrow source,
@@ -102,16 +124,27 @@ class ArrowDataframeReader {
      * @param is_nullable : array of bools that indicates which of the
      * selected fields is nullable. Same length and order as selected_fields.
      */
-    ArrowDataframeReader(bool parallel, int64_t tot_rows_to_read,
-                         int* selected_fields, int num_selected_fields,
-                         int* is_nullable)
+    ArrowDataframeReader(bool parallel, PyObject* pyarrow_schema,
+                         int64_t tot_rows_to_read,
+                         std::set<int> selected_fields,
+                         std::vector<bool> is_nullable)
         : parallel(parallel),
           tot_rows_to_read(tot_rows_to_read),
-          is_nullable(is_nullable, is_nullable + num_selected_fields),
-          selected_fields(selected_fields,
-                          selected_fields + num_selected_fields) {}
+          is_nullable(is_nullable),
+          selected_fields(selected_fields) {
+        this->set_arrow_schema(pyarrow_schema);
+    }
 
     virtual ~ArrowDataframeReader() { release_gil(); }
+
+    inline void set_arrow_schema(PyObject* pyarrow_schema) {
+        this->pyarrow_schema = pyarrow_schema;
+
+        // https://arrow.apache.org/docs/python/extending.html#using-pyarrow-from-c-and-cython-code
+        CHECK_ARROW_AND_ASSIGN(
+            arrow::py::unwrap_schema(pyarrow_schema),
+            "Unwrapping Arrow Schema from Python Object Failed", this->schema);
+    }
 
     /**
      * Return the number of pieces that this process is going to read.
@@ -122,6 +155,9 @@ class ArrowDataframeReader {
     /// return the total number of global rows that we are reading
     int64_t get_total_rows() const { return total_rows; }
 
+    /// Return the number of rows read by the current rank
+    int64_t get_local_rows() const { return count; }
+
     /// read data and return a Bodo table
     table_info* read() {
         tracing::Event ev("reader::read", parallel);
@@ -129,11 +165,13 @@ class ArrowDataframeReader {
             throw std::runtime_error(
                 "ArrowDataframeReader::read(): not initialized");
         }
+
         TableBuilder builder(schema, selected_fields, count, is_nullable,
                              str_as_dict_colnames,
                              create_dict_encoding_from_strings);
         rows_left = count;
         read_all(builder);
+
         if (rows_left != 0) {
             throw std::runtime_error(
                 "ArrowDataframeReader::read(): did not read all rows");
@@ -145,9 +183,11 @@ class ArrowDataframeReader {
     const bool parallel;
     const int64_t tot_rows_to_read;  // used for df.head(N) case
     bool initialized = false;
+    PyObject* pyarrow_schema;
     std::shared_ptr<arrow::Schema> schema;
     std::vector<bool> is_nullable;
     std::set<int> selected_fields;
+
     // For dictionary encoded columns, load them directly as
     // dictionaries (as in the case of parquet), or convert them
     // to dictionaries from regular string arrays (as in the case
@@ -170,6 +210,16 @@ class ArrowDataframeReader {
                            bool create_dict_from_string = false);
 
     /**
+     * Helper Function to Upcast Runtime Data to Expected Reader Schema
+     * before adding to TableBuilder. This is currently only used in
+     * SnowflakeReader
+     * @param table : Input source table to upcast
+     * @return Casted output table
+     */
+    std::shared_ptr<arrow::Table> cast_arrow_table(
+        std::shared_ptr<arrow::Table> table);
+
+    /**
      * Register a piece for this process to read
      * @param piece : piece to register
      * @param num_rows : number of rows from this piece to read
@@ -181,9 +231,6 @@ class ArrowDataframeReader {
 
     /// Return Python object representing Arrow dataset
     virtual PyObject* get_dataset() = 0;
-
-    /// Get schema of data that we are reading (arrow-cpp format)
-    virtual std::shared_ptr<arrow::Schema> get_schema(PyObject* dataset) = 0;
 
     /// Read all pieces (data read from pieces is appended to builder)
     virtual void read_all(TableBuilder& builder) = 0;

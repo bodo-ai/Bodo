@@ -81,24 +81,32 @@ def pytest_collection_modifyitems(items):
     called after collection has been performed.
     """
     azure_1p_markers = [
-        pytest.mark.bodo_1of6,
-        pytest.mark.bodo_2of6,
-        pytest.mark.bodo_3of6,
-        pytest.mark.bodo_4of6,
-        pytest.mark.bodo_5of6,
-        pytest.mark.bodo_6of6,
+        pytest.mark.bodo_1of9,
+        pytest.mark.bodo_2of9,
+        pytest.mark.bodo_3of9,
+        pytest.mark.bodo_4of9,
+        pytest.mark.bodo_5of9,
+        pytest.mark.bodo_6of9,
+        pytest.mark.bodo_7of9,
+        pytest.mark.bodo_8of9,
+        pytest.mark.bodo_9of9,
     ]
     azure_2p_markers = [
-        pytest.mark.bodo_1of10,
-        pytest.mark.bodo_2of10,
-        pytest.mark.bodo_3of10,
-        pytest.mark.bodo_4of10,
-        pytest.mark.bodo_5of10,
-        pytest.mark.bodo_6of10,
-        pytest.mark.bodo_7of10,
-        pytest.mark.bodo_8of10,
-        pytest.mark.bodo_9of10,
-        pytest.mark.bodo_10of10,
+        pytest.mark.bodo_1of15,
+        pytest.mark.bodo_2of15,
+        pytest.mark.bodo_3of15,
+        pytest.mark.bodo_4of15,
+        pytest.mark.bodo_5of15,
+        pytest.mark.bodo_6of15,
+        pytest.mark.bodo_7of15,
+        pytest.mark.bodo_8of15,
+        pytest.mark.bodo_9of15,
+        pytest.mark.bodo_10of15,
+        pytest.mark.bodo_11of15,
+        pytest.mark.bodo_12of15,
+        pytest.mark.bodo_13of15,
+        pytest.mark.bodo_14of15,
+        pytest.mark.bodo_15of15,
     ]
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
@@ -110,7 +118,6 @@ def pytest_collection_modifyitems(items):
         for item in items:
             if module_to_run == item.module.__name__.split(".")[-1] + ".py":
                 item.add_marker(pytest.mark.single_mod)
-    n = len(items)
 
     for i, item in enumerate(items):
         # Divide the tests evenly so long tests don't end up in 1 group
@@ -172,6 +179,9 @@ def minio_server():
     secret_key = os.environ["AWS_SECRET_ACCESS_KEY"]
     address = "{}:{}".format(host, port)
 
+    os.environ["MINIO_ROOT_USER"] = access_key
+    os.environ["MINIO_ROOT_PASSWORD"] = secret_key
+    # For compatibility with older MinIO versions.
     os.environ["MINIO_ACCESS_KEY"] = access_key
     os.environ["MINIO_SECRET_KEY"] = secret_key
     os.environ["AWS_S3_ENDPOINT"] = "http://{}/".format(address)

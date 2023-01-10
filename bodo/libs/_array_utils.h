@@ -6,12 +6,6 @@
 #include "_decimal_ext.h"
 #include "hyperloglog.hpp"
 
-// ------------------------------------------------
-// Always include robin and hopscotch maps because they are used regardless of
-// default hash map implementation
-#include <include/tsl/hopscotch_map.h>
-#include <include/tsl/robin_map.h>
-
 // Choose default implementation for unordered map and set
 #undef USE_STD
 #undef USE_TSL_ROBIN
@@ -163,10 +157,12 @@ array_info* RetrieveArray_TwoColumns(
  *
  * @param array_info* : the input pointer
  * @param ListIdx is the vector of list of rows selected
+ * @param use_nullable_int use nullable int output for Numpy array input
  * @return one array
  */
 array_info* RetrieveArray_SingleColumn(array_info* in_arr,
-                                       std::vector<int64_t> const& ListIdx);
+                                       std::vector<int64_t> const& ListIdx,
+                                       bool use_nullable_int = false);
 
 /** This function uses the combinatorial information computed in the
  * "ListIdx" array and return the coulm with the selecetd rows.
@@ -523,8 +519,10 @@ inline int NumericComparison(Bodo_CTypes::CTypeEnum const& dtype, char* ptr1,
         return NumericComparison_int<int32_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT32)
         return NumericComparison_int<uint32_t>(ptr1, ptr2, na_position);
-    // for DATE, the missing value is done via NULLABLE_INT_BOOL
-    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::DATE)
+    // for DATE/TIME, the missing value is done via NULLABLE_INT_BOOL
+    // TODO: [BE-4106] Split Time into Time32 and Time64
+    if (dtype == Bodo_CTypes::INT64 || dtype == Bodo_CTypes::DATE ||
+        dtype == Bodo_CTypes::TIME)
         return NumericComparison_int<int64_t>(ptr1, ptr2, na_position);
     if (dtype == Bodo_CTypes::UINT64)
         return NumericComparison_int<uint64_t>(ptr1, ptr2, na_position);
@@ -681,5 +679,15 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
 std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype);
 
 std::string GetArrType_as_string(bodo_array_type::arr_type_enum arr_type);
+
+/**
+ * @brief concatenate tables vertically into a single table.
+ * Input tables are assumed to have the same schema, and will
+ * be fully deleted (decref arrays and delete pointers).
+ *
+ * @param table_chunks input tables which are assumed to have the same schema
+ * @return table_info* concatenated table
+ */
+table_info* concat_tables(std::vector<table_info*>& table_chunks);
 
 #endif  // _ARRAY_UTILS_H_INCLUDED

@@ -772,9 +772,7 @@ class DataFramePass:
                 func_text += "    else:\n"
                 # Add extra indent
                 func_text += "  "
-            func_text += (
-                f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"
-            )
+            func_text += f"    S{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(v{i})\n"
         if is_df_output:
             data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
             func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe(({data_arrs},), df_index, __col_name_meta_value_dataframe_apply)\n"
@@ -848,9 +846,7 @@ class DataFramePass:
         func_text += "  numba.parfors.parfor.init_prange()\n"
         func_text += "  out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))\n"
         func_text += "  for i in numba.parfors.parfor.internal_prange(n):\n"
-        func_text += (
-            f"    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp({body_code})\n"
-        )
+        func_text += f"    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({body_code})\n"
         func_text += "  return out_arr\n"
 
         loc_vars = {}
@@ -871,6 +867,7 @@ class DataFramePass:
             f,
             rhs.args[:2] + list(named_params.values()),
             extra_globals=glbls,
+            run_full_pipeline=True,
         )
 
     def _run_call_df_sort_values(self, assign, lhs, rhs):
@@ -1618,6 +1615,10 @@ class DataFramePass:
         else:
             indicator_col_num = -1
 
+        # cross join needs input lengths to handle dead input cases
+        left_len_var = self._gen_len_call(left_df, nodes) if how == "cross" else None
+        right_len_var = self._gen_len_call(right_df, nodes) if how == "cross" else None
+
         nodes.append(
             bodo.ir.join.Join(
                 left_keys,
@@ -1640,6 +1641,8 @@ class DataFramePass:
                 indicator_col_num,
                 is_na_equal,
                 gen_cond_expr,
+                left_len_var,
+                right_len_var,
             )
         )
 
@@ -1660,6 +1663,24 @@ class DataFramePass:
             )
 
         return nodes + compile_func_single_block(_init_df, out_vars, lhs, self)
+
+    def _gen_len_call(self, var, nodes):
+        """generate a len() call on 'var' and append the IR nodes to 'nodes'
+
+        Args:
+            var (ir.Var): input variable to call len() on (array/series/dataframe type)
+            nodes (list(ir.Stmt)): IR node list to append nodes of len() call
+
+        Returns:
+            ir.Var: output variable of len() call
+        """
+        nodes += compile_func_single_block(
+            eval("lambda A: len(A)"),
+            (var,),
+            None,
+            self,
+        )
+        return nodes[-1].target
 
     def _run_call_groupby(self, assign, lhs, rhs, grp_var, func_name):
         """Transform groupby calls into an Aggregate IR node"""
@@ -2166,25 +2187,20 @@ class DataFramePass:
                 "    out_vals = bodo.hiframes.pd_series_ext.get_series_data(out)\n"
             )
             for i in range(n_out_cols - n_out_keys):
-                func_text += f"    arrs{i}[i] = bodo.utils.conversion.unbox_if_timestamp(out_vals[{i}])\n"
+                func_text += f"    arrs{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(out_vals[{i}])\n"
         else:
-            func_text += (
-                f"    arrs0[i] = bodo.utils.conversion.unbox_if_timestamp(out)\n"
-            )
+            func_text += f"    arrs0[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(out)\n"
         for i in range(n_keys):
             key_typ = df.data[df.column_index[grp_typ.keys[i]]]
-            func_text += f"    if bodo.libs.array_kernels.isna(s_key{i}, starts[i]):\n"
             if key_typ == bodo.dict_str_arr_type:
+                func_text += (
+                    f"    if bodo.libs.array_kernels.isna(s_key{i}, starts[i]):\n"
+                )
                 func_text += f"      bodo.libs.array_kernels.setna(dict_key_indices_arrs{i}, i)\n"
                 func_text += f"    else:\n"
                 func_text += f"      dict_key_indices_arrs{i}[i] = s_key{i}._indices[starts[i]]\n"
             else:
-                func_text += f"      bodo.libs.array_kernels.setna(in_key_arrs{i}, i)\n"
-                func_text += f"    else:\n"
-                if key_typ == bodo.string_array_type:
-                    func_text += f"      bodo.libs.str_arr_ext.get_str_arr_item_copy(in_key_arrs{i}, i, s_key{i}, starts[i])\n"
-                else:
-                    func_text += f"      in_key_arrs{i}[i] = s_key{i}[starts[i]]\n"
+                func_text += f"    bodo.libs.array_kernels.copy_array_element(in_key_arrs{i}, i, s_key{i}, starts[i])\n"
         if not grp_typ.as_index:
             func_text += f"    out_index_arr[i] = n_prev_groups + i\n"
 
@@ -2329,7 +2345,11 @@ class DataFramePass:
             f"    mutated = bool(dist_reduce(int(mutated), np.int32({sum_no})))\n"
         )
         func_text += "  if not mutated:\n"
-        func_text += f"    rev_idx = sort_idx.argsort()\n"
+
+        # Use Bodo's implementation of argsort instead of numba (sort_idx.argsort())
+        # Numba's implementation is slow.
+        # https://bodo.atlassian.net/browse/BE-4053
+        func_text += f"    rev_idx = bodo.hiframes.series_impl.argsort(sort_idx)\n"
         func_text += f"    out_index = out_index[rev_idx]\n"
         for i in range(n_out_cols):
             func_text += f"    out_arr{i} = out_arr{i}[rev_idx]\n"

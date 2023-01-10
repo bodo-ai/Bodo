@@ -148,20 +148,6 @@ std::shared_ptr<arrow::fs::S3FileSystem> get_s3_fs(std::string bucket_region,
     return s3_fs;
 }
 
-static int finalize_s3() {
-    try {
-        if (is_fs_initialized) {
-            CHECK_ARROW(arrow::fs::FinalizeS3(), "Finalize S3",
-                        std::string(""));
-            is_fs_initialized = false;
-        }
-        return 0;
-    } catch (const std::exception &e) {
-        PyErr_SetString(PyExc_RuntimeError, e.what());
-        return -1;
-    }
-}
-
 std::pair<std::string, int64_t> extract_file_name_size(
     const arrow::fs::FileInfo &file_stat) {
     return make_pair(file_stat.path(), file_stat.size());
@@ -315,8 +301,6 @@ PyMODINIT_FUNC PyInit_s3_reader(void) {
     // Only ever called from C++
     PyObject_SetAttrString(m, "s3_get_fs",
                            PyLong_FromVoidPtr((void *)(&s3_get_fs)));
-    PyObject_SetAttrString(m, "finalize_s3",
-                           PyLong_FromVoidPtr((void *)(&finalize_s3)));
     return m;
 }
 

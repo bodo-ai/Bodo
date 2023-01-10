@@ -9,6 +9,7 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
+from bodo.tests.timezone_common import generate_date_trunc_func
 from bodo.tests.utils import check_func
 
 
@@ -124,7 +125,7 @@ from bodo.tests.utils import check_func
         "days",
     ],
 )
-def test_add_interval_date_units(unit, args, answers):
+def test_add_interval_date_units(unit, args, answers, memory_leak_check):
     if any(isinstance(arg, pd.Series) for arg in args):
         fn_str = f"lambda amount, start_dt: pd.Series(bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt))"
     else:
@@ -319,7 +320,7 @@ def test_add_interval_date_units(unit, args, answers):
         "nanoseconds",
     ],
 )
-def test_add_interval_time_units(unit, args, answers):
+def test_add_interval_time_units(unit, args, answers, memory_leak_check):
     if any(isinstance(arg, pd.Series) for arg in args):
         fn_str = f"lambda amount, start_dt: pd.Series(bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt))"
     else:
@@ -335,14 +336,159 @@ def test_add_interval_time_units(unit, args, answers):
     )
 
 
+def make_add_interval_tz_test(amount, start, target, is_vector):
+    """
+    Takes in a start/end timestamp string and converts them to tz-aware timestamps
+    with a timestamp chosen based on the amount added. Either keeps as a scalar
+    or converts to a vector.
+    """
+    timezones = [
+        "US/Pacific",
+        "US/Mountain",
+        "US/Eastern",
+        "Europe/Madrid",
+        "Australia/Sydney",
+        "Poland",
+        "US/Alaska",
+    ]
+    tz = timezones[amount % len(timezones)]
+    start_ts = pd.Timestamp(start, tz=tz)
+    end_ts = pd.Timestamp(target, tz=tz)
+    if is_vector:
+        start_vector = pd.Series([start_ts, None] * 3)
+        end_vector = pd.Series([end_ts, None] * 3)
+        return start_vector, end_vector
+    else:
+        return start_ts, end_ts
+
+
+@pytest.mark.parametrize(
+    "is_vector", [pytest.param(True, id="vector"), pytest.param(False, id="scalar")]
+)
+@pytest.mark.parametrize(
+    "unit, amount, start, answer",
+    [
+        pytest.param("years", 5, "mar", "2025-3-7 12:00:00", id="years-mar"),
+        pytest.param(
+            "months",
+            14,
+            "mar",
+            "2021-5-7 12:00:00",
+            id="months-mar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param("weeks", 110, "mar", "2022-4-16 12:00:00", id="weeks-mar"),
+        pytest.param(
+            "days",
+            3,
+            "mar",
+            "2020-3-10 12:00:00",
+            id="days-mar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param("hours", 20, "mar", "2020-3-8 8:00:00", id="hours-mar"),
+        pytest.param(
+            "seconds",
+            86490,
+            "mar",
+            "2020-3-8 12:01:30",
+            id="seconds-mar",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "milliseconds",
+            105359250,
+            "mar",
+            "2020-3-8 17:15:59.250",
+            id="milliseconds-mar",
+        ),
+        pytest.param(
+            "years",
+            2,
+            "nov",
+            "2022-11-1 00:00:00",
+            id="years-nov",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param("months", 1, "nov", "2020-12-1 00:00:00", id="months-nov"),
+        pytest.param(
+            "weeks",
+            2,
+            "nov",
+            "2020-11-15 00:00:00",
+            id="weeks-nov",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param("days", 1, "nov", "2020-11-2 00:00:00", id="days-nov"),
+        pytest.param(
+            "hours",
+            6,
+            "nov",
+            "2020-11-1 06:00:00",
+            id="hours-nov",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param("minutes", 255, "nov", "2020-11-1 04:15:00", id="minutes-nov"),
+        pytest.param(
+            "seconds",
+            19921,
+            "nov",
+            "2020-11-1 05:32:01",
+            id="seconds-nov",
+            marks=pytest.mark.slow,
+        ),
+        pytest.param(
+            "nanoseconds",
+            15150123456789,
+            "nov",
+            "2020-11-1 04:12:30.123456789",
+            id="nanoseconds-nov",
+        ),
+    ],
+)
+def test_add_interval_tz(unit, amount, start, answer, is_vector, memory_leak_check):
+    """Tests the add_interval_xxx kernels on timezone data. All the vector
+    tests use a starting date right before the spring daylight savings jump
+    of 2020, and all the scalar tests use a starting date right before hte
+    fall daylight savings jump of 2020.
+
+    Current expected behavior: daylight savings behavior ignored."""
+
+    # Map mar/nov to the corresponding starting timestamps
+    if start == "mar":
+        starting_dt = "2020-3-7 12:00:00"
+    else:
+        starting_dt = "2020-11-1 00:00:00"
+
+    start, answer = make_add_interval_tz_test(amount, starting_dt, answer, is_vector)
+
+    if any(isinstance(arg, pd.Series) for arg in (amount, start)):
+        fn_str = f"lambda amount, start_dt: pd.Series(bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt))"
+    else:
+        fn_str = f"lambda amount, start_dt: bodo.libs.bodosql_array_kernels.add_interval_{unit}(amount, start_dt)"
+    impl = eval(fn_str)
+
+    check_func(
+        impl,
+        (amount, start),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.fixture(
     params=[
         pytest.param(
-            pd.concat(
+            pd.Series(
                 [
-                    pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
-                    pd.Series([None, None]),
-                    pd.Series(pd.date_range("1970-01-01", "2108-01-01", periods=20)),
+                    pd.Timestamp(d)
+                    for d in pd.date_range("2018-01-01", "2019-01-01", periods=20)
+                ]
+                + [None, None]
+                + [
+                    pd.Timestamp(d)
+                    for d in pd.date_range("1970-01-01", "2108-01-01", periods=20)
                 ]
             ),
             id="vector",
@@ -351,10 +497,14 @@ def test_add_interval_time_units(unit, args, answers):
     ],
 )
 def dates_scalar_vector(request):
+    """A fixture of either a single timestamp, or a series of timestamps from
+    various year/month ranges with some nulls inserted. Uses pd.Series on
+    concatenated lists instead of pd.concat since the date_range outputs
+    a DatetimeIndex with a potentially inconvenient dtype when combinined."""
     return request.param
 
 
-def test_dayname(dates_scalar_vector):
+def test_dayname(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.dayname(arr))
 
@@ -379,39 +529,121 @@ def test_dayname(dates_scalar_vector):
     )
 
 
-@pytest.mark.parametrize(
-    "days",
-    [
-        pytest.param(
-            pd.Series(pd.array([0, 1, -2, 4, 8, None, -32, 10000])),
-            id="vector",
-        ),
-        pytest.param(
-            42,
-            id="scalar",
-        ),
-    ],
-)
-def test_day_timestamp(days):
-    def impl(days):
-        return pd.Series(bodo.libs.bodosql_array_kernels.day_timestamp(days))
+def test_dayofmonth(dates_scalar_vector, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayofmonth(arr))
 
     # avoid pd.Series() conversion for scalar output
-    if isinstance(days, int):
-        impl = lambda days: bodo.libs.bodosql_array_kernels.day_timestamp(days)
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofmonth(arr)
 
-    # Simulates day_timestamp on a single row
-    def days_scalar_fn(days):
-        if pd.isna(days):
+    # Simulates DAYOFMONTH on a single row
+    def dayofmonth_scalar_fn(elem):
+        if pd.isna(elem):
             return None
         else:
-            return pd.Timestamp(days, unit="D")
+            return elem.day
 
-    days_answer = vectorized_sol((days,), days_scalar_fn, "datetime64[ns]")
+    dayname_answer = vectorized_sol((dates_scalar_vector,), dayofmonth_scalar_fn, None)
     check_func(
         impl,
-        (days,),
-        py_output=days_answer,
+        (dates_scalar_vector,),
+        py_output=dayname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_dayofweek(dates_scalar_vector, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayofweek(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofweek(arr)
+
+    # Simulates DAYOFWEEK on a single row
+    def dayofweek_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            dow_dict = {
+                "Monday": 1,
+                "Tuesday": 2,
+                "Wednesday": 3,
+                "Thursday": 4,
+                "Friday": 5,
+                "Saturday": 6,
+                "Sunday": 0,
+            }
+            return dow_dict[elem.day_name()]
+
+    dayname_answer = vectorized_sol((dates_scalar_vector,), dayofweek_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=dayname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_dayofweekiso(dates_scalar_vector, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayofweekiso(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofweekiso(arr)
+
+    # Simulates DAYOFWEEKISO on a single row
+    def dayofweekiso_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            dow_dict = {
+                "Monday": 1,
+                "Tuesday": 2,
+                "Wednesday": 3,
+                "Thursday": 4,
+                "Friday": 5,
+                "Saturday": 6,
+                "Sunday": 7,
+            }
+            return dow_dict[elem.day_name()]
+
+    dayname_answer = vectorized_sol(
+        (dates_scalar_vector,), dayofweekiso_scalar_fn, None
+    )
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=dayname_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_dayofyear(dates_scalar_vector, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.dayofyear(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.dayofyear(arr)
+
+    # Simulates DAYOFYEAR on a single row
+    def dayofyear_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem.dayofyear
+
+    dayname_answer = vectorized_sol((dates_scalar_vector,), dayofyear_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=dayname_answer,
         check_dtype=False,
         reset_index=True,
     )
@@ -430,7 +662,7 @@ def test_day_timestamp(days):
         ),
     ],
 )
-def test_int_to_days(days):
+def test_int_to_days(days, memory_leak_check):
     def impl(days):
         return pd.Series(bodo.libs.bodosql_array_kernels.int_to_days(days))
 
@@ -455,7 +687,7 @@ def test_int_to_days(days):
     )
 
 
-def test_last_day(dates_scalar_vector):
+def test_last_day(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.last_day(arr))
 
@@ -474,6 +706,63 @@ def test_last_day(dates_scalar_vector):
     check_func(
         impl,
         (dates_scalar_vector,),
+        py_output=last_day_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arr",
+    [
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timestamp("2015-01-31", tz="US/Pacific"),
+                    pd.Timestamp("2016-02-29 01:36:01.737418240", tz="US/Pacific"),
+                    pd.Timestamp("2017-03-27 08:43:00", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2018-04-25 00:00:21", tz="US/Pacific"),
+                    pd.Timestamp("2019-05-23 16:00:00", tz="US/Pacific"),
+                    pd.Timestamp("2020-06-21 05:40:01", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2021-07-19", tz="US/Pacific"),
+                    pd.Timestamp("2022-08-17 07:48:01.254654976", tz="US/Pacific"),
+                    pd.Timestamp("2023-09-15 08:00:00", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2024-10-13 00:00:45.511627776", tz="US/Pacific"),
+                    pd.Timestamp("2025-11-11 16:15:00", tz="US/Pacific"),
+                    pd.Timestamp("2026-12-09 11:16:01.467226624", tz="US/Pacific"),
+                    None,
+                    pd.Timestamp("2017-02-1", tz="US/Pacific"),
+                    pd.Timestamp("2020-03-1", tz="US/Pacific"),
+                    pd.Timestamp("2024-11-1", tz="US/Pacific"),
+                ]
+            ),
+            id="vector-pacific",
+        ),
+        pytest.param(pd.Timestamp("2022-3-1", tz="Poland"), id="scalar-poland"),
+    ],
+)
+def test_last_day_tz_aware(arr, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.last_day(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(arr, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.last_day(arr)
+
+    # Simulates LAST_DAY on a single row
+    def last_day_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            return elem + pd.tseries.offsets.MonthEnd(n=0, normalize=True)
+
+    last_day_answer = vectorized_sol((arr,), last_day_scalar_fn, None)
+    check_func(
+        impl,
+        (arr,),
         py_output=last_day_answer,
         check_dtype=False,
         reset_index=True,
@@ -501,7 +790,7 @@ def test_last_day(dates_scalar_vector):
         pytest.param((2018, 300), id="all_scalar"),
     ],
 )
-def test_makedate(args):
+def test_makedate(args, memory_leak_check):
     def impl(year, day):
         return pd.Series(bodo.libs.bodosql_array_kernels.makedate(year, day))
 
@@ -541,7 +830,7 @@ def test_makedate(args):
         ),
     ],
 )
-def test_second_timestamp(seconds):
+def test_second_timestamp(seconds, memory_leak_check):
     def impl(seconds):
         return pd.Series(bodo.libs.bodosql_array_kernels.second_timestamp(seconds))
 
@@ -566,7 +855,7 @@ def test_second_timestamp(seconds):
     )
 
 
-def test_monthname(dates_scalar_vector):
+def test_monthname(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.monthname(arr))
 
@@ -592,64 +881,124 @@ def test_monthname(dates_scalar_vector):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "arg",
     [
-        pytest.param(
-            (
-                pd.concat(
-                    [
-                        pd.Series(
-                            pd.date_range("2018-01-01", "2019-01-01", periods=20)
-                        ),
-                        pd.Series([None, None]),
-                    ]
-                ),
-                pd.Series(pd.date_range("2005-01-01", "2020-01-01", periods=22)),
-            ),
-            id="all_vector",
-        ),
-        pytest.param(
-            (
-                pd.Series(pd.date_range("2018-01-01", "2019-01-01", periods=20)),
-                pd.Timestamp("2018-06-05"),
-            ),
-            id="vector_scalar",
-            marks=pytest.mark.slow,
-        ),
-        pytest.param(
-            (pd.Timestamp("2000-10-29"), pd.Timestamp("1992-03-25")), id="all_scalar"
-        ),
+        pd.Timestamp("2007-10-07"),
+        pd.Series(
+            [None] * 2
+            + list(pd.date_range("2020-10-01", freq="11D", periods=30))
+            + [None]
+        ).values,
     ],
 )
-def test_month_diff(args):
-    def impl(arr0, arr1):
-        return pd.Series(bodo.libs.bodosql_array_kernels.month_diff(arr0, arr1))
+def test_to_days(arg, memory_leak_check):
+    args = (arg,)
 
-    # avoid pd.Series() conversion for scalar output
-    if not isinstance(args[0], pd.Series) and not isinstance(args[1], pd.Series):
-        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.month_diff(arr0, arr1)
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_days(arg))
 
-    # Simulates month diff on a single row
-    def md_scalar_fn(ts1, ts2):
-        if pd.isna(ts1) or pd.isna(ts2):
+    # avoid Series conversion for scalar output
+    if isinstance(arg, pd.Timestamp):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.to_days(arg)
+
+    # Simulates to_days on a single row
+    def to_days_scalar_fn(dt64):
+        if pd.isna(dt64):
             return None
         else:
-            floored_delta = (ts1.year - ts2.year) * 12 + (ts1.month - ts2.month)
-            remainder = ((ts1 - pd.DateOffset(months=floored_delta)) - ts2).value
-            remainder = 1 if remainder > 0 else (-1 if remainder < 0 else 0)
-            if floored_delta > 0 and remainder < 0:
-                actual_month_delta = floored_delta - 1
-            elif floored_delta < 0 and remainder > 0:
-                actual_month_delta = floored_delta + 1
-            else:
-                actual_month_delta = floored_delta
-            return -actual_month_delta
+            # Handle the scalar Timestamp case.
+            if isinstance(dt64, pd.Timestamp):
+                dt64 = dt64.value
+            return (np.int64(dt64) // 86400000000000) + 719528
 
-    days_answer = vectorized_sol(args, md_scalar_fn, pd.Int32Dtype())
+    to_days_answer = vectorized_sol((arg,), to_days_scalar_fn, pd.Int64Dtype())
     check_func(
         impl,
         args,
-        py_output=days_answer,
+        py_output=to_days_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pd.Timestamp("2007-10-07"),
+        pd.Timestamp("2007-10-07", tz="US/Pacific"),
+        pd.Series(
+            [None] * 2
+            + list(pd.date_range("2020-10-01", freq="11D", periods=30))
+            + [None]
+        ).values,
+        pd.Series(
+            [None] * 2
+            + list(pd.date_range("2020-10-01", freq="11D", periods=30, tz="US/Pacific"))
+            + [None]
+        ).array,
+    ],
+)
+def test_to_seconds(arg, memory_leak_check):
+    args = (arg,)
+
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.to_seconds(arg))
+
+    # avoid Series conversion for scalar output
+    if isinstance(arg, pd.Timestamp):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.to_seconds(arg)
+
+    # Simulates to_seconds on a single row
+    def to_seconds_scalar_fn(dt64):
+        if pd.isna(dt64):
+            return None
+        else:
+            # Handle the scalar Timestamp case.
+            if isinstance(dt64, pd.Timestamp):
+                dt64 = dt64.value
+            return (np.int64(dt64) // 1000000000) + 62167219200
+
+    to_seconds_answer = vectorized_sol((arg,), to_seconds_scalar_fn, pd.Int64Dtype())
+    check_func(
+        impl,
+        args,
+        py_output=to_seconds_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        733321,
+        pd.Series(
+            [None] * 2 + list(np.arange(738064, 738394, 11)) + [None], dtype="Int64"
+        ).array,
+    ],
+)
+def test_from_days(arg, memory_leak_check):
+    args = (arg,)
+
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.from_days(arg))
+
+    # avoid Series conversion for scalar output
+    if isinstance(arg, int):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.from_days(arg)
+
+    # Simulates from_days on a single row
+    def from_days_scalar_fn(int_val):
+        if pd.isna(int_val):
+            return None
+        else:
+            return pd.Timestamp((int_val - 719528) * 86400000000000)
+
+    from_days_answer = vectorized_sol((arg,), from_days_scalar_fn, None)
+    check_func(
+        impl,
+        args,
+        py_output=from_days_answer,
         check_dtype=False,
         reset_index=True,
     )
@@ -672,7 +1021,7 @@ def test_month_diff(args):
         ),
     ],
 )
-def test_next_previous_day(args):
+def test_next_previous_day(args, memory_leak_check):
     def next_impl(arr0, arr1):
         return pd.Series(bodo.libs.bodosql_array_kernels.next_day(arr0, arr1))
 
@@ -722,7 +1071,7 @@ def test_next_previous_day(args):
     )
 
 
-def test_weekday(dates_scalar_vector):
+def test_weekday(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.weekday(arr))
 
@@ -747,7 +1096,7 @@ def test_weekday(dates_scalar_vector):
     )
 
 
-def test_yearofweekiso(dates_scalar_vector):
+def test_yearofweekiso(dates_scalar_vector, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.yearofweekiso(arr))
 
@@ -774,8 +1123,260 @@ def test_yearofweekiso(dates_scalar_vector):
     )
 
 
+@pytest.mark.tz_aware
+@pytest.mark.parametrize(
+    "ts_val",
+    [
+        pd.Timestamp("2022-11-07 04:23:12", tz="US/Pacific"),
+        pd.Series(
+            [None] * 4
+            + list(
+                pd.date_range("1/1/2022", periods=30, freq="7D6H7s", tz="US/Pacific")
+            )
+            + [None] * 2
+        ),
+    ],
+)
+def test_tz_aware_interval_add_date_offset(ts_val, memory_leak_check):
+    """
+    Tests tz_aware_interval_add with a date_offset as the interval.
+    """
+
+    def impl(ts_val, date_offset):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.tz_aware_interval_add(ts_val, date_offset)
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(ts_val, pd.Timestamp):
+        impl = lambda ts_val, date_offset: bodo.libs.bodosql_array_kernels.tz_aware_interval_add(
+            ts_val, date_offset
+        )
+
+    date_offset = pd.DateOffset(months=-2)
+
+    # Simulates the add on a single row
+    def tz_aware_interval_add_scalar_fn(ts_val, date_offset):
+        if pd.isna(ts_val):
+            return None
+        else:
+            return ts_val + date_offset
+
+    answer = vectorized_sol(
+        (ts_val, date_offset), tz_aware_interval_add_scalar_fn, None
+    )
+    check_func(
+        impl,
+        (ts_val, date_offset),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.tz_aware
+@pytest.mark.parametrize(
+    "ts_val",
+    [
+        pd.Timestamp("2022-11-07 04:23:12", tz="US/Pacific"),
+        pd.Series(
+            [None] * 4
+            + list(
+                pd.date_range("1/1/2022", periods=30, freq="7D6H7s", tz="US/Pacific")
+            )
+            + [None] * 2
+        ),
+    ],
+)
+def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
+    """
+    Tests tz_aware_interval_add with a timedelta as the interval.
+    """
+
+    def impl(ts_val, timedelta):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.tz_aware_interval_add(ts_val, timedelta)
+        )
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(ts_val, pd.Timestamp):
+        impl = lambda ts_val, timedelta: bodo.libs.bodosql_array_kernels.tz_aware_interval_add(
+            ts_val, timedelta
+        )
+
+    # Note we assume the days as the only unit in the expected output
+    timedelta = pd.Timedelta(days=2)
+
+    # Simulates the add on a single row
+    def tz_aware_interval_add_scalar_fn(ts_val, timedelta):
+        if pd.isna(ts_val):
+            return None
+        else:
+            # First compute the day movement.
+            new_ts = ts_val.normalize() + timedelta
+            # Now restore the fields
+            return pd.Timestamp(
+                year=new_ts.year,
+                month=new_ts.month,
+                day=new_ts.day,
+                hour=ts_val.hour,
+                minute=ts_val.minute,
+                second=ts_val.second,
+                microsecond=ts_val.microsecond,
+                nanosecond=ts_val.nanosecond,
+                tz=new_ts.tz,
+            )
+
+    answer = vectorized_sol((ts_val, timedelta), tz_aware_interval_add_scalar_fn, None)
+    check_func(
+        impl,
+        (ts_val, timedelta),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "part",
+    [
+        "quarter",
+        "yyyy",
+        "week",
+        "mm",
+        "days",
+        "hour",
+        "minute",
+        "S",
+        "ms",
+        "us",
+        "nsecond",
+    ],
+)
+@pytest.mark.parametrize(
+    "ts_input",
+    [
+        pytest.param(
+            pd.Timestamp(
+                year=2022,
+                month=11,
+                day=6,
+                hour=11,
+                minute=4,
+                second=12,
+                microsecond=241,
+                nanosecond=31,
+            ),
+            id="scalar-tz-naive",
+        ),
+        pytest.param(
+            pd.Timestamp(
+                year=2022,
+                month=11,
+                day=6,
+                hour=11,
+                minute=4,
+                second=12,
+                microsecond=241,
+                nanosecond=31,
+                tz="Australia/Lord_Howe",
+            ),
+            id="scalar-tz-aware",
+        ),
+        pytest.param(
+            pd.Series(
+                [None] * 4
+                + list(
+                    pd.date_range(
+                        "2022-11-6 04:12:41.432433", periods=20, freq="11D3H5us"
+                    )
+                )
+                + [None] * 2
+            ).values,
+            id="vector-tz-naive",
+        ),
+        pytest.param(
+            pd.Series(
+                [None] * 4
+                + list(
+                    pd.date_range(
+                        "2022-11-6 04:12:41.432433",
+                        periods=20,
+                        freq="11D3H5us",
+                        tz="US/Pacific",
+                    )
+                )
+                + [None] * 2
+            ).array,
+            id="vector-tz-aware",
+        ),
+    ],
+)
+def test_date_trunc(part, ts_input, memory_leak_check):
+    """
+    Tests date_trunc array kernel on various inputs, testing all the different code paths
+    in the generated kernel.
+    """
+
+    def impl(part, arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.date_trunc(part, arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(ts_input, pd.Timestamp):
+        impl = lambda part, arr: bodo.libs.bodosql_array_kernels.date_trunc(part, arr)
+
+    # Simulates date_trunc on a single row
+    def date_trunc_scalar_fn(part, ts_input):
+        return generate_date_trunc_func(part)(ts_input)
+
+    answer = vectorized_sol((part, ts_input), date_trunc_scalar_fn, None)
+    check_func(
+        impl,
+        (part, ts_input),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def test_add_interval_optional(memory_leak_check):
+    def impl(tz_naive_ts, tz_aware_ts, int_val, flag0, flag1):
+        arg0 = tz_naive_ts if flag0 else None
+        arg1 = tz_aware_ts if flag0 else None
+        arg2 = int_val if flag1 else None
+        return (
+            bodo.libs.bodosql_array_kernels.add_interval_months(arg2, arg0),
+            bodo.libs.bodosql_array_kernels.add_interval_days(arg2, arg1),
+            bodo.libs.bodosql_array_kernels.add_interval_hours(arg2, arg0),
+            bodo.libs.bodosql_array_kernels.add_interval_minutes(arg2, arg1),
+        )
+
+    A = pd.Timestamp("2018-04-01")
+    B = pd.Timestamp("2023-11-05 00:45:00", tz="US/Mountain")
+    C = 240
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            a0 = pd.Timestamp("2038-04-01") if flag0 and flag1 else None
+            a1 = (
+                pd.Timestamp("2024-7-02 00:45:00", tz="US/Mountain")
+                if flag0 and flag1
+                else None
+            )
+            a2 = pd.Timestamp("2018-04-11") if flag0 and flag1 else None
+            a3 = (
+                pd.Timestamp("2023-11-05 04:45:00", tz="US/Mountain")
+                if flag0 and flag1
+                else None
+            )
+            check_func(
+                impl,
+                (A, B, C, flag0, flag1),
+                py_output=(a0, a1, a2, a3),
+            )
+
+
 @pytest.mark.slow
-def test_calendar_optional():
+def test_calendar_optional(memory_leak_check):
     def impl(A, B, C, flag0, flag1, flag2):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -787,6 +1388,9 @@ def test_calendar_optional():
             bodo.libs.bodosql_array_kernels.weekday(arg0),
             bodo.libs.bodosql_array_kernels.yearofweekiso(arg0),
             bodo.libs.bodosql_array_kernels.makedate(arg1, arg2),
+            bodo.libs.bodosql_array_kernels.dayofweek(arg0),
+            bodo.libs.bodosql_array_kernels.dayofmonth(arg0),
+            bodo.libs.bodosql_array_kernels.dayofyear(arg0),
         )
 
     A, B, C = pd.Timestamp("2018-04-01"), 2005, 365
@@ -799,36 +1403,33 @@ def test_calendar_optional():
                 a3 = 6 if flag0 else None
                 a4 = 2018 if flag0 else None
                 a5 = pd.Timestamp("2005-12-31") if flag1 and flag2 else None
+                a6 = 0 if flag0 else None
+                a7 = 1 if flag0 else None
+                a8 = 91 if flag0 else None
                 check_func(
                     impl,
                     (A, B, C, flag0, flag1, flag2),
-                    py_output=(a0, a1, a2, a3, a4, a5),
+                    py_output=(a0, a1, a2, a3, a4, a5, a6, a7, a8),
                 )
 
 
 @pytest.mark.slow
-def test_option_timestamp():
-    def impl(A, B, flag0, flag1):
-        arg0 = A if flag0 else None
-        arg1 = B if flag1 else None
-        return (
-            bodo.libs.bodosql_array_kernels.second_timestamp(arg0),
-            bodo.libs.bodosql_array_kernels.day_timestamp(arg1),
-        )
+def test_option_timestamp(memory_leak_check):
+    def impl(A, flag):
+        arg = A if flag else None
+        return bodo.libs.bodosql_array_kernels.second_timestamp(arg)
 
-    for flag0 in [True, False]:
-        for flag1 in [True, False]:
-            A0 = pd.Timestamp(1000000, unit="s") if flag0 else None
-            A1 = pd.Timestamp(10000, unit="D") if flag1 else None
-            check_func(
-                impl,
-                (1000000, 10000, flag0, flag1),
-                py_output=(A0, A1),
-            )
+    for flag in [True, False]:
+        A = pd.Timestamp(1000000, unit="s") if flag else None
+        check_func(
+            impl,
+            (1000000, flag),
+            py_output=A,
+        )
 
 
 @pytest.mark.slow
-def test_option_int_to_days():
+def test_option_int_to_days(memory_leak_check):
     def impl(A, flag):
         arg = A if flag else None
         return bodo.libs.bodosql_array_kernels.int_to_days(arg)
@@ -839,17 +1440,123 @@ def test_option_int_to_days():
 
 
 @pytest.mark.slow
-def test_option_month_diff():
-    def impl(A, B, flag0, flag1):
-        arg0 = A if flag0 else None
-        arg1 = B if flag1 else None
-        return bodo.libs.bodosql_array_kernels.month_diff(arg0, arg1)
+def test_option_to_days(memory_leak_check):
+    def impl(A, flag):
+        arg = A if flag else None
+        return bodo.libs.bodosql_array_kernels.to_days(arg)
+
+    for flag in [True, False]:
+        answer = 733042 if flag else None
+        check_func(
+            impl,
+            (pd.Timestamp("2007-01-01"), flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.slow
+def test_option_from_days(memory_leak_check):
+    def impl(A, flag):
+        arg = A if flag else None
+        return bodo.libs.bodosql_array_kernels.from_days(arg)
+
+    for flag in [True, False]:
+        answer = pd.Timestamp("2007-01-01") if flag else None
+        check_func(
+            impl,
+            (733042, flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.slow
+def test_option_to_seconds(memory_leak_check):
+    def impl(A, flag):
+        arg = A if flag else None
+        return bodo.libs.bodosql_array_kernels.to_seconds(arg)
+
+    for flag in [True, False]:
+        answer = 63334828800 if flag else None
+        check_func(
+            impl,
+            (pd.Timestamp("2007-01-01"), flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.tz_aware
+@pytest.mark.slow
+def test_option_tz_aware_interval_add_date_offset(memory_leak_check):
+    """
+    Tests tz_aware_interval_add optional support with a date_offset as the interval.
+    """
+
+    def impl(ts_val, date_offset, flag0, flag1):
+        arg0 = ts_val if flag0 else None
+        arg1 = date_offset if flag1 else None
+        return bodo.libs.bodosql_array_kernels.tz_aware_interval_add(arg0, arg1)
+
+    ts_val = pd.Timestamp("2022-11-05", tz="US/Pacific")
+    date_offset = pd.DateOffset(months=2)
+    expected_add = ts_val + date_offset
 
     for flag0 in [True, False]:
         for flag1 in [True, False]:
-            answer = 42 if flag0 and flag1 else None
+            answer = expected_add if flag0 and flag1 else None
             check_func(
                 impl,
-                (pd.Timestamp("2007-01-01"), pd.Timestamp("2010-07-04"), flag0, flag1),
+                (ts_val, date_offset, flag0, flag1),
+                py_output=answer,
+            )
+
+
+@pytest.mark.tz_aware
+@pytest.mark.slow
+def test_option_tz_aware_interval_add_timedelta(memory_leak_check):
+    """
+    Tests tz_aware_interval_add optional support with a timedelta as the interval.
+    """
+
+    def impl(ts_val, date_offset, flag0, flag1):
+        arg0 = ts_val if flag0 else None
+        arg1 = date_offset if flag1 else None
+        return bodo.libs.bodosql_array_kernels.tz_aware_interval_add(arg0, arg1)
+
+    ts_val = pd.Timestamp("2022-11-05 04:23:12", tz="US/Pacific")
+    date_offset = pd.Timedelta(days=2)
+    expected_add = pd.Timestamp("2022-11-07 04:23:12", tz="US/Pacific")
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = expected_add if flag0 and flag1 else None
+            check_func(
+                impl,
+                (ts_val, date_offset, flag0, flag1),
+                py_output=answer,
+            )
+
+
+@pytest.mark.slow
+def test_option_date_trunc(memory_leak_check):
+    """
+    Tests date_trunc array kernel on optional inputs
+    """
+
+    def impl(part, ts, flag0, flag1):
+        arg0 = part if flag0 else None
+        arg1 = ts if flag1 else None
+        return bodo.libs.bodosql_array_kernels.date_trunc(arg0, arg1)
+
+    part = "day"
+    ts = pd.Timestamp("2022-11-6 12:40:45", tz="US/Pacific")
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = (
+                pd.Timestamp("2022-11-6", tz="US/Pacific") if flag0 and flag1 else None
+            )
+            check_func(
+                impl,
+                (part, ts, flag0, flag1),
                 py_output=answer,
             )

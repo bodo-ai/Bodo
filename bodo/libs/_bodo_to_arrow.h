@@ -11,9 +11,15 @@
 #undef timezone
 #endif
 
-void bodo_array_to_arrow(
+std::shared_ptr<arrow::DataType> bodo_array_to_arrow(
     arrow::MemoryPool *pool, const array_info *array,
-    const std::string &col_name,
-    std::vector<std::shared_ptr<arrow::Field>> &schema_vector,
-    std::shared_ptr<arrow::ChunkedArray> *out, const std::string &tz,
-    arrow::TimeUnit::type &time_unit, bool copy);
+    std::shared_ptr<arrow::Array> *out, bool convert_timedelta_to_int64,
+    const std::string &tz, arrow::TimeUnit::type &time_unit, bool copy,
+    bool downcast_time_ns_to_us);
+/**
+ * @brief convert Bodo table to Arrow table
+ *
+ * @param table input Bodo table
+ * @return std::shared_ptr<arrow::Table> Arrow table
+ */
+std::shared_ptr<arrow::Table> bodo_table_to_arrow(table_info *table);

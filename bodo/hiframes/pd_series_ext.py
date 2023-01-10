@@ -28,8 +28,9 @@ from numba.parfors.array_analysis import ArrayAnalysis
 import bodo
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_timedelta_ext import pd_timedelta_type
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.io import csv_cpp
+from bodo.libs.float_arr_ext import FloatDtype
 from bodo.libs.int_arr_ext import IntDtype
 from bodo.libs.pd_datetime_arr_ext import PandasDatetimeTZDtype
 from bodo.libs.str_ext import string_type, unicode_to_utf8
@@ -76,6 +77,8 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
         data = dtype_to_array_type(dtype) if data is None else data
         # store regular dtype instead of IntDtype to avoid errors
         dtype = dtype.dtype if isinstance(dtype, IntDtype) else dtype
+        # store regular dtype instead of FloatDtype to avoid errors
+        dtype = dtype.dtype if isinstance(dtype, FloatDtype) else dtype
         self.dtype = dtype
         self.data = data
         name_typ = types.none if name_typ is None else name_typ
@@ -670,7 +673,7 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
         # getitem returns Timestamp for dt_index and series(dt64)
         bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(ary, "Series.map()")
         if dtype == types.NPDatetime("ns"):
-            dtype = pd_timestamp_type
+            dtype = pd_timestamp_tz_naive_type
         # getitem returns Timedelta for td_index and series(td64)
         # TODO(ehsan): simpler to use timedelta64ns instead of types.NPTimedelta("ns")
         if dtype == types.NPTimedelta("ns"):
@@ -863,10 +866,10 @@ class SeriesAttribute(OverloadedKeyAttributeTemplate):
             other, "Series.combine()"
         )
         if dtype1 == types.NPDatetime("ns"):
-            dtype1 = pd_timestamp_type
+            dtype1 = pd_timestamp_tz_naive_type
         dtype2 = other.dtype
         if dtype2 == types.NPDatetime("ns"):
-            dtype2 = pd_timestamp_type
+            dtype2 = pd_timestamp_tz_naive_type
 
         f_return_type = get_const_func_output_type(
             func,
@@ -1049,6 +1052,8 @@ def pd_series_overload(
             nb_dtype = bodo.utils.typing.parse_dtype(dtype, "pandas.Series")
             if isinstance(nb_dtype, bodo.libs.int_arr_ext.IntDtype):
                 _arr_dtype = bodo.IntegerArrayType(nb_dtype.dtype)
+            elif isinstance(nb_dtype, bodo.libs.float_arr_ext.FloatDtype):
+                _arr_dtype = bodo.FloatingArrayType(nb_dtype.dtype)
             elif nb_dtype == bodo.libs.bool_arr_ext.boolean_dtype:
                 _arr_dtype = bodo.boolean_array
             elif isinstance(nb_dtype, types.Number) or nb_dtype in [

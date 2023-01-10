@@ -1,61 +1,43 @@
 package com.bodosql.calcite.application;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.AggCodeGen.generateApplyCodeWithGroupBy;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateBinOpCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateBinOpName;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateOrCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.generateCastName;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.generateCaseName;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getDoubleArgCondFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.getSingleArgCondFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitIf;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.visitVariadic;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CastCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateSubCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.generateFilterCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.generateJoinCode;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LikeCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.generateLiteralCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.generateLogicalValuesCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateConvCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateConvName;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.generateLogFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getDoubleArgNumericFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.getSingleArgNumericFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.generatePostfixOpCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.generatePostfixOpName;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.PrefixOpCodeGen.generatePrefixOpCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.PrefixOpCodeGen.generatePrefixOpName;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.NumericCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.PostfixOpCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.PrefixOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ProjectCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.RegexpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SetOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.SinceEpochFnCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.generateSortCode;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getAscendingBoolString;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.getNAPositionString;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.SortCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.StringFnCodeGen.generateConcatFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.TimestampDiffCodeGen.generateTimestampDiffInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getDoubleArgTrigFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.getSingleArgTrigFnInfo;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.generateWindowedAggFn;
-import static com.bodosql.calcite.application.BodoSQLExprType.meet_elementwise_op;
-import static com.bodosql.calcite.application.JoinCondVisitor.visitJoinCond;
-import static com.bodosql.calcite.application.Utils.AggHelpers.aggContainsFilter;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.TimestampDiffCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.TrigCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLExprType.*;
+import static com.bodosql.calcite.application.JoinCondVisitor.*;
+import static com.bodosql.calcite.application.Utils.AggHelpers.*;
 import static com.bodosql.calcite.application.Utils.Utils.*;
-import static com.bodosql.calcite.application.Utils.Utils.renameExprsList;
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
 import com.bodosql.calcite.application.Utils.BodoCtx;
 import com.bodosql.calcite.table.BodoSqlTable;
+import com.bodosql.calcite.table.LocalTableImpl;
+import com.google.common.collect.Range;
 import java.util.*;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
@@ -63,16 +45,18 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.AggregateCall;
 import org.apache.calcite.rel.core.Join;
+import org.apache.calcite.rel.core.TableModify;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.logical.*;
-import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.*;
-import org.apache.calcite.sql.type.SqlTypeFamily;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.*;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.apache.calcite.util.Pair;
+import org.apache.calcite.util.Sarg;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Visitor class for parsed SQL nodes to generate Pandas code from SQL code. */
 public class PandasCodeGenVisitor extends RelVisitor {
@@ -87,6 +71,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private int colVarId = 1;
   private int groupByApplyFnId = 1;
   private int globalVarId = 1;
+
+  // Note that a given query can only have one MERGE INTO statement. Therefore,
+  // we can statically define the variable names we'll use for the iceberg file list and snapshot
+  // id,
+  // since we'll only be using these variables once per query
+  private static final String icebergFileListVarName = "__bodo_Iceberg_file_list";
+  private static final String icebergSnapshotIDName = "__bodo_Iceberg_snapshot_id";
+
+  private static final String ROW_ID_COL_NAME = "_bodo_row_id";
+  private static final String MERGE_ACTION_ENUM_COL_NAME = "_merge_into_change";
 
   // Mapping from a unique key per node to exprTypes
   private final HashMap<String, BodoSQLExprType.ExprType> exprTypesMap;
@@ -140,6 +134,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // information can be shown.
   private final int verboseLevel;
 
+  // These Variables track the target table for merge into
+  private @Nullable String targetTableDf;
+  // Extra arguments to pass to the write code for the fileList and Snapshot
+  // id in the form of "argName1=varName1, argName2=varName2"
+  private @Nullable String fileListAndSnapshotIdArgs;
+
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
       HashMap<String, RexNode> searchMap,
@@ -154,6 +154,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     this.loweredGlobals = loweredGlobalVariablesMap;
     this.originalSQLQuery = originalSQLQuery;
     this.debuggingDeltaTable = debuggingDeltaTable;
+    this.targetTableDf = null;
+    this.fileListAndSnapshotIdArgs = null;
     this.verboseLevel = verboseLevel;
   }
 
@@ -309,7 +311,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     int id = node.getId();
     if (node.getTuples().size() != 0) {
       for (RexLiteral colLiteral : node.getTuples().get(0)) {
-        RexNodeVisitorInfo literalExpr = this.visitLiteralScan(colLiteral);
+        // We cannot be within a case statement since LogicalValues is a RelNode and
+        // cannot be inside a case statement (which is a RexNode)
+        RexNodeVisitorInfo literalExpr = this.visitLiteralScan(colLiteral, false);
         assert exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(colLiteral, id))
             == BodoSQLExprType.ExprType.SCALAR;
         exprCodes.add(literalExpr.getExprCode());
@@ -400,7 +404,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<String> colNames = node.getRowType().getFieldNames();
 
     this.generatedCode.append(
-        generateIntersectCode(outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames));
+        generateIntersectCode(
+            outVar, lhsExpr, lhsColNames, rhsExpr, rhsColNames, colNames, node.all));
 
     varGenStack.push(outVar);
     columnNamesStack.push(colNames);
@@ -467,7 +472,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           && (typeName != SqlTypeName.BIGINT)) {
         throw new BodoSQLCodegenException(
             "Limit value must be an integer, value is of type: "
-                + sqlTypenameToPandasTypename(typeName, true, false));
+                + sqlTypenameToPandasTypename(typeName, true));
       }
 
       // fetch is either a named Parameter or a literal from parsing.
@@ -488,7 +493,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           && (typeName != SqlTypeName.BIGINT)) {
         throw new BodoSQLCodegenException(
             "Offset value must be an integer, value is of type: "
-                + sqlTypenameToPandasTypename(typeName, true, false));
+                + sqlTypenameToPandasTypename(typeName, true));
       }
 
       // Offset is either a named Parameter or a literal from parsing.
@@ -544,10 +549,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
         if (seenIdxs.contains(inputRef.getIndex())) {
           /**
            * When we have a situation with common subexpressions like "sum(A) as alias2, sum(A) as
-           * alias from table1 group by D" Calcite generates a plan like:
-           * LogicalProject(alias2=[$1], alias=[$1]) LogicalAggregate(group=[{0}], alias=[SUM($1)])
-           * In this case, we can't use loc, as it would lead to duplicate column names in the
-           * output dataframe See test_repeat_columns in BodoSQL/bodosql/tests/test_agg_groupby.py
+           * alias from table1 groupby D" Calcite generates a plan like: LogicalProject(alias2=[$1],
+           * alias=[$1]) LogicalAggregate(group=[{0}], alias=[SUM($1)]) In this case, we can't use
+           * loc, as it would lead to duplicate column names in the output dataframe See
+           * test_repeat_columns in BodoSQL/bodosql/tests/test_agg_groupby.py
            */
           useLoc = false;
           break;
@@ -595,13 +600,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
         this.varCache.put(nodeId, new Pair<>(projectOutVar, outputColumns));
       } else {
         List<RelDataTypeField> fields = node.getRowType().getFieldList();
-        List<SqlTypeName> sqlTypes = new ArrayList<>();
+        List<RelDataType> sqlTypes = new ArrayList<>();
         for (int i = 0; i < node.getNamedProjects().size(); i++) {
           Pair<RexNode, String> named_r = node.getNamedProjects().get(i);
           RexNode r = named_r.getKey();
           String alias = named_r.getValue();
           exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(r, nodeId)));
-          sqlTypes.add(fields.get(i).getType().getSqlTypeName());
+          sqlTypes.add(fields.get(i).getType());
 
           if (r instanceof RexOver) {
             windowAggList.add((RexOver) r);
@@ -697,27 +702,75 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node
    */
   public void visitMergeInto(LogicalTableModify node) {
+    assert node.getOperation() == TableModify.Operation.MERGE;
+
+    this.visit(node.getInput(0), 0, node);
+    String deltaDfVar = this.varGenStack.pop();
+    List<String> currentDeltaDfColNames = this.columnNamesStack.pop();
+
     if (this.debuggingDeltaTable) {
       // If this environment variable is set, we're only testing the generation of the delta table.
       // Just return the delta table.
-      this.visit(node.getInput(0), 0, node);
-      String outVar = this.varGenStack.pop();
-      List<String> colNames = this.columnNamesStack.pop();
       // We drop no-ops from the delta table, as a few Calcite Optimizations can result in their
       // being removed from the table, and their presence/lack thereof shouldn't impact anything in
       // the
       // final implementation, but it can cause issues when testing the delta table
       this.generatedCode
           .append(getBodoIndent())
-          .append(outVar)
+          .append(deltaDfVar)
           .append(" = ")
-          .append(outVar)
+          .append(deltaDfVar)
           .append(".dropna(subset=[")
-          .append(makeQuoted(colNames.get(colNames.size() - 1)))
+          .append(makeQuoted(currentDeltaDfColNames.get(currentDeltaDfColNames.size() - 1)))
           .append("])\n");
-      this.generatedCode.append(getBodoIndent()).append("return " + outVar);
+      this.generatedCode.append(getBodoIndent()).append("return " + deltaDfVar);
     } else {
-      throw new BodoSQLCodegenException("MERGE INTO not yet implemented.");
+      // Assert that we've encountered a LogicalTargetTableScan in the codegen, and
+      // set the appropriate variables
+      assert targetTableDf != null;
+      assert fileListAndSnapshotIdArgs != null;
+
+      RelOptTableImpl relOptTable = (RelOptTableImpl) node.getTable();
+      BodoSqlTable bodoSqlTable = (BodoSqlTable) relOptTable.table();
+      if (!(bodoSqlTable.isWriteable() && bodoSqlTable.getDBType().equals("ICEBERG"))) {
+        throw new BodoSQLCodegenException(
+            "MERGE INTO is only supported with Iceberg table destinations provided via the the"
+                + " SQL TablePath API");
+      }
+
+      // note table.getColumnNames does NOT include ROW_ID or MERGE_ACTION_ENUM_COL_NAME column
+      // names,
+      // because of the way they are added plan in calcite (extension fields)
+      // We know that the row ID and merge columns exist in the input table due to our code
+      // invariants
+      List<String> targetTableFinalColumnNames = bodoSqlTable.getColumnNames();
+      List<String> deltaTableExpectedColumnNames;
+      deltaTableExpectedColumnNames = new ArrayList<>(targetTableFinalColumnNames);
+      deltaTableExpectedColumnNames.add(ROW_ID_COL_NAME);
+      deltaTableExpectedColumnNames.add(MERGE_ACTION_ENUM_COL_NAME);
+
+      StringBuilder outputCode = new StringBuilder();
+      String writebackDf = genDfVar();
+
+      outputCode.append(
+          handleRename(deltaDfVar, currentDeltaDfColNames, deltaTableExpectedColumnNames));
+      outputCode
+          .append(getBodoIndent())
+          .append(writebackDf)
+          .append(" = bodosql.libs.iceberg_merge_into.do_delta_merge_with_target(")
+          .append(this.targetTableDf)
+          .append(", ")
+          .append(deltaDfVar)
+          .append(")\n");
+
+      // TODO: this can just be cast, since we handled rename
+      outputCode.append(
+          handleCastAndRenameBeforeWrite(writebackDf, targetTableFinalColumnNames, bodoSqlTable));
+      outputCode
+          .append(getBodoIndent())
+          .append(bodoSqlTable.generateWriteCode(writebackDf, this.fileListAndSnapshotIdArgs))
+          .append("\n");
+      this.generatedCode.append(outputCode);
     }
   }
 
@@ -755,15 +808,30 @@ public class PandasCodeGenVisitor extends RelVisitor {
           "Insert Into is only supported with table destinations provided via the Snowflake"
               + "catalog or the SQL TablePath API");
     }
+
+    outputCode.append(handleCastAndRenameBeforeWrite(outVar, colNames, bodoSqlTable));
+    outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
+    this.generatedCode.append(outputCode);
+  }
+
+  public String handleCastAndRenameBeforeWrite(
+      String outVar, List<String> colNames, BodoSqlTable bodoSqlTable) {
+    StringBuilder outputCode = new StringBuilder();
     String castExpr = bodoSqlTable.generateWriteCastCode(outVar);
     if (castExpr != "") {
       outputCode.append(getBodoIndent()).append(outVar).append(" = ").append(castExpr).append("\n");
     }
     // Update column names to the write names.
-    List<String> writeColNames = bodoSqlTable.getWriteColumnNames();
+    outputCode.append(handleRename(outVar, colNames, bodoSqlTable.getWriteColumnNames()));
+    return outputCode.toString();
+  }
+
+  public String handleRename(String outVar, List<String> oldColNames, List<String> newColNames) {
+    assert oldColNames.size() == newColNames.size();
+    StringBuilder outputCode = new StringBuilder();
     boolean hasRename = false;
-    for (int i = 0; i < writeColNames.size(); i++) {
-      if (!colNames.get(i).equals(writeColNames.get(i))) {
+    for (int i = 0; i < newColNames.size(); i++) {
+      if (!oldColNames.get(i).equals(newColNames.get(i))) {
         if (!hasRename) {
           // Only generate the rename if at least 1 column needs renaming to avoid any empty
           // dictionary issues.
@@ -775,17 +843,16 @@ public class PandasCodeGenVisitor extends RelVisitor {
               .append(".rename(columns={");
           hasRename = true;
         }
-        outputCode.append(makeQuoted(colNames.get(i)));
+        outputCode.append(makeQuoted(oldColNames.get(i)));
         outputCode.append(" : ");
-        outputCode.append(makeQuoted(writeColNames.get(i)));
+        outputCode.append(makeQuoted(newColNames.get(i)));
         outputCode.append(", ");
       }
     }
     if (hasRename) {
       outputCode.append("}, copy=False)\n");
     }
-    outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
-    this.generatedCode.append(outputCode);
+    return outputCode.toString();
   }
 
   /**
@@ -912,7 +979,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         String curGroupAggExpr;
         /* First rename any input keys to the output. */
 
-        /* group without aggregation : e.g. select B from table1 group by A */
+        /* group without aggregation : e.g. select B from table1 groupby A */
         if (aggCallList.isEmpty()) {
           curGroupAggExpr = generateAggCodeNoAgg(inVar, inputColumnNames, curGroup);
         }
@@ -922,7 +989,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               generateAggCodeNoGroupBy(
                   inVar, inputColumnNames, aggCallList, aggCallNames, distIfNoGroup);
         }
-        /* group with aggregation : e.g. select sum(B) from table1 group by A */
+        /* group with aggregation : e.g. select sum(B) from table1 groupby A */
         else {
           Pair<String, String> curGroupAggExprAndAdditionalGeneratedCode =
               handleLogicalAggregateWithGroups(
@@ -1020,7 +1087,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     Pair<String, String> exprAndAdditionalGeneratedCode;
     if (aggContainsFilter(aggCallList)) {
-      // If we have a Filter we need to generate a group by apply
+      // If we have a Filter we need to generate a groupby apply
       exprAndAdditionalGeneratedCode =
           generateApplyCodeWithGroupBy(
               inVar,
@@ -1069,7 +1136,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (node instanceof RexInputRef) {
       result = visitInputRef((RexInputRef) node, colNames, inputVar, isSingleRow, ctx);
     } else if (node instanceof RexLiteral) {
-      result = visitLiteralScan((RexLiteral) node);
+      result = visitLiteralScan((RexLiteral) node, isSingleRow);
     } else if (node instanceof RexOver) {
       // Windowed aggregation is special, since it needs to add generated
       // code in order to define functions to be used with groupby apply.
@@ -1093,7 +1160,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
   /**
    * Visitor for RexCalls IGNORE NULLS and RESPECT NULLS This function is only called if IGNORE
-   * NULLS and RESPECT NULLS is called without an associated window. Otherwise, it is included as an
+   * NULLS and RESPECT NULLS is called without an associated window. Otherwise, it is included as a
    * field in the REX OVER node.
    *
    * <p>Currently, we always throw an error when entering this call. Frankly, based on my reading of
@@ -1336,7 +1403,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             needNullCheckColumns,
             localCtx,
             inputVar,
-            node.getType().getSqlTypeName(),
+            node.getType(),
             colNames,
             pdVisitorClass);
 
@@ -1373,10 +1440,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
       return new ArrayList<>();
     }
 
-    List<RexWindow> windows = new ArrayList<>();
-    List<SqlKind> fnKinds = new ArrayList<>();
-    List<String> fnNames = new ArrayList<>();
+    // Used to store each distinct window and the list of corresponding
+    // window function calls
+    List<List<RexWindow>> windows = new ArrayList<>();
+    List<List<SqlKind>> fnKinds = new ArrayList<>();
+    List<List<String>> fnNames = new ArrayList<>();
     List<List<RexOver>> aggSets = new ArrayList<>();
+    List<List<Boolean>> respectNullsLists = new ArrayList<>();
 
     // Used to store how each output within each groupby-apply corresponds
     // to one of the original column outputs in the SELECT statement
@@ -1384,11 +1454,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // Eventually used to store the names of each output
     List<String> outputColExprs = new ArrayList<>();
-
-    // Only used for LEAD/LAG and (FIRST/LAST/NTH)_Val
-    // defaults to True/Respect Nulls
-    // see https://docs.snowflake.com/en/sql-reference/functions/lag.html
-    List<Boolean> respectNullsList = new ArrayList<>();
 
     // Loop over each aggregation and identify if it can be fused with one
     // of the aggregations already added to the aggSets list
@@ -1403,50 +1468,53 @@ public class PandasCodeGenVisitor extends RelVisitor {
       Boolean respectNulls = !agg.ignoreNulls();
       for (Integer i = 0; i < windows.size(); i++) {
 
-        // For now, can only fuse window function calls with the same window
-        // parittion/order/etc. if they are the same function, and that function
-        // is one of FIRST_VALUE, LEAD or LAG.
-        if (fnKind == SqlKind.FIRST_VALUE || fnKind == SqlKind.LEAD || fnKind == SqlKind.LAG) {
-          if (windows.get(i).equals(window)
-              && fnKinds.get(i).equals(fnKind)
-              && respectNullsList.get(i).equals(respectNulls)) {
-            canFuse = true;
-            aggSets.get(i).add(agg);
-            indices.get(i).add(j);
-            break;
-          }
+        // Check if the window function can be fused with one of the earlier
+        // closures. This is true if it has the same partition & order as the
+        // first window in that closure.
+        if (windows.get(i).get(0).partitionKeys.equals(window.partitionKeys)
+            && windows.get(i).get(0).orderKeys.equals(window.orderKeys)) {
+          canFuse = true;
+          windows.get(i).add(window);
+          fnKinds.get(i).add(fnKind);
+          fnNames.get(i).add(fnName);
+          aggSets.get(i).add(agg);
+          respectNullsLists.get(i).add(respectNulls);
+          indices.get(i).add(j);
+          break;
         }
       }
 
-      // If it can fuse, skip the next step
-      if (canFuse) {
-        continue;
+      // If the window function call was not added to one of the existing
+      // closure entries, create a new entry for this window function call
+      if (!canFuse) {
+        windows.add(new ArrayList<>(Arrays.asList(window)));
+        fnKinds.add(new ArrayList<>(Arrays.asList(fnKind)));
+        fnNames.add(new ArrayList<>(Arrays.asList(fnName)));
+        respectNullsLists.add(new ArrayList<>(Arrays.asList(respectNulls)));
+        aggSets.add(new ArrayList<>(Arrays.asList(agg)));
+        indices.add(new ArrayList<>(Arrays.asList(j)));
       }
-
-      // If it can't, add a new entry and record what index it corresponded to
-      respectNullsList.add(respectNulls);
-      windows.add(window);
-      fnKinds.add(fnKind);
-      fnNames.add(fnName);
-      List<RexOver> newAggSet = new ArrayList<>();
-      List<Integer> newIndexList = new ArrayList<>();
-      newAggSet.add(agg);
-      newIndexList.add(j);
-      aggSets.add(newAggSet);
-      indices.add(newIndexList);
     }
 
     // For each distinct window/function combination, create a new
     // closure and groupby-apply call
     for (Integer i = 0; i < windows.size(); i++) {
-      RexWindow window = windows.get(i);
-      SqlKind fnKind = fnKinds.get(i);
-      String fnName = fnNames.get(i);
-      Boolean respectNulls = respectNullsList.get(i);
+      List<RexWindow> windowList = windows.get(i);
+      List<SqlKind> fnKindList = fnKinds.get(i);
+      List<String> fnNameList = fnNames.get(i);
+      List<Boolean> respectNullsList = respectNullsLists.get(i);
       List<RexOver> aggSet = aggSets.get(i);
       Pair<String, List<String>> out =
           visitAggOverHelper(
-              aggSet, colNames, window, fnKind, fnName, respectNulls, id, inputVar, ctx);
+              aggSet,
+              colNames,
+              windowList,
+              fnKindList,
+              fnNameList,
+              respectNullsList,
+              id,
+              inputVar,
+              ctx);
 
       // Extract the dataframe whose columns contain the output(s) of the
       // window aggregation
@@ -1466,8 +1534,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
       for (Integer j = 0; j < aggSet.size(); j++) {
         String outputDfColName = outputDfColnameList.get(j);
         String outputCode =
-            new StringBuilder(generatedDfName)
-                .append("[" + makeQuoted(outputDfColName) + "].values")
+            new StringBuilder("bodo.hiframes.pd_series_ext.get_series_data(")
+                .append(generatedDfName)
+                .append("[" + makeQuoted(outputDfColName) + "])")
                 .toString();
 
         // Map the output value back to the correct column location
@@ -1525,8 +1594,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param aggOperations A list
    * @param colNames List of colNames used in the relational expression
    * @param window the RexWindow over which the aggregation occurs
-   * @param aggFn the SQL kind of the window function.
-   * @param name the name of the window function.
+   * @param aggFn the SQL kinds of the window functions.
+   * @param name the names of the window functions.
    * @param id The RelNode id used to uniquely identify the table.
    * @param inputVar Name of dataframe from which InputRefs select Columns
    * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
@@ -1540,10 +1609,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private Pair<String, List<String>> visitAggOverHelper(
       List<RexOver> aggOperations,
       List<String> colNames,
-      RexWindow window,
-      SqlKind aggFn,
-      String name,
-      Boolean isRespectNulls,
+      List<RexWindow> windows,
+      List<SqlKind> aggFns,
+      List<String> names,
+      List<Boolean> isRespectNulls,
       int id,
       String inputVar,
       BodoCtx ctx) {
@@ -1585,15 +1654,29 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // simple incremented variable, used for making sure we don't have duplicate column names
     int col_id_var = 0;
 
-    // We currently require there to be a partition clause
+    RexWindow window = windows.get(0);
+
     if (window.partitionKeys.size() == 0) {
       throw new BodoSQLCodegenException(
           "BODOSQL currently requires a partition column when handling windowed aggregation"
               + " functions");
     }
 
-    // Ensure that all the columns needed to correctly do the group by are added, and record their
-    // names for later, so we know what columns by which to group when generating the group by
+    for (int i = 1; i < windows.size(); i++) {
+      if (!windows.get(i).partitionKeys.equals(window.partitionKeys)) {
+        throw new BodoSQLCodegenException(
+            "BODOSQL currently requires all window functions in the same closure to have the same"
+                + " PARTITION BY");
+      }
+      if (!windows.get(i).orderKeys.equals(window.orderKeys)) {
+        throw new BodoSQLCodegenException(
+            "BODOSQL currently requires all window functions in the same closure to have the same"
+                + " ORDER BY");
+      }
+    }
+
+    // Ensure that all the columns needed to correctly do the groupby are added, and record their
+    // names for later, so we know what columns by which to group when generating the groupby
     // function text
     for (int i = 0; i < window.partitionKeys.size(); i++) {
       RexNode node = window.partitionKeys.get(i);
@@ -1672,7 +1755,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // we
             // perform the aggregation.
             // Therefore, we add into the projection, so it will be a part of the table
-            if (aggFn != SqlKind.NTILE) {
+            if (aggFns.get(j) != SqlKind.NTILE) {
               String curAggColName = "AGG_OP_" + j;
               childExprs.add(new RexNodeVisitorInfo(curAggColName, curInfo.getExprCode()));
               BodoSQLExprType.ExprType curExprType =
@@ -1698,86 +1781,48 @@ public class PandasCodeGenVisitor extends RelVisitor {
       argsListList.add(curArgslist);
     }
 
-    // Determine the upper and lower bound of the windowed aggregation.
-    // For window function which do not support bounds (NTILE, RANK, LEAD, LAG, etc.) we expect
-    // that Calcite will throw an error in the case that they have invalid bounds.
-
-    boolean lowerUnBound = window.getLowerBound().isUnbounded();
-    boolean upperUnBound = window.getUpperBound().isUnbounded();
     // String for how we represent an offset of 0. This contains any
     // typing info that might be needed.
     String zeroExpr = "np.int64(0)";
 
-    // set the lowerBound, if bounded. Else, set it to some dummy value/null
-    String lowerBound;
-    if (!lowerUnBound) {
-      RexNode lowerBoundNode = window.getLowerBound().getOffset();
-      BodoSQLExprType.ExprType lowerBoundExprType;
-      if (window.getLowerBound().isPreceding()) {
-        // choosing to represent preceding values as negative
-        // doesn't require null checking, as value is either a literal or a column
-        lowerBound =
-            "-("
-                + visitRexNode(lowerBoundNode, colNames, id, inputVar, false, ctx).getExprCode()
-                + ")";
-        lowerBoundExprType =
-            exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(lowerBoundNode, id));
-      } else if (window.getLowerBound().isFollowing()) {
-        lowerBound = visitRexNode(lowerBoundNode, colNames, id, inputVar, false, ctx).getExprCode();
-        lowerBoundExprType =
-            exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(lowerBoundNode, id));
-      } else if (window.getLowerBound().isCurrentRow()) {
-        lowerBound = zeroExpr;
-        lowerBoundExprType = BodoSQLExprType.ExprType.SCALAR;
-      } else {
-        throw new BodoSQLCodegenException(
-            "Error, upper bound of windowed operation not supported:"
-                + window.getLowerBound().toString());
-      }
+    List<Boolean> lowerBoundedList = new ArrayList<Boolean>();
+    List<Boolean> upperBoundedList = new ArrayList<Boolean>();
+    List<String> lowerBoundsList = new ArrayList<String>();
+    List<String> upperBoundsList = new ArrayList<String>();
 
-      // We currently require scalar bounds
-      assert lowerBoundExprType == BodoSQLExprType.ExprType.SCALAR;
-    } else {
-      // This could be null, but I'm putting something recognizable so that it's easier to determine
-      // when something
-      // goes wrong
-      lowerBound = "UNUSABLE_LOWER_BOUND";
-    }
+    for (int i = 0; i < windows.size(); i++) {
+      window = windows.get(i);
 
-    // set the upperBound, if bounded. Else, set it to some dummy value/null
-    String upperBound;
-    if (!upperUnBound) {
-      BodoSQLExprType.ExprType upperBoundExprType;
-      RexNode upperBoundNode = window.getUpperBound().getOffset();
-      if (window.getUpperBound().isPreceding()) {
-        // choosing to represent preceding values as negative
-        // doesn't require null checking, as value is either a literal or a column
-        upperBound =
-            "-("
-                + visitRexNode(upperBoundNode, colNames, id, inputVar, false, ctx).getExprCode()
-                + ")";
-        upperBoundExprType =
-            exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(upperBoundNode, id));
-      } else if (window.getUpperBound().isFollowing()) {
-        upperBound = visitRexNode(upperBoundNode, colNames, id, inputVar, false, ctx).getExprCode();
-        upperBoundExprType =
-            exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(upperBoundNode, id));
-      } else if (window.getUpperBound().isCurrentRow()) {
-        upperBound = zeroExpr;
-        upperBoundExprType = BodoSQLExprType.ExprType.SCALAR;
-      } else {
-        throw new BodoSQLCodegenException(
-            "Error, upper bound of windowed operation not supported:"
-                + window.getUpperBound().toString());
-      }
+      // Determine the upper and lower bound of the windowed aggregation.
+      // For window function which do not support bounds (NTILE, RANK, LEAD, LAG, etc.) we expect
+      // that Calcite will throw an error in the case that they have invalid bounds.
 
-      // We currently require scalar bounds
-      assert upperBoundExprType == BodoSQLExprType.ExprType.SCALAR;
-    } else {
-      // This could be null, but I'm putting something recognizable so that it's easier to determine
-      // when something
-      // goes wrong
-      upperBound = "UNUSABLE_UPPER_BOUND";
+      boolean lowerUnBound = window.getLowerBound().isUnbounded();
+      boolean upperUnBound = window.getUpperBound().isUnbounded();
+      String lowerBound =
+          extractWindowBound(
+              window.getLowerBound(),
+              "lower",
+              WindowAggCodeGen.unboundedLowerBound,
+              colNames,
+              id,
+              inputVar,
+              ctx,
+              zeroExpr);
+      String upperBound =
+          extractWindowBound(
+              window.getUpperBound(),
+              "upper",
+              WindowAggCodeGen.unboundedUpperBound,
+              colNames,
+              id,
+              inputVar,
+              ctx,
+              zeroExpr);
+      lowerBoundedList.add(!lowerUnBound);
+      upperBoundedList.add(!upperUnBound);
+      lowerBoundsList.add(lowerBound);
+      upperBoundsList.add(upperBound);
     }
 
     // Add a column to the dataframe that tracks the original positions of each of the values.
@@ -1786,7 +1831,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // generateWindowedAggFn expects this column exists, and has the specified name.
     childExprs.add(
         new RexNodeVisitorInfo(
-            WindowAggCodeGen.reverseSortColumName, "np.arange(len(" + inputVar + "))"));
+            WindowAggCodeGen.revertSortColumnName, "np.arange(len(" + inputVar + "))"));
     exprTypes.add(BodoSQLExprType.ExprType.COLUMN);
 
     // Create the projection of the input dataframe, which contains only the values which we require
@@ -1822,7 +1867,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       NAPositionString.append("]");
     }
 
-    // generate the group by (if needed)
+    // generate the groupby (if needed)
     // currently, we require there to always be a partition clause
     if (!window.partitionKeys.isEmpty()) {
       StringBuilder grpbyExpr = new StringBuilder(".groupby(").append(groupbyCols.toString());
@@ -1833,9 +1878,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           "Error, cannot currently perform windowed aggregation without a partition clause");
     }
 
-    List<SqlTypeName> typs = new ArrayList<>();
+    List<RelDataType> typs = new ArrayList<>();
     for (int i = 0; i < aggOperations.size(); i++) {
-      typs.add(aggOperations.get(i).getType().getSqlTypeName());
+      typs.add(aggOperations.get(i).getType());
     }
 
     List<String> outputColList;
@@ -1843,11 +1888,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     if (!window.partitionKeys.isEmpty()) {
       // We have a GroupBy object due to performing a partition,
 
-      // Generate the function definition to use within the groupby apply
-      // This returns two items, the generated function text of the function definition, and a map
-      // of input aggregation
-      // column name to output aggregation column name.
-      // for example
+      // Generate the function definition to use within the groupby apply. This
+      // returns two items, the generated function text of the function definition,
+      // and a map of input aggregation column name to output aggregation column name.
+      // For example:
       //
       // LEAD(A, 1), LEAD(B, 2) ==> aggColNames = [A, B]
       //
@@ -1861,6 +1905,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // outputColMap = {A: AGG_OUTPUT_1, B: AGG_OUTPUT_2}
       //
       String fn_name = this.genWindowedAggFnName();
+
       Pair<String, List<String>> out =
           generateWindowedAggFn(
               fn_name,
@@ -1868,30 +1913,88 @@ public class PandasCodeGenVisitor extends RelVisitor {
               ascendingString.toString(),
               NAPositionString.toString(),
               orderKeys,
-              aggFn,
-              name,
+              aggFns,
+              names,
               typs,
-              !upperUnBound,
-              upperBound,
-              !lowerUnBound,
-              lowerBound,
+              lowerBoundedList,
+              upperBoundedList,
+              lowerBoundsList,
+              upperBoundsList,
               zeroExpr,
               argsListList,
               isRespectNulls);
       String fn_text = out.getKey();
       outputColList = out.getValue();
+
       // The length of the output column list should be the same length as argsListList
       assert argsListList.size() == outputColList.size();
       this.generatedCode.append(fn_text);
 
       // perform the groupby apply, using the generated function call
       outputExpr.append(groupedColExpr).append(".apply(").append(fn_name).append(")");
+
     } else {
       throw new BodoSQLCodegenException(
           "Error, cannot currently perform windowed aggregation without a partition clause");
     }
 
     return new Pair<>(outputExpr.toString(), outputColList);
+  }
+
+  /**
+   * Return a string representation of a window function frame bound as will be used by the window
+   * function code generation. I.e.: - CURRENT ROW => 0 - 4 PRECEDING => -4 - etc.
+   *
+   * @param bound The object storing informaiton about the window function bound
+   * @param name Either "upper" or "lower"
+   * @param defaultString what to learn if there is no ound
+   * @param colNames List of colNames used in the relational expression
+   * @param id The RelNode id used to uniquely identify the table.
+   * @param inputVar Name of dataframe from which InputRefs select Columns
+   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
+   *     List of precomputed column variables that need to be added to the dataframe before an
+   *     apply, and the list of named parameters that need to be passed to an apply function as
+   *     arguments.
+   * @param zeroExpr String representation of 0
+   * @return The string representation of the bound
+   */
+  private String extractWindowBound(
+      RexWindowBound bound,
+      String name,
+      String defaultString,
+      List<String> colNames,
+      int id,
+      String inputVar,
+      BodoCtx ctx,
+      String zeroExpr) {
+
+    if (bound.isUnbounded()) {
+      return defaultString;
+    }
+
+    String result;
+    RexNode boundNode = bound.getOffset();
+    BodoSQLExprType.ExprType boundExprType;
+    if (bound.isPreceding()) {
+      // choosing to represent preceding values as negative
+      // doesn't require null checking, as value is either a literal or a column
+      result =
+          "-(" + visitRexNode(boundNode, colNames, id, inputVar, false, ctx).getExprCode() + ")";
+      boundExprType = exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(boundNode, id));
+    } else if (bound.isFollowing()) {
+      result = visitRexNode(boundNode, colNames, id, inputVar, false, ctx).getExprCode();
+      boundExprType = exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(boundNode, id));
+    } else if (bound.isCurrentRow()) {
+      result = zeroExpr;
+      boundExprType = BodoSQLExprType.ExprType.SCALAR;
+    } else {
+      throw new BodoSQLCodegenException(
+          "Error, " + name + " bound of windowed operation not supported:" + bound.toString());
+    }
+
+    // We currently require scalar bounds
+    assert boundExprType == BodoSQLExprType.ExprType.SCALAR;
+    return result;
   }
 
   private RexNodeVisitorInfo visitTimestampDiff(
@@ -1909,10 +2012,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     // The first argument is required to be an interval symbol.
     assert fnOperation.getOperands().get(0) instanceof RexLiteral;
-    String flag = ((RexLiteral) fnOperation.getOperands().get(0)).getValue().toString();
-    boolean bothArgsCol =
-        exprTypes.get(1) == BodoSQLExprType.ExprType.COLUMN
-            && exprTypes.get(2) == BodoSQLExprType.ExprType.COLUMN;
 
     // Extract all the inputs to the current function
     List<RexNodeVisitorInfo> operandsInfo =
@@ -1924,7 +2023,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           }
         };
 
-    return generateTimestampDiffInfo(inputVar, exprTypes, operandsInfo, isSingleRow, ctx);
+    return generateTimestampDiffInfo(inputVar, exprTypes, operandsInfo, ctx);
   }
 
   /**
@@ -1987,7 +2086,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         String expr = operandInfo.getExprCode();
         // Need to unbox scalar timestamp values.
         if (isSingleRow || (exprTypes.get(j) == BodoSQLExprType.ExprType.SCALAR)) {
-          expr = "bodo.utils.conversion.unbox_if_timestamp(" + expr + ")";
+          expr = "bodo.utils.conversion.unbox_if_tz_naive_timestamp(" + expr + ")";
           expr = generateNullCheck(inputVar, colNames, nullsets.get(j), "None", expr, isSingleRow);
         }
         codeExprs.add(expr);
@@ -2166,7 +2265,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
             if (isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR) {
               exprUppercase = expr + ".upper()";
             } else if (exprType == BodoSQLExprType.ExprType.COLUMN) {
-              exprUppercase = "pd.Series(" + expr + ").str.upper().values";
+              exprUppercase =
+                  "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                      + expr
+                      + ").str.upper())";
             } else {
               throw new BodoSQLCodegenException(
                   "Internal Error: Function: upper only supported for column and scalar types");
@@ -2181,15 +2283,19 @@ public class PandasCodeGenVisitor extends RelVisitor {
             if (isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR) {
               exprLowercase = expr + ".lower()";
             } else if (exprType == BodoSQLExprType.ExprType.COLUMN) {
-              exprLowercase = "pd.Series(" + expr + ").str.lower().values";
+              exprLowercase =
+                  "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+                      + expr
+                      + ").str.lower())";
             } else {
               throw new BodoSQLCodegenException(
                   "Internal Error: Function: lower only supported for column and scalar types");
             }
             return new RexNodeVisitorInfo(outputName, exprLowercase);
           case "DATEADD":
+          case "TIMEADD":
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
-            // Otherwise, fall back to the normal DATEADD.
+            // Otherwise, fall back to the normal DATEADD. TIMEADD is an alias.
             if (operandsInfo.size() == 3) {
               assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
               return generateSnowflakeDateAddCode(operandsInfo);
@@ -2197,14 +2303,22 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DATE_ADD":
           case "ADDDATE":
             assert operandsInfo.size() == 2;
+            // If the second argument is a timedelta, switch to manual addition
+            boolean manual_addition =
+                SqlTypeName.INTERVAL_TYPES.contains(
+                    fnOperation.getOperands().get(1).getType().getSqlTypeName());
             // Cast arg0 to from string to timestamp, if needed
             if (SqlTypeName.STRING_TYPES.contains(
                 fnOperation.getOperands().get(0).getType().getSqlTypeName())) {
+              RelDataType inputType = fnOperation.getOperands().get(0).getType();
+              // The output type will always be the timestamp the string is being cast to.
+              RelDataType outputType = fnOperation.getType();
               String casted_expr =
                   generateCastCode(
                       operandsInfo.get(0).getExprCode(),
-                      SqlTypeName.TIMESTAMP,
-                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR | isSingleRow);
+                      inputType,
+                      outputType,
+                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
               operandsInfo.set(
                   0, new RexNodeVisitorInfo(operandsInfo.get(0).getName(), casted_expr));
             }
@@ -2212,47 +2326,29 @@ public class PandasCodeGenVisitor extends RelVisitor {
             outputName =
                 generateDateAddName(operandsInfo.get(0).getName(), operandsInfo.get(1).getName());
 
-            // DateAdd should generate scalar code when inside an apply, or all the arguments are
-            // scalar
-            boolean dateAddGeneratesScalarCode =
-                isSingleRow
-                    | (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR
-                        && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR);
-            // IF the first argument is a string, then we need to generate cast
-            SqlTypeName type = fnOperation.getOperands().get(0).getType().getSqlTypeName();
-            boolean strNeedsCast = type.getFamily() == SqlTypeFamily.CHARACTER;
-
-            String arg1Expr;
-            // if the second argument is an integer, need to convert it to the int * days
-            if (SqlTypeName.INT_TYPES.contains(
-                fnOperation.getOperands().get(1).getType().getSqlTypeName())) {
-              arg1Expr =
-                  intExprToIntervalDays(
-                      operandsInfo.get(1).getExprCode(),
-                      exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
-            } else {
-              arg1Expr = operandsInfo.get(1).getExprCode();
-            }
-
+            String arg1Expr = operandsInfo.get(1).getExprCode();
             String addExpr =
-                generateDateAddCode(
-                    operandsInfo.get(0).getExprCode(),
-                    arg1Expr,
-                    dateAddGeneratesScalarCode,
-                    strNeedsCast);
+                generateMySQLDateAddCode(
+                    operandsInfo.get(0).getExprCode(), arg1Expr, manual_addition);
             return new RexNodeVisitorInfo(outputName, addExpr);
+
           case "SUBDATE":
           case "DATE_SUB":
             assert operandsInfo.size() == 2;
 
+            RelDataType arg0Type = fnOperation.getOperands().get(0).getType();
+
             // Cast arg0 to from string to timestamp, if needed
-            if (SqlTypeName.STRING_TYPES.contains(
-                fnOperation.getOperands().get(0).getType().getSqlTypeName())) {
+            if (SqlTypeName.STRING_TYPES.contains(arg0Type.getSqlTypeName())) {
+              RelDataType inputType = fnOperation.getOperands().get(0).getType();
+              // The output type will always be the timestamp the string is being cast to.
+              RelDataType outputType = fnOperation.getType();
               String casted_expr =
                   generateCastCode(
                       operandsInfo.get(0).getExprCode(),
-                      SqlTypeName.TIMESTAMP,
-                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR | isSingleRow);
+                      inputType,
+                      outputType,
+                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
               operandsInfo.set(
                   0, new RexNodeVisitorInfo(operandsInfo.get(0).getName(), casted_expr));
             }
@@ -2262,7 +2358,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // scalar
             boolean dateSubGeneratesScalarCode =
                 isSingleRow
-                    | (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR
+                    || (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR
                         && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR);
 
             // if the second argument is an integer, need to convert it to the int * days
@@ -2275,10 +2371,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
             } else {
               arg1Expr = operandsInfo.get(1).getExprCode();
             }
-
-            String subExpr =
-                generateDateSubCode(
-                    operandsInfo.get(0).getExprCode(), arg1Expr, dateSubGeneratesScalarCode);
+            final String subExpr;
+            if (arg0Type instanceof TZAwareSqlType) {
+              List<String> args = List.of(operandsInfo.get(0).getExprCode(), arg1Expr);
+              subExpr = genTZAwareIntervalArithCode(args, SqlKind.MINUS, true);
+            } else {
+              subExpr =
+                  generateDateSubCode(
+                      operandsInfo.get(0).getExprCode(), arg1Expr, dateSubGeneratesScalarCode);
+            }
             return new RexNodeVisitorInfo(outputName, subExpr);
 
           case "DATEDIFF":
@@ -2429,26 +2530,21 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "PI":
             return new RexNodeVisitorInfo("PI", "np.pi");
           case "CONCAT":
-            return generateConcatFnInfo(
-                operandsInfo, exprTypes, fnOperation.getOperator(), isSingleRow);
+            return generateConcatFnInfo(operandsInfo);
           case "CONCAT_WS":
             assert operandsInfo.size() >= 2;
             return generateConcatWSFnInfo(
-                operandsInfo.get(0),
-                exprTypes.get(0),
-                operandsInfo.subList(1, operandsInfo.size()),
-                exprTypes.subList(1, operandsInfo.size()),
-                fnOperation.getOperator(),
-                isSingleRow);
+                operandsInfo.get(0), operandsInfo.subList(1, operandsInfo.size()));
           case "GETDATE":
             assert operandsInfo.size() == 0;
             return new RexNodeVisitorInfo("GETDATE()", "pd.Timestamp.now().normalize()");
           case "CURRENT_TIMESTAMP":
           case "NOW":
           case "LOCALTIMESTAMP":
-          case "LOCALTIME":
             assert operandsInfo.size() == 0;
-            return generateCurtimeCode(fnName);
+            assert fnOperation.getType() instanceof TZAwareSqlType;
+            BodoTZInfo tzInfo = ((TZAwareSqlType) fnOperation.getType()).getTZInfo();
+            return generateCurrTimestampCode(fnName, tzInfo);
           case "UTC_TIMESTAMP":
             assert operandsInfo.size() == 0;
             return generateUTCTimestampCode();
@@ -2457,8 +2553,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateUTCDateCode();
           case "MAKEDATE":
             assert operandsInfo.size() == 2;
-            return generateMakeDateInfo(
-                inputVar, operandsInfo.get(0), operandsInfo.get(1), isSingleRow, ctx);
+            return generateMakeDateInfo(operandsInfo.get(0), operandsInfo.get(1));
           case "DATE_FORMAT":
             if (!(operandsInfo.size() == 2
                 && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR)) {
@@ -2481,36 +2576,31 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DAYNAME":
           case "WEEKDAY":
           case "LAST_DAY":
+          case "YEAROFWEEK":
           case "YEAROFWEEKISO":
             assert operandsInfo.size() == 1;
             return getSingleArgDatetimeFnInfo(
-                fnName,
-                inputVar,
-                operandsInfo.get(0).getExprCode(),
-                operandsInfo.get(0).getName(),
-                exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(0).getName());
           case "NEXT_DAY":
           case "PREVIOUS_DAY":
             assert operandsInfo.size() == 2;
             return getDoubleArgDatetimeFnInfo(
                 fnName,
-                inputVar,
                 operandsInfo.get(0).getExprCode(),
                 operandsInfo.get(0).getName(),
                 operandsInfo.get(1).getExprCode(),
-                operandsInfo.get(1).getName(),
-                exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+                operandsInfo.get(1).getName());
           case "DATE_PART":
             assert operandsInfo.size() == 2;
             assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
             return generateDatePart(
                 operandsInfo, exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
           case "TO_DAYS":
-            return generateToDaysCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
+            return generateToDaysCode(operandsInfo.get(0));
           case "TO_SECONDS":
-            return generateToSecondsCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
+            return generateToSecondsCode(operandsInfo.get(0));
           case "FROM_DAYS":
-            return generateFromDaysCode(operandsInfo.get(0), exprTypes.get(0), isSingleRow);
+            return generateFromDaysCode(operandsInfo.get(0));
           case "TIME":
           case "TO_TIME":
             return generateToTimeCode(
@@ -2654,19 +2744,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "INITCAP":
             return generateInitcapInfo(operandsInfo);
           case "DATE_TRUNC":
-            if (!(operandsInfo.size() == 2
-                && exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR)) {
-              throw new BodoSQLCodegenException(
-                  "Error, invalid argument types passed to DATE_TRUNC");
-            } else {
-              return generateDateTruncCode(
-                  operandsInfo.get(0), operandsInfo.get(1), exprTypes.get(1), isSingleRow);
-            }
+            return generateDateTruncCode(operandsInfo.get(0), operandsInfo.get(1));
           case "MICROSECOND":
           case "SECOND":
           case "MINUTE":
+          case "DAY":
           case "DAYOFYEAR":
           case "DAYOFWEEK":
+          case "DAYOFWEEKISO":
           case "DAYOFMONTH":
           case "HOUR":
           case "MONTH":
@@ -2826,19 +2911,82 @@ public class PandasCodeGenVisitor extends RelVisitor {
       boolean isSingleRow,
       BodoCtx ctx) {
     RexNodeVisitorInfo result;
+    String expr;
+    String name;
     SqlKind sqlOp = node.getOperator().getKind();
     switch (sqlOp) {
         /* TODO(Ritwika): investigate more possible internal operations as result of optimization rules*/
       case SEARCH:
-        // Lookup the expanded nodes previously generated
-        result =
-            visitRexNode(
-                searchMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)),
-                colNames,
-                id,
-                inputVar,
-                isSingleRow,
-                ctx);
+
+        // Determine if we can use the optimized is_in codepath. We can take this codepath if
+        // the second argument (the elements to search for) consists of exclusively discrete values,
+        // and
+        // we are not inside a case statement.
+        // We can't use the optimized implementation within a case statement due to the Sarg array
+        // being
+        // lowered as a global, and we can't lower globals within a case statement, as
+        // bodosql_case_placeholder
+        // doesn't have the doesn't have the same global state as
+        // the rest of the main generated code
+        SqlTypeName search_val_type = node.getOperands().get(1).getType().getSqlTypeName();
+        // TODO: add testing/support for sql types other than string/int:
+        // https://bodo.atlassian.net/browse/BE-4046
+        // TODO: allow lowering globals within case statements in BodoSQL:
+        //
+        boolean can_use_isin_codegen =
+            !isSingleRow
+                & (SqlTypeName.STRING_TYPES.contains(search_val_type)
+                    || SqlTypeName.INT_TYPES.contains(search_val_type));
+
+        RexLiteral sargNode = (RexLiteral) node.getOperands().get(1);
+        Sarg sargVal = (Sarg) sargNode.getValue();
+        Iterator<Range> iter = sargVal.rangeSet.asRanges().iterator();
+        // We expect the range to have at least one value,
+        // otherwise, this search should have been optimized out
+        assert iter.hasNext() : "Internal Error: search Sarg literal had no elements";
+        while (iter.hasNext() && can_use_isin_codegen) {
+          Range curRange = iter.next();
+          // Assert that each element of the range is scalar.
+          if (!(curRange.hasLowerBound()
+              && curRange.hasUpperBound()
+              && curRange.upperEndpoint() == curRange.lowerEndpoint())) {
+            can_use_isin_codegen = false;
+          }
+        }
+
+        if (can_use_isin_codegen) {
+          // use the isin array kernel in the case
+          // that the second argument does consists of
+          // exclusively discrete values
+          RexNodeVisitorInfo arg0Info =
+              visitRexNode(node.getOperands().get(0), colNames, id, inputVar, isSingleRow, ctx);
+          RexNodeVisitorInfo arg1Info =
+              visitRexNode(sargNode, colNames, id, inputVar, isSingleRow, ctx);
+
+          expr =
+              "bodo.libs.bodosql_array_kernels.is_in("
+                  + arg0Info.getExprCode()
+                  + ", "
+                  + arg1Info.getExprCode()
+                  + ")";
+          name = arg0Info.getName() + " in " + arg1Info.getName();
+          result = new RexNodeVisitorInfo(name, expr);
+        } else {
+          // Fallback to generating individual checks
+          // in the case that the second argument does not consist of
+          // exclusively discrete values
+
+          // Lookup the expanded nodes previously generated
+          result =
+              visitRexNode(
+                  searchMap.get(ExprTypeVisitor.generateRexNodeKey(node, id)),
+                  colNames,
+                  id,
+                  inputVar,
+                  isSingleRow,
+                  ctx);
+        }
+
         break;
       default:
         throw new BodoSQLCodegenException(
@@ -2879,14 +3027,33 @@ public class PandasCodeGenVisitor extends RelVisitor {
       // Handle OR separately because it needs to handle NULL for short circuiting
       return visitORScan(operation, colNames, id, inputVar, isSingleRow, ctx);
     }
+    // Store the argument types for TZ-Aware data
+    List<RelDataType> argDataTypes = new ArrayList<>();
     for (RexNode operand : operation.operands) {
       RexNodeVisitorInfo info = visitRexNode(operand, colNames, id, inputVar, isSingleRow, ctx);
       names.add(info.getName());
       args.add(info.getExprCode());
       exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operand, id)));
+      argDataTypes.add(operand.getType());
+    }
+    if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
+      // Support the concat operator by using the concat array kernel.
+      List<RexNodeVisitorInfo> argInfos = new ArrayList<>();
+      for (int i = 0; i < names.size(); i++) {
+        argInfos.add(new RexNodeVisitorInfo(names.get(i), args.get(i)));
+      }
+      return generateConcatFnInfo(argInfos);
+    }
+    if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
+      // Support the concat operator by using the concat array kernel.
+      List<RexNodeVisitorInfo> argInfos = new ArrayList<>();
+      for (int i = 0; i < names.size(); i++) {
+        argInfos.add(new RexNodeVisitorInfo(names.get(i), args.get(i)));
+      }
+      return generateConcatFnInfo(argInfos);
     }
     String name = generateBinOpName(names, binOp);
-    String codeGen = generateBinOpCode(args, exprTypes, binOp, isSingleRow);
+    String codeGen = generateBinOpCode(args, exprTypes, binOp, isSingleRow, argDataTypes);
     return new RexNodeVisitorInfo(name, codeGen);
   }
 
@@ -3080,7 +3247,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
-    SqlTypeName typeName = operation.getType().getSqlTypeName();
+    RelDataType inputType = operation.operands.get(0).getType();
+    RelDataType outputType = operation.getType();
 
     boolean outputScalar =
         isSingleRow
@@ -3088,8 +3256,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 == BodoSQLExprType.ExprType.SCALAR);
     RexNodeVisitorInfo child =
         visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
-    String name = generateCastName(child.getName(), typeName);
-    String exprCode = generateCastCode(child.getExprCode(), typeName, outputScalar);
+    String name = generateCastName(child.getName(), outputType.getSqlTypeName());
+    String exprCode = generateCastCode(child.getExprCode(), inputType, outputType, outputScalar);
     return new RexNodeVisitorInfo(name, exprCode);
   }
 
@@ -3116,8 +3284,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
         String.format(
             "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(%s, %d)", inputVar, node.getIndex());
     if (isSingleRow) {
+      // Float types don't have a nullable vs non-nullable array. Until we have nullable
+      // support we treat NaN as NULL, so this keeps things consistent
+      SqlTypeName typeName = node.getType().getSqlTypeName();
+      boolean is_floating_type =
+          typeName.equals(SqlTypeName.FLOAT)
+              || typeName.equals(SqlTypeName.DOUBLE)
+              || typeName.equals(SqlTypeName.DECIMAL);
       // If we are processing inside CASE we need to track nulls and used columns
-      ctx.getNeedNullCheckColumns().add(colName);
+      if (node.getType().isNullable() || is_floating_type) {
+        // Only track nulls if the type is nullable.
+        ctx.getNeedNullCheckColumns().add(colName);
+      }
       ctx.getUsedColumns().add(node.getIndex());
       // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value accesses
       // (e.g. T1_1[i])
@@ -3144,11 +3322,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * Visitor for Rex Literals.
    *
    * @param node RexLiteral being visited
+   * @param node isSingleRow flag for if table references refer to a single row or the whole table.
+   *     This is used for determining if an expr returns a scalar or a column. Only CASE statements
+   *     set this to True currently.
    * @return RexNodeVisitorInfo containing the new column name and the code generated for the
    *     relational expression.
    */
-  public RexNodeVisitorInfo visitLiteralScan(RexLiteral node) {
-    String literal = generateLiteralCode(node);
+  public RexNodeVisitorInfo visitLiteralScan(RexLiteral node, boolean isSingleRow) {
+    String literal = generateLiteralCode(node, isSingleRow, this);
     return new RexNodeVisitorInfo(literal, literal);
   }
 
@@ -3158,6 +3339,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * @param node TableScan node being visited
    */
   public void visitTableScan(TableScan node) {
+
+    if (!(node instanceof LogicalTableScan || node instanceof LogicalTargetTableScan)) {
+      throw new BodoSQLCodegenException(
+          "Internal error: unsupported tableScan node generated:" + node.toString());
+    }
+    boolean isTargetTableScan = node instanceof LogicalTargetTableScan;
+
     // Determine how many \n characters have appears. This indicates the line
     // in which to insert the IO for table scans.
     String outVar = this.genDfVar();
@@ -3170,8 +3358,30 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else {
       RelOptTableImpl relTable = (RelOptTableImpl) node.getTable();
       BodoSqlTable table = (BodoSqlTable) relTable.table();
-      String readCode = table.generateReadCode();
-      String readAssign = String.format("  %s = %s\n", outVar, readCode);
+      String readCode;
+      String readAssign;
+      // Add the table to cached values
+      if (isTargetTableScan) {
+        // TODO: Properly restrict to Iceberg.
+        if (!(table instanceof LocalTableImpl) || !table.getDBType().equals("ICEBERG")) {
+          throw new BodoSQLCodegenException(
+              "Insert Into is only supported with Iceberg table destinations provided via"
+                  + " the the SQL TablePath API");
+        }
+        readCode = table.generateReadCode("_bodo_merge_into=True,");
+        this.fileListAndSnapshotIdArgs =
+            String.format(
+                "snapshot_id=%s, old_fnames=%s,", icebergSnapshotIDName, icebergFileListVarName);
+        readAssign =
+            String.format(
+                "  %s, %s, %s = %s\n",
+                outVar, icebergFileListVarName, icebergSnapshotIDName, readCode);
+        targetTableDf = outVar;
+      } else {
+        readCode = table.generateReadCode();
+        readAssign = String.format("  %s = %s\n", outVar, readCode);
+      }
+
       boolean readUsesIO = table.readRequiresIO();
       if (this.verboseLevel >= 1 && readUsesIO) {
         // If the user has set verbose level >= 1 and there is IO, we generate
@@ -3189,13 +3399,18 @@ public class PandasCodeGenVisitor extends RelVisitor {
       } else {
         this.generatedCode.append(readAssign);
       }
+
       String castExpr = table.generateReadCastCode(outVar);
       if (castExpr != "") {
         this.generatedCode.append(String.format("  %s = %s\n", outVar, castExpr));
       }
-      // Add the table to cached values
-      this.varCache.put(node.getId(), new Pair<>(outVar, columnNames));
+      if (!isTargetTableScan) {
+        // Add the table to cached values. We only support this for regular
+        // tables and not the target table in merge into.
+        this.varCache.put(node.getId(), new Pair<>(outVar, columnNames));
+      }
     }
+
     columnNamesStack.push(columnNames);
     varGenStack.push(outVar);
   }
@@ -3217,10 +3432,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else {
       this.visit(node.getLeft(), 0, node);
       List<String> leftColNames = columnNamesStack.pop();
+      String leftTable = varGenStack.pop();
       this.visit(node.getRight(), 1, node);
       List<String> rightColNames = columnNamesStack.pop();
       String rightTable = varGenStack.pop();
-      String leftTable = varGenStack.pop();
 
       RexNode cond = node.getCondition();
 
@@ -3229,18 +3444,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       Pair<String, Boolean> joinCondInfo =
           visitJoinCond(cond, leftColNames, rightColNames, mergeCols);
       String joinCond = joinCondInfo.getKey();
-      Boolean hasEquals = joinCondInfo.getValue();
+
       /* extract join type */
-      // TODO: Update join type to "cross" if cond=True
       String joinType = node.getJoinType().lowerName;
-      if (!hasEquals && !joinType.equals("inner")) {
-        // If there is no equality in the join we don't support it in the engine yet.
-        // We can handle inner join with a dummy column, but not outer joins.
-        throw new BodoSQLCodegenException(
-            "BodoSQL outer joins require at least 1 equality condition");
+
+      // a join without any conditions is a cross join (how="cross" in pd.merge)
+      if (joinCond.equals("True")) {
+        joinType = "cross";
       }
-      // Do we need to apply a filter after the merge?
-      boolean filterOutput = !hasEquals && !joinCond.equals("True");
 
       String joinCode =
           generateJoinCode(
@@ -3252,21 +3463,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
               leftColNames,
               outputColNames,
               joinCond,
-              hasEquals,
               mergeCols);
       this.generatedCode.append(joinCode);
-      if (filterOutput) {
-        // BodoCtx is unused because we are never inside an apply.
-        RexNodeVisitorInfo filterOperation =
-            visitRexNode(node.getCondition(), outputColNames, nodeId, outVar, false, new BodoCtx());
-        String filterCode =
-            generateFilterCode(
-                outVar,
-                outVar,
-                filterOperation.getExprCode(),
-                exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node.getCondition(), nodeId)));
-        this.generatedCode.append(filterCode);
-      }
       this.varCache.put(nodeId, new Pair<>(outVar, outputColNames));
     }
     columnNamesStack.push(outputColNames);

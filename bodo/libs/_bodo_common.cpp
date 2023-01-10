@@ -24,6 +24,8 @@ void bodo_common_init() {
     numpy_item_size[Bodo_CTypes::DECIMAL] = BYTES_PER_DECIMAL;
     numpy_item_size[Bodo_CTypes::DATETIME] = sizeof(int64_t);
     numpy_item_size[Bodo_CTypes::DATE] = sizeof(int64_t);
+    // TODO: [BE-4106] TIME size should depend on precision.
+    numpy_item_size[Bodo_CTypes::TIME] = sizeof(int64_t);
     numpy_item_size[Bodo_CTypes::TIMEDELTA] = sizeof(int64_t);
     numpy_item_size[Bodo_CTypes::INT128] = BYTES_PER_DECIMAL;
 
@@ -446,7 +448,8 @@ array_info* alloc_array_item(int64_t n_arrays, int64_t n_total_items,
  *
  * In the case of NUMPY/CATEGORICAL or NULLABLE_INT_BOOL,
  * -- length is the number of rows, and n_sub_elems, n_sub_sub_elems do not
- * matter. In the case of STRING:
+ * matter.
+ * In the case of STRING:
  * -- length is the number of rows (= number of strings)
  * -- n_sub_elems is the total number of characters.
  * In the case of LIST_STRING:
@@ -583,9 +586,16 @@ int64_t array_memory_size(array_info* earr) {
     return 0;
 }
 
-int64_t table_global_memory_size(table_info* table) {
+int64_t table_local_memory_size(table_info* table) {
     int64_t local_size = 0;
-    for (auto& earr : table->columns) local_size += array_memory_size(earr);
+    for (auto& arr : table->columns) {
+        local_size += array_memory_size(arr);
+    }
+    return local_size;
+}
+
+int64_t table_global_memory_size(table_info* table) {
+    int64_t local_size = table_local_memory_size(table);
     int64_t global_size;
     MPI_Allreduce(&local_size, &global_size, 1, MPI_LONG_LONG_INT, MPI_SUM,
                   MPI_COMM_WORLD);
@@ -681,6 +691,32 @@ void decref_table_array(table_info* table, int arr_no) {
     array_info* a = table->columns[arr_no];
     if (a != NULL) {
         decref_array(a);
+    }
+}
+
+/**
+ * @brief incref all arrays in a table
+ *
+ * @param table input table
+ */
+void incref_table_arrays(table_info* table) {
+    for (array_info* a : table->columns) {
+        if (a != NULL) {
+            incref_array(a);
+        }
+    }
+}
+
+/**
+ * @brief decref all arrays in a table
+ *
+ * @param table input table
+ */
+void decref_table_arrays(table_info* table) {
+    for (array_info* a : table->columns) {
+        if (a != NULL) {
+            decref_array(a);
+        }
     }
 }
 

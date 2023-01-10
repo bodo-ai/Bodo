@@ -1,11 +1,11 @@
 #!/bin/bash
 set -exo pipefail
 
-export PATH=$HOME/miniconda3/bin:$PATH
+export PATH=$HOME/mambaforge/bin:$PATH
 source activate $CONDA_ENV
 
 # Upload to artifactory
-conda install -y conda-build anaconda-client conda-verify curl -c conda-forge
+mamba install -y conda-build anaconda-client conda-verify curl -c conda-forge
 
 BODOSQL_CHANNEL_NAME=${1:-bodo-binary}
 

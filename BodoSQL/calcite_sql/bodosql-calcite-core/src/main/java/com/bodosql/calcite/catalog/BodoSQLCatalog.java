@@ -5,6 +5,7 @@ import java.sql.*;
 import java.util.*;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.type.*;
 
 public interface BodoSQLCatalog {
   /**
@@ -86,4 +87,19 @@ public interface BodoSQLCatalog {
    * @return The generated code.
    */
   String generateRemoteQuery(String query);
+
+  /**
+   * Return the db location to which this Catalog refers.
+   *
+   * @return The source DB location.
+   */
+  public String getDBType();
+
+  /**
+   * Fetch the default timezone for this catalog. If the catalog doesn't influence the default
+   * timezone it should return UTC.
+   *
+   * @return BodoTZInfo for the default timezone.
+   */
+  BodoTZInfo getDefaultTimezone();
 }

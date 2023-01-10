@@ -9,8 +9,8 @@ import com.bodosql.calcite.application.Utils.BodoCtx;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexCall;
-import org.apache.calcite.sql.type.SqlTypeName;
 
 public class CondOpCodeGen {
 
@@ -139,7 +139,7 @@ public class CondOpCodeGen {
       List<HashSet<String>> nullSets,
       BodoCtx ctx,
       String inputVar,
-      SqlTypeName outputType,
+      RelDataType outputType,
       List<String> colNames,
       PandasCodeGenVisitor pdVisitorClass) {
     StringBuilder genCode = new StringBuilder();

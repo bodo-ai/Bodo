@@ -52,19 +52,16 @@ from bodo.hiframes.pd_index_ext import (
 )
 from bodo.hiframes.pd_multi_index_ext import MultiIndexType
 from bodo.hiframes.pd_series_ext import SeriesType, if_series_to_array_type
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.hiframes.split_impl import string_array_split_view_type
 from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import (
-    BooleanArrayType,
-    boolean_array,
-    boolean_dtype,
-)
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
 from bodo.libs.dict_arr_ext import dict_str_arr_type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import MapArrayType
@@ -85,6 +82,7 @@ from bodo.utils.typing import (
     dtype_to_array_type,
     ensure_constant_arg,
     ensure_constant_values,
+    get_castable_arr_dtype,
     get_index_data_arr_types,
     get_index_names,
     get_literal_value,
@@ -288,7 +286,6 @@ def overload_dataframe_shape(df):
 def overload_dataframe_dtypes(df):
     """Support df.dtypes by getting dtype values from underlying arrays"""
     check_runtime_cols_unsupported(df, "DataFrame.dtypes")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.dtypes")
 
     func_text = "def impl(df):\n"
 
@@ -397,13 +394,11 @@ def overload_dataframe_astype(
     # This is used to get coverage parity with Spark's cast because some types are too generic
     # to do any actual cast in Pandas (i.e. object for datetime.date).
     check_runtime_cols_unsupported(df, "DataFrame.astype()")
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.astype()")
     # check unsupported arguments
     args_dict = {
-        "copy": copy,
         "errors": errors,
     }
-    args_default_dict = {"copy": True, "errors": "raise"}
+    args_default_dict = {"errors": "raise"}
     check_unsupported_args(
         "df.astype",
         args_dict,
@@ -417,6 +412,9 @@ def overload_dataframe_astype(
         raise_bodo_error(
             "DataFrame.astype(): 'dtype' when passed as string must be a constant value"
         )
+
+    if not is_overload_bool(copy):  # pragma: no cover
+        raise BodoError("DataFrame.astype(): 'copy' must be a boolean value")
 
     # just call astype() on all column arrays
     # TODO: support categorical, dt64, etc.
@@ -453,16 +451,10 @@ def overload_dataframe_astype(
             extra_globals = {}
             name_map = {}
             # Generate the global variables for the types. To match the existing astype
-            # implementation we convert each to a valid scalar type.
+            # implementation we convert certain arrays to scalars.
             for i, name in enumerate(schema_type.columns):
                 arr_typ = schema_type.data[i]
-                if isinstance(arr_typ, IntegerArrayType):
-                    scalar_type = bodo.libs.int_arr_ext.IntDtype(arr_typ.dtype)
-                elif arr_typ == boolean_array:
-                    scalar_type = boolean_dtype
-                else:
-                    scalar_type = arr_typ.dtype
-                extra_globals[f"_bodo_schema{i}"] = scalar_type
+                extra_globals[f"_bodo_schema{i}"] = get_castable_arr_dtype(arr_typ)
                 name_map[name] = f"_bodo_schema{i}"
             data_args = ", ".join(
                 f"bodo.utils.conversion.fix_arr_dtype(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {i}), {name_map[c]}, copy, nan_to_str=_bodo_nan_to_str, from_series=True)"
@@ -1612,7 +1604,14 @@ def overload_dataframe_idxmax(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
-            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
+            or isinstance(
+                coltype,
+                (
+                    bodo.IntegerArrayType,
+                    bodo.FloatingArrayType,
+                    bodo.CategoricalArrayType,
+                ),
+            )
             or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
@@ -1650,7 +1649,14 @@ def overload_dataframe_idxmin(df, axis=0, skipna=True):
                 coltype.dtype in [bodo.datetime64ns, bodo.timedelta64ns]
                 or isinstance(coltype.dtype, (types.Number, types.Boolean))
             )
-            or isinstance(coltype, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
+            or isinstance(
+                coltype,
+                (
+                    bodo.IntegerArrayType,
+                    bodo.FloatingArrayType,
+                    bodo.CategoricalArrayType,
+                ),
+            )
             or coltype in [bodo.boolean_array, bodo.datetime_date_array_type]
         ):
             raise BodoError(
@@ -1943,7 +1949,7 @@ def overload_dataframe_cumsum(df, axis=None, skipna=True):
 def _is_describe_type(data):
     """Check if df.data has supported datatype for describe"""
     return (
-        isinstance(data, IntegerArrayType)
+        isinstance(data, (IntegerArrayType, FloatingArrayType))
         or (isinstance(data, types.Array) and isinstance(data.dtype, (types.Number)))
         or data.dtype == bodo.datetime64ns
     )
@@ -3398,13 +3404,6 @@ def overload_dataframe_merge(
             # make sure all right_keys is a valid column in right
             validate_keys(right_keys, right)
 
-    if (not left_on or not right_on) and not is_overload_none(on):
-        # If we have no left_on or right_on but we have an on, then
-        # we have a general condition that requires a cross join.
-        raise BodoError(
-            f"DataFrame.merge(): Merge condition '{get_overload_const_str(on)}' requires a cross join to implement, but cross join is not supported."
-        )
-
     if not is_overload_bool(indicator):
         raise_bodo_error("DataFrame.merge(): indicator must be a constant boolean")
     indicator_val = get_overload_const_bool(indicator)
@@ -3475,6 +3474,7 @@ def common_validate_merge_merge_asof_spec(
         CategoricalArrayType,
         types.Array,
         IntegerArrayType,
+        FloatingArrayType,
         DecimalArrayType,
         IntervalArrayType,
         bodo.DatetimeArrayType,
@@ -3590,8 +3590,10 @@ def validate_merge_spec(
     common_validate_merge_merge_asof_spec(
         "merge", left, right, on, left_on, right_on, left_index, right_index, suffixes
     )
-    # make sure how is constant and one of ("left", "right", "outer", "inner")
-    ensure_constant_values("merge", "how", how, ("left", "right", "outer", "inner"))
+    # make sure how is constant and one of ("left", "right", "outer", "inner", "cross")
+    ensure_constant_values(
+        "merge", "how", how, ("left", "right", "outer", "inner", "cross")
+    )
 
 
 def validate_merge_asof_spec(
@@ -5912,7 +5914,7 @@ def is_df_values_numpy_supported_dftyp(df_typ):
     """helper function that checks if the dataframe type contains only numeric/boolean/dt64/td64 values"""
     for col_typ in df_typ.data:
         if not (
-            isinstance(col_typ, IntegerArrayType)
+            isinstance(col_typ, (IntegerArrayType, FloatingArrayType))
             or isinstance(col_typ.dtype, types.Number)
             or col_typ.dtype in (bodo.datetime64ns, bodo.timedelta64ns)
         ):
@@ -6376,7 +6378,7 @@ class DataFrameTupleIterator(types.SimpleIteratorType):
 def _get_series_dtype(arr_typ):
     # values of datetimeindex are extracted as Timestamp
     if arr_typ == types.Array(types.NPDatetime("ns"), 1, "C"):
-        return pd_timestamp_type
+        return pd_timestamp_tz_naive_type
     return arr_typ.dtype
 
 
@@ -6479,7 +6481,7 @@ def iternext_itertuples(context, builder, sig, args, result):
             arr_ptr = getattr(iterobj, "array{}".format(i))
 
             if arr_typ == types.Array(types.NPDatetime("ns"), 1, "C"):
-                getitem_sig = signature(pd_timestamp_type, arr_typ, types.intp)
+                getitem_sig = signature(pd_timestamp_tz_naive_type, arr_typ, types.intp)
                 val = context.compile_internal(
                     builder,
                     lambda a, i: bodo.hiframes.pd_timestamp_ext.convert_datetime64_to_timestamp(

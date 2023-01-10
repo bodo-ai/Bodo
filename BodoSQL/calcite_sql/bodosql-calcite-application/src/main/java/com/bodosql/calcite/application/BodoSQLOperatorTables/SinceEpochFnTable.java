@@ -34,10 +34,11 @@ public final class SinceEpochFnTable implements SqlOperatorTable {
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to None.
           null,
-          // What Input Types does the function accept.
-          OperandTypes.TIMESTAMP,
+          // What Input Types does the function accept?
+          // Note: When have proper Date type support this should be restricted to just date.
+          OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -50,10 +51,10 @@ public final class SinceEpochFnTable implements SqlOperatorTable {
           // What Value should the return type be
           ReturnTypes.BIGINT_NULLABLE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to None.
           null,
           // What Input Types does the function accept.
-          OperandTypes.TIMESTAMP,
+          OperandTypes.DATETIME,
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
@@ -66,7 +67,7 @@ public final class SinceEpochFnTable implements SqlOperatorTable {
           // What Value should the return type be
           ReturnTypes.TIMESTAMP_NULLABLE,
           // What should be used to infer operand types. We don't use
-          // this so we set it to None.
+          // this, so we set it to None.
           null,
           // What Input Types does the function accept.
           OperandTypes.INTEGER,

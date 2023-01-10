@@ -1,3 +1,6 @@
+
+# Azure Pipeline that is triggered weekdays at midnight or when a release is tagged.
+
 trigger:
 - refs/tags/*
 
@@ -10,6 +13,16 @@ schedules:
     include:
     - develop
 
+
+# NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
+# See get_channel.sh
+# Originally added through Azure Pipeline UI.
+# Azure pipeline UI includes AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
+variables:
+  CHECK_LICENSE_EXPIRED: 1
+  CHECK_LICENSE_CORE_COUNT: 1
+  OBFUSCATE: 1
+
 stages:
 - stage: Build_Bodo_Binary
   displayName: 'Build Bodo Binary'
@@ -19,7 +32,7 @@ stages:
       vmImage: macOS-latest
     steps:
     - script: |
-        set -eo pipefail
+        set -exo pipefail
         export BUILD_DATE=`date  +"%Y-%m-%d"`
         export FILE_SUFFIX=built-${BUILD_DATE}
         echo "##vso[task.setvariable variable=fileSuffix;isOutput=true]$FILE_SUFFIX"
@@ -113,70 +126,102 @@ stages:
       caching_test: false
       PYTHON_VERSION: 3.10
       matrix:
-        BODO_1P_1_OF_6:
+        BODO_1P_1_OF_9:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1of6 and not weekly
-        BODO_1P_2_OF_6:
+          PYTEST_MARKER: bodo_1of9 and not weekly
+        BODO_1P_2_OF_9:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2of6 and not weekly
-        BODO_1P_3_OF_6:
+          PYTEST_MARKER: bodo_2of9 and not weekly
+        BODO_1P_3_OF_9:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3of6 and not weekly
-        BODO_1P_4_OF_6:
+          PYTEST_MARKER: bodo_3of9 and not weekly
+        BODO_1P_4_OF_9:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4of6 and not weekly
-        BODO_1P_5_OF_6:
+          PYTEST_MARKER: bodo_4of9 and not weekly
+        BODO_1P_5_OF_9:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5of6 and not weekly
-        BODO_1P_6_OF_6:
+          PYTEST_MARKER: bodo_5of9 and not weekly
+        BODO_1P_6_OF_9:
           NP: 1
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6of6 and not weekly
-        BODO_2P_1_OF_10:
+          PYTEST_MARKER: bodo_6of9 and not weekly
+        BODO_1P_7_OF_9:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_7of9 and not weekly
+        BODO_1P_8_OF_9:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_8of9 and not weekly
+        BODO_1P_9_OF_9:
+          NP: 1
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_9of9 and not weekly
+        BODO_2P_1_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_1of10 and not weekly
-        BODO_2P_2_OF_10:
+          PYTEST_MARKER: bodo_1of15 and not weekly
+        BODO_2P_2_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_2of10 and not weekly
-        BODO_2P_3_OF_10:
+          PYTEST_MARKER: bodo_2of15 and not weekly
+        BODO_2P_3_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_3of10 and not weekly
-        BODO_2P_4_OF_10:
+          PYTEST_MARKER: bodo_3of15 and not weekly
+        BODO_2P_4_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_4of10 and not weekly
-        BODO_2P_5_OF_10:
+          PYTEST_MARKER: bodo_4of15 and not weekly
+        BODO_2P_5_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_5of10 and not weekly
-        BODO_2P_6_OF_10:
+          PYTEST_MARKER: bodo_5of15 and not weekly
+        BODO_2P_6_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_6of10 and not weekly
-        BODO_2P_7_OF_10:
+          PYTEST_MARKER: bodo_6of15 and not weekly
+        BODO_2P_7_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_7of10 and not weekly
-        BODO_2P_8_OF_10:
+          PYTEST_MARKER: bodo_7of15 and not weekly
+        BODO_2P_8_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_8of10 and not weekly
-        BODO_2P_9_OF_10:
+          PYTEST_MARKER: bodo_8of15 and not weekly
+        BODO_2P_9_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_9of10 and not weekly
-        BODO_2P_10_OF_10:
+          PYTEST_MARKER: bodo_9of15 and not weekly
+        BODO_2P_10_OF_15:
           NP: 2
           CONDA_ENV: 'bodo'
-          PYTEST_MARKER: bodo_10of10 and not weekly
+          PYTEST_MARKER: bodo_10of15 and not weekly
+        BODO_2P_11_OF_15:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_11of15 and not weekly
+        BODO_2P_12_OF_15:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_12of15 and not weekly
+        BODO_2P_13_OF_15:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_13of15 and not weekly
+        BODO_2P_14_OF_15:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_14of15 and not weekly
+        BODO_2P_15_OF_15:
+          NP: 2
+          CONDA_ENV: 'bodo'
+          PYTEST_MARKER: bodo_15of15 and not weekly
 
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
@@ -209,39 +254,57 @@ stages:
       CONDA_ENV: run_bodo_sql
       PYTHON_VERSION: 3.10
       matrix:
-        BODOSQL_1P_1_OF_4:
+        BODOSQL_1P_1_OF_6:
           NP: 1
-          PYTEST_MARKER: bodosql_1of4 and not weekly
-        BODOSQL_1P_2_OF_4:
+          PYTEST_MARKER: bodosql_1of6 and not weekly
+        BODOSQL_1P_2_OF_6:
           NP: 1
-          PYTEST_MARKER: bodosql_2of4 and not weekly
-        BODOSQL_1P_3_OF_4:
+          PYTEST_MARKER: bodosql_2of6 and not weekly
+        BODOSQL_1P_3_OF_6:
           NP: 1
-          PYTEST_MARKER: bodosql_3of4 and not weekly
-        BODOSQL_1P_4_OF_4:
+          PYTEST_MARKER: bodosql_3of6 and not weekly
+        BODOSQL_1P_4_OF_6:
           NP: 1
-          PYTEST_MARKER: bodosql_4of4 and not weekly
-        BODOSQL_2P_1_OF_7:
+          PYTEST_MARKER: bodosql_4of6 and not weekly
+        BODOSQL_1P_5_OF_6:
+          NP: 1
+          PYTEST_MARKER: bodosql_5of6 and not weekly
+        BODOSQL_1P_6_OF_6:
+          NP: 1
+          PYTEST_MARKER: bodosql_6of6 and not weekly
+        BODOSQL_2P_1_OF_11:
           NP: 2
-          PYTEST_MARKER: bodosql_1of7 and not weekly
-        BODOSQL_2P_2_OF_7:
+          PYTEST_MARKER: bodosql_1of11 and not weekly
+        BODOSQL_2P_2_OF_11:
           NP: 2
-          PYTEST_MARKER: bodosql_2of7 and not weekly
-        BODOSQL_2P_3_OF_7:
+          PYTEST_MARKER: bodosql_2of11 and not weekly
+        BODOSQL_2P_3_OF_11:
           NP: 2
-          PYTEST_MARKER: bodosql_3of7 and not weekly
-        BODOSQL_2P_4_OF_7:
+          PYTEST_MARKER: bodosql_3of11 and not weekly
+        BODOSQL_2P_4_OF_11:
           NP: 2
-          PYTEST_MARKER: bodosql_4of7 and not weekly
-        BODOSQL_2P_5_OF_7:
+          PYTEST_MARKER: bodosql_4of11 and not weekly
+        BODOSQL_2P_5_OF_11:
           NP: 2
-          PYTEST_MARKER: bodosql_5of7 and not weekly
-        BODOSQL_2P_6_OF_7:
+          PYTEST_MARKER: bodosql_5of11 and not weekly
+        BODOSQL_2P_6_OF_11:
           NP: 2
-          PYTEST_MARKER: bodosql_6of7 and not weekly
-        BODOSQL_2P_7_OF_7:
+          PYTEST_MARKER: bodosql_6of11 and not weekly
+        BODOSQL_2P_7_OF_11:
           NP: 2
-          PYTEST_MARKER: bodosql_7of7 and not weekly
+          PYTEST_MARKER: bodosql_7of11 and not weekly
+        BODOSQL_2P_8_OF_11:
+          NP: 2
+          PYTEST_MARKER: bodosql_8of11 and not weekly
+        BODOSQL_2P_9_OF_11:
+          NP: 2
+          PYTEST_MARKER: bodosql_9of11 and not weekly
+        BODOSQL_2P_10_OF_11:
+          NP: 2
+          PYTEST_MARKER: bodosql_10of11 and not weekly
+        BODOSQL_2P_11_OF_11:
+          NP: 2
+          PYTEST_MARKER: bodosql_11of11 and not weekly
 
   - template: buildscripts/bodosql/azure/azure-test-binary-linux-macos.yml
     parameters:

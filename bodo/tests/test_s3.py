@@ -851,7 +851,7 @@ def test_s3_json_read_records_lines_seq(minio_server, s3_bucket, test_df):
             "s3://bodo-test/df_records_lines_seq.json",
             orient="records",
             lines=True,
-            dtype={"A": float, "B": "bool", "C": int},
+            dtype={"A": float, "B": "bool", "C": int},  # type: ignore
         )
 
     check_func(test_read, (), py_output=test_df)
@@ -900,7 +900,7 @@ def test_s3_json_read_records_lines_1D_var(minio_server, s3_bucket, test_df):
             "s3://bodo-test/df_records_lines_1D_var.json",
             orient="records",
             lines=True,
-            dtype={"A": float, "B": "bool", "C": int},
+            dtype={"A": float, "B": "bool", "C": int},  # type: ignore
         )
 
     check_func(test_read, (), py_output=test_df)

@@ -33,6 +33,7 @@ from bodo.libs.array_item_arr_ext import (
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType, int128_type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import (
@@ -106,6 +107,7 @@ ll.add_symbol("get_shuffle_info", array_ext.get_shuffle_info)
 ll.add_symbol("delete_shuffle_info", array_ext.delete_shuffle_info)
 ll.add_symbol("reverse_shuffle_table", array_ext.reverse_shuffle_table)
 ll.add_symbol("hash_join_table", array_ext.hash_join_table)
+ll.add_symbol("cross_join_table", array_ext.cross_join_table)
 ll.add_symbol("drop_duplicates_table", array_ext.drop_duplicates_table)
 ll.add_symbol("sort_values_table", array_ext.sort_values_table)
 ll.add_symbol("sample_table", array_ext.sample_table)
@@ -216,7 +218,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                     types_list += get_types(field_typ)
                 return types_list
             elif (
-                isinstance(arr_typ, (types.Array, IntegerArrayType))
+                isinstance(arr_typ, (types.Array, IntegerArrayType, FloatingArrayType))
                 or arr_typ == boolean_array
             ):
                 return get_types(arr_typ.dtype)
@@ -267,7 +269,8 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                 )
             # TODO: add Struct, Categorical, String
             elif isinstance(
-                arr_typ, (IntegerArrayType, DecimalArrayType, types.Array)
+                arr_typ,
+                (IntegerArrayType, FloatingArrayType, DecimalArrayType, types.Array),
             ) or arr_typ in (
                 boolean_array,
                 datetime_date_array_type,
@@ -331,7 +334,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
                     [null_bitmap_ptr] + buffs_data,
                 )
             elif isinstance(
-                arr_typ, (IntegerArrayType, DecimalArrayType)
+                arr_typ, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
             ) or arr_typ in (
                 boolean_array,
                 datetime_date_array_type,
@@ -643,7 +646,7 @@ def array_to_info_codegen(context, builder, sig, args, incref=True):
 
     # nullable integer/bool array
     if isinstance(
-        arr_type, (IntegerArrayType, DecimalArrayType, TimeArrayType)
+        arr_type, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
     ) or arr_type in (
         boolean_array,
         datetime_date_array_type,
@@ -1063,7 +1066,9 @@ def nested_to_array(
             infos_pos + 2,
         )
 
-    elif isinstance(arr_typ, (IntegerArrayType, DecimalArrayType)) or arr_typ in (
+    elif isinstance(
+        arr_typ, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or arr_typ in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -1401,7 +1406,7 @@ def info_to_array_codegen(context, builder, sig, args):
 
     # nullable integer/bool array
     if isinstance(
-        arr_type, (IntegerArrayType, DecimalArrayType, TimeArrayType)
+        arr_type, (IntegerArrayType, FloatingArrayType, DecimalArrayType, TimeArrayType)
     ) or arr_type in (
         boolean_array,
         datetime_date_array_type,
@@ -2405,6 +2410,78 @@ def hash_join_table(
 
 
 @intrinsic
+def cross_join_table(
+    typingctx,
+    left_table_t,
+    right_table_t,
+    left_parallel_t,
+    right_parallel_t,
+    is_left_t,
+    is_right_t,
+    key_in_output_t,
+    need_typechange_t,
+    cond_func,
+    left_col_nums,
+    left_col_nums_len,
+    right_col_nums,
+    right_col_nums_len,
+    num_rows_ptr_t,
+):
+    """
+    Call cpp function for cross join of two tables.
+    """
+    assert left_table_t == table_type, "cross_join_table: cpp table type expected"
+    assert right_table_t == table_type, "cross_join_table: cpp table type expected"
+
+    def codegen(context, builder, sig, args):
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(1),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+                lir.IntType(64),
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="cross_join_table"
+        )
+        ret = builder.call(fn_tp, args)
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+        return ret
+
+    return (
+        table_type(
+            left_table_t,
+            right_table_t,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.boolean,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.voidptr,
+            types.int64,
+            types.voidptr,
+            types.int64,
+            types.voidptr,
+        ),
+        codegen,
+    )
+
+
+@intrinsic
 def sort_values_table(
     typingctx,
     table_t,
@@ -2797,8 +2874,8 @@ def get_search_regex(in_arr, case, match, pat, out_arr):  # pragma: no cover
 
 
 def _gen_row_access_intrinsic(col_array_typ, c_ind):
-    """Generate an intrinsic for loading a value from a table column with 'col_dtype'
-    data type. 'c_ind' is the index of the column within the table.
+    """Generate an intrinsic for loading a value from a table column with
+    'col_array_typ' array type. 'c_ind' is the index of the column within the table.
     The intrinsic's input is an array of pointers for the table's data either array
     info or data depending on the type and a row index.
 
@@ -2816,14 +2893,22 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
 
     col_dtype = col_array_typ.dtype
 
-    if isinstance(col_dtype, (types.Number, TimeType)) or col_dtype in [
+    if isinstance(
+        col_dtype,
+        (types.Number, TimeType, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype),
+    ) or col_dtype in [
         bodo.datetime_date_type,
         bodo.datetime64ns,
         bodo.timedelta64ns,
         types.bool_,
     ]:
-        # This code path just returns the data.
 
+        # Note: PandasDatetimeTZDtype is not the return type for scalar data.
+        # In C++ the data is just a datetime64ns
+        if isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+            col_dtype = bodo.datetime64ns
+
+        # This code path just returns the data.
         @intrinsic
         def getitem_func(typingctx, table_t, ind_t):
             def codegen(context, builder, sig, args):
@@ -2836,7 +2921,12 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 col_ptr = builder.bitcast(
                     col_ptr, context.get_data_type(col_dtype).as_pointer()
                 )
-                return builder.load(builder.gep(col_ptr, [row_ind]))
+                # Similar to Numpy array getitem in Numba:
+                # https://github.com/numba/numba/blob/2298ad6186d177f39c564046890263b0f1c74ecc/numba/np/arrayobj.py#L130
+                # makes sure we don't get LLVM i1 vs i8 mismatches for bool scalars
+                return context.unpack_value(
+                    builder, col_dtype, builder.gep(col_ptr, [row_ind])
+                )
 
             return col_dtype(types.voidptr, types.int64), codegen
 
@@ -2873,12 +2963,18 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 size = cgutils.alloca_once(builder, lir.IntType(64))
                 args = (col_ptr, row_ind, size)
                 data_ptr = builder.call(getitem_fn, args)
-                return context.make_tuple(
-                    builder, sig.return_type, [data_ptr, builder.load(size)]
+                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                return context.compile_internal(
+                    builder,
+                    lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
+                        data, length
+                    ),
+                    decode_sig,
+                    [data_ptr, builder.load(size)],
                 )
 
             return (
-                types.Tuple([types.voidptr, types.int64])(types.voidptr, types.int64),
+                bodo.string_type(types.voidptr, types.int64),
                 codegen,
             )
 
@@ -2951,12 +3047,18 @@ def _gen_row_access_intrinsic(col_array_typ, c_ind):
                 size = cgutils.alloca_once(builder, lir.IntType(64))
                 args = (dictionary_ptr, dict_loc, size)
                 data_ptr = builder.call(getitem_fn, args)
-                return context.make_tuple(
-                    builder, sig.return_type, [data_ptr, builder.load(size)]
+                decode_sig = bodo.string_type(types.voidptr, types.int64)
+                return context.compile_internal(
+                    builder,
+                    lambda data, length: bodo.libs.str_arr_ext.decode_utf8(
+                        data, length
+                    ),
+                    decode_sig,
+                    [data_ptr, builder.load(size)],
                 )
 
             return (
-                types.Tuple([types.voidptr, types.int64])(types.voidptr, types.int64),
+                bodo.string_type(types.voidptr, types.int64),
                 codegen,
             )
 
@@ -2981,17 +3083,16 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
     3  "ef"  9
     """
     if (
-        isinstance(col_array_dtype, bodo.libs.int_arr_ext.IntegerArrayType)
-        or col_array_dtype
-        in (bodo.libs.bool_arr_ext.boolean_array, bodo.binary_array_type)
-        or is_str_arr_type(col_array_dtype)
-        or (
-            isinstance(col_array_dtype, types.Array)
-            and (
-                col_array_dtype.dtype == bodo.datetime_date_type
-                or isinstance(col_array_dtype.dtype, bodo.TimeType)
-            )
+        isinstance(
+            col_array_dtype, (IntegerArrayType, FloatingArrayType, bodo.TimeArrayType)
         )
+        or col_array_dtype
+        in (
+            bodo.libs.bool_arr_ext.boolean_array,
+            bodo.binary_array_type,
+            bodo.datetime_date_array_type,
+        )
+        or is_str_arr_type(col_array_dtype)
     ):
         # These arrays use a null bitmap to store NA values.
         @intrinsic
@@ -3024,12 +3125,20 @@ def _gen_row_na_check_intrinsic(col_array_dtype, c_ind):
 
         return checkna_func
 
-    elif isinstance(col_array_dtype, types.Array):
+    elif isinstance(col_array_dtype, (types.Array, bodo.DatetimeArrayType)):
         col_dtype = col_array_dtype.dtype
         if col_dtype in [
             bodo.datetime64ns,
             bodo.timedelta64ns,
-        ]:
+        ] or isinstance(col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype):
+
+            # Note: PandasDatetimeTZDtype is not the return type for scalar data.
+            # In C++ the data is just a datetime64ns
+            if isinstance(
+                col_dtype, bodo.libs.pd_datetime_arr_ext.PandasDatetimeTZDtype
+            ):
+                col_dtype = bodo.datetime64ns
+
             # Datetime arrays represent NULL by using pd._libs.iNaT
             @intrinsic
             def checkna_func(typingctx, table_t, ind_t):
