@@ -2173,8 +2173,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // which makes it difficult to strip non space values. However, this situation doesn't seem
         // to happen with the currently added string functions, so for now it's no an issue
         assert operandsInfo.get(1).getExprCode().equals("\" \"");
-        return generateTrimFnInfo(
-            operandsInfo.get(0), operandsInfo.get(2), exprTypes.get(2), isSingleRow);
+        return generateTrimFnInfo(operandsInfo.get(0), operandsInfo.get(2));
 
       case NULLIF:
         assert operandsInfo.size() == 2;
@@ -2364,10 +2363,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             // if the second argument is an integer, need to convert it to the int * days
             if (SqlTypeName.INT_TYPES.contains(
                 fnOperation.getOperands().get(1).getType().getSqlTypeName())) {
-              arg1Expr =
-                  intExprToIntervalDays(
-                      operandsInfo.get(1).getExprCode(),
-                      exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+              arg1Expr = intExprToIntervalDays(operandsInfo.get(1).getExprCode());
             } else {
               arg1Expr = operandsInfo.get(1).getExprCode();
             }
@@ -2697,14 +2693,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               throw new BodoSQLCodegenException(fnName + " requires providing only 1 argument");
             }
             return getSingleArgStringFnInfo(
-                fnName,
-                operandsInfo.get(0).getExprCode(),
-                operandsInfo.get(0).getName(),
-                isSingleRow
-                    || (exprTypesMap.get(
-                            ExprTypeVisitor.generateRexNodeKey(
-                                fnOperation.getOperands().get(0), id))
-                        == BodoSQLExprType.ExprType.SCALAR));
+                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(0).getName());
           case "FORMAT":
           case "REPEAT":
           case "STRCMP":

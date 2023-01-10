@@ -237,17 +237,8 @@ public class DatetimeFnCodeGen {
     return new RexNodeVisitorInfo(name, outputExpr);
   }
 
-  public static String intExprToIntervalDays(String expr, boolean useScalar) {
-    String arg1Expr;
-    if (useScalar) {
-      arg1Expr =
-          "bodo.utils.conversion.box_if_dt64(bodo.libs.bodosql_array_kernels.int_to_days("
-              + expr
-              + "))";
-    } else {
-      arg1Expr = "bodo.libs.bodosql_array_kernels.int_to_days(" + expr + ")";
-    }
-    return arg1Expr;
+  public static String intExprToIntervalDays(String expr) {
+    return "bodo.libs.bodosql_array_kernels.int_to_days(" + expr + ")";
   }
 
   /**
