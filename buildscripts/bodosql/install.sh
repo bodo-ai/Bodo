@@ -1,5 +1,5 @@
 #!/bin/bash
-set -xeo pipefail
+set -exo pipefail
 
 
 # Only download miniforge if we're not at runtime.
@@ -26,10 +26,10 @@ then
       echo Error
     fi
     chmod +x miniconda.sh
-    ./miniconda.sh -b
+    bash miniconda.sh -b
     export PATH=$HOME/miniconda3/bin:$PATH
   fi
-  conda create -n $CONDA_ENV -q -y -c conda-forge python=$PYTHON_VERSION mamba
+  conda create -n $CONDA_ENV -y -c conda-forge python=$PYTHON_VERSION mamba
 else 
   if [[ "$uname_mach_str" == 'arm64' ]] || [[ "$uname_mach_str" == 'aarch64' ]]; then
     export MINIFORGE_URL="https://github.com/conda-forge/miniforge/releases/latest/download"
@@ -50,15 +50,17 @@ fi
 
 
 # ---- Create Conda Env ----
-MAMBA_INSTALL="mamba install -q -y"
+MAMBA_INSTALL="mamba install -y"
 
 # Deactivate env in case this was called by another file that
 # activated the env. This only happens on AWS and causes errors
 # on Azure with MacOS
+set +x
 if [[ "$CI_SOURCE" == "AWS" ]]; then
     source deactivate || true
 fi
 source activate $CONDA_ENV
+set -x
 
 # ---- Install packages from Conda ----
 

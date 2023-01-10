@@ -1126,7 +1126,7 @@ ll.add_symbol("str_arr_to_float64", hstr_ext.str_arr_to_float64)
 ll.add_symbol("get_utf8_size", hstr_ext.get_utf8_size)
 ll.add_symbol("print_str_arr", hstr_ext.print_str_arr)
 ll.add_symbol("inplace_int64_to_str", hstr_ext.inplace_int64_to_str)
-
+ll.add_symbol("str_to_dict_str_array", hstr_ext.str_to_dict_str_array)
 
 inplace_int64_to_str = types.ExternalFunction(
     "inplace_int64_to_str", types.void(types.voidptr, types.int64, types.int64)
@@ -1524,13 +1524,14 @@ def box_str_arr(typ, val, c):
 @intrinsic
 def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert str_arr_typ == string_array_type
+    assert str_arr_typ in (
+        string_array_type,
+        binary_array_type,
+    ), "str_arr_is_na: string/binary array expected"
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, str_arr_typ)
         null_bitmap_ptr = context.make_array(null_bitmap_arr_type)(
             context, builder, payload.null_bitmap
         ).data
@@ -1558,13 +1559,14 @@ def str_arr_is_na(typingctx, str_arr_typ, ind_typ=None):
 @intrinsic
 def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert str_arr_typ == string_array_type
+    assert str_arr_typ in [
+        string_array_type,
+        binary_array_type,
+    ], "str_arr_set_na: string/binary array expected"
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, str_arr_typ)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1590,23 +1592,24 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
         mask = builder.xor(mask, lir.Constant(lir.IntType(8), -1))
         # unset masked bit
         builder.store(builder.and_(byte, mask), byte_ptr)
-        if str_arr_typ == string_array_type:
-            # NOTE: sometimes during construction, setna may be called before setting
-            # the actual value (see struct array unboxing). setting the last offset can
-            # make output of num_total_chars() invalid
-            # TODO: refactor string array to avoid C code
-            # if ind+1 != num_strings
-            #   offsets[ind+1] = offsets[ind]
-            ind_plus1 = builder.add(ind, lir.Constant(lir.IntType(64), 1))
-            is_na_cond = builder.icmp_unsigned("!=", ind_plus1, payload.n_arrays)
-            with builder.if_then(is_na_cond):
-                builder.store(
-                    builder.load(builder.gep(offsets, [ind])),
-                    builder.gep(
-                        offsets,
-                        [ind_plus1],
-                    ),
-                )
+
+        # NOTE: sometimes during construction, setna may be called before setting
+        # the actual value (see struct array unboxing). setting the last offset can
+        # make output of num_total_chars() invalid
+        # TODO: refactor string array to avoid C code
+        # if ind+1 != num_strings
+        #   offsets[ind+1] = offsets[ind]
+        ind_plus1 = builder.add(ind, lir.Constant(lir.IntType(64), 1))
+        is_na_cond = builder.icmp_unsigned("!=", ind_plus1, payload.n_arrays)
+        with builder.if_then(is_na_cond):
+            builder.store(
+                builder.load(builder.gep(offsets, [ind])),
+                builder.gep(
+                    offsets,
+                    [ind_plus1],
+                ),
+            )
+
         return context.get_dummy_value()
 
     return types.void(str_arr_typ, types.intp), codegen
@@ -1615,13 +1618,14 @@ def str_arr_set_na(typingctx, str_arr_typ, ind_typ=None):
 @intrinsic
 def str_arr_set_not_na(typingctx, str_arr_typ, ind_typ=None):
     # None default to make IntelliSense happy
-    assert str_arr_typ == string_array_type
+    assert str_arr_typ in [
+        binary_array_type,
+        string_array_type,
+    ], "str_arr_set_not_na: string/binary array expected"
 
     def codegen(context, builder, sig, args):
         in_str_arr, ind = args
-        payload = _get_str_binary_arr_payload(
-            context, builder, in_str_arr, string_array_type
-        )
+        payload = _get_str_binary_arr_payload(context, builder, in_str_arr, str_arr_typ)
 
         # bits[i / 8] |= kBitmask[i % 8];
         byte_ind = builder.lshr(ind, lir.Constant(lir.IntType(64), 3))
@@ -1947,12 +1951,17 @@ def str_arr_getitem_int(A, ind):
 
         return str_arr_getitem_impl
 
-    # bool arr indexing
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    # bool arr indexing. Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if (
+        ind != bodo.boolean_array
+        and is_list_like_index_type(ind)
+        and ind.dtype == types.bool_
+    ):
 
         def bool_impl(A, ind):  # pragma: no cover
             # convert potential Series to array
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind = bodo.utils.conversion.coerce_to_array(ind)
             n = len(A)
             n_strs = 0
             n_chars = 0
@@ -2012,7 +2021,7 @@ def str_arr_getitem_int(A, ind):
 
         def str_arr_arr_impl(A, ind):  # pragma: no cover
             # convert potential Series to array
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind = bodo.utils.conversion.coerce_to_array(ind)
             n = len(ind)
             n_chars = 0
             for i in range(n):
@@ -2101,11 +2110,13 @@ def str_arr_getitem_int(A, ind):
 
         return str_arr_slice_impl
 
-    # This should be the only StringArray implementation.
+    # This should be the only StringArray implementation
+    # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more ind options are added.
-    raise BodoError(
-        f"getitem for StringArray with indexing type {ind} not supported."
-    )  # pragma: no cover
+    if ind != bodo.boolean_array:  # pragma: no cover
+        raise BodoError(
+            f"getitem for StringArray with indexing type {ind} not supported."
+        )
 
 
 dummy_use = numba.njit(lambda a: None)
@@ -2221,7 +2232,7 @@ def str_arr_setitem(A, idx, val):
             def impl_bool_scalar(A, idx, val):  # pragma: no cover
                 n = len(A)
                 # NOTE: necessary to convert potential Series to array
-                idx = bodo.utils.conversion.coerce_to_ndarray(idx)
+                idx = bodo.utils.conversion.coerce_to_array(idx)
                 out_arr = pre_alloc_string_array(n, -1)
                 for i in numba.parfors.parfor.internal_prange(n):
                     if not bodo.libs.array_kernels.isna(idx, i) and idx[i]:
@@ -2295,7 +2306,8 @@ def overload_str_arr_astype(A, dtype, copy=True):
             "StringArray.astype(): 'dtype' when passed as string must be a constant value"
         )
 
-    # same dtype case
+    # same dtype case with str. Here we opt to cause both dict
+    # and regular string arrays maintain the same type.
     if isinstance(dtype, types.Function) and dtype.key[0] == str:
         # no need to copy since our StringArray is immutable
         return lambda A, dtype, copy=True: A  # pragma: no cover
@@ -2303,11 +2315,17 @@ def overload_str_arr_astype(A, dtype, copy=True):
     # numpy dtypes
     nb_dtype = parse_dtype(dtype, "StringArray.astype")
 
+    if A == nb_dtype:
+        # same dtype case when passing an array typeref.
+        # no need to copy since our StringArray is immutable
+        return lambda A, dtype, copy=True: A  # pragma: no cover
+
     # TODO: support other dtypes if any
     # TODO: error checking
     if not isinstance(nb_dtype, (types.Float, types.Integer)) and nb_dtype not in (
         types.bool_,
         bodo.libs.bool_arr_ext.boolean_dtype,
+        bodo.dict_str_arr_type,
     ):  # pragma: no cover
         raise BodoError("invalid dtype in StringArray.astype()")
 
@@ -2356,6 +2374,13 @@ def overload_str_arr_astype(A, dtype, copy=True):
 
         return impl_bool
 
+    elif nb_dtype == bodo.dict_str_arr_type:
+
+        def impl_dict_str(A, dtype, copy=True):  # pragma: no cover
+            return str_arr_to_dict_str_arr(A)
+
+        return impl_dict_str
+
     else:
         # int dtype doesn't support NAs
         # TODO: raise some form of error for NAs
@@ -2368,6 +2393,53 @@ def overload_str_arr_astype(A, dtype, copy=True):
             return B
 
         return impl_int
+
+
+@numba.jit
+def str_arr_to_dict_str_arr(A):  # pragma: no cover
+    return str_arr_to_dict_str_arr_cpp(A)
+
+
+@intrinsic
+def str_arr_to_dict_str_arr_cpp(typingctx, str_arr_t):
+    def codegen(context, builder, sig, args):
+        (str_arr,) = args
+
+        str_arr_info = bodo.libs.array.array_to_info_codegen(
+            context,
+            builder,
+            bodo.libs.array.array_info_type(sig.args[0]),
+            (str_arr,),
+            False,
+        )
+
+        fnty = lir.FunctionType(
+            lir.IntType(8).as_pointer(),
+            [
+                lir.IntType(8).as_pointer(),
+            ],
+        )
+        fn_tp = cgutils.get_or_insert_function(
+            builder.module, fnty, name="str_to_dict_str_array"
+        )
+        dict_array_info = builder.call(fn_tp, [str_arr_info])
+        bodo.utils.utils.inlined_check_and_propagate_cpp_exception(context, builder)
+
+        dict_arr = bodo.libs.array.info_to_array_codegen(
+            context,
+            builder,
+            sig.return_type(bodo.libs.array.array_info_type, sig.return_type),
+            (dict_array_info, context.get_constant_null(sig.return_type)),
+        )
+
+        return dict_arr
+
+    assert (
+        str_arr_t == bodo.string_array_type
+    ), "str_arr_to_dict_str_arr: Input Array is not a Bodo String Array"
+
+    sig = bodo.dict_str_arr_type(bodo.string_array_type)
+    return sig, codegen
 
 
 @intrinsic
@@ -2611,7 +2683,7 @@ def pre_alloc_str_arr_equiv(self, scope, equiv_set, loc, args, kws):
 
 from numba.parfors.array_analysis import ArrayAnalysis
 
-ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = (
+ArrayAnalysis._analyze_op_call_bodo_libs_str_arr_ext_pre_alloc_string_array = (  # type: ignore
     pre_alloc_str_arr_equiv
 )
 

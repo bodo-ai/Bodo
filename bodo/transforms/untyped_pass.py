@@ -10,11 +10,9 @@ import itertools
 import datetime
 import pandas as pd
 import numpy as np
-import pyarrow as pa
 
 import numba
 from numba.core import ir, ir_utils, types
-
 from numba.core.ir_utils import (
     mk_unique_var,
     find_topo_order,
@@ -31,16 +29,18 @@ from numba.core.ir_utils import (
 )
 from numba.core.registry import CPUDispatcher
 
-
 import bodo
 import bodo.io
 from bodo.io import h5
 from bodo.utils.utils import is_assign, is_call, is_expr
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.int_arr_ext import IntegerArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.bool_arr_ext import boolean_array
-from bodo.libs.dict_arr_ext import dict_str_arr_type
 from bodo.hiframes.pd_index_ext import RangeIndexType
+from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
+import bodo.hiframes.pd_dataframe_ext
+from bodo.hiframes.pd_dataframe_ext import DataFrameType
 import bodo.ir
 import bodo.ir.aggregate
 import bodo.ir.join
@@ -48,13 +48,7 @@ import bodo.ir.sort
 from bodo.ir import csv_ext
 from bodo.ir import sql_ext
 from bodo.ir import json_ext
-from bodo.io.parquet_pio import ParquetHandler
-from bodo.io.helpers import _get_numba_typ_from_pa_typ
-from bodo.utils.typing import ColNamesMetaType
-
-from bodo.hiframes.pd_categorical_ext import PDCategoricalDtype, CategoricalArrayType
-import bodo.hiframes.pd_dataframe_ext
-from bodo.hiframes.pd_dataframe_ext import DataFrameType
+from bodo.ir import parquet_ext
 from bodo.utils.transform import (
     get_const_value,
     get_const_value_inner,
@@ -67,13 +61,13 @@ from bodo.utils.transform import (
 from bodo.utils.typing import (
     BodoError,
     BodoWarning,
+    ColNamesMetaType,
     raise_bodo_error,
     to_nullable_type,
     FileInfo,
     to_str_arr_if_dict_array,
 )
 from bodo.utils.utils import check_java_installation
-
 from bodo.numba_compat import mini_dce
 
 
@@ -92,7 +86,16 @@ class UntypedPass:
     type inference due to complexity such as pd.read_csv().
     """
 
-    def __init__(self, func_ir, typingctx, args, _locals, metadata, flags):
+    def __init__(
+        self,
+        func_ir,
+        typingctx,
+        args,
+        _locals,
+        metadata,
+        flags,
+        is_independent: bool = False,
+    ):
         self.func_ir = func_ir
         self.typingctx = typingctx
         self.args = args
@@ -103,11 +106,13 @@ class UntypedPass:
         ir_utils._the_max_label.update(max(func_ir.blocks.keys()))
 
         self.arrow_tables = {}
-        self.pq_handler = ParquetHandler(func_ir, typingctx, args, _locals)
+        self.pq_handler = parquet_ext.ParquetHandler(func_ir, typingctx, args, _locals)
         self.h5_handler = h5.H5_IO(self.func_ir, _locals, flags, args)
         # save names of arguments and return values to catch invalid dist annotation
         self._arg_names = set()
         self._return_varnames = set()
+        # Is code executing independently on each rank?
+        self._is_independent = is_independent
 
     def run(self):
         """run untyped pass transform"""
@@ -935,8 +940,9 @@ class UntypedPass:
             unsupported_arrow_types,
             is_select_query,
             has_side_effects,
+            pyarrow_table_schema,
         ) = _get_sql_types_arr_colnames(
-            sql_const, con_const, _bodo_read_as_dict, lhs, rhs.loc
+            sql_const, con_const, _bodo_read_as_dict, lhs, rhs.loc, self._is_independent
         )
 
         index_ind = None
@@ -974,7 +980,7 @@ class UntypedPass:
                 index_col_name,
                 index_arr_typ,
                 None,  # database_schema
-                None,  # pyarrow_table_schema
+                pyarrow_table_schema,
                 False,  # is_merge_into
                 types.none,  # file_list_type
                 types.none,  # snapshot_id_type
@@ -1746,9 +1752,11 @@ class UntypedPass:
         if _bodo_upcast_to_float64:
             dtype_map_cpy = dtype_map.copy()
             for c, t in dtype_map_cpy.items():
-                if isinstance(t, (types.Array, IntegerArrayType)) and isinstance(
+                if isinstance(
+                    t, (types.Array, IntegerArrayType, FloatingArrayType)
+                ) and isinstance(
                     t.dtype, (types.Integer, types.Float)
-                ):
+                ):  # pragma: no cover
                     dtype_map[c] = types.Array(types.float64, 1, "C")
 
         # handle dtype arg if provided
@@ -2284,8 +2292,8 @@ class UntypedPass:
             data_arrs,
             index_col,
             nodes,
-            col_types,
-            index_col_type,
+            _,
+            _,
         ) = self.pq_handler.gen_parquet_read(
             fname,
             lhs,
@@ -2302,7 +2310,7 @@ class UntypedPass:
             index_arg = (
                 f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, None)"
             )
-            index_typ = RangeIndexType(types.none)
+
         elif isinstance(index_col, dict):
             if index_col["name"] is None:
                 index_col_name = None
@@ -2312,9 +2320,7 @@ class UntypedPass:
                 index_col_name_str = f"'{index_col_name}'"
             # ignore range index information in pandas metadata
             index_arg = f"bodo.hiframes.pd_index_ext.init_range_index(0, len(T), 1, {index_col_name_str})"
-            index_typ = RangeIndexType(
-                types.none if index_col_name is None else types.literal(index_col_name)
-            )
+
         else:
             # if the index_col is __index_level_0_, it means it has no name.
             # Thus we do not write the name instead of writing '__index_level_0_' as the name
@@ -2322,19 +2328,11 @@ class UntypedPass:
             index_arg = (
                 f"bodo.utils.conversion.convert_to_index(index_arr, {index_name!r})"
             )
-            index_typ = bodo.hiframes.pd_index_ext.array_type_to_index(
-                index_col_type,
-                types.none if index_name is None else types.literal(index_name),
-            )
 
         func_text = "def _init_df(T, index_arr):\n"
         func_text += f"  return bodo.hiframes.pd_dataframe_ext.init_dataframe((T,), {index_arg}, __col_name_meta_value_pq_read)\n"
         loc_vars = {}
-        exec(
-            func_text,
-            {},
-            loc_vars,
-        )
+        exec(func_text, {}, loc_vars)
         _init_df = loc_vars["_init_df"]
         nodes += compile_func_single_block(
             _init_df,
@@ -2768,6 +2766,12 @@ def _dtype_val_to_arr_type(t, func_name, loc):
             )
             return IntegerArrayType(dtype.dtype)
 
+        if t.startswith("Float"):  # pragma: no cover
+            dtype = bodo.libs.float_arr_ext.typeof_pd_float_dtype(
+                pd.api.types.pandas_dtype(t), None
+            )
+            return FloatingArrayType(dtype.dtype)
+
         # datetime64 case
         if t == "datetime64[ns]":
             return types.Array(types.NPDatetime("ns"), 1, "C")
@@ -2799,9 +2803,14 @@ def _dtype_val_to_arr_type(t, func_name, loc):
         return CategoricalArrayType(typ)
 
     # nullable int types
-    if isinstance(t, pd.core.arrays.integer._IntegerDtype):
+    if isinstance(t, pd.core.arrays.integer._IntegerDtype):  # pragma: no cover
         dtype = bodo.libs.int_arr_ext.typeof_pd_int_dtype(t, None)
         return IntegerArrayType(dtype.dtype)
+
+    # nullable float types
+    if isinstance(t, pd.core.arrays.floating.FloatingDtype):
+        dtype = bodo.libs.float_arr_ext.typeof_pd_float_dtype(t, None)
+        return FloatingArrayType(dtype.dtype)
 
     # try numpy dtypes
     try:
@@ -3068,7 +3077,9 @@ def _get_read_file_col_info(dtype_map, date_cols, col_names, lhs):
     return columns, data_arrs, out_types
 
 
-def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, loc):
+def _get_sql_types_arr_colnames(
+    sql_const, con_const, _bodo_read_as_dict, lhs, loc, is_independent: bool
+):
     """
     Wrapper function to determine the db_type, column names,
     array variables, array types, any column names
@@ -3080,7 +3091,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
     to type a SQL query.
     """
     # find db type
-    db_type, con_paswd = bodo.ir.sql_ext.parse_dbtype(con_const)
+    db_type, _ = sql_ext.parse_dbtype(con_const)
     # Whether SQL statement is SELECT query
     is_select_query = False
     # Does the SQL node have side effects (e.g. DELETE). If
@@ -3094,7 +3105,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
     # Ex. : Create, insert, update, delete, drop, ...
     # SELECT goes to full path of getting type, split across ranks, ...
     # Other will be executed by all ranks as it's.
-    # Snowflake+Bodo only supports SELECT
+    # Snowflake + Bodo only supports SELECT
     # Snowflake: Show and Describe don't work with get_dataset
     # Only supported by MySQL.
     # Oracle: cx_oracle doesn't support them. Bodo displays same error as Pandas.
@@ -3120,6 +3131,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
         converted_colnames,
         unsupported_columns,
         unsupported_arrow_types,
+        pyarrow_table_schema,
     ) = _get_sql_df_type_from_db(
         sql_const,
         con_const,
@@ -3128,6 +3140,7 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
         sql_word,
         _bodo_read_as_dict,
         loc,
+        is_independent,
     )
     dtypes = df_type.data
     dtype_map = {c: dtypes[i] for i, c in enumerate(df_type.columns)}
@@ -3153,11 +3166,19 @@ def _get_sql_types_arr_colnames(sql_const, con_const, _bodo_read_as_dict, lhs, l
         unsupported_arrow_types,
         is_select_query,
         has_side_effects,
+        pyarrow_table_schema,
     )
 
 
 def _get_sql_df_type_from_db(
-    sql_const, con_const, db_type, is_select_query, sql_word, _bodo_read_as_dict, loc
+    sql_const,
+    con_const,
+    db_type,
+    is_select_query,
+    sql_word,
+    _bodo_read_as_dict,
+    loc,
+    is_independent: bool,
 ):
     """access the database to find df type for read_sql() output.
     Only rank zero accesses the database, then broadcasts.
@@ -3187,224 +3208,79 @@ def _get_sql_df_type_from_db(
             )
             raise BodoError(message)
 
-    df_info = None
     message = ""
-    if bodo.get_rank() == 0:
+    df_type = None
+    converted_colnames = None
+    unsupported_columns = None
+    unsupported_arrow_types = None
+    pyarrow_table_schema = None
+
+    if bodo.get_rank() == 0 or is_independent:
         try:
-            # Any columns that had their name converted. These need to be reverted
-            # in any dead column elimination
-            converted_colnames = set()
-            rows_to_read = 100  # TODO: tune this
-            # SHOW/DESCRIBE don't work with LIMIT.
-            if not is_select_query:
-                sql_call = f"{sql_const}"
-            # oracle does not support LIMIT. Use ROWNUM instead
-            elif db_type == "oracle":
-                sql_call = f"select * from ({sql_const}) WHERE ROWNUM <= {rows_to_read}"
-            else:
-                sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
-
             if db_type == "snowflake":  # pragma: no cover
-                from bodo.io.snowflake import snowflake_connect
-
-                conn = snowflake_connect(con_const)
-
-                # Import after snowflake_connect since it should be safe now.
-                import snowflake.connector
-
-                cursor = conn.cursor()
-                described_query = cursor.describe(sql_call)
-                col_names = []
-                is_nullable = []
-                for x in described_query:
-                    col_names.append(x.name)
-                    is_nullable.append(x.is_nullable)
-                # TODO: Avoid executing the query once its possible to determine
-                # the exact arrow types.
-                if is_select_query:
-                    # We can only execute a sample query if we are performing a select.
-                    executed_query = cursor.execute(sql_call)
-                    arrow_data = executed_query.fetch_arrow_all()
-                else:
-                    arrow_data = None
-                if arrow_data is None:
-                    # If there is no data to load, construct the types
-                    # based on the metadata.
-                    pa_fields = [
-                        pa.field(
-                            x.name, bodo.io.snowflake.FIELD_TYPE_TO_PA_TYPE[x.type_code]
-                        )
-                        for x in described_query
-                    ]
-                else:
-                    pa_fields = [
-                        arrow_data.schema.field(i) for i in range(len(col_names))
-                    ]
-
-                col_types = []
-                unsupported_columns = []
-                unsupported_arrow_types = []
-                for i, c in enumerate(col_names):
-                    field = pa_fields[i]
-                    dtype, supported = _get_numba_typ_from_pa_typ(
-                        field,
-                        False,  # index_col
-                        is_nullable[i],  # nullable_from_metadata
-                        None,  # category_info
-                    )
-                    col_types.append(dtype)
-                    if not supported:
-                        unsupported_columns.append(i)
-                        # Store the unsupported arrow type for future
-                        # error messages.
-                        unsupported_arrow_types.append(field.type)
-
-                str_as_dict_cols = _bodo_read_as_dict if _bodo_read_as_dict else []
-                str_col_name_to_ind = {}
-                for i, t in enumerate(col_types):
-                    if t == string_array_type:
-                        str_col_name_to_ind[col_names[i]] = i
-
-                # Map the snowflake original column name to the name that
-                # is used from Python. This is used for comparing with
-                # _bodo_read_as_dict which will use Python's convention.
-                snowflake_case_map = {
-                    name.lower() if name.isupper() else name: name
-                    for name in str_col_name_to_ind.keys()
-                }
-
-                # If user-provided list has any columns that are not string
-                # type, show a warning.
-                non_str_columns_in_read_as_dict_cols = (
-                    str_as_dict_cols - snowflake_case_map.keys()
+                from bodo.io.snowflake import (
+                    get_schema,
+                    SF_READ_DICT_ENCODING_IF_TIMEOUT,
                 )
-                if len(non_str_columns_in_read_as_dict_cols) > 0:
-                    if bodo.get_rank() == 0:
-                        warnings.warn(
-                            BodoWarning(
-                                f"The following columns are not of datatype string and hence cannot be read with dictionary encoding: {non_str_columns_in_read_as_dict_cols}"
-                            )
-                        )
-                convert_dict_col_names = snowflake_case_map.keys() & str_as_dict_cols
-                for name in convert_dict_col_names:
-                    col_types[
-                        str_col_name_to_ind[snowflake_case_map[name]]
-                    ] = dict_str_arr_type
 
-                query_args, string_col_ind = [], []
-                undetermined_str_cols = snowflake_case_map.keys() - str_as_dict_cols
-                for name in undetermined_str_cols:
-                    # Always quote column names for correctness
-                    query_args.append(f'count (distinct "{snowflake_case_map[name]}")')
-                    string_col_ind.append(str_col_name_to_ind[snowflake_case_map[name]])
-
-                # determine if the string columns are dictionary encoded
-                try_dictionary_encode = (
-                    bodo.io.snowflake.SF_READ_AUTO_DICT_ENCODE_ENABLED
+                (
+                    df_type,
+                    converted_colnames,
+                    unsupported_columns,
+                    unsupported_arrow_types,
+                    pyarrow_table_schema,
+                    dict_encode_timeout,
+                ) = get_schema(
+                    con_const,
+                    sql_const,
+                    is_select_query,
+                    _bodo_read_as_dict,
                 )
-                if len(query_args) != 0 and try_dictionary_encode:
-                    # the criterion with which we determine whether to convert or not
-                    criterion = bodo.io.snowflake.SF_READ_DICT_ENCODE_CRITERION
 
-                    # the timeout for the probing query
-                    timeout = bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_TIMEOUT
+                # Log the chosen dict-encoding timeout behavior
+                if bodo.user_logging.get_verbose_level() >= 2 and dict_encode_timeout:
+                    probe_limit, query_args = dict_encode_timeout
 
-                    # what to do if there's a timeout
-                    encode_if_timeout = (
-                        bodo.io.snowflake.SF_READ_DICT_ENCODING_IF_TIMEOUT
+                    msg = (
+                        "Timeout occured during probing query at:\n%s\n"
+                        "Maximum number of rows queried: %d\n"
                     )
-
-                    # the limit on the number of rows total to read for the probe
-                    probe_limit = (
-                        bodo.io.snowflake.SF_READ_DICT_ENCODING_PROBE_ROW_LIMIT
-                    )
-                    probe_limit = max(probe_limit // len(query_args), 1)
-
-                    # construct the prediction query script for the string columns
-                    # in which we sample 1 percent of the data
-                    # upper bound limits the total amount of sampling that will occur
-                    # to prevent a hang/timeout
-                    predict_cardinality_call = (
-                        f"select count(*),{', '.join(query_args)}"
-                        f"from ( select * from ({sql_const}) limit {probe_limit} ) SAMPLE (1)"
-                    )
-
-                    prediction_query_timed_out = False
-                    try:
-                        prediction_query = cursor.execute(
-                            predict_cardinality_call, timeout=timeout
-                        )
-                    except snowflake.connector.errors.ProgrammingError as e:
-                        # Catch timeouts
-                        if "SQL execution canceled" in str(e):
-                            prediction_query_timed_out = True
-                        else:
-                            raise
-                    if prediction_query_timed_out:  # pragma: no cover
-                        # It is hard to get Snowflake to consistently
-                        # and deterministically time out, so this branch
-                        # isn't tested in the unit tests.
-
-                        # if the query times out, follow the default behavior set by
-                        # the SF_READ_DICT_ENCODING_IF_TIMEOUT flag
-                        if encode_if_timeout:
-                            for i in string_col_ind:
-                                col_types[i] = dict_str_arr_type
-
-                        # log the chosen behavior
-                        if bodo.user_logging.get_verbose_level() >= 2:
-                            msg = (
-                                "Timeout occured during probing query at:\n%s\n"
-                                "Maximum number of rows queried: %d\n"
-                            )
-                            if encode_if_timeout:
-                                msg += "The following columns will be dictionary encoded: %s\n"
-                            else:
-                                msg += "The following columns will not be dictionary encoded: %s\n"
-                            read_src = loc.strformat()
-                            string_col_names = ",".join(query_args)
-                            bodo.user_logging.log_message(
-                                "Dictionary Encoding Probe Query",
-                                msg,
-                                read_src,
-                                probe_limit,
-                                string_col_names,
-                            )
+                    if SF_READ_DICT_ENCODING_IF_TIMEOUT:
+                        msg += "The following columns will be dictionary encoded: %s\n"
                     else:
-                        cardinality_data = prediction_query.fetch_arrow_all()
-                        # calculate the level of uniqueness for each string column
-                        total_rows = cardinality_data[0][0].as_py()
-                        uniqueness = [
-                            cardinality_data[i][0].as_py() / max(total_rows, 1)
-                            for i in range(1, len(query_args) + 1)
-                        ]
-                        # filter the string col indices based on the criterion
-                        col_inds_to_convert = filter(
-                            lambda x: x[0] <= criterion, zip(uniqueness, string_col_ind)
+                        msg += (
+                            "The following columns will not be dictionary encoded: %s\n"
                         )
-                        for _, ind in col_inds_to_convert:
-                            col_types[ind] = dict_str_arr_type
+                    read_src = loc.strformat()
+                    string_col_names = ",".join(query_args)
+                    bodo.user_logging.log_message(
+                        "Dictionary Encoding Probe Query",
+                        msg,
+                        read_src,
+                        probe_limit,
+                        string_col_names,
+                    )
 
-                # Ensure column name case matches Pandas/sqlalchemy. See:
-                # https://github.com/snowflakedb/snowflake-sqlalchemy#object-name-case-handling
-                # If a name is returned as all uppercase by the Snowflake connector
-                # it means it is case insensitive or it was inserted as all
-                # uppercase with double quotes. In both of these situations
-                # pd.read_sql() returns the name with all lower case
-                new_colnames = []
-                for x in col_names:
-                    if x.isupper():
-                        converted_colnames.add(x.lower())
-                        new_colnames.append(x.lower())
-                    else:
-                        new_colnames.append(x)
-                df_type = DataFrameType(
-                    data=tuple(col_types), columns=tuple(new_colnames)
-                )
             else:
+                # Any columns that had their name converted. These need to be reverted
+                # in any dead column elimination
+                converted_colnames = set()
+                rows_to_read = 100  # TODO: tune this
+                # SHOW/DESCRIBE don't work with LIMIT.
+                if not is_select_query:
+                    sql_call = f"{sql_const}"
+                # oracle does not support LIMIT. Use ROWNUM instead
+                elif db_type == "oracle":
+                    sql_call = (
+                        f"select * from ({sql_const}) WHERE ROWNUM <= {rows_to_read}"
+                    )
+                else:
+                    sql_call = f"select * from ({sql_const}) x LIMIT {rows_to_read}"
+
                 # Unsupported arrow columns is unused by other paths.
                 unsupported_columns = []
                 unsupported_arrow_types = []
+                pyarrow_table_schema = None
                 # MySQL+DESCRIBE: has fixed DataFrameType. Created upfront.
                 # SHOW has many variation depending on object to show
                 # so it will fall in the else-stmt
@@ -3440,37 +3316,43 @@ def _get_sql_df_type_from_db(
             # int for example, but later rows could have NAs
             # Q: Is this needed for snowflake?
             df_type = to_nullable_type(df_type)
-            df_info = (
+
+        except Exception as e:
+            message = f"{type(e).__name__}:'{e}'"
+
+    if not is_independent:
+        message = comm.bcast(message)
+    raise_error = bool(message)
+    if raise_error:
+        common_err_msg = f"pd.read_sql(): Error executing query `{sql_const}`."
+        # raised general exception since except checks for multiple exceptions (sqlalchemy, snowflake)
+        raise RuntimeError(f"{common_err_msg}\n{message}")
+
+    if not is_independent:
+        (
+            df_type,
+            converted_colnames,
+            unsupported_columns,
+            unsupported_arrow_types,
+            pyarrow_table_schema,
+        ) = comm.bcast(
+            (
                 df_type,
                 converted_colnames,
                 unsupported_columns,
                 unsupported_arrow_types,
+                pyarrow_table_schema,
             )
-        except Exception as e:
-            message = f"{type(e).__name__}:'{e}'"
+        )
+    df_type = df_type.copy(data=tuple(t for t in df_type.data))
 
-    raise_error = bool(message)
-    # check if more than 1 rank, then propagate the error to raise on all ranks.
-    if bodo.get_size() > 1:
-        comm = MPI.COMM_WORLD
-        raise_error = comm.allreduce(raise_error, op=MPI.LOR)
-    if raise_error:
-        common_err_msg = f"pd.read_sql(): Error executing query `{sql_const}`."
-        # raised general exception since except checks for multiple exceptions (sqlalchemy, snowflake)
-        if message:
-            raise RuntimeError(f"{common_err_msg}\n{message}")
-        else:
-            raise RuntimeError(
-                f"{common_err_msg}\nPlease refer to errors on other ranks."
-            )
-    (
+    return (
         df_type,
         converted_colnames,
         unsupported_columns,
         unsupported_arrow_types,
-    ) = comm.bcast(df_info)
-    df_type = df_type.copy(data=tuple(t for t in df_type.data))
-    return df_type, converted_colnames, unsupported_columns, unsupported_arrow_types
+        pyarrow_table_schema,
+    )
 
 
 def _check_storage_options(storage_options, func_name, rhs):
@@ -3621,13 +3503,6 @@ def _get_csv_df_type_from_file(
         )
 
     return df_type_or_e
-
-
-def _check_type(val, typ):
-    """check whether "val" is of type "typ", or any type in "typ" if "typ" is a list"""
-    if isinstance(typ, list):
-        return any(isinstance(val, t) for t in typ)
-    return isinstance(val, typ)
 
 
 def _check_int_list(list_val):

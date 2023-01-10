@@ -1,6 +1,7 @@
 package com.bodo.iceberg;
 
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -18,8 +19,11 @@ import org.apache.iceberg.types.Types;
 public class DataFileInfo {
 
   private final String path;
+
   // file size in bytes
   private final long size;
+
+  @SerializedName("record_count")
   private final long recordCount;
 
   DataFileInfo(String path, long size, long recordCount) {

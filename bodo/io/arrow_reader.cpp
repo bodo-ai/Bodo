@@ -3,11 +3,13 @@
 // Implementation of ArrowDataframeReader, ColumnBuilder subclasses and
 // helper code to read Arrow data into Bodo.
 
-#include "arrow_reader.h"
+#include <arrow/compute/api.h>
+
 #include "../libs/_array_utils.h"
 #include "../libs/_datetime_ext.h"
 #include "../libs/_datetime_utils.h"
 #include "../libs/_distributed.h"
+#include "arrow_reader.h"
 
 using arrow::Type;
 
@@ -349,6 +351,19 @@ class PrimitiveBuilder : public TableBuilder::BuilderColumn {
         dtype_size = numpy_item_size[out_array->dtype];
     }
 
+    PrimitiveBuilder(Bodo_CTypes::CTypeEnum dtype, int64_t length,
+                     bool is_nullable, bool is_categorical)
+        : is_nullable(is_nullable), is_categorical(is_categorical) {
+        if (is_nullable)
+            out_array =
+                alloc_array(length, -1, -1, bodo_array_type::NULLABLE_INT_BOOL,
+                            dtype, 0, -1);
+        else
+            out_array = alloc_array(length, -1, -1, bodo_array_type::NUMPY,
+                                    dtype, 0, -1);
+        dtype_size = numpy_item_size[out_array->dtype];
+    }
+
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         std::shared_ptr<arrow::DataType> arrow_type = chunked_arr->type();
 
@@ -409,6 +424,8 @@ class StringBuilder : public TableBuilder::BuilderColumn {
      */
     StringBuilder(std::shared_ptr<arrow::DataType> type)
         : dtype(arrow_to_bodo_type(type)) {}
+
+    StringBuilder(Bodo_CTypes::CTypeEnum dtype) : dtype(dtype) {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // XXX hopefully keeping the string arrays around doesn't prevent other
@@ -536,6 +553,8 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
         }
     }
 
+    DictionaryEncodedStringBuilder(int64_t length) : length(length) {}
+
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // Store the chunks
         this->all_chunks.insert(this->all_chunks.end(),
@@ -616,24 +635,10 @@ class DictionaryEncodedStringBuilder : public TableBuilder::BuilderColumn {
     arrow::ArrayVector all_chunks;
 };
 
-// C++20 magic to support "heterogeneous" access to unordered containers
-// makes the key "transparent", allowing std::string_view to be used similar to
-// std::string https://www.cppstories.com/2021/heterogeneous-access-cpp20/
-struct string_hash {
-    using is_transparent = void;
-    [[nodiscard]] size_t operator()(const char* txt) const {
-        return std::hash<std::string_view>{}(txt);
-    }
-    [[nodiscard]] size_t operator()(std::string_view txt) const {
-        return std::hash<std::string_view>{}(txt);
-    }
-    [[nodiscard]] size_t operator()(const std::string& txt) const {
-        return std::hash<std::string>{}(txt);
-    }
-};
-
 /// Column builder for constructing dictionary-encoded string arrays from string
 /// arrays
+/// TODO: Minimize duplicated code and shared logic from str_to_dict_str_array
+/// function in _str_ext.cpp
 class DictionaryEncodedFromStringBuilder : public TableBuilder::BuilderColumn {
    public:
     /**
@@ -770,6 +775,10 @@ class ListStringBuilder : public TableBuilder::BuilderColumn {
         string_builder = new StringBuilder(type->field(0)->type());
     }
 
+    ListStringBuilder(Bodo_CTypes::CTypeEnum dtype) {
+        string_builder = new StringBuilder(dtype);
+    }
+
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // get child (StringArray) chunks and pass them to StringBuilder
         arrow::ArrayVector child_chunks;
@@ -847,6 +856,7 @@ class ArrowBuilder : public TableBuilder::BuilderColumn {
      * @param type : Arrow type of input array
      */
     ArrowBuilder(std::shared_ptr<arrow::DataType> type) {}
+    ArrowBuilder() {}
 
     virtual void append(std::shared_ptr<::arrow::ChunkedArray> chunked_arr) {
         // XXX hopefully keeping the arrays around doesn't prevent other
@@ -945,6 +955,31 @@ TableBuilder::TableBuilder(std::shared_ptr<arrow::Schema> schema,
     }
 }
 
+TableBuilder::TableBuilder(table_info* table, const int64_t num_rows) {
+    for (array_info* arr : table->columns) {
+        if (arr->arr_type == bodo_array_type::NULLABLE_INT_BOOL) {
+            columns.push_back(
+                new PrimitiveBuilder(arr->dtype, num_rows, true, false));
+        } else if (arr->arr_type == bodo_array_type::NUMPY) {
+            columns.push_back(
+                new PrimitiveBuilder(arr->dtype, num_rows, false, false));
+        } else if (arr->arr_type == bodo_array_type::CATEGORICAL) {
+            columns.push_back(
+                new PrimitiveBuilder(arr->dtype, num_rows, false, true));
+        } else if (arr->arr_type == bodo_array_type::DICT) {
+            columns.push_back(new DictionaryEncodedStringBuilder(num_rows));
+        } else if (arr->arr_type == bodo_array_type::STRING) {
+            columns.push_back(new StringBuilder(arr->dtype));
+        } else if (arr->arr_type == bodo_array_type::LIST_STRING) {
+            columns.push_back(new ListStringBuilder(arr->dtype));
+        } else if (arr->arr_type == bodo_array_type::ARROW) {
+            columns.push_back(new ArrowBuilder());
+        } else {
+            throw std::runtime_error("TableBuilder: data type not supported");
+        }
+    }
+}
+
 void TableBuilder::append(std::shared_ptr<::arrow::Table> table) {
     // NOTE table could be sliced, so the column builders need to take into
     // account the offset and length attributes of the Arrow arrays in the
@@ -968,7 +1003,6 @@ void ArrowDataframeReader::init_arrow_reader(
     gil_held = true;
 
     PyObject* ds = get_dataset();
-    schema = get_schema(ds);
 
     create_dict_encoding_from_strings = create_dict_from_string;
     for (auto i : str_as_dict_cols) {
@@ -1128,4 +1162,66 @@ void ArrowDataframeReader::init_arrow_reader(
         ev.add_attribute("g_total_rows", total_rows);
     }
     initialized = true;
+}
+
+std::shared_ptr<arrow::Table> ArrowDataframeReader::cast_arrow_table(
+    std::shared_ptr<arrow::Table> table) {
+    if (!table->schema()->Equals(this->schema)) {
+        arrow::ChunkedArrayVector new_cols;
+        for (int i = 0; i < table->num_columns(); i++) {
+            // We should do a quick check to ensure that we only perform
+            // upcasting and no nullability changes
+            auto col = table->column(i);
+
+            auto exp_type = this->schema->field(i)->type();
+            auto exp_nullable = this->schema->field(i)->nullable();
+            auto act_type = col->type();
+            auto act_nullable = table->schema()->field(i)->nullable();
+
+            // Either
+            // 1) Expected nullable and actually nullable
+            // 2) Expected not nullable and actually not nullable
+            // 3) Expected nullable and actually not nullable
+            auto nullable_eq = exp_nullable == act_nullable || !act_nullable;
+            // TableBuilder currently will allow for nullable floating-point or
+            // timestamp arrays to be appended to non-nullable variants (by
+            // converting NA to NaN or NaT) Thus, we shouldn't bother checking
+            // for nullability in these cases
+            if (exp_type->id() == Type::FLOAT ||
+                exp_type->id() == Type::DOUBLE ||
+                exp_type->id() == Type::TIMESTAMP)
+                nullable_eq = true;
+
+            if (act_type->Equals(exp_type) && nullable_eq) {
+                new_cols.push_back(col);
+
+                // Dont bother checking if types are compatible, should
+                // be done at compile-time. Only sizes can change
+            } else if (act_type->bit_width() < exp_type->bit_width() &&
+                       nullable_eq) {
+                // bit-width is we-defined for all types with a fixed width. For
+                // other types, such as strings it's always set to -1, and hence
+                // should be safe to compare.
+                // (https://arrow.apache.org/docs/cpp/api/datatype.html#_CPPv4NK5arrow8DataType9bit_widthEv)
+
+                auto res = arrow::compute::Cast(col, exp_type);
+                // TODO: Use std::format after fixing C++ compiler errors
+                CHECK_ARROW(res.status(),
+                            "Unable to upcast from " + col->type()->ToString() +
+                                " to " + exp_type->ToString() +
+                                " before appending to TableBuilder");
+                auto casted_datum = res.ValueOrDie();
+                new_cols.push_back(casted_datum.chunked_array());
+
+            } else {
+                // TODO: Use std::format after fixing C++ compiler errors
+                throw std::runtime_error("Invalid Downcast from " +
+                                         col->type()->ToString() + " to " +
+                                         exp_type->ToString());
+            }
+        }
+        table = arrow::Table::Make(this->schema, new_cols, table->num_rows());
+    }
+
+    return table;
 }

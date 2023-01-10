@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
 from bodo.tests.utils import check_func, generate_comparison_ops_func
 
 
@@ -222,3 +223,130 @@ def test_binary_dataframe_apply(binary_arr_value, memory_leak_check):
         test_impl,
         (df,),
     )
+
+
+# Binary setitem tests. Modified from their counterparts in test_string_array.py
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(np.array([b"IJ"] * 5, object), id="array"),
+        pytest.param([b"IJ"] * 5, id="list"),
+        pytest.param(b"IJ", id="scalar"),
+    ],
+)
+def setitem_val(request):
+    return request.param
+
+
+@pytest.mark.slow
+def test_setitem_slice(memory_leak_check, setitem_val):
+    """
+    Test operator.setitem with a slice index. String arrays
+    should only have setitem used during initialization, so
+    we create a new string array in the test.
+    """
+
+    def test_impl(val):
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(8, -1)
+        A[0] = b"Afdhui"
+        A[1] = b"CD"
+        A[2:7] = val
+        A[7] = b"GH"
+        return A
+
+    py_output = np.array([b"Afdhui", b"CD"] + [b"IJ"] * 5 + [b"GH"], object)
+    check_func(test_impl, (setitem_val,), dist_test=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_setitem_slice_optional(memory_leak_check, setitem_val):
+    """
+    Test operator.setitem with a slice index and an optional type.
+    String arrays should only have setitem used during
+    initialization, so we create a new string array in the test.
+    """
+
+    def test_impl(val, flag):
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(8, -1)
+        A[0] = b"AB"
+        A[1] = b"CD"
+        if flag:
+            A[2:7] = val
+        else:
+            A[2:7] = None
+        A[7] = b"GH"
+        return A
+
+    py_output_flag = np.array([b"AB", b"CD"] + [b"IJ"] * 5 + [b"GH"], object)
+    py_output_no_flag = np.array([b"AB", b"CD"] + [None] * 5 + [b"GH"], object)
+
+    check_func(
+        test_impl, (setitem_val, True), dist_test=False, py_output=py_output_flag
+    )
+    check_func(
+        test_impl, (setitem_val, False), dist_test=False, py_output=py_output_no_flag
+    )
+
+
+@pytest.mark.slow
+def test_setitem_slice_none(memory_leak_check):
+    """
+    Test operator.setitem with a slice index and None.
+    String arrays should only have setitem used during
+    initialization, so we create a new string array in the test.
+    """
+
+    def test_impl():
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(8, -1)
+        A[0] = b"AB"
+        A[1] = b"CD"
+        A[2:7] = None
+        A[7] = b"GH"
+        return A
+
+    py_output = np.array([b"AB", b"CD"] + [None] * 5 + [b"GH"], object)
+    check_func(test_impl, (), dist_test=False, py_output=py_output)
+
+
+@pytest.mark.smoke
+def test_setitem_int(memory_leak_check):
+    def test_impl(A, idx, val):
+        A[idx] = val
+        return A
+
+    A = np.array([b"AB", b"", b"121", np.nan, b"abcd", bytes(3)], object)
+    idx = 2
+    val = b"212"  # same size as element 2 but different value
+    check_func(test_impl, (A, idx, val), copy_input=True)
+
+
+@pytest.mark.slow
+def test_setitem_none_int(memory_leak_check):
+    def test_impl(n, idx):
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(n, n - 1)
+        for i in range(n):
+            if i == idx:
+                A[i] = None
+                continue
+            A[i] = b"A"
+        return A
+
+    py_output = np.array([b"A", None] + [b"A"] * 6, object)
+    check_func(test_impl, (8, 1), copy_input=True, dist_test=False, py_output=py_output)
+
+
+@pytest.mark.slow
+def test_setitem_optional_int(memory_leak_check):
+    def test_impl(n, idx):
+        A = bodo.libs.str_arr_ext.pre_alloc_binary_array(n, n - 1)
+        for i in range(n):
+            if i == idx:
+                value = None
+            else:
+                value = b"A"
+            A[i] = value
+        return A
+
+    py_output = np.array([b"A", None] + [b"A"] * 6, object)
+    check_func(test_impl, (8, 1), copy_input=True, dist_test=False, py_output=py_output)

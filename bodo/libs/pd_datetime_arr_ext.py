@@ -19,6 +19,7 @@ from numba.extending import (
     overload,
     overload_attribute,
     overload_method,
+    register_jitable,
     register_model,
     typeof_impl,
     unbox,
@@ -49,6 +50,57 @@ class PandasDatetimeTZDtype(types.Type):
             )
         self.tz = tz
         super(PandasDatetimeTZDtype, self).__init__(name=f"PandasDatetimeTZDtype[{tz}]")
+
+
+register_model(PandasDatetimeTZDtype)(models.OpaqueModel)
+
+
+@lower_constant(PandasDatetimeTZDtype)
+def lower_constant_pd_datetime_tz_dtype(context, builder, typ, pyval):
+    return context.get_dummy_value()
+
+
+@box(PandasDatetimeTZDtype)
+def box_pd_datetime_tzdtype(typ, val, c):
+    mod_name = c.context.insert_const_string(c.builder.module, "pandas")
+    pd_class_obj = c.pyapi.import_module_noblock(mod_name)
+    # Create the timezone type.
+    unit_str = c.context.get_constant_generic(c.builder, types.unicode_type, "ns")
+    # No need to incref because unit_str is a constant
+    unit_str_obj = c.pyapi.from_native_value(
+        types.unicode_type, unit_str, c.env_manager
+    )
+    if isinstance(typ.tz, str):
+        tz_str = c.context.get_constant_generic(c.builder, types.unicode_type, typ.tz)
+        # No need to incref because tz_str is a constant
+        tz_arg_obj = c.pyapi.from_native_value(
+            types.unicode_type, tz_str, c.env_manager
+        )
+    else:
+        # We store ns, but the Fixed offset constructor takes minutes.
+        offset = nanoseconds_to_offset(typ.tz)
+        tz_arg_obj = c.pyapi.unserialize(c.pyapi.serialize_object(offset))
+
+    res = c.pyapi.call_method(
+        pd_class_obj, "DatetimeTZDtype", (unit_str_obj, tz_arg_obj)
+    )
+    c.pyapi.decref(unit_str_obj)
+    c.pyapi.decref(tz_arg_obj)
+    c.pyapi.decref(pd_class_obj)
+    # decref() should be called on native value
+    # see https://github.com/numba/numba/blob/13ece9b97e6f01f750e870347f231282325f60c3/numba/core/boxing.py#L389
+    c.context.nrt.decref(c.builder, typ, val)
+    return res
+
+
+@unbox(PandasDatetimeTZDtype)
+def unbox_pd_datetime_tzdtype(typ, val, c):
+    return NativeValue(c.context.get_dummy_value())
+
+
+@typeof_impl.register(pd.DatetimeTZDtype)
+def typeof_pd_int_dtype(val, c):
+    return PandasDatetimeTZDtype(val.tz)
 
 
 def get_pytz_type_info(pytz_type):
@@ -252,7 +304,7 @@ def alloc_pd_datetime_array_equiv(self, scope, equiv_set, loc, args, kws):
     """Array analysis function for alloc_pd_datetime_array() passed to Numba's array analysis
     extension. Assigns output array's size as equivalent to the input size variable.
     """
-    assert len(args) == 1 and not kws
+    assert len(args) == 2 and not kws
     return ArrayAnalysis.AnalyzeResult(shape=args[0], pre=[])
 
 
@@ -315,6 +367,17 @@ def overload_pd_datetime_tz_convert(A):
     return impl
 
 
+@overload_attribute(DatetimeArrayType, "dtype", no_unliteral=True)
+def overload_pd_datetime_dtype(A):
+    tz = A.tz
+    dtype = pd.DatetimeTZDtype("ns", tz)
+
+    def impl(A):  # pragma: no cover
+        return dtype
+
+    return impl
+
+
 @overload(operator.getitem, no_unliteral=True)
 def overload_getitem(A, ind):
     if not isinstance(A, DatetimeArrayType):
@@ -330,11 +393,16 @@ def overload_getitem(A, ind):
 
         return impl
 
-    # bool arr indexing
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    # bool arr indexing. Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if (
+        ind != bodo.boolean_array
+        and is_list_like_index_type(ind)
+        and ind.dtype == types.bool_
+    ):
 
         def impl_bool(A, ind):  # pragma: no cover
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind = bodo.utils.conversion.coerce_to_array(ind)
             new_data = ensure_contig_if_np(A._data[ind])
             return init_pandas_datetime_array(new_data, tz)
 
@@ -344,7 +412,7 @@ def overload_getitem(A, ind):
     if is_list_like_index_type(ind) and isinstance(ind.dtype, types.Integer):
 
         def impl_int_arr(A, ind):  # pragma: no cover
-            ind = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind = bodo.utils.conversion.coerce_to_array(ind)
             new_data = ensure_contig_if_np(A._data[ind])
             return init_pandas_datetime_array(new_data, tz)
 
@@ -359,9 +427,12 @@ def overload_getitem(A, ind):
 
         return impl_slice
 
-    raise BodoError(
-        "operator.getitem with DatetimeArrayType is only supported with an integer index, int arr, boolean array, or slice."
-    )
+    # This should be the only DatetimeArray implementation
+    # except for converting a Nullable boolean index to non-nullable.
+    if ind != bodo.boolean_array:  # pragma: no cover
+        raise BodoError(
+            "operator.getitem with DatetimeArrayType is only supported with an integer index, int arr, boolean array, or slice."
+        )
 
 
 @overload(operator.setitem, no_unliteral=True)
@@ -500,3 +571,103 @@ def create_cmp_op_overload_arr(op):
             )
 
     return overload_datetime_arr_cmp
+
+
+def overload_add_operator_datetime_arr(lhs, rhs):
+    """
+    Implementation for the supported add operations on Timezone-Aware data.
+    This function is called from an overload, so it returns an overload.
+    This is used for lhs + rhs.
+
+    Either lhs or rhs is assumed to be a DatetimeArrayType based on how this
+    function is used.
+
+    Args:
+        lhs (types.Type): Bodo type to add. Either (DatetimeArrayType or week_type)
+        rhs (types.Type): Bodo type to add. Either (DatetimeArrayType or week_type)
+
+    Raises:
+        BodoError: If operator.add is not supported between DatetimeArrayType and the other type.
+
+    Returns:
+        func: An implementation function that would be returned from an overload
+    """
+    if isinstance(lhs, DatetimeArrayType):
+        # TODO: Support more types
+        if rhs == bodo.week_type:
+            tz_literal = lhs.tz
+
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(lhs)
+                out_arr = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                    n, tz_literal
+                )
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(lhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = lhs[i] + rhs
+                return out_arr
+
+            return impl
+
+        else:
+            raise BodoError(
+                f"add operator not supported between Timezone-aware timestamp and {rhs}. Please convert to timezone naive with ts.tz_convert(None)"
+            )
+    else:
+        # Note this function is only called if at least one input is a DatetimeArrayType
+        # TODO: Support more types
+        if lhs == bodo.week_type:
+
+            tz_literal = rhs.tz
+
+            def impl(lhs, rhs):  # pragma: no cover
+                numba.parfors.parfor.init_prange()
+                n = len(rhs)
+                out_arr = bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(
+                    n, tz_literal
+                )
+                for i in numba.parfors.parfor.internal_prange(n):
+                    if bodo.libs.array_kernels.isna(rhs, i):
+                        bodo.libs.array_kernels.setna(out_arr, i)
+                    else:
+                        out_arr[i] = lhs + rhs[i]
+                return out_arr
+
+            return impl
+
+        else:
+            raise BodoError(
+                f"add operator not supported between {lhs} and Timezone-aware timestamp. Please convert to timezone naive with ts.tz_convert(None)"
+            )
+
+
+@register_jitable
+def convert_months_offset_to_days(
+    curr_year, curr_month, curr_day, num_months
+):  # pragma: no cover
+    """Converts the number of months to move forward from a current
+    year, month, and day into a Timedelta with the appropriate number of days.
+    This is used to convert a DateOffset of only months into an equivalent
+    pd.Timedelta for us in BodoSQL array kernels
+
+    Args:
+        curr_year (types.int64): Current year number
+        curr_month (types.int64): Current month number (1-12)
+        curr_day (types.int64): Current day number (1-31)
+        num_months (types.int64): Number of months to add (either + or -)
+    """
+    # Account for the 1-indexing in computing the new month
+    month_total = (curr_month + num_months) - 1
+    new_month = (month_total % 12) + 1
+    num_years = month_total // 12
+    new_year = curr_year + num_years
+    # Make sure the day is still valid in this month, otherwise we truncate
+    # to the last day of the month.
+    max_day = bodo.hiframes.pd_timestamp_ext.get_days_in_month(new_year, new_month)
+    new_day = min(max_day, curr_day)
+    curr_ts = pd.Timestamp(year=curr_year, month=curr_month, day=curr_day)
+    new_ts = pd.Timestamp(year=new_year, month=new_month, day=new_day)
+    return new_ts - curr_ts

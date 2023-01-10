@@ -33,15 +33,15 @@ public class SnowflakeGenTest {
     // Add a local table to also resolve
     ArrayList arr = new ArrayList();
     BodoSQLColumn.BodoSQLColumnDataType dataType = BodoSQLColumn.BodoSQLColumnDataType.INT64;
-    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataType);
+    BodoSQLColumnImpl column = new BodoSQLColumnImpl("A", dataType, true);
     arr.add(column);
-    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataType);
+    BodoSQLColumnImpl column2 = new BodoSQLColumnImpl("D", dataType, true);
     arr.add(column2);
-    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType);
+    BodoSQLColumnImpl column3 = new BodoSQLColumnImpl("C", dataType, true);
     arr.add(column3);
 
     BodoSqlTable table =
-        new LocalTableImpl("localtable", schema, arr, false, "localtable", "", false);
+        new LocalTableImpl("localtable", schema, arr, false, "", "", false, "MEMORY");
     schema.addTable(table);
 
     RelationalAlgebraGenerator generator =

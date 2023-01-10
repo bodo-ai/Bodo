@@ -1246,8 +1246,7 @@ class DistributedAnalysis:
             self._analyze_call_np(lhs, func_name, args, kws, array_dists, rhs.loc)
             return
 
-        # cummin/cummax (absent from numpy)
-        if func_mod == "bodo.libs.array_kernels" and func_name in {"cummin", "cummax"}:
+        if fdef == ("accum_func", "bodo.libs.array_kernels"):
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
@@ -1584,7 +1583,10 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
-        if func_name in broadcasted_fixed_arg_functions:
+        if (
+            func_name in broadcasted_fixed_arg_functions
+            and func_mod == "bodo.libs.bodosql_array_kernels"
+        ):
             # All of the arguments could be scalars or arrays, but all of the
             # arrays need to meet one another
             arrays = [lhs]
@@ -1595,7 +1597,10 @@ class DistributedAnalysis:
                 self._meet_several_array_dists(arrays, array_dists)
             return
 
-        if func_name in broadcasted_variadic_functions:
+        if (
+            func_name in broadcasted_variadic_functions
+            and func_mod == "bodo.libs.bodosql_array_kernels"
+        ):
             # Note: this will fail if the tuple argument is not constant,
             # but this should never happen because we control code generation
             elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
@@ -1609,6 +1614,46 @@ class DistributedAnalysis:
                     arrays.append(arg.name)
             if len(arrays) > 1:
                 self._meet_several_array_dists(arrays, array_dists)
+            return
+
+        if fdef == ("concat_ws", "bodo.libs.bodosql_array_kernels"):
+            # Note: this will fail if the tuple argument is not constant,
+            # but this should never happen because we control code generation
+            elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
+            assert (
+                elems is not None
+            ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
+
+            arrays = [lhs]
+            for arg in elems:
+                if is_array_typ(self.typemap[arg.name]):
+                    arrays.append(arg.name)
+            # Get the information about the separator
+            sep_name = rhs.args[1].name
+            if is_array_typ(self.typemap[sep_name]):
+                arrays.append(sep_name)
+            if len(arrays) > 1:
+                self._meet_several_array_dists(arrays, array_dists)
+            return
+
+        if fdef == ("is_in", "bodo.libs.bodosql_array_kernels"):
+
+            # Case 1: DIST DIST -> DIST, is_parallel=True
+            # Case 2: REP  REP  -> REP, is_parallel=False
+            # Case 3: DIST REP  -> DIST, is_parallel=False
+            # Case 4: REP  DIST:   Banned by construction
+            if is_array_typ(self.typemap[rhs.args[0].name]):
+                # If the input array is distributed, then the output
+                # must be an array with matching distribution
+                assert is_array_typ(self.typemap[lhs])
+                new_dist = self._meet_array_dists(rhs.args[0].name, lhs, array_dists)
+
+            assert is_array_typ(self.typemap[rhs.args[1].name])
+
+            # if arg0 is replicated, then we must force arg1 to be replicated as well
+            if is_REP(array_dists.get(rhs.args[0].name, None)):
+                self._set_REP(rhs.args[1].name, array_dists)
+
             return
 
         # I've confirmed that this actually runs on currently nightly, but we never hit it since
@@ -1644,15 +1689,20 @@ class DistributedAnalysis:
             return
 
         if fdef == ("array_isin", "bodo.libs.array"):
+            # Case 1: DIST DIST -> DIST, is_parallel=True
+            # Case 2: REP  REP  -> REP, is_parallel=False
+            # Case 3: DIST REP  -> DIST, is_parallel=False
+            # Case 4: REP  DIST:   Banned by construction
+
             # out_arr and in_arr should have the same distribution
             new_dist = self._meet_array_dists(
                 rhs.args[0].name, rhs.args[1].name, array_dists
             )
-            # values array can be distributed only if input is distributed
-            new_dist = Distribution(
-                min(new_dist.value, array_dists[rhs.args[2].name].value)
-            )
-            array_dists[rhs.args[2].name] = new_dist
+
+            # if the input is replicated, then we must force the values  to be replicated as well
+            if is_REP(new_dist) and _is_1D_or_1D_Var_arr(rhs.args[2].name, array_dists):
+                self._set_REP(rhs.args[2].name, array_dists)
+
             return
         if fdef == ("get_search_regex", "bodo.libs.array"):
             # out_arr and in_arr should have the same distribution
@@ -2061,6 +2111,13 @@ class DistributedAnalysis:
             self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
+        if func_mod == "bodo.libs.float_arr_ext" and func_name in (
+            "get_float_arr_data",
+            "get_float_arr_bitmap",
+        ):
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            return
+
         if func_mod == "bodo.libs.bool_arr_ext" and func_name in (
             "get_bool_arr_data",
             "get_bool_arr_bitmap",
@@ -2082,6 +2139,11 @@ class DistributedAnalysis:
             return
 
         if fdef == ("set_bit_to_arr", "bodo.libs.int_arr_ext"):
+            return
+
+        if fdef == ("iceberg_merge_cow_py", "bodo.io.iceberg"):
+            # iceberg_merge_cow_py doesn't have a return value
+            # or alter the distribution of any input.
             return
 
         # add proper diagnostic info for tuple/list to array since usually happens
@@ -2333,6 +2395,15 @@ class DistributedAnalysis:
             array_dists[rhs.args[0].name] = new_dist
             return
 
+        if fdef == ("init_float_array", "bodo.libs.float_arr_ext"):
+            # lhs, data, and bitmap should have the same distribution
+            new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
+            new_dist = self._meet_array_dists(
+                lhs, rhs.args[1].name, array_dists, new_dist
+            )
+            array_dists[rhs.args[0].name] = new_dist
+            return
+
         if fdef == ("init_bool_array", "bodo.libs.bool_arr_ext"):
             # lhs, data, and bitmap should have the same distribution
             new_dist = self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
@@ -2445,6 +2516,9 @@ class DistributedAnalysis:
         if fdef == ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"):
             return
 
+        if fdef == ("copy_array_element", "bodo.libs.array_kernels"):
+            return
+
         if fdef == ("str_arr_setitem_int_to_str", "bodo.libs.str_arr_ext"):
             return
 
@@ -2455,6 +2529,11 @@ class DistributedAnalysis:
             return
 
         if fdef == ("set_null_bits_to_value", "bodo.libs.str_arr_ext"):
+            return
+
+        if fdef == ("str_arr_to_dict_str_arr", "bodo.libs.str_arr_ext"):
+            # LHS should match RHS
+            self._meet_array_dists(lhs, rhs.args[0].name, array_dists)
             return
 
         if fdef == ("array_op_describe", "bodo.libs.array_ops"):
@@ -4345,6 +4424,9 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                         if fdef == ("inplace_eq", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
+                        if fdef == ("copy_array_element", "bodo.libs.array_kernels"):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
+                            accesses.add((rhs.args[2].name, rhs.args[3].name, False))
                         if fdef == ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, False))
                             accesses.add((rhs.args[2].name, rhs.args[3].name, False))

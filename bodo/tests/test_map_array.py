@@ -108,9 +108,7 @@ def test_map_apply_simple(memory_leak_check):
     )
     check_func(impl, (df,))
 
-# https://dev.azure.com/bodo-inc/Bodo/_test/analytics?definitionId=5&contextType=build
-# test_map_apply on average takes 11.34 min, or 680.4 seconds
-@pytest.mark.timeout(1000)
+
 def test_map_apply(memory_leak_check):
     """
     Test creating a MapArray from Series.apply.

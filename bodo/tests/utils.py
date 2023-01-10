@@ -1,6 +1,7 @@
-"""Utility functions for testing such as check_func() that tests a function.
-"""
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
+"""
+Utility functions for testing such as check_func() that tests a function.
+"""
 import io
 import os
 import random
@@ -11,7 +12,8 @@ import warnings
 from contextlib import contextmanager
 from decimal import Decimal
 from enum import Enum
-from typing import Dict
+from typing import Dict, Generator, TypeVar
+from urllib.parse import urlencode
 from uuid import uuid4
 
 import numba
@@ -186,6 +188,7 @@ def check_func(
     - use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
     format for testing.
     If None, tests both formats if input arguments have string arrays.
+    - check_typing_issues:
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
@@ -222,6 +225,10 @@ def check_func(
         and is_out_distributed is not False
     ):
         run_seq = False
+
+    # convert float input to nullable float to test new nullable float functionality
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        args = convert_to_nullable_float(args)
 
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     w = None
@@ -302,7 +309,7 @@ def check_func(
         if not dist_test:
             return
 
-        if is_out_distributed is None:
+        if is_out_distributed is None and py_output is not pd.NA:
             # assume all distributable output is distributed if not specified
             py_out_typ = _typeof(py_output)
             is_out_distributed = is_distributable_typ(
@@ -431,6 +438,33 @@ def check_func(
             use_table_format=True if use_table_format is None else use_table_format,
             use_dict_encoded_strings=True,
         )
+
+
+def convert_to_nullable_float(arg):
+    """Convert float array/Series/DataFrame to nullable float"""
+    # tuple
+    if isinstance(arg, tuple):
+        return tuple(convert_to_nullable_float(a) for a in arg)
+
+    # Numpy float array
+    if (
+        isinstance(arg, np.ndarray)
+        and arg.dtype in (np.float32, np.float64)
+        and arg.ndim == 1
+    ):
+        return pd.array(arg)
+
+    # Series with float data
+    if isinstance(arg, pd.Series) and arg.dtype in (np.float32, np.float64):
+        return arg.astype("Float32" if arg.dtype == np.float32 else "Float64")
+
+    # DataFrame float columns
+    if isinstance(arg, pd.DataFrame) and any(
+        a in (np.float32, np.float64) for a in arg.dtypes
+    ):
+        return pd.DataFrame({c: convert_to_nullable_float(arg[c]) for c in arg.columns})
+
+    return arg
 
 
 def _type_has_str_array(t):
@@ -655,7 +689,10 @@ def _get_arg(a, copy=False):
     return a
 
 
-def _get_dist_arg(a, copy=False, var_length=False, check_typing_issues=True):
+T = TypeVar("T", pytypes.FunctionType, pd.Series, pd.DataFrame)
+
+
+def _get_dist_arg(a: T, copy=False, var_length=False, check_typing_issues=True) -> T:
     """get distributed chunk for 'a' on current rank (for input to test functions)"""
     if copy and hasattr(a, "copy"):
         a = a.copy()
@@ -909,6 +946,10 @@ def _test_equal(
                 pd.testing.assert_extension_array_equal(
                     bodo_out, pd.array(py_out, "string[pyarrow]")
                 )
+            elif isinstance(bodo_out, pd.arrays.FloatingArray):
+                pd.testing.assert_extension_array_equal(
+                    bodo_out, pd.array(py_out, bodo_out.dtype)
+                )
             else:
                 np.testing.assert_array_equal(bodo_out, py_out)
     # check for array since is_extension_array_dtype() matches dtypes also
@@ -975,6 +1016,10 @@ def _test_equal(
         )
     elif py_out is pd.NaT:
         assert py_out is bodo_out
+    # Bodo returns np.nan instead of pd.NA for nullable float data to avoid typing
+    # issues
+    elif py_out is pd.NA and np.isnan(bodo_out):
+        pass
     else:
         np.testing.assert_equal(bodo_out, py_out)
 
@@ -1059,7 +1104,8 @@ def _gather_output(bodo_output):
 
 def _typeof(val):
     # Pandas returns an object array for .values or to_numpy() call on Series of
-    # nullable int, which can't be handled in typeof. Bodo returns a nullable int array
+    # nullable int/float, which can't be handled in typeof. Bodo returns a
+    # nullable int/float array
     # see test_series_to_numpy[numeric_series_val3] and
     # test_series_get_values[series_val4]
     if (
@@ -1069,15 +1115,9 @@ def _typeof(val):
             (isinstance(a, float) and np.isnan(a)) or isinstance(a, int) for a in val
         )
     ):
-        # TODO: Should this check be fixed? It seems like all floats should
-        # be an IntegerArray
         return bodo.libs.int_arr_ext.IntegerArrayType(bodo.int64)
     elif isinstance(val, pd.arrays.FloatingArray):
-        # TODO: Add proper support for floating array
-        # FloatingArrays are used somewhat extensively in Pandas >= 1.2.0
-        # so we need to add further support. This code is fragile and
-        # should not be considered reliable.
-        return numba.core.types.Array(numba.core.types.float64, 1, "C")
+        return bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
     # TODO: add handling of Series with Float64 values here
     elif isinstance(val, pd.DataFrame) and any(
         [
@@ -1089,7 +1129,9 @@ def _typeof(val):
         for i in range(len(val.columns)):
             S = val.iloc[:, i]
             if isinstance(S.dtype, pd.core.arrays.floating.FloatingDtype):
-                col_typs.append(typeof_pd_float_dtype(S.dtype))
+                col_typs.append(
+                    bodo.libs.float_arr_ext.typeof_pd_float_dtype(S.dtype, None)
+                )
             else:
                 col_typs.append(bodo.hiframes.boxing._infer_series_arr_type(S).dtype)
         col_typs = (dtype_to_array_type(typ) for typ in col_typs)
@@ -1100,7 +1142,7 @@ def _typeof(val):
         val.dtype, pd.core.arrays.floating.FloatingDtype
     ):
         return bodo.SeriesType(
-            typeof_pd_float_dtype(val.dtype),
+            bodo.libs.float_arr_ext.typeof_pd_float_dtype(val.dtype, None),
             index=numba.typeof(val.index),
             name_typ=numba.typeof(val.name),
         )
@@ -1108,22 +1150,6 @@ def _typeof(val):
         # function type isn't accurate, but good enough for the purposes of _typeof
         return types.FunctionType(types.none())
     return bodo.typeof(val)
-
-
-def typeof_pd_float_dtype(val):
-    """
-    Pandas 1.2.0 adds interpretting a nullable FloatArray
-    This isn't supported yet in Bodo, so we convert these inputs
-    to floating point values.
-    """
-    # Warning: This code is unstable and doesn't currently change
-    # the actual underlying type. This is just used by _typeof inside
-    # test utils for distirbuted testing. It should not be used in
-    # actual Numba Code
-    bitwidth = 8 * val.itemsize
-    dtype = getattr(numba.types, "float{}".format(bitwidth))
-    # TODO: Add a custom FloatingDType() inside Bodo.
-    return dtype
 
 
 def is_bool_object_series(S):
@@ -2074,7 +2100,7 @@ def _ensure_func_calls_optimized_out(bodo_func, call_names):
 
 # We only run snowflake tests on Azure Pipelines because the Snowflake account credentials
 # are stored there (to avoid failing on AWS or our local machines)
-def get_snowflake_connection_string(db, schema, user=1):
+def get_snowflake_connection_string(db, schema, conn_params=None, user=1):
     """
     Generates a common snowflake connection string. Some details (how to determine
     username and password) seem unlikely to change, whereas as some tests could require
@@ -2095,8 +2121,10 @@ def get_snowflake_connection_string(db, schema, user=1):
     else:
         raise ValueError("Invalid user")
 
-    warehouse = "DEMO_WH"
-    conn = f"snowflake://{username}:{password}@{account}/{db}/{schema}?warehouse={warehouse}"
+    params = {"warehouse": "DEMO_WH"} if conn_params is None else conn_params
+    conn = (
+        f"snowflake://{username}:{password}@{account}/{db}/{schema}?{urlencode(params)}"
+    )
     return conn
 
 
@@ -2126,7 +2154,7 @@ def snowflake_cred_env_vars_present(user=1) -> bool:
 @contextmanager
 def create_snowflake_table(
     df: pd.DataFrame, base_table_name: str, db: str, schema: str
-) -> str:
+) -> Generator[str, None, None]:
     """Creates a new table in Snowflake derived from the base table name
     and using the DataFrame. The name from the base name is modified to help
     reduce the likelihood of conflicts during concurrent tests.
@@ -2142,9 +2170,9 @@ def create_snowflake_table(
     Returns:
         str: The final table name.
     """
+    comm = MPI.COMM_WORLD
+    table_name = None
     try:
-        comm = MPI.COMM_WORLD
-        table_name = None
         if bodo.get_rank() == 0:
             unique_name = str(uuid4()).replace("-", "_")
             table_name = f"{base_table_name}_{unique_name}".lower()
@@ -2241,7 +2269,11 @@ def find_nested_dispatcher_and_args(
 ):
     """Finds a dispatcher in the IR and the arguments with which it was
     called for the given func_name (which matches the output of find_callname).
-    This dispatcher is assumed to be called
+
+    Note: This code assumes that if return_dispatcher=True, then the new
+    dispatch must be called with the Overload infrastructure. If any other infrastructure
+    is used, for example the generated_jit infrastructure, then the given
+    code may not work.
 
     Args:
         dispatcher (Dispatch): A numba/bodo dispatcher
@@ -2259,7 +2291,7 @@ def find_nested_dispatcher_and_args(
     if return_dispatcher:
         typemap = annotation.typemap
         arg_types = tuple([typemap[name] for name in arg_names])
-        # Find the coalesce dispatcher in the IR
+        # Find the dispatcher in the IR
         cached_info = typemap[var_name].templates[0]._impl_cache
         return cached_info[
             (numba.core.registry.cpu_target.typing_context, arg_types, ())

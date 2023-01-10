@@ -65,7 +65,10 @@ public class PostfixOpCodeGen {
         if (outputScalar) {
           codeBuilder.append("(not (").append(arg).append("is False))");
         } else {
-          codeBuilder.append("pd.Series(").append(arg).append(").fillna(True).values");
+          codeBuilder
+              .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
+              .append(arg)
+              .append(").fillna(True))");
         }
         break;
       case IS_NOT_TRUE:
@@ -73,17 +76,20 @@ public class PostfixOpCodeGen {
           codeBuilder.append("(not (").append(arg).append("is True))");
         } else {
           codeBuilder
-              .append("(~")
+              .append("bodo.hiframes.pd_series_ext.get_series_data((~")
               .append("pd.Series(")
               .append(arg)
-              .append(").fillna(False)).values");
+              .append(").fillna(False)))");
         }
         break;
       case IS_TRUE:
         if (outputScalar) {
           codeBuilder.append("(").append(arg).append("is True)");
         } else {
-          codeBuilder.append("pd.Series(").append(arg).append(").fillna(False).values");
+          codeBuilder
+              .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
+              .append(arg)
+              .append(").fillna(False))");
         }
         break;
       case IS_FALSE:
@@ -91,10 +97,10 @@ public class PostfixOpCodeGen {
           codeBuilder.append("(").append(arg).append("is False)");
         } else {
           codeBuilder
-              .append("(~")
+              .append("bodo.hiframes.pd_series_ext.get_series_data((~")
               .append("pd.Series(")
               .append(arg)
-              .append(").fillna(True)).values");
+              .append(").fillna(True)))");
         }
         break;
       default:

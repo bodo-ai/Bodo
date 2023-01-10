@@ -377,3 +377,38 @@ def test_to_char_error():
         match="format string for TO_CHAR not yet supported",
     ):
         bc.sql(query)
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_datetime_to_char(tz_aware_df, memory_leak_check):
+    """simplest test for TO_CHAR on timezone aware data"""
+    query = "SELECT TO_CHAR(A) as A from table1"
+
+    expected_output = pd.DataFrame({"A": tz_aware_df["table1"]["A"].astype(str)})
+    check_query(
+        query,
+        tz_aware_df,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output,
+    )
+
+
+def test_datetime_to_char(memory_leak_check):
+    """simplest test for TO_CHAR on datetimes"""
+    query = "SELECT TO_CHAR(A) as A from table1"
+
+    dt_series = pd.date_range("2022/1/1", periods=30, freq="6D5H").to_series()
+    df = pd.DataFrame({"A": dt_series})
+    expected_output = pd.DataFrame({"A": dt_series.dt.strftime("%Y-%m-%d %X%z")})
+
+    ctx = {"table1": df}
+    check_query(
+        query,
+        ctx,
+        None,
+        check_dtype=False,
+        check_names=False,
+        expected_output=expected_output,
+    )

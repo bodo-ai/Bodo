@@ -1,19 +1,22 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include <Python.h>
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
-#include <numpy/arrayobject.h>
-#include <boost/algorithm/string/replace.hpp>
+
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include <arrow/python/pyarrow.h>
+#include <numpy/arrayobject.h>
+#include <boost/algorithm/string/replace.hpp>
+
+#include "_array_utils.h"
 #include "_bodo_common.h"
 #include "_bodo_to_arrow.h"
 
-#include "_str_decode.cpp"
-
 #include <boost/lexical_cast.hpp>
+
+#include "_str_decode.cpp"
 
 extern "C" {
 
@@ -64,6 +67,8 @@ void* pd_pyarrow_array_from_string_array(const array_info* str_arr);
 void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
                           char* str, int64_t len, int kind, int is_ascii,
                           int64_t index);
+void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
+                          char* str, int64_t len, int64_t index);
 int64_t get_utf8_size(char* str, int64_t len, int kind);
 
 void set_string_array_range(offset_t* out_offsets, char* out_data,
@@ -105,6 +110,7 @@ int64_t bytes_fromhex(unsigned char* output, unsigned char* data,
 void int_to_hex(char* output, int64_t output_len, uint64_t int_val);
 void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
                          const int32_t* indices, const uint8_t* null_bitmap);
+array_info* str_to_dict_str_array(array_info* str_arr);
 
 PyMODINIT_FUNC PyInit_hstr_ext(void) {
     PyObject* m;
@@ -161,6 +167,9 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
         PyLong_FromVoidPtr((void*)(&np_array_from_string_array)));
     PyObject_SetAttrString(m, "setitem_string_array",
                            PyLong_FromVoidPtr((void*)(&setitem_string_array)));
+    PyObject_SetAttrString(m, "setitem_binary_array",
+                           PyLong_FromVoidPtr((void*)(&setitem_binary_array)));
+
     PyObject_SetAttrString(
         m, "set_string_array_range",
         PyLong_FromVoidPtr((void*)(&set_string_array_range)));
@@ -213,6 +222,16 @@ PyMODINIT_FUNC PyInit_hstr_ext(void) {
                            PyLong_FromVoidPtr((void*)(&int_to_hex)));
     PyObject_SetAttrString(m, "box_dict_str_array",
                            PyLong_FromVoidPtr((void*)(&box_dict_str_array)));
+    PyObject_SetAttrString(m, "str_to_dict_str_array",
+                           PyLong_FromVoidPtr((void*)(&str_to_dict_str_array)));
+    PyObject_SetAttrString(m, "get_stats_alloc",
+                           PyLong_FromVoidPtr((void*)(&get_stats_alloc)));
+    PyObject_SetAttrString(m, "get_stats_free",
+                           PyLong_FromVoidPtr((void*)(&get_stats_free)));
+    PyObject_SetAttrString(m, "get_stats_mi_alloc",
+                           PyLong_FromVoidPtr((void*)(&get_stats_mi_alloc)));
+    PyObject_SetAttrString(m, "get_stats_mi_free",
+                           PyLong_FromVoidPtr((void*)(&get_stats_mi_free)));
     return m;
 }
 
@@ -360,6 +379,30 @@ void setitem_string_array(offset_t* offsets, char* data, uint64_t n_bytes,
     } else {
         utf8_len = unicode_to_utf8(&data[start], str, len, kind);
     }
+
+    CHECK(utf8_len < std::numeric_limits<offset_t>::max(),
+          "string array too large");
+    CHECK(start + utf8_len <= n_bytes, "out of bounds string array setitem");
+    offsets[index + 1] = start + utf8_len;
+    return;
+#undef CHECK
+}
+
+void setitem_binary_array(offset_t* offsets, char* data, uint64_t n_bytes,
+                          char* str, int64_t len, int64_t index) {
+#define CHECK(expr, msg)               \
+    if (!(expr)) {                     \
+        std::cerr << msg << std::endl; \
+        return;                        \
+    }
+    offset_t utf8_len = (offset_t)len;
+
+    if (index == 0) offsets[index] = 0;
+    offset_t start = offsets[index];
+
+    // Bytes objects in python are always just an array of chars,
+    // so we should never need to do any decoding
+    memcpy(&data[start], str, len);
 
     CHECK(utf8_len < std::numeric_limits<offset_t>::max(),
           "string array too large");
@@ -646,20 +689,17 @@ void* pd_pyarrow_array_from_string_array(const array_info* str_arr) {
 
     // convert to Arrow array with copy (since passing to Pandas)
     // only str_arr and true arguments are relevant here
-    std::vector<std::shared_ptr<arrow::Field>> schema_vector;
-    std::shared_ptr<arrow::ChunkedArray> arrow_arr;
+    std::shared_ptr<arrow::Array> arrow_arr;
     arrow::TimeUnit::type time_unit = arrow::TimeUnit::NANO;
-    bodo_array_to_arrow(::arrow::default_memory_pool(), str_arr, "_bodo_array",
-                        schema_vector, &arrow_arr, "", time_unit, true);
-
-    // Bodo arrays are single chunk currently
-    CHECK(arrow_arr->num_chunks() == 1, "single chunk Arrow array expected");
+    bodo_array_to_arrow(::arrow::default_memory_pool(), str_arr, &arrow_arr,
+                        false /*convert_timedelta_to_int64*/, "", time_unit,
+                        true, false /*downcast_time_ns_to_us*/);
 
     // https://arrow.apache.org/docs/python/integration/extending.html
     CHECK(!arrow::py::import_pyarrow(), "importing pyarrow failed");
 
     // convert Arrow C++ to PyArrow
-    PyObject* pyarrow_arr = arrow::py::wrap_array(arrow_arr->chunk(0));
+    PyObject* pyarrow_arr = arrow::py::wrap_array(arrow_arr);
 
     // call pd.arrays.ArrowStringArray(pyarrow_arr) which avoids copy
     PyObject* pd_mod = PyImport_ImportModule("pandas");
@@ -963,4 +1003,70 @@ void* box_dict_str_array(int64_t n, PyArrayObject* dict_arr,
     }
     return ret;
 #undef CHECK
+}
+
+/**
+ * @brief Kernel to Convert String Arrays to Dictionary String Arrays
+ * Most of the logic is shared with DictionaryEncodedFromStringBuilder
+ * (TableBuilder::BuilderColumn subclass in arrow_reader.cpp)
+ *
+ * @param str_arr Input String Array (not consumed by function)
+ * @return array_info* Output Dictionary Array with Copied Contents
+ */
+array_info* str_to_dict_str_array(array_info* str_arr) {
+    const auto arr_len = str_arr->length;
+    const auto num_null_bitmask_bytes = (arr_len + 7) >> 3;
+
+    // Dictionary Indices Array
+    auto indices_arr = alloc_nullable_array(arr_len, Bodo_CTypes::INT32);
+    memcpy(indices_arr->null_bitmask, str_arr->null_bitmask,
+           num_null_bitmask_bytes);
+
+    // Map string to its new index in dictionary values array
+    UNORD_MAP_CONTAINER<std::string, std::pair<int32_t, uint64_t>, string_hash,
+                        std::equal_to<>>
+        str_to_ind;
+    uint32_t num_dict_strs = 0;
+    uint64_t total_dict_chars = 0;
+
+    offset_t* offsets = (offset_t*)str_arr->data2;
+    for (uint64_t i = 0; i < arr_len; i++) {
+        if (!str_arr->get_null_bit(i)) continue;
+        std::string_view elem(str_arr->data1 + offsets[i],
+                              offsets[i + 1] - offsets[i]);
+
+        int32_t elem_idx;
+        if (!str_to_ind.contains(elem)) {
+            std::pair<int32_t, uint64_t> ind_offset_len =
+                std::make_pair(num_dict_strs, total_dict_chars);
+            // TODO: remove std::string() after upgrade to C++23
+            str_to_ind[std::string(elem)] = ind_offset_len;
+            total_dict_chars += elem.length();
+            elem_idx = num_dict_strs++;
+        } else {
+            elem_idx = str_to_ind.find(elem)->second.first;
+        }
+
+        indices_arr->at<int32_t>(i) = elem_idx;
+    }
+
+    // Create Dictionary String Values
+    array_info* values_arr =
+        alloc_string_array(num_dict_strs, total_dict_chars);
+    int64_t n_null_bytes = (num_dict_strs + 7) >> 3;
+    memset(values_arr->null_bitmask, 0xFF, n_null_bytes);  // No nulls
+
+    offset_t* out_offsets = (offset_t*)values_arr->data2;
+    out_offsets[0] = 0;
+    for (auto& it : str_to_ind) {
+        memcpy(values_arr->data1 + it.second.second, it.first.c_str(),
+               it.first.size());
+        out_offsets[it.second.first] = it.second.second;
+    }
+    out_offsets[num_dict_strs] = static_cast<offset_t>(total_dict_chars);
+
+    return new array_info(bodo_array_type::DICT, Bodo_CTypes::CTypeEnum::STRING,
+                          arr_len, -1, -1, NULL, NULL, NULL,
+                          indices_arr->null_bitmask, NULL, NULL, NULL, NULL, 0,
+                          0, 0, false, false, false, values_arr, indices_arr);
 }

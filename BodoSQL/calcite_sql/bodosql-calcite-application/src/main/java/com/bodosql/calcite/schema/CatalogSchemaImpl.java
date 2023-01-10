@@ -137,4 +137,13 @@ public class CatalogSchemaImpl extends BodoSqlSchema {
   public BodoSQLCatalog getCatalog() {
     return catalog;
   }
+
+  /**
+   * Return the db location to which this schema refers.
+   *
+   * @return The source DB location.
+   */
+  public String getDBType() {
+    return catalog.getDBType();
+  }
 }

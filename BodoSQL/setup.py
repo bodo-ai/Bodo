@@ -31,7 +31,7 @@ try:
     class CustomBDistWheelCommand(bdist_wheel_parent):
         def run(self):
             """Creates the generated library/tests, builds maven, and then calls the original run command"""
-            build_libs(self, False)
+            build_libs(self)
             super().run()
 
     bdist_wheel_command = CustomBDistWheelCommand
@@ -49,14 +49,11 @@ else:
     update_calcite = True
 
 
-def build_libs(obj, create_tests):
+def build_libs(obj):
     """Creates the generated library/tests, builds maven, and then calls the original run command"""
     import buildscripts.python_library_build.write_generated_lib
 
     buildscripts.python_library_build.write_generated_lib.generate_and_write_library()
-    if create_tests:
-        buildscripts.python_library_build.write_generated_lib.generate_and_write_library_tests()
-
     try:
         pom_dir = os.path.join("calcite_sql", "pom.xml")
         dmvn_repo = os.path.dirname("bodosql-protocol-mvn/")
@@ -106,14 +103,14 @@ if "build_py" in versioneer_cmdclass:
 class CustomDevelopCommand(develop_parent):
     def run(self):
         """Creates the generated library/tests, builds maven, and then calls the original run command"""
-        build_libs(self, True)
+        build_libs(self)
         super().run()
 
 
 class CustomBuildCommand(build_py_parent):
     def run(self):
         """Creates the generated library/tests, builds maven, and then calls the original run command"""
-        build_libs(self, False)
+        build_libs(self)
         super().run()
 
 

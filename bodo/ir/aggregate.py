@@ -62,6 +62,7 @@ from bodo.libs.array_item_arr_ext import (
 from bodo.libs.binary_arr_ext import BinaryArrayType, pre_alloc_binary_array
 from bodo.libs.bool_arr_ext import BooleanArrayType
 from bodo.libs.decimal_arr_ext import DecimalArrayType, alloc_decimal_array
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import (
     StringArrayType,
@@ -1276,6 +1277,8 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         assert int_typ_name.endswith("Dtype()")
         int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
         return f"bodo.hiframes.pd_series_ext.get_series_data(pd.Series([1], dtype='{int_typ_name}'))"
+    elif isinstance(t, FloatingArrayType):
+        return f"bodo.hiframes.pd_series_ext.get_series_data(pd.Series([1.0], dtype='{t.dtype}'))"
     elif isinstance(t, BooleanArrayType):
         return "bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))"
     elif isinstance(t, StringArrayType):

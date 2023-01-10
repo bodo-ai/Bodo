@@ -443,7 +443,7 @@ def df_getitem_overload(df, ind):
         # TODO: create an IR node for enforcing same dist for all columns and ind array
         func_text = "def impl(df, ind):\n"
         if not isinstance(ind, types.SliceType):
-            func_text += "  ind = bodo.utils.conversion.coerce_to_ndarray(ind)\n"
+            func_text += "  ind = bodo.utils.conversion.coerce_to_array(ind)\n"
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[ind]"
         if df.is_table_format:
             new_data = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)[ind]"
@@ -643,7 +643,7 @@ def _gen_iloc_getitem_bool_slice_impl(df, col_names, idx_typ, idx, is_out_series
     if isinstance(idx_typ, types.SliceType):
         func_text += f"  idx_t = {idx}\n"
     else:
-        func_text += f"  idx_t = bodo.utils.conversion.coerce_to_ndarray({idx})\n"
+        func_text += f"  idx_t = bodo.utils.conversion.coerce_to_array({idx})\n"
     index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
     extra_globals = None
     if df.is_table_format and not is_out_series:
@@ -780,7 +780,7 @@ def overload_loc_getitem(I, idx):
     if is_list_like_index_type(idx) and idx.dtype == types.bool_:
         func_text = "def impl(I, idx):\n"
         func_text += "  df = I._obj\n"
-        func_text += "  idx_t = bodo.utils.conversion.coerce_to_ndarray(idx)\n"
+        func_text += "  idx_t = bodo.utils.conversion.coerce_to_array(idx)\n"
         index = "bodo.hiframes.pd_dataframe_ext.get_dataframe_index(df)[idx_t]"
         if df.is_table_format:
             new_data = f"bodo.hiframes.pd_dataframe_ext.get_dataframe_table(df)[idx_t]"
@@ -1003,7 +1003,7 @@ def overload_iat_setitem(I, idx, val):
         def impl_col_ind(I, idx, val):  # pragma: no cover
             df = I._obj
             data = bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, col_ind)
-            data[idx[0]] = bodo.utils.conversion.unbox_if_timestamp(val)
+            data[idx[0]] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(val)
 
         return impl_col_ind
 

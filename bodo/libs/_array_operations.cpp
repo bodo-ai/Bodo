@@ -336,7 +336,7 @@ table_info* get_parallel_sort_bounds(table_info* local_sort, int64_t n_key_t,
     // The underlying dictionary is the same for local_sort and pre_bounds
     // for the dict columns, as needed for broadcast_table.
     table_info* bounds =
-        broadcast_table(local_sort, pre_bounds, n_key_t, parallel);
+        broadcast_table(local_sort, pre_bounds, n_key_t, parallel, mpi_root);
 
     if (myrank == mpi_root) {
         delete_table(pre_bounds);

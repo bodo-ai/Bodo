@@ -14,23 +14,25 @@ jobs:
   - task: UsePythonVersion@0
     inputs:
       versionSpec: '3.9'
-    displayName: 'Use Python $(python.version)'
+    displayName: 'Use Python 3.9'
 
   - script: |
-      set -eo pipefail
-      buildscripts/bodosql/install.sh
+      set -exo pipefail
+      wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh
+      chmod +x mambaforge.sh
+      bash mambaforge.sh -b
+      export PATH=$HOME/mambaforge/bin:$PATH
+      mamba create -n $CONDA_ENV -q -y -c conda-forge python=$PYTHON_VERSION
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
       PYTHON_VERSION: ${{ parameters.PYTHON_VERSION }}
-      TARGET_NAME: ${{ parameters.name }}
-      RUNTIME: "no"
     displayName: 'Setup Conda Installation + Dependencies'
 
   - task: DownloadSecureFile@1
     name: secret_file
-    displayName: 'Download secrets file'
     inputs:
       secureFile: 'publish_binary_secrets'
+    displayName: 'Download Secrets File'
 
   - script: |
       set -eo pipefail
@@ -42,4 +44,4 @@ jobs:
     env:
       CONDA_ENV:  ${{ parameters.CONDA_ENV }}
       TARGET_NAME: ${{ parameters.name }}
-    displayName: 'Conda build and publish BodoSQL binary to Artifactory'
+    displayName: 'Conda Build and Publish BodoSQL Binary to Artifactory'

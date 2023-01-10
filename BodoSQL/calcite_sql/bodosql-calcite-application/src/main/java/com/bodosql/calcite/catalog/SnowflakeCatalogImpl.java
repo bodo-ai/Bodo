@@ -13,8 +13,10 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.sql.*;
 import java.util.*;
+import javax.annotation.*;
 import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.type.*;
 import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -63,6 +65,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
   // Maximum amount of time we are going to wait between retries
   private static final int maxBackoffMilliseconds = 2000;
 
+  private @Nullable static BodoTZInfo sfTZInfo;
+
   /**
    * Create the catalog and store the relevant account information.
    *
@@ -97,6 +101,12 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
     this.totalProperties.putAll(this.accountInfo);
     this.conn = null;
     this.dbMeta = null;
+    // TODO(Nick): Ensure keys are in all caps at the Python level
+    if (accountInfo.contains("TIMEZONE")) {
+      // This is an optimization to avoid a trip to Snowflake.
+      // Note: We assume the Timestamp information can never be loaded as an int.
+      this.sfTZInfo = new BodoTZInfo(accountInfo.getProperty("TIMEZONE"), "str");
+    }
   }
 
   /**
@@ -129,6 +139,50 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       } while (conn == null && numRetries < maxRetries);
     }
     return conn;
+  }
+
+  /**
+   * Fetch a Snowflake Session parameter from a user's Snowflake account. These may not have been
+   * set by us and instead may be session defaults.
+   *
+   * @param param The name of the parameter to fetch.
+   * @param shouldRetry If failing to load the Metadata should we retry with a fresh connection?
+   * @return The value of the parameter as a String
+   * @throws SQLException An exception occurs contacting snowflake.
+   */
+  private String getSnowflakeParameter(String param, boolean shouldRetry) throws SQLException {
+    try {
+      Connection conn = getConnection();
+      Statement stmt = conn.createStatement();
+      ResultSet paramInfo = stmt.executeQuery(String.format("Show parameters like '%s'", param));
+      if (paramInfo.next()) {
+        return paramInfo.getString(2);
+      } else {
+        throw new SQLException("Snowflake returned a empty table of Session parameters");
+      }
+    } catch (SQLException e) {
+      if (shouldRetry) {
+        closeConnections();
+        return getSnowflakeParameter(param, false);
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  /**
+   * Get the Snowflake timezone session parameter and update the cached value.
+   *
+   * @param shouldRetry If failing to load the Metadata should we retry with a fresh connection?
+   * @return THe value of the BodoTZInfo with the TIMEZONE from Snowflake.
+   * @throws SQLException An exception occurs contacting snowflake.
+   */
+  private BodoTZInfo getSnowflakeTimezone(boolean shouldRetry) throws SQLException {
+    if (sfTZInfo == null) {
+      // Note: We assume the Timestamp information can never be loaded as an int.
+      sfTZInfo = new BodoTZInfo(getSnowflakeParameter("TIMEZONE", shouldRetry), "str");
+    }
+    return sfTZInfo;
   }
 
   /**
@@ -235,6 +289,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
    */
   private Table getTableImpl(BodoSqlSchema schema, String tableName, boolean shouldRetry) {
     try {
+      // Fetch the timezone info.
+      BodoTZInfo tzInfo = getSnowflakeTimezone(shouldRetry);
       DatabaseMetaData metaData = getDataBaseMetaData(shouldRetry);
       // Passing null for columnNamePattern should match all columns. Although
       // this is not in the public documentation.
@@ -243,6 +299,8 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       while (tableInfo.next()) {
         // Column name is stored in column 4
         // Data type is stored in column 5
+        // NULLABLE is stored in column 11. Note we can only
+        // be certain there are no nulls if we see columnNoNulls
         // https://docs.oracle.com/javase/8/docs/api/java/sql/DatabaseMetaData.html#getColumns
         String writeName = tableInfo.getString(4);
         String readName = writeName;
@@ -252,7 +310,11 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
         int dataType = tableInfo.getInt(5);
         BodoSQLColumnDataType type =
             BodoSQLColumnDataType.fromJavaSqlType(JDBCType.valueOf(dataType));
-        columns.add(new BodoSQLColumnImpl(readName, writeName, type));
+        // The column is nullable unless we are certain it has no nulls.
+        boolean nullable = tableInfo.getInt(11) != DatabaseMetaData.columnNoNulls;
+        // The precision value is held in field 9, decimal digits
+        int precision = tableInfo.getInt(9);
+        columns.add(new BodoSQLColumnImpl(readName, writeName, type, nullable, tzInfo, precision));
       }
       return new CatalogTableImpl(tableName, schema, columns);
     } catch (SQLException e) {
@@ -487,6 +549,31 @@ public class SnowflakeCatalogImpl implements BodoSQLCatalog {
       schemaName = schemaList.get(0).getName();
     }
     return String.format("pd.read_sql('%s', '%s')", query, generatePythonConnStr(schemaName));
+  }
+
+  /**
+   * Return the db location to which this Catalog refers.
+   *
+   * @return The source DB location.
+   */
+  @Override
+  public String getDBType() {
+    return "SNOWFLAKE";
+  }
+
+  /**
+   * Fetch the default timezone for this catalog. If the catalog doesn't influence the default
+   * timezone it should return UTC.
+   *
+   * @return BodoTZInfo for the default timezone.
+   */
+  @Override
+  public BodoTZInfo getDefaultTimezone() {
+    try {
+      return getSnowflakeTimezone(true);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   /**

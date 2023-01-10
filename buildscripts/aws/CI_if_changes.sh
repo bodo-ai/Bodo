@@ -2,13 +2,17 @@
 
 # Used to run unit tests inside AWS codebuild
 
-set -exo pipefail
+set -eo pipefail
+set +x
 # Deactivate env in case this was called by another file that
 # activated the env
 source deactivate || true
-export PATH=$HOME/miniconda3/bin:$PATH
+
+# TODO: Do we need to activate here?
+export PATH=$HOME/mambaforge/bin:$PATH
 # Run with || true in case this is called by a CI build that doesn't
 # use conda (Sonar)
 source activate $CONDA_ENV || true
 
+set -x
 python3 buildscripts/aws/CI_if_changes.py $@

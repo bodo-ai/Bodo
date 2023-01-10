@@ -47,6 +47,7 @@ from bodo.libs import hstr_ext
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import string_array_type, string_type
@@ -308,6 +309,9 @@ class SeriesDtypeEnum(Enum):
     BinaryIndexType = 43
     TimedeltaIndexType = 44
     LiteralType = 45
+    PD_nullable_Float32 = 46
+    PD_nullable_Float64 = 47
+    FloatingArray = 48
 
 
 # Map of types that can be mapped to a singular enum. Maps type -> enum
@@ -335,6 +339,8 @@ _one_to_one_type_to_enum_map = {
     IntDtype(types.uint32): SeriesDtypeEnum.PD_nullable_UInt32.value,
     IntDtype(types.int64): SeriesDtypeEnum.PD_nullable_Int64.value,
     IntDtype(types.uint64): SeriesDtypeEnum.PD_nullable_UInt64.value,
+    FloatDtype(types.float32): SeriesDtypeEnum.PD_nullable_Float32.value,
+    FloatDtype(types.float64): SeriesDtypeEnum.PD_nullable_Float64.value,
     bytes_type: SeriesDtypeEnum.BINARY.value,
     string_type: SeriesDtypeEnum.STRING.value,
     bodo.bool_: SeriesDtypeEnum.Bool.value,
@@ -365,6 +371,8 @@ _one_to_one_enum_to_type_map = {
     SeriesDtypeEnum.PD_nullable_UInt32.value: IntDtype(types.uint32),
     SeriesDtypeEnum.PD_nullable_Int64.value: IntDtype(types.int64),
     SeriesDtypeEnum.PD_nullable_UInt64.value: IntDtype(types.uint64),
+    SeriesDtypeEnum.PD_nullable_Float32.value: FloatDtype(types.float32),
+    SeriesDtypeEnum.PD_nullable_Float64.value: FloatDtype(types.float64),
     SeriesDtypeEnum.BINARY.value: bytes_type,
     SeriesDtypeEnum.STRING.value: string_type,
     SeriesDtypeEnum.Bool.value: bodo.bool_,
@@ -459,6 +467,13 @@ def _dtype_from_type_enum_list_recursor(typ_enum_list):
             typ_enum_list[1:]
         )
         return (remaining_typ_enum_list, IntegerArrayType(typ))
+    # Float array needs special handling, as FloatingArray.dtype does not return
+    # a nullable float type
+    elif typ_enum_list[0] == SeriesDtypeEnum.FloatingArray.value:  # pragma: no cover
+        (remaining_typ_enum_list, typ) = _dtype_from_type_enum_list_recursor(
+            typ_enum_list[1:]
+        )
+        return (remaining_typ_enum_list, FloatingArrayType(typ))
     elif typ_enum_list[0] == SeriesDtypeEnum.ARRAY.value:
         (remaining_typ_enum_list, typ) = _dtype_from_type_enum_list_recursor(
             typ_enum_list[1:]
@@ -634,6 +649,11 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
         return [SeriesDtypeEnum.IntegerArray.value] + _dtype_to_type_enum_list_recursor(
             typ.dtype
         )
+    # floating arrays need special handling, as FloatingArray's dtype is not a nullable float
+    elif isinstance(typ, FloatingArrayType):  # pragma: no cover
+        return [
+            SeriesDtypeEnum.FloatingArray.value
+        ] + _dtype_to_type_enum_list_recursor(typ.dtype)
     elif bodo.utils.utils.is_array_typ(typ, False):
         return [SeriesDtypeEnum.ARRAY.value] + _dtype_to_type_enum_list_recursor(
             typ.dtype
@@ -683,7 +703,10 @@ def _dtype_to_type_enum_list_recursor(typ, upcast_numeric_index=True):
 
             if isinstance(typ.dtype, types.Float):
                 upcasted_dtype = types.float64
-                upcasted_arr_typ = types.Array(upcasted_dtype, 1, "C")
+                if isinstance(typ.data, FloatingArrayType):  # pragma: no cover
+                    upcasted_arr_typ = FloatingArrayType(upcasted_dtype)
+                else:
+                    upcasted_arr_typ = types.Array(upcasted_dtype, 1, "C")
             elif typ.dtype in {
                 types.int8,
                 types.int16,
@@ -868,14 +891,6 @@ def _infer_series_arr_type(S, array_metadata=None):
                 return dtype_to_array_type(_dtype_from_type_enum_list(type_list))
 
         return bodo.typeof(_fix_series_arr_type(S.array))
-
-    # Pandas float dtype
-    # We don't currently support pandas floating arrays (https://bodo.atlassian.net/browse/BE-41)
-    # So just throw an error to the user to cast to numpy dtype
-    if isinstance(S.dtype, pd.core.arrays.floating.FloatingDtype):  # pragma: no cover
-        raise BodoError(
-            "Bodo does not currently support Series constructed with Pandas FloatingArray.\nPlease use Series.astype() to convert any input Series input to Bodo JIT functions."
-        )
 
     # infer type of underlying data array
     try:
@@ -1481,6 +1496,11 @@ def get_series_dtype_handle_null_int_and_hetrogenous(series_typ):
     ):
         return IntDtype(series_typ.dtype)
 
+    if isinstance(series_typ.dtype, types.Float) and isinstance(
+        series_typ.data, FloatingArrayType
+    ):  # pragma: no cover
+        return FloatDtype(series_typ.dtype)
+
     return series_typ.dtype
 
 
@@ -1588,9 +1608,12 @@ def _infer_ndarray_obj_dtype(val):
         return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
 
     first_val = val[i]
+    # For compilation purposes we also impose a limit to the size
+    # of the struct as very large structs cannot be efficiently compiled.
+    struct_size_limit = 100
     if isinstance(first_val, str):
         return bodo.dict_str_arr_type if _use_dict_str_type else string_array_type
-    elif isinstance(first_val, bytes):
+    elif isinstance(first_val, (bytes, bytearray)):
         return binary_array_type
     elif isinstance(first_val, bool):
         return bodo.libs.bool_arr_ext.boolean_array
@@ -1609,12 +1632,23 @@ def _infer_ndarray_obj_dtype(val):
         ),
     ):
         return bodo.libs.int_arr_ext.IntegerArrayType(numba.typeof(first_val))
+    elif isinstance(
+        first_val,
+        (
+            float,
+            np.float32,
+            np.float64,
+        ),
+    ):  # pragma: no cover
+        return bodo.libs.float_arr_ext.FloatingArrayType(numba.typeof(first_val))
     # assuming object arrays with dictionary values string keys are struct arrays, which
     # means all keys are string and match across dictionaries, and all values with same
     # key have same data type
     # TODO: distinguish between Struct and Map arrays properly
-    elif isinstance(first_val, (dict, Dict)) and all(
-        isinstance(k, str) for k in first_val.keys()
+    elif (
+        isinstance(first_val, (dict, Dict))
+        and (len(first_val.keys()) <= struct_size_limit)
+        and all(isinstance(k, str) for k in first_val.keys())
     ):
         field_names = tuple(first_val.keys())
         # TODO: handle None value in first_val elements
@@ -1637,6 +1671,7 @@ def _infer_ndarray_obj_dtype(val):
             np.ndarray,
             pd.arrays.BooleanArray,
             pd.arrays.IntegerArray,
+            pd.arrays.FloatingArray,
             pd.arrays.StringArray,
             pd.arrays.ArrowStringArray,
         ),

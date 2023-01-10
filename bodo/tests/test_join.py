@@ -15,6 +15,7 @@ import pyarrow as pa
 import pytest
 
 import bodo
+from bodo.tests.dataframe_common import df_value  # noqa
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -22,6 +23,9 @@ from bodo.tests.user_logging_utils import (
 )
 from bodo.tests.utils import (
     DeadcodeTestPipeline,
+    _gather_output,
+    _get_dist_arg,
+    _test_equal,
     check_func,
     count_array_REPs,
     count_parfor_REPs,
@@ -873,6 +877,85 @@ def test_merge_common_cols(df1, df2, memory_leak_check):
         impl(df1, df2).sort_values("A").reset_index(drop=True),
         check_column_type=False,
     )
+
+
+def test_merge_cross(memory_leak_check, df_value):
+    """
+    Test merge() with how="cross" with various data types and values
+    """
+
+    def test_impl1(df1, df2):
+        return df1.merge(df2, how="cross")
+
+    rng = np.random.default_rng(100)
+    df2 = pd.DataFrame({"RAND": rng.integers(11, 33, 6)})
+    check_func(test_impl1, (df_value, df2), sort_output=True, reset_index=True)
+    check_func(test_impl1, (df2, df_value), sort_output=True, reset_index=True)
+
+
+def test_merge_cross_len_only(memory_leak_check):
+    """
+    Test merge() with how="cross" with only length of output used (corner case)
+    """
+
+    def impl(df1, df2):
+        return len(df1.merge(df2, how="cross"))
+
+    df1 = pd.DataFrame({"A": [1, 2, 3, 4], "B": [1, 3, 4, 11]})
+    df2 = pd.DataFrame({"C": [3, 4, 5], "D": [6, 7, 8]})
+    check_func(impl, (df1, df2))
+
+    # test only one side being distributed
+    py_out = len(df1) * len(df2)
+    bodo_out = bodo.jit(distributed=["df1"])(impl)(_get_dist_arg(df1, True, True), df2)
+    assert bodo_out == py_out
+    bodo_out = bodo.jit(distributed=["df2"])(impl)(df1, _get_dist_arg(df2, True, True))
+    assert bodo_out == py_out
+
+
+def test_merge_cross_dead_input(memory_leak_check):
+    """
+    Test merge() with how="cross" when all columns from one side are dead
+    """
+
+    # left side is dead
+    def impl1(df1, df2):
+        df3 = df1.merge(df2, how="cross")
+        return df3[["D"]]
+
+    # right side is dead
+    def impl2(df1, df2):
+        df3 = df1.merge(df2, how="cross")
+        return df3[["A"]]
+
+    df1 = pd.DataFrame({"A": [1, 2, 3, 4], "B": [1, 3, 4, 11]})
+    df2 = pd.DataFrame({"C": [3, 4, 5], "D": [6, 7, 8]})
+    check_func(impl1, (df1, df2), sort_output=True, reset_index=True, check_dtype=False)
+    check_func(impl2, (df1, df2), sort_output=True, reset_index=True, check_dtype=False)
+
+    # test only one side being distributed
+    out_df = _gather_output(
+        bodo.jit(distributed=["df1"])(impl1)(_get_dist_arg(df1, True, True), df2)
+    )
+    if bodo.get_rank() == 0:
+        _test_equal(
+            out_df,
+            impl1(df1, df2),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
+    out_df = _gather_output(
+        bodo.jit(distributed=["df2"])(impl2)(df1, _get_dist_arg(df2, True, True))
+    )
+    if bodo.get_rank() == 0:
+        _test_equal(
+            out_df,
+            impl2(df1, df2),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+        )
 
 
 @pytest.mark.slow
@@ -1872,6 +1955,18 @@ def test_merge_general_cond(memory_leak_check):
             how=how,
         )
 
+    # single non-equality term, no equality
+    def impl6(df1, df2):
+        return df1.merge(df2, on="right.D <= left.B + 1")
+
+    # multiple non-equality terms, no equality
+    def impl7(df1, df2, how):
+        return df1.merge(
+            df2,
+            on="(right.D < left.B + 1 | right.C > left.B)",
+            how=how,
+        )
+
     df1 = pd.DataFrame({"A": [1, 2, 1, 1, 3, 2, 3], "B": [1, 2, 3, 1, 2, 3, 1]})
     df2 = pd.DataFrame(
         {
@@ -1883,6 +1978,20 @@ def test_merge_general_cond(memory_leak_check):
     # larger tables to test short/long table control flow in _join.cpp
     df3 = pd.concat([df1] * 10)
     df4 = pd.concat([df2] * 10)
+    # nullable float
+    df5 = pd.DataFrame(
+        {
+            "A": pd.array([1, 2, 1, 1, 3, 2, 3], "Float64"),
+            "B": pd.array([1, 2, 3, 1, 2, 3, 1], "Float32"),
+        }
+    )
+    df6 = pd.DataFrame(
+        {
+            "A": pd.array([4, 1, 2, 3, 2, 1, 4], "Float64"),
+            "C": pd.array([3, 2, 1, 3, 2, 1, 2], "Float32"),
+            "D": pd.array([1, 2, 3, 4, 5, 6, 7], "Float64"),
+        }
+    )
 
     py_out = df1.merge(df2, on="A")
     check_func(
@@ -1953,17 +2062,51 @@ def test_merge_general_cond(memory_leak_check):
         py_output=py_out,
     )
 
-    # # test left/right/outer cases, needs Spark to generate reference output
+    py_out = df1.merge(df2, how="cross")
+    py_out = py_out.query("D <= B + 1")
+    check_func(
+        impl6,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+    py_out = df1.merge(df4, how="cross")
+    py_out = py_out.query("D < B + 1 | C > B")
+    check_func(
+        impl7,
+        (df1, df4, "inner"),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
+    # testing left/right/outer cases needs Spark to generate reference output
+    # avoid duplicated names for non-equi case
+    df3 = df2.rename(columns={"A": "A1"})
+    df7 = df6.rename(columns={"A": "A1"})
     from pyspark.sql import SparkSession
 
     spark = SparkSession.builder.getOrCreate()
     sdf1 = spark.createDataFrame(df1)
     sdf2 = spark.createDataFrame(df2)
+    sdf3 = spark.createDataFrame(df3)
+    sdf5 = spark.createDataFrame(df5)
+    sdf6 = spark.createDataFrame(df6)
+    sdf7 = spark.createDataFrame(df7)
     sdf1.createOrReplaceTempView("table1")
     sdf2.createOrReplaceTempView("table2")
+    sdf3.createOrReplaceTempView("table3")
+    sdf5.createOrReplaceTempView("table5")
+    sdf6.createOrReplaceTempView("table6")
+    sdf7.createOrReplaceTempView("table7")
     for how in ("left", "right", "outer"):
         # Spark requires "full outer" for some reason
         spark_how = "full outer" if how == "outer" else how
+        # test with equality
         py_out = spark.sql(
             f"select * from table1 {spark_how} join table2 on (table2.D < table1.B + 1 or table2.C > table1.B) and table1.A == table2.A"
         ).toPandas()
@@ -1974,6 +2117,66 @@ def test_merge_general_cond(memory_leak_check):
         check_func(
             impl5,
             (df1, df2, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
+        # test without equality
+        py_out = spark.sql(
+            f"select * from table1 {spark_how} join table3 on (table3.D < table1.B + 1 or table3.C > table1.B)"
+        ).toPandas()
+        check_func(
+            impl7,
+            (df1, df3, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
+        # test only one side being distributed
+        out_df = _gather_output(
+            bodo.jit(distributed=["df1"])(impl7)(
+                _get_dist_arg(df1, True, True), df3, how
+            )
+        )
+        if bodo.get_rank() == 0:
+            _test_equal(
+                out_df, py_out, sort_output=True, reset_index=True, check_dtype=False
+            )
+        out_df = _gather_output(
+            bodo.jit(distributed=["df2"])(impl7)(
+                df1, _get_dist_arg(df3, True, True), how
+            )
+        )
+        if bodo.get_rank() == 0:
+            _test_equal(
+                out_df, py_out, sort_output=True, reset_index=True, check_dtype=False
+            )
+        # ---- Test nullable float arrays ----
+        # test with equality
+        py_out = spark.sql(
+            f"select * from table5 {spark_how} join table6 on (table6.D < table5.B + 1 or table6.C > table5.B) and table5.A == table6.A"
+        ).toPandas()
+        # spark duplicates key columns with nulls
+        py_out_A = py_out.A.iloc[:, 0].combine_first(py_out.A.iloc[:, 1])
+        py_out = py_out.drop(columns="A")
+        py_out.insert(0, "A", py_out_A)
+        check_func(
+            impl5,
+            (df5, df6, how),
+            sort_output=True,
+            reset_index=True,
+            check_dtype=False,
+            py_output=py_out,
+        )
+        # test without equality
+        py_out = spark.sql(
+            f"select * from table5 {spark_how} join table7 on (table7.D < table5.B + 1 or table7.C > table5.B)"
+        ).toPandas()
+        check_func(
+            impl7,
+            (df5, df7, how),
             sort_output=True,
             reset_index=True,
             check_dtype=False,
@@ -2095,6 +2298,20 @@ def test_merge_general_cond_na_float(memory_leak_check):
     # larger tables to test short/long table control flow in _join.cpp
     df3 = pd.concat([df1] * 10)
     df4 = pd.concat([df2] * 10)
+    # nullable float input
+    df5 = pd.DataFrame(
+        {
+            "A": [1, 2, 1, 1, 3, 2, 3],
+            "B": pd.Series([1, None, 3, None, 2, 3, 1], dtype="Float64"),
+        }
+    )
+    df6 = pd.DataFrame(
+        {
+            "A": [4, 1, 2, 3, 2, 1, 4],
+            "C": [3, 2, 1, 3, 2, 1, 2],
+            "D": pd.Series([None, 2, 3, 4, 5, 6, 7], dtype="Float32"),
+        }
+    )
 
     py_out = df1.merge(df2, left_on=["A"], right_on=["A"])
     # Note we can't use df.query in Pandas because it can't
@@ -2109,6 +2326,19 @@ def test_merge_general_cond_na_float(memory_leak_check):
         check_dtype=False,
         py_output=py_out,
     )
+
+    py_out = df5.merge(df6, left_on=["A"], right_on=["A"])
+    filter_cond = py_out["D"] <= (py_out["B"] + 1)
+    py_out = py_out[filter_cond]
+    check_func(
+        impl1,
+        (df5, df6),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+
     py_out = df3.merge(df2, left_on=["A"], right_on=["A"])
     filter_cond = (py_out["C"] + py_out["D"] - 5) >= py_out["B"]
     py_out = py_out[filter_cond]
@@ -2573,6 +2803,10 @@ def test_merge_general_cond_rm_dead(memory_leak_check):
         df3 = df1.merge(df2, on="right.D2-5 >= left.C & left.A == right.A2")
         return df3[["A2", "B", "C", "E"]]
 
+    def impl2(df1, df2):
+        df3 = df1.merge(df2, on="right.D2-5 >= left.C")
+        return df3[["A2", "B", "C", "E"]]
+
     df1 = pd.DataFrame(
         {
             "A": [1, 2, 1, 1, 3, 2, 3],
@@ -2595,6 +2829,16 @@ def test_merge_general_cond_rm_dead(memory_leak_check):
     py_out = py_out.query("D2-5 >= C")[["A2", "B", "C", "E"]]
     check_func(
         impl,
+        (df1, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
+    py_out = df1.merge(df2, how="cross")
+    py_out = py_out.query("D2-5 >= C")[["A2", "B", "C", "E"]]
+    check_func(
+        impl2,
         (df1, df2),
         sort_output=True,
         reset_index=True,
@@ -3553,6 +3797,29 @@ def test_merge_asof_parallel(datapath, memory_leak_check):
                         [1, 1, None, None, None, None, 1, 1], dtype="Int64"
                     ),
                     "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Int64"),
+                }
+            ),
+        ),
+        (
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, None, 1, 0, None, 7] * 2, dtype="Float64"),
+                    "B1": pd.Series([1, 2, None, 3] * 3, dtype="Float64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([2, 5, 6, 6, None, 1] * 2, dtype="Float64"),
+                    "B2": pd.Series([None, 2, 4, 3] * 3, dtype="Float64"),
+                }
+            ),
+            pd.DataFrame(
+                {
+                    "A": pd.Series([5, 5, 5, 5, 1, 1, 1, 1], dtype="Float64"),
+                    "B1": pd.Series(
+                        [1, 1, None, None, None, None, 1, 1], dtype="Float64"
+                    ),
+                    "B2": pd.Series([2, 3, 2, 3, 2, 3, 2, 3], dtype="Float64"),
                 }
             ),
         ),

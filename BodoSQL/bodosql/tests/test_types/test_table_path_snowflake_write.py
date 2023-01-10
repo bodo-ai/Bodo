@@ -29,7 +29,7 @@ def test_insert_into(memory_leak_check):
     table on each run.
     """
 
-    def impl(table_name, schema, create_df, append_df, read_query):
+    def write_impl(table_name, schema, create_df, append_df, conn_str):
         # Create the Snowflake table.
         create_df.to_sql(table_name, conn_str, if_exists="replace", index=False)
         bc = bodosql.BodoSQLContext(
@@ -41,7 +41,8 @@ def test_insert_into(memory_leak_check):
             }
         )
         bc.sql("INSERT INTO dest_table(B, C) SELECT B, C FROM T1 WHERE A > 5")
-        bodo.barrier()
+
+    def read_impl(read_query, conn_str):
         return pd.read_sql(read_query, conn_str)
 
     create_df = pd.DataFrame(
@@ -64,18 +65,26 @@ def test_insert_into(memory_leak_check):
         read_query = f"select * from {table_name}"
         py_output = None
         if bodo.get_rank() == 0:
-            # Append to the output so we are consistent for types.
+            # Generate the reference answer
             filtered_df = append_df[append_df.a > 5][["b", "c"]]
-            filtered_df.to_sql(
-                table_name, conn_str, schema=schema, if_exists="append", index=False
-            )
-            # We read the result direclty from snowflake in case it changes
-            # the data in any way (types, names, etc.)
-            py_output = pd.read_sql(read_query, conn_str)
+            py_output = create_df.append(filtered_df, ignore_index=True)
+
         py_output = comm.bcast(py_output)
+
+        # Since we separate read and write into different impl's,
+        # we must do the 1D parallel work from check_func done
+        # on read_impl for write_impl as well
+        create_df = bodo.scatterv(create_df)
+        append_df = bodo.scatterv(append_df)
+        bodo.jit(distributed=["create_df", "append_df"])(write_impl)(
+            table_name, schema, create_df, append_df, conn_str
+        )
+
+        bodo.barrier()
+
         check_func(
-            impl,
-            (table_name, schema, create_df, append_df, read_query),
+            read_impl,
+            (read_query, conn_str),
             py_output=py_output,
             only_1D=True,
             reset_index=True,
@@ -98,7 +107,7 @@ def test_insert_into_date(memory_leak_check):
     table on each run.
     """
 
-    def impl(table_name, schema, create_df, append_df, read_query):
+    def write_impl(table_name, schema, create_df, append_df, conn_str):
         # Create the Snowflake table.
         create_df.to_sql(table_name, conn_str, if_exists="replace", index=False)
         bc = bodosql.BodoSQLContext(
@@ -110,7 +119,8 @@ def test_insert_into_date(memory_leak_check):
             }
         )
         bc.sql("INSERT INTO dest_table(A) SELECT A from t1 where C > 2")
-        bodo.barrier()
+
+    def read_impl(read_query, conn_str):
         return pd.read_sql(read_query, conn_str)
 
     create_df = pd.DataFrame(
@@ -152,19 +162,28 @@ def test_insert_into_date(memory_leak_check):
         conn_str = get_snowflake_connection_string(db, schema)
         read_query = f"select * from {table_name}"
         py_output = None
+
         if bodo.get_rank() == 0:
-            # Append to the output so we are consistent for types.
+            # Generate reference answer
             filtered_df = append_df[append_df.c > 2][["a"]]
-            filtered_df.to_sql(
-                table_name, conn_str, schema=schema, if_exists="append", index=False
-            )
-            # We read the result direclty from snowflake in case it changes
-            # the data in any way (types, names, etc.)
-            py_output = pd.read_sql(read_query, conn_str)
+            py_output = create_df.append(filtered_df, ignore_index=True)
+
         py_output = comm.bcast(py_output)
+
+        # Since we separate read and write into different impl's,
+        # we must do the 1D parallel work from check_func done
+        # on read_impl for write_impl as well
+        create_df = bodo.scatterv(create_df)
+        append_df = bodo.scatterv(append_df)
+        bodo.jit(distributed=["create_df", "append_df"])(write_impl)(
+            table_name, schema, create_df, append_df, conn_str
+        )
+
+        bodo.barrier()
+
         check_func(
-            impl,
-            (table_name, schema, create_df, append_df, read_query),
+            read_impl,
+            (read_query, conn_str),
             py_output=py_output,
             only_1D=True,
             reset_index=True,

@@ -1391,13 +1391,18 @@ def dt_timedelta_arr_getitem(A, ind):
 
         return impl_int
 
-    # bool arr indexing
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    # bool arr indexing. Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if (
+        ind != bodo.boolean_array
+        and is_list_like_index_type(ind)
+        and ind.dtype == types.bool_
+    ):
 
         def impl_bool(A, ind):  # pragma: no cover
             # Heavily influenced by array_getitem_bool_index.
             # Just replaces calls for new data with all 3 arrays
-            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
             new_days_data = A._days_data[ind_t]
             new_seconds_data = A._seconds_data[ind_t]
@@ -1416,7 +1421,7 @@ def dt_timedelta_arr_getitem(A, ind):
         def impl(A, ind):  # pragma: no cover
             # Heavily influenced by array_getitem_int_index.
             # Just replaces calls for new data with all 3 arrays
-            ind_t = bodo.utils.conversion.coerce_to_ndarray(ind)
+            ind_t = bodo.utils.conversion.coerce_to_array(ind)
             old_mask = A._null_bitmap
             new_days_data = A._days_data[ind_t]
             new_seconds_data = A._seconds_data[ind_t]
@@ -1447,11 +1452,13 @@ def dt_timedelta_arr_getitem(A, ind):
 
         return impl_slice
 
-    # This should be the only DatetimeTimedeltaArray implementation.
+    # This should be the only DatetimeTimedeltaArray implementation
+    # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more idx options are added.
-    raise BodoError(
-        f"getitem for DatetimeTimedeltaArray with indexing type {ind} not supported."
-    )  # pragma: no cover
+    if ind != bodo.boolean_array:  # pragma: no cover
+        raise BodoError(
+            f"getitem for DatetimeTimedeltaArray with indexing type {ind} not supported."
+        )
 
 
 @overload(operator.setitem, no_unliteral=True)

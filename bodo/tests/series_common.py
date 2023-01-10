@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import bodo
+
 
 @dataclass
 class SeriesReplace:
@@ -29,6 +31,13 @@ class WhereNullable:
 
 
 GLOBAL_VAL = 2
+
+
+nullable_float_marker = pytest.mark.skipif(
+    not bodo.libs.float_arr_ext._use_nullable_float,
+    reason="nullable float not fully supported yet",
+)
+
 
 # using length of 5 arrays to enable testing on 3 ranks (2, 2, 1 distribution)
 # zero length chunks on any rank can cause issues, TODO: fix

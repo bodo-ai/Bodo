@@ -1,26 +1,17 @@
 FROM ubuntu:20.04
 
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
-RUN apt-get update && apt-get install -y wget git curl jq
+RUN apt-get update && apt-get install -y wget git curl jq unzip && rm -rf /var/lib/apt/lists/*
 
 ADD buildscripts/setup_conda.sh .
-ADD buildscripts/aws/test_installs.sh .
+ADD buildscripts/envs/conda-lock.yml ./buildscripts/envs/conda-lock.yml
 
 ENV CONDA_ENV BodoCodeBuild
 ENV PYTHON_VERSION 3.10
-ENV RUN_NIGHTLY yes
 
 RUN ./setup_conda.sh
-RUN ./test_installs.sh
 
-# This docker image is VERY LARGE, so we remove unnecessary files
-# after the environment is created. This will increase the docker
-# image size because it creates layers, so we use docker-squash
-# https://pypi.org/project/docker-squash/ to generate a new
-# smaller image.
 # TODO: Determine if there are more files that can be removed
 # i.e. source files that are compiled.
-ADD buildscripts/aws/clean_conda.sh .
-RUN ./clean_conda.sh
 
 CMD ["/bin/bash"]

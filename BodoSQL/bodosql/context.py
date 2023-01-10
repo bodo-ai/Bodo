@@ -46,6 +46,7 @@ if bodo.get_rank() == 0:
         SnowflakeCatalogImplClass = (
             gateway.jvm.com.bodosql.calcite.catalog.SnowflakeCatalogImpl
         )
+        BodoTZInfoClass = gateway.jvm.org.apache.calcite.sql.type.BodoTZInfo
     except Exception as e:
         saw_error = True
         msg = str(e)
@@ -58,6 +59,7 @@ else:
     RelationalAlgebraGeneratorClass = None
     PropertiesClass = None
     SnowflakeCatalogImplClass = None
+    BodoTZInfoClass = None
 
 saw_error = bcast_scalar(saw_error)
 msg = bcast_scalar(msg)
@@ -82,12 +84,13 @@ class SqlTypeEnum(Enum):
     Date = 12
     Time = 13
     Datetime = 14
-    Timedelta = 15
-    DateOffset = 16
-    String = 17
-    Binary = 18
-    Categorical = 19
-    Unsupported = 20
+    TZ_AWARE_TIMESTAMP = 15
+    Timedelta = 16
+    DateOffset = 17
+    String = 18
+    Binary = 19
+    Categorical = 20
+    Unsupported = 21
 
 
 # Scalar dtypes for supported Bodo Arrays
@@ -107,10 +110,6 @@ _numba_to_sql_column_type_map = {
     types.bool_: SqlTypeEnum.Bool.value,
     bodo.string_type: SqlTypeEnum.String.value,
     bodo.bytes_type: SqlTypeEnum.Binary.value,
-    bodo.TimeType(0): SqlTypeEnum.Time.value,
-    bodo.TimeType(3): SqlTypeEnum.Time.value,
-    bodo.TimeType(6): SqlTypeEnum.Time.value,
-    bodo.TimeType(9): SqlTypeEnum.Time.value,
     # Note date doesn't have native support yet, but the code to
     # cast to datetime64 is handled in the Java code.
     bodo.datetime_date_type: SqlTypeEnum.Date.value,
@@ -132,23 +131,72 @@ _numba_to_sql_param_type_map = {
     bodo.string_type: SqlTypeEnum.String.value,
     # Scalar datetime and timedelta are assumed
     # to be scalar Pandas Timestamp/Timedelta
-    bodo.pd_timestamp_type: SqlTypeEnum.Datetime.value,
+    bodo.pd_timestamp_tz_naive_type: SqlTypeEnum.Datetime.value,
     bodo.pd_timedelta_type: SqlTypeEnum.Timedelta.value,
     # date_offset_type represents Timedelta year/month
     # and is support only for scalars
     bodo.date_offset_type: SqlTypeEnum.DateOffset.value,
     # TODO: Support Date and Binary parameters [https://bodo.atlassian.net/browse/BE-3542]
-    bodo.TimeType(0): SqlTypeEnum.Time.value,
-    bodo.TimeType(3): SqlTypeEnum.Time.value,
-    bodo.TimeType(6): SqlTypeEnum.Time.value,
-    bodo.TimeType(9): SqlTypeEnum.Time.value,
 }
+
+
+def construct_tz_aware_column_type(typ, col_name, nullable):
+    """Construct a BodoSQL column type for a tz-aware
+    value.
+
+    Args:
+        typ (types.Type): A tz-aware Bodo type
+        col_name (str): Column name
+        nullable (bool): Is the column Nullable
+
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type.
+    """
+    # Create the BodoTzInfo Java object.
+    tz_info = BodoTZInfoClass(str(typ.tz), "int" if isinstance(typ.tz, int) else "str")
+    return ColumnClass(
+        col_name,
+        ColumnTypeClass.fromTypeId(SqlTypeEnum.TZ_AWARE_TIMESTAMP.value),
+        nullable,
+        tz_info,
+    )
+
+
+def construct_time_column_type(
+    typ: Union[bodo.TimeArrayType, bodo.TimeType], col_name: str, nullable: bool
+):
+    """Construct a BodoSQL column type for a time
+    value.
+
+    Args:
+        typ (Union[bodo.TimeArrayType, bodo.TimeType]): A time Bodo type
+        col_name (str): Column name
+        nullable (bool): Is the column Nullable
+
+    Returns:
+        JavaObject: The Java Object for the BodoSQL column type.
+    """
+    # Create the BodoTzInfo Java object.
+    precision = typ.precision
+    return ColumnClass(
+        col_name,
+        ColumnTypeClass.fromTypeId(SqlTypeEnum.Time.value),
+        nullable,
+        precision,
+    )
 
 
 def get_sql_column_type(arr_type, col_name):
     """get SQL type for a given array type."""
     warning_msg = f"DataFrame column '{col_name}' with type {arr_type} not supported in BodoSQL. BodoSQL will attempt to optimize the query to remove this column, but this can lead to errors in compilation. Please refer to the supported types: https://docs.bodo.ai/latest/source/BodoSQL.html#supported-data-types"
-    if arr_type.dtype in _numba_to_sql_column_type_map:
+    nullable = bodo.utils.typing.is_nullable_type(arr_type)
+    if isinstance(arr_type, bodo.DatetimeArrayType):
+        # Timezone-aware Timestamp columns have their own special handling.
+        return construct_tz_aware_column_type(arr_type, col_name, nullable)
+    elif isinstance(arr_type, bodo.TimeArrayType):
+        # Time array types have their own special handling for precision
+        return construct_time_column_type(arr_type, col_name, nullable)
+    elif arr_type.dtype in _numba_to_sql_column_type_map:
         col_dtype = ColumnTypeClass.fromTypeId(
             _numba_to_sql_column_type_map[arr_type.dtype]
         )
@@ -159,11 +207,12 @@ def get_sql_column_type(arr_type, col_name):
         if elem in _numba_to_sql_column_type_map:
             elem_dtype = ColumnTypeClass.fromTypeId(_numba_to_sql_column_type_map[elem])
         else:
-            raise BodoError(err_msg)
-    elif isinstance(arr_type, bodo.DatetimeArrayType):
-        # TODO [BS-641]: Treat TZ-Aware as its own internal type.
-        col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Datetime.value)
-        elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
+            # The type is unsupported we raise a warning indicating this is a possible
+            # error but we generate a dummy type because we may be able to support it
+            # if its optimized out.
+            warnings.warn(BodoSQLWarning(warning_msg))
+            col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
+            elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
     else:
         # The type is unsupported we raise a warning indicating this is a possible
         # error but we generate a dummy type because we may be able to support it
@@ -171,21 +220,35 @@ def get_sql_column_type(arr_type, col_name):
         warnings.warn(BodoSQLWarning(warning_msg))
         col_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Unsupported.value)
         elem_dtype = ColumnTypeClass.fromTypeId(SqlTypeEnum.Empty.value)
-    return ColumnClass(col_name, col_dtype, elem_dtype)
+    return ColumnClass(col_name, col_dtype, elem_dtype, nullable)
 
 
 def get_sql_param_type(param_type, param_name):
     """get SQL type from a Bodo scalar type. Also returns
     if there was a literal type used for outputting a warning."""
     unliteral_type = types.unliteral(param_type)
+    # The named parameters are always scalars. We don't support
+    # Optional types or None types yet. As a result this is always
+    # non-null.
+    nullable = False
     is_literal = unliteral_type != param_type
-    if unliteral_type in _numba_to_sql_param_type_map:
+    if (
+        isinstance(unliteral_type, bodo.PandasTimestampType)
+        and unliteral_type.tz != None
+    ):
+        # Timezone-aware Timestamps have their own special handling.
+        return construct_tz_aware_column_type(param_type, param_name, nullable)
+    elif isinstance(unliteral_type, bodo.TimeType):
+        # Time array types have their own special handling for precision
+        return construct_time_column_type(param_type, param_name, nullable)
+    elif unliteral_type in _numba_to_sql_param_type_map:
         return (
             ColumnClass(
                 param_name,
                 ColumnTypeClass.fromTypeId(
                     _numba_to_sql_param_type_map[unliteral_type]
                 ),
+                nullable,
             ),
             is_literal,
         )
@@ -292,6 +355,7 @@ def compute_df_types(df_list, is_bodo_type):
                         None,
                         ir.Var(None, "dummy_var", ir.Loc("dummy_loc", -1)),
                         ir.Loc("dummy_loc", -1),
+                        False,
                     )
                     # Future proof against additional return values that are unused
                     # by BodoSQL by returning a tuple.
@@ -318,7 +382,9 @@ def compute_df_types(df_list, is_bodo_type):
     return orig_bodo_types, df_types
 
 
-def add_table_type(table_name, schema, df_type, bodo_type, table_num, from_jit):
+def add_table_type(
+    table_name, schema, df_type, bodo_type, table_num, from_jit, write_type
+):
     """Add a SQL Table type in Java to the schema."""
     assert bodo.get_rank() == 0, "add_table_type should only be called on rank 0."
     col_arr = ArrayClass()
@@ -331,15 +397,36 @@ def add_table_type(table_name, schema, df_type, bodo_type, table_num, from_jit):
     is_writeable = (
         isinstance(bodo_type, TablePathType) and bodo_type._file_type == "sql"
     )
+
     if is_writeable:
-        schema_code = (
+        schema_code_to_sql = (
             f"schema='{bodo_type._db_schema}'"
             if bodo_type._db_schema is not None
             else ""
         )
-        write_format_code = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code})"
+        if write_type == "MERGE":
+            # Note. We only support MERGE for Iceberg. We check this in the
+            # Java code to ensure we also handle catalogs. Note the
+            # last argument is for passing additional arguments as key=value pairs.
+            write_format_code = f"bodo.io.iceberg.iceberg_merge_cow_py('{bodo_type._file_path}', '{bodo_type._conn_str}', '{bodo_type._db_schema}', %s, %s)"
+        else:
+            write_format_code = f"%s.to_sql('{bodo_type._file_path}', '{bodo_type._conn_str}', if_exists='append', index=False, {schema_code_to_sql}, %s)"
     else:
         write_format_code = ""
+
+    # Determine the DB Type for generating java code.
+    if isinstance(bodo_type, TablePathType):
+        if bodo_type._file_type == "pq":
+            db_type = "PARQUET"
+        else:
+            assert (
+                bodo_type._file_type == "sql"
+            ), "TablePathType is only implement for parquet and SQL APIs"
+            const_conn_str = bodo_type._conn_str
+            db_type, _ = parse_dbtype(const_conn_str)
+    else:
+        db_type = "MEMORY"
+
     read_code = _generate_table_read(table_name, bodo_type, table_num, from_jit)
     table = LocalTableClass(
         table_name,
@@ -351,6 +438,7 @@ def add_table_type(table_name, schema, df_type, bodo_type, table_num, from_jit):
         # TablePath is a wrapper for a file so it results in an IO read.
         # The only other option is an in memory Pandas DataFrame.
         isinstance(bodo_type, TablePathType),
+        db_type,
     )
     schema.addTable(table)
 
@@ -383,21 +471,26 @@ def _generate_table_read(
         read_dict_list = (
             ""
             if bodo_type._bodo_read_as_dict is None
-            else f"_bodo_read_as_dict={bodo_type._bodo_read_as_dict}"
+            else f"_bodo_read_as_dict={bodo_type._bodo_read_as_dict},"
         )
         if file_type == "pq":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
-            read_line = f"pd.read_parquet('{file_path}', {read_dict_list})\n"
+            if read_dict_list:
+                read_line = f"pd.read_parquet('{file_path}', {read_dict_list}, %s)\n"
+            else:
+                read_line = f"pd.read_parquet('{file_path}', %s)\n"
         elif file_type == "sql":
             # TODO: Replace with runtime variable once we support specifying
             # the schema
             conn_str = bodo_type._conn_str
             db_type, _ = parse_dbtype(conn_str)
             if db_type == "iceberg":
-                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list})\n"
+                read_line = f"pd.read_sql_table('{file_path}', '{conn_str}', '{bodo_type._db_schema}', {read_dict_list} %s)\n"
             else:
-                read_line = f"pd.read_sql('select * from {file_path}', '{conn_str}')\n"
+                read_line = (
+                    f"pd.read_sql('select * from {file_path}', '{conn_str}', %s)\n"
+                )
         else:
             raise BodoError(
                 f"Internal Error: Unsupported TablePathType for type: '{file_type}'"
@@ -437,7 +530,7 @@ def add_param_table(table_name, schema, param_keys, param_values):
     # a table scan. Instead the original Python variable names will always
     # be used.
     schema.addTable(
-        LocalTableClass(table_name, schema, param_arr, False, "", "", False)
+        LocalTableClass(table_name, schema, param_arr, False, "", "", False, "MEMORY")
     )
 
 
@@ -618,6 +711,7 @@ class BodoSQLContext:
                     "bodo": bodo,
                     "numba": numba,
                     "time": time,
+                    "pd": pd,
                 },
                 locs,
             )
@@ -650,6 +744,7 @@ class BodoSQLContext:
             "MetaType": bodo.utils.typing.MetaType,
             "numba": numba,
             "time": time,
+            "pd": pd,
         }
 
         glbls.update(lowered_globals)
@@ -679,9 +774,16 @@ class BodoSQLContext:
                 generator = self._create_generator()
                 # Handle the parsing step.
                 generator.parseQuery(sql)
+                # Determine the write type
+                write_type = generator.getWriteType(sql)
                 # Update the schema with types.
                 update_schema(
-                    self.schema, self.names, self.df_types, self.orig_bodo_types, False
+                    self.schema,
+                    self.names,
+                    self.df_types,
+                    self.orig_bodo_types,
+                    False,
+                    write_type,
                 )
                 plan_or_err_msg = str(generator.getOptimizedPlanString(sql))
                 # Remove the named Params table
@@ -709,9 +811,16 @@ class BodoSQLContext:
                 generator = self._create_generator()
                 # Handle the parsing step.
                 generator.parseQuery(sql)
+                # Determine the write type
+                write_type = generator.getWriteType(sql)
                 # Update the schema with types.
                 update_schema(
-                    self.schema, self.names, self.df_types, self.orig_bodo_types, False
+                    self.schema,
+                    self.names,
+                    self.df_types,
+                    self.orig_bodo_types,
+                    False,
+                    write_type,
                 )
                 plan_or_err_msg = str(generator.getUnoptimizedPlanString(sql))
                 # Remove the named Params table
@@ -739,9 +848,16 @@ class BodoSQLContext:
         generator = self._create_generator()
         # Handle the parsing step.
         generator.parseQuery(sql)
+        # Determine the write type
+        write_type = generator.getWriteType(sql)
         # Update the schema with types.
         update_schema(
-            self.schema, self.names, self.df_types, self.orig_bodo_types, False
+            self.schema,
+            self.names,
+            self.df_types,
+            self.orig_bodo_types,
+            False,
+            write_type,
         )
 
         if optimized:
@@ -948,6 +1064,7 @@ def update_schema(
     df_types: List[bodo.DataFrameType],
     bodo_types: List[types.Type],
     from_jit: bool,
+    write_type: str,
 ):
     """Update a local schema with local tables.
 
@@ -958,10 +1075,19 @@ def update_schema(
         bodo_types (List[types.Type]): List of Bodo types for each table. This stores
             the original type, so a TablePath isn't converted to its
             DataFrameType, which it is for df_types.
+        write_type (str): String describing the type of write used for generating the write code.
+            Will be "MERGE" for MERGE INTO queries, and defaults to "INSERT" for all other
+            queries.
         from_jit (bool): Is this typing coming from JIT?
     """
     if bodo.get_rank() == 0:
         for i in range(len(table_names)):
             add_table_type(
-                table_names[i], schema, df_types[i], bodo_types[i], i, from_jit
+                table_names[i],
+                schema,
+                df_types[i],
+                bodo_types[i],
+                i,
+                from_jit,
+                write_type,
             )

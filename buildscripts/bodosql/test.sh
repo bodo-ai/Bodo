@@ -1,5 +1,6 @@
 #!/bin/bash
-set -exo pipefail
+set -eo pipefail
+set +x
 
 # Deactivate env in case this was called by another file that
 # activated the env. This only happens on AWS and causes errors
@@ -7,8 +8,9 @@ set -exo pipefail
 if [[ "$CI_SOURCE" == "AWS" ]]; then
     source deactivate || true
 fi
-export PATH=$HOME/miniconda3/bin:$PATH
+export PATH=$HOME/mambaforge/bin:$PATH
 source activate $CONDA_ENV
+set -x
 
 # Move to BodoSQL directory
 cd BodoSQL

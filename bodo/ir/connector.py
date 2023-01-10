@@ -15,7 +15,7 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import debug_prints
+from bodo.utils.utils import debug_prints, is_array_typ
 
 
 def connector_array_analysis(node, equiv_set, typemap, array_analysis):
@@ -82,7 +82,7 @@ def connector_distributed_analysis(node, array_dists):
         out_dist = Distribution.OneD
 
     # For non Table returns, all output arrays should have the same distribution
-    # For Table returns, both the table and the index should have the same distriution
+    # For Table returns, both the table and the index should have the same distribution
     for v in node.out_vars:
         if v.name in array_dists:
             out_dist = Distribution(min(out_dist.value, array_dists[v.name].value))
@@ -660,8 +660,12 @@ def determine_filter_cast(
     else:
         col_cast = ""
     rhs_typ = typemap[filter_val[2].name]
-    # If we do isin, then rhs_typ will be a list or set
+    # If we do series isin, then rhs_typ will be a list or set
     if isinstance(rhs_typ, (types.List, types.Set)):
+        rhs_scalar_typ = rhs_typ.dtype
+    # If we do isin via the bodosql array kernel, then rhs_typ will be an array
+    # We enforce that this array is replicated, so it's safe to do pushdown
+    elif is_array_typ(rhs_typ):
         rhs_scalar_typ = rhs_typ.dtype
     else:
         rhs_scalar_typ = rhs_typ
@@ -688,12 +692,12 @@ def determine_filter_cast(
         # Only supported types should be string and timestamp or timestamp + date
         if lhs_scalar_typ == types.unicode_type and rhs_scalar_typ in (
             bodo.datetime64ns,
-            bodo.pd_timestamp_type,
+            bodo.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
             return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
         elif rhs_scalar_typ == types.unicode_type and lhs_scalar_typ in (
             bodo.datetime64ns,
-            bodo.pd_timestamp_type,
+            bodo.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
             if isinstance(rhs_typ, (types.List, types.Set)):  # pragma: no cover
                 # This path should never be reached because we checked that
@@ -705,12 +709,12 @@ def determine_filter_cast(
             return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
         elif lhs_scalar_typ == bodo.datetime_date_type and rhs_scalar_typ in (
             bodo.datetime64ns,
-            bodo.pd_timestamp_type,
+            bodo.pd_timestamp_tz_naive_type,
         ):
             return ".cast(pyarrow.timestamp('ns'), safe=False)", ""
         elif rhs_scalar_typ == bodo.datetime_date_type and lhs_scalar_typ in (
             bodo.datetime64ns,
-            bodo.pd_timestamp_type,
+            bodo.pd_timestamp_tz_naive_type,
         ):  # pragma: no cover
             return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
     return col_cast, ""

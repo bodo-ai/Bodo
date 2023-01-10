@@ -1,5 +1,7 @@
 // Copyright (C) 2019 Bodo Inc. All rights reserved.
 #include "_array_utils.h"
+#include "../io/arrow_reader.h"
+#include "_bodo_to_arrow.h"
 
 #include <mpi.h>
 #include <iostream>
@@ -190,9 +192,69 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
     }
 }
 
+/**
+ * @brief Create a Numpy array by selecting elements from input array as
+ * specified by index function f.
+ *
+ * @tparam F function type with integer input/output
+ * @param in_arr Numpy array with input data
+ * @param f function that takes output array index and returns input array index
+ * to find corresponding data
+ * @param nRowOut number of rows in output array
+ * @param use_nullable_int use nullable integer data type if input data is
+ * integer
+ * @return array_info* output data array as specified by input
+ */
+template <typename F>
+array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr, F f,
+                                               size_t nRowOut,
+                                               bool use_nullable_int = false) {
+    array_info* out_arr = NULL;
+    bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
+    Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
+    uint64_t siztype = numpy_item_size[dtype];
+    std::vector<char> vectNaN = RetrieveNaNentry(dtype);
+    char* in_data1 = in_arr->data1;
+    // use nullable int array if dtype is integer and use_nullable_int is
+    // specified
+    if (use_nullable_int && is_integer(dtype)) {
+        out_arr = alloc_array(nRowOut, -1, -1,
+                              bodo_array_type::NULLABLE_INT_BOOL, dtype, 0, 0);
+        char* out_data1 = out_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            int64_t idx = f(iRow);
+            char* out_ptr = out_data1 + siztype * iRow;
+            char* in_ptr;
+            bool bit = false;
+            if (idx >= 0) {
+                in_ptr = in_data1 + siztype * idx;
+                memcpy(out_ptr, in_ptr, siztype);
+                bit = true;
+            }
+            out_arr->set_null_bit(iRow, bit);
+        }
+    } else {
+        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
+        char* out_data1 = out_arr->data1;
+        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
+            int64_t idx = f(iRow);
+            char* out_ptr = out_data1 + siztype * iRow;
+            char* in_ptr;
+            // To allow NaN values in the column.
+            if (idx >= 0)
+                in_ptr = in_data1 + siztype * idx;
+            else
+                in_ptr = vectNaN.data();
+            memcpy(out_ptr, in_ptr, siztype);
+        }
+    }
+    return out_arr;
+}
+
 template <typename F>
 array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
-                                         size_t nRowOut) {
+                                         size_t nRowOut,
+                                         bool use_nullable_int = false) {
     array_info* out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
@@ -325,11 +387,15 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
             int64_t idx = f(iRow);
             // To allow NaN values in the column.
             bool bit = false;
+            char* out_ptr = out_data1 + siztype * iRow;
             if (idx >= 0) {
-                char* out_ptr = out_data1 + siztype * iRow;
                 char* in_ptr = in_data1 + siztype * idx;
                 memcpy(out_ptr, in_ptr, siztype);
                 bit = in_indices->get_null_bit(idx);
+            } else {
+                // set index value to zero in case some other code accesses it
+                // by mistake. see https://bodo.atlassian.net/browse/BE-4146
+                memset(out_ptr, 0, siztype);
             }
             out_indices->set_null_bit(iRow, bit);
         }
@@ -416,24 +482,8 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
         }
     }
     if (arr_type == bodo_array_type::NUMPY) {
-        // In the case of NUMPY array we have only to put a single
-        // entry.
-        uint64_t siztype = numpy_item_size[dtype];
-        std::vector<char> vectNaN = RetrieveNaNentry(dtype);
-        char* in_data1 = in_arr->data1;
-        out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
-        char* out_data1 = out_arr->data1;
-        for (size_t iRow = 0; iRow < nRowOut; iRow++) {
-            int64_t idx = f(iRow);
-            char* out_ptr = out_data1 + siztype * iRow;
-            char* in_ptr;
-            // To allow NaN values in the column.
-            if (idx >= 0)
-                in_ptr = in_data1 + siztype * idx;
-            else
-                in_ptr = vectNaN.data();
-            memcpy(out_ptr, in_ptr, siztype);
-        }
+        out_arr = RetrieveArray_SingleColumn_F_numpy(in_arr, f, nRowOut,
+                                                     use_nullable_int);
     }
     if (arr_type == bodo_array_type::ARROW) {
         // Arrow builder for output array. builds it dynamically (buffer
@@ -468,10 +518,11 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
 };
 
 array_info* RetrieveArray_SingleColumn(array_info* in_arr,
-                                       std::vector<int64_t> const& ListIdx) {
+                                       std::vector<int64_t> const& ListIdx,
+                                       bool use_nullable_int) {
     return RetrieveArray_SingleColumn_F(
         in_arr, [&](size_t iRow) -> int64_t { return ListIdx[iRow]; },
-        ListIdx.size());
+        ListIdx.size(), use_nullable_int);
 }
 
 array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
@@ -655,12 +706,16 @@ array_info* RetrieveArray_TwoColumns(
         for (size_t iRow = 0; iRow < nRowOut; iRow++) {
             std::pair<array_info*, std::ptrdiff_t> ArrRow = get_iRow(iRow);
             bool bit = false;
+            char* out_ptr = out_indices->data1 + siztype * iRow;
             if (ArrRow.second >= 0) {
                 array_info* e_col = ArrRow.first;
-                char* out_ptr = out_indices->data1 + siztype * iRow;
                 char* in_ptr = e_col->info2->data1 + siztype * ArrRow.second;
                 memcpy(out_ptr, in_ptr, siztype);
                 bit = e_col->info2->get_null_bit(ArrRow.second);
+            } else {
+                // set index value to zero in case some other code accesses it
+                // by mistake. see https://bodo.atlassian.net/browse/BE-4146
+                memset(out_ptr, 0, siztype);
             }
             out_indices->set_null_bit(iRow, bit);
         }
@@ -1394,8 +1449,9 @@ std::string GetStringExpression(Bodo_CTypes::CTypeEnum const& dtype,
         uint64_t* ptr = (uint64_t*)ptrdata;
         return std::to_string(*ptr);
     }
+    // TODO: [BE-4106] Split Time into Time32 and Time64
     if (dtype == Bodo_CTypes::DATE || dtype == Bodo_CTypes::DATETIME ||
-        dtype == Bodo_CTypes::TIMEDELTA) {
+        dtype == Bodo_CTypes::TIMEDELTA || dtype == Bodo_CTypes::TIME) {
         int64_t* ptr = (int64_t*)ptrdata;
         return std::to_string(*ptr);
     }
@@ -1800,12 +1856,14 @@ std::string GetDtype_as_string(Bodo_CTypes::CTypeEnum const& dtype) {
     if (dtype == Bodo_CTypes::FLOAT32) return "FLOAT32";
     if (dtype == Bodo_CTypes::FLOAT64) return "FLOAT64";
     if (dtype == Bodo_CTypes::STRING) return "STRING";
+    if (dtype == Bodo_CTypes::LIST_STRING) return "LIST_STRING";
     if (dtype == Bodo_CTypes::BINARY) return "BINARY";
     if (dtype == Bodo_CTypes::_BOOL) return "_BOOL";
     if (dtype == Bodo_CTypes::DECIMAL) return "DECIMAL";
     if (dtype == Bodo_CTypes::DATE) return "DATE";
     if (dtype == Bodo_CTypes::DATETIME) return "DATETIME";
     if (dtype == Bodo_CTypes::TIMEDELTA) return "TIMEDELTA";
+    if (dtype == Bodo_CTypes::TIME) return "TIME";
     return "unmatching dtype";
 }
 
@@ -1929,4 +1987,33 @@ std::pair<size_t, size_t> get_nunique_hashes_global(
     // cast to `size_t` to avoid compilation error on Windows
     ev.add_attribute("g_global_estimate", static_cast<size_t>(est));
     return {local_est, est};
+}
+
+/**
+ * @brief concatenate tables vertically into a single table.
+ * Input tables are assumed to have the same schema, and will
+ * be fully deleted (decref arrays and delete pointers).
+ *
+ * @param table_chunks input tables which are assumed to have the same schema
+ * @return table_info* concatenated table
+ */
+table_info* concat_tables(std::vector<table_info*>& table_chunks) {
+    // get number of total rows for TableBuilder
+    int64_t n_total_rows = 0;
+    for (table_info* table : table_chunks) {
+        n_total_rows += table->nrows();
+    }
+
+    assert(table_chunks->size() > 0);
+    TableBuilder table_builder(table_chunks[0], n_total_rows);
+    for (table_info* table : table_chunks) {
+        table_builder.append(bodo_table_to_arrow(table));
+    }
+
+    table_info* out_table = table_builder.get_table();
+
+    for (table_info* table : table_chunks) {
+        delete_table_decref_arrays(table);
+    }
+    return out_table;
 }

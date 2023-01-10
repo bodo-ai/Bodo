@@ -207,7 +207,14 @@ def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):

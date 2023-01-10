@@ -2353,7 +2353,9 @@ def get_stmt_writes(stmt, func_ir):
             ("str_arr_setitem_NA_str", "bodo.libs.str_arr_ext"),
             ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
             ("get_str_arr_item_copy", "bodo.libs.str_arr_ext"),
+            ("copy_array_element", "bodo.libs.array_kernels"),
             ("set_bit_to_arr", "bodo.libs.int_arr_ext"),
+            ("tuple_list_to_array", "bodo.utils.utils"),
         ):
             writes.add(stmt.value.args[0].name)
         if fdef == ("generate_table_nbytes", "bodo.utils.table_utils"):
@@ -3190,7 +3192,7 @@ def resolve_number___call__(self, classty):
             bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
                 val1, "numpy.datetime64"
             )
-            if val1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
+            if val1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
                 if not is_overload_constant_str(val2):
                     raise_bodo_error(
                         "datetime64(): 'units' must be a 'str' specifying 'ns'"

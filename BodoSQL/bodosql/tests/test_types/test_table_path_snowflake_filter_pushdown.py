@@ -168,3 +168,47 @@ def test_snowflake_limit_pushdown(memory_leak_check):
         assert fir.meta_head_only_info[0] is not None
         check_logger_msg(stream, "Columns loaded ['mycol']")
         check_logger_msg(stream, "Filter pushdown successfully performed")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_in_pushdown(memory_leak_check):
+    """
+    Test in pushdown with loading from a Snowflake table.
+    """
+
+    def impl(table_name, conn_str):
+        bc = bodosql.BodoSQLContext(
+            {"sql_table": bodosql.TablePath(table_name, "sql", conn_str=conn_str)},
+        )
+        return bc.sql(
+            "select mycol from sql_table WHERE mycol in ('A', 'B', 'C')",
+        )
+
+    # Note: We don't yet support casting with limit pushdown.
+    table_name = "BODOSQL_ALL_SUPPORTED"
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn_str = get_snowflake_connection_string(db, schema)
+    py_output = pd.read_sql(
+        f"select mycol from {table_name} WHERE mycol in ('A', 'B', 'C')",
+        conn_str,
+    )
+    check_func(
+        impl,
+        (table_name, conn_str),
+        py_output=py_output,
+        reset_index=True,
+        check_dtype=False,
+    )
+
+    # make sure filter + limit pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        bodo_func = bodo.jit(pipeline_class=DistTestPipeline)(impl)
+        bodo_func(table_name, conn_str)
+        check_logger_msg(stream, "Columns loaded ['mycol']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")

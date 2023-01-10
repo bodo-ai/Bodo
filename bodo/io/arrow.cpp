@@ -9,24 +9,32 @@
 // --------- functions defined in parquet_reader.cpp ---------
 table_info* pq_read(PyObject* path, bool parallel, PyObject* dnf_filters,
                     PyObject* expr_filters, PyObject* storage_options,
-                    int64_t tot_rows_to_read, int32_t* selected_cols,
-                    int32_t num_selected_cols, int32_t* is_nullable,
-                    int32_t* selected_part_cols, int32_t* part_cols_cat_dtype,
-                    int32_t num_partition_cols, int32_t* str_as_dict_cols,
-                    int32_t num_str_as_dict_cols, int64_t* total_rows_out,
-                    bool input_file_name_col, bool use_hive);
+                    PyObject* pyarrow_schema, int64_t tot_rows_to_read,
+                    int32_t* _selected_cols, int32_t num_selected_cols,
+                    int32_t* _is_nullable, int32_t* selected_part_cols,
+                    int32_t* part_cols_cat_dtype, int32_t num_partition_cols,
+                    int32_t* str_as_dict_cols, int32_t num_str_as_dict_cols,
+                    int64_t* total_rows_out, bool input_file_name_col,
+                    bool use_hive);
 
 // --------- functions defined in iceberg_parquet_reader.cpp --------
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             const char* table_name, bool parallel,
                             int64_t tot_rows_to_read, PyObject* dnf_filters,
-                            PyObject* expr_filters, int32_t* selected_fields,
-                            int32_t num_selected_fields, int32_t* is_nullable,
-                            PyObject* pyarrow_table_schema,
-                            int32_t* str_as_dict_cols,
+                            PyObject* expr_filters, int32_t* _selected_fields,
+                            int32_t num_selected_fields, int32_t* _is_nullable,
+                            PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
                             int32_t num_str_as_dict_cols,
                             bool is_merge_into_cow, int64_t* total_rows_out,
                             PyObject** file_list_ptr, int64_t* snapshot_id_ptr);
+
+// --------- function defined in snowflake_reader.cpp ---------
+table_info* snowflake_read(const char* query, const char* conn, bool parallel,
+                           bool is_independent, PyObject* pyarrow_schema,
+                           int64_t n_fields, int32_t* _is_nullable,
+                           int32_t* str_as_dict_cols,
+                           int32_t num_str_as_dict_cols, int64_t* total_nrows,
+                           bool _only_length_query, bool _is_select_query);
 
 // --------- functions defined in parquet_write.cpp ---------
 int64_t pq_write_py_entry(const char* filename, const table_info* table,
@@ -36,7 +44,8 @@ int64_t pq_write_py_entry(const char* filename, const table_info* table,
                           bool write_rangeindex_to_metadata, const int start,
                           const int stop, const int step, const char* name,
                           const char* bucket_region, int64_t row_group_size,
-                          const char* prefix, const char* tz);
+                          const char* prefix, bool convert_timedelta_to_int64,
+                          const char* tz, bool downcast_time_ns_to_us);
 
 void pq_write_partitioned(const char* _path_name, table_info* table,
                           const array_info* col_names_arr,
@@ -48,19 +57,12 @@ void pq_write_partitioned(const char* _path_name, table_info* table,
                           const char* tz);
 
 // ---------- functions defined in iceberg_parquet_write.cpp ----
-
 PyObject* iceberg_pq_write_py_entry(
     const char* table_data_loc, table_info* table,
     const array_info* col_names_arr, PyObject* partition_spec,
     PyObject* sort_order, const char* compression, bool is_parallel,
-    const char* bucket_region, int64_t row_group_size, char* iceberg_metadata);
-
-// --------- function defined in snowflake_reader.cpp ---------
-table_info* snowflake_read(const char* query, const char* conn, bool parallel,
-                           int64_t n_fields, int32_t* is_nullable,
-                           int32_t* str_as_dict_cols,
-                           int32_t num_str_as_dict_cols, int64_t* total_nrows,
-                           bool _only_length_query, bool _is_select_query);
+    const char* bucket_region, int64_t row_group_size, char* iceberg_metadata,
+    PyObject* iceberg_arrow_schema_py);
 
 PyMODINIT_FUNC PyInit_arrow_cpp(void) {
     PyObject* m;

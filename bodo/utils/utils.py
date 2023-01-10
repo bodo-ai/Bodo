@@ -35,6 +35,7 @@ from bodo.hiframes.time_ext import TimeArrayType
 from bodo.libs.binary_arr_ext import bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import (
     num_total_chars,
@@ -193,6 +194,7 @@ def is_alloc_callname(func_name, mod_name):
         )
         or (func_name == "alloc_bool_array" and mod_name == "bodo.libs.bool_arr_ext")
         or (func_name == "alloc_int_array" and mod_name == "bodo.libs.int_arr_ext")
+        or (func_name == "alloc_float_array" and mod_name == "bodo.libs.float_arr_ext")
         or (
             func_name == "alloc_datetime_date_array"
             and mod_name == "bodo.hiframes.datetime_date_ext"
@@ -357,6 +359,7 @@ def is_array_typ(var_typ, include_index_series=True):
             var_typ,
             (
                 IntegerArrayType,
+                FloatingArrayType,
                 bodo.libs.decimal_arr_ext.DecimalArrayType,
                 bodo.hiframes.pd_categorical_ext.CategoricalArrayType,
                 bodo.libs.array_item_arr_ext.ArrayItemArrayType,
@@ -508,6 +511,15 @@ def empty_like_type_overload(n, arr):
             return bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)
 
         return empty_like_type_int_arr
+
+    # nullable float arr
+    if isinstance(arr, FloatingArrayType):  # pragma: no cover
+        _dtype = arr.dtype
+
+        def empty_like_type_float_arr(n, arr):  # pragma: no cover
+            return bodo.libs.float_arr_ext.alloc_float_array(n, _dtype)
+
+        return empty_like_type_float_arr
 
     if arr == boolean_array:
 
@@ -850,6 +862,12 @@ def overload_alloc_type(n, t, s=None):
             n, dtype
         )  # pragma: no cover
 
+    # nullable float array
+    if isinstance(typ, FloatingArrayType):
+        return lambda n, t, s=None: bodo.libs.float_arr_ext.alloc_float_array(
+            n, dtype
+        )  # pragma: no cover
+
     # nullable bool array
     if typ == boolean_array:
         return lambda n, t, s=None: bodo.libs.bool_arr_ext.alloc_bool_array(
@@ -872,13 +890,22 @@ def overload_astype(A, t):
     if A == typ:
         return lambda A, t: A  # pragma: no cover
 
-    # numpy or nullable int array can convert to numpy directly
-    if isinstance(A, (types.Array, IntegerArrayType)) and isinstance(typ, types.Array):
+    # numpy or nullable int/float array can convert to numpy directly
+    if isinstance(A, (types.Array, IntegerArrayType, FloatingArrayType)) and isinstance(
+        typ, types.Array
+    ):
         return lambda A, t: A.astype(dtype)  # pragma: no cover
 
     # convert to nullable int
     if isinstance(typ, IntegerArrayType):
         return lambda A, t: bodo.libs.int_arr_ext.init_integer_array(
+            A.astype(dtype),
+            np.full((len(A) + 7) >> 3, 255, np.uint8),
+        )  # pragma: no cover
+
+    # convert to nullable float
+    if isinstance(typ, FloatingArrayType):  # pragma: no cover
+        return lambda A, t: bodo.libs.float_arr_ext.init_float_array(
             A.astype(dtype),
             np.full((len(A) + 7) >> 3, 255, np.uint8),
         )  # pragma: no cover
@@ -911,6 +938,14 @@ def overload_full_type(n, val, t):
     if isinstance(typ, IntegerArrayType):
         dtype = numba.np.numpy_support.as_dtype(typ.dtype)
         return lambda n, val, t: bodo.libs.int_arr_ext.init_integer_array(
+            np.full(n, val, dtype),
+            np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
+        )  # pragma: no cover
+
+    # nullable float array
+    if isinstance(typ, FloatingArrayType):
+        dtype = numba.np.numpy_support.as_dtype(typ.dtype)
+        return lambda n, val, t: bodo.libs.float_arr_ext.init_float_array(
             np.full(n, val, dtype),
             np.full((tuple_to_scalar(n) + 7) >> 3, 255, np.uint8),
         )  # pragma: no cover
@@ -988,8 +1023,8 @@ def tuple_list_to_array(A, data, elem_type):
     )
     func_text = "def impl(A, data, elem_type):\n"
     func_text += "  for i, d in enumerate(data):\n"
-    if elem_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
-        func_text += "    A[i] = bodo.utils.conversion.unbox_if_timestamp(d)\n"
+    if elem_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
+        func_text += "    A[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(d)\n"
     else:
         func_text += "    A[i] = d\n"
     loc_vars = {}
@@ -1068,7 +1103,7 @@ def is_call_assign(stmt):
     )
 
 
-def is_call(expr):
+def is_call(expr) -> bool:
     return isinstance(expr, ir.Expr) and expr.op == "call"
 
 
@@ -1076,11 +1111,11 @@ def is_var_assign(inst):
     return isinstance(inst, ir.Assign) and isinstance(inst.value, ir.Var)
 
 
-def is_assign(inst):
+def is_assign(inst) -> bool:
     return isinstance(inst, ir.Assign)
 
 
-def is_expr(val, op):
+def is_expr(val, op) -> bool:
     return isinstance(val, ir.Expr) and val.op == op
 
 

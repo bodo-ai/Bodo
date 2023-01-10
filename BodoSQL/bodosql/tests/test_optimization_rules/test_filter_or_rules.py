@@ -100,13 +100,13 @@ def test_join_filter_rule(spark_info, memory_leak_check):
     assert gen_code3.count("|") == 1, "Expected 1 | after optimization"
     result4 = check_query(query4, ctx, spark_info, return_codegen=True)
     gen_code4 = result4["pandas_code"]
-    assert gen_code4.count("booland") == 1, "Expected 1 booland after optimization"
+    assert gen_code4.count("booland") == 0, "Expected 0 booland after optimization"
     assert gen_code4.count("|") == 2, "Expected 2 | after optimization"
     result5 = check_query(query5, ctx, spark_info, return_codegen=True)
     gen_code5 = result5["pandas_code"]
-    assert gen_code5.count("booland") == 2, "Expected 2 booland after no-optimization"
+    assert gen_code5.count("booland") == 0, "Expected 0 booland after no-optimization"
     assert gen_code5.count("|") == 1, "Expected 1 | after no-optimization"
     result6 = check_query(query6, ctx, spark_info, return_codegen=True)
     gen_code6 = result6["pandas_code"]
-    assert gen_code6.count("booland") == 4, "Expected 4 booland after no-optimization"
+    assert gen_code6.count("booland") == 1, "Expected 1 booland after no-optimization"
     assert gen_code6.count("|") == 2, "Expected 2 | after no-optimization"

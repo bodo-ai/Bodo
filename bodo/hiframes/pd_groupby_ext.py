@@ -48,6 +48,7 @@ from bodo.libs.array import (
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.decimal_arr_ext import Decimal128Type
+from bodo.libs.float_arr_ext import FloatDtype, FloatingArrayType
 from bodo.libs.int_arr_ext import IntDtype, IntegerArrayType
 from bodo.libs.str_arr_ext import string_array_type
 from bodo.libs.str_ext import string_type
@@ -573,9 +574,9 @@ def get_agg_typ(
             if func_name in ("sum", "cumsum"):
                 data = to_str_arr_if_dict_array(data)
             e_column_type = ColumnType.NonNumericalColumn.value
-            if isinstance(data, (types.Array, IntegerArrayType)) and isinstance(
-                data.dtype, (types.Integer, types.Float)
-            ):
+            if isinstance(
+                data, (types.Array, IntegerArrayType, FloatingArrayType)
+            ) and isinstance(data.dtype, (types.Integer, types.Float)):
                 e_column_type = ColumnType.NumericalColumn.value
 
             if func_name == "agg":
@@ -768,6 +769,8 @@ def get_agg_typ(
     ):
         if isinstance(out_data[0], IntegerArrayType):
             dtype = IntDtype(out_data[0].dtype)
+        elif isinstance(out_data[0], FloatingArrayType):
+            dtype = FloatDtype(out_data[0].dtype)
         else:
             dtype = out_data[0].dtype
         name_type = (

@@ -1133,6 +1133,13 @@ def test_dataframe_pipe():
                 "B": [True, False, False, True, True, False],
             }
         ),
+        # nullable float
+        pd.DataFrame(
+            {
+                "A": ["aa", "bb", "aa", "cc", "aa", "bb"],
+                "B": pd.Series([1.5, 2.2, 2.2, 5.3, None, 1.5], dtype="Float64"),
+            }
+        ),
     ],
 )
 # memory_leak_check doesn't work with Categorical

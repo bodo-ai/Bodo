@@ -8,11 +8,20 @@ import sys
 num_processes = int(sys.argv[1])
 # all other args go to pytest
 pytest_args = sys.argv[2:]
+# Get File-Level Timeout Info from Environment Variable (in seconds)
+file_timeout = int(os.environ.get("BODO_RUNTESTS_TIMEOUT", 7200))
 
 logfile_name = "splitting_logs/logfile-07-18-22.txt"
 
 # If in AWS Codebuild partition tests
 if "CODEBUILD_BUILD_ID" in os.environ:
+    # Make sure buildscripts is in the import path
+    module_dir = os.path.abspath(os.path.join(__file__, os.pardir))
+    repo_dir = os.path.abspath(os.path.join(module_dir, os.pardir))
+    assert module_dir in sys.path
+    if repo_dir not in sys.path:
+        sys.path.append(repo_dir)
+
     import buildscripts.aws.select_timing_from_logs
 
     # Load the logfile for splitting tests
@@ -124,6 +133,7 @@ for i, m in enumerate(modules):
         mod_pytest_args[mark_arg_idx + 1] += " and single_mod"
     except ValueError:
         mod_pytest_args += ["-m", "single_mod"]
+
     # run tests with mpiexec + pytest always. If you just use
     # pytest then out of memory won't tell you which test failed.
     cmd = [
@@ -133,10 +143,15 @@ for i, m in enumerate(modules):
         str(num_processes),
         "pytest",
         "-Wignore",
+        # junitxml generates test report file that can be displayed by CodeBuild website
+        # use PYTEST_MARKER and module name to generate a unique filename for each group of tests as identified
+        # by markers and test filename.
+        f"--junitxml=pytest-report-{m.split('.')[0]}-{os.environ['PYTEST_MARKER'].replace(' ','-')}.xml",
     ] + mod_pytest_args
     print("Running", " ".join(cmd))
     p = subprocess.Popen(cmd, shell=False)
-    rc = p.wait()
+    rc = p.wait(timeout=file_timeout)
+
     if rc not in (0, 5):  # pytest returns error code 5 when no tests found
         # raise RuntimeError("An error occurred when running the command " + str(cmd))
         tests_failed = True

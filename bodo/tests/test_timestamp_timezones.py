@@ -6,12 +6,13 @@ import re
 import numpy as np
 import pandas as pd
 import pytest
-import pytz
 
 import bodo
-from bodo.tests.timezone_common import sample_tz  # noqa
+from bodo.tests.timezone_common import representative_tz, sample_tz  # noqa
 from bodo.tests.utils import check_func, generate_comparison_ops_func
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest.mark.tz_aware
 
 
 @pytest.fixture(
@@ -34,24 +35,6 @@ def timestamp_str(request):
     ],
 )
 def timezone(request):
-    return request.param
-
-
-# create a fixture that's representative of all timezones
-@pytest.fixture(
-    params=[
-        "UTC",
-        "US/Pacific",  # timezone behind UTC
-        "Europe/Berlin",  # timezone ahead of UTC
-        "Africa/Casablanca",  # timezone that's ahead of UTC only during DST
-        "Asia/Kolkata",  # timezone that's offset by 30 minutes
-        "Asia/Kathmandu",  # timezone that's offset by 45 minutes
-        "Australia/Lord_Howe",  # timezone that's offset by 30 minutes only during DST
-        "Pacific/Honolulu",  # timezone that has no DST,
-        "Etc/GMT+8",  # timezone that has fixed offset from UTC as opposed to zone
-    ]
-)
-def representative_tz(request):
     return request.param
 
 
@@ -102,17 +85,22 @@ def test_timestamp_tz_convert(representative_tz):
 
 
 def test_timestamp_tz_localize(representative_tz):
-    def test_impl(ts, tz):
+    def test_impl1(ts, tz):
         return ts.tz_localize(tz=tz)
+
+    def test_impl2(ts):
+        return ts.tz_localize(None)
 
     ts = pd.Timestamp("09-30-2020 14:00")
     check_func(
-        test_impl,
+        test_impl1,
         (
             ts,
             representative_tz,
         ),
     )
+    ts = pd.Timestamp("09-30-2020 14:00", tz=representative_tz)
+    check_func(test_impl2, (ts,))
 
 
 def test_timestamp_tz_ts_input():
@@ -197,44 +185,6 @@ def test_tz_index_unsupported():
         match=".*Timezone-aware index not yet supported.*",
     ):
         bodo.jit(impl)(tz_idx)
-
-
-def test_tz_series_unsupported():
-    def impl(s):
-        return s.dtype
-
-    non_tz_s = pd.Series([pd.Timestamp(f"2020-01-0{i}") for i in range(1, 10)])
-    tz_s = pd.Series(
-        [pd.Timestamp(f"2020-01-0{i}", tz="US/Eastern") for i in range(1, 10)]
-    )
-
-    check_func(impl, (non_tz_s,))
-
-    with pytest.raises(
-        BodoError,
-        match=".*Timezone-aware series not yet supported.*",
-    ):
-        bodo.jit(impl)(tz_s)
-
-
-def test_tz_dataframe_unsupported(memory_leak_check):
-    def impl(df):
-        return df.astype("int64")
-
-    non_tz_df = pd.DataFrame(
-        {"a": [pd.Timestamp("2020-01-01")] * 10},
-    )
-    tz_df = pd.DataFrame(
-        {"a": [pd.Timestamp("2020-01-01", tz="US/Eastern")] * 10},
-    )
-
-    check_func(impl, (non_tz_df,))
-
-    with pytest.raises(
-        BodoError,
-        match=".*Timezone-aware columns not yet supported.*",
-    ):
-        bodo.jit(impl)(tz_df)
 
 
 def test_tz_date_scalar_cmp(sample_tz, cmp_op, memory_leak_check):
@@ -328,3 +278,209 @@ def test_different_tz_unsupported(cmp_op):
         BodoError, match="requires both Timestamps share the same timezone"
     ):
         func(ts2, ts3)
+
+
+def test_pd_timedelta_add(representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    ts = pd.Timestamp(
+        year=2022,
+        month=11,
+        day=6,
+        hour=0,
+        minute=36,
+        second=11,
+        microsecond=113,
+        nanosecond=204,
+        tz=representative_tz,
+    )
+    td = pd.Timedelta(hours=2, seconds=11, nanoseconds=45)
+    check_func(test_impl, (td, ts))
+    check_func(test_impl, (ts, td))
+
+
+def test_datetime_timedelta_add(representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    ts = pd.Timestamp(
+        year=2022,
+        month=11,
+        day=6,
+        hour=0,
+        minute=36,
+        second=11,
+        microsecond=113,
+        nanosecond=204,
+        tz=representative_tz,
+    )
+    td = datetime.timedelta(hours=2, seconds=11, microseconds=45)
+    check_func(test_impl, (td, ts))
+    check_func(test_impl, (ts, td))
+
+
+def test_pd_timedelta_sub(representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    ts = pd.Timestamp(
+        year=2022,
+        month=11,
+        day=6,
+        hour=3,
+        minute=36,
+        second=11,
+        microsecond=113,
+        nanosecond=204,
+        tz=representative_tz,
+    )
+    td = pd.Timedelta(hours=2, seconds=11, nanoseconds=45)
+    check_func(test_impl, (ts, td))
+
+
+def test_datetime_timedelta_sub(representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    ts = pd.Timestamp(
+        year=2022,
+        month=11,
+        day=6,
+        hour=3,
+        minute=36,
+        second=11,
+        microsecond=113,
+        nanosecond=204,
+        tz=representative_tz,
+    )
+    td = datetime.timedelta(hours=2, seconds=11, microseconds=45)
+    check_func(test_impl, (ts, td))
+
+
+def test_timestamp_now_with_tz_str(representative_tz, memory_leak_check):
+
+    # Note: we have to lower this a global so that it's constant, since we require it to be
+    # a constant at this time
+    @bodo.jit()
+    def test_impl():
+        return pd.Timestamp.now(representative_tz)
+
+    # Note: have to test this manually as pd.Timestamp.now() will return slightly differing values
+    out = test_impl()
+    assert pd.Timestamp.now(representative_tz) - out < pd.Timedelta(1, "min")
+
+
+def test_tz_constructor_values(representative_tz, memory_leak_check):
+    tz = representative_tz
+
+    def test_constructor_kw(year, month, day, hour):
+        # Test constructor with year/month/day passed as keyword arguments
+        return pd.Timestamp(year=year, month=month, day=day, hour=hour, tz=tz)
+
+    def test_constructor_kw_value(year, month, day, hour):
+        # Check the utc value
+        return pd.Timestamp(year=year, month=month, day=day, hour=hour, tz=tz).value
+
+    # Note: This checks both sides of daylight savings.
+    check_func(test_constructor_kw, (2022, 11, 6, 0))
+    check_func(test_constructor_kw, (2022, 11, 6, 3))
+    check_func(test_constructor_kw, (2022, 3, 13, 0))
+    check_func(test_constructor_kw, (2022, 3, 13, 3))
+
+    check_func(test_constructor_kw_value, (2022, 11, 6, 0))
+    check_func(test_constructor_kw_value, (2022, 11, 6, 3))
+    check_func(test_constructor_kw_value, (2022, 3, 13, 0))
+    check_func(test_constructor_kw_value, (2022, 3, 13, 3))
+
+
+def test_tz_add_month_begin(representative_tz, memory_leak_check):
+    """
+    Add tests for adding TZ-Aware timezones with a Pandas
+    MonthBegin type.
+    """
+
+    def impl(lhs, rhs):
+        return lhs + rhs
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+    offset = pd.tseries.offsets.MonthBegin(n=4, normalize=True)
+    check_func(impl, (ts, offset))
+    check_func(impl, (offset, ts))
+    # Check normalize=False
+    offset = pd.tseries.offsets.MonthBegin(n=4, normalize=False)
+    check_func(impl, (ts, offset))
+    check_func(impl, (offset, ts))
+
+
+def test_tz_sub_month_begin(representative_tz, memory_leak_check):
+    """
+    Add tests for subtracting a Pandas
+    MonthBeing type from TZ-Aware timezones.
+    """
+
+    def impl(lhs, rhs):
+        return lhs - rhs
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+    offset = pd.tseries.offsets.MonthBegin(n=3, normalize=True)
+    check_func(impl, (ts, offset))
+    # Check normalize=False
+    offset = pd.tseries.offsets.MonthBegin(n=3, normalize=False)
+    check_func(impl, (ts, offset))
+
+
+def test_tz_add_month_end(representative_tz, memory_leak_check):
+    """
+    Add tests for adding TZ-Aware timezones with a Pandas
+    MonthEnd type.
+    """
+
+    def impl(lhs, rhs):
+        return lhs + rhs
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+    offset = pd.tseries.offsets.MonthEnd(n=4, normalize=True)
+    check_func(impl, (ts, offset))
+    check_func(impl, (offset, ts))
+    # Check normalize=False
+    offset = pd.tseries.offsets.MonthEnd(n=4, normalize=False)
+    check_func(impl, (ts, offset))
+    check_func(impl, (offset, ts))
+
+
+def test_tz_sub_month_end(representative_tz, memory_leak_check):
+    """
+    Add tests for subtracting a Pandas
+    MonthEnd type from TZ-Aware timezones.
+    """
+
+    def impl(lhs, rhs):
+        return lhs - rhs
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+    offset = pd.tseries.offsets.MonthEnd(n=3, normalize=True)
+    check_func(impl, (ts, offset))
+    # Check normalize=False
+    offset = pd.tseries.offsets.MonthEnd(n=3, normalize=False)
+    check_func(impl, (ts, offset))
+
+
+@pytest.mark.parametrize("freq", ["D", "H", "T", "S", "ms", "L", "U", "us", "N"])
+def test_timestamp_freq_methods(freq, representative_tz, memory_leak_check):
+    """Tests the timestamp freq methods with various frequencies"""
+
+    ts = pd.Timestamp("11/6/2022 11:30:15", tz=representative_tz)
+
+    def impl1(ts, freq):
+        return ts.ceil(freq)
+
+    def impl2(ts, freq):
+        return ts.floor(freq)
+
+    def impl3(ts, freq):
+        return ts.round(freq)
+
+    check_func(impl1, (ts, freq))
+    check_func(impl2, (ts, freq))
+    check_func(impl3, (ts, freq))

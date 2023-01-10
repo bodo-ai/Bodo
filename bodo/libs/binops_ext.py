@@ -37,12 +37,13 @@ from bodo.hiframes.pd_offsets_ext import (
     month_end_type,
     week_type,
 )
-from bodo.hiframes.pd_timestamp_ext import pd_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import pd_timestamp_tz_naive_type
 from bodo.hiframes.series_impl import SeriesType
 from bodo.hiframes.time_ext import TimeType
 from bodo.libs.binary_arr_ext import binary_array_type, bytes_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_ext import string_type
 from bodo.utils.typing import (
@@ -94,12 +95,12 @@ class SeriesCmpOpTemplate(AbstractTemplate):
         rhs_arr = rhs.data if isinstance(rhs, SeriesType) else rhs
         # Timestamp and Timestamp need to be unboxed if compared to dt64/td64 array
         if lhs_arr in (
-            bodo.pd_timestamp_type,
+            bodo.pd_timestamp_tz_naive_type,
             bodo.pd_timedelta_type,
         ) and rhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
             lhs_arr = rhs_arr.dtype
         elif rhs_arr in (
-            bodo.pd_timestamp_type,
+            bodo.pd_timestamp_tz_naive_type,
             bodo.pd_timedelta_type,
         ) and lhs_arr.dtype in (bodo.datetime64ns, bodo.timedelta64ns):
             rhs_arr = lhs_arr.dtype
@@ -275,11 +276,16 @@ def overload_sub_operator_scalars(lhs, rhs):
 
     # The order matters here: make sure offset types are before datetime types
     # Datetime types
-    if lhs == pd_timestamp_type and rhs in [
-        pd_timestamp_type,
-        datetime_timedelta_type,
-        pd_timedelta_type,
-    ]:
+    if (
+        isinstance(lhs, bodo.PandasTimestampType)
+        and rhs
+        in (
+            datetime_timedelta_type,
+            pd_timedelta_type,
+        )
+    ) or (lhs == pd_timestamp_tz_naive_type and rhs == pd_timestamp_tz_naive_type):
+        # Note we don't support sub between two Timestamps with timezones,
+        # but we do with Timestamp and Timedelta
         return bodo.hiframes.pd_timestamp_ext.overload_sub_operator_timestamp(lhs, rhs)
 
     if sub_dt_or_td(lhs, rhs):
@@ -308,8 +314,14 @@ def create_overload_arith_op(op):
 
     def overload_arith_operator(lhs, rhs):
         """Overload some of the arithmetic operators like add, sub, truediv, floordiv, mul, pow, mod."""
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(lhs, f"{op} operator")
-        bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(rhs, f"{op} operator")
+        if op not in [operator.add, operator.sub]:
+            # We support add and sub with tz-aware
+            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+                lhs, f"{op} operator"
+            )
+            bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(
+                rhs, f"{op} operator"
+            )
 
         ## ---- start off with redirecting common overloads to some or common to all arith ops:
 
@@ -318,6 +330,8 @@ def create_overload_arith_op(op):
             return bodo.hiframes.dataframe_impl.create_binary_op_overload(op)(lhs, rhs)
 
         # Start of Series Operations
+
+        # TODO [BE-4027]: Support operator.add with tz-aware series and week offset
 
         # Time Series for add and sub operators
         if time_series_operation(lhs, rhs) and (op in [operator.add, operator.sub]):
@@ -328,6 +342,8 @@ def create_overload_arith_op(op):
             return bodo.hiframes.series_impl.create_binary_op_overload(op)(lhs, rhs)
 
         # Start of Index Operations
+
+        # TODO [BE-4028]: Support operator.add with tz-aware Index and week offset
 
         # index and timestamp:
         if sub_dt_index_and_timestamp(lhs, rhs) and op == operator.sub:
@@ -349,6 +365,10 @@ def create_overload_arith_op(op):
         if isinstance(lhs, IntegerArrayType) or isinstance(rhs, IntegerArrayType):
             return bodo.libs.int_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
+        # nullable float array case
+        if isinstance(lhs, FloatingArrayType) or isinstance(rhs, FloatingArrayType):
+            return bodo.libs.float_arr_ext.create_op_overload(op, 2)(lhs, rhs)
+
         # boolean array
         if lhs == boolean_array or rhs == boolean_array:
             return bodo.libs.bool_arr_ext.create_op_overload(op, 2)(lhs, rhs)
@@ -358,6 +378,15 @@ def create_overload_arith_op(op):
             is_str_arr_type(lhs) or types.unliteral(lhs) == string_type
         ):
             return bodo.libs.str_arr_ext.overload_add_operator_string_array(lhs, rhs)
+
+        # TODO: Timezone Aware Datetime Arrays
+        if op == operator.add and (
+            isinstance(lhs, bodo.DatetimeArrayType)
+            or isinstance(rhs, bodo.DatetimeArrayType)
+        ):
+            return bodo.libs.pd_datetime_arr_ext.overload_add_operator_datetime_arr(
+                lhs, rhs
+            )
 
         # Start of Misc Operations
 
@@ -517,6 +546,10 @@ def create_overload_cmp_operator(op):
         if isinstance(lhs, IntegerArrayType) or isinstance(rhs, IntegerArrayType):
             return bodo.libs.int_arr_ext.create_op_overload(op, 2)(lhs, rhs)
 
+        # float array
+        if isinstance(lhs, FloatingArrayType) or isinstance(rhs, FloatingArrayType):
+            return bodo.libs.float_arr_ext.create_op_overload(op, 2)(lhs, rhs)
+
         if binary_array_cmp(lhs, rhs):
             return bodo.libs.binary_arr_ext.create_binary_cmp_op_overload(op)(lhs, rhs)
 
@@ -588,8 +621,8 @@ def add_dt_td_and_dt_date(lhs, rhs):
 def add_timestamp(lhs, rhs):
     """Helper function to check types supported in pd_timestamp_ext overload."""
 
-    ts_and_td = lhs == pd_timestamp_type and is_timedelta_type(rhs)
-    td_and_ts = is_timedelta_type(lhs) and rhs == pd_timestamp_type
+    ts_and_td = isinstance(lhs, bodo.PandasTimestampType) and is_timedelta_type(rhs)
+    td_and_ts = is_timedelta_type(lhs) and isinstance(rhs, bodo.PandasTimestampType)
 
     return ts_and_td or td_and_ts
 
@@ -645,17 +678,28 @@ def mul_date_offset_and_int(lhs, rhs):
 def sub_offset_to_datetime_or_timestamp(lhs, rhs):
     """Helper function to check types supported in pd_offsets_ext add op overload."""
 
-    dt_types = [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
-    offset_types = [date_offset_type, month_begin_type, month_end_type, week_type]
-
-    return rhs in offset_types and lhs in dt_types
+    tz_naive_dt_types = [
+        datetime_datetime_type,
+        datetime_date_type,
+        pd_timestamp_tz_naive_type,
+    ]
+    tz_aware_classes = (bodo.PandasTimestampType,)
+    # offsets
+    tz_aware_offset_types = (week_type, month_begin_type, month_end_type)
+    tz_naive_offset_types = (date_offset_type,)
+    # Here we support all bodo.PandasTimestampType only with tz_aware_offset_types and
+    # all other types with all offset types.
+    return (rhs in tz_aware_offset_types and isinstance(lhs, tz_aware_classes)) or (
+        (rhs in tz_naive_offset_types or rhs in tz_aware_offset_types)
+        and lhs in tz_naive_dt_types
+    )
 
 
 def sub_dt_index_and_timestamp(lhs, rhs):
     """Helper function to check types supported in pd_index_ext sub op overload."""
 
-    lhs_index = isinstance(lhs, DatetimeIndexType) and rhs == pd_timestamp_type
-    rhs_index = isinstance(rhs, DatetimeIndexType) and lhs == pd_timestamp_type
+    lhs_index = isinstance(lhs, DatetimeIndexType) and rhs == pd_timestamp_tz_naive_type
+    rhs_index = isinstance(rhs, DatetimeIndexType) and lhs == pd_timestamp_tz_naive_type
 
     return lhs_index or rhs_index
 
@@ -740,8 +784,8 @@ def cmp_timestamp_or_date(lhs, rhs):
     ) and isinstance(rhs, bodo.hiframes.pd_timestamp_ext.PandasTimestampType)
 
     # Timestamp + dt64 must be timezone naive
-    ts_and_dt64 = lhs == pd_timestamp_type and rhs == bodo.datetime64ns
-    dt64_and_ts = rhs == pd_timestamp_type and lhs == bodo.datetime64ns
+    ts_and_dt64 = lhs == pd_timestamp_tz_naive_type and rhs == bodo.datetime64ns
+    dt64_and_ts = rhs == pd_timestamp_tz_naive_type and lhs == bodo.datetime64ns
 
     return ts_and_date or date_and_ts or ts_and_ts or ts_and_dt64 or dt64_and_ts
 
@@ -805,11 +849,11 @@ def cmp_timeseries(lhs, rhs):
     is_tz_naive_dt64s = (
         bodo.hiframes.pd_series_ext.is_dt64_series_typ(rhs)
         and rhs.dtype == bodo.datetime64ns
-        and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+        and lhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
     ) or (
         bodo.hiframes.pd_series_ext.is_dt64_series_typ(lhs)
         and lhs.dtype == bodo.datetime64ns
-        and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+        and rhs == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
     )
     dt64_series_ops = dt64s_with_string or string_with_dt64s or is_tz_naive_dt64s
 
@@ -845,7 +889,7 @@ def helper_time_series_checks(operand):
         bodo.hiframes.pd_series_ext.is_dt64_series_typ(operand)
         or bodo.hiframes.pd_series_ext.is_timedelta64_series_typ(operand)
         or operand
-        in [datetime_timedelta_type, datetime_datetime_type, pd_timestamp_type]
+        in [datetime_timedelta_type, datetime_datetime_type, pd_timestamp_tz_naive_type]
     )
     return ret
 

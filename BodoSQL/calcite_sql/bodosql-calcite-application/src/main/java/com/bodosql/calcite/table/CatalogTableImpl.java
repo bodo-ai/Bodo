@@ -2,7 +2,10 @@ package com.bodosql.calcite.table;
 
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
-import java.util.List;
+import java.util.*;
+import org.apache.calcite.rel.type.*;
+import org.apache.calcite.schema.Table;
+import org.apache.calcite.sql.type.*;
 
 /**
  *
@@ -67,6 +70,29 @@ public class CatalogTableImpl extends BodoSqlTable {
   }
 
   /**
+   * Generate the code needed to write the given variable to storage.
+   *
+   * @param varName Name of the variable to write.
+   * @param extraArgs Extra arguments to pass to the Python API. They are assume to be escaped by
+   *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
+   * @return The generated code to write the table.
+   */
+  public String generateWriteCode(String varName, String extraArgs) {
+    throw new UnsupportedOperationException("Catalog APIs do not support additional arguments");
+  }
+
+  /**
+   * Return the location from which the table is generated. The return value is always entirely
+   * capitalized.
+   *
+   * @return The source DB location.
+   */
+  @Override
+  public String getDBType() {
+    return this.getCatalogSchema().getDBType().toUpperCase();
+  }
+
+  /**
    * Generate the code needed to read the table. This table type generates code common to all tables
    * in the catalog.
    *
@@ -75,6 +101,19 @@ public class CatalogTableImpl extends BodoSqlTable {
   @Override
   public String generateReadCode() {
     return this.getCatalogSchema().generateReadCode(this.getName());
+  }
+
+  /**
+   * Generate the code needed to read the table. This function is called by specialized IO
+   * implementations that require passing 1 or more additional arguments.
+   *
+   * @param extraArgs: Extra arguments to pass to the Python API. They are assume to be escaped by
+   *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
+   * @return The generated code to read the table.
+   */
+  @Override
+  public String generateReadCode(String extraArgs) {
+    throw new UnsupportedOperationException("Catalog APIs do not support additional arguments");
   }
 
   /**
@@ -87,6 +126,26 @@ public class CatalogTableImpl extends BodoSqlTable {
   @Override
   public String generateRemoteQuery(String query) {
     return this.getCatalogSchema().generateRemoteQuery(query);
+  }
+
+  @Override
+  public Table extend(List<RelDataTypeField> extensionFields) {
+    String name = this.getName();
+    BodoSqlSchema schema = this.getSchema();
+    List<BodoSQLColumn> extendedColumns = new ArrayList<>();
+    extendedColumns.addAll(this.columns);
+    for (int i = 0; i < extensionFields.size(); i++) {
+      RelDataTypeField curField = extensionFields.get(0);
+      String fieldName = curField.getName();
+      RelDataType colType = curField.getType();
+      BodoSQLColumn.BodoSQLColumnDataType newColType =
+          BodoSQLColumn.BodoSQLColumnDataType.fromSqlType(colType);
+      // getTZInfo() returns null if the type is not TZAware Timestamp
+      BodoTZInfo tzInfo = colType.getTZInfo();
+      BodoSQLColumn newCol = new BodoSQLColumnImpl(fieldName, newColType, false, tzInfo);
+      extendedColumns.add(newCol);
+    }
+    return new CatalogTableImpl(name, schema, extendedColumns);
   }
 
   /**

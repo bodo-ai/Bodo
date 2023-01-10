@@ -136,10 +136,11 @@ table_info* reverse_shuffle_table_kernel(table_info* in_table, uint32_t* hashes,
  * @param n_cols    : the number of columns of the keys.
  * @param is_parallel: Used to indicate whether tracing should be parallel or
  * not
+ * @param mpi_root: root rank for broadcast (where data is broadcast from)
  * @return the table equal to in_table but available on all the nodes.
  */
 table_info* broadcast_table(table_info* ref_table, table_info* in_table,
-                            size_t n_cols, bool is_parallel);
+                            size_t n_cols, bool is_parallel, int mpi_root);
 
 /** Gather a table.
  *

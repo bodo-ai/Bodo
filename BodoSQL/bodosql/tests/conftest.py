@@ -137,14 +137,24 @@ def bodosql_numeric_types(request):
             "table1": pd.DataFrame(
                 {
                     "A": [4, 1, 2, 3] * 4,
-                    "B": [1.0, 2.0, 3.0, 4.0] * 4,
+                    "B": pd.array(
+                        [1.0, 2.0, 3.0, 4.0] * 4,
+                        "Float64"
+                        if bodo.libs.float_arr_ext._use_nullable_float
+                        else "float64",
+                    ),
                     "C": ["bird", "dog", "flamingo", "cat"] * 4,
                 }
             ),
             "table2": pd.DataFrame(
                 {
                     "A": [3, 1, 2, 4] * 4,
-                    "B": [1.0, 2.0, 4.0, 3.0] * 4,
+                    "B": pd.array(
+                        [1.0, 2.0, 4.0, 3.0] * 4,
+                        "Float64"
+                        if bodo.libs.float_arr_ext._use_nullable_float
+                        else "float64",
+                    ),
                     "D": [
                         pd.Timestamp(2021, 5, 19),
                         pd.Timestamp(1999, 12, 31),
@@ -357,6 +367,40 @@ def bodosql_large_numeric_types(request):
     ]
 )
 def bodosql_datetime_types(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        {
+            "table1": pd.DataFrame(
+                {
+                    "A": [
+                        datetime.date(2011, 4, 24),
+                        datetime.date(2020, 6, 7),
+                        datetime.date(2022, 1, 1),
+                        None,
+                    ]
+                    * 3,
+                    "B": [
+                        datetime.date(2021, 11, 2),
+                        datetime.date(2022, 11, 21),
+                        None,
+                    ]
+                    * 4,
+                    "C": [
+                        datetime.date(2021, 11, 21),
+                        None,
+                        pd.Timestamp(2021, 3, 3),
+                    ]
+                    * 4,
+                }
+            ),
+        },
+    ]
+)
+def bodosql_date_types(request):
+    # TODO: Use this fixture more when we have a proper date type
     return request.param
 
 
@@ -938,6 +982,49 @@ def numeric_values(request):
     Collection of numeric values used for testing, all the integer values should fit within a bytee
     """
     return request.param
+
+
+@pytest.fixture
+def tz_aware_df():
+    # Transition to Daylight Savings
+    # "1D2H37T48S" --> 1 day, 2 hours, 37 minutes, 48 seconds
+    to_dst_series = pd.date_range(
+        start="11/3/2021", freq="1D2H37T48S", periods=30, tz="US/Pacific"
+    ).to_series()
+
+    # Transition back from Daylight Savings
+    from_dst_series = pd.date_range(
+        start="03/1/2022", freq="0D12H30T1S", periods=60, tz="US/Pacific"
+    ).to_series()
+
+    # February is weird with leap years
+    feb_leap_year_series = pd.date_range(
+        start="02/20/2020", freq="1D0H30T0S", periods=20, tz="US/Pacific"
+    ).to_series()
+
+    second_quarter_series = pd.date_range(
+        start="05/01/2015", freq="2D0H1T59S", periods=20, tz="US/Pacific"
+    ).to_series()
+
+    third_quarter_series = pd.date_range(
+        start="08/17/2000", freq="10D1H1T10S", periods=20, tz="US/Pacific"
+    ).to_series()
+
+    df = pd.DataFrame(
+        {
+            "A": pd.concat(
+                [
+                    to_dst_series,
+                    from_dst_series,
+                    feb_leap_year_series,
+                    second_quarter_series,
+                    third_quarter_series,
+                ]
+            )
+        }
+    )
+
+    return {"table1": df}
 
 
 @pytest.fixture(scope="module")
@@ -1549,19 +1636,25 @@ def pytest_collection_modifyitems(items):
     Also Marks the tests with marker "bodosql_<x>of4".
     """
     azure_1p_markers = [
-        pytest.mark.bodosql_1of4,
-        pytest.mark.bodosql_2of4,
-        pytest.mark.bodosql_3of4,
-        pytest.mark.bodosql_4of4,
+        pytest.mark.bodosql_1of6,
+        pytest.mark.bodosql_2of6,
+        pytest.mark.bodosql_3of6,
+        pytest.mark.bodosql_4of6,
+        pytest.mark.bodosql_5of6,
+        pytest.mark.bodosql_6of6,
     ]
     azure_2p_markers = [
-        pytest.mark.bodosql_1of7,
-        pytest.mark.bodosql_2of7,
-        pytest.mark.bodosql_3of7,
-        pytest.mark.bodosql_4of7,
-        pytest.mark.bodosql_5of7,
-        pytest.mark.bodosql_6of7,
-        pytest.mark.bodosql_7of7,
+        pytest.mark.bodosql_1of11,
+        pytest.mark.bodosql_2of11,
+        pytest.mark.bodosql_3of11,
+        pytest.mark.bodosql_4of11,
+        pytest.mark.bodosql_5of11,
+        pytest.mark.bodosql_6of11,
+        pytest.mark.bodosql_7of11,
+        pytest.mark.bodosql_8of11,
+        pytest.mark.bodosql_9of11,
+        pytest.mark.bodosql_10of11,
+        pytest.mark.bodosql_11of11,
     ]
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
