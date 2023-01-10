@@ -1902,6 +1902,78 @@ def test_subdate_td_scalars(
     )
 
 
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case"),
+    ],
+)
+@pytest.mark.parametrize(
+    "interval_amt",
+    [
+        pytest.param(100, id="integer"),
+        pytest.param("INTERVAL '4' days + INTERVAL '6' hours", id="timedelta"),
+    ],
+)
+def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
+    if use_case:
+        query = f"SELECT DT, CASE WHEN DT IS NULL THEN NULL ELSE SUBDATE(DT, {interval_amt}) END from table1"
+    else:
+        query = f"SELECT DT, DATE_SUB(DT, {interval_amt}) from table1"
+
+    input_ts = [
+        "2018-3-1 12:30:59.251125999",
+        "2018-3-12",
+        None,
+        "2018-9-29 6:00:00",
+        "2018-11-6",
+    ]
+    if isinstance(interval_amt, int):
+        output_ts = [
+            "2017-11-21 12:30:59.251125999",
+            "2017-12-02",
+            None,
+            "2018-06-21 06:00:00",
+            "2018-07-29",
+        ]
+    else:
+        output_ts = [
+            "2018-02-25 06:30:59.251125999",
+            "2018-03-07 18:00:00",
+            None,
+            "2018-09-25",
+            "2018-11-01 18:00:00",
+        ]
+
+    tz = "US/Pacific" if use_case else "Poland"
+    table1 = pd.DataFrame(
+        {
+            "DT": pd.Series(
+                [None if ts is None else pd.Timestamp(ts, tz=tz) for ts in input_ts]
+            )
+        }
+    )
+    expected_output = pd.DataFrame(
+        {
+            0: table1.DT,
+            1: pd.Series(
+                [None if ts is None else pd.Timestamp(ts, tz=tz) for ts in output_ts]
+            ),
+        }
+    )
+
+    check_query(
+        query,
+        {"table1": table1},
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        only_jit_1DVar=True,
+    )
+
+
 def test_yearweek(spark_info, dt_fn_dataframe, memory_leak_check):
     """Test for YEARWEEK, which returns a 6-character string
     with the date's year and week (1-53) concatenated together"""
@@ -2650,6 +2722,7 @@ def test_tz_aware_previous_day_case(
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.tz_aware
 def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
     query = f"SELECT DATE_TRUNC('{date_trunc_literal}', A) as output from table1"
     df = pd.DataFrame(
