@@ -42,6 +42,10 @@ def cosh(arr):  # pragma: no cover
     return
 
 
+def cot(arr):  # pragma: no cover
+    return
+
+
 def sin(arr):  # pragma: no cover
     return
 
@@ -103,6 +107,10 @@ def cosh_util(arr):  # pragma: no cover
     return
 
 
+def cot_util(arr):  # pragma: no cover
+    return
+
+
 def sin_util(arr):  # pragma: no cover
     return
 
@@ -137,6 +145,7 @@ funcs_utils_names = (
     (atan2, atan2_util, "ATAN2"),
     (cos, cos_util, "COS"),
     (cosh, cosh_util, "COSH"),
+    (cot, cot_util, "COT"),
     (sin, sin_util, "SIN"),
     (sinh, sinh_util, "SINH"),
     (tan, tan_util, "TAN"),
@@ -158,7 +167,7 @@ def create_trig_func_overload(func_name):
             to the appropriate version of the real implementation"""
             if isinstance(arr, types.optional):
                 return unopt_argument(
-                    f"bodo.libs.bodosql_array_kernels.{func_name}", ["arr"], 0
+                    f"bodo.libs.bodosql_array_kernels.{func_name}_util", ["arr"], 0
                 )
 
             func_text = "def impl(arr):\n"
@@ -236,6 +245,8 @@ def create_trig_util_overload(func_name):  # pragma: no cover
                 scalar_text += "res[i] = np.cos(arg0)"
             elif func_name == "COSH":
                 scalar_text += "res[i] = np.cosh(arg0)"
+            elif func_name == "COT":
+                scalar_text += "res[i] = np.divide(1, np.tan(arg0))"
             elif func_name == "SIN":
                 scalar_text += "res[i] = np.sin(arg0)"
             elif func_name == "SINH":
