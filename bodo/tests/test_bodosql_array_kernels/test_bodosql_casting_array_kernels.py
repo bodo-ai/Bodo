@@ -10,7 +10,7 @@ from pandas.api.types import is_float_dtype, is_string_dtype
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
-from bodo.tests.bodosql_array_kernel_tests.test_bodosql_snowflake_conversion_array_kernels import (
+from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_array_kernels import (
     str_to_bool,
 )
 from bodo.tests.timezone_common import representative_tz  # noqa
