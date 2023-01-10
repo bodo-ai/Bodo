@@ -7,7 +7,6 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DateSubCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.*;
@@ -2301,6 +2300,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             }
           case "DATE_ADD":
           case "ADDDATE":
+          case "SUBDATE":
+          case "DATE_SUB":
             assert operandsInfo.size() == 2;
             // If the second argument is a timedelta, switch to manual addition
             boolean manual_addition =
@@ -2328,55 +2329,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             String arg1Expr = operandsInfo.get(1).getExprCode();
             String addExpr =
                 generateMySQLDateAddCode(
-                    operandsInfo.get(0).getExprCode(), arg1Expr, manual_addition);
+                    operandsInfo.get(0).getExprCode(), arg1Expr, manual_addition, fnName);
             return new RexNodeVisitorInfo(outputName, addExpr);
-
-          case "SUBDATE":
-          case "DATE_SUB":
-            assert operandsInfo.size() == 2;
-
-            RelDataType arg0Type = fnOperation.getOperands().get(0).getType();
-
-            // Cast arg0 to from string to timestamp, if needed
-            if (SqlTypeName.STRING_TYPES.contains(arg0Type.getSqlTypeName())) {
-              RelDataType inputType = fnOperation.getOperands().get(0).getType();
-              // The output type will always be the timestamp the string is being cast to.
-              RelDataType outputType = fnOperation.getType();
-              String casted_expr =
-                  generateCastCode(
-                      operandsInfo.get(0).getExprCode(),
-                      inputType,
-                      outputType,
-                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
-              operandsInfo.set(
-                  0, new RexNodeVisitorInfo(operandsInfo.get(0).getName(), casted_expr));
-            }
-            outputName =
-                generateDateSubName(operandsInfo.get(0).getName(), operandsInfo.get(1).getName());
-            // DateSub should generate scalar code when inside an apply, or all the arguments are
-            // scalar
-            boolean dateSubGeneratesScalarCode =
-                isSingleRow
-                    || (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR
-                        && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR);
-
-            // if the second argument is an integer, need to convert it to the int * days
-            if (SqlTypeName.INT_TYPES.contains(
-                fnOperation.getOperands().get(1).getType().getSqlTypeName())) {
-              arg1Expr = intExprToIntervalDays(operandsInfo.get(1).getExprCode());
-            } else {
-              arg1Expr = operandsInfo.get(1).getExprCode();
-            }
-            final String subExpr;
-            if (arg0Type instanceof TZAwareSqlType) {
-              List<String> args = List.of(operandsInfo.get(0).getExprCode(), arg1Expr);
-              subExpr = genTZAwareIntervalArithCode(args, SqlKind.MINUS, true);
-            } else {
-              subExpr =
-                  generateDateSubCode(
-                      operandsInfo.get(0).getExprCode(), arg1Expr, dateSubGeneratesScalarCode);
-            }
-            return new RexNodeVisitorInfo(outputName, subExpr);
 
           case "DATEDIFF":
             assert operandsInfo.size() == 2;

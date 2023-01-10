@@ -466,9 +466,6 @@ def add_interval_util(start_dt, interval):
     arg_types = [start_dt, interval]
     propagate_null = [True] * 2
     scalar_text = ""
-    is_vector = bodo.utils.utils.is_array_typ(
-        interval, True
-    ) or bodo.utils.utils.is_array_typ(start_dt, True)
     extra_globals = None
     # Modified logic from add_interval_xxx functions
     if time_zone is not None:
@@ -483,7 +480,7 @@ def add_interval_util(start_dt, interval):
             )
             extra_globals = {"trans": trans, "deltas": deltas}
             scalar_text += f"start_value = arg0.value\n"
-            scalar_text += "end_value = start_value + arg0.value\n"
+            scalar_text += "end_value = start_value + arg1.value\n"
             scalar_text += (
                 "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
             )
@@ -495,11 +492,7 @@ def add_interval_util(start_dt, interval):
         scalar_text += f"res[i] = arg0 + arg1\n"
         out_dtype = bodo.DatetimeArrayType(time_zone)
     else:
-        unbox_str = (
-            "bodo.utils.conversion.unbox_if_tz_naive_timestamp" if is_vector else ""
-        )
-        box_str = "bodo.utils.conversion.box_if_dt64" if is_vector else ""
-        scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) + arg1)\n"
+        scalar_text = f"res[i] = arg0 + arg1\n"
 
         out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
@@ -685,7 +678,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                 else:
                     scalar_text += "td = pd.Timedelta(end_value - start_value)\n"
 
-            # Handle months/years via the following steps:
+            # Handle other units via the following steps:
             # 1. Find the starting ns
             # 2. Find the ending ns by extracting the ns and adding the ns
             #    value of the timedelta
