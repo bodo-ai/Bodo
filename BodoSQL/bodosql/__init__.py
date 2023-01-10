@@ -15,6 +15,7 @@ import bodosql.libs.null_handling
 import bodosql.libs.nullchecked_logical_operators
 import bodosql.libs.sql_operators
 import bodosql.libs.ntile_helper
+import bodosql.libs.iceberg_merge_into
 
 # Import the library, throwing an error if it does not exist
 import os

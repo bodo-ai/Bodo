@@ -3,26 +3,23 @@ set -exo pipefail
 
 unamestr=`uname`
 
-# Install Miniconda
-# Reference:
-# https://github.com/numba/numba/blob/master/buildscripts/incremental/install_miniconda.sh
+# Install Mambaforge
 if [ "$RUNTIME" != "yes" ];
 then
   if [[ "$unamestr" == 'Linux' ]]; then
-    wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh
+    wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh -O mambaforge.sh
   elif [[ "$unamestr" == 'Darwin' ]]; then
-    wget https://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh -O miniconda.sh
+    wget https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-MacOSX-x86_64.sh -O mambaforge.sh
   else
     echo Error
   fi
-    chmod +x miniconda.sh
-    ./miniconda.sh -b
+  chmod +x mambaforge.sh
+  ./mambaforge.sh -b
 fi
-export PATH=$HOME/miniconda3/bin:$PATH
+export PATH=$HOME/mambaforge/bin:$PATH
 
 
 # ---- Create Conda Env ----
-MAMBA_INSTALL="mamba install -q -y"
 # Deactivate if another script has already activated the env
 source deactivate || true
 
@@ -32,68 +29,20 @@ conda config --set remote_backoff_factor 60
 
 if [ "$RUNTIME" != "yes" ];
 then
-  conda create -n $CONDA_ENV -q -y -c conda-forge python=$PYTHON_VERSION mamba
-fi
-source activate $CONDA_ENV
-
-if [ "$RUNTIME" != "yes" ];
-then
-  if [ "$RUN_NIGHTLY" != "yes" ];
-  then
-      $MAMBA_INSTALL -c conda-forge numpy scipy boost-cpp=1.74.0 cmake h5py mpich mpi
-  else
-      $MAMBA_INSTALL -q -y -c conda-forge cmake make
-  fi
+  # Conda / Mamba will attempt to upgrade packages listed in the
+  # "aggressive_update_packages" at every CLI call.
+  # To upgrade these packages, it will also upgrade packages that depend on
+  # them. OpenSSL is usually one of the defaults, and many packages Bodo
+  # uses depends on OpenSSL, thus breaking our dependency locking.
+  # Therefore, we need to remove all entries from this setting
+  # TODO: Replace with a conda config operation
+  echo "aggressive_update_packages: []" >> ~/.condarc
+  mamba install -y -c conda-forge conda-lock
 fi
 
+conda-lock install --mamba -n $CONDA_ENV buildscripts/envs/conda-lock.yml
 
-# ---- install compilers ----
-if [[ "$unamestr" == 'Linux' ]]; then
-    $MAMBA_INSTALL -c conda-forge 'gcc_linux-64>=9' 'gxx_linux-64>=9'
-elif [[ "$unamestr" == 'Darwin' ]]; then
-    $MAMBA_INSTALL -c conda-forge clang_osx-64 clangxx_osx-64
-else
-    echo "Error in compiler install"
-    exit 1
-fi
-
-
-# ---- Conda installs for source build ----
-if [ "$RUN_NIGHTLY" != "yes" ];
-then
-   $MAMBA_INSTALL -c conda-forge boost-cpp=1.74.0 cmake h5py mpich mpi
-   $MAMBA_INSTALL 'hdf5=1.12.*=*mpich*' -c conda-forge
-   $MAMBA_INSTALL -c conda-forge pyarrow=9.0.0
-   $MAMBA_INSTALL fsspec>=2021.09 -c conda-forge
-   $MAMBA_INSTALL pandas=${BODO_PD_VERSION:-'1.4.*'} -c conda-forge
-   $MAMBA_INSTALL numba=0.55.2 -c conda-forge
-   $MAMBA_INSTALL cython -c conda-forge
-   $MAMBA_INSTALL mpi4py -c conda-forge
-   $MAMBA_INSTALL scikit-learn='1.1.*' 'gcsfs>=2022.1' -c conda-forge
-   $MAMBA_INSTALL matplotlib='3.5.1' -c conda-forge
-   $MAMBA_INSTALL pyspark=3.2 'openjdk=11' -c conda-forge
-   $MAMBA_INSTALL xlrd xlsxwriter openpyxl -c conda-forge
-   if [ "$RUN_COVERAGE" == "yes" ]; then $MAMBA_INSTALL coveralls; fi
-else
-   if [ "$RUNTIME" != "yes" ];
-    then
-       conda clean -a -y
-       #$MAMBA_INSTALL pytorch=1.9 pyarrow=9.0.0 -c pytorch -c conda-forge -c defaults
-       $MAMBA_INSTALL pyarrow=9.0.0 -c conda-forge
-       conda clean -a -y
-       #$MAMBA_INSTALL bokeh=2.3 -c pytorch -c conda-forge -c defaults
-       #conda clean -a -y
-       #$MAMBA_INSTALL torchvision=0.10 -c pytorch -c conda-forge -c defaults
-       #conda clean -a -y
-       # Install h5py and hd5f directly because otherwise tensorflow
-       # installs a non-mpi version.
-       #$MAMBA_INSTALL tensorflow h5py hdf5=$HDF5_VERSION -c conda-forge
-       # If building the docker image always install 1.12 for hdf5
-       $MAMBA_INSTALL h5py 'hdf5=1.12.*=*mpich*' -c conda-forge
-       conda clean -a -y
-       #pip install horovod;
-    fi
-   pip install credstash
-fi
-
+# This docker image is LARGE, so we remove unnecessary files
+# after the environment is created.
+# TODO: Check how long this takes at PR CI runtime
 conda clean -a -y

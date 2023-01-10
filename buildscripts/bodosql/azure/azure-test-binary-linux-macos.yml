@@ -28,7 +28,9 @@ jobs:
     displayName: 'Use Python $(python.version)'
 
   - script: |
-      if [[ "${{ parameters.name }}" == "macOS" ]]; then
+      unamestr=`uname`
+      uname_mach_str=`uname -m`
+      if [[ "$unamestr" == 'Darwin' ]] && [[ "$uname_mach_str" == "x86_64" ]]; then
         buildscripts/bodosql/setup_osx_sdk.sh
       fi
     displayName: 'Setup OSX SDK'
@@ -74,7 +76,8 @@ jobs:
       mkdir bodosql
       # Note, I don't think this ever runs? we don't have any tests with the name parameter
       # Equal to Linux for bodosql
-      if [[ "${{ parameters.name }}" == "Linux" ]]; then
+      unamestr=`uname`
+      if [[ "$unamestr" == 'Linux' ]]; then
         cp -avr $(System.DefaultWorkingDirectory)/BodoSQL/bodosql/tests bodosql/
       else
         cp -r $(System.DefaultWorkingDirectory)/BodoSQL/bodosql/tests bodosql
@@ -104,6 +107,9 @@ jobs:
       source activate $CONDA_ENV
       cd $HOME/bodo-inc
       cp `python -c "import bodosql; print(bodosql.__file__[:-11])"`pytest.ini .
+      # For caching tests we need to update the location of the decryption file.
+      # We set the absolute path as an environment variable.
+      export BODO_TRACING_DECRYPTION_FILE_PATH=`echo "$(System.DefaultWorkingDirectory)/obfuscation/decompress_traces.py"`
       if [[ "$CACHE_TEST" == "true" ]]; then
         python -u -m bodosql.runtests_caching "$NP" bodosql/tests/caching_tests/
       else

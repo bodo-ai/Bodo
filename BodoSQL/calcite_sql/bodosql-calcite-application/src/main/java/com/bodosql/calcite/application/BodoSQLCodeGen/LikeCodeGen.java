@@ -72,50 +72,50 @@ public class LikeCodeGen {
           if (startPercent && endPercent) {
             if (caseInsensitive) {
               likeParts
-                  .append("pd.Series(")
+                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
                   .append(expr)
                   .append(").str.lower().str.contains(")
                   .append(trimmedRegex)
-                  .append(".lower(), regex=False).values");
+                  .append(".lower(), regex=False))");
             } else {
               likeParts
-                  .append("pd.Series(")
+                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
                   .append(expr)
                   .append(").str.contains(")
                   .append(trimmedRegex)
-                  .append(", regex=False).values");
+                  .append(", regex=False))");
             }
           } else if (startPercent) {
             if (caseInsensitive) {
               likeParts
-                  .append("pd.Series(")
+                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
                   .append(expr)
                   .append(").str.lower().str.endswith(")
                   .append(trimmedRegex)
-                  .append(".lower()).values");
+                  .append(".lower()))");
             } else {
               likeParts
-                  .append("pd.Series(")
+                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
                   .append(expr)
                   .append(").str.endswith(")
                   .append(trimmedRegex)
-                  .append(").values");
+                  .append("))");
             }
           } else {
             if (caseInsensitive) {
               likeParts
-                  .append("pd.Series(")
+                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
                   .append(expr)
                   .append(").str.lower().str.startswith(")
                   .append(trimmedRegex)
-                  .append(".lower()).values");
+                  .append(".lower()))");
             } else {
               likeParts
-                  .append("pd.Series(")
+                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
                   .append(expr)
                   .append(").str.startswith(")
                   .append(trimmedRegex)
-                  .append(").values");
+                  .append("))");
             }
           }
         }
@@ -130,18 +130,18 @@ public class LikeCodeGen {
         } else {
           if (caseInsensitive) {
             likeParts
-                .append("pd.Series(")
+                .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
                 .append(expr)
                 .append(").str.lower().str.contains(")
                 .append(convertSQLRegexToPython(trimmedRegex, startPercent, endPercent))
-                .append(".lower()).values");
+                .append(".lower()))");
           } else {
             likeParts
-                .append("pd.Series(")
+                .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
                 .append(expr)
                 .append(").str.contains(")
                 .append(convertSQLRegexToPython(trimmedRegex, startPercent, endPercent))
-                .append(").values");
+                .append("))");
           }
         }
       }

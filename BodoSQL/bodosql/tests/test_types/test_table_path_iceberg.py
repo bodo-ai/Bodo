@@ -16,6 +16,7 @@ from bodo.tests.conftest import (  # pragma: no cover
     iceberg_table_conn,
 )
 from bodo.tests.iceberg_database_helpers import spark_reader
+from bodo.tests.iceberg_database_helpers.utils import create_iceberg_table
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
     create_string_io_logger,
@@ -38,7 +39,7 @@ from bodo.tests.utils import check_func, sync_dtypes
         ),
         "simple_string_table",
         "partitions_dt_table",
-        # TODO: The results of Bodo and Spark implemenation are different from original
+        # TODO: The results of Bodo and Spark implementation are different from original
         # but only in check_func
         pytest.param("simple_dt_tsz_table", marks=pytest.mark.slow),
         pytest.param(
@@ -220,3 +221,153 @@ def test_tablepath_dict_encoding(
 
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
     check_func(impl, (table_name, conn, db_schema, bodo_read_as_dict), py_output=py_out)
+
+
+def test_merge_into_simple(iceberg_database, iceberg_table_conn):
+    table_name = "test_merge_into_simple_tbl"
+    db_schema, warehouse_loc = iceberg_database
+    sql_schema = [
+        ("id", "int", True),
+        ("dep", "string", True),
+    ]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            pd.DataFrame({"id": [1], "dep": ["foo"]}), sql_schema, table_name
+        )
+    bodo.barrier()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+    bc = bodosql.BodoSQLContext(
+        {
+            table_name: bodosql.TablePath(
+                table_name, "sql", conn_str=conn, db_schema=db_schema
+            ),
+            "source": pd.DataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "dep": ["emp-id-1", "emp-id-2", "emp-id-3"],
+                }
+            ),
+        }
+    )
+
+    query = (
+        f"MERGE INTO {table_name} AS t USING source AS s "
+        "ON t.id = s.id "
+        "WHEN NOT MATCHED THEN "
+        "INSERT (id, dep) VALUES (1, s.dep)"
+    )
+
+    def impl(bc):
+        bc.sql(query)
+        return bc.sql(f"SELECT * FROM {table_name}")
+
+    expected_out = pd.DataFrame(
+        {"id": [1, 1, 1], "dep": ["foo", "emp-id-2", "emp-id-3"]}
+    )
+
+    check_func(
+        impl,
+        (bc,),
+        py_output=expected_out,
+        only_1DVar=True,
+        sort_output=True,
+        check_names=False,
+        check_dtype=False,
+        reset_index=True,
+        check_categorical=False,
+    )
+
+
+def test_merge_into_simple_2(iceberg_database, iceberg_table_conn):
+    table_name = "test_merge_into_simple_tbl"
+    db_schema, warehouse_loc = iceberg_database
+    sql_schema = [
+        ("id", "int", True),
+        ("dep", "string", True),
+    ]
+    if bodo.get_rank() == 0:
+        create_iceberg_table(
+            pd.DataFrame({"id": [1], "dep": ["foo"]}), sql_schema, table_name
+        )
+    bodo.barrier()
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+    bc = bodosql.BodoSQLContext(
+        {
+            table_name: bodosql.TablePath(
+                table_name, "sql", conn_str=conn, db_schema=db_schema
+            ),
+            "source": pd.DataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "dep": ["emp-id-1", "emp-id-2", "emp-id-3"],
+                }
+            ),
+        }
+    )
+
+    query = (
+        f"MERGE INTO {table_name} AS t USING source AS s "
+        "ON t.id = s.id "
+        "WHEN NOT MATCHED THEN "
+        "INSERT (id, dep) VALUES (s.id, s.dep)"
+    )
+
+    def impl(bc):
+        bc.sql(query)
+        return bc.sql(f"SELECT * FROM {table_name}")
+
+    expected_out = pd.DataFrame(
+        {"id": [1, 2, 3], "dep": ["foo", "emp-id-2", "emp-id-3"]}
+    )
+
+    check_func(
+        impl,
+        (bc,),
+        py_output=expected_out,
+        only_1DVar=True,
+        sort_output=True,
+        check_names=False,
+        check_dtype=False,
+        reset_index=True,
+        check_categorical=False,
+    )
+
+
+def test_iceberg_in_pushdown(memory_leak_check, iceberg_database, iceberg_table_conn):
+    """
+    Test in pushdown with loading from a iceberg table.
+    """
+
+    table_name = "simple_string_table"
+    db_schema, warehouse_loc = iceberg_database
+    conn = iceberg_table_conn(table_name, db_schema, warehouse_loc)
+
+    def impl(table_name, conn, db_schema):
+        bc = bodosql.BodoSQLContext(
+            {
+                "iceberg_tbl": bodosql.TablePath(
+                    table_name,
+                    "sql",
+                    conn_str=conn,
+                    db_schema=db_schema,
+                )
+            }
+        )
+        df = bc.sql("select A from iceberg_tbl WHERE A in ('A', 'C')")
+        return df
+
+    py_out, _, _ = spark_reader.read_iceberg_table(table_name, db_schema)
+    py_out = py_out[["A"]][(py_out["A"] == "A") | (py_out["A"] == "C")]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    # make sure filter pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl, (table_name, conn, db_schema), py_output=py_out, reset_index=True
+        )
+        check_logger_msg(stream, "Columns loaded ['A']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")

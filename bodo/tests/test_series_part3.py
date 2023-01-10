@@ -1205,7 +1205,7 @@ def test_np_mod(numeric_series_val):
     check_func(impl, (numeric_series_val, numeric_series_val), check_dtype=False)
     check_func(impl, (10, numeric_series_val), check_dtype=False)
 
-
+@pytest.mark.tz_aware
 def test_tz_aware_series_getitem(memory_leak_check):
     def impl_iat(S):
         return S.iat[2]

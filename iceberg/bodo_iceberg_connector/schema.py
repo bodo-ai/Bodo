@@ -17,7 +17,7 @@ from bodo_iceberg_connector.py4j_support import (
     launch_jvm,
 )
 from bodo_iceberg_connector.schema_helper import arrow_schema_j2py
-from py4j.protocol import Py4JJavaError
+from py4j.protocol import Py4JError
 
 # Types I didn't figure out how to test with Spark:
 #   FixedType
@@ -155,7 +155,7 @@ def get_iceberg_info(port: int, conn_str: str, schema: str, table: str, error=Tr
                 py_schema.colnames == pyarrow_schema.names
             ), "Iceberg Schema Field Names Should be Equal in PyArrow Schema"
 
-    except Py4JJavaError as e:
+    except Py4JError as e:
         raise IcebergJavaError.from_java_error(e)
 
     # TODO: Remove when sure that Iceberg's Schema and PyArrow's Schema always match

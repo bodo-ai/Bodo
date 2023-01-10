@@ -10,6 +10,7 @@ import pytest
 from pandas.tseries.offsets import DateOffset
 
 import bodo
+from bodo.tests.timezone_common import representative_tz  # noqa
 from bodo.tests.utils import check_func
 
 
@@ -108,6 +109,38 @@ def test_week_add_timestamp(week_value, memory_leak_check):
     check_func(test_impl, (timestamp_val, week_value))
 
 
+def test_week_add_timestamp_with_tz(week_value, representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+        tz=representative_tz,
+    )
+    check_func(test_impl, (week_value, timestamp_val))
+    check_func(test_impl, (timestamp_val, week_value))
+
+
+def test_week_add_timestamp_arr_with_tz(
+    week_value, representative_tz, memory_leak_check
+):
+    def test_impl(val1, val2):
+        return val1 + val2
+
+    arr = pd.date_range(
+        start="1/1/2022", freq="16D5H", periods=30, tz=representative_tz
+    ).array
+    check_func(test_impl, (week_value, arr))
+    check_func(test_impl, (arr, week_value))
+
+
 def test_week_sub_datetime(week_value, memory_leak_check):
     def test_impl(val1, val2):
         return val1 - val2
@@ -132,6 +165,24 @@ def test_week_sub_timestamp(week_value, memory_leak_check):
         second=45,
         microsecond=99320,
         nanosecond=891,
+    )
+    check_func(test_impl, (timestamp_val, week_value))
+
+
+def test_week_sub_timestamp_with_tz(week_value, representative_tz, memory_leak_check):
+    def test_impl(val1, val2):
+        return val1 - val2
+
+    timestamp_val = pd.Timestamp(
+        year=2020,
+        month=10,
+        day=30,
+        hour=22,
+        minute=12,
+        second=45,
+        microsecond=99320,
+        nanosecond=891,
+        tz=representative_tz,
     )
     check_func(test_impl, (timestamp_val, week_value))
 

@@ -118,7 +118,7 @@ public class BodoIcebergHandler {
     List<DataFileInfo> fileInfos = DataFileInfo.fromJson(newFileInfoJson);
 
     this.overwriteData(
-        table.newOverwrite(), table.spec(), table.sortOrder(), oldFileNames, fileInfos);
+        table.newTransaction(), table.spec(), table.sortOrder(), oldFileNames, fileInfos);
   }
 
   /** Insert data files into the table */
@@ -136,7 +136,7 @@ public class BodoIcebergHandler {
 
   /** Overwrite Data Files with New Modified Versions */
   public void overwriteData(
-      OverwriteFiles action,
+      Transaction transaction,
       PartitionSpec spec,
       SortOrder order,
       List<String> oldFileNames,
@@ -144,12 +144,16 @@ public class BodoIcebergHandler {
     boolean isPartitionedPaths = spec.isPartitioned();
 
     // Data Files should be uniquely identified by path only. Other values should not matter
-    for (String oldFileName : oldFileNames)
-      action.deleteFile(new DataFileInfo(oldFileName, 0, 0).toDataFile(spec, order, false));
-    for (DataFileInfo newFile : newFiles)
-      action.addFile(newFile.toDataFile(spec, order, isPartitionedPaths));
+    DeleteFiles delAction = transaction.newDelete();
+    for (String oldFileName : oldFileNames) delAction.deleteFile(oldFileName);
+    delAction.commit();
 
+    AppendFiles action = transaction.newAppend();
+    for (DataFileInfo newFile : newFiles)
+      action.appendFile(newFile.toDataFile(spec, order, isPartitionedPaths));
     action.commit();
+
+    transaction.commitTransaction();
   }
 
   /** Fetch the snapshot id for a table */

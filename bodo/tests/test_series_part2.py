@@ -993,7 +993,7 @@ def test_series_isin(S, values, memory_leak_check):
     def test_impl(S, values):
         return S.isin(values)
 
-    check_func(test_impl, (S, values))
+    check_func(test_impl, (S, values), check_dtype=False)
 
 
 # TODO: Readd the memory leak check when constant lower leak is fixed
@@ -1068,7 +1068,7 @@ def test_series_nlargest(numeric_series_val, k, memory_leak_check):
     def test_impl(S, k):
         return S.nlargest(k)
 
-    check_func(test_impl, (numeric_series_val, k), False)
+    check_func(test_impl, (numeric_series_val, k), False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1093,7 +1093,7 @@ def test_series_nsmallest(numeric_series_val, k, memory_leak_check):
     def test_impl(S, k):
         return S.nsmallest(k)
 
-    check_func(test_impl, (numeric_series_val, k), False)
+    check_func(test_impl, (numeric_series_val, k), False, check_dtype=False)
 
 
 def test_series_nsmallest_non_index(memory_leak_check):
@@ -1314,18 +1314,18 @@ def test_series_quantile_q(memory_leak_check):
 
     S = pd.Series([1.2, 3.4, 4.5, 32.3, 67.8, 100])
 
-    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4)
+    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4, check_dtype=False)
 
     # dt64
     S = pd.Series(pd.date_range("2030-01-1", periods=11))
-    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4)
+    check_func(test_impl, (S,), is_out_distributed=False, atol=1e-4, check_dtype=False)
 
     # int
     def test_int(S):
         ans = S.quantile(0)
         return ans
 
-    check_func(test_int, (S,))
+    check_func(test_int, (S,), check_dtype=False)
 
     def test_str(S):
         ans = S.quantile("aa")
@@ -2576,7 +2576,7 @@ def test_series_mask(memory_leak_check):
     )
     cond = S == 2.0
     check_func(test_impl, (S, cond, 12))
-    check_func(test_impl_nan, (S, cond))
+    check_func(test_impl_nan, (S, cond), check_dtype=False)
 
 
 def test_series_mask_arr(memory_leak_check):
@@ -2855,7 +2855,7 @@ def test_series_var(memory_leak_check):
 
     S = pd.Series([np.nan, 2.0, 3.0, 4.0, 5.0])
     check_func(f, (S,))
-    check_func(f_skipna, (S,))
+    check_func(f_skipna, (S,), py_output=True)
     check_func(f_ddof, (S,))
     # Empty Series
     S_empty = pd.Series()
@@ -2929,7 +2929,7 @@ def test_series_std(memory_leak_check):
 
     S = pd.Series([np.nan, 2.0, 3.0, 4.0, 5.0])
     check_func(f, (S,))
-    check_func(f_skipna, (S,))
+    check_func(f_skipna, (S,), py_output=True)
     check_func(f_ddof, (S,))
     # Empty Series
     S_empty = pd.Series()

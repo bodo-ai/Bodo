@@ -154,7 +154,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_parfor_REPs(), 0)
         self.assertEqual(count_parfor_OneDs(), 2)
         f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-        self.assertTrue(dist_IR_contains(f_ir, "dist_cumsum"))
+        self.assertTrue(dist_IR_contains(f_ir, "accum_func"))
 
     def test_column_distribution(self):
         # make sure all column calls are distributed
@@ -176,7 +176,7 @@ class TestHiFrames(unittest.TestCase):
         self.assertEqual(count_array_REPs(), 0)
         self.assertEqual(count_parfor_REPs(), 0)
         f_ir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
-        self.assertTrue(dist_IR_contains(f_ir, "dist_cumsum"))
+        self.assertTrue(dist_IR_contains(f_ir, "accum_func"))
 
     def test_quantile_parallel(self):
         def test_impl(n):

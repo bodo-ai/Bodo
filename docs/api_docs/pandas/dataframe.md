@@ -259,6 +259,8 @@ Bodo provides extensive DataFrame support documented below.
     - `dtype`: dict of string column names keys, and Strings/types values. String (string must be parsable by `np.dtype`), Valid type (see types), The following functions: float, int, bool, str
         - **Must be constant at Compile Time**
 
+    - `copy`: boolean
+
 
     ***Example Usage***
 

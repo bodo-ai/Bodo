@@ -81,6 +81,7 @@ from bodo.libs.bool_arr_ext import (
     is_valid_boolean_array_logical_op,
 )
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.map_arr_ext import MapArrayType
 from bodo.libs.str_arr_ext import StringArrayType, string_array_type
@@ -126,23 +127,6 @@ from bodo.utils.utils import (
 ufunc_names = set(f.__name__ for f in numba.core.typing.npydecl.supported_ufuncs)
 
 
-_dt_index_binops = (
-    "==",
-    "!=",
-    ">=",
-    ">",
-    "<=",
-    "<",
-    "-",
-    operator.eq,
-    operator.ne,
-    operator.ge,
-    operator.gt,
-    operator.le,
-    operator.lt,
-    operator.sub,
-)
-
 _string_array_comp_ops = (
     operator.eq,
     operator.ne,
@@ -151,35 +135,6 @@ _string_array_comp_ops = (
     operator.le,
     operator.lt,
 )
-
-_binop_to_str = {
-    operator.eq: "==",
-    operator.ne: "!=",
-    operator.ge: ">=",
-    operator.gt: ">",
-    operator.le: "<=",
-    operator.lt: "<",
-    operator.sub: "-",
-    operator.add: "+",
-    operator.mul: "*",
-    operator.truediv: "/",
-    operator.floordiv: "//",
-    operator.mod: "%",
-    operator.pow: "**",
-    "==": "==",
-    "!=": "!=",
-    ">=": ">=",
-    ">": ">",
-    "<=": "<=",
-    "<": "<",
-    "-": "-",
-    "+": "+",
-    "*": "*",
-    "/": "/",
-    "//": "//",
-    "%": "%",
-    "**": "**",
-}
 
 
 class SeriesPass:
@@ -204,7 +159,7 @@ class SeriesPass:
         self.typemap = typemap
         self.calltypes = calltypes
         self.locals = _locals
-        # dataframe transformation module to try on each statement
+        # DataFrame transformation module to try on each statement
         self.dataframe_pass = DataFramePass(
             func_ir, typingctx, targetctx, typemap, calltypes
         )
@@ -219,15 +174,15 @@ class SeriesPass:
         # topo_order necessary so Series data replacement optimization can be
         # performed in one pass
         topo_order = find_topo_order(blocks)
-        # find the potentially updated dataframes to avoid optimizing out
+        # find the potentially updated DataFrames to avoid optimizing out
         # get_dataframe_data() calls incorrectly
         self.dataframe_pass._updated_dataframes = self._get_updated_dataframes(
             blocks, topo_order
         )
-        # Keep track of the updated dataframes already visited on this pass.
+        # Keep track of the updated DataFrames already visited on this pass.
         self.dataframe_pass._visited_updated_dataframes = set()
 
-        # NOTE: this is iterating in topological order; we're poping from the reversed ordering.
+        # NOTE: this is iterating in topological order; we're popping from the reversed ordering.
         work_list = list((l, blocks[l]) for l in reversed(topo_order))
         changed = False
         while work_list:
@@ -468,7 +423,7 @@ class SeriesPass:
             )
             return replace_func(self, impl, (target, idx), pre_nodes=nodes)
 
-        # simplify geitem on Series with constant Index values
+        # simplify getitem on Series with constant Index values
         # used for df.apply() UDF optimization
         if (
             isinstance(target_typ, (SeriesType, HeterogeneousSeriesType))
@@ -708,7 +663,7 @@ class SeriesPass:
             val_def = guard(get_definition, self.func_ir, inst.value)
             if (
                 is_expr(val_def, "getitem") or is_expr(val_def, "static_getitem")
-            ) and self.typemap[val_def.value.name] == string_array_type:
+            ) and is_str_arr_type(self.typemap[val_def.value.name]):
                 val_idx = get_getsetitem_index_var(val_def, self.typemap, nodes)
                 return nodes + compile_func_single_block(
                     eval(
@@ -1019,7 +974,7 @@ class SeriesPass:
         if rhs.fn == operator.sub and (
             is_dt64_series_typ(typ1)
             and (
-                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                 or typ2 == datetime_timedelta_type
                 or typ2 == datetime_datetime_type
                 or is_timedelta64_series_typ(typ2)
@@ -1028,7 +983,7 @@ class SeriesPass:
             or (
                 is_dt64_series_typ(typ2)
                 and (
-                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                     or typ1 == datetime_datetime_type
                 )
             )
@@ -1083,14 +1038,14 @@ class SeriesPass:
         if rhs.fn in cmp_ops and (
             is_dt64_series_typ(typ1)
             and (
-                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                 or typ2 == string_type
                 or bodo.utils.typing.is_overload_constant_str(typ2)
             )
             or (
                 is_dt64_series_typ(typ2)
                 and (
-                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                    typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
                     or typ1 == string_type
                     or bodo.utils.typing.is_overload_constant_str(typ1)
                 )
@@ -1139,11 +1094,11 @@ class SeriesPass:
         if rhs.fn == operator.sub and (
             (
                 isinstance(typ1, DatetimeIndexType)
-                and typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                and typ2 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
             )
             or (
                 isinstance(typ2, DatetimeIndexType)
-                and typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type
+                and typ1 == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type
             )
         ):
             impl = bodo.hiframes.pd_index_ext.overload_sub_operator_datetime_index(
@@ -1176,6 +1131,16 @@ class SeriesPass:
 
         if rhs.fn == operator.add and (is_str_arr_type(typ1) or is_str_arr_type(typ2)):
             impl = bodo.libs.str_arr_ext.overload_add_operator_string_array(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
+        # Add for tz-aware
+        if rhs.fn == operator.add and (
+            isinstance(typ1, bodo.DatetimeArrayType)
+            or isinstance(typ2, bodo.DatetimeArrayType)
+        ):
+            impl = bodo.libs.pd_datetime_arr_ext.overload_add_operator_datetime_arr(
+                typ1, typ2
+            )
             return replace_func(self, impl, [arg1, arg2])
 
         if rhs.fn == operator.sub and typ2 == datetime_timedelta_type:
@@ -1329,6 +1294,24 @@ class SeriesPass:
             impl = overload_func(typ1, typ2)
             return replace_func(self, impl, [arg1, arg2])
 
+        # inline remaining Float array ops
+        if (
+            rhs.fn in numba.core.typing.npydecl.NumpyRulesArrayOperator._op_map.keys()
+            and any(isinstance(t, FloatingArrayType) for t in (typ1, typ2))
+        ):
+            overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
+        if (
+            rhs.fn
+            in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
+            and any(isinstance(t, FloatingArrayType) for t in (typ1, typ2))
+        ):  # pragma: no cover
+            overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 2)
+            impl = overload_func(typ1, typ2)
+            return replace_func(self, impl, [arg1, arg2])
+
         # inline operator.or_ and operator.and_ for boolean arrays
         if (rhs.fn in [operator.or_, operator.and_]) and any(
             t == boolean_array for t in (typ1, typ2)
@@ -1402,9 +1385,15 @@ class SeriesPass:
             impl = overload_func(typ)
             return replace_func(self, impl, [arg])
 
-        if isinstance(typ, IntegerArrayType):
+        if isinstance(typ, IntegerArrayType):  # pragma: no cover
             assert rhs.fn in (operator.neg, operator.invert, operator.pos)
             overload_func = bodo.libs.int_arr_ext.create_op_overload(rhs.fn, 1)
+            impl = overload_func(typ)
+            return replace_func(self, impl, [arg])
+
+        if isinstance(typ, FloatingArrayType):  # pragma: no cover
+            assert rhs.fn in (operator.neg, operator.pos)
+            overload_func = bodo.libs.float_arr_ext.create_op_overload(rhs.fn, 1)
             impl = overload_func(typ)
             return replace_func(self, impl, [arg])
 
@@ -1502,6 +1491,16 @@ class SeriesPass:
         ):
             return self._handle_ufuncs_int_arr(func_name, rhs.args)
 
+        # inline ufuncs on FloatingArray
+        if (
+            func_mod in ("numpy", "ufunc")
+            and func_name in ufunc_names
+            and any(
+                isinstance(self.typemap[a.name], FloatingArrayType) for a in rhs.args
+            )
+        ):  # pragma: no cover
+            return self._handle_ufuncs_float_arr(func_name, rhs.args)
+
         # inline ufuncs on BooleanArray
         if (
             func_mod in ("numpy", "ufunc")
@@ -1583,16 +1582,6 @@ class SeriesPass:
                     kws=dict(rhs.kws),
                 )  # pragma: no cover
 
-        if fdef == ("apply_null_mask", "bodo.libs.int_arr_ext"):
-            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
-            impl = bodo.libs.int_arr_ext.apply_null_mask.py_func(*in_typs)
-            return replace_func(self, impl, rhs.args)
-
-        if fdef == ("merge_bitmaps", "bodo.libs.int_arr_ext"):
-            in_typs = tuple(self.typemap[a.name] for a in rhs.args)
-            impl = bodo.libs.int_arr_ext.merge_bitmaps.py_func(*in_typs)
-            return replace_func(self, impl, rhs.args)
-
         if fdef == ("get_int_arr_data", "bodo.libs.int_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
@@ -1632,6 +1621,27 @@ class SeriesPass:
             kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
 
             impl = getattr(bodo.libs.int_arr_ext, "overload_int_arr_" + func_name)(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
+        # inline FloatingArrayType.copy()
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(self.typemap[func_mod.name], FloatingArrayType)
+            and func_name in ("copy", "astype", "sum")
+        ):  # pragma: no cover
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = getattr(bodo.libs.float_arr_ext, "overload_float_arr_" + func_name)(
                 *arg_typs, **kw_typs
             )
             return replace_func(
@@ -2269,10 +2279,15 @@ class SeriesPass:
                 typ = typ.instance_type
             dtype = None
             # nullable int array
-            if isinstance(typ, IntegerArrayType):
+            if isinstance(typ, IntegerArrayType):  # pragma: no cover
                 dtype = typ.dtype
                 impl = eval(
                     "lambda n, t, s=None: bodo.libs.int_arr_ext.alloc_int_array(n, _dtype)"
+                )
+            elif isinstance(typ, FloatingArrayType):  # pragma: no cover
+                dtype = typ.dtype
+                impl = eval(
+                    "lambda n, t, s=None: bodo.libs.float_arr_ext.alloc_float_array(n, _dtype)"
                 )
             elif isinstance(typ, types.Array):
                 dtype = typ.dtype
@@ -2370,6 +2385,17 @@ class SeriesPass:
                     assign.target,
                     self,
                     extra_globals={"_precision": precision, "_scale": scale},
+                )
+            elif isinstance(typ, bodo.DatetimeArrayType):
+                tz = typ.tz
+                return compile_func_single_block(
+                    eval(
+                        "lambda n, t, s=None: bodo.libs.pd_datetime_arr_ext.alloc_pd_datetime_array(n, _tz)"
+                    ),
+                    rhs.args,
+                    assign.target,
+                    self,
+                    extra_globals={"_tz": tz},
                 )
 
             return compile_func_single_block(
@@ -2868,6 +2894,15 @@ class SeriesPass:
         impl = overload_func(*in_typs)
         return replace_func(self, impl, args)
 
+    def _handle_ufuncs_float_arr(self, ufunc_name, args):
+        np_ufunc = getattr(np, ufunc_name)
+        overload_func = bodo.libs.float_arr_ext.create_op_overload(
+            np_ufunc, np_ufunc.nin
+        )
+        in_typs = tuple(self.typemap[a.name] for a in args)
+        impl = overload_func(*in_typs)
+        return replace_func(self, impl, args)
+
     def _handle_ufuncs_bool_arr(self, ufunc_name, args):
         np_ufunc = getattr(np, ufunc_name)
         overload_func = bodo.libs.bool_arr_ext.create_op_overload(
@@ -3258,7 +3293,7 @@ class SeriesPass:
                 "            bodo.libs.array_kernels.setna(S0, i)\n"
                 "        v = bodo.utils.conversion.box_if_dt64(A[i])\n"
                 "        if v in d:\n"
-                "            S0[i] = bodo.utils.conversion.unbox_if_timestamp(d[v])\n"
+                "            S0[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(d[v])\n"
                 "        else:\n"
                 "            bodo.libs.array_kernels.setna(S0, i)\n"
                 "    return bodo.hiframes.pd_series_ext.init_series(S0, index, name)\n"
@@ -3355,9 +3390,7 @@ class SeriesPass:
         else:
             func_text += f"    v0 = v\n"
         for i in range(n_out_cols):
-            func_text += (
-                f"    S{i}[i] = bodo.utils.conversion.unbox_if_timestamp(v{i})\n"
-            )
+            func_text += f"    S{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(v{i})\n"
         glbls = {}
         if is_df_output:
             data_arrs = ", ".join(f"S{i}" for i in range(n_out_cols))
@@ -3924,6 +3957,7 @@ def _fix_typ_undefs(new_typ, old_typ):
                 (
                     types.Array,
                     IntegerArrayType,
+                    FloatingArrayType,
                     SeriesType,
                     StringArrayType,
                     ArrayItemArrayType,

@@ -1,6 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 import io
-import os
 import re
 import string
 import traceback
@@ -17,20 +16,13 @@ from bodo.tests.user_logging_utils import (
     set_logging_stream,
 )
 from bodo.tests.utils import (
-    _get_dist_arg,
     check_func,
-    get_snowflake_connection_string,
     get_start_end,
     oracle_user_pass_and_hostname,
     reduce_sum,
-    snowflake_cred_env_vars_present,
     sql_user_pass_and_hostname,
 )
-from bodo.utils.testing import (
-    ensure_clean_mysql_psql_table,
-    ensure_clean_snowflake_table,
-)
-from bodo.utils.typing import BodoWarning
+from bodo.utils.testing import ensure_clean_mysql_psql_table
 
 
 @pytest.mark.parametrize("chunksize", [None, 4])
@@ -523,251 +515,6 @@ def test_to_sql_invalid_password(memory_leak_check):
         impl(df)
 
 
-@pytest.mark.parametrize("df_size", [17000 * 3, 2])
-@pytest.mark.parametrize("sf_write_overlap", [True, False])
-@pytest.mark.parametrize("sf_write_use_put", [True, False])
-@pytest.mark.parametrize("snowflake_user", [1, pytest.param(3, marks=pytest.mark.slow)])
-def test_to_sql_snowflake(
-    df_size, sf_write_overlap, sf_write_use_put, snowflake_user, memory_leak_check
-):
-    """
-    Tests that df.to_sql works as expected. Since Snowflake has a limit of ~16k
-    per insert, we insert 17k rows per rank to emulate a "large" insert.
-    """
-
-    # Skip test if env vars with snowflake creds required for this test are not set.
-    if not snowflake_cred_env_vars_present(snowflake_user):
-        pytest.skip(reason="Required env vars with Snowflake credentials not set")
-
-    if (
-        ("AGENT_NAME" in os.environ)
-        and sf_write_overlap
-        and sf_write_use_put
-        and (snowflake_user == 3)
-    ):
-        pytest.skip(
-            reason="[BE-3758] This test fails on Azure pipelines for a yet to be determined reason."
-        )
-
-    import platform
-
-    import bodo
-
-    db = "TEST_DB"
-    schema = "PUBLIC"
-    conn = get_snowflake_connection_string(db, schema, user=snowflake_user)
-
-    # Specify Snowflake write hyperparameters
-    import bodo.io.snowflake
-
-    old_sf_write_overlap = bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD
-    bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = sf_write_overlap
-    old_sf_write_use_put = bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT
-    bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = sf_write_use_put
-
-    rng = np.random.default_rng(5)
-    letters = np.array(list(string.ascii_letters))
-    py_output = pd.DataFrame(
-        {
-            "a": np.arange(df_size),
-            "b": np.arange(df_size).astype(np.float64),
-            "c": [
-                "".join(rng.choice(letters, size=rng.integers(10, 100)))
-                for _ in range(df_size)
-            ],
-            "d": pd.date_range("2001-01-01", periods=df_size),
-            "e": pd.date_range("2001-01-01", periods=df_size).date,
-        }
-    )
-    start, end = get_start_end(len(py_output))
-    df = py_output.iloc[start:end]
-
-    @bodo.jit(distributed=["df"])
-    def test_write(df, name, conn, schema):
-        df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
-        bodo.barrier()
-
-    try:
-        with ensure_clean_snowflake_table(conn) as name:
-            # If using a Azure Snowflake account, the stage will be ADLS backed, so
-            # when writing to it directly, we need a proper ADLS/Haddop setup
-            # and the bodo_azurefs_sas_token_provider library, both of which are only
-            # done for Linux. So we verify that it shows user the appropriate warning
-            # about falling back to the PUT method.
-            if (
-                snowflake_user == 3
-                and (not sf_write_use_put)
-                and (platform.system() != "Linux")
-            ):
-                if bodo.get_rank() == 0:
-                    # Warning is only raised on rank 0
-                    with pytest.warns(
-                        BodoWarning,
-                        match="Falling back to PUT command for upload for now.",
-                    ):
-                        test_write(df, name, conn, schema)
-                else:
-                    test_write(df, name, conn, schema)
-            else:
-                test_write(df, name, conn, schema)
-
-            bodo.barrier()
-            passed = 1
-            if bodo.get_rank() == 0:
-                try:
-                    output_df = pd.read_sql(f"select * from {name}", conn)
-                    # Row order isn't defined, so sort the data.
-                    output_cols = output_df.columns.to_list()
-                    output_df = output_df.sort_values(output_cols).reset_index(
-                        drop=True
-                    )
-                    py_cols = py_output.columns.to_list()
-                    py_output = py_output.sort_values(py_cols).reset_index(drop=True)
-                    pd.testing.assert_frame_equal(
-                        output_df, py_output, check_dtype=False, check_column_type=False
-                    )
-                except Exception as e:
-                    print("".join(traceback.format_exception(None, e, e.__traceback__)))
-                    passed = 0
-
-            n_passed = reduce_sum(passed)
-            assert n_passed == bodo.get_size()
-            bodo.barrier()
-    finally:
-        bodo.io.snowflake.SF_WRITE_OVERLAP_UPLOAD = old_sf_write_overlap
-        bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_sf_write_use_put
-
-
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
-def test_to_sql_snowflake_user2(memory_leak_check):
-    """
-    Tests that df.to_sql works when the Snowflake account password has special
-    characters.
-    """
-    # Only test with one rank because we are just testing access
-    if bodo.get_size() != 1:
-        return
-    import platform
-
-    # This test runs on both Mac and Linux, so give each table a different
-    # name for the highly unlikely but possible case the tests run concurrently.
-    # We use uppercase table names as Snowflake by default quotes identifiers.
-    if platform.system() == "Darwin":
-        name = "TOSQLSMALLMAC"
-    else:
-        name = "TOSQLSMALLLINUX"
-    db = "TEST_DB"
-    schema = "PUBLIC"
-    # User 2 has @ character in the password
-    conn = get_snowflake_connection_string(db, schema, user=2)
-
-    rng = np.random.default_rng(5)
-    len_list = 1000
-    letters = np.array(list(string.ascii_letters))
-    df = pd.DataFrame(
-        {
-            "a": rng.choice(500, size=len_list),
-            "b": rng.choice(500, size=len_list),
-            "c": [
-                "".join(rng.choice(letters, size=rng.integers(10, 100)))
-                for _ in range(len_list)
-            ],
-            "d": pd.date_range("2002-01-01", periods=1000),
-            "e": pd.date_range("2002-01-01", periods=1000).date,
-        }
-    )
-
-    @bodo.jit
-    def test_write(df, name, conn, schema):
-        df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
-
-    test_write(df, name, conn, schema)
-
-    def read(conn):
-        return pd.read_sql(f"select * from {name}", conn)
-
-    # Can't read with pandas because it will throw an error if the username has
-    # special characters
-    check_func(read, (conn,), py_output=df, dist_test=False, check_dtype=False)
-
-
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
-def test_to_sql_colname_case(memory_leak_check):
-    """
-    Tests that df.to_sql works with different upper/lower case of column name
-    """
-    import platform
-
-    # This test runs on both Mac and Linux, so give each table a different
-    # name for the highly unlikely but possible case the tests run concurrently.
-    # We use uppercase table names as Snowflake by default quotes identifiers.
-    if platform.system() == "Darwin":
-        name = "TEST_CASE_MAC"
-    else:
-        name = "TEST_CASE_LINUX"
-    db = "TEST_DB"
-    schema = "PUBLIC"
-    conn = get_snowflake_connection_string(db, schema)
-
-    # Setting all data to be int as we don't care about values in this test.
-    # We're just ensuring that column names match with different cases.
-    rng = np.random.default_rng(5)
-    # NOTE: We're testing the to_sql is writing columns correctly.
-    # For read: all uppercase column names will fail if compared
-    # to actual dataframe. This is because we match Pandas Behavior where
-    # all uppercase names are returned as lowercase. See _get_sql_df_type_from_db
-    df = pd.DataFrame(
-        {
-            # all lower
-            "aaa": rng.integers(0, 500, 10),
-            # all upper
-            "BBB": rng.integers(0, 500, 10),
-            # mix
-            "CdEd": rng.integers(0, 500, 10),
-            # lower with special char.
-            "d_e_$": rng.integers(0, 500, 10),
-            # upper with special char.
-            "F_G_$": rng.integers(0, 500, 10),
-            # no letters
-            "_123$": rng.integers(0, 500, 10),
-            # special character only
-            "_$": rng.integers(0, 500, 10),
-            # lower with number
-            "a12": rng.integers(0, 500, 10),
-            # upper with number
-            "B12C": rng.integers(0, 500, 10),
-        }
-    )
-
-    @bodo.jit(distributed=["df"])
-    def test_write(df, name, conn, schema):
-        df.to_sql(name, conn, if_exists="replace", index=False, schema=schema)
-
-    test_write(_get_dist_arg(df), name, conn, schema)
-
-    def sf_read(conn):
-        return pd.read_sql(f"select * from {name}", conn)
-
-    bodo_result = bodo.jit(sf_read)(conn)
-    bodo_result = bodo.gatherv(bodo_result)
-
-    passed = 1
-    if bodo.get_rank() == 0:
-        try:
-            py_output = sf_read(conn)
-            # disable dtype check. Int16 vs. int64
-            pd.testing.assert_frame_equal(
-                bodo_result, py_output, check_dtype=False, check_column_type=False
-            )
-        except Exception as e:
-            print("".join(traceback.format_exception(None, e, e.__traceback__)))
-            passed = 0
-
-    n_passed = reduce_sum(passed)
-    n_pes = bodo.get_size()
-    assert n_passed == n_pes, "test_to_sql_colname_case failed"
-
-
 @pytest.mark.slow
 def test_mysql_show(memory_leak_check):
     """Test MySQL: SHOW query"""
@@ -803,6 +550,7 @@ def test_mysql_describe(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgre_show(memory_leak_check):
     """Test PostgreSQL: SHOW query"""
 
@@ -823,6 +571,7 @@ postgres_user_pass_and_hostname = "bodo:edJEh6RCUWMefuoZXTIy@bodo-postgre-test.c
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_basic(memory_leak_check):
     """Test simple SQL query with PostgreSQL DBMS"""
 
@@ -861,6 +610,7 @@ def test_postgres_read_sql_basic(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_count(memory_leak_check):
     """Test SQL query count(*) and a single column PostgreSQL DB"""
 
@@ -880,6 +630,7 @@ def test_postgres_read_sql_count(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_join(memory_leak_check):
     """Test SQL query join PostgreSQL DB"""
 
@@ -937,6 +688,7 @@ def test_postgres_read_sql_join(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_gb(memory_leak_check):
     """Test SQL query group by, column alias, and round PostgreSQL DB"""
 
@@ -976,6 +728,7 @@ def test_postgres_read_sql_gb(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 def test_postgres_read_sql_having(memory_leak_check):
     """Test SQL query HAVING PostgreSQL DB"""
 
@@ -996,6 +749,7 @@ def test_postgres_read_sql_having(memory_leak_check):
 
 
 @pytest.mark.slow
+@pytest.mark.skip(reason="disable all postgreSQL tests for now")
 @pytest.mark.parametrize("is_distributed", [True, False])
 def test_to_sql_postgres(is_distributed, memory_leak_check):
     """

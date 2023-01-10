@@ -37,7 +37,7 @@ from bodo.hiframes.pd_series_ext import (
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
     convert_val_to_timestamp,
-    pd_timestamp_type,
+    pd_timestamp_tz_naive_type,
 )
 from bodo.hiframes.rolling import is_supported_shift_array_type
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
@@ -48,6 +48,7 @@ from bodo.libs.binary_arr_ext import (
 )
 from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import Decimal128Type, DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.pd_datetime_arr_ext import unwrap_tz_array
 from bodo.libs.str_arr_ext import StringArrayType
@@ -116,7 +117,6 @@ def overload_series_dtype(s):
     if s.dtype == bodo.string_type:
         raise BodoError("Series.dtype not supported for string Series yet")
 
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(s, "Series.dtype")
     return lambda s: bodo.hiframes.pd_series_ext.get_series_data(
         s
     ).dtype  # pragma: no cover
@@ -165,7 +165,6 @@ def overload_series_empty(s):
 
 @overload_attribute(SeriesType, "dtypes", inline="always")
 def overload_series_dtypes(s):
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(s, "Series.dtypes")
     return lambda s: s.dtype  # pragma: no cover
 
 
@@ -945,7 +944,9 @@ def overload_series_cumsum(S, axis=None, skipna=True):
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(A.cumsum(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(
+            bodo.libs.array_kernels.accum_func(A, "cumsum"), index, name
+        )
 
     return impl
 
@@ -974,7 +975,9 @@ def overload_series_cumprod(S, axis=None, skipna=True):
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(A.cumprod(), index, name)
+        return bodo.hiframes.pd_series_ext.init_series(
+            bodo.libs.array_kernels.accum_func(A, "cumprod"), index, name
+        )
 
     return impl
 
@@ -998,19 +1001,12 @@ def overload_series_cummin(S, axis=None, skipna=True):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.cummin()")
 
     # TODO: support skipna
-    #
-    # The big difference between cumsum/cumprod and cummin/cummax
-    # is that cumsum/cumprod are part of numpy and implemented in NUMBA,
-    # but cummin/cummax are not implemented in numpy and therefore not in numba.
-    # Thus for cummin/cummax we need to roll out our own implementation.
-    # We cannot use parfor as it is not easily parallelizable and thus requires a
-    # hand crafted parallelization (see dist_cummin/dist_cummax)
     def impl(S, axis=None, skipna=True):  # pragma: no cover
         arr = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.array_kernels.cummin(arr), index, name
+            bodo.libs.array_kernels.accum_func(arr, "cummin"), index, name
         )
 
     return impl
@@ -1042,7 +1038,7 @@ def overload_series_cummax(S, axis=None, skipna=True):
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         return bodo.hiframes.pd_series_ext.init_series(
-            bodo.libs.array_kernels.cummax(arr), index, name
+            bodo.libs.array_kernels.accum_func(arr, "cummax"), index, name
         )
 
     return impl
@@ -1121,13 +1117,22 @@ def overload_series_abs(S):
 
     # TODO [BE-2453]: Better errorchecking in general?
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.abs()")
+    out_arr_type = S.data
 
     # TODO: timedelta
     def impl(S):  # pragma: no cover
         A = bodo.hiframes.pd_series_ext.get_series_data(S)
         index = bodo.hiframes.pd_series_ext.get_series_index(S)
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
-        return bodo.hiframes.pd_series_ext.init_series(np.abs(A), index, name)
+        numba.parfors.parfor.init_prange()
+        n = len(A)
+        out_arr = bodo.utils.utils.alloc_type(n, out_arr_type, (-1,))
+        for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(A, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
+            out_arr[i] = np.abs(A[i])
+        return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
     return impl
 
@@ -1399,7 +1404,10 @@ def overload_series_idxmin(S, axis=0, skipna=True):
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
-        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
+        or isinstance(
+            S.data,
+            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.CategoricalArrayType),
+        )
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
@@ -1449,7 +1457,10 @@ def overload_series_idxmax(S, axis=0, skipna=True):
                 or isinstance(S.dtype, (types.Number, types.Boolean))
             )
         )
-        or isinstance(S.data, (bodo.IntegerArrayType, bodo.CategoricalArrayType))
+        or isinstance(
+            S.data,
+            (bodo.IntegerArrayType, bodo.FloatingArrayType, bodo.CategoricalArrayType),
+        )
         or S.data in [bodo.boolean_array, bodo.datetime_date_array_type]
     ):
         raise BodoError(
@@ -2916,7 +2927,7 @@ def overload_series_describe(
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.datetime64ns
         )
-    ) and not isinstance(S.data, IntegerArrayType):
+    ) and not isinstance(S.data, (IntegerArrayType, FloatingArrayType)):
         raise BodoError(f"describe() column input type {S.data} not supported.")
 
     # TODO: Support non-numeric columns set columns (e.g. categorical, BooleanArrayType, string)
@@ -3310,11 +3321,13 @@ def overload_series_fillna(
                         bodo.libs.array_kernels.setna(out_arr, i)
                         continue
                     if bodo.libs.array_kernels.isna(in_arr, i):
-                        out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                        out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                             fill_arr[i]
                         )
                         continue
-                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(in_arr[i])
+                    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                        in_arr[i]
+                    )
                 return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
             return fillna_series_impl
@@ -3361,14 +3374,14 @@ def overload_series_fillna(
             limit=None,
             downcast=None,
         ):  # pragma: no cover
-            value = bodo.utils.conversion.unbox_if_timestamp(value)
+            value = bodo.utils.conversion.unbox_if_tz_naive_timestamp(value)
             in_arr = bodo.hiframes.pd_series_ext.get_series_data(S)
             index = bodo.hiframes.pd_series_ext.get_series_index(S)
             name = bodo.hiframes.pd_series_ext.get_series_name(S)
             n = len(in_arr)
             out_arr = bodo.utils.utils.alloc_type(n, _dtype, (-1,))
             for i in numba.parfors.parfor.internal_prange(n):
-                s = bodo.utils.conversion.unbox_if_timestamp(in_arr[i])
+                s = bodo.utils.conversion.unbox_if_tz_naive_timestamp(in_arr[i])
                 if bodo.libs.array_kernels.isna(in_arr, i):
                     s = value
                 out_arr[i] = s
@@ -3859,10 +3872,26 @@ def overload_series_np_dot(a, b, out=None):
         raise BodoError("np.dot(): 'out' parameter not supported yet")
 
     # just call np.dot on underlying arrays
+    if isinstance(a, SeriesType) and isinstance(b, SeriesType):
+
+        def impl(a, b, out=None):  # pragma: no cover
+            arr = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(a)
+            )
+            arr2 = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(b)
+            )
+            return np.dot(arr, arr2)
+
+        return impl
+
     if isinstance(a, SeriesType):
 
         def impl(a, b, out=None):  # pragma: no cover
-            arr = bodo.hiframes.pd_series_ext.get_series_data(a)
+            arr = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(a)
+            )
+            b = bodo.utils.conversion.ndarray_if_nullable_arr(b)
             return np.dot(arr, b)
 
         return impl
@@ -3870,7 +3899,10 @@ def overload_series_np_dot(a, b, out=None):
     if isinstance(b, SeriesType):
 
         def impl(a, b, out=None):  # pragma: no cover
-            arr = bodo.hiframes.pd_series_ext.get_series_data(b)
+            a = bodo.utils.conversion.ndarray_if_nullable_arr(a)
+            arr = bodo.utils.conversion.ndarray_if_nullable_arr(
+                bodo.hiframes.pd_series_ext.get_series_data(b)
+            )
             return np.dot(a, arr)
 
         return impl
@@ -3936,8 +3968,6 @@ def overload_series_shift(S, periods=1, freq=None, axis=0, fill_value=None):
         package_name="pandas",
         module_name="Series",
     )
-
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(S, "Series.shift()")
 
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int, dt64, nullable int/bool/decimal/date,
@@ -4131,6 +4161,7 @@ def _validate_self_other_mask_where(
         isinstance(arr, types.Array)
         or isinstance(arr, BooleanArrayType)
         or isinstance(arr, IntegerArrayType)
+        or isinstance(arr, FloatingArrayType)
         or (
             bodo.utils.utils.is_array_typ(arr, False)
             and (arr.dtype in [bodo.string_type, bodo.bytes_type])
@@ -4142,7 +4173,7 @@ def _validate_self_other_mask_where(
             not in [
                 bodo.datetime64ns,
                 bodo.timedelta64ns,
-                bodo.pd_timestamp_type,
+                bodo.pd_timestamp_tz_naive_type,
                 bodo.pd_timedelta_type,
             ]
         )
@@ -4223,7 +4254,10 @@ def _validate_self_other_mask_where(
                     or (is_series_type(other) and arr.dtype == other.dtype)
                 )
             )
-            and (isinstance(arr, BooleanArrayType) or isinstance(arr, IntegerArrayType))
+            and (
+                isinstance(arr, BooleanArrayType)
+                or isinstance(arr, (IntegerArrayType, FloatingArrayType))
+            )
         )
     ):
 
@@ -4283,7 +4317,7 @@ def create_explicit_binary_op_overload(op):
         )
         is_other_datetime_iter = is_iterable_type(other) and (
             other.dtype == datetime_datetime_type
-            or other.dtype == pd_timestamp_type
+            or other.dtype == pd_timestamp_tz_naive_type
             or other.dtype == bodo.datetime64ns
         )
 
@@ -4305,10 +4339,10 @@ def create_explicit_binary_op_overload(op):
         if is_scalar_type(other):
             args = (S.data, other)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-            # Pandas 1.0 returns nullable bool array for nullable int array
-            if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-                types.bool_, 1, "C"
-            ):
+            # Pandas 1.0 returns nullable bool array for nullable array
+            if isinstance(
+                S.data, (IntegerArrayType, FloatingArrayType)
+            ) and ret_dtype == types.Array(types.bool_, 1, "C"):
                 ret_dtype = boolean_array
 
             def impl_scalar(
@@ -4319,7 +4353,7 @@ def create_explicit_binary_op_overload(op):
                 name = bodo.hiframes.pd_series_ext.get_series_name(S)
                 numba.parfors.parfor.init_prange()
                 # Unbox other if necessary.
-                other = bodo.utils.conversion.unbox_if_timestamp(other)
+                other = bodo.utils.conversion.unbox_if_tz_naive_timestamp(other)
                 n = len(arr)
                 out_arr = bodo.utils.utils.alloc_type(n, ret_dtype, (-1,))
                 for i in numba.parfors.parfor.internal_prange(n):
@@ -4338,10 +4372,10 @@ def create_explicit_binary_op_overload(op):
 
         args = (S.data, types.Array(other.dtype, 1, "C"))
         ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-        # Pandas 1.0 returns nullable bool array for nullable int array
-        if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-            types.bool_, 1, "C"
-        ):
+        # Pandas 1.0 returns nullable bool array for nullable array
+        if isinstance(
+            S.data, (IntegerArrayType, FloatingArrayType)
+        ) and ret_dtype == types.Array(types.bool_, 1, "C"):
             ret_dtype = boolean_array
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
@@ -4400,10 +4434,10 @@ def create_explicit_binary_reverse_op_overload(op):
         if isinstance(other, types.Number):
             args = (other, S.data)
             ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-            # Pandas 1.0 returns nullable bool array for nullable int array
-            if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-                types.bool_, 1, "C"
-            ):
+            # Pandas 1.0 returns nullable bool array for nullable array
+            if isinstance(
+                S.data, (IntegerArrayType, FloatingArrayType)
+            ) and ret_dtype == types.Array(types.bool_, 1, "C"):
                 ret_dtype = boolean_array
 
             def impl_scalar(
@@ -4432,10 +4466,10 @@ def create_explicit_binary_reverse_op_overload(op):
 
         args = (types.Array(other.dtype, 1, "C"), S.data)
         ret_dtype = typing_context.resolve_function_type(op, args, {}).return_type
-        # Pandas 1.0 returns nullable bool array for nullable int array
-        if isinstance(S.data, IntegerArrayType) and ret_dtype == types.Array(
-            types.bool_, 1, "C"
-        ):
+        # Pandas 1.0 returns nullable bool array for nullable array
+        if isinstance(
+            S.data, (IntegerArrayType, FloatingArrayType)
+        ) and ret_dtype == types.Array(types.bool_, 1, "C"):
             ret_dtype = boolean_array
 
         def impl(S, other, level=None, fill_value=None, axis=0):  # pragma: no cover
@@ -4601,7 +4635,9 @@ def create_binary_op_overload(op):
                     name = bodo.hiframes.pd_series_ext.get_series_name(lhs)
                     rhs_arr = bodo.utils.conversion.get_array_if_series_or_index(rhs)
                     # Unbox the other value in case its a scalar
-                    out_arr = op(arr, bodo.utils.conversion.unbox_if_timestamp(rhs_arr))
+                    out_arr = op(
+                        arr, bodo.utils.conversion.unbox_if_tz_naive_timestamp(rhs_arr)
+                    )
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return impl
@@ -4628,7 +4664,9 @@ def create_binary_op_overload(op):
                     name = bodo.hiframes.pd_series_ext.get_series_name(rhs)
                     lhs_arr = bodo.utils.conversion.get_array_if_series_or_index(lhs)
                     # Unbox the other value in case its a scalar
-                    out_arr = op(bodo.utils.conversion.unbox_if_timestamp(lhs_arr), arr)
+                    out_arr = op(
+                        bodo.utils.conversion.unbox_if_tz_naive_timestamp(lhs_arr), arr
+                    )
                     return bodo.hiframes.pd_series_ext.init_series(out_arr, index, name)
 
                 return impl
@@ -5102,10 +5140,8 @@ def overload_np_where(condition, x, y):
     if isinstance(x_dtype, bodo.PDCategoricalDtype):
         func_text += "      out_codes[j] = x_codes[j]\n"
     else:
-        func_text += (
-            "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
-                "x[j]" if is_x_arr else "x"
-            )
+        func_text += "      out_arr[j] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({})\n".format(
+            "x[j]" if is_x_arr else "x"
         )
     func_text += "    else:\n"
     if is_y_arr:
@@ -5118,10 +5154,8 @@ def overload_np_where(condition, x, y):
         else:
             func_text += "      setna(out_arr, j)\n"
     else:
-        func_text += (
-            "      out_arr[j] = bodo.utils.conversion.unbox_if_timestamp({})\n".format(
-                "y[j]" if is_y_arr else "y"
-            )
+        func_text += "      out_arr[j] = bodo.utils.conversion.unbox_if_tz_naive_timestamp({})\n".format(
+            "y[j]" if is_y_arr else "y"
         )
     func_text += "  return out_arr\n"
     loc_vars = {}
@@ -5235,6 +5269,7 @@ def _verify_np_select_arg_typs(condlist, choicelist, default):
         isinstance(choicelist_array_typ, types.Array)
         or isinstance(choicelist_array_typ, BooleanArrayType)
         or isinstance(choicelist_array_typ, IntegerArrayType)
+        or isinstance(choicelist_array_typ, FloatingArrayType)
         or (
             bodo.utils.utils.is_array_typ(choicelist_array_typ, False)
             and (choicelist_array_typ.dtype in [bodo.string_type, bodo.bytes_type])
@@ -5449,8 +5484,11 @@ def overload_series_between(S, left, right, inclusive="both"):
         name = bodo.hiframes.pd_series_ext.get_series_name(S)
         numba.parfors.parfor.init_prange()
         n = len(arr)
-        out_arr = np.empty(n, np.bool_)
+        out_arr = bodo.libs.bool_arr_ext.alloc_bool_array(n)
         for i in numba.parfors.parfor.internal_prange(n):
+            if bodo.libs.array_kernels.isna(arr, i):
+                bodo.libs.array_kernels.setna(out_arr, i)
+                continue
             val = bodo.utils.conversion.box_if_dt64(arr[i])
             if inclusive == "both":
                 out_arr[i] = val <= right and val >= left

@@ -8,11 +8,13 @@ import operator
 import types as pytypes
 import warnings
 from inspect import getfullargspec
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numba
 import numba.cpython.unicode
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 from numba.core import cgutils, ir, ir_utils, types
 from numba.core.errors import NumbaError
 from numba.core.imputils import RefType, iternext_impl
@@ -49,6 +51,8 @@ INDEX_SENTINEL = "$_bodo_index_"
 
 
 list_cumulative = {"cumsum", "cumprod", "cummin", "cummax"}
+Index = Union[str, Dict, None]
+FileSchema = Tuple[List[str], List, Index, List[int], List, List, List, pa.Schema]
 
 
 def is_timedelta_type(in_type):
@@ -274,26 +278,26 @@ class FileInfo:
     def __init__(self):
         # if not None, it is a string that needs to be concatenated to input string in
         # get_schema() to get full path for retrieving schema
-        self._concat_str = None
+        self._concat_str: Optional[str] = None
         # whether _concat_str should be concatenated on the left
-        self._concat_left = None
+        self._concat_left: Optional[str] = None
 
-    def get_schema(self, fname):
-        """get dataset schema from file name"""
+    def get_schema(self, fname: str):
+        """Get dataset schema from file name"""
         full_path = self.get_full_filename(fname)
         return self._get_schema(full_path)
 
     def set_concat(self, concat_str, is_left):
-        """set input string concatenation parameters"""
+        """Set input string concatenation parameters"""
         self._concat_str = concat_str
         self._concat_left = is_left
 
-    def _get_schema(self, fname):
+    def _get_schema(self, fname: str) -> FileSchema:
         # should be implemented in subclasses
         raise NotImplementedError
 
-    def get_full_filename(self, fname):
-        """get full path with concatenation if necessary"""
+    def get_full_filename(self, fname: str):
+        """Get full path with concatenation if necessary"""
         if self._concat_str is None:
             return fname
 
@@ -304,14 +308,16 @@ class FileInfo:
 
 
 class FilenameType(types.Literal):
-    """Arguments of Bodo functions that are a constant literal are
+    """
+    Arguments of Bodo functions that are a constant literal are
     converted to this type instead of plain Literal to allow us
     to reuse the cache for differing file names that have the
     same schema. All FilenameType instances have the same hash
     to allow comparison of different instances. Equality is based
-    on the schema (not the file name)."""
+    on the schema (not the file name).
+    """
 
-    def __init__(self, fname, finfo):
+    def __init__(self, fname, finfo: FileInfo):
         self.fname = fname
         self._schema = finfo.get_schema(fname)
         super(FilenameType, self).__init__(self.fname)
@@ -339,7 +345,7 @@ class FilenameType(types.Literal):
         return copy.deepcopy(self._schema)
 
 
-types.FilenameType = FilenameType
+types.FilenameType = FilenameType  # type: ignore
 
 # Data model, unboxing and lower cast are the same as fname (unicode or list) to
 # allow passing different file names to compiled code (note that if
@@ -751,7 +757,7 @@ def check_unsupported_args(
         raise BodoError(error_message)
 
 
-def get_overload_const_tuple(val):
+def get_overload_const_tuple(val) -> Optional[Tuple]:
     if isinstance(val, tuple):
         return val
     if isinstance(val, types.Omitted):
@@ -761,7 +767,7 @@ def get_overload_const_tuple(val):
         return tuple(get_overload_const(t) for t in val.types)
 
 
-def get_overload_constant_dict(val):
+def get_overload_constant_dict(val) -> Dict:
     """get constant dict values from literal type (stored as const tuple)"""
     # LiteralStrKeyDict with all const values, e.g. {"A": ["B"]}
     # see test_groupby_agg_const_dict::impl4
@@ -798,7 +804,7 @@ def get_overload_const_str_len(val):
         return len(val.value)
 
 
-def get_overload_const_list(val):
+def get_overload_const_list(val) -> Union[List[Any], Tuple[Any, ...], None]:
     """returns a constant list from type 'val', which could be a single value
     literal, a constant list or a constant tuple.
     """
@@ -821,7 +827,7 @@ def get_overload_const_list(val):
         return tuple(get_literal_value(t) for t in val.types)
 
 
-def get_overload_const_str(val):
+def get_overload_const_str(val) -> str:
     if isinstance(val, str):
         return val
     if isinstance(val, types.Omitted):
@@ -834,7 +840,7 @@ def get_overload_const_str(val):
     raise BodoError("{} not constant string".format(val))
 
 
-def get_overload_const_bytes(val):
+def get_overload_const_bytes(val) -> bytes:
     """Gets the bytes value from the possibly wraped value.
     Val must actually be a constant byte type, or this fn will throw an error
     """
@@ -847,7 +853,7 @@ def get_overload_const_bytes(val):
     raise BodoError("{} not constant binary".format(val))
 
 
-def get_overload_const_int(val):
+def get_overload_const_int(val) -> int:
     if isinstance(val, int):
         return val
     if isinstance(val, types.Omitted):
@@ -860,7 +866,7 @@ def get_overload_const_int(val):
     raise BodoError("{} not constant integer".format(val))
 
 
-def get_overload_const_float(val):
+def get_overload_const_float(val) -> float:
     if isinstance(val, float):
         return val
     if isinstance(val, types.Omitted):
@@ -869,7 +875,7 @@ def get_overload_const_float(val):
     raise BodoError("{} not constant float".format(val))
 
 
-def get_overload_const_bool(val):
+def get_overload_const_bool(val) -> bool:
     if isinstance(val, bool):
         return val
     if isinstance(val, types.Omitted):
@@ -882,7 +888,7 @@ def get_overload_const_bool(val):
     raise BodoError("{} not constant boolean".format(val))
 
 
-def is_const_func_type(t):
+def is_const_func_type(t) -> bool:
     """check if 't' is a constant function type"""
     return isinstance(
         t,
@@ -965,6 +971,10 @@ def parse_dtype(dtype, func_name=None):
             return bodo.libs.int_arr_ext.typeof_pd_int_dtype(
                 pd.api.types.pandas_dtype(d_str), None
             )
+        if d_str.startswith("Float"):
+            return bodo.libs.float_arr_ext.typeof_pd_float_dtype(
+                pd.api.types.pandas_dtype(d_str), None
+            )
         if d_str == "boolean":
             return bodo.libs.bool_arr_ext.boolean_dtype
         if d_str == "str":
@@ -978,7 +988,9 @@ def parse_dtype(dtype, func_name=None):
         raise BodoError(f"invalid dtype {dtype}")
 
 
-def is_list_like_index_type(t):
+def is_list_like_index_type(
+    t,
+) -> bool:
     """Types that can be similar to list for indexing Arrays, Series, etc.
     Tuples are excluded due to indexing semantics.
     """
@@ -1017,7 +1029,7 @@ def get_index_names(t, func_name, default_name):
 
     err_msg = "{}: index name should be a constant string".format(func_name)
 
-    # MultIndex has multiple names
+    # MultiIndex has multiple names
     if isinstance(t, MultiIndexType):
         names = []
         for i, n_typ in enumerate(t.names_typ):
@@ -1105,7 +1117,7 @@ def get_index_type_from_dtype(t):
     )
 
     if t in [
-        bodo.hiframes.pd_timestamp_ext.pd_timestamp_type,
+        bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type,
         bodo.datetime64ns,
         bodo.datetime_date_type,
     ]:
@@ -1271,7 +1283,7 @@ def unbox_func_literal(typ, obj, c):
 
 
 # groupby.agg() can take a constant dictionary with a UDF in values. Typer of Numba's
-# typed.Dict trys to get the type of the UDF value, which is not possible. This hack
+# typed.Dict tries to get the type of the UDF value, which is not possible. This hack
 # makes a dummy type available to Numba so that type inference works.
 types.MakeFunctionLiteral._literal_type_cache = types.MakeFunctionLiteral(lambda: 0)
 
@@ -1323,13 +1335,11 @@ register_model(ColNamesMetaType)(models.OpaqueModel)
 
 def is_literal_type(t):
     """return True if 't' represents a data type with known compile-time constant value"""
-    # sometimes Dispatcher objects become TypeRef, see test_groupby_agg_const_dict
-    if isinstance(t, types.TypeRef):
-        t = t.instance_type
     return (
+        isinstance(t, types.TypeRef)
         # LiteralStrKeyDict is not always a literal since its values are not necessarily
         # constant
-        (
+        or (
             isinstance(t, (types.Literal, types.Omitted))
             and not isinstance(t, types.LiteralStrKeyDict)
         )
@@ -1342,6 +1352,7 @@ def is_literal_type(t):
         # dtype literals should be treated as literals
         or isinstance(t, (types.DTypeSpec, types.Function))
         or isinstance(t, bodo.libs.int_arr_ext.IntDtype)
+        or isinstance(t, bodo.libs.float_arr_ext.FloatDtype)
         or t
         in (bodo.libs.bool_arr_ext.boolean_dtype, bodo.libs.str_arr_ext.string_dtype)
         # values like np.sum could be passed as UDFs and are technically literals
@@ -1425,6 +1436,8 @@ def get_literal_value(t):
         return t
     if isinstance(t, bodo.libs.int_arr_ext.IntDtype):
         return getattr(pd, str(t)[:-2])()
+    if isinstance(t, bodo.libs.float_arr_ext.FloatDtype):  # pragma: no cover
+        return getattr(pd, str(t)[:-2])()
     if t == bodo.libs.bool_arr_ext.boolean_dtype:
         return pd.BooleanDtype()
     if t == bodo.libs.str_arr_ext.string_dtype:
@@ -1483,6 +1496,9 @@ def dtype_to_array_type(dtype, convert_nullable=False):
     if isinstance(dtype, bodo.libs.int_arr_ext.IntDtype):
         return bodo.IntegerArrayType(dtype.dtype)
 
+    if isinstance(dtype, bodo.libs.float_arr_ext.FloatDtype):  # pragma: no cover
+        return bodo.FloatingArrayType(dtype.dtype)
+
     if dtype == types.bool_:
         return bodo.boolean_array
 
@@ -1518,7 +1534,7 @@ def dtype_to_array_type(dtype, convert_nullable=False):
 
     # Timestamp/datetime are stored as dt64 array
     if dtype in (
-        bodo.pd_timestamp_type,
+        bodo.pd_timestamp_tz_naive_type,
         bodo.hiframes.datetime_datetime_ext.datetime_datetime_type,
     ):
         return types.Array(bodo.datetime64ns, 1, "C")
@@ -1559,7 +1575,7 @@ def get_udf_out_arr_type(f_return_type, return_nullable=False):
     )
 
     # unbox Timestamp to dt64 in Series
-    if f_return_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_type:
+    if f_return_type == bodo.hiframes.pd_timestamp_ext.pd_timestamp_tz_naive_type:
         f_return_type = types.NPDatetime("ns")
 
     # unbox Timedelta to timedelta64 in Series
@@ -1658,6 +1674,12 @@ def to_nullable_type(t):
         if isinstance(t.dtype, types.Integer):
             return bodo.libs.int_arr_ext.IntegerArrayType(t.dtype)
 
+        if (
+            isinstance(t.dtype, types.Float)
+            and bodo.libs.float_arr_ext._use_nullable_float
+        ):
+            return bodo.libs.float_arr_ext.FloatingArrayType(t.dtype)
+
     return t
 
 
@@ -1751,9 +1773,9 @@ def get_common_scalar_dtype(scalar_types):
 
     # Timestamp/dt64 can be used interchangably
     # TODO: Should datetime.datetime also be included?
-    if scalar_types[0] in (bodo.datetime64ns, bodo.pd_timestamp_type):
+    if scalar_types[0] in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type):
         for typ in scalar_types[1:]:
-            if typ not in (bodo.datetime64ns, bodo.pd_timestamp_type):
+            if typ not in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type):
                 return (None, False)
         return (bodo.datetime64ns, True)
 
@@ -1807,7 +1829,13 @@ def get_nullable_and_non_nullable_types(array_of_types):
         if typ == bodo.libs.bool_arr_ext.boolean_array:
             all_types.append(types.Array(types.bool_, 1, "C"))
 
-        elif isinstance(typ, bodo.libs.int_arr_ext.IntegerArrayType):
+        elif isinstance(
+            typ,
+            (
+                bodo.libs.int_arr_ext.IntegerArrayType,
+                bodo.libs.float_arr_ext.FloatingArrayType,
+            ),
+        ):
             all_types.append(types.Array(typ.dtype, 1, "C"))
 
         elif isinstance(typ, types.Array):
@@ -1816,6 +1844,9 @@ def get_nullable_and_non_nullable_types(array_of_types):
 
             if isinstance(typ.dtype, types.Integer):
                 all_types.append(bodo.libs.int_arr_ext.IntegerArrayType(typ.dtype))
+
+            if isinstance(typ.dtype, types.Float):
+                all_types.append(bodo.libs.float_arr_ext.FloatingArrayType(typ.dtype))
 
         all_types.append(typ)
 
@@ -2235,16 +2266,16 @@ def is_safe_arrow_cast(lhs_scalar_typ, rhs_scalar_typ):
     # All tests excpet lhs: date are currently marked as slow
     if lhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between string and timestamp
-        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
     elif rhs_scalar_typ == types.unicode_type:  # pragma: no cover
         # Cast is supported between timestamp and string
-        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
     elif lhs_scalar_typ == bodo.datetime_date_type:
         # Cast is supported between date and timestamp
-        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+        return rhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
     elif rhs_scalar_typ == bodo.datetime_date_type:  # pragma: no cover
         # Cast is supported between date and timestamp
-        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_type)
+        return lhs_scalar_typ in (bodo.datetime64ns, bodo.pd_timestamp_tz_naive_type)
     return False  # pragma: no cover
 
 
@@ -2426,3 +2457,25 @@ CasePlaceholderTyper.prefer_literal = True
 
 
 gen_objmode_func_overload(warnings.warn, "none")
+
+
+def get_castable_arr_dtype(arr_type: types.Type):
+    """Convert a Bodo array type into a Type representation
+    that can be used for casting an array via fix_arr_dtype.
+
+    Args:
+        arr_type (types.Type): The array type to convert to a castable value.
+
+    Returns:
+        Any: The value used to generate the cast value.
+    """
+    if isinstance(arr_type, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
+        cast_typ = arr_type.get_pandas_scalar_type_instance.name
+    elif arr_type in (bodo.boolean_array, bodo.dict_str_arr_type) or isinstance(
+        arr_type, bodo.DatetimeArrayType
+    ):
+        cast_typ = arr_type
+    else:
+        # Most array types cast using the dtype.
+        cast_typ = arr_type.dtype
+    return cast_typ

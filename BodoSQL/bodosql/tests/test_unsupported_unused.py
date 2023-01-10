@@ -37,8 +37,12 @@ def test_snowflake_read_sql_unused(memory_leak_check):
     # Note: This table was manually created inside Snowflake. The
     # relevant columns are
     # USEDCOL: NUMBER(38, 0)
-    # BADCOL: NUMBER(25, 1)
-    query = "SELECT * FROM UNSUPPORTED"
+    # BADCOL: NUMBER(25,20)
+
+    # Note that we have to use decimal scale >= 18 for badcol, due to
+    # a conflicting pr that uses arrow_number_to_decimal
+    # see: https://bodo.atlassian.net/browse/BE-4168
+    query = "SELECT * FROM UNSUPPORTED2"
     py_output = pd.read_sql(query, conn)[["usedcol"]]
     # Warnings are only raised on rank 0
     if bodo.get_rank() == 0:
@@ -74,7 +78,7 @@ def test_snowflake_table_path_unused(memory_leak_check):
 
     def test_impl(conn):
         bc = bodosql.BodoSQLContext(
-            {"table1": bodosql.TablePath("UNSUPPORTED", "sql", conn_str=conn)}
+            {"table1": bodosql.TablePath("UNSUPPORTED2", "sql", conn_str=conn)}
         )
         return bc.sql("select usedcol from table1")
 
@@ -83,7 +87,7 @@ def test_snowflake_table_path_unused(memory_leak_check):
     conn = get_snowflake_connection_string(db, schema)
     # Add arrow_number_to_decimal to create a decimal array
     conn = f"{conn}&arrow_number_to_decimal=True"
-    query = "SELECT * FROM UNSUPPORTED"
+    query = "SELECT * FROM UNSUPPORTED2"
     py_output = pd.read_sql(query, conn)[["usedcol"]]
     # Warnings are only raised on rank 0
     if bodo.get_rank() == 0:
@@ -119,16 +123,14 @@ def test_snowflake_table_path_unused_subquery(memory_leak_check):
 
     def test_impl(conn):
         bc = bodosql.BodoSQLContext(
-            {"table1": bodosql.TablePath("UNSUPPORTED", "sql", conn_str=conn)}
+            {"table1": bodosql.TablePath("UNSUPPORTED2", "sql", conn_str=conn)}
         )
         return bc.sql("select usedcol from (select * from table1 where usedcol = 1)")
 
     db = "TEST_DB"
     schema = "PUBLIC"
     conn = get_snowflake_connection_string(db, schema)
-    # Add arrow_number_to_decimal to create a decimal array
-    conn = f"{conn}&arrow_number_to_decimal=True"
-    query = "SELECT * FROM UNSUPPORTED"
+    query = "SELECT * FROM UNSUPPORTED2"
     py_output = pd.read_sql(query, conn)[["usedcol"]]
     py_output = py_output[py_output.usedcol == 1]
     # Warnings are only raised on rank 0

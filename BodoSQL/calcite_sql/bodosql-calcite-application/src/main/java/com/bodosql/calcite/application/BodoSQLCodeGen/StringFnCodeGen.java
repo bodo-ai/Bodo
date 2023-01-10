@@ -1,15 +1,12 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.BodoSQLCodeGen.BinOpCodeGen.generateBinOpCode;
 import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import org.apache.calcite.sql.SqlOperator;
 
 public class StringFnCodeGen {
 
@@ -114,7 +111,12 @@ public class StringFnCodeGen {
     } else if (equivalentPandasMethodMapColumns.containsKey(fnName)) {
       String pandas_method = equivalentPandasMethodMapColumns.get(fnName);
       return new RexNodeVisitorInfo(
-          new_fn_name, "pd.Series(" + arg1Expr + ")." + pandas_method + "().values");
+          new_fn_name,
+          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+              + arg1Expr
+              + ")."
+              + pandas_method
+              + "())");
     }
 
     // If we made it here, something has gone very wrong
@@ -191,18 +193,9 @@ public class StringFnCodeGen {
    * Function that returns the rexInfo for the Concat Function Call.
    *
    * @param operandsInfo The rexInfo for all of the arguments to the Concat Call
-   * @param exprTypes The exprType of each argument.
-   * @param op the concat function SqlOperator. Must be passed in, so I can pass it to
-   *     generateConcatWs
-   * @param isScalar Is this function used inside an apply and should always generate scalar code.
-   * @return The name generated that matches the Concat expression.
+   * @return The RexNodeVisitorInfo generated that matches the Concat expression.
    */
-  public static RexNodeVisitorInfo generateConcatFnInfo(
-      List<RexNodeVisitorInfo> operandsInfo,
-      List<BodoSQLExprType.ExprType> exprTypes,
-      SqlOperator op,
-      boolean isScalar) {
-    assert op.getName() == "CONCAT";
+  public static RexNodeVisitorInfo generateConcatFnInfo(List<RexNodeVisitorInfo> operandsInfo) {
 
     StringBuilder concatName = new StringBuilder();
     concatName.append("CONCAT(");
@@ -212,11 +205,9 @@ public class StringFnCodeGen {
     }
     concatName.append(")");
 
-    RexNodeVisitorInfo separatorInfo = new RexNodeVisitorInfo("", "");
+    RexNodeVisitorInfo separatorInfo = new RexNodeVisitorInfo(makeQuoted(""), makeQuoted(""));
 
-    RexNodeVisitorInfo concatWSInfo =
-        generateConcatWSFnInfo(
-            separatorInfo, BodoSQLExprType.ExprType.SCALAR, operandsInfo, exprTypes, op, isScalar);
+    RexNodeVisitorInfo concatWSInfo = generateConcatWSFnInfo(separatorInfo, operandsInfo);
 
     return new RexNodeVisitorInfo(concatName.toString(), concatWSInfo.getExprCode());
   }
@@ -226,48 +217,27 @@ public class StringFnCodeGen {
    *
    * @param separatorInfo the rexInfo for the string used for the separator
    * @param operandsInfo The rexInfo for the list of string arguments to be concatenated
-   * @param op The concat or concat_ws function SqlOperator. Must be passed in, so I can pass it to
-   *     generateBinopCode.
-   * @return The name generated that matches the Concat_ws expression.
+   * @return The RexNodeVisitorInfo generated that matches the Concat_ws expression.
    */
   public static RexNodeVisitorInfo generateConcatWSFnInfo(
-      RexNodeVisitorInfo separatorInfo,
-      BodoSQLExprType.ExprType separatorType,
-      List<RexNodeVisitorInfo> operandsInfo,
-      List<BodoSQLExprType.ExprType> exprTypes,
-      SqlOperator op,
-      boolean isScalar) {
+      RexNodeVisitorInfo separatorInfo, List<RexNodeVisitorInfo> operandsInfo) {
 
-    assert op.getName() == "CONCAT" || op.getName() == "CONCAT_WS";
     StringBuilder concatWsName = new StringBuilder();
     concatWsName.append("CONCAT_WS(");
-    List<String> concatWsArgs = new ArrayList<>();
-    List<BodoSQLExprType.ExprType> concatWsExprTypes = new ArrayList<>();
+    concatWsName.append(separatorInfo.getName()).append(", ");
+    StringBuilder concatCodeGen = new StringBuilder();
+    concatCodeGen.append("bodo.libs.bodosql_array_kernels.concat_ws((");
 
     // Iterate through the list of input operands, building the name and the args/types list to pass
     // to generateBinOpCode
-    for (int i = 0; i < operandsInfo.size() - 1; i++) {
+    for (int i = 0; i < operandsInfo.size(); i++) {
       RexNodeVisitorInfo curOpInfo = operandsInfo.get(i);
       concatWsName.append(curOpInfo.getName()).append(", ");
-      concatWsArgs.add(curOpInfo.getExprCode());
-      concatWsExprTypes.add(exprTypes.get(i));
-      // Add the separator in between each argument
-      if (!separatorInfo.getExprCode().equals("")) {
-        concatWsName.append(separatorInfo.getName()).append(", ");
-        concatWsArgs.add(separatorInfo.getExprCode());
-        concatWsExprTypes.add(separatorType);
-      }
+      concatCodeGen.append(curOpInfo.getExprCode()).append(", ");
     }
-    // append the final value
-    RexNodeVisitorInfo finalOpInfo = operandsInfo.get(operandsInfo.size() - 1);
-    concatWsName.append(finalOpInfo.getName()).append(", ");
-    concatWsExprTypes.add(exprTypes.get(operandsInfo.size() - 1));
-    concatWsArgs.add(finalOpInfo.getExprCode());
-
     concatWsName.append(")");
-
-    String concatExpression = generateBinOpCode(concatWsArgs, concatWsExprTypes, op, isScalar);
-    return new RexNodeVisitorInfo(concatWsName.toString(), concatExpression);
+    concatCodeGen.append("), ").append(separatorInfo.getExprCode()).append(")");
+    return new RexNodeVisitorInfo(concatWsName.toString(), concatCodeGen.toString());
   }
 
   /**
@@ -521,7 +491,11 @@ public class StringFnCodeGen {
               + "\" \")";
     } else {
       outputExpr =
-          "pd.Series(" + stringToBeTrimmed.getExprCode() + ").str." + trimFn + "(\" \").values";
+          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
+              + stringToBeTrimmed.getExprCode()
+              + ").str."
+              + trimFn
+              + "(\" \"))";
     }
     return new RexNodeVisitorInfo(outputName, outputExpr);
   }

@@ -496,8 +496,13 @@ def int_arr_getitem(A, ind):
         # XXX: cannot handle NA for scalar getitem since not type stable
         return lambda A, ind: A._data[ind]
 
-    # bool arr indexing
-    if is_list_like_index_type(ind) and ind.dtype == types.bool_:
+    # bool arr indexing. Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if (
+        ind != bodo.boolean_array
+        and is_list_like_index_type(ind)
+        and ind.dtype == types.bool_
+    ):
 
         def impl_bool(A, ind):  # pragma: no cover
             new_data, new_mask = array_getitem_bool_index(A, ind)
@@ -523,11 +528,13 @@ def int_arr_getitem(A, ind):
 
         return impl_slice
 
-    # This should be the only IntegerArray implementation.
+    # This should be the only IntegerArray implementation
+    # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more idx options are added.
-    raise BodoError(
-        f"getitem for IntegerArray with indexing type {ind} not supported."
-    )  # pragma: no cover
+    if ind != bodo.boolean_array:  # pragma: no cover
+        raise BodoError(
+            f"getitem for IntegerArray with indexing type {ind} not supported."
+        )
 
 
 @overload(operator.setitem, no_unliteral=True)
@@ -650,6 +657,11 @@ def overload_int_arr_astype(A, dtype, copy=True):
     # see convert_to_nullable_tup in array_kernels.py
     # see test_series_concat_convert_to_nullable
 
+    # Unwrap the dtype, if typeref
+    if isinstance(dtype, types.TypeRef):
+        # Unwrap TypeRef
+        dtype = dtype.instance_type
+
     # If dtype is a string, force it to be a literal
     if dtype == types.unicode_type:
         raise_bodo_error(
@@ -710,82 +722,6 @@ def overload_int_arr_astype(A, dtype, copy=True):
 
 
 ############################### numpy ufuncs #################################
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def apply_null_mask(arr, bitmap, mask_fill, inplace):
-    assert isinstance(arr, types.Array)
-
-    # Integer output becomes IntegerArray
-    if isinstance(arr.dtype, types.Integer):
-        if is_overload_none(inplace):
-            return lambda arr, bitmap, mask_fill, inplace: bodo.libs.int_arr_ext.init_integer_array(
-                arr, bitmap.copy()
-            )
-        else:
-            return lambda arr, bitmap, mask_fill, inplace: bodo.libs.int_arr_ext.init_integer_array(
-                arr, bitmap
-            )
-
-    # NAs are applied to Float output
-    if isinstance(arr.dtype, types.Float):
-
-        def impl(arr, bitmap, mask_fill, inplace):  # pragma: no cover
-            n = len(arr)
-            for i in numba.parfors.parfor.internal_prange(n):
-                if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
-                    arr[i] = np.nan
-            return arr
-
-        return impl
-
-    if arr.dtype == types.bool_:
-
-        def impl_bool(arr, bitmap, mask_fill, inplace):  # pragma: no cover
-            n = len(arr)
-            for i in numba.parfors.parfor.internal_prange(n):
-                if not bodo.libs.int_arr_ext.get_bit_bitmap_arr(bitmap, i):
-                    arr[i] = mask_fill
-            return arr
-
-        return impl_bool
-    # TODO: handle other possible types
-    return lambda arr, bitmap, mask_fill, inplace: arr
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def merge_bitmaps(B1, B2, n, inplace):
-    assert B1 == types.Array(types.uint8, 1, "C")
-    assert B2 == types.Array(types.uint8, 1, "C")
-
-    if not is_overload_none(inplace):
-
-        def impl_inplace(B1, B2, n, inplace):  # pragma: no cover
-            # looping over bits individually to hopefully enable more fusion
-            # TODO: evaluate and improve
-            for i in numba.parfors.parfor.internal_prange(n):
-                bit1 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B1, i)
-                bit2 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B2, i)
-                bit = bit1 & bit2
-                bodo.libs.int_arr_ext.set_bit_to_arr(B1, i, bit)
-            return B1
-
-        return impl_inplace
-
-    def impl(B1, B2, n, inplace):  # pragma: no cover
-        numba.parfors.parfor.init_prange()
-        n_bytes = (n + 7) >> 3
-        B = np.empty(n_bytes, np.uint8)
-        # looping over bits individually to hopefully enable more fusion
-        # TODO: evaluate and improve
-        for i in numba.parfors.parfor.internal_prange(n):
-            bit1 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B1, i)
-            bit2 = bodo.libs.int_arr_ext.get_bit_bitmap_arr(B2, i)
-            bit = bit1 & bit2
-            bodo.libs.int_arr_ext.set_bit_to_arr(B, i, bit)
-        return B
-
-    return impl
 
 
 ufunc_aliases = {
@@ -894,43 +830,6 @@ def _install_unary_ops():
 _install_unary_ops()
 
 
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def get_int_arr_data_tup(arrs):
-    n_arrs = len(arrs.types)
-    func_text = "def f(arrs):\n"
-    res = ", ".join("arrs[{}]._data".format(i) for i in range(n_arrs))
-    func_text += "  return ({}{})\n".format(res, "," if n_arrs == 1 else "")
-    loc_vars = {}
-    exec(func_text, {}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
-@numba.generated_jit(nopython=True, no_cpython_wrapper=True)
-def concat_bitmap_tup(arrs):
-    n_arrs = len(arrs.types)
-    total_size = "+".join("len(arrs[{}]._data)".format(i) for i in range(n_arrs))
-
-    func_text = "def f(arrs):\n"
-    func_text += "  n = {}\n".format(total_size)
-    func_text += "  n_bytes = (n + 7) >> 3\n"
-    func_text += "  new_mask = np.empty(n_bytes, np.uint8)\n"
-    func_text += "  curr_bit = 0\n"
-    for i in range(n_arrs):
-        func_text += "  old_mask = arrs[{}]._null_bitmap\n".format(i)
-        func_text += "  for j in range(len(arrs[{}])):\n".format(i)
-        func_text += "    bit = bodo.libs.int_arr_ext.get_bit_bitmap_arr(old_mask, j)\n"
-        func_text += (
-            "    bodo.libs.int_arr_ext.set_bit_to_arr(new_mask, curr_bit, bit)\n"
-        )
-        func_text += "    curr_bit += 1\n"
-    func_text += "  return new_mask\n"
-    loc_vars = {}
-    exec(func_text, {"np": np, "bodo": bodo}, loc_vars)
-    impl = loc_vars["f"]
-    return impl
-
-
 # inlining in Series pass but avoiding inline="always" since there are Numba-only cases
 # that don't need inlining such as repeats.sum() in repeat_kernel()
 @overload_method(IntegerArrayType, "sum", no_unliteral=True)
@@ -987,7 +886,7 @@ def overload_unique(A):
 
 
 def get_nullable_array_unary_impl(op, A):
-    """generate implementation for unary operation on nullable integer or boolean array"""
+    """generate implementation for unary operation on nullable integer, float, or boolean array"""
     # use type inference to get output dtype
     typing_context = numba.core.registry.cpu_target.typing_context
     ret_dtype = typing_context.resolve_function_type(
@@ -1009,7 +908,7 @@ def get_nullable_array_unary_impl(op, A):
 
 
 def get_nullable_array_binary_impl(op, lhs, rhs):
-    """generate implementation for binary operation on nullable integer or boolean array"""
+    """generate implementation for binary operation on nullable integer, float, or boolean array"""
     # TODO: 1 ** np.nan is 1. So we have to unmask those.
     inplace = (
         op in numba.core.typing.npydecl.NumpyRulesInplaceArrayOperator._op_map.keys()
@@ -1043,7 +942,7 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     #         or bodo.libs.array_kernels.isna(rhs, i)):
     #       bodo.libs.array_kernels.setna(out_arr, i)
     #       continue
-    #     out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(op(lhs[i], rhs[i]))
+    #     out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(op(lhs[i], rhs[i]))
     #   return out_arr
     access_str1 = "lhs" if is_lhs_scalar else "lhs[i]"
     access_str2 = "rhs" if is_rhs_scalar else "rhs[i]"
@@ -1060,7 +959,7 @@ def get_nullable_array_binary_impl(op, lhs, rhs):
     func_text += "        or {}):\n".format(na_str2)
     func_text += "      bodo.libs.array_kernels.setna(out_arr, i)\n"
     func_text += "      continue\n"
-    func_text += "    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(op({}, {}))\n".format(
+    func_text += "    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(op({}, {}))\n".format(
         access_str1, access_str2
     )
     func_text += "  return out_arr\n"
@@ -1096,7 +995,7 @@ def get_int_array_op_pd_td(op):
                     if bodo.libs.array_kernels.isna(rhs, i):
                         bodo.libs.array_kernels.setna(out_arr, i)
                         continue
-                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                         op(lhs, rhs[i])
                     )
                 return out_arr
@@ -1111,7 +1010,7 @@ def get_int_array_op_pd_td(op):
                     if bodo.libs.array_kernels.isna(lhs, i):
                         bodo.libs.array_kernels.setna(out_arr, i)
                         continue
-                    out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(
+                    out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
                         op(lhs[i], rhs)
                     )
                 return out_arr

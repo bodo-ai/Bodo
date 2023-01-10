@@ -10,11 +10,12 @@ import java.util.List;
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.*;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlNode;
 
-public abstract class BodoSqlTable implements Table {
+public abstract class BodoSqlTable implements ExtensibleTable {
   /**
    * Abstract class definition for tables in BodoSQL. This contains all common shared components by
    * various types of tables, such as managing columns.
@@ -25,7 +26,7 @@ public abstract class BodoSqlTable implements Table {
   private final String name;
 
   private final BodoSqlSchema schema;
-  private final List<BodoSQLColumn> columns;
+  protected final List<BodoSQLColumn> columns;
 
   /**
    * Common table constructor. This sets relevant information like the table name, columns, and a
@@ -78,7 +79,10 @@ public abstract class BodoSqlTable implements Table {
   public RelDataType getRowType(RelDataTypeFactory rdtf) {
     RelDataTypeFactory.Builder builder = rdtf.builder();
     for (BodoSQLColumn column : columns) {
-      builder.add(column.getColumnName(), column.convertToSqlType(rdtf));
+      builder.add(
+          column.getColumnName(),
+          column.convertToSqlType(
+              rdtf, column.isNullable(), column.getTZInfo(), column.getPrecision()));
       builder.nullable(true);
     }
     return builder.build();
@@ -229,11 +233,39 @@ public abstract class BodoSqlTable implements Table {
   public abstract String generateWriteCode(String varName);
 
   /**
+   * Generate the code needed to write the given variable to storage.
+   *
+   * @param varName Name of the variable to write.
+   * @param extraArgs Extra arguments to pass to the Python API. They are assume to be escaped by
+   *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
+   * @return The generated code to write the table.
+   */
+  public abstract String generateWriteCode(String varName, String extraArgs);
+
+  /**
+   * Return the location from which the table is generated. The return value is always entirely
+   * capitalized.
+   *
+   * @return The source DB location.
+   */
+  public abstract String getDBType();
+
+  /**
    * Generate the code needed to read the table.
    *
    * @return The generated code to read the table.
    */
   public abstract String generateReadCode();
+
+  /**
+   * Generate the code needed to read the table. This function is called by specialized IO
+   * implementations that require passing 1 or more additional arguments.
+   *
+   * @param extraArgs Extra arguments to pass to the Python API. They are assume to be escaped by
+   *     the calling function and are of the form "key1=value1, ..., keyN=valueN".
+   * @return The generated code to read the table.
+   */
+  public abstract String generateReadCode(String extraArgs);
 
   /**
    * Generates the code necessary to submit the remote query to the catalog DB. This is not
@@ -243,6 +275,14 @@ public abstract class BodoSqlTable implements Table {
    * @return The generated code.
    */
   public abstract String generateRemoteQuery(String query);
+
+  public abstract Table extend(List<RelDataTypeField> extensionFields);
+
+  /** This is never used by BodoSQL, so we always return -1 */
+  @Override
+  public int getExtendedColumnOffset() {
+    return -1;
+  }
 
   /**
    * Returns if calling `generateReadCode()` for a table will result in an IO operation in the Bodo

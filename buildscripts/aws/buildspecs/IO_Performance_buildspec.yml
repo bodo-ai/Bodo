@@ -20,15 +20,12 @@ phases:
         - echo Entered the install phase...
         # Load the performance repo
         - buildscripts/aws/clone_io_performance_benchmarks.sh
-        - buildscripts/setup_conda.sh
-        - buildscripts/aws/test_installs.sh
-        
+        - buildscripts/setup_conda.sh        
 
     build:
         commands:
         - echo Entered the build phase...
         - buildscripts/build.sh
-
         
     post_build:
         commands:

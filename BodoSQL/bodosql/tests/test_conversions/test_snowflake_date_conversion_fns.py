@@ -12,6 +12,7 @@ from bodosql.tests.utils import check_query, make_tables_nullable
 from bodo.tests.bodosql_array_kernel_tests.test_bodosql_snowflake_date_conversion_array_kernels import (  # pragma: no cover
     scalar_to_date_equiv_fn,
 )
+from bodo.tests.timezone_common import representative_tz  # noqa
 
 
 @pytest.fixture(
@@ -230,6 +231,82 @@ def test_to_date_tz_aware(memory_leak_check):
     ctx = {"table1": df}
     query = f"SELECT TO_DATE(timestamps) as timestamps from table1"
     expected_output = pd.DataFrame({"timestamps": df["timestamps"].dt.normalize()})
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+    )
+
+
+def test_to_date_tz_aware_case(memory_leak_check):
+    """tests to_date on valid datetime values in a case statment"""
+    df = pd.DataFrame(
+        {
+            "timestamps": pd.date_range(
+                "1/18/2022", periods=30, freq="10D5H", tz="US/PACIFIC"
+            ),
+            "B": [True, False, True, False, True] * 6,
+        }
+    )
+    ctx = {"table1": df}
+    query = f"SELECT CASE WHEN B THEN TO_DATE(timestamps) END as timestamps from table1"
+    to_date_series = df["timestamps"].dt.normalize()
+    to_date_series[~df.B] = None
+    expected_output = pd.DataFrame({"timestamps": to_date_series})
+
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=expected_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_try_to_date(tz_aware_df, memory_leak_check):
+    """tests try_to_date on valid and invalid datetime values"""
+
+    # Construct input dataframe of both valid and invalid datetime strings
+    valid_datetimes = tz_aware_df["table1"]["A"]
+
+    invalid_str_datetimes = pd.Series(
+        [
+            "",
+            "invalid",
+            "2020-100-17 00:00:00-00:00",
+            "2021-0-0 00:00:00-00:00",
+            "2000-0-50 00:00:00-00:00",
+            "2000-13-32 00:00:00-00:00",
+            "2020-1 00:00:00-00:00",
+            "2022-1-2-3 00:00:00-00:00",
+            "01/2020",
+            "0111/01/1999",
+            "01/100/2000",
+        ]
+    )
+    df = pd.DataFrame(
+        {
+            "timestamps": pd.concat(
+                [valid_datetimes.astype(str), invalid_str_datetimes]
+            ).reset_index(drop=True)
+        }
+    )
+
+    # Construct expected answer using Pandas
+    valid_answers = valid_datetimes.dt.date
+    invalid_answers = pd.Series([None] * len(invalid_str_datetimes))
+    expected_output = pd.DataFrame(
+        {
+            "timestamps": pd.concat([valid_answers, invalid_answers])
+            .reset_index(drop=True)
+            .astype("datetime64[ns]")
+        }
+    )
+
+    ctx = {"table1": df}
+    query = f"SELECT TRY_TO_DATE(timestamps) as timestamps from table1"
 
     check_query(
         query,

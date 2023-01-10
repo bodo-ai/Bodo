@@ -213,7 +213,9 @@ class BodoTypeInference(PartialTypeInference):
             rerun_typing = changed_after_typing or needs_transform
 
         dprint_func_ir(state.func_ir, "after typing pass")
+
         self._check_for_errors(state, curr_typing_pass_required or rerun_typing)
+
         return True
 
     def _check_for_errors(self, state, curr_typing_pass_required):
@@ -825,7 +827,7 @@ class TypingTransforms:
         self._check_non_filter_df_use_after_filter(
             set(used_dfs.keys()), assign, func_ir
         )
-        new_working_body = self._reorder_filter_nodes(
+        new_working_body, is_ir_reordered = self._reorder_filter_nodes(
             read_node, index_def, used_dfs, skipped_vars, filters, working_body, func_ir
         )
         old_filters = read_node.filters
@@ -833,12 +835,50 @@ class TypingTransforms:
         # an implicit AND. We merge by distributed the AND over ORs
         # (A or B) AND (C or D) -> AC or AD or BC or BD
         # See test_read_partitions_implicit_and_detailed for an example usage.
-        if old_filters is not None:
-            new_filters = []
-            for old_or_cond in old_filters:
-                for new_or_cond in filters:
-                    new_filters.append(old_or_cond + new_or_cond)
-            filters = new_filters
+        # We also simplify the filters here to avoid duplicate code in the filter pushdown
+        # stage and avoid edge cases where if a filter can't be deleted with hit an infinite
+        # loop (see test_merge_into_filter_compilation_errors.py::test_requires_transform).
+        # This has two components:
+        #
+        #   1. Simplify AND. We delete any filter repeated in the same AND
+        #   2. Simplify OR. We delete any or statement that is repeated multiple times.
+        #
+        # Other simplification may be possible
+        if old_filters is None:
+            # Initialize the old_filters to AND with nothing
+            old_filters = [[]]
+        filters_changed = False
+        # Use boolean algebra laws to combine old and new filters
+        # and remove duplicates. The old and new filters are essentially
+        # OR expressions that are ANDed together (to apply all filters).
+        # e.g. (A | B) & (C | D) -> (A & C) | (A & D) | (B & C) | (B & D)
+        # Keeping track of duplicates ensures that for (A | B) & (A | B)
+        # then the output is A | AB | B. If we don't delete redundant OR
+        # statements then we can have an infinite loop if we tried to
+        # merge with the same filter repeatedly as we will believe the
+        # filters have changed.
+        new_filter_set = set()
+        for old_or_cond in old_filters:
+            for new_or_cond in filters:
+                # Create a set for fast lookup
+                old_or_set = set(old_or_cond)
+                expr_changed = False
+                for new_and_cond in new_or_cond:
+                    # Add the new filter condition if it doesn't already exist
+                    if new_and_cond not in old_or_set:
+                        # Append to avoid adding the same AND condition multiple times
+                        old_or_set.add(new_and_cond)
+                        expr_changed = True
+                # Sort for the set comparison
+                combined_filters = tuple(sorted(old_or_set))
+                if combined_filters not in new_filter_set:
+                    # Append to avoid adding the same OR condition multiple times
+                    new_filter_set.add(combined_filters)
+                    filters_changed = expr_changed
+        # Convert the output back to list(list(tuple)). Here we
+        # sort to keep everything consistent on all ranks as iterating
+        # through a set depends on a randomized hash seed.
+        filters = sorted([list(x) for x in new_filter_set])
 
         # Update the logs with the successful filter pushdown.
         # (no exception was raise until this end point so filters are valid)
@@ -864,8 +904,13 @@ class TypingTransforms:
             assign.value = assign.value.value
             self.rerun_after_dce = True
 
-        # Mark the IR as changed
-        self.changed = True
+        # Mark the IR as changed if modified the IR or filters at all.
+        # This is important because if we don't delete the filter and an error
+        # in the code requires a transformation we will wrongfully believe the IR
+        # has changed. See test_merge_into_filter_compilation_errors.py::test_requires_transform.
+        self.changed = self.changed or (
+            is_ir_reordered or filters_changed or (not keep_filter)
+        )
         # Return the updates to the working body so we can modify blocks that may not
         # be in the working body yet.
         return new_working_body
@@ -1058,8 +1103,16 @@ class TypingTransforms:
             else:
                 non_filter_nodes.append(stmt)
 
+        # Check if the code has changed. There is only 1 change that
+        # can occur, a node is moved from later into the IR earlier
+        # via new body. This changes will be found in location
+        #  new_body[pq_ind: len(new_body)]. As a result we can just
+        # check this code for changes
+        start_idx, end_idx = pq_ind, len(new_body)
+        changed = working_body[start_idx:end_idx] != new_body[start_idx:end_idx]
         # update current basic block with new stmt order
-        return new_body + non_filter_nodes
+        new_working_body = new_body + non_filter_nodes
+        return new_working_body, changed
 
     def _get_filter_nodes(self, index_def, func_ir):
         """find ir.Expr nodes used in filtering output dataframe directly so they can
@@ -1097,7 +1150,11 @@ class TypingTransforms:
         # by BodoSQL
         require(
             len(call_list) == 2
-            and (isinstance(call_list[1], ir.Var) or call_list[1] == "pandas")
+            and (
+                isinstance(call_list[1], ir.Var)
+                or call_list[1] == "pandas"
+                or call_list[1] == "bodo.libs.bodosql_array_kernels"
+            )
         )
         if call_list[0] in ("notna", "isna", "notnull", "isnull"):
             return self._get_null_filter(
@@ -1105,6 +1162,13 @@ class TypingTransforms:
             )
         elif call_list[0] == "isin":
             return self._get_isin_filter(
+                call_list, call_def, func_ir, df_var, df_col_names
+            )
+        elif call_list == (
+            "is_in",
+            "bodo.libs.bodosql_array_kernels",
+        ):  # pragma: no cover
+            return self._get_bodosql_array_kernel_is_in_filter(
                 call_list, call_def, func_ir, df_var, df_col_names
             )
         elif (
@@ -1153,6 +1217,40 @@ class TypingTransforms:
         colname = self._get_col_name(call_list[1], df_var, df_col_names, func_ir)
         op = "in"
         return (colname, op, list_set_arg)
+
+    def _get_bodosql_array_kernel_is_in_filter(
+        self, call_list, call_def, func_ir, df_var, df_col_names
+    ):  # pragma: no cover
+        """
+        Function used by _get_partition_filters to extract isin related
+        filters from the bodosql is_in kernel.
+        """
+
+        # This is normally already be checked in _is_isin_filter_pushdown_func,
+        # However, we need to have this check here in case this expression is
+        # the a sub expression in a binop (i.e. filter = (df.A < 3) & is_in(df.B, pd.array([1, 2])))
+        arg1_arr_type = self.typemap.get(call_def.args[1].name, None)
+
+        # We require that arg1 is a replicated array to perform filter pushdown.
+        # In the bodoSQL codegen, this value should be lowered
+        # as a global, and all globals are required to be replicated.
+        is_arg1_global = isinstance(
+            guard(get_definition, self.func_ir, call_def.args[1].name),
+            numba.core.ir.Global,
+        )
+
+        # TODO: check if this requirement needs to be enforced
+        require(
+            is_arg1_global
+            and arg1_arr_type.dtype != bodo.datetime64ns
+            and not isinstance(
+                arg1_arr_type.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
+            )
+        )
+
+        colname = self._get_col_name(call_def.args[0], df_var, df_col_names, func_ir)
+        op = "in"
+        return (colname, op, call_def.args[1])
 
     def _get_starts_ends_with_filter(
         self, call_list, call_def, func_ir, df_var, df_col_names
@@ -2735,7 +2833,9 @@ class TypingTransforms:
             col_names,
             arr_types,
             pyarrow_table_schema,
-        ) = bodo.io.iceberg.get_iceberg_type_info(table_name, con, database_schema)
+        ) = bodo.io.iceberg.get_iceberg_type_info(
+            table_name, con, database_schema, is_merge_into_cow=_bodo_merge_into
+        )
 
         # check user-provided dict-encoded columns for errors
         col_name_map = {c: i for i, c in enumerate(col_names)}
@@ -2764,6 +2864,7 @@ class TypingTransforms:
         str_columns = list(set(str_columns) - set(_bodo_read_as_dict))
         # Sort the columns to ensure same order on all ranks
         str_columns = sorted(str_columns)
+
         dict_str_cols = bodo.io.parquet_pio.determine_str_as_dict_columns(
             iceberg_pq_dset.pq_dataset,
             pyarrow_table_schema,
@@ -4315,35 +4416,69 @@ class TypingTransforms:
         Does an expression match a supported isin call that can be
         used in filter pushdown.
 
-        Note: we only allow isin with lists/sets. We don't support Series/Array
+        Note: we only allow series isin with lists/sets. We don't support Series/Array
         because we don't want to worry about distributed data and tuples aren't
         supported in the isin API.
         """
-        if not (is_call(index_def) and index_call_name[0] == "isin"):
+
+        if not is_call(index_def):
+            # Immediately return false if we don't have a call
             return False
+        elif index_call_name[0] == "isin":
+            method_obj_type = self.typemap.get(index_call_name[1].name, None)
 
-        method_obj_type = self.typemap.get(index_call_name[1].name, None)
+            # rerun type inference if we don't have the method's object type yet
+            # read_sql_table (and other I/O calls in the future) is handled in typing pass
+            # so the Series type may not be available yet
+            if method_obj_type in (None, types.unknown, types.undefined):
+                self.needs_transform = True
+                return False
 
-        # rerun type inference if we don't have the method's object type yet
-        # read_sql_table (and other I/O calls in the future) is handled in typing pass
-        # so the Series type may not be available yet
-        if method_obj_type in (None, types.unknown, types.undefined):
-            self.needs_transform = True
-            return False
+            if not isinstance(method_obj_type, SeriesType):
+                return False
 
-        if not isinstance(method_obj_type, SeriesType):
-            return False
-
-        list_set_typ = self.typemap.get(index_def.args[0].name, None)
-        # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
-        # filter pushdown in that situation.
-        return (
-            isinstance(list_set_typ, (types.List, types.Set))
-            and list_set_typ.dtype != bodo.datetime64ns
-            and not isinstance(
-                list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
+            list_set_typ = self.typemap.get(index_def.args[0].name, None)
+            # We don't support casting pd_timestamp_type/datetime64 values in arrow, so we avoid
+            # filter pushdown in that situation.
+            return (
+                isinstance(list_set_typ, (types.List, types.Set))
+                and list_set_typ.dtype != bodo.datetime64ns
+                and not isinstance(
+                    list_set_typ.dtype,
+                    bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
+                )
             )
-        )
+        elif index_call_name == ("is_in", "bodo.libs.bodosql_array_kernels"):
+
+            # In the case that we're hadling the bodsql is_in array kernel, we expect arg1 to be
+            # an array. We need to rerun type inference if we don't have the type yet
+            arg1_arr_type = self.typemap.get(index_def.args[1].name, None)
+            if arg1_arr_type in (None, types.unknown, types.undefined):
+                self.needs_transform = True
+                return False
+
+            # We require that arg1 is a replicated array to perform filter pushdown.
+            # In the bodoSQL codegen, this value should be lowered
+            # as a global, and all globals are required to be replicated.
+            is_arg1_global = isinstance(
+                guard(get_definition, self.func_ir, index_def.args[1].name),
+                numba.core.ir.Global,
+            )
+
+            # TODO: verify if we have the same issue with datetime64ns/timestamps that the
+            # series isin implementation does.
+            return (
+                is_arg1_global
+                and arg1_arr_type.dtype != bodo.datetime64ns
+                and not isinstance(
+                    arg1_arr_type.dtype,
+                    bodo.hiframes.pd_timestamp_ext.PandasTimestampType,
+                )
+            )
+
+        else:
+            # In all other cases, return False
+            return False
 
     def _starts_ends_with_filter_pushdown_func(self, index_def, index_call_name):
         """

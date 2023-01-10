@@ -494,7 +494,7 @@ def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
                         bodo.libs.array_kernels.setna(out_arr, i)
                     continue
                 out_arr[i] = str(
-                    bodo.utils.conversion.unbox_if_timestamp(categories[s])
+                    bodo.utils.conversion.unbox_if_tz_naive_timestamp(categories[s])
                 )
             return out_arr
 
@@ -512,7 +512,9 @@ def overload_cat_arr_astype(A, dtype, copy=True, _bodo_nan_to_str=True):
             if s == -1:
                 bodo.libs.array_kernels.setna(out_arr, i)
                 continue
-            out_arr[i] = bodo.utils.conversion.unbox_if_timestamp(categories[s])
+            out_arr[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                categories[s]
+            )
         return out_arr
 
     return impl
@@ -581,7 +583,7 @@ def _alloc_categorical_array(n, cat_dtype):
 
 
 def alloc_categorical_array_equiv(self, scope, equiv_set, loc, args, kws):
-    """Array analysis function for alloc_int_array() passed to Numba's array analysis
+    """Array analysis function for alloc_categorical_array() passed to Numba's array analysis
     extension. Assigns output array's size as equivalent to the input size variable.
     """
     assert len(args) == 2 and not kws
@@ -1043,19 +1045,26 @@ def categorical_array_getitem(arr, ind):
 
         return categorical_getitem_impl
 
-    # bool/int/slice arr indexing
-    if is_list_like_index_type(ind) or isinstance(ind, types.SliceType):
+    # bool/int/slice arr indexing. Note nullable boolean arrays are handled in
+    # bool_arr_ind_getitem to ensure NAs are converted to False.
+    if (
+        ind != bodo.boolean_array
+        and is_list_like_index_type(ind)
+        or isinstance(ind, types.SliceType)
+    ):
 
         def impl_bool(arr, ind):  # pragma: no cover
             return init_categorical_array(arr.codes[ind], arr.dtype)
 
         return impl_bool
 
-    # This should be the only CategoricalArrayType implementation.
+    # This should be the only CategoricalArrayType implementation
+    # except for converting a Nullable boolean index to non-nullable.
     # We only expect to reach this case if more idx options are added.
-    raise BodoError(
-        f"getitem for CategoricalArrayType with indexing type {ind} not supported."
-    )  # pragma: no cover
+    if ind != bodo.boolean_array:  # pragma: no cover
+        raise BodoError(
+            f"getitem for CategoricalArrayType with indexing type {ind} not supported."
+        )
 
 
 class CategoricalMatchingValues(enum.Enum):
@@ -1228,7 +1237,7 @@ def categorical_array_setitem(arr, ind, val):
                 for j in range(n):
                     # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                     # Timestamp and Timedelta
-                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[j])
+                    new_val = bodo.utils.conversion.unbox_if_tz_naive_timestamp(val[j])
                     if new_val not in categories:
                         raise ValueError(
                             "Cannot setitem on a Categorical with a new category, set the categories first"
@@ -1302,7 +1311,9 @@ def categorical_array_setitem(arr, ind, val):
                     if ind[j]:
                         # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                         # Timestamp and Timedelta
-                        new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
+                        new_val = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                            val[val_ind]
+                        )
                         if new_val not in categories:
                             raise ValueError(
                                 "Cannot setitem on a Categorical with a new category, set the categories first"
@@ -1366,7 +1377,9 @@ def categorical_array_setitem(arr, ind, val):
                 for j in range(slice_ind.start, slice_ind.stop, slice_ind.step):
                     # Timestamp/Timedelta are stored internally as dt64 but inside the index as
                     # Timestamp and Timedelta
-                    new_val = bodo.utils.conversion.unbox_if_timestamp(val[val_ind])
+                    new_val = bodo.utils.conversion.unbox_if_tz_naive_timestamp(
+                        val[val_ind]
+                    )
                     if new_val not in categories:
                         raise ValueError(
                             "Cannot setitem on a Categorical with a new category, set the categories first"

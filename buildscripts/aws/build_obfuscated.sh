@@ -2,17 +2,17 @@
 
 set -exo pipefail
 
-export PATH=$HOME/miniconda3/bin:$PATH
+export PATH=$HOME/mambaforge/bin:$PATH
 
 echo "********** Creating Conda Env **********"
-conda create -y -n bodo_build conda-build anaconda-client conda-verify conda=4.12
+mamba create -y -n bodo_build conda-build anaconda-client conda-verify
 
 echo "********** Flake8-ing **********"
-conda install -y flake8
+mamba install -y flake8
 flake8 bodo
 
 echo "********** Obfuscating **********"
-conda install -y astor -c conda-forge
+mamba install -y astor -c conda-forge
 cd $CODEBUILD_SRC_DIR/obfuscation
 ./do_obfuscation.py
 
@@ -33,5 +33,5 @@ if [[ "$UseNumbaDev" == "true" ]]; then
     conda-build . -c numba/label/dev -c conda-forge --no-test
     echo "Using numba/label/dev channel"
 else
-    conda-build . -c conda-forge --no-test
+    conda-build . -c conda-forge --no-test -e nightly_conda_build_config.yaml
 fi

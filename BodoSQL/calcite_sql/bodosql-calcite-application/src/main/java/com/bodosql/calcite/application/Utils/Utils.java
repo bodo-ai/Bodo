@@ -1,5 +1,7 @@
 package com.bodosql.calcite.application.Utils;
 
+import static com.bodosql.calcite.application.Utils.BodoArrayHelpers.sqlTypeToBodoArrayType;
+
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import com.bodosql.calcite.application.PandasCodeGenVisitor;
 import com.bodosql.calcite.catalog.SnowflakeCatalogImpl;
@@ -11,11 +13,12 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.apache.calcite.rel.core.AggregateCall;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexOver;
 import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.*;
 
 /** Class filled with static utility functions. */
 public class Utils {
@@ -29,6 +32,13 @@ public class Utils {
   /** Function used to return the standard indent used within BodoSql */
   public static String getBodoIndent() {
     return bodoIndent;
+  }
+
+  /** Function used to add multiple indents to a string buffer all at once */
+  public static void addIndent(StringBuilder funcText, int numIndents) {
+    for (int i = 0; i < numIndents; i++) {
+      funcText = funcText.append(bodoIndent);
+    }
   }
 
   /**
@@ -186,19 +196,14 @@ public class Utils {
    *
    * @param typeName SQL Type.
    * @param outputScalar Should the output generate a type for converting scalars.
-   * @param outputArrayType flag for returning an array type instead of dtype
    * @return The pandas type
    */
-  public static String sqlTypenameToPandasTypename(
-      SqlTypeName typeName, boolean outputScalar, boolean outputArrayType) {
+  public static String sqlTypenameToPandasTypename(SqlTypeName typeName, boolean outputScalar) {
     String dtype;
-    assert !(outputScalar && outputArrayType);
     switch (typeName) {
       case BOOLEAN:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_bool";
-        } else if (outputArrayType) {
-          return "bodo.boolean_array";
         } else {
           dtype = makeQuoted("boolean");
         }
@@ -206,8 +211,6 @@ public class Utils {
       case TINYINT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int8";
-        } else if (outputArrayType) {
-          return "bodo.IntegerArrayType(bodo.int8)";
         } else {
           dtype = "pd.Int8Dtype()";
         }
@@ -215,8 +218,6 @@ public class Utils {
       case SMALLINT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int16";
-        } else if (outputArrayType) {
-          return "bodo.IntegerArrayType(bodo.int16)";
         } else {
           dtype = "pd.Int16Dtype()";
         }
@@ -224,8 +225,6 @@ public class Utils {
       case INTEGER:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int32";
-        } else if (outputArrayType) {
-          return "bodo.IntegerArrayType(bodo.int32)";
         } else {
           dtype = "pd.Int32Dtype()";
         }
@@ -233,8 +232,6 @@ public class Utils {
       case BIGINT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_int64";
-        } else if (outputArrayType) {
-          return "bodo.IntegerArrayType(bodo.int64)";
         } else {
           dtype = "pd.Int64Dtype()";
         }
@@ -242,8 +239,6 @@ public class Utils {
       case FLOAT:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float32";
-        } else if (outputArrayType) {
-          return "bodo.float32[::1]";
         } else {
           dtype = "np.float32";
         }
@@ -252,8 +247,6 @@ public class Utils {
       case DECIMAL:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float64";
-        } else if (outputArrayType) {
-          return "bodo.float64[::1]";
         } else {
           dtype = "np.float64";
         }
@@ -265,8 +258,6 @@ public class Utils {
           // This should likely be in the engine itself, to match pandas behavior
           // BE-2882
           dtype = "pd.to_datetime";
-        } else if (outputArrayType) {
-          return "bodo.datetime64ns[::1]";
         } else {
           dtype = "np.dtype(\"datetime64[ns]\")";
         }
@@ -279,8 +270,6 @@ public class Utils {
       case CHAR:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_str";
-        } else if (outputArrayType) {
-          return "bodo.string_array_type";
         } else {
           dtype = "str";
         }
@@ -289,8 +278,6 @@ public class Utils {
       case BINARY:
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_str";
-        } else if (outputArrayType) {
-          return "bodo.binary_array_type";
         } else {
           // TODO: FIXME?
           dtype = "bodo.bytes_type";
@@ -311,8 +298,6 @@ public class Utils {
           // This should likely be in the engine itself, to match pandas behavior
           // BE-2882
           dtype = "pd.to_timedelta";
-        } else if (outputArrayType) {
-          return "bodo.timedelta64ns[::1]";
         } else {
           dtype = "np.dtype(\"timedelta64[ns]\")";
         }
@@ -498,7 +483,7 @@ public class Utils {
       String inputVar,
       BodoCtx ctx,
       String lambdaFnStr,
-      SqlTypeName outputType,
+      RelDataType outputType,
       List<String> colNames,
       PandasCodeGenVisitor pdVisitorClass) {
     // We assume, at this point, that the ctx.colsToAddList has been added to inputVar, and
@@ -551,11 +536,10 @@ public class Utils {
     inputDataStr.append(")");
     initCode.append(")");
     String initGlobal = pdVisitorClass.lowerAsMetaType(initCode.toString());
-    // have to use single quotes here since lambdaFnStr has double quotes inside leading to syntax
-    // errors later
-    String bodyGlobal = pdVisitorClass.lowerAsGlobal("'" + lambdaFnStr + "'");
+    // have to use triple quotes here since lambdaFnStr can contain " or '
+    String bodyGlobal = pdVisitorClass.lowerAsGlobal("\"\"\"" + lambdaFnStr + "\"\"\"");
 
-    String outputArrayType = sqlTypenameToPandasTypename(outputType, false, true);
+    String outputArrayType = sqlTypeToBodoArrayType(outputType, false);
     String outputArrayTypeGlobal = pdVisitorClass.lowerAsGlobal(outputArrayType);
 
     return String.format(

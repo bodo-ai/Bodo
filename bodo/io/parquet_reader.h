@@ -1,4 +1,4 @@
-// Copyright (C) 2021 Bodo Inc. All rights reserved.
+// Copyright (C) 2022 Bodo Inc. All rights reserved.
 
 // Implementation of ParquetReader (subclass of ArrowDataframeReader) with
 // functionality that is specific to reading parquet datasets
@@ -15,11 +15,11 @@ class ParquetReader : public ArrowDataframeReader {
      */
     ParquetReader(PyObject* _path, bool _parallel, PyObject* _dnf_filters,
                   PyObject* _expr_filters, PyObject* _storage_options,
-                  int64_t _tot_rows_to_read, int32_t* _selected_fields,
-                  int32_t num_selected_fields, int32_t* is_nullable,
+                  PyObject* pyarrow_schema, int64_t _tot_rows_to_read,
+                  std::set<int> _selected_fields, std::vector<bool> is_nullable,
                   bool _input_file_name_col, bool _use_hive = true)
-        : ArrowDataframeReader(_parallel, _tot_rows_to_read, _selected_fields,
-                               num_selected_fields, is_nullable),
+        : ArrowDataframeReader(_parallel, pyarrow_schema, _tot_rows_to_read,
+                               _selected_fields, is_nullable),
           dnf_filters(_dnf_filters),
           expr_filters(_expr_filters),
           path(_path),
@@ -28,14 +28,6 @@ class ParquetReader : public ArrowDataframeReader {
           use_hive(_use_hive) {
         if (storage_options == Py_None)
             throw std::runtime_error("ParquetReader: storage_options is None");
-
-        // copy selected_fields to a Python list to pass to
-        // parquet_pio.get_scanner_batches
-        selected_fields_py = PyList_New(selected_fields.size());
-        size_t i = 0;
-        for (auto field_num : selected_fields) {
-            PyList_SetItem(selected_fields_py, i++, PyLong_FromLong(field_num));
-        }
     }
 
     /**
@@ -51,6 +43,7 @@ class ParquetReader : public ArrowDataframeReader {
         ArrowDataframeReader::init_arrow_reader(
             {_str_as_dict_cols, _str_as_dict_cols + num_str_as_dict_cols},
             false);
+
         if (parallel) {
             // Get the average number of pieces per rank. This is used to
             // increase the number of threads of the Arrow batch reader
@@ -90,19 +83,13 @@ class ParquetReader : public ArrowDataframeReader {
 
     virtual PyObject* get_dataset() override;
 
-    virtual std::shared_ptr<arrow::Schema> get_schema(
-        PyObject* dataset) override;
-
     virtual void read_all(TableBuilder& builder) override;
+
+    // Prefix to add to each of the file paths (only used for input_file_name)
+    std::string prefix;
 
     PyObject* dnf_filters = nullptr;
     PyObject* expr_filters = nullptr;
-    // selected columns in the parquet file (not fields). For example,
-    // field "struct<A: int64, B: int64>" has two int64 columns in the
-    // parquet file
-    std::vector<int> selected_columns;
-    // Prefix to add to each of the file paths (only used for input_file_name)
-    std::string prefix;
     PyObject* filesystem = nullptr;
     // dataset partitioning info (regardless of whether we select partition
     // columns or not)
@@ -111,7 +98,6 @@ class ParquetReader : public ArrowDataframeReader {
    private:
     PyObject* path;  // path passed to pd.read_parquet() call
     PyObject* storage_options;
-    PyObject* selected_fields_py;
     bool input_file_name_col;
     bool use_hive;
 

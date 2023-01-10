@@ -1,17 +1,19 @@
 """
 Infrastructure used to test correctness.
 """
-# Copyright (C) 2022 Bodo Inc. All rights reserved.
-
 import os
 import re
 from decimal import Decimal
 from enum import Enum
 
+# Copyright (C) 2022 Bodo Inc. All rights reserved.
+from typing import Any, Dict, List, Optional
+
 import bodosql
 import numba
 import numpy as np
 import pandas as pd
+import pyspark
 from mpi4py import MPI
 from pyspark.sql.functions import col
 from pyspark.sql.types import (
@@ -42,43 +44,43 @@ class InputDist(Enum):
 
 
 def check_query(
-    query,
-    dataframe_dict,
-    spark,
-    named_params=None,
-    check_names=True,
-    check_dtype=True,
-    sort_output=True,
-    expected_output=None,
-    convert_columns_bytearray=None,
-    convert_columns_string=None,
-    convert_columns_timedelta=None,
-    convert_columns_decimal=None,
-    convert_float_nan=False,
-    convert_columns_bool=None,
-    return_codegen=False,
-    return_seq_dataframe=False,
-    run_dist_tests=True,
-    only_python=False,
-    only_jit_seq=False,
-    only_jit_1D=False,
-    only_jit_1DVar=None,
-    spark_dataframe_dict=None,
-    equivalent_spark_query=None,
-    optimize_calcite_plan=True,
-    spark_input_cols_to_cast=None,
-    spark_output_cols_to_cast=None,
-    pyspark_schemas=None,
-    named_params_timedelta_interval=False,
-    convert_nullable_bodosql=True,
-    use_table_format=None,
-    use_dict_encoded_strings=None,
-    is_out_distributed=True,
+    query: str,
+    dataframe_dict: Dict[str, pd.DataFrame],
+    spark: Optional[pyspark.sql.session.SparkSession],
+    named_params: Optional[Dict[str, Any]] = None,
+    check_names: bool = True,
+    check_dtype: bool = True,
+    sort_output: bool = True,
+    expected_output: Optional[pd.DataFrame] = None,
+    convert_columns_bytearray: Optional[List[str]] = None,
+    convert_columns_string: Optional[List[str]] = None,
+    convert_columns_timedelta: Optional[List[str]] = None,
+    convert_columns_decimal: Optional[List[str]] = None,
+    convert_float_nan: bool = False,
+    convert_columns_bool: Optional[List[str]] = None,
+    convert_columns_tz_naive: Optional[List[str]] = None,
+    return_codegen: bool = False,
+    return_seq_dataframe: bool = False,
+    run_dist_tests: bool = True,
+    only_python: bool = False,
+    only_jit_seq: bool = False,
+    only_jit_1D: bool = False,
+    only_jit_1DVar: Optional[bool] = None,
+    spark_dataframe_dict: Optional[Dict[str, pd.DataFrame]] = None,
+    equivalent_spark_query: Optional[str] = None,
+    optimize_calcite_plan: bool = True,
+    spark_input_cols_to_cast: Optional[Dict[str, Dict[str, str]]] = None,
+    pyspark_schemas: Optional[Dict[str, pyspark.sql.types.StructType]] = None,
+    named_params_timedelta_interval: bool = False,
+    convert_nullable_bodosql: bool = True,
+    use_table_format: Optional[bool] = None,
+    use_dict_encoded_strings: Optional[bool] = None,
+    is_out_distributed: bool = True,
 ):
     """
     Evaluates the correctness of a BodoSQL query by comparing SparkSQL
     as a baseline. Correctness is determined by converting both outputs
-    to Pandas dataframes and checking equality.
+    to Pandas DataFrames and checking equality.
 
     This function returns a dictionary of key value pairs depending
     on the information requested to be returned. Currently the following
@@ -137,6 +139,11 @@ def check_query(
         convert_columns_bool: Convert NaN values to None by setting datatype
             to boolean.
 
+        convert_columns_tz_naive(Optional[List[str]]): List of columns
+            in the input DataFrame(s) that use tz-aware timestamp data.
+            Spark will produce an incorrect output for these columns, so
+            we convert them to tz-naive before running the query in Spark.
+
         convert_columns_decimal: Convert the given list of
             decimal columns to float64 types.
 
@@ -180,12 +187,6 @@ def check_query(
             from pandas types (Specifically, all pandas integers types are converted
             to bigint, which is an invalid type for certain functions in spark,
             such as DATE_ADD, and FORMAT_NUMBER)
-
-        spark_output_cols_to_cast: A List of tuples in the form (colname, typename).
-            Casts the specified columns in the spark output to the the specified types.
-            for example, a value of ["A", "Int64"] would cause the expected_ouput["A"]
-            to be cast to int64. Will raise errors if the column is not present in the output,
-            or if the type is not valid when used with series.astype.
 
         pyspark_schemas: Dictionary of Pyspark Schema for each DataFrame provided in dataframe_dict.
             If this value is None or the DataFrame is not provided in the dict, this value
@@ -245,7 +246,6 @@ def check_query(
     # unoptimized plan, optimized plan, and the Pandas code
     debug_mode = os.environ.get("BODOSQL_TESTING_DEBUG", False)
     if debug_mode:
-
         print("Query:")
         print(query)
         bc = bodosql.BodoSQLContext(dataframe_dict)
@@ -267,6 +267,8 @@ def check_query(
         for table_name, df in spark_dataframe_dict.items():
             spark.catalog.dropTempView(table_name)
             df = convert_nullable_object(df)
+            if convert_columns_tz_naive:
+                df = remove_tz_columns_spark(df, convert_columns_tz_naive)
 
             if pyspark_schemas is None:
                 schema = None
@@ -310,18 +312,6 @@ def check_query(
             if isinstance(e, Exception):
                 raise e
 
-        if spark_output_cols_to_cast != None:
-            for colname, typ in spark_output_cols_to_cast:
-                if colname in expected_output.columns:
-                    expected_output[colname] = expected_output[colname].astype(typ)
-                else:
-                    print("Column and typecast")
-                    print(colname, typ)
-                    print("expected_output")
-                    print(expected_output)
-                    raise Exception(
-                        "Error, didn't find column to cast in expected output"
-                    )
         if convert_columns_bytearray:
             expected_output = convert_spark_bytearray(
                 expected_output, convert_columns_bytearray
@@ -596,6 +586,7 @@ def check_query_python(
         bodosql_output = bc.sql(query, named_params)
     else:
         bodosql_output = bc._test_sql_unoptimized(query, named_params)
+
     _check_query_equal(
         bodosql_output,
         expected_output,
@@ -927,10 +918,6 @@ def _check_query_equal(
 
     passed = 1
     n_ranks = bodo.get_size()
-    # print("BODO")
-    # print(bodosql_output)
-    # print("SPARK")
-    # print(expected_output)
     # only rank 0 should check if gatherv() called on output
     if not is_out_distributed or bodo.get_rank() == 0:
         passed = _test_equal_guard(
@@ -1069,6 +1056,32 @@ def convert_nullable_object(df):
                 S = df.iloc[:, i]
                 df[df.columns[i]] = S.astype(object).where(pd.notnull(S), None)
     return df
+
+
+def remove_tz_columns_spark(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
+    """Takes any DataFrame columns in df that
+    are also found in cols and converts them from
+    tz-aware to tz-naive. This is necessary for passing data to
+    Spark because Spark will compute the incorrect timestamp when it
+    converts the timezone to local time (as it doesn't handle tz information
+    in a way we can use for testing).
+
+    Args:
+        df (pd.DataFrame): Data which will be an input to spark
+        cols (List[str]): List of column names which if found should be
+            converted from tz-aware to tz-naive.
+
+    Returns:
+        pd.DataFrame: A new DataFrame with possibly some columns changed.
+    """
+    new_df = pd.DataFrame({})
+    naive_cols = set(cols)
+    for col in df.columns:
+        if col in naive_cols:
+            new_df[col] = df[col].dt.tz_convert(None)
+        else:
+            new_df[col] = df[col]
+    return new_df
 
 
 def generate_plan(query, dataframe_dict):
@@ -1279,6 +1292,9 @@ def get_equivalent_spark_agg_query(query):
     )
     spark_query = re.sub(
         "VARIANCE_SAMP\\(([a-zA-Z0-9-_]+)\\)", "VAR_SAMP(\\1)", spark_query
+    )
+    spark_query = re.sub(
+        "CAST\\(([a-zA-Z0-9-_]+) AS VARCHAR\\)", "CAST(\\1 AS STRING)", spark_query
     )
 
     return spark_query

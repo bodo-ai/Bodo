@@ -17,16 +17,14 @@ class IcebergParquetReader : public ParquetReader {
     IcebergParquetReader(const char* _conn, const char* _database_schema,
                          const char* _table_name, bool _parallel,
                          int64_t tot_rows_to_read, PyObject* _dnf_filters,
-                         PyObject* _expr_filters, int32_t* _selected_fields,
-                         int32_t num_selected_fields, int32_t* is_nullable,
-                         PyObject* _pyarrow_table_schema,
-                         bool _is_merge_into_cow)
+                         PyObject* _expr_filters,
+                         std::set<int> _selected_fields,
+                         std::vector<bool> is_nullable,
+                         PyObject* pyarrow_schema, bool _is_merge_into_cow)
         : ParquetReader(/*path*/ nullptr, _parallel, _dnf_filters,
-                        _expr_filters,
-                        /*storage_options*/ PyDict_New(), tot_rows_to_read,
-                        _selected_fields, num_selected_fields, is_nullable,
-                        /*input_file_name_col*/ false),
-          pyarrow_table_schema(_pyarrow_table_schema),
+                        _expr_filters, /*storage_options*/ PyDict_New(),
+                        pyarrow_schema, tot_rows_to_read, _selected_fields,
+                        is_nullable, /*input_file_name_col*/ false),
           conn(_conn),
           database_schema(_database_schema),
           table_name(_table_name),
@@ -72,15 +70,15 @@ class IcebergParquetReader : public ParquetReader {
         // import bodo.io.iceberg
         PyObject* iceberg_mod = PyImport_ImportModule("bodo.io.iceberg");
         if (PyErr_Occurred()) throw std::runtime_error("python");
+
         // ds = bodo.io.iceberg.get_iceberg_pq_dataset(
         //          conn, database_schema, table_name,
-        //          pyarrow_table_schema, dnf_filters,
+        //          pyarrow_schema, dnf_filters,
         //          expr_filters, tot_rows_to_read, parallel
         //      )
-
         PyObject* ds = PyObject_CallMethod(
             iceberg_mod, "get_iceberg_pq_dataset", "sssOOOLO", this->conn,
-            this->database_schema, this->table_name, this->pyarrow_table_schema,
+            this->database_schema, this->table_name, this->pyarrow_schema,
             this->dnf_filters, this->expr_filters, this->tot_rows_to_read,
             PyBool_FromLong(parallel));
         if (ds == NULL && PyErr_Occurred()) {
@@ -94,7 +92,6 @@ class IcebergParquetReader : public ParquetReader {
         PyObject* prefix_py = PyObject_GetAttrString(ds, "_prefix");
         this->prefix.assign(PyUnicode_AsUTF8(prefix_py));
         Py_DECREF(prefix_py);
-        Py_DECREF(this->pyarrow_table_schema);
         Py_DECREF(this->dnf_filters);
         Py_DECREF(iceberg_mod);
 
@@ -114,12 +111,6 @@ class IcebergParquetReader : public ParquetReader {
     // Eventually we'll want to use this for schema evolution, etc.
     // to handle file-level transformations, etc.
     // virtual void read_all(TableBuilder& builder) {}
-
-    // The pyarrow schema for the table determined
-    // at compile time. This will be compared with the schema
-    // of the files read in, to detect schema evolution, and
-    // in the future, make transformations based on it.
-    PyObject* pyarrow_table_schema = nullptr;
 
    private:
     // Table identifiers for the iceberg table
@@ -157,23 +148,26 @@ class IcebergParquetReader : public ParquetReader {
  * parquet files)
  * NOTE: selected_fields must be sorted
  * @param num_selected_fields : length of selected_fields array
- * @param is_nullable : array of bools that indicates which of the
+ * @param is_nullable : array of booleans that indicates which of the
  * selected fields is nullable. Same length and order as selected_fields.
- * @param pyarrow_table_schema : Pyarrow schema (instance of pyarrow.lib.Schema)
+ * @param pyarrow_schema : PyArrow schema (instance of pyarrow.lib.Schema)
  * determined at compile time. Used for schema evolution detection, and for
  * evaluating transformations in the future.
  * @param is_merge_into : Is this table loaded as the target table for merge
  * into with COW. If True we will only apply filters that limit the number of
  * files and cannot filter rows within a file.
- * @return table containing all the arrays read.
+ * @param[out] file_list_ptr : Additional output of the Python list of read-in
+ * files. This is currently only used for MERGE INTO COW
+ * @param[out] snapshot_id_ptr : Additional output of current snapshot id
+ * This is currently only used for MERGE INTO COW
+ * @return Table containing all the read data
  */
 table_info* iceberg_pq_read(const char* conn, const char* database_schema,
                             const char* table_name, bool parallel,
                             int64_t tot_rows_to_read, PyObject* dnf_filters,
-                            PyObject* expr_filters, int32_t* selected_fields,
-                            int32_t num_selected_fields, int32_t* is_nullable,
-                            PyObject* pyarrow_table_schema,
-                            int32_t* str_as_dict_cols,
+                            PyObject* expr_filters, int32_t* _selected_fields,
+                            int32_t num_selected_fields, int32_t* _is_nullable,
+                            PyObject* pyarrow_schema, int32_t* str_as_dict_cols,
                             int32_t num_str_as_dict_cols,
                             bool is_merge_into_cow, int64_t* total_rows_out,
                             PyObject** file_list_ptr,
@@ -185,22 +179,56 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
             Py_DECREF(expr_filters);
             expr_filters = Py_None;
         }
-        IcebergParquetReader reader(
-            conn, database_schema, table_name, parallel, tot_rows_to_read,
-            dnf_filters, expr_filters, selected_fields, num_selected_fields,
-            is_nullable, pyarrow_table_schema, is_merge_into_cow);
-        // initialize reader
+
+        std::set<int> selected_fields(
+            {_selected_fields, _selected_fields + num_selected_fields});
+        std::vector<bool> is_nullable(_is_nullable,
+                                      _is_nullable + num_selected_fields);
+
+        IcebergParquetReader reader(conn, database_schema, table_name, parallel,
+                                    tot_rows_to_read, dnf_filters, expr_filters,
+                                    selected_fields, is_nullable,
+                                    pyarrow_schema, is_merge_into_cow);
+
+        // Initialize reader
         reader.init_iceberg_reader(str_as_dict_cols, num_str_as_dict_cols);
-        PyObject* file_list = Py_None;
-        int64_t snapshot_id = -1;
+
+        // MERGE INTO COW Output Handling
         if (is_merge_into_cow) {
-            file_list = reader.get_file_list();
-            snapshot_id = reader.get_snapshot_id();
+            *file_list_ptr = reader.get_file_list();
+            *snapshot_id_ptr = reader.get_snapshot_id();
+        } else {
+            *file_list_ptr = Py_None;
+            *snapshot_id_ptr = -1;
         }
-        *file_list_ptr = file_list;
-        *snapshot_id_ptr = snapshot_id;
+
         *total_rows_out = reader.get_total_rows();
         table_info* read_output = reader.read();
+
+        // Append the index column to the output table used for MERGE INTO COW
+        // Since the MERGE INTO flag is internal, we assume that this column
+        // is never dead for simplicity sake.
+        if (is_merge_into_cow) {
+            int64_t num_local_rows = reader.get_local_rows();
+            array_info* row_id_col_arr =
+                alloc_numpy(num_local_rows, Bodo_CTypes::INT64);
+
+            // Create the initial value on this rank
+            // TODO: Replace with start_idx from ArrowReader
+            int64_t init_val = 0;
+            if (parallel) {
+                MPI_Exscan(&num_local_rows, &init_val, 1, MPI_LONG_LONG_INT,
+                           MPI_SUM, MPI_COMM_WORLD);
+            }
+
+            // Equivalent to np.arange(*total_rows_out, dtype=np.int64)
+            std::iota((int64_t*)row_id_col_arr->data1,
+                      (int64_t*)row_id_col_arr->data1 + num_local_rows,
+                      init_val);
+
+            read_output->columns.push_back(row_id_col_arr);
+        }
+
         return read_output;
 
     } catch (const std::exception& e) {

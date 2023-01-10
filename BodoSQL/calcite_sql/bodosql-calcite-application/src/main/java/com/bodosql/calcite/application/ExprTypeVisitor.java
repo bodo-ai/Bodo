@@ -37,9 +37,11 @@ public class ExprTypeVisitor {
           "COSH",
           "COT",
           "DATE_FORMAT",
+          "DAY",
           "DAYNAME",
           "DAYOFMONTH",
           "DAYOFWEEK",
+          "DAYOFWEEKISO",
           "DAYOFYEAR",
           "DEGREES",
           "EXP",
@@ -114,6 +116,7 @@ public class ExprTypeVisitor {
           "DATE_PART",
           "DATEADD",
           "DATEDIFF",
+          "DATE_TRUNC",
           "DECODE",
           "DIV0",
           "EDITDISTANCE",
@@ -164,6 +167,7 @@ public class ExprTypeVisitor {
           "SUBDATE",
           "SUBSTR",
           "SUBSTRING_INDEX",
+          "TIMEADD",
           "TO_BOOLEAN",
           "TO_DATE",
           "TRANSLATE3",
@@ -174,6 +178,7 @@ public class ExprTypeVisitor {
           "TRY_TO_DATE",
           "WEEKDAY",
           "WIDTH_BUCKET",
+          "YEAROFWEEK",
           "YEAROFWEEKISO",
           "YEARWEEK",
           "ZEROIFNULL");
@@ -418,7 +423,6 @@ public class ExprTypeVisitor {
       } else if (fnName.equals("RAND")
           || fnName.equals("PI")
           || fnName.equals("CURRENT_TIMESTAMP")
-          || fnName.equals("LOCALTIME")
           || fnName.equals("LOCALTIMESTAMP")
           || fnName.equals("GETDATE")
           || fnName.equals("NOW")
@@ -431,11 +435,6 @@ public class ExprTypeVisitor {
         // PI/Rand take no arguments and output scalar.
         // TODO: Fix Rand as it should output a column in some cases
         exprTypes.put(key, BodoSQLExprType.ExprType.SCALAR);
-      } else if (fnName.equals("DATE_TRUNC")) {
-        // DATE_TRUNC's type is the output of the operand 1
-        RexNode child = node.operands.get(1);
-        String childKey = generateRexNodeKey(child, id);
-        exprTypes.put(key, exprTypes.get(childKey));
       } else if (arg0KindFunctions.contains(node.getOperator().getKind())
           || arg0NamedFunctions.contains(fnName)) {
         // Functions that use arg0

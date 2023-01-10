@@ -445,7 +445,7 @@ def test_do_delta_merge_with_target_filter_pushdown_simple(
     def impl(table_name, conn, db_schema):
         orig_df, _, _ = pd.read_sql_table(
             table_name, conn, db_schema, _bodo_merge_into=True
-        )
+        )  # type: ignore
         # Normally, this section would be a join on some secondary source table to
         # produce a delta table
         # For now, we're just deleting columns where B = 2 using do_delta_merge_with_target
@@ -460,6 +460,8 @@ def test_do_delta_merge_with_target_filter_pushdown_simple(
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
-        out = bodo.jit(impl)(table_name, conn, db_schema)
-    check_logger_msg(stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F']")
+        bodo.jit(impl)(table_name, conn, db_schema)
+    check_logger_msg(
+        stream, "Columns loaded ['A', 'B', 'C', 'D', 'E', 'F', '_bodo_row_id']"
+    )
     check_logger_msg(stream, "Filter pushdown successfully performed")

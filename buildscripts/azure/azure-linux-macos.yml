@@ -23,12 +23,15 @@ jobs:
 
   - script: |
       set -eo pipefail
-      buildscripts/setup_conda.sh
+      bash buildscripts/setup_conda.sh
       export PATH=$HOME/miniconda3/bin:$PATH
     displayName: 'Setup Miniconda'
 
   - script: |
-      if [[ "${{ parameters.name }}" == "macOS" ]]; then
+      unamestr=`uname`
+      uname_mach_str=`uname -m`
+      # macOS
+      if [[ "$unamestr" == 'Darwin' ]] && [[ "$uname_mach_str" == 'x86_64' ]]; then
         buildscripts/setup_osx_sdk.sh
       fi
     displayName: 'Setup OSX SDK'
@@ -82,7 +85,8 @@ jobs:
       export PATH=$HOME/miniconda3/bin:$PATH
       source activate $CONDA_ENV
       pip install pytest pytest-azurepipelines pytest-cov pytest-timeout
-      if [[ ("$NP" -eq 1) && ("${{ parameters.name }}" == "Linux") ]]; then
+      unamestr=`uname`
+      if [[ ("$NP" -eq 1) && ( "$unamestr" == "Linux") ]]; then
         python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" --cov-report= --cov=./ bodo/tests/
       else
         python bodo/runtests.py "$NP" -s -v -m "$(PYTEST_MARKER)" bodo/tests/

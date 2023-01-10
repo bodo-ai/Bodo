@@ -457,7 +457,7 @@ def test_having_numeric(
     bodosql_numeric_types,
     comparison_ops,
     spark_info,
-    # seems to be leaking memory sporatically, see [BS-534]
+    # seems to be leaking memory sporadically, see [BS-534]
     # memory_leak_check
 ):
     """
@@ -903,4 +903,159 @@ def test_boolor_agg_output_type(memory_leak_check):
         check_dtype=False,
         expected_output=expected_output,
         is_out_distributed=False,
+    )
+
+
+@pytest.mark.tz_aware
+def test_max_min_tz_aware(memory_leak_check):
+    """
+    Test max and min on a tz-aware timestamp column
+    """
+    S = pd.Series(
+        list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
+        + [None] * 5
+    )
+    df = pd.DataFrame({"A": S, "id": ["a", "b", "c", "a", "d"] * 7})
+    ctx = {"table1": df}
+    py_output = pd.DataFrame(
+        {"output1": df.groupby("id").max()["A"], "output2": df.groupby("id").min()["A"]}
+    )
+    query = "Select max(A) as output1, min(A) as output2 from table1 group by id"
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_count_tz_aware(memory_leak_check):
+    """
+    Test count and count(*) on a tz-aware timestamp column
+    """
+    S = pd.Series(
+        list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
+        + [None] * 5
+    )
+    df = pd.DataFrame({"A": S, "id": ["a", "b", "c", "a", "d"] * 7})
+    ctx = {"table1": df}
+    py_output = pd.DataFrame(
+        {"output1": df.groupby("id").count()["A"], "output2": df.groupby("id").size()}
+    )
+    query = "Select count(A) as output1, Count(*) as output2 from table1 group by id"
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_any_value_tz_aware(memory_leak_check):
+    """
+    Test any_value on a tz-aware timestamp column
+    """
+    df = pd.DataFrame(
+        {
+            # Any Value is not defined so keep everything in each group the same.
+            "A": [
+                pd.Timestamp("2022/1/1", tz="Poland"),
+                pd.Timestamp("2022/1/2", tz="Poland"),
+                pd.Timestamp("2022/1/3", tz="Poland"),
+                pd.Timestamp("2022/1/1", tz="Poland"),
+                pd.Timestamp("2022/1/4", tz="Poland"),
+            ]
+            * 7,
+            "id": ["a", "b", "c", "a", "d"] * 7,
+        }
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame({"output1": df.groupby("id").head(1)["A"]})
+    query = "Select ANY_VALUE(A) as output1 from table1 group by id"
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_key(memory_leak_check):
+    """
+    Test tz_aware values as a key to groupby.
+    """
+    df = pd.DataFrame(
+        {
+            "A": [
+                pd.Timestamp("2022/1/1", tz="Poland"),
+                pd.Timestamp("2022/1/2", tz="Poland"),
+                pd.Timestamp("2022/1/3", tz="Poland"),
+                pd.Timestamp("2022/1/1", tz="Poland"),
+                pd.Timestamp("2022/1/4", tz="Poland"),
+            ]
+            * 7,
+            "val": np.arange(35),
+        }
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame({"output1": df.groupby("A").sum()["val"]})
+    query = "Select SUM(val) as output1 from table1 group by A"
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_having(memory_leak_check):
+    """
+    Test having with tz-aware values.
+    """
+    df = pd.DataFrame(
+        {
+            "A": [
+                pd.Timestamp("2022/1/1", tz="Poland"),
+                pd.Timestamp("2022/1/2", tz="Poland"),
+                pd.Timestamp("2022/1/3", tz="Poland"),
+                pd.Timestamp("2022/1/1", tz="Poland"),
+                pd.Timestamp("2022/1/4", tz="Poland"),
+            ]
+            * 7,
+            "B": [
+                pd.Timestamp("2021/1/12", tz="Poland"),
+                pd.Timestamp("2022/2/4", tz="Poland"),
+                pd.Timestamp("2021/1/4", tz="Poland"),
+                None,
+                pd.Timestamp("2022/1/1", tz="Poland"),
+                pd.Timestamp("2027/1/1", tz="Poland"),
+                None,
+            ]
+            * 5,
+            "C": [1, 2, 3] * 10 + [1, 2, 3, 4, 5],
+        }
+    )
+    ctx = {"table1": df}
+
+    def groupby_func(df):
+        if df.A.max() > df.B.min():
+            return df.A.min()
+        else:
+            return None
+
+    py_output = df.groupby("C", as_index=False).apply(groupby_func)
+    # Rename the columns
+    py_output.columns = ["C", "output1"]
+    # Remove the rows having would remove
+    py_output = py_output[py_output.output1.notna()]
+    query = "Select C, MIN(A) as output1 from table1 group by C HAVING max(A) > min(B)"
+    check_query(
+        query,
+        ctx,
+        None,
+        expected_output=py_output,
     )

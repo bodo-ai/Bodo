@@ -2113,6 +2113,11 @@ def get_random_integerarray(n):
     )
 
 
+def get_random_floatingarray(n):
+    np.random.seed(5)
+    return pd.arrays.FloatingArray(np.random.ranf(n), np.random.ranf(n) < 0.30)
+
+
 def get_random_booleanarray(n):
     np.random.seed(5)
     return pd.arrays.BooleanArray(np.random.ranf(n) < 0.50, np.random.ranf(n) < 0.30)
@@ -2142,6 +2147,7 @@ def get_random_int64index(n):
             gen_random_string_binary_array(n, is_binary=True), marks=pytest.mark.slow
         ),  # binary array
         pytest.param(get_random_integerarray(n), marks=pytest.mark.slow),
+        pytest.param(get_random_floatingarray(n), marks=pytest.mark.slow),
         pytest.param(get_random_booleanarray(n), marks=pytest.mark.slow),
         pytest.param(get_random_decimalarray(n), marks=pytest.mark.slow),
         pytest.param(
@@ -2705,6 +2711,31 @@ def test_bcast_tuple_root(val1, val2, root):
             np.array(
                 [1.121, 0.0, 5.1, -2.42, 32.2],
                 dtype=np.float32,
+            ),
+        ),
+        # Nullable float
+        (
+            pd.array(
+                [
+                    1.121,
+                    0.0,
+                    35.13431,
+                    -2414.4242,
+                    23211.22,
+                    None,
+                ],
+                dtype=pd.Float64Dtype(),
+            ),
+            pd.array(
+                [
+                    1.121,
+                    0.0,
+                    5.1,
+                    -2.42,
+                    32.2,
+                    None,
+                ],
+                dtype=pd.Float64Dtype(),
             ),
         ),
         # Nullable boolean

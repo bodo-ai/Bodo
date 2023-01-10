@@ -545,19 +545,3 @@ def test_heterogenous_series_unsupported_method(memory_leak_check):
     err_msg = re.escape("HeterogeneousSeries.any not supported yet")
     with pytest.raises(BodoError, match=err_msg):
         test_impl(df)
-
-
-@pytest.mark.slow()
-def test_pd_float_array_err():
-    """Test using a series with an underlying FloatingArray throws a reasonable error"""
-    S = pd.Series(pd.array([1.0, 2.0, 3.0, 4.0, 8.0] * 2))
-
-    @bodo.jit
-    def impl(S):
-        return S
-
-    err_msg = re.escape(
-        "Bodo does not currently support Series constructed with Pandas FloatingArray.\nPlease use Series.astype() to convert any input Series input to Bodo JIT functions."
-    )
-    with pytest.raises(BodoError, match=err_msg):
-        impl(S)

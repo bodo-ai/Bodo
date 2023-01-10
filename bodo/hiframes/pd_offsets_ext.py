@@ -7,6 +7,7 @@ import operator
 import llvmlite.binding as ll
 import numpy as np
 import pandas as pd
+import pytz
 from llvmlite import ir as lir
 from numba.core import cgutils, types
 from numba.core.imputils import lower_constant
@@ -27,7 +28,12 @@ from numba.extending import (
 
 from bodo.hiframes.datetime_date_ext import datetime_date_type
 from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
-from bodo.hiframes.pd_timestamp_ext import get_days_in_month, pd_timestamp_type
+from bodo.hiframes.pd_timestamp_ext import (
+    PandasTimestampType,
+    get_days_in_month,
+    pd_timestamp_tz_naive_type,
+    tz_has_transition_times,
+)
 from bodo.libs import hdatetime_ext
 from bodo.utils.typing import (
     BodoError,
@@ -194,14 +200,16 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
         return impl
 
     # rhs is a timestamp
-    if lhs == month_begin_type and rhs == pd_timestamp_type:
+    if lhs == month_begin_type and isinstance(rhs, PandasTimestampType):
+
+        tz_literal = rhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
             year, month, day = calculate_month_begin_date(
                 rhs.year, rhs.month, rhs.day, lhs.n
             )
             if lhs.normalize:
-                return pd.Timestamp(year=year, month=month, day=day)
+                return pd.Timestamp(year=year, month=month, day=day, tz=tz_literal)
             else:
                 return pd.Timestamp(
                     year=year,
@@ -212,6 +220,7 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
                     second=rhs.second,
                     microsecond=rhs.microsecond,
                     nanosecond=rhs.nanosecond,
+                    tz=tz_literal,
                 )
 
         return impl
@@ -229,9 +238,9 @@ def overload_add_operator_month_begin_offset_type(lhs, rhs):
 
     # rhs is the offset
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
-        and rhs == month_begin_type
-    ):
+        isinstance(lhs, PandasTimestampType)
+        or lhs in [datetime_datetime_type, datetime_date_type]
+    ) and rhs == month_begin_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return rhs + lhs
@@ -393,14 +402,16 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
         return impl
 
     # rhs is a timestamp
-    if lhs == month_end_type and rhs == pd_timestamp_type:
+    if lhs == month_end_type and isinstance(rhs, PandasTimestampType):
+
+        tz_literal = rhs.tz
 
         def impl(lhs, rhs):  # pragma: no cover
             year, month, day = calculate_month_end_date(
                 rhs.year, rhs.month, rhs.day, lhs.n
             )
             if lhs.normalize:
-                return pd.Timestamp(year=year, month=month, day=day)
+                return pd.Timestamp(year=year, month=month, day=day, tz=tz_literal)
             else:
                 return pd.Timestamp(
                     year=year,
@@ -411,6 +422,7 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
                     second=rhs.second,
                     microsecond=rhs.microsecond,
                     nanosecond=rhs.nanosecond,
+                    tz=tz_literal,
                 )
 
         return impl
@@ -428,9 +440,9 @@ def overload_add_operator_month_end_offset_type(lhs, rhs):
 
     # rhs is the offset
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
-        and rhs == month_end_type
-    ):
+        isinstance(lhs, PandasTimestampType)
+        or lhs in [datetime_datetime_type, datetime_date_type]
+    ) and rhs == month_end_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return rhs + lhs
@@ -1025,7 +1037,7 @@ def relative_delta_addition(dateoffset, ts):  # pragma: no cover
             ts = ts + td
 
             if dateoffset._weekday != -1:
-                # roll foward by determining the difference in day of the week
+                # roll forward by determining the difference in day of the week
                 # We only accept labeling a day of the week 0..6
                 curr_weekday = ts.weekday()
                 days_forward = (dateoffset._weekday - curr_weekday) % 7
@@ -1040,7 +1052,7 @@ def overload_add_operator_date_offset_type(lhs, rhs):
     These will be reused to implement arrays.
     """
     # rhs is a timestamp
-    if lhs == date_offset_type and rhs == pd_timestamp_type:
+    if lhs == date_offset_type and rhs == pd_timestamp_tz_naive_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             ts = relative_delta_addition(lhs, rhs)
@@ -1063,7 +1075,7 @@ def overload_add_operator_date_offset_type(lhs, rhs):
 
     # offset is the rhs
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
+        lhs in [datetime_datetime_type, pd_timestamp_tz_naive_type, datetime_date_type]
         and rhs == date_offset_type
     ):
 
@@ -1082,7 +1094,8 @@ def overload_sub_operator_offsets(lhs, rhs):
     """
     # lhs date/datetime/timestamp and rhs date_offset/month_end_type/week_type
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
+        lhs in [datetime_datetime_type, datetime_date_type]
+        or isinstance(lhs, PandasTimestampType)
     ) and rhs in [date_offset_type, month_begin_type, month_end_type, week_type]:
 
         def impl(lhs, rhs):  # pragma: no cover
@@ -1328,15 +1341,15 @@ def overload_add_operator_week_offset_type(lhs, rhs):
     These will be reused to implement arrays.
     """
     # rhs is a datetime, date or a timestamp
-    if lhs == week_type and rhs == pd_timestamp_type:
+    if lhs == week_type and isinstance(rhs, PandasTimestampType):
 
         def impl(lhs, rhs):  # pragma: no cover
-            time_delta = calculate_week_date(lhs.n, lhs.weekday, rhs.weekday())
-
             if lhs.normalize:
-                new_time = pd.Timestamp(year=rhs.year, month=rhs.month, day=rhs.day)
+                new_time = rhs.normalize()
             else:
                 new_time = rhs
+
+            time_delta = calculate_week_date(lhs.n, lhs.weekday, new_time)
 
             return new_time + time_delta
 
@@ -1345,8 +1358,6 @@ def overload_add_operator_week_offset_type(lhs, rhs):
     if lhs == week_type and rhs == datetime_datetime_type:
 
         def impl(lhs, rhs):  # pragma: no cover
-            time_delta = calculate_week_date(lhs.n, lhs.weekday, rhs.weekday())
-
             if lhs.normalize:
                 new_time = pd.Timestamp(year=rhs.year, month=rhs.month, day=rhs.day)
             else:
@@ -1360,6 +1371,7 @@ def overload_add_operator_week_offset_type(lhs, rhs):
                     microsecond=rhs.microsecond,
                 )
 
+            time_delta = calculate_week_date(lhs.n, lhs.weekday, new_time)
             return new_time + time_delta
 
         return impl
@@ -1367,16 +1379,16 @@ def overload_add_operator_week_offset_type(lhs, rhs):
     if lhs == week_type and rhs == datetime_date_type:
 
         def impl(lhs, rhs):  # pragma: no cover
-            time_delta = calculate_week_date(lhs.n, lhs.weekday, rhs.weekday())
+            time_delta = calculate_week_date(lhs.n, lhs.weekday, rhs)
             return rhs + time_delta
 
         return impl
 
     # rhs is the offset
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_type, datetime_date_type]
-        and rhs == week_type
-    ):
+        lhs in [datetime_datetime_type, datetime_date_type]
+        or isinstance(lhs, PandasTimestampType)
+    ) and rhs == week_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return rhs + lhs
@@ -1387,21 +1399,132 @@ def overload_add_operator_week_offset_type(lhs, rhs):
     raise BodoError(f"add operator not supported for data types {lhs} and {rhs}.")
 
 
-@register_jitable
-def calculate_week_date(n, weekday, other_weekday):  # pragma: no cover
-    """Calculate the date n weeks from the input."""
+def calculate_week_date(n, weekday, input_date_or_ts):  # pragma: no cover
+    # Dummy function for overload.
+    pass
 
-    # if weekday = None (int representation is -1) return the offset
-    if weekday == -1:
-        return pd.Timedelta(weeks=n)
 
-    # adjust the offset by a week if the weekdays are different
-    if weekday != other_weekday:
-        offset = (weekday - other_weekday) % 7
-        if n > 0:
-            n = n - 1
+@overload(calculate_week_date)
+def overload_calculate_week_date(n, weekday, input_date_or_ts):
+    """
+    Calculate the Timedelta to move n weeks from the input
 
-    return pd.Timedelta(weeks=n, days=offset)
+    Args:
+        n (types.int64): Number of weeks to move.
+        weekday (types.int64): Target weekday. Monday=0, Sunday=6
+        input_date_or_ts (Union[datetime_date_type PandasTimestampType]):
+            Input Timestamp or date value to move. If the Timestamp is
+            tz-aware and contains daylight savings then we include a check
+            for if we cross that boundary and updates the Timedelta accordingly.
+
+    Returns:
+        pandas_timedelta_type: A timedelta to add and adjust the input to the
+            target Timestamp.
+    """
+
+    if isinstance(input_date_or_ts, PandasTimestampType) and tz_has_transition_times(
+        input_date_or_ts.tz
+    ):
+        # Implementation for Timestamps that may have timezones
+        # that may require handling transition times. These are
+        # times that change the UTC offset (e.g. Daylight savings).
+
+        def impl_tz_aware(n, weekday, input_date_or_ts):  # pragma: no cover
+            # Compute the original Timedelta
+            if weekday == -1:
+                td = pd.Timedelta(weeks=n)
+            else:
+                other_weekday = input_date_or_ts.weekday()
+                # adjust the offset by a week if the weekdays are different
+                if weekday != other_weekday:
+                    offset = (weekday - other_weekday) % 7
+                    if n > 0:
+                        n = n - 1
+
+                td = pd.Timedelta(weeks=n, days=offset)
+
+            # Now that we have the timedelta we need to check if we cross a daylight
+            # savings boundary. If so we need to update the offset.
+            return update_timedelta_with_transition(input_date_or_ts, td)
+
+        return impl_tz_aware
+    else:
+        # TZ-Naive
+        def impl(n, weekday, input_date_or_ts):  # pragma: no cover
+            # if weekday = None (int representation is -1) return the offset
+            if weekday == -1:
+                return pd.Timedelta(weeks=n)
+
+            other_weekday = input_date_or_ts.weekday()
+
+            # adjust the offset by a week if the weekdays are different
+            if weekday != other_weekday:
+                offset = (weekday - other_weekday) % 7
+                if n > 0:
+                    n = n - 1
+
+            return pd.Timedelta(weeks=n, days=offset)
+
+        return impl
+
+
+def update_timedelta_with_transition(ts_value, timedelta):  # pragma: no cover
+    pass
+
+
+@overload(update_timedelta_with_transition)
+def overload_update_timedelta_with_transition(ts, td):
+    """Helper function used when converting an "offset"
+    used to move forward an amount of time in an attribute (e.g. 1 month)
+    and convert it to a change to the UTC time. This function takes the Timestamp
+    value and a previously calculated Timedelta that would be correct if the
+    value maintained the same UTC offset and adds an "adjustment" if the start
+    and end time have different UTC offsets.
+
+    Args:
+        ts (bodo.PandasTimestampType): Original Timestamp used for updating the timedelta.
+        td (pd_timedelta_type): Timedelta to move assuming we never change UTC offsets.
+
+    Returns:
+        pd_timedelta_type: New timedelta with the adjustment.
+    """
+
+    if tz_has_transition_times(ts.tz):
+        # If there are transition times then we may need to update the
+        # Timedelta to account for the different in UTC offsets.
+
+        # Compute the timezone.
+        tz_obj = pytz.timezone(ts.tz)
+        # This timezone must be a pytz.tzinfo.DstTzInfo.
+        # Here we will lower the transition + delta info as arrays
+        # to compute the required offset.
+        trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
+        deltas = np.array(tz_obj._transition_info)[:, 0]
+        deltas = (
+            (pd.Series(deltas).dt.total_seconds() * 1_000_000_000)
+            .astype(np.int64)
+            .values
+        )
+
+        def impl_tz_aware(ts, td):  # pragma: no cover
+            # We need to check if we cross a daylight
+            # savings boundary. If so we need to update the offset.
+            start_value = ts.value
+            end_value = start_value + td.value
+
+            # If the index into trans changes we have cross a boundary. As a result
+            # We need to update how the UTC offset changes to maintain the same
+            # local info.
+            start_trans = np.searchsorted(trans, start_value, side="right") - 1
+            end_trans = np.searchsorted(trans, end_value, side="right") - 1
+            offset = deltas[start_trans] - deltas[end_trans]
+            return pd.Timedelta(td.value + offset)
+
+        return impl_tz_aware
+
+    else:
+        # If there are no transitions just return the original timedelta
+        return lambda ts, td: td  # pragma: no cover
 
 
 date_offset_unsupported_attrs = {

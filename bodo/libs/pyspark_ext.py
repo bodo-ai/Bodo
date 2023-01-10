@@ -378,7 +378,9 @@ def overload_create_df(
     func_text += f"  for i in range(n):\n"
     func_text += f"    r = data[i]\n"
     for i in range(n_cols):
-        func_text += f"    A{i}[i] = bodo.utils.conversion.unbox_if_timestamp(r[{i}])\n"
+        func_text += (
+            f"    A{i}[i] = bodo.utils.conversion.unbox_if_tz_naive_timestamp(r[{i}])\n"
+        )
 
     data_args = "({}{})".format(
         ", ".join(f"A{i}" for i in range(n_cols)), "," if len(columns) == 1 else ""

@@ -12,6 +12,9 @@ import llvmlite.binding as ll
 import numba
 import numpy as np
 import pandas as pd
+
+# See call_finalize for why this is commented out
+# from pyarrow.fs import finalize_s3
 from llvmlite import ir as lir
 from mpi4py import MPI
 from numba.core import cgutils, ir_utils, types
@@ -34,6 +37,7 @@ from bodo.libs.array_item_arr_ext import (
 from bodo.libs.binary_arr_ext import binary_array_type
 from bodo.libs.bool_arr_ext import boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType, set_bit_to_arr
 from bodo.libs.interval_arr_ext import IntervalArrayType
 from bodo.libs.map_arr_ext import MapArrayType
@@ -208,7 +212,9 @@ def isend(arr, size, pe, tag, cond=True):
         return impl
 
     # nullable arrays
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
+    if isinstance(
+        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or arr in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -225,6 +231,17 @@ def isend(arr, size, pe, tag, cond=True):
             return (data_req, null_req)
 
         return impl_nullable
+
+    # TZ-Aware Timestamp arrays
+    if isinstance(arr, DatetimeArrayType):
+
+        def impl_tz_arr(arr, size, pe, tag, cond=True):  # pragma: no cover
+            # Just send the underlying data. TZ info is all in the type.
+            data_arr = arr._data
+            type_enum = get_type_enum(data_arr)
+            return _isend(data_arr.ctypes, size, type_enum, pe, tag, cond)
+
+        return impl_tz_arr
 
     # string arrays
     if is_str_arr_type(arr) or arr == binary_array_type:
@@ -292,7 +309,9 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
         return impl
 
     # nullable arrays
-    if isinstance(arr, (IntegerArrayType, DecimalArrayType)) or arr in (
+    if isinstance(
+        arr, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or arr in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -309,6 +328,17 @@ def irecv(arr, size, pe, tag, cond=True):  # pragma: no cover
             return (data_req, null_req)
 
         return impl_nullable
+
+    # TZ-Aware Timestamp arrays
+    if isinstance(arr, DatetimeArrayType):
+
+        def impl_tz_arr(arr, size, pe, tag, cond=True):  # pragma: no cover
+            # Just recv the underlying data. TZ info is all in the type.
+            data_arr = arr._data
+            type_enum = get_type_enum(data_arr)
+            return _irecv(data_arr.ctypes, size, type_enum, pe, tag, cond)
+
+        return impl_tz_arr
 
     # string arrays
     if arr in [binary_array_type, string_array_type]:
@@ -715,7 +745,8 @@ def gatherv(data, allgather=False, warn_if_rep=True, root=MPI_ROOT):
         return gatherv_impl_int_arr
 
     if isinstance(
-        data, (IntegerArrayType, DecimalArrayType, bodo.TimeArrayType)
+        data,
+        (IntegerArrayType, FloatingArrayType, DecimalArrayType, bodo.TimeArrayType),
     ) or data in (
         boolean_array,
         datetime_date_array_type,
@@ -1662,6 +1693,11 @@ def get_value_for_type(dtype):  # pragma: no cover
         )
         return pd.array([3], pd_dtype)
 
+    # Float array
+    if isinstance(dtype, FloatingArrayType):
+        pd_dtype = "Float{}".format(dtype.dtype.bitwidth)
+        return pd.array([3.0], pd_dtype)
+
     # bool array
     if dtype == boolean_array:
         return pd.array([True], "boolean")
@@ -1996,7 +2032,9 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
 
         return scatterv_array_item_impl
 
-    if isinstance(data, (IntegerArrayType, DecimalArrayType)) or data in (
+    if isinstance(
+        data, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or data in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -2006,6 +2044,8 @@ def scatterv_impl(data, send_counts=None, warn_if_dist=True):
         # their init functions
         if isinstance(data, IntegerArrayType):
             init_func = bodo.libs.int_arr_ext.init_integer_array
+        if isinstance(data, FloatingArrayType):
+            init_func = bodo.libs.float_arr_ext.init_float_array
         if isinstance(data, DecimalArrayType):
             precision = data.precision
             scale = data.scale
@@ -2328,7 +2368,6 @@ def bcast_overload(data, root=MPI_ROOT):
     """broadcast array from rank root. 'data' array is assumed to be pre-allocated in
     non-root ranks.
     """
-    bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(data, "bodo.bcast()")
     # numpy arrays
     if isinstance(data, types.Array):
 
@@ -2367,8 +2406,8 @@ def bcast_overload(data, root=MPI_ROOT):
 
         return bcast_decimal_arr
 
-    # nullable int/bool/date arrays
-    if isinstance(data, IntegerArrayType) or data in (
+    # nullable int/float/bool/date arrays
+    if isinstance(data, (IntegerArrayType, FloatingArrayType)) or data in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -2379,6 +2418,16 @@ def bcast_overload(data, root=MPI_ROOT):
             return
 
         return bcast_impl_int_arr
+
+    # TZ-Aware Timestamp arrays
+    if isinstance(data, DatetimeArrayType):
+
+        def bcast_impl_tz_arr(data, root=MPI_ROOT):  # pragma: no cover
+            # Just bcast the underlying data. TZ info is all in the type.
+            bcast(data._data, root)
+            return
+
+        return bcast_impl_tz_arr
 
     # string arrays
     if is_str_arr_type(data) or data == binary_array_type:
@@ -2863,7 +2912,7 @@ def get_chunk_bounds_overload(A):
 
     def impl(A):  # pragma: no cover
         n_pes = get_size()
-        all_bounds = np.empty(n_pes, A.dtype)
+        all_bounds = np.empty(n_pes, np.int64)
         all_empty = np.empty(n_pes, np.int8)
 
         # using int64 min value in case the first chunk is empty. This will ensure
@@ -2874,7 +2923,7 @@ def get_chunk_bounds_overload(A):
             val = A[-1]
             empty = 0
 
-        allgather(all_bounds, val)
+        allgather(all_bounds, np.int64(val))
         allgather(all_empty, empty)
 
         # for empty chunks, use the boundary from previous rank to ensure empty output
@@ -2912,7 +2961,9 @@ def alltoallv(
     typ_enum_o = get_type_enum(out_data)
     assert typ_enum == typ_enum_o
 
-    if isinstance(send_data, (IntegerArrayType, DecimalArrayType)) or send_data in (
+    if isinstance(
+        send_data, (IntegerArrayType, FloatingArrayType, DecimalArrayType)
+    ) or send_data in (
         boolean_array,
         datetime_date_array_type,
     ):
@@ -3358,13 +3409,10 @@ def dist_permutation_array_index(
 ########### finalize MPI & s3_reader, disconnect hdfs when exiting ############
 
 
-from bodo.io import fsspec_reader, hdfs_reader, s3_reader
+from bodo.io import fsspec_reader, hdfs_reader
 
 ll.add_symbol("finalize", hdist.finalize)
 finalize = types.ExternalFunction("finalize", types.int32())
-
-ll.add_symbol("finalize_s3", s3_reader.finalize_s3)
-finalize_s3 = types.ExternalFunction("finalize_s3", types.int32())
 
 ll.add_symbol("finalize_fsspec", fsspec_reader.finalize_fsspec)
 finalize_fsspec = types.ExternalFunction("finalize_fsspec", types.int32())
@@ -3399,7 +3447,12 @@ def disconnect_hdfs_njit():  # pragma: no cover
 @numba.njit
 def call_finalize():  # pragma: no cover
     finalize()
-    finalize_s3()
+    # The S3 Finalizer packaged with PyArrow 9 is causing segfaults on MacOS
+    # x86 and sometimes on Linux (esp when using MinIO).
+    # It does not seem to actually do much except for some memory cleanup,
+    # which doesn't matter too much since we're calling it at the end of
+    # the program. Thus, lets skip it for now.
+    # finalize_s3()
     finalize_fsspec()
     _check_for_cpp_errors()
     disconnect_hdfs()

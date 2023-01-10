@@ -197,7 +197,14 @@ def column_name_df_value(request):
 
 @pytest.fixture(
     params=[
-        pd.DataFrame({"a": [1, 2] * 20, "b": [True, False] * 20, "c": [1.0, 2.0] * 20}),
+        pd.DataFrame(
+            {
+                "a": [1, 2] * 20,
+                "b": [True, False] * 20,
+                "c": [1.0, 2.0] * 20,
+                "d": pd.array([1.0, 2.0] * 20, "Float64"),
+            }
+        ),
     ]
 )
 def select_dtypes_df(request):

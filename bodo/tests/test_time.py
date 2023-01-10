@@ -55,22 +55,27 @@ def test_time_python_constructor(str_time, int_time):
         pytest.param(
             lambda: bodo.Time(12, precision=0),
             id="hour",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda: bodo.Time(12, 34, precision=0),
             id="minute",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda: bodo.Time(12, 34, 56, precision=0),
             id="second",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda: bodo.Time(12, 34, 56, 78, precision=3),
             id="millisecond",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda: bodo.Time(12, 34, 56, 78, 12, precision=6),
             id="microsecond",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda: bodo.Time(12, 34, 56, 78, 12, 34, precision=9),
@@ -79,14 +84,17 @@ def test_time_python_constructor(str_time, int_time):
         pytest.param(
             lambda: bodo.time_from_str("12:34:56", precision=0),
             id="second_str",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda: bodo.time_from_str("12:34:56.789", precision=3),
             id="millisecond_str",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda: bodo.time_from_str("12:34:56.789123", precision=6),
             id="microsecond_str",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda: bodo.time_from_str("12:34:56.789123456", precision=9),
@@ -105,14 +113,17 @@ def test_time_constructor(impl, memory_leak_check):
         pytest.param(
             lambda t: t.hour,
             id="hour",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda t: t.minute,
             id="minute",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda t: t.second,
             id="second",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda t: t.microsecond,
@@ -126,6 +137,7 @@ def test_time_extraction(impl, memory_leak_check):
     check_func(impl, (t,))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "precision,dtype",
     [
@@ -213,22 +225,27 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
         pytest.param(
             lambda a, b: a == b,
             id="op_eq",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda a, b: a != b,
             id="op_not_eq",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda a, b: a < b,
             id="op_lt",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda a, b: a <= b,
             id="op_le",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda a, b: a > b,
             id="op_gt",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda a, b: a >= b,
@@ -243,11 +260,13 @@ def test_time_arrow_conversions(precision, dtype, memory_leak_check):
             bodo.Time(1, 15, 12, 0, precision=3),
             bodo.Time(1, 15, 12, 0, precision=3),
             id="data_eq",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             bodo.Time(1, 15, 12, 0, precision=3),
             bodo.Time(1, 15, 12, 1, precision=3),
             id="data_lt",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             bodo.Time(1, 15, 12, 1, precision=3),
@@ -260,54 +279,187 @@ def test_time_cmp(cmp_fn, a, b, memory_leak_check):
     check_func(cmp_fn, (a, b))
 
 
-def test_time_sort(memory_leak_check):
+@pytest.mark.slow
+@pytest.mark.parametrize("precision", [0, 3, 6, 9])
+def test_time_sort(precision, memory_leak_check):
+    """Test sort by a Time column
+
+    Args:
+        precision (int): Time precision argument
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
     df = pd.DataFrame(
         {
             "A": [
-                bodo.Time(12, 0),
-                bodo.Time(1, 1, 3, 1),
-                bodo.Time(2),
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 1, 3, 1, precision=precision),
+                None,
+                bodo.Time(2, precision=precision),
+                bodo.Time(15, 0, 50, 10, 100, precision=precision),
+                bodo.Time(9, 1, 3, 10, precision=precision),
+                None,
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
             ]
         }
     )
 
     def impl(df):
-        df.sort_values(by="A")
-        return df
+        return df.sort_values(by="A")
 
-    check_func(impl, (df,))
+    check_func(impl, (df,), reset_index=True)
 
 
-def test_time_merge(memory_leak_check):
+@pytest.mark.parametrize("precision", [0, 3, 6, 9])
+def test_time_merge(precision, memory_leak_check):
+    """Test join on a Time column
+
+    Args:
+        precision (int): Time precision argument
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
     df = pd.DataFrame(
         {
             "A": [
-                bodo.Time(12, 0),
-                bodo.Time(1, 1, 3, 1),
-                bodo.Time(2),
-            ]
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 1, 3, 1, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(15, 0, 50, 10, 100, precision=precision),
+                bodo.Time(9, 1, 3, 10, precision=precision),
+                None,
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+            ],
+            "B": [
+                None,
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 11, 3, 1, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(14, 0, 50, 10, 100, precision=precision),
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.Time(9, 1, 30, 10, precision=precision),
+            ],
         }
     )
 
     df2 = pd.DataFrame(
         {
             "A": [
-                bodo.Time(12, 0),
-                bodo.Time(1, 1, 3, 1),
-                bodo.Time(2),
-            ]
+                None,
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 1, 3, 1, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(1, 10, precision=precision),
+                None,
+                bodo.Time(1, 11, 30, 100, precision=precision),
+                bodo.Time(12, precision=precision),
+            ],
+            "D": [
+                bodo.Time(11, 0, precision=precision),
+                None,
+                bodo.Time(6, 11, 3, 1, precision=precision),
+                bodo.Time(9, precision=precision),
+                bodo.Time(14, 10, 50, 10, 100, precision=precision),
+                bodo.Time(9, 1, 30, 10, precision=precision),
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.Time(11, 59, 59, 100, 1000, 50, precision=precision),
+            ],
         }
     )
 
     def impl(df, df2):
-        df.merge(df2, how="inner", on="A")
-        return df
+        return df.merge(df2, how="inner", on="A")
 
-    check_func(impl, (df, df2))
+    check_func(impl, (df, df2), sort_output=True, reset_index=True)
+
+    def impl2(df, df2):
+        return df.merge(df2, how="inner", on="left.A == right.A & left.B < right.D")
+
+    py_out = df.merge(df2, left_on=["A"], right_on=["A"])
+    py_out = py_out.query("B < D")
+    check_func(
+        impl2,
+        (df, df2),
+        sort_output=True,
+        reset_index=True,
+        check_dtype=False,
+        py_output=py_out,
+    )
 
 
+@pytest.mark.slow
+@pytest.mark.parametrize("precision", [0, 3, 6, 9])
+def test_time_groupby(precision, memory_leak_check):
+    """Test groupby with Time column as key with index=False and as an aggregation column
+        NOTE: [BE-4109] Not testing Time as groupby key with as_index=True
+        since Time is not supported as an index.
+
+    Args:
+        precision (int): Time precision argument
+        memory_leak_check (fixture function): check memory leak in the test.
+
+    """
+    df = pd.DataFrame(
+        {
+            "A": [
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(1, 1, 3, 1, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(15, 0, 50, 10, 100, precision=precision),
+                bodo.Time(9, 1, 3, 10, precision=precision),
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+            ],
+            "B": [0, 0, 1, 0, 0, 1],
+        }
+    )
+
+    # Test Time as column to compute aggregation on
+    def impl(df):
+        return df.groupby("B")["A"].agg(["min", "max", "first", "last"])
+
+    check_func(impl, (df,), sort_output=True, reset_index=True)
+
+    df = pd.DataFrame(
+        {
+            "A": [
+                bodo.Time(12, 0, precision=precision),
+                None,
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+                bodo.Time(2, precision=precision),
+                bodo.Time(12, 0, precision=precision),
+                bodo.Time(15, 0, 50, 10, 100, precision=precision),
+                None,
+                bodo.Time(2, precision=precision),
+                bodo.Time(11, 59, 59, 100, 100, 50, precision=precision),
+            ],
+            "B": [0, 0, 1, 0, 0, 1, 2, 1, -1],
+        }
+    )
+
+    # Test Time as column to compute aggregation on with None values
+    def impl2(df):
+        return df.groupby("B")["A"].max()
+
+    # Hard-code py_output (See [BE-4107])
+    py_output = df.dropna().groupby("B")["A"].max().append(pd.Series([None], name="A"))
+    check_func(impl2, (df,), py_output=py_output, sort_output=True, reset_index=True)
+
+    # Test Time as key with index=False and keeping None group
+    def impl3(df):
+        return df.groupby("A", as_index=False, dropna=False)["B"].min()
+
+    check_func(impl3, (df,), sort_output=True, reset_index=True)
+
+    # Test Time as key with index=False and dropping None group
+    def impl4(df):
+        return df.groupby("A", as_index=False)["B"].max()
+
+    check_func(impl4, (df,), sort_output=True, reset_index=True)
+
+
+@pytest.mark.slow
 def test_time_head(memory_leak_check):
-    df = pd.DataFrame({"A": [bodo.Time(x) for x in range(10)]})
+    df = pd.DataFrame({"A": [bodo.Time(1, x) for x in range(15)]})
 
     def impl(df):
         return df.head()
@@ -321,20 +473,24 @@ def test_time_head(memory_leak_check):
         pytest.param(
             lambda dt: bodo.Time(dt.hour, precision=0),
             id="hour",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda dt: bodo.Time(dt.hour, dt.minute, precision=0),
             id="minute",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda dt: bodo.Time(dt.hour, dt.minute, dt.second, precision=0),
             id="second",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda dt: bodo.Time(
                 dt.hour, dt.minute, dt.second, dt.millisecond, precision=3
             ),
             id="millisecond",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda dt: bodo.Time(
@@ -346,6 +502,7 @@ def test_time_head(memory_leak_check):
                 precision=6,
             ),
             id="microsecond",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             lambda dt: bodo.Time(
@@ -367,26 +524,32 @@ def test_time_head(memory_leak_check):
         pytest.param(
             bodo.Time(precision=9),
             id="none",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             bodo.Time(12, precision=9),
             id="hour",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             bodo.Time(12, 30, precision=9),
             id="minute",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             bodo.Time(12, 30, 42, precision=9),
             id="second",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             bodo.Time(12, 30, 42, 64, precision=9),
             id="millisecond",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             bodo.Time(12, 30, 42, 64, 43, precision=9),
             id="microsecond",
+            marks=pytest.mark.slow,
         ),
         pytest.param(
             bodo.Time(12, 30, 42, 64, 43, 58, precision=9),
@@ -402,11 +565,36 @@ def test_time_construction_from_parts(impl, dt, memory_leak_check):
     check_func(impl, (dt,))
 
 
+@pytest.mark.slow
 def test_time_array_setitem_none(memory_leak_check):
-    df = pd.DataFrame({"A": [bodo.Time(x) for x in range(10)]})
+    df = pd.DataFrame({"A": [bodo.Time(1, x) for x in range(15)]})
 
     def impl(df):
         df["A"][0] = None
         return df
 
     check_func(impl, (df,))
+
+
+@pytest.mark.slow
+def test_comparison_error(memory_leak_check):
+
+    # Time vs. non-Time
+    def impl():
+        return bodo.Time(2) < None
+
+    with pytest.raises(
+        TypeError,
+        match="Cannot compare Time with non-Time type",
+    ):
+        impl()
+
+    # Time different precisions
+    def impl2():
+        return bodo.Time(2) < bodo.Time(2, precision=0)
+
+    with pytest.raises(
+        TypeError,
+        match="Cannot compare times with different precisions",
+    ):
+        impl2()

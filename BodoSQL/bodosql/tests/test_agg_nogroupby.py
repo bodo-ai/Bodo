@@ -561,6 +561,7 @@ def test_any_value(query, spark_info, memory_leak_check):
     )
 
 
+@pytest.mark.tz_aware
 def test_max_min_tz_aware(memory_leak_check):
     """
     Test max and min on a tz-aware timestamp column
@@ -579,6 +580,100 @@ def test_max_min_tz_aware(memory_leak_check):
         {"output1": S.max(), "output2": S.min()}, index=pd.RangeIndex(0, 1, 1)
     )
     query = "Select max(A) as output1, min(A) as output2 from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        is_out_distributed=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_count_tz_aware(memory_leak_check):
+    """
+    Test count and count(*) on a tz-aware timestamp column
+    """
+    S = pd.Series(
+        list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
+        + [None] * 4
+    )
+    df = pd.DataFrame(
+        {
+            "A": S,
+        }
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame(
+        {"output1": S.count(), "output2": len(S)}, index=pd.RangeIndex(0, 1, 1)
+    )
+    query = "Select count(A) as output1, Count(*) as output2 from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        is_out_distributed=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_any_value_tz_aware(memory_leak_check):
+    """
+    Test any_value on a tz-aware timestamp column
+    """
+    S = pd.Series(
+        list(pd.date_range(start="1/1/2022", freq="16D5H", periods=30, tz="Poland"))
+        + [None] * 4
+    )
+    df = pd.DataFrame(
+        {
+            "A": S,
+        }
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame({"output1": S.iloc[0]}, index=pd.RangeIndex(0, 1, 1))
+    # Note: We also output the first value although this is not strictly defined.
+    query = "Select ANY_VALUE(A) as output1 from table1"
+    check_query(
+        query,
+        ctx,
+        None,
+        is_out_distributed=False,
+        expected_output=py_output,
+    )
+
+
+@pytest.mark.tz_aware
+def test_tz_aware_having(memory_leak_check):
+    """
+    Test having with tz-aware values.
+    """
+    df = pd.DataFrame(
+        {
+            "A": [
+                pd.Timestamp("2022/1/1", tz="Poland"),
+                pd.Timestamp("2022/1/2", tz="Poland"),
+                pd.Timestamp("2022/1/3", tz="Poland"),
+                pd.Timestamp("2016/1/1", tz="Poland"),
+                pd.Timestamp("2019/1/4", tz="Poland"),
+            ]
+            * 7,
+            "B": [
+                pd.Timestamp("2021/1/12", tz="Poland"),
+                pd.Timestamp("2022/2/4", tz="Poland"),
+                pd.Timestamp("2021/1/4", tz="Poland"),
+                None,
+                pd.Timestamp("2022/1/1", tz="Poland"),
+                pd.Timestamp("2027/1/1", tz="Poland"),
+                None,
+            ]
+            * 5,
+        }
+    )
+    ctx = {"table1": df}
+    py_output = pd.DataFrame({"output1": df.A.min()}, index=pd.RangeIndex(0, 1, 1))
+    query = "Select MIN(A) as output1 from table1 HAVING MAX(A) > min(B)"
     check_query(
         query,
         ctx,

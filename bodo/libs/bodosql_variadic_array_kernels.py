@@ -32,7 +32,8 @@ def overload_coalesce(A):
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.coalesce",
                 ["A"],
-                i,
+                0,
+                container_arg=i,
                 container_length=len(A),
             )
 
@@ -277,7 +278,8 @@ def decode(A):
             return unopt_argument(
                 "bodo.libs.bodosql_array_kernels.decode",
                 ["A"],
-                i,
+                0,
+                container_arg=i,
                 container_length=len(A),
             )
 
@@ -447,4 +449,100 @@ def decode_util(A):
         arg_string,
         arg_sources,
         support_dict_encoding=support_dict_encoding,
+    )
+
+
+def concat_ws(A, sep):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(concat_ws)
+def overload_concat_ws(A, sep):
+    """Handles cases where concat_ws receives optional arguments and forwards
+    to the appropriate version of the real implementation"""
+    if not isinstance(A, (types.Tuple, types.UniTuple)):
+        raise_bodo_error("concat_ws argument must be a tuple")
+    for i in range(len(A)):
+        if isinstance(A[i], types.optional):
+            # Note: If we have an optional scalar and its not the last argument,
+            # then the NULL vs non-NULL case can lead to different decisions
+            # about dictionary encoding in the output. This will lead to a memory
+            # leak as the dict-encoding result will be cast to a regular string array.
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.concat_ws",
+                ["A", "sep"],
+                0,
+                container_arg=i,
+                container_length=len(A),
+            )
+    if isinstance(sep, types.optional):
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.concat_ws",
+            ["A", "sep"],
+            1,
+        )
+
+    def impl(A, sep):  # pragma: no cover
+        return concat_ws_util(A, sep)
+
+    return impl
+
+
+def concat_ws_util(A, sep):  # pragma: no cover
+    # Dummy function used for overload
+    return
+
+
+@overload(concat_ws_util, no_unliteral=True)
+def overload_concat_ws_util(A, sep):
+    """A dedicated kernel for the SQL function CONCAT_WS which takes in array of
+       1+ columns/scalars and a separator and returns the result of concatenating
+       together all of the values.
+
+    Args:
+        A (any array/scalar tuple): the array of values that are concatenated
+        into a single column.
+
+    Raises:
+        BodoError: if there are 0 columns, or the types don't match
+
+    Returns:
+        an array containing the concatenated values of the input array
+    """
+    if len(A) == 0:
+        raise_bodo_error("Cannot concatenate 0 columns")
+
+    arg_names = []
+    arg_types = []
+    # Verify that every argument is a string array.
+    for i, arr_typ in enumerate(A):
+        arg_name = f"A{i}"
+        # TODO: Allow all binary data as well.
+        verify_string_arg(arr_typ, "CONCAT_WS", arg_name)
+        arg_names.append(arg_name)
+        arg_types.append(arr_typ)
+    # Verify sep
+    arg_names.append("sep")
+    verify_string_arg(sep, "CONCAT_WS", "sep")
+    arg_types.append(sep)
+    propagate_null = [True] * len(arg_names)
+    # Determine the output dtype. Note: we don't keep data dictionary
+    # encoded because there are too many possible combinations.
+    out_dtype = bodo.string_array_type
+
+    # Create the mapping from the tuple to the local variable.
+    arg_string = "A, sep"
+    arg_sources = {f"A{i}": f"A[{i}]" for i in range(len(A))}
+
+    concat_args = ",".join([f"arg{i}" for i in range(len(A))])
+    scalar_text = f"  res[i] = arg{len(A)}.join([{concat_args}])\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        arg_string,
+        arg_sources,
     )

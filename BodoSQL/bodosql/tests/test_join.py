@@ -9,15 +9,19 @@ import pandas as pd
 import pytest
 from bodosql.tests.utils import check_efficient_join, check_query
 
+from bodo.tests.timezone_common import representative_tz  # noqa
+
 
 @pytest.fixture(params=["INNER", "LEFT", "RIGHT", "FULL OUTER"])
 def join_type(request):
     return request.param
 
 
-def test_join(join_dataframes, spark_info, comparison_ops, memory_leak_check):
+def test_join(
+    join_dataframes, spark_info, join_type, comparison_ops, memory_leak_check
+):
     """test simple join queries"""
-    # For nullable intergers convert the pyspark output from
+    # For nullable integers convert the pyspark output from
     # float to object
     if any(
         [
@@ -40,11 +44,12 @@ def test_join(join_dataframes, spark_info, comparison_ops, memory_leak_check):
     if comparison_ops == "<=>":
         # TODO: Add support for <=> from general-join cond
         return
-    query = f"select table1.B, C, D from table1 join table2 on table1.A {comparison_ops} table2.A"
+    query = f"select table1.B, C, D from table1 {join_type} join table2 on table1.A {comparison_ops} table2.A"
     result = check_query(
         query,
         join_dataframes,
         spark_info,
+        check_dtype=False,
         check_names=False,
         return_codegen=True,
         convert_float_nan=convert_float_nan,
@@ -60,7 +65,14 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
 
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -121,6 +133,41 @@ def test_join_alias(join_dataframes, spark_info, memory_leak_check):
         join_dataframes,
         spark_info,
         check_names=False,
+        check_dtype=False,
+        convert_float_nan=convert_float_nan,
+        convert_columns_bytearray=convert_columns_bytearray,
+    )
+
+
+def test_natural_join(join_dataframes, spark_info, join_type, memory_leak_check):
+    """test simple natural join queries"""
+    # For nullable integers convert the pyspark output from
+    # float to object
+    if any(
+        [
+            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            for x in join_dataframes["table1"].dtypes
+        ]
+    ):
+        convert_float_nan = True
+    else:
+        convert_float_nan = False
+    if any(
+        [
+            isinstance(join_dataframes["table1"][colname].values[0], bytes)
+            for colname in join_dataframes["table1"].columns
+        ]
+    ):
+        convert_columns_bytearray = ["B", "C", "D"]
+    else:
+        convert_columns_bytearray = None
+    query = f"select table1.B, C, D from table1 NATURAL {join_type} join table2"
+    check_query(
+        query,
+        join_dataframes,
+        spark_info,
+        check_dtype=False,
+        check_names=False,
         convert_float_nan=convert_float_nan,
         convert_columns_bytearray=convert_columns_bytearray,
     )
@@ -134,7 +181,14 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
     """
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -175,7 +229,14 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
 
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -206,7 +267,14 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
     """test all possible join types"""
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -236,13 +304,20 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
     check_efficient_join(pandas_code)
 
 
-def test_join_differentsize_tables(
+def test_join_different_size_tables(
     join_dataframes, spark_info, join_type, memory_leak_check
 ):
     """tests that join operations still works when the dataframes have different sizes"""
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -319,7 +394,7 @@ def test_nested_join(join_dataframes, spark_info, memory_leak_check):
 def test_nested_or_join(join_dataframes, spark_info, memory_leak_check):
     """tests that nested joins work with implicit joins using 'or'"""
 
-    # for context, the nested outter join should create a number of null values in table4.A and table4.B,
+    # for context, the nested outer join should create a number of null values in table4.A and table4.B,
     # which we then use in the join condition for the top level join
     # assumedly, the null values in table4.A/B shouldn't match to anything, and shouldn't raise an error
     if any(
@@ -381,9 +456,7 @@ def test_nested_and_join(join_dataframes, spark_info, memory_leak_check):
 
 def test_join_boolean(bodosql_boolean_types, spark_info, join_type, memory_leak_check):
     """test all possible join types on boolean table"""
-    if join_type != "INNER":
-        # [BS-664] Support outer join without equality condition
-        return
+
     newCtx = {
         "table1": bodosql_boolean_types["table1"],
         "table2": bodosql_boolean_types["table1"],
@@ -427,7 +500,7 @@ def test_multikey_join_types(join_dataframes, spark_info, join_type, memory_leak
 
 
 @pytest.mark.slow
-def test_trimmed_multikey_cond_innerjoin(
+def test_trimmed_multikey_cond_inner_join(
     join_dataframes, spark_info, memory_leak_check
 ):
     """test that with inner join, equality conditions that are used in AND become keys and don't appear in the filter."""
@@ -493,3 +566,55 @@ def test_nonascii_in_implicit_join(spark_info, memory_leak_check):
     """
 
     check_query(query, ctx, spark_info, check_names=False, check_dtype=False)
+
+
+def test_tz_aware_join(representative_tz, memory_leak_check):
+    """
+    Test join, including non-equality, on tz_aware data
+    """
+    df = pd.DataFrame(
+        {
+            "A": list(
+                pd.date_range(
+                    start="1/1/2022", freq="4D7H", periods=30, tz=representative_tz
+                )
+            )
+            + [None] * 4,
+            # Note: B's and A's will overlap.
+            "B": [None] * 14
+            + list(
+                pd.date_range(
+                    start="1/1/2022", freq="12D21H", periods=20, tz=representative_tz
+                )
+            ),
+            "C": pd.date_range(
+                start="3/1/2022", freq="1H", periods=34, tz=representative_tz
+            ),
+            "D": pd.date_range(
+                start="1/1/2022", freq="14D20T", periods=34, tz=representative_tz
+            ),
+        }
+    )
+    query = """
+        select
+            t1.A as A,
+            t2.B as B,
+            t1.C as C,
+            t2.D as D
+        FROM
+            table1 t1
+        JOIN table2 t2
+            on t1.A = t2.B and t2.C > t1.B
+    """
+    ctx = {
+        "table1": df,
+        "table2": df,
+    }
+    py_output = df.merge(df, left_on="A", right_on="B")
+    # Drop nulls to match SQL
+    py_output = py_output[py_output.A_x.notna()]
+    # Add the comparison
+    py_output = py_output[py_output.C_y > py_output.B_x]
+    py_output = py_output[["A_x", "B_y", "C_x", "D_y"]]
+    py_output.columns = ["A", "B", "C", "D"]
+    check_query(query, ctx, None, expected_output=py_output)

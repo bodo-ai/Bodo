@@ -1,8 +1,20 @@
 package com.bodosql.calcite.application;
 
-import com.bodosql.calcite.application.BodoSQLOperatorTables.*;
+import com.bodosql.calcite.application.BodoSQLOperatorTables.CastingOperatorTable;
+import com.bodosql.calcite.application.BodoSQLOperatorTables.CondOperatorTable;
+import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable;
+import com.bodosql.calcite.application.BodoSQLOperatorTables.NumericOperatorTable;
+import com.bodosql.calcite.application.BodoSQLOperatorTables.SinceEpochFnTable;
+import com.bodosql.calcite.application.BodoSQLOperatorTables.StringOperatorTable;
+import com.bodosql.calcite.application.BodoSQLOperatorTables.ThreeOperatorStringTable;
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
-import com.bodosql.calcite.application.bodo_sql_rules.*;
+import com.bodosql.calcite.application.bodo_sql_rules.AliasPreservingAggregateProjectMergeRule;
+import com.bodosql.calcite.application.bodo_sql_rules.AliasPreservingProjectJoinTransposeRule;
+import com.bodosql.calcite.application.bodo_sql_rules.InnerJoinRemoveRule;
+import com.bodosql.calcite.application.bodo_sql_rules.JoinReorderConditionRule;
+import com.bodosql.calcite.application.bodo_sql_rules.LimitProjectTransposeRule;
+import com.bodosql.calcite.application.bodo_sql_rules.LogicalFilterReorderConditionRule;
+import com.bodosql.calcite.application.bodo_sql_rules.ProjectUnaliasedRemoveRule;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
@@ -29,22 +41,28 @@ import org.apache.calcite.plan.hep.HepProgramBuilder;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.rules.*;
-import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.rel.type.*;
 import org.apache.calcite.rex.RexExecutorImpl;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.SchemaPlus;
+import org.apache.calcite.sql.SqlMerge;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.util.ChainedSqlOperatorTable;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
 import org.apache.calcite.sql2rel.StandardConvertletTableConfig;
-import org.apache.calcite.tools.*;
+import org.apache.calcite.tools.FrameworkConfig;
+import org.apache.calcite.tools.Frameworks;
+import org.apache.calcite.tools.Planner;
+import org.apache.calcite.tools.RelConversionException;
+import org.apache.calcite.tools.ValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -136,14 +154,16 @@ public class RelationalAlgebraGenerator {
    * the Planner member variables.
    */
   public void setupPlanner(
-      List<SchemaPlus> defaultSchemas, SchemaPlus schema, String namedParamTableName) {
+      List<SchemaPlus> defaultSchemas,
+      SchemaPlus schema,
+      String namedParamTableName,
+      RelDataTypeSystem typeSystem) {
     try {
       // Generate the schema paths for the operator table.
       List<List<String>> defaultSchemaList = new ArrayList<>();
       for (SchemaPlus defaultSchema : defaultSchemas) {
         defaultSchemaList.add(CalciteSchema.from(defaultSchema).path(null));
       }
-      RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
       Properties props = new Properties();
       List<SqlOperatorTable> sqlOperatorTables = new ArrayList<>();
       // TODO: Replace this code. Deprecated?
@@ -239,7 +259,8 @@ public class RelationalAlgebraGenerator {
 
     List<SchemaPlus> defaultSchemas = new ArrayList();
     defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
-    setupPlanner(defaultSchemas, schema, namedParamTableName);
+    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem();
+    setupPlanner(defaultSchemas, schema, namedParamTableName, typeSystem);
   }
 
   /**
@@ -273,7 +294,10 @@ public class RelationalAlgebraGenerator {
       defaultSchemas.add(schema.getSubSchema(catalogDefaultSchema.getName()));
     }
     defaultSchemas.add(schema.getSubSchema(newSchema.getName()));
-    setupPlanner(defaultSchemas, schema, namedParamTableName);
+    // Create a type system with the correct default Timezone.
+    BodoTZInfo tzInfo = catalog.getDefaultTimezone();
+    RelDataTypeSystem typeSystem = new BodoSQLRelDataTypeSystem(tzInfo);
+    setupPlanner(defaultSchemas, schema, namedParamTableName, typeSystem);
   }
 
   public void setRules(List<RelOptRule> rules) {
@@ -572,6 +596,31 @@ public class RelationalAlgebraGenerator {
     }
 
     return response;
+  }
+
+  /**
+   * Determine the "type" of write produced by this node. The write operation is always assumed to
+   * be the top level of the parsed query. It returns the name of operation in question to enable
+   * passing the correct write API to the table.
+   *
+   * <p>Currently supported write types: "MERGE": Merge into "INSERT": Insert Into
+   *
+   * @param sql The SQL query to parse.
+   * @return A string representing the type of write.
+   */
+  public String getWriteType(String sql) throws Exception {
+    // Parse the query if we haven't already
+    if (this.parseNode == null) {
+      parseQuery(sql);
+    }
+    if (this.parseNode instanceof SqlMerge) {
+      return "MERGE";
+    } else {
+      // Default to insert into for the write type.
+      // If there is no write then the return value
+      // doesn't matter.
+      return "INSERT";
+    }
   }
 
   public String getPandasString(String sql, boolean debugDeltaTable) throws Exception {
