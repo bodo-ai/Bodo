@@ -928,8 +928,8 @@ def test_df_apply_df_output(memory_leak_check):
         return df.apply(g, axis=1)
 
     df = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl1, (df,), check_dtype=False)
+    check_func(impl2, (df,), check_dtype=False)
 
 
 def test_df_apply_df_output_multicolumn(memory_leak_check):
@@ -2957,9 +2957,10 @@ def test_df_mem_usage(memory_leak_check):
         {"A": [1, 2, 3, 4, 5, 6], "B": [2.1, 3.2, 4.4, 5.2, 10.9, 6.8]},
         index=pd.date_range(start="2018-04-24", end="2018-04-27", periods=6, name="A"),
     )
-    py_out = pd.Series([48, 48, 48], index=["Index", "A", "B"])
+    col_B_size = 49 if bodo.libs.float_arr_ext._use_nullable_float else 48
+    py_out = pd.Series([48, 48, col_B_size], index=["Index", "A", "B"])
     check_func(impl1, (df,), py_output=py_out, is_out_distributed=False)
-    py_out = pd.Series([48, 48], index=["A", "B"])
+    py_out = pd.Series([48, col_B_size], index=["A", "B"])
     check_func(impl2, (df,), py_output=py_out, is_out_distributed=False)
     # Empty DataFrame
     df = pd.DataFrame()

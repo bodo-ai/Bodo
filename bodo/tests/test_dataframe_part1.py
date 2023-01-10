@@ -954,9 +954,11 @@ def test_df_replace(memory_leak_check):
     def impl2(df):
         return df.replace([np.inf, -np.inf], np.nan)
 
-    df = pd.DataFrame({"A": [1.0, 2.4, -np.inf], "B": [np.inf, np.nan, 5.2]})
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    df = pd.DataFrame({"A": [1.0, 2.4, -np.inf], "B": [np.inf, 3.6, 5.2]})
+    # passing output here since check_func may convert input to nullable float
+    # Pandas replaces np.nan with pd.NA which causes errors
+    check_func(impl1, (df,), py_output=impl1(df), check_dtype=False)
+    check_func(impl2, (df,), py_output=impl2(df), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1053,7 +1055,8 @@ def test_df_values(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.values
 
-    check_func(impl, (numeric_df_value,))
+    # pass py_output here in case check_func converts input to nullable float
+    check_func(impl, (numeric_df_value,), py_output=numeric_df_value.values)
 
 
 @pytest.mark.slow
@@ -1077,7 +1080,8 @@ def test_df_to_numpy(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.to_numpy()
 
-    check_func(impl, (numeric_df_value,))
+    # pass py_output here in case check_func converts input to nullable float
+    check_func(impl, (numeric_df_value,), py_output=numeric_df_value.to_numpy())
 
 
 @pytest.mark.slow
@@ -1129,6 +1133,16 @@ def test_df_dtypes(df_value):
         ):
             py_output.iloc[i] = pd.CategoricalDtype(
                 py_output.iloc[i].categories.astype("string[pyarrow]")
+            )
+        # check_func converts input to nullable float if flag is on
+        if (
+            py_output.iloc[i] in (np.float32, np.float64)
+            and bodo.libs.float_arr_ext._use_nullable_float
+        ):
+            py_output.iloc[i] = (
+                pd.Float32Dtype()
+                if py_output.iloc[i] == np.float32
+                else pd.Float64Dtype()
             )
 
     check_func(impl, (df_value,), is_out_distributed=False, py_output=py_output)

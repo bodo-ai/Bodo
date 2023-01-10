@@ -1596,6 +1596,20 @@ class SeriesPass:
                 assign.value = var_def.args[1]
                 return [assign]
 
+        if fdef == ("get_float_arr_data", "bodo.libs.float_arr_ext"):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
+            if call_def == ("init_float_array", "bodo.libs.float_arr_ext"):
+                assign.value = var_def.args[0]
+                return [assign]
+
+        if fdef == ("get_float_arr_bitmap", "bodo.libs.float_arr_ext"):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
+            if call_def == ("init_float_array", "bodo.libs.float_arr_ext"):
+                assign.value = var_def.args[1]
+                return [assign]
+
         if fdef == ("get_bool_arr_data", "bodo.libs.bool_arr_ext"):
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def, self.typemap)

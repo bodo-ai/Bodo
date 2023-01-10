@@ -411,31 +411,6 @@ def get_groupby_output_dtype(arr_type, func_name, index_type=None):
         return arr_type, "ok"
 
 
-def get_pivot_output_dtype(arr_type, func_name, index_type=None):
-    """
-    Return output dtype for groupby aggregation function based on the
-    function and the input array type and dtype.
-    If the operation is not feasible (e.g. summing dates) then an error message
-    is passed upward to be decided according to the context.
-    """
-    in_dtype = arr_type.dtype
-    if func_name in {"count"}:
-        return IntDtype(types.int64)
-    if func_name in {"sum", "prod", "min", "max"}:
-        if func_name in {"sum", "prod"} and not isinstance(
-            in_dtype, (types.Integer, types.Float)
-        ):
-            raise BodoError(
-                "pivot_table(): sum and prod operations require integer or float input"
-            )
-        if isinstance(in_dtype, types.Integer):
-            return IntDtype(in_dtype)
-        return in_dtype
-    if func_name in {"mean", "var", "std"}:
-        return types.float64
-    raise BodoError("invalid pivot operation")
-
-
 def check_args_kwargs(func_name, len_args, args, kws):
     """Check for extra incorrect arguments"""
     if len(kws) > 0:

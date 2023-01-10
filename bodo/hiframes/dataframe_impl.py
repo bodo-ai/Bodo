@@ -175,13 +175,15 @@ def overload_dataframe_values(df):
         )
 
     n_cols = len(df.columns)
-    # convert nullable int columns to float to match Pandas behavior
-    nullable_int_cols = set(
-        i for i in range(n_cols) if isinstance(df.data[i], IntegerArrayType)
+    # convert nullable data columns to float to match Pandas behavior
+    nullable_arr_cols = set(
+        i
+        for i in range(n_cols)
+        if isinstance(df.data[i], (IntegerArrayType, FloatingArrayType))
     )
     data_args = ", ".join(
         "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}){}".format(
-            i, ".astype(float)" if i in nullable_int_cols else ""
+            i, ".astype(float)" if i in nullable_arr_cols else ""
         )
         for i in range(n_cols)
     )
@@ -1236,10 +1238,7 @@ def overload_dataframe_abs(df):
             )
 
     n_cols = len(df.columns)
-    data_args = ", ".join(
-        "np.abs(bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df, {}))".format(i)
-        for i in range(n_cols)
-    )
+    data_args = ", ".join(f"df.iloc[:, {i}].abs()" for i in range(n_cols))
     header = "def impl(df):\n"
     return _gen_init_df(header, df.columns, data_args)
 
@@ -1264,7 +1263,9 @@ def overload_dataframe_corr(df, method="pearson", min_periods=1):
             df.column_index[c],
             ".astype(np.float64)"
             if (
-                isinstance(df.data[df.column_index[c]], IntegerArrayType)
+                isinstance(
+                    df.data[df.column_index[c]], (IntegerArrayType, FloatingArrayType)
+                )
                 or df.data[df.column_index[c]] == boolean_array
             )
             else "",
@@ -1324,7 +1325,9 @@ def overload_dataframe_cov(df, min_periods=None, ddof=1):
             df.column_index[c],
             ".astype(np.float64)"
             if (
-                isinstance(df.data[df.column_index[c]], IntegerArrayType)
+                isinstance(
+                    df.data[df.column_index[c]], (IntegerArrayType, FloatingArrayType)
+                )
                 or df.data[df.column_index[c]] == boolean_array
             )
             else "",
@@ -2114,7 +2117,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
     bodo.hiframes.pd_timestamp_ext.check_tz_aware_unsupported(df, "DataFrame.diff()")
 
     # Bodo specific limitations for supported types
-    # Currently only float (not nullable), int (not nullable), and dt64 are supported
+    # Currently only float, int, and dt64 are supported
     for column_type in df.data:
         if not (
             isinstance(column_type, types.Array)
@@ -2125,7 +2128,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
         ):
             # TODO: Link to supported Column input types.
             raise BodoError(
-                f"DataFrame.diff() column input type {column_type.dtype} not supported."
+                f"DataFrame.diff() column input type {column_type} not supported."
             )
 
     # Ensure period is int
@@ -5599,7 +5602,12 @@ def overload_dataframe_info(
                 dtype_name = "category"
             elif isinstance(df.data[i], bodo.IntegerArrayType):
                 int_typ_name = bodo.libs.int_arr_ext.IntDtype(df.data[i].dtype).name
-                dtype_name = f"{int_typ_name[:-7]}"  # remove trailing "Dtype()"
+                dtype_name = int_typ_name[:-7]  # remove trailing "Dtype()"
+            elif isinstance(df.data[i], FloatingArrayType):
+                float_typ_name = bodo.libs.float_arr_ext.FloatDtype(
+                    df.data[i].dtype
+                ).name
+                dtype_name = float_typ_name[:-7]  # remove trailing "Dtype()"
             func_text += f'    col_dtype[{i}] = "{dtype_name}"\n'
 
             if dtype_name in dtype_count:
@@ -5868,7 +5876,7 @@ def overload_dataframe_plot(
         if is_overload_none(x) and is_overload_none(y):
             for i in range(len(df.columns)):
                 if isinstance(
-                    df.data[i], (types.Array, IntegerArrayType)
+                    df.data[i], (types.Array, IntegerArrayType, FloatingArrayType)
                 ) and isinstance(df.data[i].dtype, (types.Integer, types.Float)):
                     func_text += f"   ax.plot(df.iloc[:, {i}], label=df.columns[{i}])\n"
         elif is_overload_none(x):
@@ -5878,7 +5886,7 @@ def overload_dataframe_plot(
             x_idx = df.columns.index(x_val)
             for i in range(len(df.columns)):
                 if isinstance(
-                    df.data[i], (types.Array, IntegerArrayType)
+                    df.data[i], (types.Array, IntegerArrayType, FloatingArrayType)
                 ) and isinstance(df.data[i].dtype, (types.Integer, types.Float)):
                     if x_idx != i:
                         func_text += f"   ax.plot(df[x], df.iloc[:, {i}], label=df.columns[{i}])\n"
