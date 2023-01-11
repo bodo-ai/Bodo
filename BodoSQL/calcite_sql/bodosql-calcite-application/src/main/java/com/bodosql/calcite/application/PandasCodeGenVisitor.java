@@ -1291,13 +1291,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     RexNodeVisitorInfo column =
         visitRexNode(node.operands.get(1), colNames, id, inputVar, isSingleRow, ctx);
     String name = generateExtractName(dateVal.getName(), column.getName());
-    String codeExpr =
-        generateExtractCode(
-            dateVal.getExprCode(),
-            column.getExprCode(),
-            isSingleRow
-                || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id))
-                    == BodoSQLExprType.ExprType.SCALAR));
+    String codeExpr = generateExtractCode(dateVal.getExprCode(), column.getExprCode());
     return new RexNodeVisitorInfo(name, codeExpr);
   }
 
@@ -2519,9 +2513,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateCurdateCode(fnName);
           case "YEARWEEK":
             assert operandsInfo.size() == 1;
-            return getYearWeekFnInfo(
-                operandsInfo.get(0),
-                exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+            return getYearWeekFnInfo(operandsInfo.get(0));
           case "MONTHNAME":
           case "DAYNAME":
           case "WEEKDAY":
@@ -2543,8 +2535,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DATE_PART":
             assert operandsInfo.size() == 2;
             assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
-            return generateDatePart(
-                operandsInfo, exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+            return generateDatePart(operandsInfo);
           case "TO_DAYS":
             return generateToDaysCode(operandsInfo.get(0));
           case "TO_SECONDS":
@@ -2566,9 +2557,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "UNIX_TIMESTAMP":
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":
-            return generateFromUnixTimeCode(
-                operandsInfo.get(0),
-                exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+            return generateFromUnixTimeCode(operandsInfo.get(0));
           case "RLIKE":
           case "REGEXP_LIKE":
             if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 3)) {
@@ -2705,10 +2694,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "WEEKISO":
             return new RexNodeVisitorInfo(
                 fnName + "(" + operandsInfo.get(0).getName() + ")",
-                generateExtractCode(
-                    fnName,
-                    operandsInfo.get(0).getExprCode(),
-                    exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow));
+                generateExtractCode(fnName, operandsInfo.get(0).getExprCode()));
           case "REGR_VALX":
           case "REGR_VALY":
             return getDoubleArgCondFnInfo(

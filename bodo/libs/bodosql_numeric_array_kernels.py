@@ -384,7 +384,7 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
             elif func_name == "TRUNC":
                 scalar_text += "if int(arg1) == arg1:\n"
                 # numpy truncates to the integer nearest to zero, so we shift by the number of decimals as appropriate
-                # to get the desired result. (multilpication is used to maintain precision)
+                # to get the desired result. (multiplication is used to maintain precision)
                 scalar_text += (
                     "  res[i] = np.trunc(arg0 * (10.0 ** arg1)) * (10.0 ** -arg1)\n"
                 )
