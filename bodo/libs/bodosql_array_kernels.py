@@ -105,6 +105,7 @@ broadcasted_fixed_arg_functions = {
     "get_quarter",
     "get_month",
     "get_week",
+    "get_weekofyear",
     "get_hour",
     "get_minute",
     "get_second",

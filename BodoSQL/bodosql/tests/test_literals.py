@@ -48,7 +48,6 @@ def test_timestamp_literals(
     )
 
 
-@pytest.mark.skip("[BS-173] issues with extract on ")
 def test_timestamp_literals_extract(
     basic_df, timestamp_literal_strings, spark_info, memory_leak_check
 ):
@@ -73,10 +72,10 @@ def test_timestamp_literals_extract(
 
 
 @pytest.mark.skip(
-    "Currently parses with calcite, unusported timestamp due to a pandas error"
+    "Currently parses with calcite, unsupported timestamp due to a pandas error"
 )
 def test_timestamp_literal_pd_error(basic_df, spark_info, memory_leak_check):
-    """This is a specific test case that is parsed correctly by calacite, but generates a runtime pandas error.
+    """This is a specific test case that is parsed correctly by calcite, but generates a runtime pandas error.
     If we want to support this, it'll probably be a quicker fix then the other ones
     """
     query = """

@@ -649,6 +649,32 @@ def test_dayofyear(dates_scalar_vector, memory_leak_check):
     )
 
 
+def test_get_weekofyear(dates_scalar_vector, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.get_weekofyear(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.get_weekofyear(arr)
+
+    # Simulates get_weekofyear on a single row
+    def get_weekofyear_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            elem = pd.Timestamp(elem)
+            return elem.weekofyear
+
+    answer = vectorized_sol((dates_scalar_vector,), get_weekofyear_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.parametrize(
     "days",
     [
@@ -1560,3 +1586,24 @@ def test_option_date_trunc(memory_leak_check):
                 (part, ts, flag0, flag1),
                 py_output=answer,
             )
+
+
+@pytest.mark.slow
+def test_option_get_weekofyear(memory_leak_check):
+    """
+    Tests get_weekofyear array kernel on optional input
+    """
+
+    def impl(arg, flag):
+        arg0 = arg if flag else None
+        return bodo.libs.bodosql_array_kernels.get_weekofyear(arg0)
+
+    arg = pd.Timestamp("2022-11-6 12:40:45", tz="US/Pacific")
+
+    for flag in [True, False]:
+        answer = arg.weekofyear if flag else None
+        check_func(
+            impl,
+            (arg, flag),
+            py_output=answer,
+        )
