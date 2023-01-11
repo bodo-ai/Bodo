@@ -556,7 +556,7 @@ def add_interval_nanoseconds_util(amount, start_dt):  # pragma: no cover
 
 def create_add_interval_func_overload(unit):  # pragma: no cover
     def overload_func(amount, start_dt):
-        """Handles cases where this interval addition function recieves optional
+        """Handles cases where this interval addition function receives optional
         arguments and forwards to the appropriate version of the real implementation"""
         args = [amount, start_dt]
         for i in range(2):

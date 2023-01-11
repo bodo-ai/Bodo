@@ -29,7 +29,7 @@ public class FilterCodeGen {
       filterBuilder
           .append("np.full(len(")
           .append(inVar)
-          .append("), np.bool_(")
+          .append("), bodo.libs.array_kernels.is_true(")
           .append(filterCode)
           .append("), np.bool_)");
     } else {

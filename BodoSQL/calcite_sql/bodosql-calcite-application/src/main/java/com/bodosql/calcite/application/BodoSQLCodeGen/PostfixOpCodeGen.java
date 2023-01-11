@@ -4,9 +4,8 @@ import static com.bodosql.calcite.application.Utils.Utils.checkNotNullColumns;
 import static com.bodosql.calcite.application.Utils.Utils.checkNullColumns;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import java.util.HashSet;
-import java.util.List;
-import org.apache.calcite.sql.SqlOperator;
+import java.util.*;
+import org.apache.calcite.sql.*;
 
 /**
  * Class that returns the generated code for Postfix Operators after all inputs have been visited.
@@ -34,7 +33,8 @@ public class PostfixOpCodeGen {
       boolean isSingleRow,
       boolean outputScalar) {
     StringBuilder codeBuilder = new StringBuilder();
-    switch (postfixOp.getKind()) {
+    SqlKind kind = postfixOp.getKind();
+    switch (kind) {
       case IS_NULL:
         if (outputScalar) {
           if (nullSet.size() > 0) {
@@ -57,51 +57,19 @@ public class PostfixOpCodeGen {
           codeBuilder.append("pd.notna(").append(arg).append(")");
         }
         break;
-        // IS_NOT FALSE != IS_TRUE and visa vera for null case.
-        // (NULL IS NOT FALSE) == TRUE, but (NULL IS TRUE) == False
-
-        // TODO: ~ on a column containing none does NOT work.
       case IS_NOT_FALSE:
-        if (outputScalar) {
-          codeBuilder.append("(not (").append(arg).append("is False))");
-        } else {
-          codeBuilder
-              .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-              .append(arg)
-              .append(").fillna(True))");
-        }
-        break;
       case IS_NOT_TRUE:
-        if (outputScalar) {
-          codeBuilder.append("(not (").append(arg).append("is True))");
-        } else {
-          codeBuilder
-              .append("bodo.hiframes.pd_series_ext.get_series_data((~")
-              .append("pd.Series(")
-              .append(arg)
-              .append(").fillna(False)))");
-        }
-        break;
       case IS_TRUE:
-        if (outputScalar) {
-          codeBuilder.append("(").append(arg).append("is True)");
-        } else {
-          codeBuilder
-              .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-              .append(arg)
-              .append(").fillna(False))");
-        }
-        break;
       case IS_FALSE:
-        if (outputScalar) {
-          codeBuilder.append("(").append(arg).append("is False)");
-        } else {
-          codeBuilder
-              .append("bodo.hiframes.pd_series_ext.get_series_data((~")
-              .append("pd.Series(")
-              .append(arg)
-              .append(").fillna(True)))");
-        }
+        // fn_name will be one of is_not_false, is_not_true,
+        // is_true, or is_false.
+        String fn_name = kind.toString().toLowerCase(Locale.ROOT);
+        codeBuilder
+            .append("bodo.libs.bodosql_array_kernels.")
+            .append(fn_name)
+            .append("(")
+            .append(arg)
+            .append(")");
         break;
       default:
         throw new BodoSQLCodegenException(
