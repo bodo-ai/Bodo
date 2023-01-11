@@ -277,6 +277,10 @@ def get_week(arr):  # pragma: no cover
     return
 
 
+def get_weekofyear(arr):  # pragma: no cover
+    return
+
+
 def get_hour(arr):  # pragma: no cover
     return
 
@@ -799,6 +803,10 @@ def get_week_util(arr):  # pragma: no cover
     return
 
 
+def get_weekofyear_util(arr):  # pragma: no cover
+    return
+
+
 def get_hour_util(arr):  # pragma: no cover
     return
 
@@ -879,6 +887,7 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "get_quarter": f"{box_str}(arg0).quarter",
             "get_month": f"{box_str}(arg0).month",
             "get_week": f"{box_str}(arg0).week",
+            "get_weekofyear": f"{box_str}(arg0).weekofyear",
             "get_hour": f"{box_str}(arg0).hour",
             "get_minute": f"{box_str}(arg0).minute",
             "get_second": f"{box_str}(arg0).second",
@@ -912,6 +921,7 @@ def _install_dt_extract_fn_overload():
         ("get_quarter", get_quarter, get_quarter_util),
         ("get_month", get_month, get_month_util),
         ("get_week", get_week, get_week_util),
+        ("get_weekofyear", get_weekofyear, get_weekofyear_util),
         ("get_hour", get_hour, get_hour_util),
         ("get_minute", get_minute, get_minute_util),
         ("get_second", get_second, get_second_util),

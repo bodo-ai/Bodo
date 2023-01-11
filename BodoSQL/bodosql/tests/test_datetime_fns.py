@@ -467,7 +467,6 @@ def now_equivalent_fns(request):
         pytest.param(
             "SELECT A, CASE WHEN EXTRACT(MONTH from GETDATE()) = A then 'y' ELSE 'n' END from table1",
             id="case",
-            marks=pytest.mark.skip("[BE-3909] Fix GETDATE inside of CASE"),
         ),
     ],
 )

@@ -23,11 +23,9 @@ public class ExtractCodeGen {
    * @param datetimeVal The arg expr for selecting which datetime field to extract. This must be a
    *     constant string.
    * @param column The column arg expr.
-   * @param outputScalar Should the output generate scalar code.
    * @return The code generated that matches the Extract expression.
    */
-  public static String generateExtractCode(
-      String datetimeVal, String column, boolean outputScalar) {
+  public static String generateExtractCode(String datetimeVal, String column) {
     String extractCode;
     switch (datetimeVal) {
       case "NANOSECOND":
@@ -60,14 +58,7 @@ public class ExtractCodeGen {
       case "WEEK":
       case "WEEKOFYEAR":
       case "WEEKISO":
-        if (outputScalar) {
-          extractCode = "bodosql.libs.generated_lib.sql_null_checking_weekofyear(" + column + ")";
-        } else {
-          extractCode =
-              "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                  + column
-                  + ").dt.isocalendar().week)";
-        }
+        extractCode = "bodo.libs.bodosql_array_kernels.get_weekofyear(" + column + ")";
         break;
       default:
         throw new BodoSQLCodegenException(
@@ -94,11 +85,9 @@ public class ExtractCodeGen {
    * gen as EXTRACT
    *
    * @param operandsInfo The information about the arguments to the call
-   * @param outputScalar Whether the output is a scalar or not
    * @return The name generated that matches the Extract expression.
    */
-  public static RexNodeVisitorInfo generateDatePart(
-      List<RexNodeVisitorInfo> operandsInfo, boolean outputScalar) {
+  public static RexNodeVisitorInfo generateDatePart(List<RexNodeVisitorInfo> operandsInfo) {
     StringBuilder name = new StringBuilder();
     name.append("DATE_PART(")
         .append(operandsInfo.get(0).getName())
@@ -214,7 +203,7 @@ public class ExtractCodeGen {
         throw new BodoSQLCodegenException(
             "Unsupported DATE_PART unit: " + operandsInfo.get(0).getName());
     }
-    String code = generateExtractCode(unit, operandsInfo.get(1).getExprCode(), outputScalar);
+    String code = generateExtractCode(unit, operandsInfo.get(1).getExprCode());
     return new RexNodeVisitorInfo(name.toString(), code);
   }
 }

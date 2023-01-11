@@ -209,29 +209,23 @@ public class DatetimeFnCodeGen {
     return new RexNodeVisitorInfo(fnName, fnExpression);
   }
 
-  public static RexNodeVisitorInfo getYearWeekFnInfo(
-      RexNodeVisitorInfo arg0Info, boolean isScalar) {
-
-    String outputExpr;
+  /**
+   * Helper function that handles codegen for YearWeek
+   *
+   * @param arg0Info The name and codegen for the argument.
+   * @return The RexNodeVisitorInfo corresponding to the function call
+   */
+  public static RexNodeVisitorInfo getYearWeekFnInfo(RexNodeVisitorInfo arg0Info) {
     String arg0Expr = arg0Info.getExprCode();
 
     // performs yearNum * 100 + week num
-    if (isScalar) {
-      // TODO: Null check this
-      outputExpr =
-          "(bodo.libs.bodosql_array_kernels.get_year("
-              + arg0Expr
-              + ") * 100 + bodosql.libs.generated_lib.sql_null_checking_weekofyear("
-              + arg0Expr
-              + "))";
-    } else {
-      outputExpr =
-          "bodo.hiframes.pd_series_ext.get_series_data((pd.Series("
-              + arg0Expr
-              + ").dt.year * 100 + pd.Series("
-              + arg0Expr
-              + ").dt.isocalendar().week))";
-    }
+    // TODO: Add proper null checking on scalars by converting * and +
+    // to an array kernel
+    String outputExpr =
+        String.format(
+            "((bodo.libs.bodosql_array_kernels.get_year(%s) * 100) +"
+                + " bodo.libs.bodosql_array_kernels.get_weekofyear(%s))",
+            arg0Expr, arg0Expr);
 
     String name = "YEARWEEK(" + arg0Info.getName() + ")";
     return new RexNodeVisitorInfo(name, outputExpr);
