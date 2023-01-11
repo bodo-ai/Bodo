@@ -2254,8 +2254,7 @@ def get_random_int64index(n):
         ),
     ],
 )
-# TODO: Add memory_leak_check when bug is resolved (failed on data13)
-def test_scatterv_gatherv_allgatherv_python(data):
+def test_scatterv_gatherv_allgatherv_python(data, memory_leak_check):
     """Test bodo.scatterv(), gatherv(), and allgatherv() for Bodo distributed data types"""
     n = len(data)
 
@@ -2264,7 +2263,7 @@ def test_scatterv_gatherv_allgatherv_python(data):
     _check_scatterv_gatherv_allgatherv((data,), n)
 
 
-def test_scatterv_gatherv_allgatherv_df_python(df_value):
+def test_scatterv_gatherv_allgatherv_df_python(df_value, memory_leak_check):
     """Test bodo.scatterv(), gatherv(), and allgatherv() for all supported dataframe types"""
     n = len(df_value)
 

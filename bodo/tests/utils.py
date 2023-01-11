@@ -1345,6 +1345,10 @@ class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
     additional ArrayAnalysis pass that preserves analysis object
     """
 
+    # Avoid copy propagation so we don't delete variables used to
+    # check array analysis.
+    avoid_copy_propagation = True
+
     def define_pipelines(self):
         [pipeline] = self._create_bodo_pipeline(
             distributed=True, inline_calls_pass=False

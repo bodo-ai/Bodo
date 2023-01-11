@@ -24,6 +24,7 @@ import numba.core.boxing
 import numba.core.inline_closurecall
 import numba.core.typing.listdecl
 import numba.np.linalg
+import numba.np.ufunc.array_exprs as array_exprs
 from numba.core import analysis, cgutils, errors, ir, ir_utils, types
 from numba.core.compiler import Compiler
 from numba.core.errors import ForceLiteralArg, LiteralTypingError, TypingError
@@ -6232,3 +6233,67 @@ if _check_numba_change:  # pragma: no cover
 
 charseq._make_constant_bytes = _make_constant_bytes
 #### END MONKEY PATCH FOR SETTING SHAPE AND STRIDES IN MAKE CONSTANT BYTES ####
+
+
+#### BEGIN MONKEY PATCH FOR FIXING ISSUES UNCOVERED BY COPY PROPAGATION ####
+
+
+def _handle_matches(self):
+    """Iterate over the matches, trying to find which instructions should
+    be rewritten, deleted, or moved.
+    """
+    from collections import defaultdict
+
+    replace_map = {}
+    dead_vars = set()
+    used_vars = defaultdict(int)
+    for instr in self.array_assigns.values():
+        expr = instr.value
+        arr_inps = []
+        arr_expr = self._get_array_operator(expr), arr_inps
+        new_expr = ir.Expr(
+            op="arrayexpr",
+            loc=expr.loc,
+            expr=arr_expr,
+            ty=self.typemap[instr.target.name],
+        )
+        new_instr = ir.Assign(new_expr, instr.target, instr.loc)
+        replace_map[instr] = new_instr
+        self.array_assigns[instr.target.name] = new_instr
+        for operand in self._get_operands(expr):
+            operand_name = operand.name
+            if operand.is_temp and operand_name in self.array_assigns:
+                child_assign = self.array_assigns[operand_name]
+                child_expr = child_assign.value
+                child_operands = child_expr.list_vars()
+                for operand in child_operands:
+                    used_vars[operand.name] += 1
+                arr_inps.append(self._translate_expr(child_expr))
+                if child_assign.target.is_temp:
+                    dead_vars.add(child_assign.target.name)
+                    # Bodo Change: Delete replace_map[child_assign] = None
+                    # This change assumed that the replace variable isn't
+                    # used by multiple expressions in the same block just
+                    # because its temp.
+            elif operand_name in self.const_assigns:
+                arr_inps.append(self.const_assigns[operand_name])
+            else:
+                used_vars[operand.name] += 1
+                arr_inps.append(operand)
+    return replace_map, dead_vars, used_vars
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(array_exprs.RewriteArrayExprs._handle_matches)
+    print(hashlib.sha256(lines.encode()).hexdigest())
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "7ebb92bfdfdd905ba85795d99fa3620103a39ab6251bd6bf49bb3987548231d1"
+    ):
+        warnings.warn(
+            "numba.np.ufunc.array_exprs.RewriteArrayExprs._handle_matches has changed"
+        )
+
+array_exprs.RewriteArrayExprs._handle_matches = _handle_matches
+
+#### END MONKEY PATCH FOR FIXING ISSUES UNCOVERED BY COPY PROPAGATION ####
