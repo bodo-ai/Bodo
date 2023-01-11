@@ -3140,15 +3140,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
-    boolean outputScalar =
-        isSingleRow
-            || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operation, id))
-                == BodoSQLExprType.ExprType.SCALAR);
     RexNodeVisitorInfo seriesOp =
         visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
     String name = generatePrefixOpName(seriesOp.getName(), operation.getOperator());
-    String codeExpr =
-        generatePrefixOpCode(seriesOp.getExprCode(), operation.getOperator(), outputScalar);
+    String codeExpr = generatePrefixOpCode(seriesOp.getExprCode(), operation.getOperator());
     return new RexNodeVisitorInfo(name, codeExpr);
   }
 

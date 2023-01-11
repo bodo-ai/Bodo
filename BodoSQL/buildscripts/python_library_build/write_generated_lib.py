@@ -90,13 +90,11 @@ def generate_and_write_library():
     This function should be called within setup.py"""
 
     library_fns_info = [
-        ("not", generate_standard_python_fn_call("not"), 1),
         ("addition", generate_standard_python_fn_call("operator.add"), 2),
         ("subtraction", generate_standard_python_fn_call("operator.sub"), 2),
         ("multiplication", generate_standard_python_fn_call("operator.mul"), 2),
         ("true_division", generate_standard_python_fn_call("np.true_divide"), 2),
         ("modulo", generate_standard_python_fn_call("np.mod"), 2),
-        ("power", generate_standard_python_fn_call("operator.pow"), 2),
         ("equal", generate_standard_python_fn_call("operator.eq"), 2),
         ("not_equal", generate_standard_python_fn_call("operator.ne"), 2),
         ("less_than", generate_standard_python_fn_call("operator.lt"), 2),
