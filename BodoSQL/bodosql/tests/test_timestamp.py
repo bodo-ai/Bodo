@@ -179,3 +179,42 @@ def test_str_date_case_stmt(spark_info, memory_leak_check):
         check_names=False,
         check_dtype=False,
     )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            "2013-04-28T20:57:01.123456789+00:00",
+            id='YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM_no_offset',
+        ),
+        pytest.param(
+            "2013-04-28T20:57:01.123456789+07:00",
+            id='YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM_with_offset',
+        ),
+    ]
+)
+def timestamp_literal(request):
+    return request.param
+
+
+@pytest.mark.skip("Needs calcite support")
+def test_timestamp_from_utc_literal(timestamp_literal, memory_leak_check):
+    """
+    Checks that a timestamp can be created from a literal with a UTC offset
+    """
+    value = pd.Timestamp(timestamp_literal).tz_convert("UTC").tz_localize(None)
+    query = f"SELECT TIMESTAMP '{timestamp_literal}' AS ts"
+    ctx = {}
+    expected_output = pd.DataFrame({"ts": value}, index=np.arange(1))
+    check_query(query, ctx, None, expected_output=expected_output)
+
+
+def test_timestamp_cast_utc_literal(timestamp_literal, memory_leak_check):
+    """
+    Checks that a timestamp can be cast from a literal with a UTC offset
+    """
+    value = pd.Timestamp(timestamp_literal).tz_localize(None)
+    query = f"SELECT CAST ('{timestamp_literal}' AS TIMESTAMP) AS ts"
+    ctx = {}
+    expected_output = pd.DataFrame({"ts": value}, index=np.arange(1))
+    check_query(query, ctx, None, expected_output=expected_output)
