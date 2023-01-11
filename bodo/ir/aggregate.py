@@ -2351,8 +2351,9 @@ def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
     inline_overload_pass = numba.core.typed_passes.InlineOverloads()
     inline_overload_pass.run_pass(pm)
 
+    # TODO: Can we capture parfor_metadata for error messages?
     series_pass = bodo.transforms.series_pass.SeriesPass(
-        f_ir, typingctx, targetctx, typemap, calltypes, {}, False
+        f_ir, typingctx, targetctx, typemap, calltypes, {}, optimize_inplace_ops=False
     )
     series_pass.run()
     # change the input type to UDF from Series to Array since Bodo passes Arrays to UDFs

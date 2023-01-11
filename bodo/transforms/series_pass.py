@@ -152,6 +152,8 @@ class SeriesPass:
         calltypes,
         _locals,
         optimize_inplace_ops=True,
+        avoid_copy_propagation=False,
+        parfor_metadata=None,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -167,6 +169,11 @@ class SeriesPass:
         self.optimize_inplace_ops = optimize_inplace_ops
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
+        # Skip copy propagation. This is used for testing purposes where
+        # copy propagation interferes with simple checks of the IR.
+        self.avoid_copy_propagation = avoid_copy_propagation
+        # Metadata information for parfor used to track user variables
+        self.parfor_metadata = parfor_metadata
 
     def run(self):
         """run series/dataframe transformations"""
@@ -248,7 +255,7 @@ class SeriesPass:
                     # replace inst.value to a call with target args
                     # as expected by inline_closure_call
                     inst.value = ir.Expr.call(
-                        ir.Var(block.scope, "dummy", inst.loc),
+                        ir.Var(block.scope, mk_unique_var("dummy"), inst.loc),
                         rp_func.args,
                         (),
                         inst.loc,
@@ -256,7 +263,10 @@ class SeriesPass:
                     # replace "target" of Setitem nodes since inline_closure_call
                     # assumes an assignment and sets "target" to return value
                     if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
-                        inst.target = ir.Var(block.scope, "dummy", inst.loc)
+                        dummy_varname = mk_unique_var("dummy")
+                        inst.target = ir.Var(block.scope, dummy_varname, inst.loc)
+                        # Append the dummy var to the typemap for correctness.
+                        self.typemap[dummy_varname] = types.none
                     block.body = new_body + block.body[i:]
                     # save work_list length to know how many new items are added
                     n_prev_work_items = len(work_list)
@@ -3733,6 +3743,28 @@ class SeriesPass:
         """Simplify IR after Series pass transforms."""
         changed = False
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
+        if not self.avoid_copy_propagation:
+            # Apply copy propagation. There will be many extra assignments if we
+            # inline code.
+            in_cps, _ = ir_utils.copy_propagate(self.func_ir.blocks, self.typemap)
+            save_copies = ir_utils.apply_copy_propagate(
+                self.func_ir.blocks,
+                in_cps,
+                ir_utils.get_name_var_table(self.func_ir.blocks),
+                self.typemap,
+                self.calltypes,
+            )
+            # Restore any user variable names.
+            # Note: user variables may still be eliminated because of dead code elimination
+            # but we attempt to capture them in metadata.
+            var_rename_map = ir_utils.restore_copy_var_names(
+                self.func_ir.blocks, save_copies, self.typemap
+            )
+            if self.parfor_metadata is not None:
+                if "var_rename_map" not in self.parfor_metadata:
+                    self.parfor_metadata["var_rename_map"] = {}
+                self.parfor_metadata["var_rename_map"].update(var_rename_map)
+
         while ir_utils.remove_dead(
             self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
         ):
