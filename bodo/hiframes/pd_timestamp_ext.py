@@ -1654,6 +1654,8 @@ def to_datetime_scalar(
     separate call to avoid adding extra basic blocks to user function for simplicity
     """
     with numba.objmode(t="pd_timestamp_tz_naive_type"):
+        # A `tz_localize(None)` is required to handle inputs with a tz offset
+        # because the return type is a naive timestamp.
         t = pd.to_datetime(
             a,
             errors=errors,
@@ -1666,7 +1668,7 @@ def to_datetime_scalar(
             infer_datetime_format=infer_datetime_format,
             origin=origin,
             cache=cache,
-        )
+        ).tz_localize(None)
     return t
 
 
