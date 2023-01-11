@@ -1980,7 +1980,7 @@ def test_init_timedelta_index_array_analysis(memory_leak_check):
 
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
 def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
-    """tests timdelta index.field. This should be inlined in series pass"""
+    """tests timedelta index.field. This should be inlined in series pass"""
 
     func_text = "def impl(A):\n"
     func_text += "  return A.{}\n".format(field)

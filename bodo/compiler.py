@@ -81,6 +81,8 @@ class BodoCompiler(numba.core.compiler.CompilerBase):
     See class docstrings for more info.
     """
 
+    avoid_copy_propagation = False
+
     def define_pipelines(self):
         return self._create_bodo_pipeline(
             distributed=True, inline_calls_pass=inline_all_calls
@@ -610,6 +612,8 @@ class BodoSeriesPass(FunctionPass):
             state.typemap,
             state.calltypes,
             state.locals,
+            avoid_copy_propagation=state.pipeline.avoid_copy_propagation,
+            parfor_metadata=state.metadata["parfors"],
         )
         # run multiple times to make sure transformations are fully applied
         # TODO(ehsan): run as long as IR changes
