@@ -55,7 +55,7 @@ def is_clause_literal_values(request):
 def test_logical_is_columns(
     bodosql_boolean_types, spark_info, is_clause_literal_values, memory_leak_check
 ):
-    """insures that logical IS NOT works correctly for columns of boolean values"""
+    """ensures that logical IS NOT works correctly for columns of boolean values"""
     query = f"SELECT A IS {is_clause_literal_values} from table1"
     check_query(
         query, bodosql_boolean_types, spark_info, check_dtype=False, check_names=False
@@ -66,7 +66,7 @@ def test_logical_is_columns(
 def test_logical_is_scalars(
     bodosql_boolean_types, spark_info, is_clause_literal_values, memory_leak_check
 ):
-    """insures that logical is works correctly for scalar boolean values"""
+    """ensures that logical is works correctly for scalar boolean values"""
     query = f"SELECT (CASE WHEN A is {is_clause_literal_values} THEN 0 ELSE 1 end) from table1"
     check_query(
         query, bodosql_boolean_types, spark_info, check_dtype=False, check_names=False
@@ -77,7 +77,7 @@ def test_logical_is_scalars(
 def test_is_logical_not_columns(
     bodosql_boolean_types, spark_info, is_clause_literal_values, memory_leak_check
 ):
-    """insures that logical IS works correctly for columns of boolean values"""
+    """ensures that logical IS works correctly for columns of boolean values"""
     query = f"SELECT A IS NOT {is_clause_literal_values} from table1"
     check_query(
         query, bodosql_boolean_types, spark_info, check_dtype=False, check_names=False
@@ -89,7 +89,7 @@ def test_is_logical_not_columns(
 def test_logical_is_not_scalars(
     bodosql_boolean_types, spark_info, is_clause_literal_values, memory_leak_check
 ):
-    """insures that logical is works correctly for scalar boolean values"""
+    """ensures that logical is works correctly for scalar boolean values"""
     query = f"SELECT (CASE WHEN A is not {is_clause_literal_values} THEN 0 ELSE 1 end) from table1"
     check_query(
         query, bodosql_boolean_types, spark_info, check_dtype=False, check_names=False

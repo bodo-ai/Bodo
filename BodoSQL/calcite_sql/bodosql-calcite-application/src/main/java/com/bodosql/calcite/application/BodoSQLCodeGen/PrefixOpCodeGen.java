@@ -15,20 +15,11 @@ public class PrefixOpCodeGen {
    * @param outputScalar Should the output generate scalar code.
    * @return The code generated that matches the Prefix Operator call.
    */
-  public static String generatePrefixOpCode(
-      String arg, SqlOperator prefixOp, boolean outputScalar) {
+  public static String generatePrefixOpCode(String arg, SqlOperator prefixOp) {
     StringBuilder codeBuilder = new StringBuilder();
     switch (prefixOp.getKind()) {
       case NOT:
-        if (outputScalar) {
-          codeBuilder
-              .append("bodosql.libs.generated_lib.sql_null_checking_not( ")
-              .append(arg)
-              .append(")");
-        } else {
-
-          codeBuilder.append("~(").append(arg).append(")");
-        }
+        codeBuilder.append("bodo.libs.bodosql_array_kernels.boolnot(").append(arg).append(")");
         break;
       case MINUS_PREFIX:
         codeBuilder.append("bodo.libs.bodosql_array_kernels.negate(").append(arg).append(")");

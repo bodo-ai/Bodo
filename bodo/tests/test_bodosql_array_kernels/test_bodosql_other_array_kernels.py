@@ -700,6 +700,79 @@ def test_regr_valxy(args, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pytest.param(pd.array([False, True, True, None, False] * 6), id="vector"),
+        pytest.param(False, id="scalar"),
+    ],
+)
+def test_is_functions(arg, memory_leak_check):
+    """
+    Tests for the array kernels is_false, is_true,
+    is_not_false, and is_not_true.
+    """
+
+    def impl1(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.is_false(arr))
+
+    def impl2(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.is_true(arr))
+
+    def impl3(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.is_not_false(arr))
+
+    def impl4(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.is_not_true(arr))
+
+    if isinstance(arg, bool):
+        impl1 = lambda arr: bodo.libs.bodosql_array_kernels.is_false(arr)
+        impl2 = lambda arr: bodo.libs.bodosql_array_kernels.is_true(arr)
+        impl3 = lambda arr: bodo.libs.bodosql_array_kernels.is_not_false(arr)
+        impl4 = lambda arr: bodo.libs.bodosql_array_kernels.is_not_true(arr)
+
+    args = (arg,)
+
+    is_false_scalar_fn = lambda val: False if pd.isna(val) else val == False
+    is_true_scalar_fn = lambda val: False if pd.isna(val) else val == True
+    is_not_false_scalar_fn = lambda val: True if pd.isna(val) else val != False
+    is_not_true_scalar_fn = lambda val: True if pd.isna(val) else val != True
+
+    answer1 = vectorized_sol(args, is_false_scalar_fn, None)
+    answer2 = vectorized_sol(args, is_true_scalar_fn, None)
+    answer3 = vectorized_sol(args, is_not_false_scalar_fn, None)
+    answer4 = vectorized_sol(args, is_not_true_scalar_fn, None)
+
+    check_func(
+        impl1,
+        args,
+        py_output=answer1,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl2,
+        args,
+        py_output=answer2,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl3,
+        args,
+        py_output=answer3,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl4,
+        args,
+        py_output=answer4,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.slow
 def test_option_bool_fns(memory_leak_check):
     def impl(A, B, flag0, flag1):
@@ -783,3 +856,25 @@ def test_option_regr_valxy(memory_leak_check):
         for flag1 in [True, False]:
             answer = (0.5, 0.1) if flag0 and flag1 else (None, None)
             check_func(impl, (A, B, flag0, flag1), py_output=answer)
+
+
+@pytest.mark.slow
+def test_option_is_functions(memory_leak_check):
+    """
+    Tests for the array kernels is_false, is_true,
+    is_not_false, and is_not_true on optional data.
+    """
+
+    def impl(A, flag):
+        arg = A if flag else None
+        return (
+            bodo.libs.bodosql_array_kernels.is_false(arg),
+            bodo.libs.bodosql_array_kernels.is_true(arg),
+            bodo.libs.bodosql_array_kernels.is_not_false(arg),
+            bodo.libs.bodosql_array_kernels.is_not_true(arg),
+        )
+
+    A = True
+    for flag in [True, False]:
+        answer = (False, True, True, False) if flag else (False, False, True, True)
+        check_func(impl, (A, flag), py_output=answer)
