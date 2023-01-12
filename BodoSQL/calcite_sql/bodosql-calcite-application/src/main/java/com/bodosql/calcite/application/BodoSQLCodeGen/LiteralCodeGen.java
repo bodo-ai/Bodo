@@ -232,7 +232,7 @@ public class LiteralCodeGen {
       // Simply calling toString creates a string with charset information attached
       // IE UTF-8:"hello world". This is needed to convert to a python literal string
       // TODO: check if this handles dealing with non-ascii strings
-      return as_Nls.asSql(false, false);
+      return escapePythonQuotes(as_Nls.asSql(false, false));
     } else if (scalarVal instanceof BigDecimal) {
       return scalarVal.toString();
     } else {

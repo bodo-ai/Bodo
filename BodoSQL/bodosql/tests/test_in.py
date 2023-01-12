@@ -4,6 +4,7 @@ Tests correctness of the In and Not In operations in BodoSQL
 """
 
 
+import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
 
@@ -44,6 +45,24 @@ def test_in_scalar_literals(basic_df, spark_info):
     output = check_query(
         query,
         basic_df,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        return_codegen=True,
+    )
+    assert check_codegen_uses_optimized_is_in(output["pandas_code"])
+
+
+def test_string_in_scalar_literals(spark_info):
+    """tests the in operation when using string literals, possibly with quotes"""
+    query = "SELECT A in ('a', '\"happy\"', 'smi\"le') from table1"
+    df = pd.DataFrame(
+        {"A": ["a", "A", None, "happy", '"happy"', "smile", '"smile"', 'smi"le'] * 3}
+    )
+    ctx = {"table1": df}
+    output = check_query(
+        query,
+        ctx,
         spark_info,
         check_names=False,
         check_dtype=False,
