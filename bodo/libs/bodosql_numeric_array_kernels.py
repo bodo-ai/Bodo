@@ -353,7 +353,7 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
 
         def overload_numeric_util(arr0, arr1):
             verify_int_float_arg(arr0, func_name, "arr0")
-            verify_int_float_arg(arr0, func_name, "arr1")
+            verify_int_float_arg(arr1, func_name, "arr1")
 
             arg_names = [
                 "arr0",
@@ -736,7 +736,7 @@ def bitnot_util(A):
     if A == bodo.none:
         out_dtype = bodo.none
     else:
-        if bodo.utils.utils.is_array_typ(A, True):
+        if is_array_typ(A, True):
             scalar_type = A.dtype
         else:
             scalar_type = A
@@ -796,7 +796,7 @@ def bitshiftright_util(A, B):
     if A == bodo.none:
         scalar_type = out_dtype = bodo.none
     else:
-        if bodo.utils.utils.is_array_typ(A, True):
+        if is_array_typ(A, True):
             scalar_type = A.dtype
         else:
             scalar_type = A
@@ -1002,9 +1002,9 @@ def negate_util(arr):
     propagate_null = [True]
 
     # Extract the underlying scalar dtype for casting integers
-    if bodo.utils.utils.is_array_typ(arr, False):
+    if is_array_typ(arr, False):
         scalar_type = arr.dtype
-    elif bodo.utils.utils.is_array_typ(arr, True):
+    elif is_array_typ(arr, True):
         scalar_type = arr.data.dtype
     else:
         scalar_type = arr
@@ -1058,3 +1058,242 @@ def width_bucket_util(arr, min_val, max_val, num_buckets):
     out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
+
+
+def add_numeric(arr0, arr1):  # pragma: no cover
+    pass
+
+
+def subtract_numeric(arr0, arr1):  # pragma: no cover
+    pass
+
+
+def multiply_numeric(arr0, arr1):  # pragma: no cover
+    pass
+
+
+def divide_numeric(arr0, arr1):  # pragma: no cover
+    pass
+
+
+def add_numeric_util(arr0, arr1):  # pragma: no cover
+    pass
+
+
+def subtract_numeric_util(arr0, arr1):  # pragma: no cover
+    pass
+
+
+def multiply_numeric_util(arr0, arr1):  # pragma: no cover
+    pass
+
+
+def divide_numeric_util(arr0, arr1):  # pragma: no cover
+    pass
+
+
+def create_numeric_operators_func_overload(func_name):
+    """
+    Returns the appropriate numeric operator function to support numeric operator functions
+    with Snowflake SQL semantics. These SQL numeric operators are special because the
+    output type conforms to SQL typing rules. Based on Snowflake,
+    these have the following rules:
+    https://docs.snowflake.com/en/sql-reference/operators-arithmetic.html#arithmetic-operators
+
+    Summarizing and translating the rules from snowflake's generic decimal types to our types,
+    we get the following approximate results:
+        - Division always outputs Float64
+        - Multiplication/Subtraction/Addition always promotes to the next largest type.
+          This is because we do not have information like the number of leading digits and
+          therefore must assume the worst case.
+
+    TODO([BE-4191]): FIX Calcite to match this behavior.
+
+
+    This is the ordering of types from largest to smallest:
+
+        - Float64
+        - Float32
+        - Int64/UInt64
+        - Int32/UInt32
+        - Int16/UInt16
+        - Int8/UInt8
+
+    Note that SQL doesn't have defined unsigned integers. As a result we keep
+    all outputs signed. We may add proper unsigned types in the future.
+    """
+
+    def overload_func(arr0, arr1):
+        """Handles cases where func_name receives an optional argument and forwards
+        to the appropriate version of the real implementation"""
+        args = [arr0, arr1]
+        for i in range(2):
+            if isinstance(args[i], types.optional):
+                return unopt_argument(
+                    f"bodo.libs.bodosql_array_kernels.{func_name}",
+                    ["arr0", "arr1"],
+                    i,
+                )
+
+        func_text = "def impl(arr0, arr1):\n"
+        func_text += (
+            f"  return bodo.libs.bodosql_array_kernels.{func_name}_util(arr0, arr1)"
+        )
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+
+        return loc_vars["impl"]
+
+    return overload_func
+
+
+def create_numeric_operators_util_func_overload(func_name):  # pragma: no cover
+    """Creates an overload function to support numeric operator functions
+    with Snowflake SQL semantics. These SQL numeric operators are special because the
+    output type conforms to SQL typing rules. Based on Snowflake,
+    these have the following rules:
+    https://docs.snowflake.com/en/sql-reference/operators-arithmetic.html#arithmetic-operators
+
+    Summarizing and translating the rules from snowflake's generic decimal types to our types,
+    we get the following approximate results:
+        - Division always outputs Float64
+        - Multiplication/Subtraction/Addition always promotes to the next largest type.
+          This is because we do not have information like the number of leading digits and
+          therefore must assume the worst case.
+
+    TODO([BE-4191]): FIX Calcite to match this behavior.
+
+
+    This is the ordering of types from largest to smallest:
+
+        - Float64
+        - Float32
+    ----------------------------- 2 integers won't promote to floats
+        - Int64/UInt64
+        - Int32/UInt32
+        - Int16/UInt16
+        - Int8/UInt8
+
+    Note that SQL doesn't have defined unsigned integers. As a result we keep
+    all outputs signed. We may add proper unsigned types in the future.
+
+
+    Args:
+        func_name: which operator function is being called (e.g. "add_numeric")
+
+    Returns:
+        (function): a utility that returns an overload with the operator functionality.
+    """
+
+    def overload_func_util(arr0, arr1):
+        def determine_output_arr_type(func_name, dtype1, dtype2):
+            """Helper function to derive the output array type.
+
+            Args:
+                func_name (str): Name of the function being performed.
+                dtype1 (types.Type): element dtype of the first array.
+                dtype2 (types.Type): element dtype of the second array.
+
+            Returns:
+                types.Type: The Array type to return. Note we always.
+
+            """
+            if func_name == "divide_numeric":
+                # TODO: Fix the expected output type inside calcite.
+                out_dtype = types.float64
+            elif dtype1 == types.none and dtype2 == types.none:
+                # If both values are None we will output None.
+                # As a result, none of this code matters and
+                # we can just choose to output any array.
+                out_dtype = types.int64
+            elif dtype1 in (types.float64, types.float32) or dtype2 in (
+                types.float64,
+                types.float32,
+            ):
+                # Always promote floats if possible.
+                out_dtype = types.float64
+            else:
+                # None may just set NA. Still BodoSQL should use type
+                # promotion when it sees 2 different integer types.
+                # We may be forced to cast if this type is optional.
+                if dtype1 == types.none:
+                    dtype1 = dtype2
+                elif dtype2 == types.none:
+                    dtype2 = dtype1
+                max_bitwidth = max(dtype1.bitwidth, dtype2.bitwidth)
+                if max_bitwidth == 64:
+                    out_dtype = types.int64
+                elif max_bitwidth == 32:
+                    out_dtype = types.int64
+                elif max_bitwidth == 16:
+                    out_dtype = types.int32
+                else:
+                    out_dtype = types.int16
+
+            # Always make the output nullable in case the input is optional. In the
+            # future we can grab this information from SQL or the original function
+            return bodo.utils.typing.to_nullable_type(types.Array(out_dtype, 1, "C"))
+
+        verify_int_float_arg(arr0, func_name, "arr0")
+        verify_int_float_arg(arr1, func_name, "arr1")
+        arg_names = ["arr0", "arr1"]
+        arg_types = [arr0, arr1]
+        propagate_null = [True] * 2
+
+        if is_array_typ(arr0):
+            elem_dtype0 = arr0.dtype
+        else:
+            elem_dtype0 = arr0
+        if is_array_typ(arr1):
+            elem_dtype1 = arr1.dtype
+        else:
+            elem_dtype1 = arr1
+
+        out_dtype = determine_output_arr_type(func_name, elem_dtype0, elem_dtype1)
+        out_elem_dtype = out_dtype.dtype
+        # determine if we need to cast each input.
+        cast_arr0 = elem_dtype0 != out_elem_dtype
+        cast_arr1 = elem_dtype1 != out_elem_dtype
+        if func_name == "add_numeric":
+            operator_str = "+"
+        elif func_name == "subtract_numeric":
+            operator_str = "-"
+        elif func_name == "multiply_numeric":
+            operator_str = "*"
+        elif func_name == "divide_numeric":
+            operator_str = "/"
+
+        cast_name = f"np.{out_elem_dtype.name}"
+        if cast_arr0:
+            arg0_str = f"{cast_name}(arg0)"
+        else:
+            arg0_str = f"arg0"
+        if cast_arr1:
+            arg1_str = f"{cast_name}(arg1)"
+        else:
+            arg1_str = f"arg1"
+        # cast the output in case the operation causes type promotion.
+        scalar_text = f"res[i] = {cast_name}({arg0_str} {operator_str} {arg1_str})"
+        return gen_vectorized(
+            arg_names, arg_types, propagate_null, scalar_text, out_dtype
+        )
+
+    return overload_func_util
+
+
+def _install_numeric_operators_overload():
+    """Creates and installs the overloads for numeric operator
+    functions."""
+    for func, util, func_name in (
+        (add_numeric, add_numeric_util, "add_numeric"),
+        (subtract_numeric, subtract_numeric_util, "subtract_numeric"),
+        (multiply_numeric, multiply_numeric_util, "multiply_numeric"),
+        (divide_numeric, divide_numeric_util, "divide_numeric"),
+    ):
+        func_overload_impl = create_numeric_operators_func_overload(func_name)
+        overload(func)(func_overload_impl)
+        util_overload_impl = create_numeric_operators_util_func_overload(func_name)
+        overload(util)(util_overload_impl)
+
+
+_install_numeric_operators_overload()

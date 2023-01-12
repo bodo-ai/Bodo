@@ -1,5 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
 import static com.bodosql.calcite.application.BodoSQLExprType.meet_elementwise_op;
 import static com.bodosql.calcite.application.Utils.Utils.generateNullCheck;
 
@@ -8,6 +9,7 @@ import com.bodosql.calcite.application.BodoSQLExprType;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import org.apache.calcite.avatica.*;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlOperator;
@@ -36,16 +38,34 @@ public class BinOpCodeGen {
       boolean isScalar,
       List<RelDataType> argDataTypes) {
     SqlKind binOpKind = binOp.getKind();
+    // Handle the Datetime functions that are either tz-aware or tz-naive
     if (argDataTypes.size() == 2
-        && (binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS))) {
+        && (binOpKind.equals(SqlKind.PLUS)
+            || binOpKind.equals(SqlKind.MINUS)
+            || binOpKind.equals(SqlKind.TIMES))) {
       // If we are passing a pair of arguments to +/-, check if we are adding a tz-aware
       // value with an interval. If so we have to take a specialized code path.
       boolean isArg0TZAware = argDataTypes.get(0) instanceof TZAwareSqlType;
       boolean isArg1TZAware = argDataTypes.get(1) instanceof TZAwareSqlType;
+      // Check if we have Datetime or Date data
+      SqlTypeName arg0TypeName = argDataTypes.get(0).getSqlTypeName();
+      SqlTypeName arg1TypeName = argDataTypes.get(1).getSqlTypeName();
+
+      boolean isArg0Datetime =
+          arg0TypeName.equals(SqlTypeName.TIMESTAMP) || arg0TypeName.equals(SqlTypeName.DATE);
+      boolean isArg1Datetime =
+          arg1TypeName.equals(SqlTypeName.TIMESTAMP) || arg1TypeName.equals(SqlTypeName.DATE);
+
       boolean isArg0Interval = argDataTypes.get(0) instanceof IntervalSqlType;
       boolean isArg1Interval = argDataTypes.get(1) instanceof IntervalSqlType;
       if ((isArg0TZAware && isArg1Interval) || (isArg1TZAware && isArg0Interval)) {
+        assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
         return genTZAwareIntervalArithCode(args, binOpKind, isArg0TZAware);
+      } else if ((isArg0Datetime && isArg1Interval) || (isArg1Datetime && isArg0Interval)) {
+        assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
+        return genDatetimeIntervalArithCode(args, binOpKind, isArg0TZAware);
+      } else if ((isArg0Interval || isArg1Interval) && binOpKind.equals(SqlKind.TIMES)) {
+        return genIntervalMultiplyCode(args, isArg0Interval);
       }
     }
     // add pd.Series() around column arguments since binary operators assume Series input
@@ -58,7 +78,7 @@ public class BinOpCodeGen {
       }
       update_args.add(new_arg);
     }
-    return generateBinOpCodeHelper(update_args, exprTypes, binOpKind, binOp.getName(), isScalar);
+    return generateBinOpCodeHelper(update_args, exprTypes, binOpKind, isScalar);
   }
   /**
    * Helper function that returns the necessary generated code for a BinOp Call. This function may
@@ -68,7 +88,6 @@ public class BinOpCodeGen {
    * @param args The arguments to the binop.
    * @param exprTypes The exprType of each argument.
    * @param binOpKind The SqlKind of the binary operator
-   * @param binOpName The name of the binary operator
    * @param isScalar Is this function used inside an apply and should always generate scalar code.
    * @return The code generated for the BinOp call.
    */
@@ -76,7 +95,6 @@ public class BinOpCodeGen {
       List<String> args,
       List<BodoSQLExprType.ExprType> exprTypes,
       SqlKind binOpKind,
-      String binOpName,
       boolean isScalar) {
     String columnOperator;
     String scalarOperator;
@@ -111,21 +129,6 @@ public class BinOpCodeGen {
         scalarIsFunction = true;
         scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_greater_than";
         break;
-      case PLUS:
-        columnOperator = "+";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_addition";
-        break;
-      case MINUS:
-        columnOperator = "-";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_subtraction";
-        break;
-      case TIMES:
-        columnOperator = "*";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_multiplication";
-        break;
       case LESS_THAN_OR_EQUAL:
         columnOperator = "<=";
         scalarIsFunction = true;
@@ -136,16 +139,35 @@ public class BinOpCodeGen {
         scalarIsFunction = true;
         scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_greater_than_or_equal";
         break;
+      case PLUS:
+        columnIsFunction = true;
+        columnOperator = "bodo.libs.bodosql_array_kernels.add_numeric";
+        scalarIsFunction = true;
+        scalarOperator = "bodo.libs.bodosql_array_kernels.add_numeric";
+        break;
+      case MINUS:
+        columnIsFunction = true;
+        columnOperator = "bodo.libs.bodosql_array_kernels.subtract_numeric";
+        scalarIsFunction = true;
+        scalarOperator = "bodo.libs.bodosql_array_kernels.subtract_numeric";
+        break;
+      case TIMES:
+        columnIsFunction = true;
+        columnOperator = "bodo.libs.bodosql_array_kernels.multiply_numeric";
+        scalarIsFunction = true;
+        scalarOperator = "bodo.libs.bodosql_array_kernels.multiply_numeric";
+        break;
+      case DIVIDE:
+        columnIsFunction = true;
+        columnOperator = "bodo.libs.bodosql_array_kernels.divide_numeric";
+        scalarIsFunction = true;
+        scalarOperator = "bodo.libs.bodosql_array_kernels.divide_numeric";
+        break;
       case AND:
         columnIsFunction = true;
         columnOperator = "bodo.libs.bodosql_array_kernels.booland";
         scalarIsFunction = true;
         scalarOperator = "bodo.libs.bodosql_array_kernels.booland";
-        break;
-      case DIVIDE:
-        columnOperator = "/";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_true_division";
         break;
       default:
         throw new BodoSQLCodegenException(
@@ -201,8 +223,14 @@ public class BinOpCodeGen {
     }
     // make sure the output is array type for column cases
     // (output is Series here since input is converted to Series in generateBinOpCode)
-    // The exception is AND that always outputs an array
-    if (!isScalar && exprType == BodoSQLExprType.ExprType.COLUMN && binOpKind != SqlKind.AND) {
+    // The exception is AND and numerics always output an array
+    if (!isScalar
+        && exprType == BodoSQLExprType.ExprType.COLUMN
+        && (binOpKind != SqlKind.AND
+            && binOpKind != SqlKind.PLUS
+            && binOpKind != SqlKind.MINUS
+            && binOpKind != SqlKind.TIMES
+            && binOpKind != SqlKind.DIVIDE)) {
       newOp.insert(0, "bodo.hiframes.pd_series_ext.get_series_data(");
       newOp.append(")");
     }
@@ -299,5 +327,61 @@ public class BinOpCodeGen {
     }
     return String.format(
         "bodo.libs.bodosql_array_kernels.tz_aware_interval_add(%s, %s)", arg0, arg1);
+  }
+
+  /**
+   * Generate code for Adding or Subtracting an interval from datetime data.
+   *
+   * @param args List of length 2 with the generated code for the arguments.
+   * @param binOp The SQLkind for the binop. Either SqlKind.PLUS or SqlKind.MINUS.
+   * @param isArg0Datetime Is arg0 the datetime argument. This is used for generating standard code.
+   * @return The generated code that creates the BodoSQL array kernel call.
+   */
+  public static String genDatetimeIntervalArithCode(
+      List<String> args, SqlKind binOp, boolean isArg0Datetime) {
+    assert args.size() == 2;
+    final String arg0;
+    String arg1;
+    // Standardize the kernel to always put the datetime argument
+    // in the first slot to limit computation + simplify the kernels.
+    // This is fine because + commutes.
+    if (isArg0Datetime) {
+      arg0 = args.get(0);
+      arg1 = args.get(1);
+    } else {
+      arg0 = args.get(1);
+      arg1 = args.get(0);
+    }
+    if (binOp.equals(SqlKind.MINUS)) {
+      assert isArg0Datetime;
+      return generateMySQLDateAddCode(arg0, arg1, true, "DATE_SUB");
+    } else {
+      assert binOp.equals(SqlKind.PLUS);
+      return generateMySQLDateAddCode(arg0, arg1, true, "DATE_ADD");
+    }
+  }
+
+  /**
+   * Generate code for multiplying an interval by an integer.
+   *
+   * @param args List of length 2 with the generated code for the arguments.
+   * @param isArg0Interval Is arg0 the interval argument. This is used for generating standard code.
+   * @return The generated code that creates the BodoSQL array kernel call.
+   */
+  public static String genIntervalMultiplyCode(List<String> args, boolean isArg0Interval) {
+    assert args.size() == 2;
+    final String arg0;
+    String arg1;
+    // Standardize the kernel to always put the interval argument
+    // in the first slot to limit computation + simplify the kernels.
+    // This is fine because * commutes.
+    if (isArg0Interval) {
+      arg0 = args.get(0);
+      arg1 = args.get(1);
+    } else {
+      arg0 = args.get(1);
+      arg1 = args.get(0);
+    }
+    return String.format("bodo.libs.bodosql_array_kernels.interval_multiply(%s, %s)", arg0, arg1);
   }
 }
