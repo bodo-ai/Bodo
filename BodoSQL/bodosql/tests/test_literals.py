@@ -380,3 +380,27 @@ def test_integer_null_literals(basic_df, spark_info, memory_leak_check):
         check_dtype=False,
         check_names=False,
     )
+
+
+def test_backslash_literals(spark_info, memory_leak_check):
+    """
+    tests that integer literals are correctly parsed by BodoSQL
+    """
+    query1 = r"""
+    SELECT
+        '\\' as A
+    """
+    query2 = r"""
+    SELECT
+        '\n' as A
+    """
+    check_query(
+        query1,
+        {},
+        spark_info,
+    )
+    check_query(
+        query2,
+        {},
+        spark_info,
+    )
