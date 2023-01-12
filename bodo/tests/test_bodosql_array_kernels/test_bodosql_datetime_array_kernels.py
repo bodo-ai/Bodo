@@ -1439,6 +1439,152 @@ def test_interval_multiply(interval_input, memory_leak_check):
         )
 
 
+@pytest.mark.parametrize(
+    "td_arg",
+    [
+        pytest.param(pd.Timedelta(days=-1, hours=15), id="scalar"),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timedelta(days=1),
+                    None,
+                    pd.Timedelta(seconds=-42, days=60),
+                    pd.Timedelta(microseconds=15),
+                    pd.Timedelta(days=10000, minutes=15),
+                ]
+                * 6
+            ).values,
+            id="vector",
+        ),
+    ],
+)
+def test_timedelta_get_days(td_arg, memory_leak_check):
+    """
+    Tests timedelta_get_days with array and scalar data.
+    """
+
+    def impl(td_arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.timedelta_get_days(td_arg))
+
+    # Scalar isn't wrapped in a series.
+    if isinstance(td_arg, pd.Timedelta):
+        impl = lambda td_arg: bodo.libs.bodosql_array_kernels.timedelta_get_days(td_arg)
+
+    def days_scalar_fn(td_arg):
+        if pd.isna(td_arg):
+            return None
+        else:
+            if isinstance(td_arg, np.timedelta64):
+                td_arg = pd.Timedelta(td_arg)
+            return td_arg.days
+
+    answer = vectorized_sol((td_arg,), days_scalar_fn, None)
+
+    check_func(
+        impl,
+        (td_arg,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pytest.param(pd.Timestamp("2022-12-25 4:40:45"), id="scalar"),
+        pytest.param(
+            pd.Series(
+                [
+                    "2023-1-1",
+                    None,
+                    "2023-1-10",
+                    "2020-11-21",
+                    "2022-12-31",
+                ]
+                * 6
+            ).values,
+            id="vector",
+        ),
+    ],
+)
+def test_create_date(arg, memory_leak_check):
+    """
+    Tests create_date with array and scalar data.
+    """
+
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.create_date(arg))
+
+    # Scalar isn't wrapped in a series.
+    if isinstance(arg, (pd.Timestamp, str)):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.create_date(arg)
+
+    def days_scalar_fn(arg):
+        if pd.isna(arg):
+            return None
+        else:
+            return pd.Timestamp(arg).normalize()
+
+    answer = vectorized_sol((arg,), days_scalar_fn, None)
+
+    check_func(
+        impl,
+        (arg,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pytest.param(pd.Timestamp("2022-12-25 4:40:45"), id="scalar"),
+        pytest.param(
+            pd.Series(
+                [
+                    "2023-1-1 00:00:00",
+                    None,
+                    "2023-1-10 12:00:01",
+                    "2020-11-21",
+                    "2022-12-31 23:11:11.433",
+                ]
+                * 6
+            ).values,
+            id="vector",
+        ),
+    ],
+)
+def test_create_timestamp(arg, memory_leak_check):
+    """
+    Tests create_timestamp with array and scalar data.
+    """
+
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.create_timestamp(arg))
+
+    # Scalar isn't wrapped in a series.
+    if isinstance(arg, (pd.Timestamp, str)):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.create_timestamp(arg)
+
+    def days_scalar_fn(arg):
+        if pd.isna(arg):
+            return None
+        else:
+            return pd.Timestamp(arg)
+
+    answer = vectorized_sol((arg,), days_scalar_fn, None)
+
+    check_func(
+        impl,
+        (arg,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 def test_add_interval_optional(memory_leak_check):
     def impl(tz_naive_ts, tz_aware_ts, int_val, flag0, flag1):
         arg0 = tz_naive_ts if flag0 else None
@@ -1705,3 +1851,63 @@ def test_option_interval_multiply(memory_leak_check):
                 (arg0, arg1, flag0, flag1),
                 py_output=answer,
             )
+
+
+@pytest.mark.slow
+def test_timedelta_get_days_optional(memory_leak_check):
+    """
+    Tests timedelta_get_days with optional data.
+    """
+
+    def impl(td_arg, flag):
+        arg0 = td_arg if flag else None
+        return bodo.libs.bodosql_array_kernels.timedelta_get_days(arg0)
+
+    td_arg = pd.Timedelta(days=14, seconds=12)
+    for flag in [True, False]:
+        answer = td_arg.days if flag else None
+        check_func(
+            impl,
+            (td_arg, flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.slow
+def test_create_date_optional(memory_leak_check):
+    """
+    Tests create_date with optional data.
+    """
+
+    def impl(arg, flag):
+        arg0 = arg if flag else None
+        return bodo.libs.bodosql_array_kernels.create_date(arg0)
+
+    arg = "2022-11-1"
+    for flag in [True, False]:
+        answer = pd.Timestamp(arg) if flag else None
+        check_func(
+            impl,
+            (arg, flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.slow
+def test_create_timestamp_optional(memory_leak_check):
+    """
+    Tests create_timestamp with optional data.
+    """
+
+    def impl(arg, flag):
+        arg0 = arg if flag else None
+        return bodo.libs.bodosql_array_kernels.create_timestamp(arg0)
+
+    arg = "2022-11-1 12:32:31"
+    for flag in [True, False]:
+        answer = pd.Timestamp(arg) if flag else None
+        check_func(
+            impl,
+            (arg, flag),
+            py_output=answer,
+        )
