@@ -90,11 +90,6 @@ def generate_and_write_library():
     This function should be called within setup.py"""
 
     library_fns_info = [
-        ("addition", generate_standard_python_fn_call("operator.add"), 2),
-        ("subtraction", generate_standard_python_fn_call("operator.sub"), 2),
-        ("multiplication", generate_standard_python_fn_call("operator.mul"), 2),
-        ("true_division", generate_standard_python_fn_call("np.true_divide"), 2),
-        ("modulo", generate_standard_python_fn_call("np.mod"), 2),
         ("equal", generate_standard_python_fn_call("operator.eq"), 2),
         ("not_equal", generate_standard_python_fn_call("operator.ne"), 2),
         ("less_than", generate_standard_python_fn_call("operator.lt"), 2),
@@ -132,7 +127,6 @@ def generate_and_write_library():
             2,
         ),
         # DATETIME fns
-        ("timestamp_dayfloor", lambda x: f"{x[0]}.floor(freq='D')", 1),
         ("strftime", generate_standard_method_call("strftime"), 2),
         (
             "pd_to_datetime_with_format",
@@ -141,8 +135,6 @@ def generate_and_write_library():
             ),
             2,
         ),
-        ("yearofweek", generate_atribute_reference("isocalendar()[0]"), 1),
-        ("weekofyear", generate_atribute_reference("weekofyear"), 1),
         ("pd_timedelta_days", generate_atribute_reference("days"), 1),
     ] + [
         # Scalar Conversion functions

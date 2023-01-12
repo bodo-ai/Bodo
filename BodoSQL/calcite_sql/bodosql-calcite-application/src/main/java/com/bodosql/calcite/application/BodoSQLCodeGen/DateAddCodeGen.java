@@ -160,7 +160,7 @@ public class DateAddCodeGen {
       String arg0, String arg1, boolean adding_delta, String fnName) {
     StringBuilder addBuilder = new StringBuilder();
     if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
-      arg1 = "-(" + arg1 + ")";
+      arg1 = "bodo.libs.bodosql_array_kernels.negate(" + arg1 + ")";
     }
     if (adding_delta) {
       addBuilder

@@ -2182,7 +2182,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       case POSITION:
         return generatePosition(operandsInfo);
-
       case OTHER:
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
@@ -2964,14 +2963,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
       args.add(info.getExprCode());
       exprTypes.add(exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operand, id)));
       argDataTypes.add(operand.getType());
-    }
-    if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
-      // Support the concat operator by using the concat array kernel.
-      List<RexNodeVisitorInfo> argInfos = new ArrayList<>();
-      for (int i = 0; i < names.size(); i++) {
-        argInfos.add(new RexNodeVisitorInfo(names.get(i), args.get(i)));
-      }
-      return generateConcatFnInfo(argInfos);
     }
     if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
       // Support the concat operator by using the concat array kernel.

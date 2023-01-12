@@ -223,8 +223,8 @@ public class DatetimeFnCodeGen {
     // to an array kernel
     String outputExpr =
         String.format(
-            "((bodo.libs.bodosql_array_kernels.get_year(%s) * 100) +"
-                + " bodo.libs.bodosql_array_kernels.get_weekofyear(%s))",
+            "bodo.libs.bodosql_array_kernels.add_numeric(bodo.libs.bodosql_array_kernels.multiply_numeric(bodo.libs.bodosql_array_kernels.get_year(%s),"
+                + " 100), bodo.libs.bodosql_array_kernels.get_weekofyear(%s))",
             arg0Expr, arg0Expr);
 
     String name = "YEARWEEK(" + arg0Info.getName() + ")";
