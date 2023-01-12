@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.test_window.window_common import (  # noqa
+    all_window_df,
     count_window_applies,
     uint8_window_df,
 )
@@ -195,4 +196,36 @@ def test_tz_aware_partition_by(spark_info):
         check_names=False,
         only_jit_1DVar=True,
         convert_columns_tz_naive=["TZ"],
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "calculation, window",
+    [
+        pytest.param(
+            "AVG(W3 - W4)",
+            "PARTITION BY COALESCE(U8, W4 % 10) ORDER BY W4",
+            id="partition_function-avg_subtract",
+        ),
+        pytest.param(
+            "SUM(CASE WHEN LEFT(ST, 1) = 'A' THEN 1 ELSE 0 END)",
+            "PARTITION BY W2 ORDER BY COALESCE(ST, 'A'), W4",
+            id="order_function-sum_case",
+        ),
+    ],
+)
+def test_window_using_function(
+    calculation, window, all_window_df, spark_info, memory_leak_check
+):
+    """Tests case where the PARTITION BY or ORDER BY clause uses a function"""
+    query = f"SELECT W4, {calculation} OVER ({window} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM table1"
+    check_query(
+        query,
+        all_window_df,
+        spark_info,
+        sort_output=True,
+        check_dtype=False,
+        check_names=False,
+        only_jit_1DVar=True,
     )
