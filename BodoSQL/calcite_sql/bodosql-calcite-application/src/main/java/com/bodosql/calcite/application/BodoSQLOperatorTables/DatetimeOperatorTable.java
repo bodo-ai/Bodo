@@ -399,23 +399,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // TODO: Extend SqlKind with our own functions
           SqlKind.OTHER_FUNCTION,
           // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
-          // What should be used to infer operand types. We don't use
-          // this so we set it to None.
-          null,
-          // What Input Types does the function accept.
-          OperandTypes.NILADIC,
-          // What group of functions does this fall into?
-          SqlFunctionCategory.TIMEDATE);
-
-  public static final SqlFunction CURRENT_DATE =
-      new SqlFunction(
-          "CURRENT_DATE",
-          // What SqlKind should match?
-          // TODO: Extend SqlKind with our own functions
-          SqlKind.OTHER_FUNCTION,
-          // What Value should the return type be
-          ReturnTypes.TIMESTAMP,
+          ReturnTypes.DATE,
           // What should be used to infer operand types. We don't use
           // this so we set it to None.
           null,
@@ -613,7 +597,6 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           WEEKOFYEAR,
           WEEKISO,
           CURDATE,
-          CURRENT_DATE,
           DATE_FORMAT,
           MAKEDATE,
           ADDDATE,
