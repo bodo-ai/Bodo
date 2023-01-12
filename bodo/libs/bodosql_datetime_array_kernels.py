@@ -2197,3 +2197,206 @@ def overload_interval_multiply_util(interval_arg, integer_arg):
         scalar_text,
         out_dtype,
     )
+
+
+def timedelta_get_days(arr):  # pragma: no cover
+    pass
+
+
+@overload(timedelta_get_days)
+def overload_timedelta_get_days(arr):
+    """BodoSQL array kernel to extract the number
+    of days from a array/scalar of Timedeltas.
+
+    Args:
+        arr (types.Types): scalar or array of timedelta values
+
+    Returns:
+        types.Type: scalar or array of integer outputs.
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.timedelta_get_days_util",
+            ["arr"],
+            0,
+        )
+
+    def impl(arr):  # pragma: no cover
+        return timedelta_get_days_util(arr)
+
+    return impl
+
+
+def timedelta_get_days_util(arr):  # pragma: no cover
+    pass
+
+
+@overload(timedelta_get_days_util)
+def overload_timedelta_get_days_util(arr):  # pragma: no cover
+    """BodoSQL array kernel to extract the number
+    of days from a array/scalar of Timedeltas.
+
+    Args:
+        arr (types.Types): scalar or array of timedelta values
+
+    Returns:
+        types.Type: scalar or array of integer outputs.
+    """
+    verify_td_arg(arr, "TIMEDELTA_GET_DAYS", "arr")
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    # The max number of days in a timedelta is 106752, so we can use
+    # an int32. This occurs because a timedelta is an int64 representing
+    # nanoseconds so: MIN_INT64
+    # abs(MIN_INT64 // NANOSECONDS_PER_DAY) == abs(-9223372036854775808 // (24 * 60 * 60 * 1000 * 1000 * 1000))
+    # == 106752
+    out_dtype = bodo.IntegerArrayType(bodo.int32)
+
+    # Generate optimized code for arr/scalar to avoid needing to
+    # create a timedelta
+    if bodo.utils.utils.is_array_typ(arr, True):
+        # Note 86400000000000 nanoseconds in a day
+        scalar_text = f"res[i] = np.int32(bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(arg0) // 86400000000000)\n"
+    else:
+        scalar_text = f"res[i] = np.int32(arg0.days)"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def create_date(arr):  # pragma: no cover
+    pass
+
+
+@overload(create_date)
+def overload_create_date(arr):
+    """BodoSQL array kernel to create a date. Currently since
+    we don't have a proper date type in Bodo we need to create
+    a naive, normalized timestamp. This function will accept
+    anything accepted by the `pd.Timestamp()` constructor
+    now, so we don't type check.
+
+    Args:
+        arr (types.Types): scalar or array of input values
+
+    Returns:
+        types.Type: scalar or array of "Date" values (normalized Timestamps).
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.create_date_util",
+            ["arr"],
+            0,
+        )
+
+    def impl(arr):  # pragma: no cover
+        return create_date_util(arr)
+
+    return impl
+
+
+def create_date_util(arr):  # pragma: no cover
+    pass
+
+
+@overload(create_date_util)
+def overload_create_date_util(arr):  # pragma: no cover
+    """BodoSQL array kernel to create a date. Currently since
+    we don't have a proper date type in Bodo we need to create
+    a naive, normalized timestamp. This function will accept
+    anything accepted by the `pd.Timestamp()` constructor
+    now, so we don't type check.
+
+    Args:
+        arr (types.Types): scalar or array of input values
+
+    Returns:
+        types.Type: scalar or array of "Date" values (normalized Timestamps).
+    """
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).normalize())\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def create_timestamp(arr):  # pragma: no cover
+    pass
+
+
+@overload(create_timestamp)
+def overload_create_timestamp(arr):
+    """BodoSQL array kernel to create a Timestamp. This function will accept
+    anything accepted by the `pd.Timestamp()` constructor
+    now, so we don't type check.
+
+    Args:
+        arr (types.Types): scalar or array of input values
+
+    Returns:
+        types.Type: scalar or array of Timestamp values.
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.create_timestamp_util",
+            ["arr"],
+            0,
+        )
+
+    def impl(arr):  # pragma: no cover
+        return create_timestamp_util(arr)
+
+    return impl
+
+
+def create_timestamp_util(arr):  # pragma: no cover
+    pass
+
+
+@overload(create_timestamp_util)
+def overload_create_timestamp_util(arr):  # pragma: no cover
+    """BodoSQL array kernel to create a Timestamp. This function will accept
+    anything accepted by the `pd.Timestamp()` constructor
+    now, so we don't type check.
+
+    Args:
+        arr (types.Types): scalar or array of input values
+
+    Returns:
+        types.Type: scalar or array of Timestamp values.
+    """
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
+
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0))\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
