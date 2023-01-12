@@ -462,8 +462,8 @@ def add_interval_util(start_dt, interval):
     Returns:
         datetime series/scalar: start_dt + interval
     """
-
     verify_datetime_arg_allow_tz(start_dt, "add_interval", "start_dt")
+    verify_sql_interval(interval, "add_interval", "interval")
     time_zone = get_tz_if_exists(start_dt)
 
     arg_names = ["start_dt", "interval"]
@@ -496,7 +496,14 @@ def add_interval_util(start_dt, interval):
         scalar_text += f"res[i] = arg0 + arg1\n"
         out_dtype = bodo.DatetimeArrayType(time_zone)
     else:
-        scalar_text = f"res[i] = arg0 + arg1\n"
+        # Scalars will return Timestamp values while vectors will remain
+        # in datetime64 format
+        is_vector = bodo.utils.utils.is_array_typ(start_dt, True)
+        unbox_str = (
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp" if is_vector else ""
+        )
+        box_str = "bodo.utils.conversion.box_if_dt64" if is_vector else ""
+        scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) + arg1)\n"
 
         out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
