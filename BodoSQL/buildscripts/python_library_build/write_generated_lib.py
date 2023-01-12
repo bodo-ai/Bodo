@@ -135,8 +135,6 @@ def generate_and_write_library():
             ),
             2,
         ),
-        ("pd_timedelta_days", generate_atribute_reference("days"), 1),
-    ] + [
         # Scalar Conversion functions
         ("scalar_conv_bool", generate_standard_python_fn_call("np.bool_"), 1),
         ("scalar_conv_int8", generate_standard_python_fn_call("np.int8"), 1),

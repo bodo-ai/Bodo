@@ -10,44 +10,23 @@ public class DateDiffCodeGen {
    * Function that return the necessary generated code for a DateDiff Function Call.
    *
    * @param arg0 The first arg expr.
-   * @param arg0Scalar Should arg0 generate scalar code.
    * @param arg1 The second arg expr.
-   * @param arg1Scalar Should arg1 generate scalar code.
-   * @param isSingleRow Does this datediff take place within an apply
    * @return The code generated that matches the DateDiff expression.
    */
-  public static String generateDateDiffCode(
-      String arg0, boolean arg0Scalar, String arg1, boolean arg1Scalar, boolean isSingleRow) {
+  public static String generateDateDiffCode(String arg0, String arg1) {
     // TODO: needs null checking, as null timestamps can be None
     StringBuilder diffExpr = new StringBuilder();
     // Create dummy visitors to reuse date trunc code.
     RexNodeVisitorInfo dayVisitor = new RexNodeVisitorInfo("", "day");
+    diffExpr.append("bodo.libs.bodosql_array_kernels.timedelta_get_days(");
     diffExpr.append("bodo.libs.bodosql_array_kernels.subtract_numeric(");
     diffExpr.append(
         generateDateTruncCode(new RexNodeVisitorInfo("", arg0), dayVisitor).getExprCode());
     diffExpr.append(", ");
     diffExpr.append(
         generateDateTruncCode(new RexNodeVisitorInfo("", arg1), dayVisitor).getExprCode());
-    diffExpr.append(")");
-    boolean allArgsScalar = arg0Scalar && arg1Scalar || isSingleRow;
-    return generateDaysCall(diffExpr.toString(), allArgsScalar);
-  }
-
-  /**
-   * Function that returns the generated days code for various exprTypes.
-   *
-   * @param isScalar Generate scalar code.
-   * @return The code generated for the given exprType.
-   */
-  public static String generateDaysCall(String expr, boolean isScalar) {
-    // TODO: needs null checking, as null timestamps can be None
-    if (isScalar) {
-      return "bodosql.libs.generated_lib.sql_null_checking_pd_timedelta_days(" + expr + ")";
-    } else {
-      // TODO: use a direct array kernel
-      return String.format(
-          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series(%s).dt.days)", expr);
-    }
+    diffExpr.append("))");
+    return diffExpr.toString();
   }
 
   /**

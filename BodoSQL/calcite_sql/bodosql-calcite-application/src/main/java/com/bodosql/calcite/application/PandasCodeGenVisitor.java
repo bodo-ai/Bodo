@@ -2329,27 +2329,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
             assert operandsInfo.size() == 2;
             outputName =
                 generateDateDiffName(operandsInfo.get(0).getName(), operandsInfo.get(1).getName());
-            boolean arg0Scalar =
-                isSingleRow
-                    || (exprTypesMap.get(
-                            ExprTypeVisitor.generateRexNodeKey(fnOperation.operands.get(0), id))
-                        == BodoSQLExprType.ExprType.SCALAR);
-            boolean arg1Scalar =
-                isSingleRow
-                    || (exprTypesMap.get(
-                            ExprTypeVisitor.generateRexNodeKey(fnOperation.operands.get(1), id))
-                        == BodoSQLExprType.ExprType.SCALAR);
-            boolean outputScalar =
-                isSingleRow
-                    || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                        == BodoSQLExprType.ExprType.SCALAR);
             String diffExpr =
                 generateDateDiffCode(
-                    operandsInfo.get(0).getExprCode(),
-                    arg0Scalar,
-                    operandsInfo.get(1).getExprCode(),
-                    arg1Scalar,
-                    outputScalar);
+                    operandsInfo.get(0).getExprCode(), operandsInfo.get(1).getExprCode());
             return new RexNodeVisitorInfo(outputName, diffExpr);
           case "STR_TO_DATE":
             assert operandsInfo.size() == 2;
