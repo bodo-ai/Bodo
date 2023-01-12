@@ -1365,6 +1365,80 @@ def test_date_trunc(part, ts_input, memory_leak_check):
     )
 
 
+@pytest.mark.parametrize(
+    "interval_input",
+    [
+        pytest.param(pd.DateOffset(years=1, months=-4), id="date-offset-scalar"),
+        pytest.param(pd.Timedelta(seconds=42), id="timedelta-scalar"),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timedelta(days=1),
+                    None,
+                    pd.Timedelta(seconds=-42),
+                    pd.Timedelta(microseconds=15),
+                    pd.Timedelta(days=-1, minutes=15),
+                ]
+                * 6
+            ).values,
+            id="timedelta-vector",
+        ),
+    ],
+)
+def test_interval_multiply(interval_input, memory_leak_check):
+    """
+    Tests interval_multiply with the different interval types and
+    on arrays.
+    """
+    int_value = 6
+    int_array = pd.array([1, None, -4, 5, 0] * 6, dtype="Int64")
+
+    def impl(interval, integer):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.interval_multiply(interval, integer)
+        )
+
+    scalar_integer_impl = impl
+    # If we have a scalar interval then the scalar integer outputs a scalar.
+    if isinstance(interval_input, (pd.Timedelta, pd.DateOffset)):
+        scalar_integer_impl = (
+            lambda interval, integer: bodo.libs.bodosql_array_kernels.interval_multiply(
+                interval, integer
+            )
+        )
+
+    def interval_scalar_fn(interval, integer):
+        if pd.isna(interval) or pd.isna(integer):
+            return None
+        else:
+            if isinstance(interval, np.timedelta64):
+                interval = pd.Timedelta(interval)
+            return interval * integer
+
+    scalar_integer_answer = vectorized_sol(
+        (interval_input, int_value), interval_scalar_fn, None
+    )
+    check_func(
+        scalar_integer_impl,
+        (interval_input, int_value),
+        py_output=scalar_integer_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+    if not isinstance(interval_input, pd.DateOffset):
+        # DateOffset can't be used with an array input.
+        vector_integer_answer = vectorized_sol(
+            (interval_input, int_array), interval_scalar_fn, None
+        )
+        check_func(
+            impl,
+            (interval_input, int_array),
+            py_output=vector_integer_answer,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+
 def test_add_interval_optional(memory_leak_check):
     def impl(tz_naive_ts, tz_aware_ts, int_val, flag0, flag1):
         arg0 = tz_naive_ts if flag0 else None
@@ -1607,3 +1681,27 @@ def test_option_get_weekofyear(memory_leak_check):
             (arg, flag),
             py_output=answer,
         )
+
+
+@pytest.mark.slow
+def test_option_interval_multiply(memory_leak_check):
+    """
+    Tests interval_multiply array kernel on optional inputs.
+    """
+
+    def impl(interval, integer, flag0, flag1):
+        arg0 = interval if flag0 else None
+        arg1 = integer if flag1 else None
+        return bodo.libs.bodosql_array_kernels.interval_multiply(arg0, arg1)
+
+    arg0 = pd.Timedelta(days=14, seconds=12)
+    arg1 = -14
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = arg0 * arg1 if flag0 and flag1 else None
+            check_func(
+                impl,
+                (arg0, arg1, flag0, flag1),
+                py_output=answer,
+            )

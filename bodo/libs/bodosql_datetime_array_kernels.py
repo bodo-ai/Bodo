@@ -12,7 +12,7 @@ from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import raise_bodo_error
+from bodo.utils.typing import BodoError, raise_bodo_error
 
 
 def standardize_snowflake_date_time_part(part_str):  # pragma: no cover
@@ -2094,6 +2094,95 @@ def overload_tz_aware_interval_add_util(tz_arg, interval_arg):
     # Check for changing utc offsets
     scalar_text += "  timedelta = bodo.hiframes.pd_offsets_ext.update_timedelta_with_transition(arg0, timedelta)\n"
     scalar_text += "  res[i] = arg0 + timedelta\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def interval_multiply(interval_arg, integer_arg):  # pragma: no cover
+    pass
+
+
+@overload(interval_multiply)
+def overload_interval_multiply(interval_arg, integer_arg):
+    """BodoSQL kernel for multiplying an interval by an integer.
+    Typically intervals are scalars, so in most cases this kernel
+    will just handle scalars. However, we do allow certain intervals
+    to be array, so we can have array outputs. The integer argument
+    should only be an array if the interval can be represented as
+    an array.
+
+    Args:
+        interval_arg (types.Type): Either a DateOffset or Timedelta scalar or array
+        integer_arg (types.Type): An integer scalar (or in rare cases array)
+
+    Returns:
+        types.Type: Interval scalar or array returned after multiplying the results.
+    """
+    for i, arg in enumerate((interval_arg, integer_arg)):
+        if isinstance(arg, types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.interval_multiply",
+                ["interval_arg", "integer_arg"],
+                i,
+            )
+
+    def impl(interval_arg, integer_arg):  # pragma: no cover
+        return interval_multiply_util(interval_arg, integer_arg)
+
+    return impl
+
+
+def interval_multiply_util(interval_arg, integer_arg):  # pragma: no cover
+    pass
+
+
+@overload(interval_multiply_util)
+def overload_interval_multiply_util(interval_arg, integer_arg):
+    """BodoSQL kernel for multiplying an interval by an integer.
+    Typically intervals are scalars, so in most cases this kernel
+    will just handle scalars. However, we do allow certain intervals
+    to be array, so we can have array outputs. The integer argument
+    should only be an array if the interval can be represented as
+    an array.
+
+    Args:
+        interval_arg (types.Type): Either a DateOffset or Timedelta scalar or array
+        integer_arg (types.Type): An integer scalar (or in rare cases array)
+
+    Returns:
+        types.Type: Interval scalar or array returned after multiplying the results.
+    """
+    verify_sql_interval(interval_arg, "INTERVAL_MULTIPLY", "interval_arg")
+    verify_int_arg(integer_arg, "INTERVAL_MULTIPLY", "integer_arg")
+    arg_names = ["interval_arg", "integer_arg"]
+    arg_types = [interval_arg, integer_arg]
+    propagate_null = [True, True]
+
+    is_interval_arr = bodo.utils.utils.is_array_typ(interval_arg, True)
+    is_integer_arr = bodo.utils.utils.is_array_typ(integer_arg, True)
+
+    if interval_arg == bodo.date_offset_type:
+        if is_integer_arr:
+            raise BodoError(
+                "interval_arg(): Integer array cannot be provided if multiplying a date offset."
+            )
+        out_dtype = bodo.date_offset_type
+    else:
+        out_dtype = types.Array(bodo.timedelta64ns, 1, "C")
+
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if is_interval_arr or is_integer_arr
+        else ""
+    )
+    box_str = "bodo.utils.conversion.box_if_dt64" if is_interval_arr else ""
+
+    scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) * arg1)\n"
     return gen_vectorized(
         arg_names,
         arg_types,
