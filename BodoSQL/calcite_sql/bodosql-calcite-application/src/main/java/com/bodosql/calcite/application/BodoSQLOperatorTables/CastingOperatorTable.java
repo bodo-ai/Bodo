@@ -7,6 +7,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.fun.SqlLibraryOperators;
 import org.apache.calcite.sql.type.*;
 import org.apache.calcite.sql.validate.SqlNameMatcher;
 
@@ -205,8 +206,11 @@ public class CastingOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlOperator INFIX_CAST = SqlLibraryOperators.INFIX_CAST;
+
   private List<SqlOperator> functionList =
-      Arrays.asList(TO_BOOLEAN, TO_DATE, TRY_TO_BOOLEAN, TRY_TO_DATE, TO_CHAR, TO_VARCHAR);
+      Arrays.asList(
+          TO_BOOLEAN, TO_DATE, TRY_TO_BOOLEAN, TRY_TO_DATE, TO_CHAR, TO_VARCHAR, INFIX_CAST);
 
   @Override
   public void lookupOperatorOverloads(
@@ -218,18 +222,23 @@ public class CastingOperatorTable implements SqlOperatorTable {
     // Heavily copied from Calcite:
     // https://github.com/apache/calcite/blob/4bc916619fd286b2c0cc4d5c653c96a68801d74e/core/src/main/java/org/apache/calcite/sql/util/ListSqlOperatorTable.java#L57
     for (SqlOperator operator : functionList) {
-      // All String Operators added are functions so far.
-      SqlFunction func = (SqlFunction) operator;
-      if (syntax != func.getSyntax()) {
-        continue;
+      if (operator instanceof SqlFunction) {
+        // All String Operators added are functions so far.
+        SqlFunction func = (SqlFunction) operator;
+        if (syntax != func.getSyntax()) {
+          continue;
+        }
+        // Check that the name matches the desired names.
+        if (!opName.isSimple() || !nameMatcher.matches(func.getName(), opName.getSimple())) {
+          continue;
+        }
       }
-      // Check that the name matches the desired names.
-      if (!opName.isSimple() || !nameMatcher.matches(func.getName(), opName.getSimple())) {
+      if (operator.getSyntax().family != syntax) {
         continue;
       }
       // TODO: Check the category. The Lexing currently thinks
       //  all of these functions are user defined functions.
-      operatorList.add(func);
+      operatorList.add(operator);
     }
   }
 
