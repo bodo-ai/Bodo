@@ -489,6 +489,10 @@ the Python types for each type keyword:
     Users are responsible for ensuring that conversion is possible
     (e.g. `CAST(str_col as INTEGER)`).
 
+### ::
+
+Infix cast operator. Equivalent to cast, but the format is `value::Typename`
+
 ### JOIN
 
 A `JOIN` clause is used to combine rows from two or more tables,
