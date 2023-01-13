@@ -58,7 +58,10 @@ public class BinOpCodeGen {
 
       boolean isArg0Interval = argDataTypes.get(0) instanceof IntervalSqlType;
       boolean isArg1Interval = argDataTypes.get(1) instanceof IntervalSqlType;
-      if ((isArg0TZAware && isArg1Interval) || (isArg1TZAware && isArg0Interval)) {
+      if (isArg0Interval && isArg1Interval) {
+        assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
+        return genIntervalAddCode(args, binOpKind);
+      } else if ((isArg0TZAware && isArg1Interval) || (isArg1TZAware && isArg0Interval)) {
         assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
         return genTZAwareIntervalArithCode(args, binOpKind, isArg0TZAware);
       } else if (isArg0Datetime || isArg1Datetime) {
@@ -294,6 +297,27 @@ public class BinOpCodeGen {
       }
     }
     return newArg.toString();
+  }
+
+  /**
+   * Generate code for Adding or Subtracting an two intervals.
+   *
+   * @param args List of length 2 with the generated code for the arguments.
+   * @param binOp The SQLkind for the binop. Either SqlKind.PLUS or SqlKind.MINUS.
+   * @return The generated code that creates the BodoSQL array kernel call.
+   */
+  public static String genIntervalAddCode(List<String> args, SqlKind binOp) {
+    assert args.size() == 2;
+    final String arg0 = args.get(0);
+    String arg1 = args.get(1);
+    if (binOp.equals(SqlKind.MINUS)) {
+      // Negate the input for Minus
+      arg1 = String.format("bodo.libs.bodosql_array_kernels.negate(%s)", arg1);
+    } else {
+      assert binOp.equals(SqlKind.PLUS);
+    }
+    return String.format(
+        "bodo.libs.bodosql_array_kernels.interval_add_interval(%s, %s)", arg0, arg1);
   }
 
   /**
