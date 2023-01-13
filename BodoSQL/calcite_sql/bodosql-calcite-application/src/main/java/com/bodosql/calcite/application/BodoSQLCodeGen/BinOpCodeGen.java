@@ -61,9 +61,10 @@ public class BinOpCodeGen {
       if ((isArg0TZAware && isArg1Interval) || (isArg1TZAware && isArg0Interval)) {
         assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
         return genTZAwareIntervalArithCode(args, binOpKind, isArg0TZAware);
-      } else if ((isArg0Datetime && isArg1Interval) || (isArg1Datetime && isArg0Interval)) {
+      } else if (isArg0Datetime || isArg1Datetime) {
         assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
-        return genDatetimeIntervalArithCode(args, binOpKind, isArg0TZAware);
+        return genDatetimeArithCode(
+            args, binOpKind, isArg0Datetime, isArg0Interval || isArg1Interval);
       } else if ((isArg0Interval || isArg1Interval) && binOpKind.equals(SqlKind.TIMES)) {
         return genIntervalMultiplyCode(args, isArg0Interval);
       }
@@ -335,10 +336,12 @@ public class BinOpCodeGen {
    * @param args List of length 2 with the generated code for the arguments.
    * @param binOp The SQLkind for the binop. Either SqlKind.PLUS or SqlKind.MINUS.
    * @param isArg0Datetime Is arg0 the datetime argument. This is used for generating standard code.
+   * @param isOtherArgInterval Is the argument an interval type or an integer that needs to convert
+   *     to an interval.
    * @return The generated code that creates the BodoSQL array kernel call.
    */
-  public static String genDatetimeIntervalArithCode(
-      List<String> args, SqlKind binOp, boolean isArg0Datetime) {
+  public static String genDatetimeArithCode(
+      List<String> args, SqlKind binOp, boolean isArg0Datetime, boolean isOtherArgInterval) {
     assert args.size() == 2;
     final String arg0;
     String arg1;
@@ -354,10 +357,10 @@ public class BinOpCodeGen {
     }
     if (binOp.equals(SqlKind.MINUS)) {
       assert isArg0Datetime;
-      return generateMySQLDateAddCode(arg0, arg1, true, "DATE_SUB");
+      return generateMySQLDateAddCode(arg0, arg1, isOtherArgInterval, "DATE_SUB");
     } else {
       assert binOp.equals(SqlKind.PLUS);
-      return generateMySQLDateAddCode(arg0, arg1, true, "DATE_ADD");
+      return generateMySQLDateAddCode(arg0, arg1, isOtherArgInterval, "DATE_ADD");
     }
   }
 
