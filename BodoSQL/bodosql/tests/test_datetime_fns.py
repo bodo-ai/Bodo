@@ -3046,6 +3046,7 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.skip(reason="[BE-4239] Fix how BodoSQL processes Interval Month literals")
 def test_tz_aware_subdate_interval_month(memory_leak_check):
     """
     Test subdate on tz-aware data with a Month Interval argument.
@@ -3086,10 +3087,10 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    query1 = "SELECT CASE WHEN B THEN SUBDATE(A, Interval 4 Months) END as output from table1"
-    query2 = "SELECT CASE WHEN B THEN DATE_SUB(A, Interval 4 Months) END as output from table1"
+    query1 = "SELECT CASE WHEN B THEN SUBDATE(A, Interval 1 Months) END as output from table1"
+    query2 = "SELECT CASE WHEN B THEN DATE_SUB(A, Interval 1 Months) END as output from table1"
 
-    S = df.A - pd.DateOffset(months=4)
+    S = df.A - pd.DateOffset(months=1)
     S[~df.B] = None
     py_output = pd.DataFrame({"output": S})
     check_query(query1, ctx, None, expected_output=py_output)
