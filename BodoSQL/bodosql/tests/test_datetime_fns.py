@@ -1912,7 +1912,8 @@ def test_subdate_td_scalars(
     "interval_amt",
     [
         pytest.param(100, id="integer"),
-        pytest.param("INTERVAL '4' days + INTERVAL '6' hours", id="timedelta"),
+        pytest.param("INTERVAL '4' days + INTERVAL '6' hours", id="timedelta_add"),
+        pytest.param("INTERVAL '4' days - INTERVAL '6' hours", id="timedelta_sub"),
     ],
 )
 def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
@@ -1936,13 +1937,21 @@ def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
             "2018-06-21 06:00:00",
             "2018-07-29",
         ]
-    else:
+    elif "+" in interval_amt:
         output_ts = [
             "2018-02-25 06:30:59.251125999",
             "2018-03-07 18:00:00",
             None,
             "2018-09-25",
             "2018-11-01 18:00:00",
+        ]
+    else:
+        output_ts = [
+            "2018-02-25 18:30:59.251125999",
+            "2018-03-08 6:00:00",
+            None,
+            "2018-09-25 12:00:00",
+            "2018-11-02 6:00:00",
         ]
 
     tz = "US/Pacific" if use_case else "Poland"
