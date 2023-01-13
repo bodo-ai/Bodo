@@ -473,7 +473,10 @@ def add_interval_util(start_dt, interval):
     extra_globals = None
     # Modified logic from add_interval_xxx functions
     if time_zone is not None:
-        if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
+        if (
+            bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone)
+            and interval != bodo.date_offset_type
+        ):
             tz_obj = pytz.timezone(time_zone)
             trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
             deltas = np.array(tz_obj._transition_info)[:, 0]
@@ -492,7 +495,7 @@ def add_interval_util(start_dt, interval):
                 "end_trans = np.searchsorted(trans, end_value, side='right') - 1\n"
             )
             scalar_text += "offset = deltas[start_trans] - deltas[end_trans]\n"
-            scalar_text += "arg1 = pd.Timedelta(arg1.value + offset)\n"
+            scalar_text += "arg1 = pd.Timedelta(end_value - start_value + offset)\n"
         scalar_text += f"res[i] = arg0 + arg1\n"
         out_dtype = bodo.DatetimeArrayType(time_zone)
     else:
