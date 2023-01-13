@@ -2179,7 +2179,7 @@ def overload_interval_multiply_util(interval_arg, integer_arg):
     if interval_arg == bodo.date_offset_type:
         if is_integer_arr:
             raise BodoError(
-                "interval_arg(): Integer array cannot be provided if multiplying a date offset."
+                "interval_multiply(): Integer array cannot be provided if multiplying a date offset."
             )
         out_dtype = bodo.date_offset_type
     else:
@@ -2202,67 +2202,79 @@ def overload_interval_multiply_util(interval_arg, integer_arg):
     )
 
 
-def timedelta_get_days(arr):  # pragma: no cover
+def interval_add_interval(arr0, arr1):  # pragma: no cover
     pass
 
 
-@overload(timedelta_get_days)
-def overload_timedelta_get_days(arr):
-    """BodoSQL array kernel to extract the number
-    of days from a array/scalar of Timedeltas.
+@overload(interval_add_interval)
+def overload_interval_add_interval(arr0, arr1):
+    """BodoSQL kernel for adding two intervals together. While this should
+    typically just be between two scalars the array case is technically possible.
+    Note: We do not support adding a DateOffset with a Timedelta.
 
     Args:
-        arr (types.Types): scalar or array of timedelta values
+        arr0 (types.Type): Either a DateOffset or Timedelta scalar or array
+        arr1 (types.Type): Either a DateOffset or Timedelta scalar or array
 
     Returns:
-        types.Type: scalar or array of integer outputs.
+        types.Type: Interval scalar or array returned after adding the results.
     """
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument(
-            "bodo.libs.bodosql_array_kernels.timedelta_get_days_util",
-            ["arr"],
-            0,
-        )
+    for i, arg in enumerate((arr0, arr1)):
+        if isinstance(arg, types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.interval_add_interval",
+                ["arr0", "arr1"],
+                i,
+            )
 
-    def impl(arr):  # pragma: no cover
-        return timedelta_get_days_util(arr)
+    def impl(arr0, arr1):  # pragma: no cover
+        return interval_add_interval_util(arr0, arr1)
 
     return impl
 
 
-def timedelta_get_days_util(arr):  # pragma: no cover
+def interval_add_interval_util(arr0, arr1):  # pragma: no cover
     pass
 
 
-@overload(timedelta_get_days_util)
-def overload_timedelta_get_days_util(arr):  # pragma: no cover
-    """BodoSQL array kernel to extract the number
-    of days from a array/scalar of Timedeltas.
+@overload(interval_add_interval_util)
+def overload_interval_add_interval_util(arr0, arr1):
+    """BodoSQL kernel for adding two intervals together. While this should
+    typically just be between two scalars the array case is technically possible.
+    Note: We do not support adding a DateOffset with a Timedelta.
 
     Args:
-        arr (types.Types): scalar or array of timedelta values
+        arr0 (types.Type): Either a DateOffset or Timedelta scalar or array
+        arr1 (types.Type): Either a DateOffset or Timedelta scalar or array
 
     Returns:
-        types.Type: scalar or array of integer outputs.
+        types.Type: Interval scalar or array returned after adding the results.
     """
-    verify_td_arg(arr, "TIMEDELTA_GET_DAYS", "arr")
-    arg_names = ["arr"]
-    arg_types = [arr]
-    propagate_null = [True]
-    # The max number of days in a timedelta is 106752, so we can use
-    # an int32. This occurs because a timedelta is an int64 representing
-    # nanoseconds so: MIN_INT64
-    # abs(MIN_INT64 // NANOSECONDS_PER_DAY) == abs(-9223372036854775808 // (24 * 60 * 60 * 1000 * 1000 * 1000))
-    # == 106752
-    out_dtype = bodo.IntegerArrayType(bodo.int32)
+    verify_td_arg(arr0, "INTERVAL_ADD_INTERVAL", "arr0")
+    verify_td_arg(arr1, "INTERVAL_ADD_INTERVAL", "arr1")
+    arg_names = ["arr0", "arr1"]
+    arg_types = [arr0, arr1]
+    propagate_null = [True, True]
 
-    # Generate optimized code for arr/scalar to avoid needing to
-    # create a timedelta
-    if bodo.utils.utils.is_array_typ(arr, True):
-        # Note 86400000000000 nanoseconds in a day
-        scalar_text = f"res[i] = np.int32(bodo.hiframes.pd_timestamp_ext.timedelta64_to_integer(arg0) // 86400000000000)\n"
-    else:
-        scalar_text = f"res[i] = np.int32(arg0.days)"
+    out_dtype = types.Array(bodo.timedelta64ns, 1, "C")
+    box_str0 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr0, True)
+        else ""
+    )
+    box_str1 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr1, True)
+        else ""
+    )
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(arr0, True)
+        or bodo.utils.utils.is_array_typ(arr1, True)
+        else ""
+    )
+
+    scalar_text = f"res[i] = {unbox_str}({box_str0}(arg0) + {box_str1}(arg1))\n"
     return gen_vectorized(
         arg_names,
         arg_types,
@@ -2396,6 +2408,85 @@ def overload_create_timestamp_util(arr):  # pragma: no cover
     )
 
     scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0))\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def date_sub_date(arr0, arr1):  # pragma: no cover
+    pass
+
+
+@overload(date_sub_date)
+def overload_date_sub_date(arr0, arr1):
+    """Array kernel that supports subtracting two dates
+    with SQL semantics. The result is in the number of days
+    between the two dates as an integer.
+
+    Args:
+        arr0 (types.Type): Date column or scalar
+        arr1 (types.Type): Date column or scalar
+
+    Returns:
+        types.Type: Integer number of days between the dates
+    """
+    args = (arr0, arr1)
+    for i in range(2):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.date_sub_date",
+                ["arr0", "arr1"],
+                i,
+            )
+
+    def impl(arr0, arr1):  # pragma: no cover
+        return date_sub_date_util(arr0, arr1)
+
+    return impl
+
+
+def date_sub_date_util(arr0, arr1):  # pragma: no cover
+    pass
+
+
+@overload(date_sub_date_util)
+def overload_date_sub_date_util(arr0, arr1):  # pragma: no cover
+    """Array kernel that supports subtracting two dates
+    with SQL semantics. The result is in the number of days
+    between the two dates as an integer.
+
+    Args:
+        arr0 (types.Type): Date column or scalar
+        arr1 (types.Type): Date column or scalar
+
+    Returns:
+        types.Type: Integer number of days between the dates
+    """
+    # TODO: When we have a formal date type in SQL this should only
+    # accept dates.
+    verify_datetime_arg(arr0, "DATE_SUB_DATE", "arr0")
+    verify_datetime_arg(arr1, "DATE_SUB_DATE", "arr1")
+    arg_names = ["arr0", "arr1"]
+    arg_types = [arr0, arr1]
+    propagate_null = [True, True]
+    # Maximum number of days fit in a 32 bit integer.
+    out_dtype = bodo.IntegerArrayType(bodo.int32)
+    box_str0 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr0, True)
+        else ""
+    )
+    box_str1 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr1, True)
+        else ""
+    )
+
+    scalar_text = f"res[i] = ({box_str0}(arg0) - {box_str1}(arg1)).days\n"
     return gen_vectorized(
         arg_names,
         arg_types,
