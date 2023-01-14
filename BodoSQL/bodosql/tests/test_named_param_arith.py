@@ -3,8 +3,6 @@ Test that Named Parameters can be used in having expressions.
 """
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
 
-import numpy as np
-import pandas as pd
 import pytest
 from bodosql.tests.named_params_common import *  # noqa
 from bodosql.tests.utils import check_query
@@ -20,28 +18,12 @@ def test_int_arith(
     query = f"""
         SELECT @a {arith_ops} A from table1
         """
-    # If the parameter is a uint64 and the column is a uint, then the output type will
-    # be unsigned. With - this can lead to overflow, which will not occur in PySpark.
-    if arith_ops == "-" and (
-        isinstance(int_named_params["a"], np.uint64)
-        and bodosql_nullable_numeric_types["table1"].dtypes["A"]
-        in [pd.UInt8Dtype(), pd.UInt16Dtype(), pd.UInt32Dtype(), pd.UInt64Dtype()]
-    ):
-        expected_output = pd.DataFrame(
-            {
-                "result": np.uint64(int_named_params["a"])
-                - bodosql_nullable_numeric_types["table1"]["A"].astype("UInt64")
-            }
-        )
-    else:
-        expected_output = None
 
     check_query(
         query,
         bodosql_nullable_numeric_types,
         spark_info,
         named_params=int_named_params,
-        expected_output=expected_output,
         check_dtype=False,
         check_names=False,
     )

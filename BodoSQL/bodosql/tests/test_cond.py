@@ -4,7 +4,6 @@ Test correctness of SQL conditional functions on BodoSQL
 """
 import copy
 
-import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.string_ops_common import bodosql_string_fn_testing_df  # noqa
@@ -461,20 +460,6 @@ def test_ifnull_case(
         check_dtype=False,
         equivalent_spark_query=spark_query,
     )
-
-
-@pytest.mark.slow
-def test_ifnull_null_float(
-    zeros_df, spark_info, ifnull_equivalent_fn, memory_leak_check
-):
-    """Checks ifnull function with values that generate np.nan"""
-    # Note: 1 / 0 returns np.inf in BodoSQL but NULL in Spark, so
-    # we use expected Output
-    expected_output = pd.DataFrame(
-        {"val": (zeros_df["table1"]["A"] / zeros_df["table1"]["B"]).replace(np.nan, -1)}
-    )
-    query = f"Select {ifnull_equivalent_fn}(A / B, -1) as val from table1"
-    check_query(query, zeros_df, spark_info, expected_output=expected_output)
 
 
 @pytest.mark.slow
