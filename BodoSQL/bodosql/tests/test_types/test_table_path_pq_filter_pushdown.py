@@ -89,7 +89,10 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
 
     # TODO: Update Name when the name changes
     py_output3 = pd.DataFrame({"EXPR$0": py_output["A"] + 1})
-    check_func(impl3, (filename,), py_output=py_output3, reset_index=True)
+    # don't check dtype because the output should use nullable int64 to match snowflake
+    check_func(
+        impl3, (filename,), py_output=py_output3, check_dtype=False, reset_index=True
+    )
     # make sure the ParquetReader node has filters parameter set and we have trimmed
     # any unused columns.
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl3)
@@ -99,7 +102,10 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
 
     # TODO: Update Name when the name changes
     py_output4 = pd.DataFrame({"EXPR$0": py_output["A"] + 1})
-    check_func(impl4, (filename,), py_output=py_output4, reset_index=True)
+    # don't check dtype because the output should use nullable int64 to match snowflake
+    check_func(
+        impl4, (filename,), py_output=py_output4, check_dtype=False, reset_index=True
+    )
     # make sure the ParquetReader node has filters parameter set and we have trimmed
     # any unused columns.
     bodo_func = bodo.jit(pipeline_class=SeriesOptTestPipeline)(impl4)

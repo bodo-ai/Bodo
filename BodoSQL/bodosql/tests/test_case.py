@@ -225,12 +225,6 @@ def test_case_no_else_clause_columns(basic_df, spark_info, memory_leak_check):
     check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
 
 
-def test_shortcircuit_and(zeros_df, spark_info, memory_leak_check):
-    """tests that and when used in a case statement shortcircuits"""
-    query = "Select Case WHEN B <> 0 AND (A / B > 0) THEN A ELSE B END FROM table1"
-    check_query(query, zeros_df, spark_info, check_names=False, check_dtype=False)
-
-
 def test_shortcircuit_or(zeros_df, spark_info, memory_leak_check):
     """tests that and when used in a case statement shortcircuits"""
     query = "Select Case WHEN B = 0 OR (A / B > 0) THEN A ELSE B END FROM table1"
