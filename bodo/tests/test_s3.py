@@ -71,7 +71,12 @@ def test_s3_csv_data1(minio_server, bucket_fixture, datapath, bucket_name, reque
         dtype={"A": int, "B": float, "C": float, "D": int},
     )
 
-    check_func(test_impl, (f"s3://{bucket_name}/csv_data1.csv",), py_output=py_output)
+    check_func(
+        test_impl,
+        (f"s3://{bucket_name}/csv_data1.csv",),
+        py_output=py_output,
+        convert_to_nullable_float=False,
+    )
 
 
 @pytest.mark.parametrize(
@@ -154,7 +159,7 @@ def test_s3_csv_data_date1(minio_server, s3_bucket, datapath):
         dtype={"A": int, "B": float, "C": str, "D": int},
         parse_dates=[2],
     )
-    check_func(test_impl, (), py_output=py_output)
+    check_func(test_impl, (), py_output=py_output, convert_to_nullable_float=False)
 
 
 def unset_aws_vars():

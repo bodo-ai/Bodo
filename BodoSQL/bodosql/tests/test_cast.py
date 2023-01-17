@@ -53,6 +53,7 @@ def test_cast_str_to_numeric(
         spark_info,
         equivalent_spark_query=spark_query1,
         check_names=False,
+        check_dtype=False,
     )
     check_query(
         query2,
@@ -60,6 +61,7 @@ def test_cast_str_to_numeric(
         spark_info,
         equivalent_spark_query=spark_query2,
         check_names=False,
+        check_dtype=False,
     )
     check_query(
         query3,
@@ -67,6 +69,7 @@ def test_cast_str_to_numeric(
         spark_info,
         equivalent_spark_query=spark_query3,
         check_names=False,
+        check_dtype=False,
     )
 
 
@@ -210,6 +213,7 @@ def test_like_to_like(basic_df, use_sf_cast_syntax, spark_info, memory_leak_chec
         spark_info,
         equivalent_spark_query=spark_query1,
         check_names=False,
+        check_dtype=False,
     )
     check_query(
         query2,
@@ -217,6 +221,7 @@ def test_like_to_like(basic_df, use_sf_cast_syntax, spark_info, memory_leak_chec
         spark_info,
         equivalent_spark_query=spark_query2,
         check_names=False,
+        check_dtype=False,
     )
     check_query(
         query3,
@@ -224,6 +229,7 @@ def test_like_to_like(basic_df, use_sf_cast_syntax, spark_info, memory_leak_chec
         spark_info,
         equivalent_spark_query=spark_query3,
         check_names=False,
+        check_dtype=False,
     )
     # TODO: [BE-957] Support Bytes.fromhex]
     # check_query(query4, basic_df, spark_info, equivalent_spark_query=spark_query4, check_names=False)

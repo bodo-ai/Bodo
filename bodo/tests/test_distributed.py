@@ -150,7 +150,7 @@ def test_array_nbytes(A, memory_leak_check):
     def impl(A):
         return A.nbytes
 
-    check_func(impl, (A,))
+    check_func(impl, (A,), convert_to_nullable_float=False)
 
 
 def test_concat_axis_1(memory_leak_check):
@@ -1106,16 +1106,16 @@ def test_arr_reshape(dtype, memory_leak_check):
         return A.reshape(n, 1)
 
     A = np.arange(12, dtype=dtype)
-    check_func(impl1, (A, 12))
-    check_func(impl2, (A, 12))
-    check_func(impl3, (A, 12))
+    check_func(impl1, (A, 12), convert_to_nullable_float=False)
+    check_func(impl2, (A, 12), convert_to_nullable_float=False)
+    check_func(impl3, (A, 12), convert_to_nullable_float=False)
     A = np.arange(12, dtype=dtype).reshape(2, 3, 2)
-    check_func(impl4, (A, 12))
-    check_func(impl5, (A, 12))
+    check_func(impl4, (A, 12), convert_to_nullable_float=False)
+    check_func(impl5, (A, 12), convert_to_nullable_float=False)
     A = np.arange(12, dtype=dtype).reshape(3, 4)
-    check_func(impl6, (A, 12))
-    check_func(impl7, (A, 12))
-    check_func(impl8, (np.arange(12, dtype=dtype), 12))
+    check_func(impl6, (A, 12), convert_to_nullable_float=False)
+    check_func(impl7, (A, 12), convert_to_nullable_float=False)
+    check_func(impl8, (np.arange(12, dtype=dtype), 12), convert_to_nullable_float=False)
 
 
 def test_np_dot(is_slow_run, memory_leak_check):
@@ -1145,11 +1145,11 @@ def test_np_dot(is_slow_run, memory_leak_check):
     np.random.seed(1)
     X = np.random.ranf((n, d))
     Y = np.arange(n, dtype=np.float64)
-    check_func(impl1, (X, Y), is_out_distributed=False)
-    check_func(impl2, (X, d))
-    check_func(impl3, (X, d))
+    check_func(impl1, (X, Y), is_out_distributed=False, convert_to_nullable_float=False)
+    check_func(impl2, (X, d), convert_to_nullable_float=False)
+    check_func(impl3, (X, d), convert_to_nullable_float=False)
     if is_slow_run:
-        check_func(impl4, (Y,))
+        check_func(impl4, (Y,), convert_to_nullable_float=False)
 
 
 def test_dist_tuple1(memory_leak_check):

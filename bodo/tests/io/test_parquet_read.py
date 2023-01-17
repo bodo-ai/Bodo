@@ -756,7 +756,7 @@ def test_read_partitions_predicate_dead_column(memory_leak_check):
             return df[(df["a"] > 5) & (df["c"] == 2)].b
 
         # TODO(ehsan): match Index
-        check_func(impl1, ("pq_data",), reset_index=True)
+        check_func(impl1, ("pq_data",), reset_index=True, check_dtype=False)
         # make sure the ParquetReader node has filters parameter set
         stream = io.StringIO()
         logger = create_string_io_logger(stream)

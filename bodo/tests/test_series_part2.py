@@ -2021,7 +2021,9 @@ def test_series_value_counts(memory_leak_check):
 
     S_str = pd.Series(["AA", "BB", "C", "AA", "C", "AA"])
     check_func(impl1, (S_str, True, False))
-    check_func(impl1, (S_str, False, True), sort_output=True)
+    check_func(
+        impl1, (S_str, False, True), sort_output=True, convert_to_nullable_float=False
+    )
     S_float = pd.Series([1.1, 2.2, 1.3, 4.4, 3.0, 1.7, np.nan, 6.6, 4.3, np.nan])
     check_func(
         impl2, (S_float, True, False), check_dtype=False, is_out_distributed=False
@@ -2879,7 +2881,7 @@ def test_series_sem(memory_leak_check):
 
     S = pd.Series([np.nan, 2.0, 3.0, 4.0, 5.0])
     check_func(f, (S,))
-    check_func(f_skipna, (S,))
+    check_func(f_skipna, (S,), py_output=True)
     check_func(f_ddof, (S,))
     # Empty Series
     S_empty = pd.Series()
@@ -3053,7 +3055,7 @@ def test_series_astype_num_constructors(memory_leak_check):
         return A.astype(float)
 
     S = pd.Series(["3.2", "1", "3.2", np.nan, "5.1"])
-    check_func(impl1, (S,))
+    check_func(impl1, (S,), convert_to_nullable_float=False)
 
     def impl2(A):
         return A.astype(int)

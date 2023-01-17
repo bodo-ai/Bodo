@@ -847,16 +847,28 @@ def test_sort_values_na_position_list(memory_leak_check):
         return output_df
 
     check_func(
-        test_impl1, (df1,), py_output=create_py_output(df1, True, ["last", "first"])
+        test_impl1,
+        (df1,),
+        py_output=create_py_output(df1, True, ["last", "first"]),
+        check_dtype=False,
     )
     check_func(
-        test_impl2, (df1,), py_output=create_py_output(df1, True, ["first", "last"])
+        test_impl2,
+        (df1,),
+        py_output=create_py_output(df1, True, ["first", "last"]),
+        check_dtype=False,
     )
     check_func(
-        test_impl3, (df1,), py_output=create_py_output(df1, False, ["last", "first"])
+        test_impl3,
+        (df1,),
+        py_output=create_py_output(df1, False, ["last", "first"]),
+        check_dtype=False,
     )
     check_func(
-        test_impl4, (df1,), py_output=create_py_output(df1, False, ["first", "last"])
+        test_impl4,
+        (df1,),
+        py_output=create_py_output(df1, False, ["first", "last"]),
+        check_dtype=False,
     )
 
 
@@ -1590,7 +1602,9 @@ def test_random_decimal(memory_leak_check):
     random.seed(5)
     n = 50
     df1 = pd.DataFrame({"A": gen_random_decimal_array(2, n)})
-    check_func(f, (df1,), convert_columns_to_pandas=True)
+    check_func(
+        f, (df1,), convert_columns_to_pandas=True, convert_to_nullable_float=False
+    )
 
 
 def test_sort_list_list(memory_leak_check):

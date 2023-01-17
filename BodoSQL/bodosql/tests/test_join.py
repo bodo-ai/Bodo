@@ -5,6 +5,7 @@ Test correctness of SQL join queries on BodoSQL
 
 import copy
 
+import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_efficient_join, check_query
@@ -73,6 +74,7 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -189,6 +191,7 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -237,6 +240,7 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -275,6 +279,7 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -318,6 +323,7 @@ def test_join_different_size_tables(
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):

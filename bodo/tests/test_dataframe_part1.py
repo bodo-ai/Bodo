@@ -955,10 +955,8 @@ def test_df_replace(memory_leak_check):
         return df.replace([np.inf, -np.inf], np.nan)
 
     df = pd.DataFrame({"A": [1.0, 2.4, -np.inf], "B": [np.inf, 3.6, 5.2]})
-    # passing output here since check_func may convert input to nullable float
-    # Pandas replaces np.nan with pd.NA which causes errors
-    check_func(impl1, (df,), py_output=impl1(df), check_dtype=False)
-    check_func(impl2, (df,), py_output=impl2(df), check_dtype=False)
+    check_func(impl1, (df,), py_output=impl1(df), convert_to_nullable_float=False)
+    check_func(impl2, (df,), py_output=impl2(df), convert_to_nullable_float=False)
 
 
 @pytest.mark.slow
@@ -993,7 +991,7 @@ def test_df_index(df_value, memory_leak_check):
     def impl(df):
         return df.index
 
-    check_func(impl, (df_value,))
+    check_func(impl, (df_value,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1187,7 +1185,7 @@ def test_df_astype_num(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.astype(np.float32)
 
-    check_func(impl, (numeric_df_value,))
+    check_func(impl, (numeric_df_value,), convert_to_nullable_float=False)
 
 
 def test_df_astype_dict(memory_leak_check):
@@ -1475,7 +1473,7 @@ def test_df_corr(df_value, memory_leak_check):
     def impl(df):
         return df.corr()
 
-    check_func(impl, (df_value,), is_out_distributed=False)
+    check_func(impl, (df_value,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1488,7 +1486,7 @@ def test_df_corr_float64(memory_leak_check):
         return df.corr()
 
     df = pd.DataFrame({"A": np.linspace(1, 50, dtype=np.float64)})
-    check_func(impl, (df,), is_out_distributed=False)
+    check_func(impl, (df,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1520,7 +1518,7 @@ def test_df_cov(df_value, memory_leak_check):
     def impl(df):
         return df.cov()
 
-    check_func(impl, (df_value,), is_out_distributed=False)
+    check_func(impl, (df_value,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1668,16 +1666,16 @@ def test_df_reduce_axis1(df, memory_leak_check, is_slow_run):
     def impl_std(df):
         return df.std(axis=1)
 
-    check_func(impl_max, (df,))
+    check_func(impl_max, (df,), convert_to_nullable_float=False)
     if not is_slow_run:
         return
-    check_func(impl_min, (df,))
-    check_func(impl_sum, (df,))
-    check_func(impl_prod, (df,))
-    check_func(impl_mean, (df,))
-    check_func(impl_median, (df,))
-    check_func(impl_var, (df,))
-    check_func(impl_std, (df,))
+    check_func(impl_min, (df,), convert_to_nullable_float=False)
+    check_func(impl_sum, (df,), convert_to_nullable_float=False)
+    check_func(impl_prod, (df,), convert_to_nullable_float=False)
+    check_func(impl_mean, (df,), convert_to_nullable_float=False)
+    check_func(impl_median, (df,), convert_to_nullable_float=False)
+    check_func(impl_var, (df,), convert_to_nullable_float=False)
+    check_func(impl_std, (df,), convert_to_nullable_float=False)
 
 
 @pytest.mark.smoke
@@ -1738,7 +1736,7 @@ def test_df_median1(memory_leak_check):
         return df.median()
 
     df = pd.DataFrame({"A": [1, 8, 4, 11, -3]})
-    check_func(impl, (df,), is_out_distributed=False)
+    check_func(impl, (df,), is_out_distributed=False, convert_to_nullable_float=False)
 
 
 def test_df_median2(numeric_df_value, memory_leak_check):
@@ -1754,7 +1752,12 @@ def test_df_median2(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.median()
 
-    check_func(impl, (numeric_df_value,), is_out_distributed=False)
+    check_func(
+        impl,
+        (numeric_df_value,),
+        is_out_distributed=False,
+        convert_to_nullable_float=False,
+    )
 
 
 @pytest.mark.slow
@@ -1775,7 +1778,13 @@ def test_df_quantile(df_value, memory_leak_check):
     def impl(df):
         return df.quantile(0.3)
 
-    check_func(impl, (df_value,), is_out_distributed=False, check_names=False)
+    check_func(
+        impl,
+        (df_value,),
+        is_out_distributed=False,
+        check_names=False,
+        check_dtype=False,
+    )
 
 
 @pytest.mark.slow
@@ -1787,7 +1796,7 @@ def test_df_pct_change(numeric_df_value, memory_leak_check):
     def test_impl(df):
         return df.pct_change(2)
 
-    check_func(test_impl, (numeric_df_value,))
+    check_func(test_impl, (numeric_df_value,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -1795,7 +1804,9 @@ def test_df_describe(numeric_df_value, memory_leak_check):
     def test_impl(df):
         return df.describe(datetime_is_numeric=True)
 
-    check_func(test_impl, (numeric_df_value,), is_out_distributed=False)
+    check_func(
+        test_impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False
+    )
 
 
 @pytest.mark.slow
@@ -1836,7 +1847,7 @@ def test_df_describe_mixed_types(memory_leak_check):
         }
     )
 
-    check_func(impl, (df,), is_out_distributed=False)
+    check_func(impl, (df,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2173,7 +2184,7 @@ def test_df_idxmax(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.idxmax()
 
-    check_func(impl, (numeric_df_value,), is_out_distributed=False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2184,7 +2195,7 @@ def test_df_idxmin(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.idxmin()
 
-    check_func(impl, (numeric_df_value,), is_out_distributed=False)
+    check_func(impl, (numeric_df_value,), is_out_distributed=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2287,7 +2298,7 @@ def test_df_shift_unsupported(df_value, memory_leak_check):
         return df.shift(2)
 
     if not is_unsupported:
-        check_func(impl, (df_value,))
+        check_func(impl, (df_value,), check_dtype=False)
         return
 
     with pytest.raises(BodoError, match=r"Dataframe.shift\(\) column input type"):
@@ -2315,7 +2326,7 @@ def test_df_diff(numeric_df_value, memory_leak_check):
     def impl(df):
         return df.diff()
 
-    check_func(impl, (numeric_df_value,))
+    check_func(impl, (numeric_df_value,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2644,10 +2655,10 @@ def test_dataframe_binary_op(op, memory_leak_check):
 
     df = pd.DataFrame({"A": [4, 6, 7, 1, 3]}, index=[3, 5, 0, 7, 2])
     # df/df
-    check_func(test_impl, (df, df))
+    check_func(test_impl, (df, df), check_dtype=False)
     # df/scalar
-    check_func(test_impl, (df, 2))
-    check_func(test_impl, (2, df))
+    check_func(test_impl, (df, 2), check_dtype=False)
+    check_func(test_impl, (2, df), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2673,8 +2684,8 @@ def test_dataframe_binary_op_inconsistent_schemas(memory_leak_check):
 
     df1 = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
     df2 = pd.DataFrame({"B": [3, 1, 2], "A": [1.2, 2.2, 3.3], "C": [1, 2, 3]})
-    check_func(impl1, (df1, df2))
-    check_func(impl2, (df1, df2), copy_input=True)
+    check_func(impl1, (df1, df2), convert_to_nullable_float=False)
+    check_func(impl2, (df1, df2), copy_input=True, convert_to_nullable_float=False)
 
 
 @pytest.mark.slow

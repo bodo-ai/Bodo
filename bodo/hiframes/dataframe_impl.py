@@ -2120,7 +2120,7 @@ def overload_dataframe_diff(df, periods=1, axis=0):
     # Currently only float, int, and dt64 are supported
     for column_type in df.data:
         if not (
-            isinstance(column_type, types.Array)
+            isinstance(column_type, (types.Array, IntegerArrayType, FloatingArrayType))
             and (
                 isinstance(column_type.dtype, (types.Number))
                 or column_type.dtype == bodo.datetime64ns

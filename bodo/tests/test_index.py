@@ -3544,7 +3544,7 @@ def test_index_cmp_ops(op, memory_leak_check):
     "index",
     [
         pd.Index([10, 12], dtype="Int64"),
-        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10.1, 12.1], dtype="Float64"),
         pd.Index([10, 12], dtype="UInt64"),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
@@ -3604,7 +3604,11 @@ def test_index_nbytes(index, memory_leak_check):
     # data = 16 bytes
     # null_bit_map= 1 byte if 1 rank, 2 bytes if > 1 rank
     # Total = 16 + num_ranks bytes
-    elif isinstance(index, pd.Index) and str(index.dtype) in ["Int64", "UInt64"]:
+    elif isinstance(index, pd.Index) and str(index.dtype) in [
+        "Int64",
+        "UInt64",
+        "Float64",
+    ]:
         py_out = 16 + (1 if bodo.get_size() == 1 else 2)
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
@@ -3678,7 +3682,9 @@ def test_index_simple_attributes(index):
     # Bodo diverges from the Pandas API by always returning the numpy dtype in
     # ambiguous cases.
     if isinstance(index.dtype, np.dtype):
-        check_func(impl3, (index,), dist_test=dist_test)
+        check_func(
+            impl3, (index,), dist_test=dist_test, convert_to_nullable_float=False
+        )
 
 
 @pytest.mark.parametrize(

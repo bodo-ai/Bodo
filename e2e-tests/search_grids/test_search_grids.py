@@ -53,4 +53,6 @@ def validate_results(bodo_result, oracle):
         if df2.dtypes.iloc[i] == pd.StringDtype("pyarrow"):
             df2.iloc[:, i] = df2.iloc[:, i].values.to_numpy()
     df22 = df2.sort_values(list(df2.columns)).reset_index(drop=True)
-    pd.testing.assert_frame_equal(oracle, df22, check_column_type=False)
+    pd.testing.assert_frame_equal(
+        oracle, df22, check_column_type=False, check_dtype=False
+    )

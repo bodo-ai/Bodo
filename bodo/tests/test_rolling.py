@@ -125,7 +125,7 @@ def test_fixed_index_groupby():
         }
     )
     # Groupby ordering isn't defined so we must sort.
-    check_func(impl, (df,), sort_output=True, reset_index=True)
+    check_func(impl, (df,), sort_output=True, reset_index=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -186,13 +186,13 @@ def test_column_select(memory_leak_check):
             ],
         }
     )
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
-    check_func(impl3, (df,))
-    check_func(impl4, (df,))
-    check_func(impl5, (df,))
-    check_func(impl6, (df,))
-    check_func(impl7, (df,))
+    check_func(impl1, (df,), check_dtype=False)
+    check_func(impl2, (df,), check_dtype=False)
+    check_func(impl3, (df,), check_dtype=False)
+    check_func(impl4, (df,), check_dtype=False)
+    check_func(impl5, (df,), check_dtype=False)
+    check_func(impl6, (df,), check_dtype=False)
+    check_func(impl7, (df,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -232,20 +232,20 @@ def test_min_periods(memory_leak_check):
             ],
         }
     )
-    check_func(impl1, (df, False, 1))
-    check_func(impl1, (df, True, 1))
-    check_func(impl1, (df, False, 2))
-    check_func(impl1, (df, True, 2))
+    check_func(impl1, (df, False, 1), check_dtype=False)
+    check_func(impl1, (df, True, 1), check_dtype=False)
+    check_func(impl1, (df, False, 2), check_dtype=False)
+    check_func(impl1, (df, True, 2), check_dtype=False)
 
-    check_func(impl2, (df, False, 1))
-    check_func(impl2, (df, True, 1))
-    check_func(impl2, (df, False, 2))
-    check_func(impl2, (df, True, 2))
+    check_func(impl2, (df, False, 1), check_dtype=False)
+    check_func(impl2, (df, True, 1), check_dtype=False)
+    check_func(impl2, (df, False, 2), check_dtype=False)
+    check_func(impl2, (df, True, 2), check_dtype=False)
 
-    check_func(impl3, (df, 1))
-    check_func(impl3, (df, 2))
-    check_func(impl4, (df, 1))
-    check_func(impl4, (df, 2))
+    check_func(impl3, (df, 1), check_dtype=False)
+    check_func(impl3, (df, 2), check_dtype=False)
+    check_func(impl4, (df, 1), check_dtype=False)
+    check_func(impl4, (df, 2), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -273,8 +273,8 @@ def test_apply_raw_false(memory_leak_check):
         },
         index=[3, 1, 5, 11, 3],
     )
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl1, (df,), check_dtype=False)
+    check_func(impl2, (df,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -299,7 +299,7 @@ def test_fixed_apply_nested_func(memory_leak_check):
         return df.rolling(2).apply(lambda a: g(a))
 
     df = pd.DataFrame({"B": [0, 1, 2, np.nan, 4]})
-    check_func(test_impl, (df,))
+    check_func(test_impl, (df,), check_dtype=False)
 
 
 @pytest.mark.slow
@@ -326,10 +326,10 @@ def test_groupby_rolling(is_slow_run):
             "D": [3, 1, 2, 4, 5, 5] * 3,
         }
     )
-    check_func(impl1, (df,), sort_output=True, reset_index=True)
+    check_func(impl1, (df,), sort_output=True, reset_index=True, check_dtype=False)
     if not is_slow_run:
         return
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    check_func(impl2, (df,), sort_output=True, reset_index=True, check_dtype=False)
     df = pd.DataFrame(
         {
             "A": [1, 4, 4, 11, 4, 1, 1, 1, 4],
@@ -347,7 +347,7 @@ def test_groupby_rolling(is_slow_run):
             ],
         }
     )
-    check_func(impl3, (df,), sort_output=True, reset_index=True)
+    check_func(impl3, (df,), sort_output=True, reset_index=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -379,8 +379,8 @@ def test_skip_non_numeric_columns(memory_leak_check):
             ],
         }
     )
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl1, (df,), check_dtype=False)
+    check_func(impl2, (df,), check_dtype=False)
 
 
 @pytest.mark.slow

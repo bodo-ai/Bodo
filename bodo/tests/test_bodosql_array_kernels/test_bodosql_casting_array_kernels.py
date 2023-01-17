@@ -212,6 +212,7 @@ def test_cast_float64(numeric_arrays, memory_leak_check):
         py_output=answer,
         check_dtype=True,
         reset_index=True,
+        convert_to_nullable_float=False,
     )
 
 
