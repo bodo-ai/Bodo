@@ -487,6 +487,9 @@ def add_interval_util(start_dt, interval):
             )
             extra_globals = {"trans": trans, "deltas": deltas}
             scalar_text += f"start_value = arg0.value\n"
+            # Wrap the interval in a pd.Timedelta if dealing with an array of intervals
+            if bodo.utils.utils.is_array_typ(interval, True):
+                scalar_text += f"arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
             scalar_text += "end_value = start_value + arg1.value\n"
             scalar_text += (
                 "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
@@ -503,10 +506,22 @@ def add_interval_util(start_dt, interval):
         # in datetime64 format
         is_vector = bodo.utils.utils.is_array_typ(start_dt, True)
         unbox_str = (
-            "bodo.utils.conversion.unbox_if_tz_naive_timestamp" if is_vector else ""
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+            if bodo.utils.utils.is_array_typ(start_dt, True)
+            or bodo.utils.utils.is_array_typ(interval, True)
+            else ""
         )
-        box_str = "bodo.utils.conversion.box_if_dt64" if is_vector else ""
-        scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) + arg1)\n"
+        box_str0 = (
+            "bodo.utils.conversion.box_if_dt64"
+            if bodo.utils.utils.is_array_typ(start_dt, True)
+            else ""
+        )
+        box_str1 = (
+            "bodo.utils.conversion.box_if_dt64"
+            if bodo.utils.utils.is_array_typ(interval, True)
+            else ""
+        )
+        scalar_text = f"res[i] = {unbox_str}({box_str0}(arg0) + {box_str1}(arg1))\n"
 
         out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
