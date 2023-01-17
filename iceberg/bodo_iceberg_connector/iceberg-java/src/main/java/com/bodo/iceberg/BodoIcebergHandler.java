@@ -156,8 +156,13 @@ public class BodoIcebergHandler {
     transaction.commitTransaction();
   }
 
-  /** Fetch the snapshot id for a table */
+  /**
+   * Fetch the snapshot id for a table. Returns -1 for a newly created table without any snapshots
+   */
   public long getSnapshotId() {
-    return catalog.loadTable(id).currentSnapshot().snapshotId();
+    var snapshot = catalog.loadTable(id).currentSnapshot();
+    // When the table has just been created
+    if (snapshot == null) return -1;
+    return snapshot.snapshotId();
   }
 }

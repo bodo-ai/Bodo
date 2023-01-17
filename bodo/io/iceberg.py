@@ -101,7 +101,6 @@ def get_iceberg_type_info(
         - PyArrow Schema Object
     """
     import bodo_iceberg_connector
-    import numba.core
 
     # In the case that we encounter an error, we store the exception in col_names_or_err
     col_names_or_err = None
@@ -123,15 +122,7 @@ def get_iceberg_type_info(
                 raise BodoError("No such Iceberg table found")
 
         except bodo_iceberg_connector.IcebergError as e:
-            # Only include Java error info in dev mode because it contains at lot of
-            # unnecessary info about internal packages and dependencies.
-            if (
-                isinstance(e, bodo_iceberg_connector.IcebergJavaError)
-                and numba.core.config.DEVELOPER_MODE
-            ):  # pragma: no cover
-                col_names_or_err = BodoError(f"{e.message}: {e.java_error}")
-            else:
-                col_names_or_err = BodoError(e.message)
+            col_names_or_err = BodoError(e.message)
 
     comm = MPI.COMM_WORLD
     col_names_or_err = comm.bcast(col_names_or_err)
@@ -172,7 +163,6 @@ def get_iceberg_file_list(
         - List of original file paths directly from Iceberg
     """
     import bodo_iceberg_connector
-    import numba.core
 
     assert (
         bodo.get_rank() == 0
@@ -183,15 +173,8 @@ def get_iceberg_file_list(
             conn, database_schema, table_name, filters
         )
     except bodo_iceberg_connector.IcebergError as e:
-        # Only include Java error info in dev mode because it contains at lot of
-        # unnecessary info about internal packages and dependencies.
-        if (
-            isinstance(e, bodo_iceberg_connector.IcebergJavaError)
-            and numba.core.config.DEVELOPER_MODE
-        ):  # pragma: no cover
-            raise BodoError(f"{e.message}:\n{e.java_error}")
-        else:
-            raise BodoError(e.message)
+        raise BodoError(e.message)
+
     return res
 
 
@@ -208,7 +191,6 @@ def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str):
         int: Snapshot Id for the current version of the Iceberg table.
     """
     import bodo_iceberg_connector
-    import numba.core
 
     assert (
         bodo.get_rank() == 0
@@ -221,15 +203,8 @@ def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str):
             table_name,
         )
     except bodo_iceberg_connector.IcebergError as e:
-        # Only include Java error info in dev mode because it contains at lot of
-        # unnecessary info about internal packages and dependencies.
-        if (
-            isinstance(e, bodo_iceberg_connector.IcebergJavaError)
-            and numba.core.config.DEVELOPER_MODE  # type: ignore
-        ):  # pragma: no cover
-            raise BodoError(f"{e.message}:\n{e.java_error}")
-        else:
-            raise BodoError(e.message)
+        raise BodoError(e.message)
+
     return snapshot_id
 
 

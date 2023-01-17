@@ -28,7 +28,7 @@ class DataFileInfo:
 def process_file_infos(
     fnames: List[str],
     all_metrics: Dict[str, Any],
-    catalog_type,
+    catalog_type: str,
     table_loc,
     db_name,
     table_name,

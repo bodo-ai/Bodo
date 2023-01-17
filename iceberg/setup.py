@@ -58,7 +58,7 @@ def build_libs(obj, dev_mode=False):
         )
         to_jar_path = os.path.join(curr_path, "bodo_iceberg_connector/jars")
         os.makedirs(to_jar_path, exist_ok=True)
-        os.rename(
+        shutil.copyfile(
             os.path.join(executable_jar_dir, "bodo-iceberg-reader.jar"),
             os.path.join(to_jar_path, "bodo-iceberg-reader.jar"),
         )
