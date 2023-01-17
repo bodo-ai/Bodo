@@ -86,6 +86,10 @@ inline bool is_integer(Bodo_CTypes::CTypeEnum typ) {
     return false;
 }
 
+inline bool is_float(Bodo_CTypes::CTypeEnum typ) {
+    return ((typ == Bodo_CTypes::FLOAT32) || (typ == Bodo_CTypes::FLOAT64));
+}
+
 /** Getting the expression of a T value as a vector of characters
  *
  * The template paramter is T.

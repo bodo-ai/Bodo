@@ -1351,6 +1351,7 @@ def test_numeric_single_arg_funcs(arr, func):
         py_output=numeric_answer,
         check_dtype=False,
         reset_index=True,
+        convert_to_nullable_float=False,
     )
 
 
@@ -1438,6 +1439,7 @@ def test_numeric_double_arg_funcs(arr0, arr1, func):
         py_output=numeric_func_answer,
         check_dtype=False,
         reset_index=True,
+        convert_to_nullable_float=False,
     )
 
 

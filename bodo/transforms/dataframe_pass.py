@@ -55,6 +55,7 @@ from bodo.utils.typing import (
     INDEX_SENTINEL,
     BodoError,
     ColNamesMetaType,
+    get_index_data_arr_types,
     get_literal_value,
     get_overload_const_func,
     get_overload_const_list,
@@ -1592,17 +1593,17 @@ class DataFramePass:
 
         if right_index_as_output:
             has_index_var = True
-            out_index_typ = self.typemap[right_index_var.name]
             in_df_index_name = right_df_index_name
         elif left_index_as_output:
             has_index_var = True
-            out_index_typ = self.typemap[left_index_var.name]
             in_df_index_name = left_df_index_name
         # Update the type info
         if has_index_var:
             index_var = ir.Var(lhs.scope, mk_unique_var("out_index"), lhs.loc)
             out_data_vars.append(index_var)
-            self.typemap[index_var.name] = out_index_typ
+            self.typemap[index_var.name] = get_index_data_arr_types(
+                self.typemap[lhs.name].index
+            )[0]
             left_vars.append(left_index_var)
             right_vars.append(right_index_var)
         else:

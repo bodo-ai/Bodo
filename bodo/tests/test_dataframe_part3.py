@@ -281,7 +281,7 @@ def test_describe_many_columns(memory_leak_check):
     import time
 
     t0 = time.time()
-    check_func(impl, (df,), is_out_distributed=False)
+    check_func(impl, (df,), is_out_distributed=False, check_dtype=False)
     compilation_time = time.time() - t0
     # Determine the max compilation time on any rank to avoid hangs.
     comm = MPI.COMM_WORLD
@@ -1691,7 +1691,13 @@ def test_df_rank(method, na_option, ascending, pct):
                     method=method, na_option=na_option, ascending=ascending, pct=pct
                 )
             )
-            check_func(impl, (df,), dist_test=False, py_output=py_output)
+            check_func(
+                impl,
+                (df,),
+                dist_test=False,
+                py_output=py_output,
+                convert_to_nullable_float=False,
+            )
     else:
         check_func(impl, (df,), dist_test=False)
 

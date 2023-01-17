@@ -234,6 +234,7 @@ def test_tpch_q6(tpch_data, spark_info, memory_leak_check):
         spark_info,
         spark_dataframe_dict=spark_df_dict,
         is_out_distributed=False,
+        check_dtype=False,
     )
 
 

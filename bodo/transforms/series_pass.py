@@ -77,6 +77,7 @@ from bodo.hiframes.series_str_impl import (
 from bodo.hiframes.split_impl import StringArraySplitViewType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import (
+    BooleanArrayType,
     boolean_array,
     is_valid_boolean_array_logical_op,
 )
@@ -1491,6 +1492,49 @@ class SeriesPass:
                 self, impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=()
             )
 
+        # inline builtin calls on Bodo nullable arrays (NOTE: our overload
+        # implementation which has inline='always' may not be pick up by Numba since
+        # Bodo arrays are iterables, see test_int_array.py::test_min)
+        if (
+            func_mod == "builtins"
+            and func_name in ("min", "max", "sum")
+            and len(rhs.args) == 1
+            and isinstance(
+                self.typemap[rhs.args[0].name],
+                (IntegerArrayType, FloatingArrayType, BooleanArrayType),
+            )
+        ):
+
+            impl = getattr(bodo.libs.array_kernels, "overload_array_" + func_name)(
+                self.typemap[rhs.args[0].name]
+            )
+            return replace_func(
+                self, impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=()
+            )
+
+        # inline Series methods (necessary since used in min/max/sum array overloads
+        # above)
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(self.typemap[func_mod.name], SeriesType)
+            and func_name in ("min", "max", "sum")
+            and len(rhs.args) == 0
+        ):
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = getattr(bodo.hiframes.series_impl, "overload_series_" + func_name)(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
         # inline ufuncs on IntegerArray
         if (
             func_mod in ("numpy", "ufunc")
@@ -1985,6 +2029,23 @@ class SeriesPass:
         # doesn't have inline pass)
         if fdef in (("notna", "pandas"), ("notnull", "pandas")) and not rhs.kws:
             impl = bodo.hiframes.dataframe_impl.overload_notna(
+                self.typemap[rhs.args[0].name]
+            )
+            return compile_func_single_block(
+                impl,
+                rhs.args,
+                assign.target,
+                self,
+            )
+
+        # inline np.var()/np.std() on nullable float arrays to be parallelized
+        if (
+            fdef in (("std", "numpy"), ("var", "numpy"))
+            and not rhs.kws
+            and len(rhs.args) == 1
+            and isinstance(self.typemap[rhs.args[0].name], FloatingArrayType)
+        ):
+            impl = getattr(bodo.libs.float_arr_ext, "overload_" + func_name)(
                 self.typemap[rhs.args[0].name]
             )
             return compile_func_single_block(

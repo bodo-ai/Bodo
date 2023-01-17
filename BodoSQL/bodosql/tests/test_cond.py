@@ -420,6 +420,7 @@ def test_ifnull_scalar(basic_df, spark_info, ifnull_equivalent_fn, memory_leak_c
         basic_df,
         spark_info,
         check_names=False,
+        check_dtype=False,
         equivalent_spark_query=spark_query,
     )
 
@@ -469,7 +470,15 @@ def test_ifnull_multitable(
     """Checks ifnull function with columns from multiple tables"""
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -567,7 +576,14 @@ def test_nullif_multitable(join_dataframes, spark_info, memory_leak_check):
     """Checks nullif function with columns from multiple tables"""
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):

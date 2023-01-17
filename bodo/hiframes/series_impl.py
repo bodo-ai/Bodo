@@ -3742,7 +3742,7 @@ def overload_series_diff(S, periods=1):
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int (not nullable), and dt64 are supported
     if not (
-        isinstance(S.data, types.Array)
+        isinstance(S.data, (types.Array, IntegerArrayType, FloatingArrayType))
         and (
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.datetime64ns

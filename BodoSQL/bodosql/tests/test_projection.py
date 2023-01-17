@@ -188,7 +188,7 @@ def test_select_literal_no_table(basic_df, spark_info, memory_leak_check):
     Tests that literals can be selected with no input table.
     """
     query = "SELECT 1, 2, 'A'"
-    check_query(query, basic_df, spark_info, check_names=False)
+    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
 def test_select_all_nullable_numeric(
@@ -212,7 +212,7 @@ def test_select_from_simple(join_dataframes, spark_info, memory_leak_check):
                 (
                     pd.core.arrays.integer._IntegerDtype,
                     pd.Float32Dtype,
-                    pd.Float64Dtype
+                    pd.Float64Dtype,
                 ),
             )
             for x in join_dataframes["table1"].dtypes

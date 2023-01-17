@@ -115,8 +115,8 @@ table_info* hash_join_table(
  * func columns are included in the output table. The booleans first contain
  * all cond columns of the left table and then the right table.
  * @param vect_need_typechange : a vector specifying whether a column's type
- * needs to be changed to nullable or not. Only application to Numput integer
- columns currently.
+ * needs to be changed to nullable or not. Only application to Numpy
+ integer/float columns currently.
  * @param cond_func function generated in Python to evaluate general join
  * conditions. It takes data pointers for left/right tables and row indices.
  * @param cond_func_left_columns: Array of column numbers in the left table
