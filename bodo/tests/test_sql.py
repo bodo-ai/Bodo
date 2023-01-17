@@ -199,7 +199,7 @@ def test_limit_inferrence_small_table(memory_leak_check):
             frame = pd.read_sql(sql_request, conn)
             return frame
 
-        check_func(test_impl_limit, (conn,))
+        check_func(test_impl_limit, (conn,), check_dtype=False)
 
 
 def test_sql_single_column(memory_leak_check):

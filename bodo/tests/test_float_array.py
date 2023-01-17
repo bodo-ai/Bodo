@@ -555,6 +555,15 @@ def test_float_arr_shape(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_list(memory_leak_check):
+    def test_impl(A):
+        return list(A)
+
+    A = pd.array([3.2, 1.3, -2.9], "Float64")
+    check_func(test_impl, (A,), only_seq=True)
+
+
+@pytest.mark.slow
 def test_float_arr_dtype(nullable_float_values, float_dtype, memory_leak_check):
     def test_impl(A):
         return A.dtype

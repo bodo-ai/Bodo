@@ -207,7 +207,7 @@ def test_table_del_single_block(file_type, datapath, memory_leak_check):
     exec(func_text, globals(), local_vars)
     impl = local_vars["impl"]
 
-    check_func(impl, ())
+    check_func(impl, (), check_dtype=False)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -1500,7 +1500,7 @@ def test_many_cols_to_parquet(datapath, memory_leak_check):
             bodo_df = pd.read_parquet(bodo_filename)
             try:
                 pd.testing.assert_frame_equal(
-                    pandas_df, bodo_df, check_column_type=False
+                    pandas_df, bodo_df, check_column_type=False, check_dtype=False
                 )
                 return 1
             except Exception:
@@ -1533,7 +1533,7 @@ def test_table_dead_csv(datapath, memory_leak_check):
         df = pd.read_csv(filename, index_col="Column4")
         return df.index
 
-    check_func(impl, ())
+    check_func(impl, (), check_dtype=False)
     bodo_func = bodo.jit(pipeline_class=ColumnDelTestPipeline)(impl)
     bodo_func()
     _check_column_dels(bodo_func, [])

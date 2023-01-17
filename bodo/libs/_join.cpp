@@ -1125,15 +1125,15 @@ table_info* hash_join_table(
             tracing::Event ev_fill_optional("fill_extra_data_col",
                                             parallel_trace);
             size_t i = 0;
-            bool map_integer_type = false;
+            bool use_nullable_arr = false;
             array_info* left_arr = work_left_table->columns[i];
             array_info* right_arr = work_right_table->columns[i];
             if (ChoiceOpt == 0) {
                 out_arrs.push_back(RetrieveArray_TwoColumns(
-                    left_arr, right_arr, ListPairWrite, 2, map_integer_type));
+                    left_arr, right_arr, ListPairWrite, 2, use_nullable_arr));
             } else {
                 out_arrs.push_back(RetrieveArray_TwoColumns(
-                    right_arr, left_arr, ListPairWrite, 2, map_integer_type));
+                    right_arr, left_arr, ListPairWrite, 2, use_nullable_arr));
             }
             // After adding the optional collect decref the original values
             if (last_col_use_left[i] == 1) {
@@ -1158,15 +1158,15 @@ table_info* hash_join_table(
                 array_info* left_arr = work_left_table->columns[i];
                 array_info* right_arr = work_right_table->columns[i];
                 if (key_in_output[key_in_output_idx]) {
-                    bool map_integer_type = false;
+                    bool use_nullable_arr = false;
                     if (ChoiceOpt == 0) {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
                             left_arr, right_arr, ListPairWrite, 2,
-                            map_integer_type));
+                            use_nullable_arr));
                     } else {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
                             right_arr, left_arr, ListPairWrite, 2,
-                            map_integer_type));
+                            use_nullable_arr));
                     }
                     idx++;
                 }
@@ -1187,16 +1187,16 @@ table_info* hash_join_table(
                 // only from one side. Therefore we have to plan for the
                 // possibility of additional NaN.
                 if (!check_key_in_output || key_in_output[key_in_output_idx]) {
-                    bool map_integer_type = use_nullable_arr_type[idx];
+                    bool use_nullable_arr = use_nullable_arr_type[idx];
                     array_info* right_arr = nullptr;
                     if (ChoiceOpt == 0) {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
                             left_arr, right_arr, ListPairWrite, 0,
-                            map_integer_type));
+                            use_nullable_arr));
                     } else {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
                             right_arr, left_arr, ListPairWrite, 1,
-                            map_integer_type));
+                            use_nullable_arr));
                     }
                     idx++;
                 }
@@ -1226,16 +1226,16 @@ table_info* hash_join_table(
                 bool check_key_in_output =
                     is_new_key || (right_cond_func_cols_set.contains(i));
                 if (!check_key_in_output || key_in_output[key_in_output_idx]) {
-                    bool map_integer_type = use_nullable_arr_type[idx];
+                    bool use_nullable_arr = use_nullable_arr_type[idx];
                     array_info* left_arr = nullptr;
                     if (ChoiceOpt == 0) {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
                             left_arr, right_arr, ListPairWrite, 1,
-                            map_integer_type));
+                            use_nullable_arr));
                     } else {
                         out_arrs.emplace_back(RetrieveArray_TwoColumns(
                             right_arr, left_arr, ListPairWrite, 0,
-                            map_integer_type));
+                            use_nullable_arr));
                     }
                     idx++;
                 }
@@ -1426,8 +1426,8 @@ void add_unmatched_rows(std::vector<uint8_t>& bit_map, size_t n_rows,
  * func columns are included in the output table. The booleans first contain
  * all cond columns of the left table and then the right table.
  * @param use_nullable_arr_type : a vector specifying whether a column's type
- * needs to be changed to nullable or not. Only applicable to Numpy integer
- * columns currently.
+ * needs to be changed to nullable or not. Only applicable to Numpy
+ * integer/float columns currently.
  * @param cond_func_left_columns: Array of column numbers in the left table
  * used by cond_func.
  * @param cond_func_left_column_len: Length of cond_func_left_columns.
@@ -1473,9 +1473,9 @@ table_info* create_out_table(
         // cond columns may be dead
         if (!left_cond_func_cols_set.contains(i) ||
             key_in_output[key_in_output_idx++]) {
-            bool use_nullable_int = use_nullable_arr_type[idx];
+            bool use_nullable_arr = use_nullable_arr_type[idx];
             out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, left_idxs,
-                                                             use_nullable_int));
+                                                             use_nullable_arr));
             idx++;
         }
         if (decref_arrs) {
@@ -1490,9 +1490,9 @@ table_info* create_out_table(
         // cond columns may be dead
         if (!right_cond_func_cols_set.contains(i) ||
             key_in_output[key_in_output_idx++]) {
-            bool use_nullable_int = use_nullable_arr_type[idx];
+            bool use_nullable_arr = use_nullable_arr_type[idx];
             out_arrs.emplace_back(RetrieveArray_SingleColumn(in_arr, right_idxs,
-                                                             use_nullable_int));
+                                                             use_nullable_arr));
             idx++;
         }
         if (decref_arrs) {

@@ -466,7 +466,7 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         df = pd.read_csv(fname_gzipped, names=["A", "B", "C", "D"], compression="gzip")
         return df.C
 
-    check_func(impl, (), only_seq=True)
+    check_func(impl, (), only_seq=True, check_dtype=False)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -477,7 +477,7 @@ def test_csv_remove_col0_used_for_len(datapath, memory_leak_check):
         subprocess.run(["gzip", "-k", "-f", fname])
     bodo.barrier()
     with ensure_clean(fname_gzipped):
-        check_func(impl2, (), only_seq=True)
+        check_func(impl2, (), only_seq=True, check_dtype=False)
         with set_logging_stream(logger, 1):
             bodo.jit()(impl2)()
             check_logger_msg(stream, "Columns loaded ['C']")
@@ -2792,7 +2792,7 @@ class TestIO(unittest.TestCase):
         def test_impl():
             return pd.read_csv(fname, names=["B", "C"], usecols=[1, 2])
 
-        check_func(test_impl, (), only_seq=True)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_usecols3(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data2.csv")
@@ -2800,7 +2800,7 @@ class TestIO(unittest.TestCase):
         def test_impl():
             return pd.read_csv(fname, sep="|", names=["B", "C"], usecols=[1, 2])
 
-        check_func(test_impl, (), only_seq=True)
+        check_func(test_impl, (), only_seq=True, check_dtype=False)
 
     def test_csv_cat2(self):
         fname = os.path.join("bodo", "tests", "data", "csv_data_cat1.csv")
@@ -3008,15 +3008,24 @@ def check_CSV_write(
 
 def check_to_csv_string_output(df, impl):
     """helper function that insures that output of to_csv is correct when returning a string from JIT code"""
-    check_func(impl, (df,), only_seq=True)
+    # Pandas (as of 1.4) has bugs in handling nullable float (e.g. float_format kw)
+    check_func(impl, (df,), only_seq=True, convert_to_nullable_float=False)
 
     # check for distributed case, the output for each rank is the same as calling
     # df.to_csv(None) on the distributed dataframe
     py_out_1d = impl(_get_dist_arg(df))
-    check_func(impl, (df,), only_1D=True, py_output=py_out_1d)
+    check_func(
+        impl, (df,), only_1D=True, py_output=py_out_1d, convert_to_nullable_float=False
+    )
 
     py_out_1d_vars = impl(_get_dist_arg(df, var_length=True))
-    check_func(impl, (df,), only_1DVar=True, py_output=py_out_1d_vars)
+    check_func(
+        impl,
+        (df,),
+        only_1DVar=True,
+        py_output=py_out_1d_vars,
+        convert_to_nullable_float=False,
+    )
 
 
 @pytest.mark.slow

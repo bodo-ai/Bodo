@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import Literal, Set, Tuple
 
 import numba
+import pandas as pd
 from numba.core import ir, types
 from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 
@@ -313,15 +314,19 @@ def cast_float_to_nullable(df, df_type):
     """
     import bodo
 
-    col_map = {}
+    col_map = defaultdict(list)
     for i, coltype in enumerate(df_type.data):
         if isinstance(coltype, (bodo.IntegerArrayType, bodo.FloatingArrayType)):
             dtype = coltype.get_pandas_scalar_type_instance
-            if dtype not in col_map:
-                col_map[dtype] = []
             col_map[dtype].append(df.columns[i])
     for typ, cols in col_map.items():
-        df[cols] = df[cols].astype(typ)
+        # Pandas (as of 1.4) may create an object array for nullable float types with
+        # nulls as 'NaN' string values. Converting to Numpy first avoids failure in
+        # astype(). See test_s3_read_json
+        if isinstance(typ, (pd.Float32Dtype, pd.Float64Dtype)):
+            df[cols] = df[cols].astype(typ.numpy_dtype).astype(typ)
+        else:
+            df[cols] = df[cols].astype(typ)
 
 
 def connector_table_column_use(
