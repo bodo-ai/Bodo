@@ -1,9 +1,10 @@
 import os
 import sys
+import warnings
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
-from bodo_iceberg_connector.errors import IcebergError
+from bodo_iceberg_connector.errors import IcebergError, IcebergWarning
 
 
 def _get_first(elems: Dict[str, List[str]], param: str) -> Optional[str]:
@@ -24,15 +25,33 @@ def parse_conn_str(
 
     # Determine Catalog Type
     catalog_type = _get_first(conn_query, "type")
+    warehouse = _get_first(conn_query, "warehouse")
+
     if catalog_type is None:
         if parsed_conn.scheme == "thrift":
             catalog_type = "hive"
+
         elif parsed_conn.scheme == "" and parsed_conn.path == "glue":
             catalog_type = "glue"
+
         elif parsed_conn.scheme == "s3":
             catalog_type = "hadoop-s3"
+            if warehouse is not None:
+                warnings.warn(
+                    "The `warehouse` property in the connection string will be ignored when accessing a Hadoop S3 catalog. Instead, the `warehouse` will be inferred from the connection string path itself.",
+                    IcebergWarning,
+                )
+            warehouse = f"s3://{parsed_conn.netloc}{parsed_conn.path}"
+
         elif parsed_conn.scheme == "" or parsed_conn.scheme == "file":
             catalog_type = "hadoop"
+            if warehouse is not None:
+                warnings.warn(
+                    "The `warehouse` property in the connection string will be ignored when accessing a local Hadoop catalog. Instead, the `warehouse` will be inferred from the connection string path itself.",
+                    IcebergWarning,
+                )
+            warehouse = f"{parsed_conn.netloc}{parsed_conn.path}"
+
         else:
             types = ", ".join(["hadoop-s3", "hadoop", "hive", "nessie", "glue"])
             raise IcebergError(
@@ -42,13 +61,11 @@ def parse_conn_str(
     assert catalog_type in ["hadoop-s3", "hadoop", "hive", "nessie", "glue"]
 
     # Get Warehouse Location
-    # TODO: Do something more intelligent with thrift
-    if catalog_type in ["hadoop", "hadoop-s3"]:
-        # TODO: assert warehouse query parameter is None ???
-        fs_prefix = "s3://" if parsed_conn.scheme == "s3" else ""
-        warehouse = f"{fs_prefix}{parsed_conn.netloc}{parsed_conn.path}"
-    else:
-        warehouse = _get_first(conn_query, "warehouse")
+    if warehouse is None:
+        warnings.warn(
+            "It is recommended that the `warehouse` property is included in the connection string for this type of catalog. Bodo can automatically infer what kind of FileIO to use from the warehouse location. It is also highly recommended to include with Glue and Nessie catalogs.",
+            IcebergWarning,
+        )
 
     # TODO: Pass more parsed results to use in java
     return catalog_type, warehouse
