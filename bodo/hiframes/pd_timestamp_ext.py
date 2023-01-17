@@ -1619,17 +1619,17 @@ def series_str_td64_astype(data):  # pragma: no cover
 @numba.njit
 def datetime_datetime_to_dt64(val):  # pragma: no cover
     """convert datetime.datetime to np.datetime64"""
-    with numba.objmode(res='NPDatetime("ns")'):
-        res = np.datetime64(val).astype("datetime64[ns]")
-
-    return res
+    return integer_to_dt64(pd.Timestamp(val).value)
 
 
 @register_jitable
 def datetime_date_arr_to_dt64_arr(arr):  # pragma: no cover
     """convert array of datetime.date to np.datetime64"""
-    with numba.objmode(res='NPDatetime("ns")[::1]'):
-        res = np.array(arr, dtype="datetime64[ns]")
+    n = len(arr)
+    res = np.empty(n, bodo.datetime64ns)
+    for i in range(n):
+        res[i] = integer_to_dt64(pd.Timestamp(arr[i]).value)
+
     return res
 
 
