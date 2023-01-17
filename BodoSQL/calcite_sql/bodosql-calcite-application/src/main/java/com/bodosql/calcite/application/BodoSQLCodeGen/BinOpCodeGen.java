@@ -64,6 +64,9 @@ public class BinOpCodeGen {
       } else if ((isArg0TZAware && isArg1Interval) || (isArg1TZAware && isArg0Interval)) {
         assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
         return genTZAwareIntervalArithCode(args, binOpKind, isArg0TZAware);
+      } else if (isArg0Datetime && isArg1Datetime) {
+        assert binOpKind.equals(SqlKind.MINUS);
+        return genDateSubCode(args);
       } else if (isArg0Datetime || isArg1Datetime) {
         assert binOpKind.equals(SqlKind.PLUS) || binOpKind.equals(SqlKind.MINUS);
         return genDatetimeArithCode(
@@ -352,6 +355,19 @@ public class BinOpCodeGen {
     }
     return String.format(
         "bodo.libs.bodosql_array_kernels.tz_aware_interval_add(%s, %s)", arg0, arg1);
+  }
+
+  /**
+   * Generate code for subtracting two dates.
+   *
+   * @param args List of length 2 with the generated code for the arguments.
+   * @return The generated code that creates the BodoSQL array kernel call.
+   */
+  public static String genDateSubCode(List<String> args) {
+    assert args.size() == 2;
+    final String arg0 = args.get(0);
+    final String arg1 = args.get(1);
+    return String.format("bodo.libs.bodosql_array_kernels.date_sub_date(%s, %s)", arg0, arg1);
   }
 
   /**
