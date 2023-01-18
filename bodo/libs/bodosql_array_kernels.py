@@ -128,6 +128,7 @@ broadcasted_fixed_arg_functions = {
     "is_not_false",
     "is_not_true",
     "is_true",
+    "json_extract_path_text",
     "last_day",
     "left",
     "length",

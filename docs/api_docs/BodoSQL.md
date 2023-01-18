@@ -2307,6 +2307,20 @@ BodoSQL currently supports the following regex functions:
     ```
 
 
+###  JSON Functions
+
+
+BodoSQL currently supports the following JSON functions:
+
+#### JSON_EXTRACT_PATH_TEXT
+-   `JSON_EXTRACT_PATH_TEXT(data, path)`
+
+    Parses the string `data` as if it were JSON data, then extracts values from
+    within (possibly multiple times if the data is nested) using the string `path`.
+
+    Obeys the following specification: https://docs.snowflake.com/en/sql-reference/functions/json_extract_path_text.html
+
+
 ###   Control Flow Functions
 
 #### DECODE
