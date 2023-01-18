@@ -1639,3 +1639,95 @@ def test_dict_monthname():
         additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
     )
     verify_dictionary_optimization(impl, (arr,), "str_upper", True)
+
+
+@pytest.mark.parametrize(
+    "data, path, answer, output_encoded",
+    [
+        pytest.param(
+            '{"Name":"Iowa","Capitol":"Des Moines","Bird":"Eastern goldfinch","Flower":"Prairie rose"}',
+            pa.array(
+                [
+                    "Name",
+                    None,
+                    "Flower",
+                    None,
+                    "Bird",
+                    "Name",
+                    "Tree",
+                ]
+                * 2,
+                type=pa.dictionary(pa.int32(), pa.string()),
+            ),
+            pd.Series(
+                [
+                    "IOWA",
+                    None,
+                    "PRAIRIE ROSE",
+                    None,
+                    "EASTERN GOLDFINCH",
+                    "IOWA",
+                    None,
+                ]
+                * 2
+            ),
+            True,
+            id="scalar_vector",
+        ),
+        pytest.param(
+            pa.array(
+                [
+                    '[["a", "b", "c"], ["d", "e", "f"], ["g", "h", "i"]]',
+                    '[["a", "l", "p"], ["h", "a", "b"], ["e", "t", "s", "o", "u", "p"]]',
+                    None,
+                    '[["a", "b", "c"], ["d", "e", "f"], ["g", "h", "i"]]',
+                    '[["a", "l", "p"], ["h", "a", "b"], ["e", "t", "s", "o", "u", "p"]]',
+                    '[["1", "", "2"], ["", "3", ""], ["4", ""]]',
+                    '[["a", "l", "p"], ["h", "a", "b"], ["e", "t", "s", "o", "u", "p"]]',
+                ]
+                * 2,
+                type=pa.dictionary(pa.int32(), pa.string()),
+            ),
+            "[2][2]",
+            pd.Series(
+                [
+                    "I",
+                    "S",
+                    None,
+                    "I",
+                    "S",
+                    None,
+                    "S",
+                ]
+                * 2
+            ),
+            True,
+            id="vector_scalar",
+        ),
+    ],
+)
+def test_dict_json_extract_path_text(data, path, answer, output_encoded):
+    # Calling .str().upper() on the output since it will leave a call to
+    # str_upper in the IR if (and only if) the output is dictionary encoded
+    def impl(data, path):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.json_extract_path_text(data, path)
+        ).str.upper()
+
+    check_func(
+        impl,
+        (data, path),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+        additional_compiler_arguments={"pipeline_class": SeriesOptTestPipeline},
+    )
+    verify_dictionary_optimization(
+        impl,
+        (
+            data,
+            path,
+        ),
+        "str_upper",
+        output_encoded,
+    )

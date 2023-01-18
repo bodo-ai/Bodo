@@ -11,6 +11,7 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LikeCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.*;
@@ -2539,6 +2540,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":
             return generateFromUnixTimeCode(operandsInfo.get(0));
+          case "JSON_EXTRACT_PATH_TEXT":
+            return generateJsonTwoArgsInfo(fnName, operandsInfo.get(0), operandsInfo.get(1));
           case "RLIKE":
           case "REGEXP_LIKE":
             if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 3)) {
