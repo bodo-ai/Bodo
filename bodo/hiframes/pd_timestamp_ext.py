@@ -1628,6 +1628,9 @@ def datetime_date_arr_to_dt64_arr(arr):  # pragma: no cover
     n = len(arr)
     res = np.empty(n, bodo.datetime64ns)
     for i in range(n):
+        if bodo.libs.array_kernels.isna(arr, i):
+            bodo.libs.array_kernels.setna(res, i)
+            continue
         res[i] = integer_to_dt64(pd.Timestamp(arr[i]).value)
 
     return res
