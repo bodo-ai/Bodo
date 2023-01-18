@@ -31,6 +31,7 @@ import static com.bodosql.calcite.application.BodoSQLExprType.*;
 import static com.bodosql.calcite.application.JoinCondVisitor.*;
 import static com.bodosql.calcite.application.Utils.AggHelpers.*;
 import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
@@ -39,6 +40,7 @@ import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
 import com.google.common.collect.Range;
 import java.util.*;
+import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
@@ -139,6 +141,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // Extra arguments to pass to the write code for the fileList and Snapshot
   // id in the form of "argName1=varName1, argName2=varName2"
   private @Nullable String fileListAndSnapshotIdArgs;
+
+  private static int RelNodeTimingVerboseLevel = 2;
 
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
@@ -319,9 +323,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
         exprCodes.add(literalExpr.getExprCode());
       }
     }
+    this.genRelnodeTimerStart(node);
     this.generatedCode.append(generateLogicalValuesCode(outVar, exprCodes, node.getRowType()));
     this.columnNamesStack.push(columnNames);
     this.varGenStack.push(outVar);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -342,6 +348,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else {
       RelNode input = node.getInput();
       this.visit(input, 0, node);
+      this.genRelnodeTimerStart(node);
       String inVar = varGenStack.pop();
       columnNames = columnNamesStack.pop();
       // The hashset is unused because the result should always be empty.
@@ -355,6 +362,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               filterPair.getExprCode(),
               exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node.getCondition(), nodeId))));
       this.varCache.put(nodeId, new Pair<>(outVar, columnNames));
+      this.genRelnodeTimerStop(node);
     }
     this.columnNamesStack.push(columnNames);
     varGenStack.push(outVar);
@@ -374,12 +382,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       childExprs.add(varGenStack.pop());
       childExprsColumns.add(columnNamesStack.pop());
     }
+    this.genRelnodeTimerStart(node);
     String outVar = this.genDfVar();
     List<String> columnNames = node.getRowType().getFieldNames();
     this.generatedCode.append(
         generateUnionCode(outVar, columnNames, childExprs, childExprsColumns, node.all));
     varGenStack.push(outVar);
     columnNamesStack.push(columnNames);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -402,6 +412,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     String outVar = this.genDfVar();
     List<String> colNames = node.getRowType().getFieldNames();
+    this.genRelnodeTimerStart(node);
 
     this.generatedCode.append(
         generateIntersectCode(
@@ -409,6 +420,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     varGenStack.push(outVar);
     columnNamesStack.push(colNames);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -425,7 +437,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String lhsExpr = varGenStack.pop();
     List<String> lhsColNames = columnNamesStack.pop();
 
-    this.visit(node.getInputs().get(01), 1, node);
+    this.visit(node.getInputs().get(1), 1, node);
     String rhsExpr = varGenStack.pop();
     List<String> rhsColNames = columnNamesStack.pop();
 
@@ -435,6 +447,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String outVar = this.genDfVar();
     String throwAwayVar = this.genDfVar();
     List<String> colNames = new ArrayList<>();
+    this.genRelnodeTimerStart(node);
 
     this.generatedCode.append(
         generateExceptCode(
@@ -442,6 +455,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     varGenStack.push(outVar);
     columnNamesStack.push(colNames);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -452,6 +466,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitLogicalSort(LogicalSort node) {
     RelNode input = node.getInput();
     this.visit(input, 0, node);
+    this.genRelnodeTimerStart(node);
     String inVar = varGenStack.pop();
     List<String> colNames = columnNamesStack.pop();
     /* handle case for queries with "ORDER BY" clause */
@@ -506,6 +521,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         generateSortCode(inVar, outVar, colNames, sortOrders, limitStr, offsetStr));
     varGenStack.push(outVar);
     columnNamesStack.push(colNames);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -526,6 +542,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       outputColumns = cacheInfo.getValue();
     } else {
       this.visit(node.getInput(), 0, node);
+      this.genRelnodeTimerStart(node);
       String projectInVar = varGenStack.pop();
       List<String> colNames = columnNamesStack.pop();
       // ChildExprs operations produced.
@@ -666,6 +683,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 this,
                 colNames.size());
       }
+      this.genRelnodeTimerStop(node);
     }
     this.generatedCode.append(outputCode);
     this.columnNamesStack.push(outputColumns);
@@ -705,6 +723,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     assert node.getOperation() == TableModify.Operation.MERGE;
 
     this.visit(node.getInput(0), 0, node);
+    this.genRelnodeTimerStart(node);
     String deltaDfVar = this.varGenStack.pop();
     List<String> currentDeltaDfColNames = this.columnNamesStack.pop();
 
@@ -772,6 +791,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           .append("\n");
       this.generatedCode.append(outputCode);
     }
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -797,6 +817,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate code for a projection.
     List<RelNode> inputs = node.getInputs();
     this.visit(node.getInput(), 0, node);
+    this.genRelnodeTimerStart(node);
     // Generate the to_sql code
     StringBuilder outputCode = new StringBuilder();
     List<String> colNames = this.columnNamesStack.pop();
@@ -812,6 +833,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     outputCode.append(handleCastAndRenameBeforeWrite(outVar, colNames, bodoSqlTable));
     outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
     this.generatedCode.append(outputCode);
+    this.genRelnodeTimerStop(node);
   }
 
   public String handleCastAndRenameBeforeWrite(
@@ -867,6 +889,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String outputVar = this.genDfVar();
     List<String> outputColumns = node.getRowType().getFieldNames();
     if (isSnowflakeCatalogTable(bodoSqlTable)) {
+      this.genRelnodeTimerStart(node);
       // If we are updating Snowflake we push the query into Snowflake.
       // We require the Snowflake Catalog to ensure we don't need to remap
       // any names.
@@ -896,6 +919,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         this.generatedCode.append(makeQuoted(colName)).append(", ");
       }
       this.generatedCode.append("]\n");
+      this.genRelnodeTimerStop(node);
     } else {
       throw new BodoSQLCodegenException(
           "Delete only supported when all source tables are found within a user's Snowflake"
@@ -960,6 +984,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       RelNode inputNode = node.getInput();
       this.visit(inputNode, 0, node);
+      this.genRelnodeTimerStart(node);
       List<String> inputColumnNames = columnNamesStack.pop();
       String inVar = varGenStack.pop();
       List<String> outputDfNames = new ArrayList<>();
@@ -1061,6 +1086,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         finalOutVar = outputDfNames.get(0);
       }
       this.varCache.put(nodeId, new Pair<>(finalOutVar, expectedOutputCols));
+      this.genRelnodeTimerStop(node);
     }
     varGenStack.push(finalOutVar);
     columnNamesStack.push(expectedOutputCols);
@@ -3331,6 +3357,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       outputColNames = cacheInfo.getValue();
     } else {
       this.visit(node.getLeft(), 0, node);
+      this.genRelnodeTimerStart(node);
       List<String> leftColNames = columnNamesStack.pop();
       String leftTable = varGenStack.pop();
       this.visit(node.getRight(), 1, node);
@@ -3366,6 +3393,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               mergeCols);
       this.generatedCode.append(joinCode);
       this.varCache.put(nodeId, new Pair<>(outVar, outputColNames));
+      this.genRelnodeTimerStop(node);
     }
     columnNamesStack.push(outputColNames);
     varGenStack.push(outVar);
@@ -3394,5 +3422,60 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
 
     return true;
+  }
+
+  /**
+   * Adds code to the generated python that logs a simple message that tells the user the node being
+   * executed, and starts a timer. Only works if verboseLevel is set to 1 or greater.
+   *
+   * <p>This is currently very rough, and should only be used for internal debugging
+   *
+   * @param node The node being timed
+   */
+  private void genRelnodeTimerStart(RelNode node) {
+    if (this.verboseLevel >= this.RelNodeTimingVerboseLevel) {
+      int node_id = node.getId();
+
+      // Some logic to get the first line of the full relTree (the string of the node that we're
+      // interested in)
+      String nodeStr = Arrays.stream(RelOptUtil.toString(node).split("\n")).findFirst().get();
+      String msgString =
+          new StringBuilder(getBodoIndent())
+              .append("t_" + node_id)
+              .append(" = time.time()\n")
+              .append(getBodoIndent())
+              .append(
+                  "bodo.user_logging.log_message('RELNODE_TIMING', '''beginning execution of"
+                      + " node: ")
+              .append(nodeStr)
+              .append("''')\n")
+              .toString();
+      this.generatedCode.append(msgString);
+    }
+  }
+
+  /**
+   * Adds code to the generated python that logs a simple message that tells the user the node being
+   * executed has finished, and prints the execution time. Only works if verboseLevel is set to 1 or
+   * greater.
+   *
+   * <p>This is currently very rough, and should only be used for internal debugging
+   *
+   * @param node The node being timed
+   */
+  private void genRelnodeTimerStop(RelNode node) {
+    if (this.verboseLevel >= this.RelNodeTimingVerboseLevel) {
+      int node_id = node.getId();
+
+      String msgString =
+          new StringBuilder(getBodoIndent())
+              .append(
+                  "bodo.user_logging.log_message('RELNODE_TIMING', f'Execution time: {time.time()"
+                      + " - t_")
+              .append(node_id)
+              .append("}')\n")
+              .toString();
+      this.generatedCode.append(msgString);
+    }
   }
 }
