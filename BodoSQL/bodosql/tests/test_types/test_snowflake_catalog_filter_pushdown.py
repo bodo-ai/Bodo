@@ -143,7 +143,7 @@ def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
         )
     )
 
-    query = "select mycol from PUBLIC.BODOSQL_ALL_SUPPORTED LIMIT 5"
+    query = "select * from PUBLIC.BODOSQL_ALL_SUPPORTED LIMIT 5"
 
     # make sure limit pushdown worked. Note we don't test correctness because it
     # is undefined.
@@ -155,7 +155,8 @@ def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
         fir = bodo_func.overloads[bodo_func.signatures[0]].metadata["preserved_ir"]
         assert hasattr(fir, "meta_head_only_info")
         assert fir.meta_head_only_info[0] is not None
-        check_logger_msg(stream, "Columns loaded ['mycol']")
+        check_logger_msg(stream, "Columns loaded ['mycol', 'mycol2']")
+        check_logger_msg(stream, "Constant limit detected, reading at most 5 rows")
 
 
 @pytest.mark.skipif(
