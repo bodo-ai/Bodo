@@ -125,6 +125,7 @@ public class ExprTypeVisitor {
           "FORMAT",
           "GETBIT",
           "HAVERSINE",
+          "JSON_EXTRACT_PATH_TEXT",
           "IF",
           "IFF",
           "IFNULL",

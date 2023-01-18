@@ -3,6 +3,7 @@ package com.bodosql.calcite.application;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.CastingOperatorTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.CondOperatorTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable;
+import com.bodosql.calcite.application.BodoSQLOperatorTables.JsonOperatorTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.NumericOperatorTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.SinceEpochFnTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.StringOperatorTable;
@@ -178,6 +179,7 @@ public class RelationalAlgebraGenerator {
       sqlOperatorTables.add(DatetimeOperatorTable.instance());
       sqlOperatorTables.add(NumericOperatorTable.instance());
       sqlOperatorTables.add(StringOperatorTable.instance());
+      sqlOperatorTables.add(JsonOperatorTable.instance());
       sqlOperatorTables.add(CondOperatorTable.instance());
       sqlOperatorTables.add(SinceEpochFnTable.instance());
       sqlOperatorTables.add(ThreeOperatorStringTable.instance());
