@@ -21,11 +21,67 @@ def test_like(
     )
 
 
+def test_like_ilike_basic_escape(spark_info, memory_leak_check):
+    """
+    tests that like and like works for a couple different possible regex strings
+    with escape
+    """
+    df = pd.DataFrame(
+        {
+            "A": [
+                "afe_fe",
+                "rewrew%Rew",
+                "W%rew",
+                "%",
+                "_",
+                "W_nf",
+                "w_x",
+                "w_X",
+                None,
+                None,
+            ]
+            * 5
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "select A from table1 where A like '%w^%%' escape '^'"
+    query2 = "select A from table1 where A ilike '%w^_%' escape '^'"
+    # Spark doesn't support ilike
+    spark_query2 = "select A from table1 where lower(A) like lower('%w^_%') escape '^'"
+    query3 = "select A from table1 where A like '^%R%' escape '^'"
+    query4 = "select A from table1 where A ilike '^_X%' escape '^'"
+    # Spark doesn't support ilike
+    spark_query4 = "select A from table1 where lower(A) like lower('^_X%') escape '^'"
+
+    check_query(
+        query1,
+        ctx,
+        spark_info,
+    )
+    check_query(
+        query2,
+        ctx,
+        spark_info,
+        equivalent_spark_query=spark_query2,
+    )
+    check_query(
+        query3,
+        ctx,
+        spark_info,
+    )
+    check_query(
+        query4,
+        ctx,
+        spark_info,
+        equivalent_spark_query=spark_query4,
+    )
+
+
 def test_ilike(bodosql_string_types, regex_string, spark_info, memory_leak_check):
     """
     tests that ilike works for a variety of different possible regex strings
     """
-    # Note that Spark's like SQL function is case sensititve by default, so we use
+    # Note that Spark's like SQL function is case sensitive by default, so we use
     # the lower function to simulate case insensitivity
     check_query(
         f"select A from table1 where A ilike {regex_string}",
@@ -97,7 +153,7 @@ def test_like_cols(
         f"select A from table1 where C {like_expression} {regex_string} or B {like_expression} {regex_string}",
         basic_df,
         spark_info,
-        check_dtype=False,  # need this for case where the select retuns empty table
+        check_dtype=False,  # need this for case where the select returns empty table
     )
 
 

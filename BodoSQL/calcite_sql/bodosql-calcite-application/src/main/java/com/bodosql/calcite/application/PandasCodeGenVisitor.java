@@ -2751,32 +2751,42 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
+
     // The input node has ${index} as its first operand, where
     // ${index} is something like $3, and a SQL regular expression
-    // as its second operand.
-    RexNode colIndex = node.operands.get(0);
+    // as its second operand. If there is an escape value it will
+    // be the third value, although it is not required and only supported
+    // for LIKE and ILIKE
+    String opName = node.getOperator().getName();
+    List<RexNode> operands = node.getOperands();
+    RexNode colIndex = operands.get(0);
     RexNodeVisitorInfo arg = visitRexNode(colIndex, colNames, id, inputVar, isSingleRow, ctx);
     String argName = arg.getName();
     String argCode = arg.getExprCode();
-    RexNode patternNode = node.operands.get(1);
+    RexNode patternNode = operands.get(1);
 
     if (!(patternNode instanceof RexLiteral)) {
-      throw new BodoSQLCodegenException("Error: Pattern must be a string literal");
+      throw new BodoSQLCodegenException(
+          String.format("%s Error: Pattern must be a string literal", opName));
     }
     RexNodeVisitorInfo pattern =
         visitRexNode(patternNode, colNames, id, inputVar, isSingleRow, ctx);
     String sqlPattern = pattern.getExprCode();
-    String opName = node.op.getName();
+    // If escape is missing use the empty string.
+    String sqlEscape = "''";
+    if (operands.size() == 3) {
+      RexNode escapeNode = operands.get(2);
+      if (!(escapeNode instanceof RexLiteral)) {
+        throw new BodoSQLCodegenException(
+            String.format("%s Error: Escape must be a string literal", opName));
+      }
+      RexNodeVisitorInfo escape =
+          visitRexNode(escapeNode, colNames, id, inputVar, isSingleRow, ctx);
+      sqlEscape = escape.getExprCode();
+    }
     String name = generateLikeName(opName, argName, sqlPattern);
     /* Assumption: Typing in LIKE requires this to be a string type. */
-    String likeCode =
-        generateLikeCode(
-            opName,
-            argCode,
-            sqlPattern,
-            isSingleRow
-                || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id))
-                    == BodoSQLExprType.ExprType.SCALAR));
+    String likeCode = generateLikeCode(opName, argCode, sqlPattern, sqlEscape);
     return new RexNodeVisitorInfo(name, likeCode);
   }
 

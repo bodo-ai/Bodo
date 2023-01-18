@@ -7,6 +7,7 @@ from bodo.libs.bodosql_array_kernel_utils import *  # noqa
 from bodo.libs.bodosql_casting_array_kernels import *  # noqa
 from bodo.libs.bodosql_datetime_array_kernels import *  # noqa
 from bodo.libs.bodosql_json_array_kernels import *  # noqa
+from bodo.libs.bodosql_like_array_kernels import *  # noqa
 from bodo.libs.bodosql_numeric_array_kernels import *  # noqa
 from bodo.libs.bodosql_other_array_kernels import *  # noqa
 from bodo.libs.bodosql_regexp_array_kernels import *  # noqa
@@ -132,6 +133,7 @@ broadcasted_fixed_arg_functions = {
     "last_day",
     "left",
     "length",
+    "like_kernel",
     "ln",
     "log",
     "log2",
