@@ -116,6 +116,14 @@ public class CatalogTableImpl extends BodoSqlTable {
     throw new UnsupportedOperationException("Catalog APIs do not support additional arguments");
   }
 
+  @Override
+  public String generateReadCastCode(String varName) {
+    // Snowflake catalog uses _bodo_read_date_as_dt64=True to convert date columns to datetime64
+    // without astype() calls in the IR which cause issues for limit pushdown.
+    // see BE-4238
+    return "";
+  }
+
   /**
    * Generates the code necessary to submit the remote query to the catalog DB. This is not
    * supported for local tables.
