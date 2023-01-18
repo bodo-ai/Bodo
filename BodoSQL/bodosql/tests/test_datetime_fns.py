@@ -458,11 +458,23 @@ def now_equivalent_fns(request):
         ),
         pytest.param(
             "SELECT A, GETDATE() - interval '6' months from table1",
-            id="no_case-minus_interval",
+            id="no_case-minus_interval-month",
+        ),
+        pytest.param(
+            "SELECT A, GETDATE() + interval '5' weeks from table1",
+            id="no_case-plus_interval-week",
+        ),
+        pytest.param(
+            "SELECT A, GETDATE() - interval '8 weeks' from table1",
+            id="no_case-minus_interval-week-sf-syntax",
+        ),
+        pytest.param(
+            "SELECT A, GETDATE() - interval '8' weeks from table1",
+            id="no_case-minus_interval-week",
         ),
         pytest.param(
             "SELECT A, GETDATE() + interval '5' days from table1",
-            id="no_case-plus_interval",
+            id="no_case-plus_interval-day",
         ),
         pytest.param(
             "SELECT A, CASE WHEN EXTRACT(MONTH from GETDATE()) = A then 'y' ELSE 'n' END from table1",
@@ -478,6 +490,9 @@ def test_getdate(query, spark_info, memory_leak_check):
             {"A": pd.Series(list(range(1, 13)), dtype=pd.Int32Dtype())}
         )
     }
+
+    if query == "SELECT A, GETDATE() - interval '8 weeks' from table1":
+        spark_query = "SELECT A, CURRENT_DATE() - interval '8' weeks from table1"
 
     check_query(
         query,
