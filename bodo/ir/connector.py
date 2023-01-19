@@ -505,7 +505,7 @@ def generate_arrow_filters(
         expr_or_conds = []
         # If any filters aren't on a partition column or are unsupported
         # in partitions, then this expression must effectively be replaced with TRUE.
-        # If any of the AND sections contain only TRUE expresssions, then we must won't
+        # If any of the AND sections contain only TRUE expressions, then we must won't
         # be able to filter anything based on partitioning. To represent this we will set
         # skip_partitions = True, which will set  dnf_filter_str = "None".
         skip_partitions = False
@@ -519,7 +519,13 @@ def generate_arrow_filters(
                 # If v[2] is a var we pass the variable at runtime,
                 # otherwise we pass a constant (i.e. NULL) which
                 # requires special handling
-                if isinstance(v[2], ir.Var):
+                if v[1] == "ALWAYS_TRUE":
+                    # Special operator handling the true case.
+                    expr_val = "ds.scalar(True)"
+                elif v[1] == "ALWAYS_FALSE":
+                    # Special operator handling the true case.
+                    expr_val = "ds.scalar(False)"
+                elif isinstance(v[2], ir.Var):
                     # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
                     # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
                     # column_cast and scalar_cast.
@@ -531,17 +537,35 @@ def generate_arrow_filters(
                         partition_names,
                         source,
                     )
+                    filter_var = filter_map[v[2].name]
                     if v[1] == "in":
+                        # Expected output for this format should look like
+                        # ds.field('A').isin(filter_var)
+                        expr_val = f"ds.field('{v[0]}').isin({filter_var})"
+
+                    elif v[1] in ("startswith", "endswith", "contains"):
+                        if v[1] == "startswith":
+                            func_name = "starts_with"
+                        elif v[1] == "endswith":
+                            func_name = "ends_with"
+                        elif v[1] == "contains":
+                            func_name = "match_substring"
+                        # All of these functions require no scalar.
+                        scalar_arg = filter_var
                         # Expected output for this format should like
-                        # (ds.field('A').isin(py_var))
-                        expr_val = f"(ds.field('{v[0]}').isin({filter_map[v[2].name]}))"
+                        # pa.compute.func(ds.field('A'), scalar)
+                        expr_val = (
+                            f"pa.compute.{func_name}(ds.field('{v[0]}'), {scalar_arg})"
+                        )
                     else:
                         # Expected output for this format should like
                         # (ds.field('A') > ds.scalar(py_var))
-                        expr_val = f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_map[v[2].name]}){scalar_cast})"
+                        expr_val = f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_var}){scalar_cast})"
                 else:
                     # Currently the only constant expressions we support are IS [NOT] NULL
-                    assert v[2] == "NULL", "unsupport constant used in filter pushdown"
+                    assert (
+                        v[2] == "NULL"
+                    ), "unsupported constant used in filter pushdown"
                     if v[1] == "is not":
                         prefix = "~"
                     else:
@@ -555,7 +579,11 @@ def generate_arrow_filters(
                 # then we skip partitions as they will be unused.
 
                 if not skip_partitions:
-                    if v[0] in partition_names and isinstance(v[2], ir.Var):
+                    if (
+                        v[0] in partition_names
+                        and isinstance(v[2], ir.Var)
+                        and v[1] not in ("startswith", "endswith", "contains")
+                    ):
                         if output_dnf:
                             dnf_str = f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})"
                         else:
@@ -568,6 +596,7 @@ def generate_arrow_filters(
                         v[0] in partition_names
                         and not isinstance(v[2], ir.Var)
                         and source == "iceberg"
+                        and v[1] not in ("startswith", "endswith", "contains")
                     ):
                         if output_dnf:
                             dnf_str = f"('{v[0]}', '{v[1]}', '{v[2]}')"
@@ -664,6 +693,7 @@ def determine_filter_cast(
             col_cast = ""
     else:
         col_cast = ""
+
     rhs_typ = typemap[filter_val[2].name]
     # If we do series isin, then rhs_typ will be a list or set
     if isinstance(rhs_typ, (types.List, types.Set)):
