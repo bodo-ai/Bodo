@@ -1147,7 +1147,7 @@ class TypingTransforms:
         return {index_def}
 
     def _get_call_filter(
-        self, call_def, func_ir, df_var, df_col_names, is_sql, new_ir_assigns
+        self, call_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
     ):
         """
         Function used by _get_partition_filters to extract filters
@@ -1191,7 +1191,7 @@ class TypingTransforms:
             "bodo.libs.bodosql_array_kernels",
         ):  # pragma: no cover
             return self._get_like_filter(
-                call_def, func_ir, df_var, df_col_names, is_sql, new_ir_assigns
+                call_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
             )
         else:
             # Trigger a GuardException because we have hit an unknown function.
@@ -1281,7 +1281,7 @@ class TypingTransforms:
         func_ir: ir.FunctionIR,
         df_var: ir.Var,
         df_col_names,
-        is_sql: bool,
+        is_sql_op: bool,
         new_ir_assigns: List[ir.Var],
     ) -> Tuple[str, str, ir.Var]:  # pragma: no cover
         """Generate a filter for like. If the values in like are proper constants
@@ -1295,8 +1295,8 @@ class TypingTransforms:
             df_var (ir.Var): The IR variable for the DataFrame being accessed by the kernel. This is
                 used to determine the original column name for filter pushdown.
             df_col_names (Tuple[str, ...]): n-tuple of DataFrame column names
-            is_sql (bool): Is the operation targeting sql or parquet/iceberg. This
-                influences the generated op.
+            is_sql_op (bool): Is the operation targeting sql or parquet/iceberg. This
+                influences the generated op string.
             new_ir_assigns (List[ir.Stmt]): A list of ir.Stmt values that are created when generating
                 the filters. If this filter succeeds we will append to this list.
 
@@ -1333,11 +1333,10 @@ class TypingTransforms:
             and is_overload_constant_bool(case_insensitive_type)
         ):
             raise GuardException
-        # Ensure we are case sensitive. We don't support case insensitive filter pushdown
-        # at this time.
+        # Fetch case sensitive information. If is_case_insensitive == True
+        # then we will create new operations that can be replaced by
+        # arrow and snowflake.
         is_case_insensitive = get_overload_const_bool(case_insensitive_type)
-        if is_case_insensitive:
-            raise GuardException
 
         pattern_const = get_overload_const_str(pattern_type)
         escape_const = get_overload_const_str(escape_type)
@@ -1359,13 +1358,26 @@ class TypingTransforms:
             op = "ALWAYS_TRUE"
         elif must_match_start and must_match_end:
             # This is equality
-            op = "=" if is_sql else "=="
+            if is_case_insensitive:
+                op = "case_insensitive_equality"
+            else:
+                op = "=" if is_sql_op else "=="
         elif must_match_start:
-            op = "startswith"
+            if is_case_insensitive:
+                op = "case_insensitive_startswith"
+            else:
+                op = "startswith"
         elif must_match_end:
-            op = "endswith"
+            if is_case_insensitive:
+                op = "case_insensitive_endswith"
+            else:
+                op = "endswith"
         else:
-            op = "contains"
+            if is_case_insensitive:
+                op = "case_insensitive_contains"
+            else:
+                op = "contains"
+
         # Create a new IR variable for the constant pattern.
         constant_value = ir.Const(final_pattern, call_def.loc)
         new_name = mk_unique_var("like_python_pattern")
@@ -1387,6 +1399,8 @@ class TypingTransforms:
         """
         require(is_expr(index_def, "binop") or is_call(index_def))
         is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
+        # Iceberg uses arrow operators instead of SQL operators.
+        is_sql_op = is_sql and read_node.db_type != "iceberg"
         # NOTE: I/O nodes update df_colnames in DCE but typing pass is before
         # optimizations
         # SqlReader doesn't have original_df_colnames so needs special casing
@@ -1419,7 +1433,7 @@ class TypingTransforms:
                             func_ir,
                             df_var,
                             df_col_names,
-                            is_sql,
+                            is_sql_op,
                             new_ir_assigns,
                         )
                     ]
@@ -1534,11 +1548,9 @@ class TypingTransforms:
 
         # literal case
         # TODO(ehsan): support 'in' and 'not in'
-        # Iceberg uses arrow operators instead of SQL operators.
-        use_sql_ops = is_sql and read_node.db_type != "iceberg"
         op_map = {
-            operator.eq: "=" if use_sql_ops else "==",
-            operator.ne: "<>" if use_sql_ops else "!=",
+            operator.eq: "=" if is_sql_op else "==",
+            operator.ne: "<>" if is_sql_op else "!=",
             operator.lt: "<",
             operator.le: "<=",
             operator.gt: ">",
@@ -1550,8 +1562,8 @@ class TypingTransforms:
         # format is ("col", op, scalar), we must invert certain
         # operators.
         right_colname_op_map = {
-            operator.eq: "=" if is_sql else "==",
-            operator.ne: "<>" if is_sql else "!=",
+            operator.eq: "=" if is_sql_op else "==",
+            operator.ne: "<>" if is_sql_op else "!=",
             operator.lt: ">",
             operator.le: ">=",
             operator.gt: "<",
@@ -1581,7 +1593,7 @@ class TypingTransforms:
                 cond = (left_colname, op_map[index_def.fn], index_def.rhs)
         else:
             cond = self._get_call_filter(
-                index_def, func_ir, df_var, df_col_names, is_sql, new_ir_assigns
+                index_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
             )
 
         # If this is parquet we need to verify this is a filter we can process.
@@ -4668,8 +4680,8 @@ class TypingTransforms:
         if not is_overload_constant_bool(case_insensitive_type):
             return False
 
-        # we can do filter pushdown if case_insensitive == False
-        return not get_overload_const_bool(case_insensitive_type)
+        # We can do filter pushdown for both values of case_insensitive.
+        return True
 
 
 def _create_const_var(val, name, scope, loc, nodes):

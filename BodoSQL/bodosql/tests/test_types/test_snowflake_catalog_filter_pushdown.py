@@ -386,3 +386,169 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
                 stream, "Filter pushdown successfully performed. Moving filter step:"
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that queries with ilike perform filter pushdown for all the
+    cases with the optimized paths. This is tested both with and without
+    escapes.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["AFewf", "b%Bf", "hELlO", "HAPPy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_pushdown_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        # equality test
+        query1 = f"Select a from {table_name} where a ilike 'hello'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a == "hELlO"]
+            check_func(
+                impl,
+                (bc, query1),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # startswith test
+        query2 = f"Select a from {table_name} where a ilike 'He%'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a.str.startswith("hE")]
+            check_func(
+                impl,
+                (bc, query2),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # endswith test
+        query3 = f"Select a from {table_name} where a ilike '%lo'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a.str.endswith("lO")]
+            check_func(
+                impl,
+                (bc, query3),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # contains test
+        query4 = f"Select a from {table_name} where a ilike '%e%'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[
+                py_output.a.str.contains("e") | py_output.a.str.contains("E")
+            ]
+            check_func(
+                impl,
+                (bc, query4),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # Equality with escape test
+        query5 = f"Select a from {table_name} where a ilike 'b^%bf' escape '^'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a == "b%Bf"]
+            check_func(
+                impl,
+                (bc, query5),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # startswith with escape test
+        query6 = f"Select a from {table_name} where a ilike 'B^%%' escape '^'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a.str.startswith("b%")]
+            check_func(
+                impl,
+                (bc, query6),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # endswith with escape test
+        query7 = f"Select a from {table_name} where a ilike '%^%bf' escape '^'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a.str.endswith("%Bf")]
+            check_func(
+                impl,
+                (bc, query7),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # contains with escape test
+        query8 = f"Select a from {table_name} where a ilike '%^%b%' escape '^'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a.str.contains("%B")]
+            check_func(
+                impl,
+                (bc, query8),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
