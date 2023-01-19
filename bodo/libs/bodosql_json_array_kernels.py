@@ -3,6 +3,8 @@
 Implements BodoSQL array kernels related to JSON utilities
 """
 
+from typing import List, Tuple, Union
+
 import numba
 from numba.core import types
 from numba.extending import register_jitable
@@ -334,7 +336,7 @@ def json_extract_path_text_util(data, path):
 
 
 @register_jitable
-def process_json_path(path: str) -> list[tuple[bool, str]]:  # pragma: no cover
+def process_json_path(path: str) -> List[Tuple[bool, str]]:  # pragma: no cover
     """Utility for json_extract_path_text_util to take in a path and break it
        up into each component index/field, and identify which of the two it is.
 
@@ -536,7 +538,7 @@ def process_json_path(path: str) -> list[tuple[bool, str]]:  # pragma: no cover
 @register_jitable
 def parse_and_extract_json_string(
     data: str, path: str
-) -> str | None:  # pragma: no cover
+) -> Union[str, None]:  # pragma: no cover
     """Utility for json_extract_path_text_util to use on specific strings
 
     Args:
