@@ -42,7 +42,11 @@ from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
     remove_dead_column_extensions,
 )
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_str,
+    is_overload_constant_str,
+)
 from bodo.utils.utils import check_and_propagate_cpp_exception
 
 if bodo.utils.utils.has_pyarrow():
@@ -368,6 +372,11 @@ def sql_distributed_run(
             # -> (l_linestatus <> var1) OR (l_shipmode = var2)
             # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
             or_conds = []
+            # Certain scalar values (e.g. like, ilike) are tuples of multiple variables
+            # used in the same operation. If they are in this list, rather than convert
+            # the tuple to a Snowflake usable literal we convert the individual elements
+            # in the tuple to Snowflake usable literals.
+            scalars_to_unpack = []
             for and_list in sql_node.filters:
                 and_conds = []
                 for p in and_list:
@@ -425,14 +434,44 @@ def sql_distributed_run(
                                 scalar_filter,
                                 ")))",
                             ]
+                    elif p[1] in ("like", "ilike"):
+                        # You can't pass the empty string to escape. As a result we
+                        # must confirm its not the empty string
+                        has_escape = True
+                        escape_typ = typemap[p[2].name][1]
+                        if is_overload_constant_str(escape_typ):
+                            escape_val = get_overload_const_str(escape_typ)
+                            has_escape = escape_val != ""
+                        escape_section = (
+                            f"escape {{{filter_map[p[2].name]}[1]}}"
+                            if has_escape
+                            else ""
+                        )
+                        single_filter = [
+                            "(",
+                            p0,
+                            p[1],
+                            f"{{{filter_map[p[2].name]}[0]}} {escape_section}",
+                            ")",
+                        ]
+                        # Indicate the tuple variable is not directly passed to Snowflake, instead its
+                        # components are.
+                        scalars_to_unpack.append(p[2].name)
                     else:
                         single_filter = ["(", p0, p[1], scalar_filter, ")"]
 
                     and_conds.append(" ".join(single_filter))
                 or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
             where_cond = " WHERE " + " OR ".join(or_conds)
-            for i, arg in enumerate(filter_map.values()):
-                func_text += f"    {arg} = get_sql_literal({arg})\n"
+            for ir_varname, arg in filter_map.items():
+                if ir_varname in scalars_to_unpack:
+                    num_elements = typemap[ir_varname].count
+                    elems = ", ".join(
+                        [f"get_sql_literal({arg}[{i}])" for i in range(num_elements)]
+                    )
+                    func_text += f"    {arg} = ({elems},)\n"
+                else:
+                    func_text += f"    {arg} = get_sql_literal({arg})\n"
             # Append filters via a format string. This format string is created and populated
             # at runtime because filter variables aren't necessarily constants (but they are scalars).
             func_text += f'    sql_request = f"{{sql_request}} {where_cond}"\n'
