@@ -1352,41 +1352,51 @@ class TypingTransforms:
         )
         # We cannot do filter pushdown if the expression requires us to keep like/use a regex.
         if requires_regex:
-            raise GuardException
-        elif match_anything:
-            # We don't have a way to represent a True filter yet.
-            op = "ALWAYS_TRUE"
-        elif must_match_start and must_match_end:
-            # This is equality
+            # Regex can only be handled with a SQL interface
+            require(is_sql_op)
             if is_case_insensitive:
-                op = "case_insensitive_equality"
+                op = "ilike"
             else:
-                op = "=" if is_sql_op else "=="
-        elif must_match_start:
-            if is_case_insensitive:
-                op = "case_insensitive_startswith"
-            else:
-                op = "startswith"
-        elif must_match_end:
-            if is_case_insensitive:
-                op = "case_insensitive_endswith"
-            else:
-                op = "endswith"
+                op = "like"
+            # Generate an ir.Expr. This is a tuple that will be unpacked
+            # later in filter pushdown.
+            expr_value = ir.Expr.build_tuple([pattern_arg, escape_arg], call_def.loc)
         else:
-            if is_case_insensitive:
-                op = "case_insensitive_contains"
+            if match_anything:
+                # We don't have a way to represent a True filter yet.
+                op = "ALWAYS_TRUE"
+            elif must_match_start and must_match_end:
+                # This is equality
+                if is_case_insensitive:
+                    op = "case_insensitive_equality"
+                else:
+                    op = "=" if is_sql_op else "=="
+            elif must_match_start:
+                if is_case_insensitive:
+                    op = "case_insensitive_startswith"
+                else:
+                    op = "startswith"
+            elif must_match_end:
+                if is_case_insensitive:
+                    op = "case_insensitive_endswith"
+                else:
+                    op = "endswith"
             else:
-                op = "contains"
+                if is_case_insensitive:
+                    op = "case_insensitive_contains"
+                else:
+                    op = "contains"
 
-        # Create a new IR variable for the constant pattern.
-        constant_value = ir.Const(final_pattern, call_def.loc)
-        new_name = mk_unique_var("like_python_pattern")
+            # Create a new IR Expr for the constant pattern.
+            expr_value = ir.Const(final_pattern, call_def.loc)
+        # Generate a variable from the Expr
+        new_name = mk_unique_var("like_python_var")
         new_var = ir.Var(ir.Scope(None, call_def.loc), new_name, call_def.loc)
-        new_assign = ir.Assign(target=new_var, value=constant_value, loc=call_def.loc)
+        new_assign = ir.Assign(target=new_var, value=expr_value, loc=call_def.loc)
         # Append the assign so we update the IR.
         new_ir_assigns.append(new_assign)
         # Update the definitions. This is safe since the name is unique.
-        func_ir._definitions[new_name] = [constant_value]
+        func_ir._definitions[new_name] = [expr_value]
         return (colname, op, new_var)
 
     def _get_partition_filters(
