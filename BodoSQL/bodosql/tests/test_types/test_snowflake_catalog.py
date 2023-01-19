@@ -11,6 +11,9 @@ import bodosql
 import numpy as np
 import pandas as pd
 import pytest
+from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
+    test_db_snowflake_catalog,
+)
 from mpi4py import MPI
 
 import bodo
@@ -50,27 +53,6 @@ def dummy_snowflake_catalogs(request):
     """
     List of table paths that should be suppported.
     None of these actually point to valid data
-    """
-    return request.param
-
-
-@pytest.fixture(
-    params=[
-        bodosql.SnowflakeCatalog(
-            os.environ.get("SF_USERNAME", ""),
-            os.environ.get("SF_PASSWORD", ""),
-            "bodopartner.us-east-1",
-            "DEMO_WH",
-            "TEST_DB",
-            connection_params={"schema": "PUBLIC"},
-        )
-    ]
-)
-def test_db_snowflake_catalog(request):
-    """
-    The test_db snowflake catalog used for most tests.
-    Although this is a fixture there is intentionally a
-    single element.
     """
     return request.param
 

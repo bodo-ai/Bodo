@@ -115,6 +115,110 @@ def test_table_path_filter_pushdown(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_like_filter_pushdown(datapath, memory_leak_check):
+    """
+    Tests that queries with like perform filter pushdown for all the
+    cases with the optimized paths.
+    """
+    filename = datapath("sample-parquet-data/rphd_sample.pq")
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    def impl1(bc):
+        # Test like where its just equality
+        return bc.sql(
+            "Select uuid from table1 where uuid like 'ce4d3aa7-476b-4772-94b4-18224490c7a1'"
+        )
+
+    def impl2(bc):
+        # Test like where its endswith
+        return bc.sql("Select uuid from table1 where uuid like '%c'")
+
+    def impl3(bc):
+        # Test like where its startswith
+        return bc.sql("Select uuid from table1 where uuid like '1%'")
+
+    def impl4(bc):
+        # Test like where its contains
+        return bc.sql("Select uuid from table1 where uuid like '%5%'")
+
+    def impl5(bc):
+        # Test like where its always true
+        return bc.sql("Select uuid from table1 where uuid like '%'")
+
+    # Compare entirely to Pandas output to simplify the process.
+    # Load the data once and then filter for each query.
+    py_output = pd.read_parquet(filename)[["uuid"]]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[
+            py_output.uuid == "ce4d3aa7-476b-4772-94b4-18224490c7a1"
+        ]
+        check_func(
+            impl1, (bc,), py_output=expected_output, reset_index=True, sort_output=True
+        )
+
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[py_output.uuid.str.endswith("c")]
+        check_func(
+            impl2, (bc,), py_output=expected_output, reset_index=True, sort_output=True
+        )
+
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[py_output.uuid.str.startswith("1")]
+        check_func(
+            impl3, (bc,), py_output=expected_output, reset_index=True, sort_output=True
+        )
+
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[py_output.uuid.str.contains("5")]
+        check_func(
+            impl4, (bc,), py_output=expected_output, reset_index=True, sort_output=True
+        )
+
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[["uuid"]]
+        check_func(
+            impl5, (bc,), py_output=expected_output, reset_index=True, sort_output=True
+        )
+
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+
+
+@pytest.mark.slow
 def test_table_path_filter_pushdown_multitable(datapath, memory_leak_check):
     """
     Tests basic filter with multiple tables.
@@ -299,7 +403,7 @@ def test_table_path_col_pruning_and_filter_pushdown_implicite_casting(
             reset_index=True,
             sort_output=True,
         )
-        # Unfortunatly, we don't get information on which filters were pushed, as BodoSQL is loaded as a functext
+        # Unfortunately, we don't get information on which filters were pushed, as BodoSQL is loaded as a functext
         # TODO: find an effective way to check which filters were pushed.
         check_logger_msg(
             stream, "Filter pushdown successfully performed. Moving filter step:"

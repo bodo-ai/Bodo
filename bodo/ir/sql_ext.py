@@ -379,12 +379,17 @@ def sql_distributed_run(
                     p0 = convert_col_name(p0, sql_node.converted_colnames)
                     p0 = '\\"' + p0 + '\\"'
                     scalar_filter = (
-                        ("{" + filter_map[p[2].name] + "}")
-                        if isinstance(p[2], ir.Var)
+                        "{" + filter_map[p[2].name] + "}"
+                        if isinstance(p2, ir.Var)
                         else p2
                     )
-                    if p[1] in ("startswith", "endswith"):
-                        # This path should only be taken with Snowflake
+                    if p[1] == "ALWAYS_TRUE":
+                        # Special operator for True
+                        single_filter = ["(TRUE)"]
+                    elif p[1] == "ALWAYS_FALSE":
+                        # Special operator for False
+                        single_filter = ["(FALSE)"]
+                    elif p[1] in ("startswith", "endswith", "contains"):
                         single_filter = [
                             "(",
                             p[1],

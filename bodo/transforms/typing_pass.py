@@ -8,7 +8,7 @@ import operator
 import types as pytypes
 import warnings
 from collections import defaultdict
-from typing import Dict, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 import numba
 import numpy as np
@@ -61,11 +61,13 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_bool,
     get_overload_const_int,
+    get_overload_const_str,
     is_const_func_type,
     is_list_like_index_type,
     is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_constant_str,
     is_overload_none,
     raise_bodo_error,
 )
@@ -612,6 +614,7 @@ class TypingTransforms:
             or self._is_na_filter_pushdown_func(index_def, index_call_name)
             or self._is_isin_filter_pushdown_func(index_def, index_call_name)
             or self._starts_ends_with_filter_pushdown_func(index_def, index_call_name)
+            or self._is_like_filter_pushdown_func(index_def, index_call_name)
         ):
             pushdown_results = guard(
                 self._follow_patterns_to_init_dataframe, assign, self.func_ir
@@ -815,6 +818,7 @@ class TypingTransforms:
             rhs_def = None
 
         df_var = assign.value.value
+        new_ir_assigns = []
         filters = self._get_partition_filters(
             index_def,
             df_var,
@@ -823,7 +827,12 @@ class TypingTransforms:
             func_ir,
             # SQL generates different operators than pyarrow
             read_node,
+            # Some filters may require generating additional IR variables.
+            # This will be updated in place.
+            new_ir_assigns,
         )
+        # Append any new assigns to the working body
+        working_body = working_body + new_ir_assigns
         self._check_non_filter_df_use_after_filter(
             set(used_dfs.keys()), assign, func_ir
         )
@@ -1137,7 +1146,9 @@ class TypingTransforms:
             return {index_def} | left_nodes | right_nodes
         return {index_def}
 
-    def _get_call_filter(self, call_def, func_ir, df_var, df_col_names, is_snowflake):
+    def _get_call_filter(
+        self, call_def, func_ir, df_var, df_col_names, is_sql, new_ir_assigns
+    ):
         """
         Function used by _get_partition_filters to extract filters
         related to series method calls.
@@ -1171,13 +1182,16 @@ class TypingTransforms:
             return self._get_bodosql_array_kernel_is_in_filter(
                 call_list, call_def, func_ir, df_var, df_col_names
             )
-        elif (
-            call_list[0] in ("startswith", "endswith") and is_snowflake
-        ):  # pragma: no cover
-            # This path is only taken on Azure because snowflake
-            # is not tested on AWS.
+        elif call_list[0] in ("startswith", "endswith"):  # pragma: no cover
             return self._get_starts_ends_with_filter(
                 call_list, call_def, func_ir, df_var, df_col_names
+            )
+        elif call_list == (
+            "like_kernel",
+            "bodo.libs.bodosql_array_kernels",
+        ):  # pragma: no cover
+            return self._get_like_filter(
+                call_def, func_ir, df_var, df_col_names, is_sql, new_ir_assigns
             )
         else:
             # Trigger a GuardException because we have hit an unknown function.
@@ -1261,8 +1275,110 @@ class TypingTransforms:
         op = call_list[0]
         return (colname, op, call_def.args[0])
 
+    def _get_like_filter(
+        self,
+        call_def: ir.Expr,
+        func_ir: ir.FunctionIR,
+        df_var: ir.Var,
+        df_col_names,
+        is_sql: bool,
+        new_ir_assigns: List[ir.Var],
+    ) -> Tuple[str, str, ir.Var]:  # pragma: no cover
+        """Generate a filter for like. If the values in like are proper constants
+        then this generates the correct operations
+
+        Args:
+            call_def (ir.Expr): An IR expression representing the call in the IR. This contains
+                access to the call details, such as the arguments.
+            func_ir (ir.FunctionIR): The current IR for the function. This is needed to update
+                definitions and extract information like column names.
+            df_var (ir.Var): The IR variable for the DataFrame being accessed by the kernel. This is
+                used to determine the original column name for filter pushdown.
+            df_col_names (Tuple[str, ...]): n-tuple of DataFrame column names
+            is_sql (bool): Is the operation targeting sql or parquet/iceberg. This
+                influences the generated op.
+            new_ir_assigns (List[ir.Stmt]): A list of ir.Stmt values that are created when generating
+                the filters. If this filter succeeds we will append to this list.
+
+        Returns:
+            Tuple[str, str, ir.Var]: A tuple for this particular filter. It has the form
+                (column_name, op (e.g. <), Variable). Since like/ilike require a transformation
+                to get the pattern into this standard form we generate a new Variable add append
+                it to the IR.
+
+        Raises GuardException: If the inputs cannot be converted to a valid filter.
+        """
+        args = call_def.args
+        # Get the column names
+        colname = self._get_col_name(args[0], df_var, df_col_names, func_ir)
+        # Get the other args. We can only do filter pushdown if all of them are literals
+        pattern_arg = args[1]
+        pattern_type = self.typemap.get(pattern_arg.name, None)
+        if pattern_type in (None, types.undefined, types.unknown):
+            self.needs_transform = True
+            raise GuardException
+        escape_arg = args[2]
+        escape_type = self.typemap.get(escape_arg.name, None)
+        if escape_type in (None, types.undefined, types.unknown):
+            self.needs_transform = True
+            raise GuardException
+        case_insensitive_arg = args[3]
+        case_insensitive_type = self.typemap.get(case_insensitive_arg.name, None)
+        if case_insensitive_type in (None, types.undefined, types.unknown):
+            self.needs_transform = True
+            raise GuardException
+        if not (
+            is_overload_constant_str(pattern_type)
+            and is_overload_constant_str(escape_type)
+            and is_overload_constant_bool(case_insensitive_type)
+        ):
+            raise GuardException
+        # Ensure we are case sensitive. We don't support case insensitive filter pushdown
+        # at this time.
+        is_case_insensitive = get_overload_const_bool(case_insensitive_type)
+        if is_case_insensitive:
+            raise GuardException
+
+        pattern_const = get_overload_const_str(pattern_type)
+        escape_const = get_overload_const_str(escape_type)
+        # Convert the pattern from SQL to Python for pushdown.
+        (
+            final_pattern,
+            requires_regex,
+            must_match_start,
+            must_match_end,
+            match_anything,
+        ) = bodo.libs.bodosql_like_array_kernels.convert_sql_pattern_to_python_compile_time(
+            pattern_const, escape_const, is_case_insensitive
+        )
+        # We cannot do filter pushdown if the expression requires us to keep like/use a regex.
+        if requires_regex:
+            raise GuardException
+        elif match_anything:
+            # We don't have a way to represent a True filter yet.
+            op = "ALWAYS_TRUE"
+        elif must_match_start and must_match_end:
+            # This is equality
+            op = "=" if is_sql else "=="
+        elif must_match_start:
+            op = "startswith"
+        elif must_match_end:
+            op = "endswith"
+        else:
+            op = "contains"
+        # Create a new IR variable for the constant pattern.
+        constant_value = ir.Const(final_pattern, call_def.loc)
+        new_name = mk_unique_var("like_python_pattern")
+        new_var = ir.Var(ir.Scope(None, call_def.loc), new_name, call_def.loc)
+        new_assign = ir.Assign(target=new_var, value=constant_value, loc=call_def.loc)
+        # Append the assign so we update the IR.
+        new_ir_assigns.append(new_assign)
+        # Update the definitions. This is safe since the name is unique.
+        func_ir._definitions[new_name] = [constant_value]
+        return (colname, op, new_var)
+
     def _get_partition_filters(
-        self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node
+        self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node, new_ir_assigns
     ):
         """get filters for predicate pushdown if possible.
         Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
@@ -1271,7 +1387,6 @@ class TypingTransforms:
         """
         require(is_expr(index_def, "binop") or is_call(index_def))
         is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
-        is_snowflake = is_sql and read_node.db_type == "snowflake"
         # NOTE: I/O nodes update df_colnames in DCE but typing pass is before
         # optimizations
         # SqlReader doesn't have original_df_colnames so needs special casing
@@ -1294,13 +1409,18 @@ class TypingTransforms:
                 r_def = get_definition(func_ir, get_binop_arg(child_def, 1))
                 r_def = self._remove_series_wrappers_from_def(r_def)
                 child_or = self._get_partition_filters(
-                    child_def, df_var, l_def, r_def, func_ir, read_node
+                    child_def, df_var, l_def, r_def, func_ir, read_node, new_ir_assigns
                 )
             else:
                 child_or = [
                     [
                         self._get_call_filter(
-                            child_def, func_ir, df_var, df_col_names, is_snowflake
+                            child_def,
+                            func_ir,
+                            df_var,
+                            df_col_names,
+                            is_sql,
+                            new_ir_assigns,
                         )
                     ]
                 ]
@@ -1334,6 +1454,7 @@ class TypingTransforms:
                         new_lhs_rdef,
                         func_ir,
                         read_node,
+                        new_ir_assigns,
                     )
                     # lhs And rhs.rhs (A And C)
                     new_rhs = ir.Expr.binop(
@@ -1351,6 +1472,7 @@ class TypingTransforms:
                         new_rhs_rdef,
                         func_ir,
                         read_node,
+                        new_ir_assigns,
                     )
                     return left_or + right_or
 
@@ -1373,6 +1495,7 @@ class TypingTransforms:
                         rhs_def,
                         func_ir,
                         read_node,
+                        new_ir_assigns,
                     )
                     # lhs.rhs And rhs (C And A)
                     new_rhs = ir.Expr.binop(
@@ -1390,6 +1513,7 @@ class TypingTransforms:
                         rhs_def,
                         func_ir,
                         read_node,
+                        new_ir_assigns,
                     )
                     return left_or + right_or
 
@@ -1457,7 +1581,7 @@ class TypingTransforms:
                 cond = (left_colname, op_map[index_def.fn], index_def.rhs)
         else:
             cond = self._get_call_filter(
-                index_def, func_ir, df_var, df_col_names, is_snowflake
+                index_def, func_ir, df_var, df_col_names, is_sql, new_ir_assigns
             )
 
         # If this is parquet we need to verify this is a filter we can process.
@@ -4483,8 +4607,7 @@ class TypingTransforms:
     def _starts_ends_with_filter_pushdown_func(self, index_def, index_call_name):
         """
         Does an expression match a supported startswith/endswith call that can be
-        used in filter pushdown. Currently these optimizations are only supported
-        when loaded from Snowflake.
+        used in filter pushdown.
         """
         if not (
             is_call(index_def) and index_call_name[0] in ("startswith", "endswith")
@@ -4504,6 +4627,49 @@ class TypingTransforms:
             return False
 
         return True
+
+    def _is_like_filter_pushdown_func(self, index_def: ir.Stmt, index_call_name):
+        """Does an expression match a like call that may be possible to support
+        in filter pushdown?
+
+        Args:
+            index_def (ir.Stmt): The index expression to check.
+            index_call_name (Tuple[str, str | ir.Var]): A 2-tuple identifying the function call.
+        """
+        if not (
+            is_call(index_def)
+            and index_call_name == ("like_kernel", "bodo.libs.bodosql_array_kernels")
+        ):
+            return False
+
+        # Filter pushdown is currently only possible if both the pattern and escape are constants
+        # and we are doing case sensitive matching.
+        args = index_def.args
+        # Pattern and escape are args 1 and 2
+        for arg_no in (1, 2):
+            const_arg = args[arg_no].name
+            const_type = self.typemap.get(const_arg, None)
+            if const_type in (None, types.unknown, types.undefined):
+                self.needs_transform = True
+                return False
+
+            if not is_overload_constant_str(const_type):
+                # An argument is not a constant so skip filter pushdown.
+                return False
+
+        # case insensitive is argument 3
+        case_insensitive = args[3].name
+        case_insensitive_type = self.typemap.get(case_insensitive, None)
+        if case_insensitive_type in (None, types.unknown, types.undefined):
+            self.needs_transform = True
+            return False
+
+        # We may need to recompile to get the constant version to avoid errors.
+        if not is_overload_constant_bool(case_insensitive_type):
+            return False
+
+        # we can do filter pushdown if case_insensitive == False
+        return not get_overload_const_bool(case_insensitive_type)
 
 
 def _create_const_var(val, name, scope, loc, nodes):
