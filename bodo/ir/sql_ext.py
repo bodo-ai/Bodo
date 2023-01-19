@@ -397,9 +397,34 @@ def sql_distributed_run(
                             p0,
                             ",",
                             scalar_filter,
-                            ")",
-                            ")",
+                            "))",
                         ]
+                    elif p[1] in (
+                        "case_insensitive_startswith",
+                        "case_insensitive_endswith",
+                        "case_insensitive_contains",
+                        "case_insensitive_equality",
+                    ):
+                        op = p[1][len("case_insensitive_") :]
+                        if op == "equality":
+                            # Equality is just =, not a function
+                            single_filter = [
+                                "(LOWER(",
+                                p0,
+                                ") = LOWER(",
+                                scalar_filter,
+                                "))",
+                            ]
+                        else:
+                            single_filter = [
+                                "(",
+                                op,
+                                "(LOWER(",
+                                p0,
+                                "), LOWER(",
+                                scalar_filter,
+                                ")))",
+                            ]
                     else:
                         single_filter = ["(", p0, p[1], scalar_filter, ")"]
 

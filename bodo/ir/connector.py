@@ -543,20 +543,39 @@ def generate_arrow_filters(
                         # ds.field('A').isin(filter_var)
                         expr_val = f"ds.field('{v[0]}').isin({filter_var})"
 
-                    elif v[1] in ("startswith", "endswith", "contains"):
-                        if v[1] == "startswith":
+                    elif v[1] == "case_insensitive_equality":
+                        # case_insensitive_equality is just == with both inputs converted
+                        # to lower case. This is used by ilike
+                        expr_val = f"(pa.compute.ascii_lower(ds.field('{v[0]}'){column_cast}) == pa.compute.ascii_lower(ds.scalar({filter_var}){scalar_cast}))"
+
+                    elif v[1] in (
+                        "startswith",
+                        "endswith",
+                        "contains",
+                        "case_insensitive_startswith",
+                        "case_insensitive_endswith",
+                        "case_insensitive_contains",
+                    ):
+                        op = v[1]
+                        prefix = "case_insensitive_"
+                        if op.startswith(prefix):
+                            ignore_case = True
+                            # These functions have the form case_insensitive_funcname.
+                            # Extract just func name.
+                            op = op[len(prefix) :]
+                        else:
+                            ignore_case = False
+                        if op == "startswith":
                             func_name = "starts_with"
-                        elif v[1] == "endswith":
+                        elif op == "endswith":
                             func_name = "ends_with"
-                        elif v[1] == "contains":
+                        elif op == "contains":
                             func_name = "match_substring"
                         # All of these functions require no scalar.
                         scalar_arg = filter_var
-                        # Expected output for this format should like
-                        # pa.compute.func(ds.field('A'), scalar)
-                        expr_val = (
-                            f"pa.compute.{func_name}(ds.field('{v[0]}'), {scalar_arg})"
-                        )
+                        # Expected output for this format should look like
+                        # pa.compute.func(ds.field('A'), scalar, ignore_case=var)
+                        expr_val = f"pa.compute.{func_name}(ds.field('{v[0]}'), {scalar_arg}, ignore_case={ignore_case})"
                     else:
                         # Expected output for this format should like
                         # (ds.field('A') > ds.scalar(py_var))
