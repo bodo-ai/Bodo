@@ -236,7 +236,7 @@ def test_upper_lower_like_constants(
     string_constants,
     spark_info,
     like_expression,
-    # memory_leak_check, Seems to be leaking memory sporadically, see [BS-534]
+    memory_leak_check,
 ):
     """
     Tests that lower/upper works on string constants
@@ -267,19 +267,16 @@ def test_pythonic_regex(
     pythonic_regex,
     spark_info,
     like_expression,
-    # TODO: re add memory_leak_check, see BS-534
+    memory_leak_check,
 ):
     """
-    checks that pythonic regex is working as inteded
+    checks that pythonic regex is working as intended
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '{pythonic_regex}'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_wildcardless_like(pandas_code)
 
 
 @pytest.mark.slow
@@ -287,19 +284,16 @@ def test_all_percent(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # TODO: re add memory_leak_check, see BS-534
+    memory_leak_check,
 ):
     """
-    checks that a regex that is all %% is correct and properly optimized
+    checks that a regex that is all %% is correct
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_and_end_percent_like(pandas_code)
 
 
 @pytest.mark.slow
@@ -307,7 +301,7 @@ def test_all_percent_scalar(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # TODO: re add memory_leak_check, see BS-534
+    memory_leak_check,
 ):
     """
     checks that a regex that is all %% is correct
@@ -325,35 +319,31 @@ def test_all_percent_scalar(
 def test_leading_percent(
     bodosql_string_types,
     spark_info,
-    like_expression,  # TODO: re add memory_leak_check, see BS-534
+    like_expression,
+    memory_leak_check,
 ):
     """
-    checks that a regex starting with % is correct and properly optimized
+    checks that a regex starting with % is correct
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%o'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_percent_like(pandas_code)
 
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%.o'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_percent_like(pandas_code)
 
 
 @pytest.mark.slow
 def test_leading_percent_scalar(
     bodosql_string_types,
     spark_info,
-    like_expression,  # TODO: re add memory_leak_check, see BS-534
+    like_expression,
+    memory_leak_check,
 ):
     """
     checks that a regex starting with % is correct
@@ -372,36 +362,30 @@ def test_trailing_percent(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # TODO: re add memory_leak_check, see BS-534
+    memory_leak_check,
 ):
     """
-    checks that a regex ending with % is correct and properly optimized
+    checks that a regex ending with % is correct
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} 'h%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_end_percent_like(pandas_code)
 
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} 'h.%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_end_percent_like(pandas_code)
 
 
 @pytest.mark.slow
 def test_trailing_percent_scalar(
     bodosql_string_types,
     spark_info,
-    like_expression
-    # TODO: re add memory_leak_check, see BS-534
+    like_expression,
+    memory_leak_check,
 ):
     """
     checks that a regex ending with % is correct
@@ -420,28 +404,22 @@ def test_both_percent(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # memory_leak_check Seems to be failing memory leak check intermitently, see BS-534
+    memory_leak_check,
 ):
     """
-    checks that a regex starting and ending with % is correct and properly optimized
+    checks that a regex starting and ending with % is correct
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%e%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_and_end_percent_like(pandas_code)
 
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%e.%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_and_end_percent_like(pandas_code)
 
 
 @pytest.mark.slow
@@ -449,7 +427,7 @@ def test_both_percent_scalar(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # memory_leak_check Seems to be failing memory leak check intermitently, see BS-534
+    memory_leak_check,
 ):
     """
     checks that a regex starting and ending with % is correct
@@ -468,40 +446,6 @@ def test_both_percent_scalar(
         check_names=False,
         check_dtype=False,
     )
-
-
-def check_wildcardless_like(pandas_code):
-    """
-    Checks that given pandas_code doesn't contain any contains
-    code because the regular expression didn't contain any
-    SQL wildcards.
-    """
-    assert ".str.contains" not in pandas_code
-
-
-def check_start_percent_like(pandas_code):
-    """
-    Checks that given pandas_code doesn't uses endswith
-    because the regular expression only included % at the beginning.
-    """
-    assert ".str.endswith" in pandas_code
-
-
-def check_end_percent_like(pandas_code):
-    """
-    Checks that given pandas_code doesn't uses startswith
-    because the regular expression only included % at the beginning.
-    """
-    assert ".str.startswith" in pandas_code
-
-
-def check_start_and_end_percent_like(pandas_code):
-    """
-    Checks that given pandas_code doesn't uses regex=False
-    because the regular expression only included % at the beginning
-    and end.
-    """
-    assert "regex=False" in pandas_code
 
 
 @pytest.mark.slow
