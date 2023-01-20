@@ -234,10 +234,12 @@ jobs:
       mamba env export | tee env/environment.yml
       mamba list --explicit > env/package-list.txt
       pip list | tee env/requirements.txt
+    continueOnError: true
     displayName: Export Environment Spec
 
   - publish: $(System.DefaultWorkingDirectory)/env
-    artifact: TestEnv-${{ parameters.name }}
+    artifact: TestEnv $(Agent.JobName)
+    continueOnError: true
 
   - script: |
       set -eo pipefail

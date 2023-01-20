@@ -144,10 +144,12 @@ jobs:
       mamba env export | tee env/environment.yml
       mamba list --explicit > env/package-list.txt
       pip list | tee env/requirements.txt
+    continueOnError: true
     displayName: Export Environment Spec
 
   - publish: $(System.DefaultWorkingDirectory)/env
     artifact: CondaBuildEnv-${{ parameters.name }}
+    continueOnError: true
 
   - script: |
       set -exo pipefail
