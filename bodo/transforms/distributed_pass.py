@@ -1429,12 +1429,16 @@ class DistributedPass:
                 n_char_var = rhs.args[1]
                 if n_char_var.name in self._local_reduce_vars:
                     rhs.args[1] = self._local_reduce_vars[n_char_var.name]
+                    if isinstance(self.typemap[n_char_var.name], types.Literal):
+                        self._set_ith_arg_to_unliteral(rhs, 1)
 
             size_var = rhs.args[0]
             out, new_size_var = self._run_alloc(size_var, scope, loc)
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
             rhs.args[0] = new_size_var
+            if isinstance(self.typemap[size_var.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 0)
             out.append(assign)
             return out
 
@@ -1449,6 +1453,8 @@ class DistributedPass:
                 n_char_var = rhs.args[1]
                 if n_char_var.name in self._local_reduce_vars:
                     rhs.args[1] = self._local_reduce_vars[n_char_var.name]
+                    if isinstance(self.typemap[n_char_var.name], types.Literal):
+                        self._set_ith_arg_to_unliteral(rhs, 1)
 
             size_var = rhs.args[0]
             size_def = guard(get_definition, self.func_ir, size_var)
@@ -1463,6 +1469,8 @@ class DistributedPass:
             # empty_inferred is tuple for some reason
             rhs.args = list(rhs.args)
             rhs.args[0] = new_size_var
+            if isinstance(self.typemap[size_var.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 0)
             out.append(assign)
             return out
 
@@ -1575,13 +1583,16 @@ class DistributedPass:
             "bodo.hiframes.split_impl",
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
-            index_var = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            index_var = self._fix_index_var(old_ind)
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars
             )
             sub_nodes = self._get_ind_sub(index_var, start_var)
             out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
             return out
 
@@ -1590,13 +1601,16 @@ class DistributedPass:
             "bodo.libs.str_arr_ext",
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
-            index_var = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            index_var = self._fix_index_var(old_ind)
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars
             )
             sub_nodes = self._get_ind_sub(index_var, start_var)
             out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
             return out
 
@@ -1611,13 +1625,16 @@ class DistributedPass:
             ("str_arr_set_not_na", "bodo.libs.str_arr_ext"),
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             arr = rhs.args[0]
-            index_var = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            index_var = self._fix_index_var(old_ind)
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars
             )
             sub_nodes = self._get_ind_sub(index_var, start_var)
             out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
             return out
 
@@ -1629,23 +1646,29 @@ class DistributedPass:
             # output array
             if self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
                 arr = rhs.args[0]
-                index_var = self._fix_index_var(rhs.args[1])
+                old_ind = rhs.args[1]
+                index_var = self._fix_index_var(old_ind)
                 start_var, nodes = self._get_parallel_access_start_var(
                     arr, equiv_set, index_var, avail_vars
                 )
                 sub_nodes = self._get_ind_sub(index_var, start_var)
                 out += nodes + sub_nodes
                 rhs.args[1] = sub_nodes[-1].target
+                if isinstance(self.typemap[old_ind.name], types.Literal):
+                    self._set_ith_arg_to_unliteral(rhs, 1)
             # input string array
             if self._dist_arr_needs_adjust(rhs.args[2].name, rhs.args[3].name):
                 arr = rhs.args[2]
-                index_var = self._fix_index_var(rhs.args[3])
+                old_ind = rhs.args[3]
+                index_var = self._fix_index_var(old_ind)
                 start_var, nodes = self._get_parallel_access_start_var(
                     arr, equiv_set, index_var, avail_vars
                 )
                 sub_nodes = self._get_ind_sub(index_var, start_var)
                 out += nodes + sub_nodes
                 rhs.args[3] = sub_nodes[-1].target
+                if isinstance(self.typemap[old_ind.name], types.Literal):
+                    self._set_ith_arg_to_unliteral(rhs, 3)
             out.append(assign)
             return out
 
@@ -1660,24 +1683,30 @@ class DistributedPass:
             # output string array
             if self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
                 arr = rhs.args[0]
-                index_var = self._fix_index_var(rhs.args[1])
+                old_ind = rhs.args[1]
+                index_var = self._fix_index_var(old_ind)
                 start_var, nodes = self._get_parallel_access_start_var(
                     arr, equiv_set, index_var, avail_vars
                 )
                 sub_nodes = self._get_ind_sub(index_var, start_var)
                 out += nodes + sub_nodes
                 rhs.args[1] = sub_nodes[-1].target
+                if isinstance(self.typemap[old_ind.name], types.Literal):
+                    self._set_ith_arg_to_unliteral(rhs, 1)
 
             # input string array
             if self._dist_arr_needs_adjust(rhs.args[2].name, rhs.args[3].name):
                 arr = rhs.args[2]
-                index_var = self._fix_index_var(rhs.args[3])
+                old_ind = rhs.args[3]
+                index_var = self._fix_index_var(old_ind)
                 start_var, nodes = self._get_parallel_access_start_var(
                     arr, equiv_set, index_var, avail_vars
                 )
                 sub_nodes = self._get_ind_sub(index_var, start_var)
                 out += nodes + sub_nodes
                 rhs.args[3] = sub_nodes[-1].target
+                if isinstance(self.typemap[old_ind.name], types.Literal):
+                    self._set_ith_arg_to_unliteral(rhs, 3)
 
             out.append(assign)
             return out
@@ -1686,13 +1715,16 @@ class DistributedPass:
             rhs.args[0].name, rhs.args[1].name
         ):
             arr = rhs.args[0]
-            index_var = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            index_var = self._fix_index_var(old_ind)
             start_var, nodes = self._get_parallel_access_start_var(
                 arr, equiv_set, index_var, avail_vars
             )
             sub_nodes = self._get_ind_sub(index_var, start_var)
             out = nodes + sub_nodes
             rhs.args[1] = sub_nodes[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
             return out
 
@@ -1704,12 +1736,15 @@ class DistributedPass:
         ) and self._dist_arr_needs_adjust(rhs.args[0].name, rhs.args[1].name):
             # fix index in call to isna
             arr = rhs.args[0]
-            ind = self._fix_index_var(rhs.args[1])
+            old_ind = rhs.args[1]
+            ind = self._fix_index_var(old_ind)
             start_var, out = self._get_parallel_access_start_var(
                 arr, equiv_set, ind, avail_vars
             )
             out += self._get_ind_sub(ind, start_var)
             rhs.args[1] = out[-1].target
+            if isinstance(self.typemap[old_ind.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
             out.append(assign)
 
         if fdef in (
@@ -4362,6 +4397,32 @@ class DistributedPass:
         self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
             self.typingctx, call_type.args[:-1] + (types.Omitted(True),), {}
         )
+
+    def _set_ith_arg_to_unliteral(self, rhs: ir.Expr, i: int) -> None:
+        """Set the ith argument of call expr 'rhs' to a nonliteral version.
+        This assumes the ith input is a literal. This is used for Bodo function replacements
+        that potentially replace an original constant in the IR with a variable.
+
+        For example this would be used if we had to make the following replacment:
+
+            f(0) -> f(int_var)
+
+        Args:
+            rhs (ir.Expr): Call expression with at least i + 1 arguments and the ith argument is
+            a literal.
+        """
+        call_type = self.calltypes[rhs]
+        # In some cases the call type is already not a literal when the argument
+        # is a literal. As a result we only change the call if its a literal.
+        if isinstance(call_type.args[i], types.Literal):
+            self.calltypes.pop(rhs)
+            self.calltypes[rhs] = self.typemap[rhs.func.name].get_call_type(
+                self.typingctx,
+                call_type.args[:i]
+                + (types.unliteral(call_type.args[i]),)
+                + call_type.args[i + 1 :],
+                {},
+            )
 
     def _set_second_last_arg_to_true(self, rhs):
         """set second-to-last argument of call expr 'rhs' to True, assuming that it is an
