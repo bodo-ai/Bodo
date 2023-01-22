@@ -4,6 +4,7 @@ Test correctness of SQL conditional functions on BodoSQL
 """
 import copy
 
+import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.string_ops_common import bodosql_string_fn_testing_df  # noqa
