@@ -117,6 +117,8 @@ class BodoTypeInference(PartialTypeInference):
         curr_typing_pass_required = False
         # flag indicating that transformation has run at least once
         ran_transform = False
+        # flag indicating that loop unrolling has been tried at least once
+        tried_unrolling = False
         # flag for when another transformation pass is needed (to avoid break before
         # next transform)
         needs_transform = False
@@ -153,10 +155,11 @@ class BodoTypeInference(PartialTypeInference):
                 state.flags,
                 True,
                 ran_transform,
+                tried_unrolling,
             )
             ran_transform = True
             prev_needs_transform = needs_transform
-            changed, needs_transform = typing_transforms_pass.run()
+            changed, needs_transform, tried_unrolling = typing_transforms_pass.run()
             rerun_after_dce = typing_transforms_pass.rerun_after_dce
             # transform pass has failed if transform was needed but IR is not changed.
             # This avoids infinite loop, see [BE-140]
@@ -187,9 +190,14 @@ class BodoTypeInference(PartialTypeInference):
                 state.flags,
                 False,
                 ran_transform,
+                tried_unrolling,
             )
             ran_transform = True
-            local_changed, needs_transform = typing_transforms_pass.run()
+            (
+                local_changed,
+                needs_transform,
+                tried_unrolling,
+            ) = typing_transforms_pass.run()
             changed_after_typing = changed_after_typing or local_changed
             rerun_after_dce = typing_transforms_pass.rerun_after_dce
         # some cases need a second transform pass to raise the proper error
@@ -206,8 +214,13 @@ class BodoTypeInference(PartialTypeInference):
                 state.flags,
                 False,
                 True,
+                tried_unrolling,
             )
-            local_changed, needs_transform = typing_transforms_pass.run()
+            (
+                local_changed,
+                needs_transform,
+                tried_unrolling,
+            ) = typing_transforms_pass.run()
             changed_after_typing = changed_after_typing or local_changed
         if skipped_transform_in_typing or changed_after_typing:
             # need to rerun type inference if the IR changed
@@ -313,6 +326,7 @@ class TypingTransforms:
         flags,
         change_required,
         ran_transform,
+        tried_unrolling,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -341,8 +355,10 @@ class TypingTransforms:
         self.flags = flags
         # a change in the IR in current pass is required to enable typing
         self.change_required = change_required
-        # whether transform has run before (e.g. loop unrolling is attempted)
+        # whether transform has run before
         self.ran_transform = ran_transform
+        # whether loop unrolling has been tried at least once
+        self.tried_unrolling = tried_unrolling
         self.changed = False
         # whether another transformation pass is needed (see _run_setattr)
         self.needs_transform = False
@@ -388,16 +404,18 @@ class TypingTransforms:
         # try loop unrolling if some const values couldn't be resolved
         if self._require_const:
             self._try_loop_unroll_for_const()
+            self.tried_unrolling = True
 
         # try unrolling a loop with constant range if everything else failed
         if self.change_required and not self.changed and not self.needs_transform:
             self._try_unroll_const_loop()
+            self.tried_unrolling = True
 
         # Remove any transformed variables that are not used anymore
         # since cases like agg dicts may not be type stable
         mini_dce(self.func_ir)
 
-        return self.changed, self.needs_transform
+        return self.changed, self.needs_transform, self.tried_unrolling
 
     def _run_assign(self, assign, label):
         rhs = assign.value
@@ -3887,7 +3905,7 @@ class TypingTransforms:
             )
         except BodoConstUpdatedError as e:
             # loop unrolling can potentially make updated lists constants
-            if self.ran_transform and err_msg:
+            if self.ran_transform and err_msg and self.tried_unrolling:
                 raise BodoError(f"{err_msg} but {e}\n{loc.strformat()}\n")
             else:
                 # save for potential loop unrolling
