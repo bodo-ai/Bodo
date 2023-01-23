@@ -549,3 +549,26 @@ def test_bodosql_context_arg_dist(memory_leak_check):
     assert count_array_REPs() == 0
     assert count_array_OneDs() == 0
     assert count_array_OneD_Vars() > 0
+
+
+def test_bodosql_context_loop_unrolling(memory_leak_check):
+    """
+    Make sure loop unrolling for constant inference works after BodoSQL call
+    """
+
+    def impl(bc, query):
+        output = bc.sql(query)
+        output.columns = [str(col).upper() for col in output.columns]
+        return output
+
+    query = "select * from t1"
+    df = pd.DataFrame({"a": np.arange(100), "b": ["r32r", "R32", "Rew", "r32r"] * 25})
+    py_output = df.rename(columns={"a": "A", "b": "B"})
+
+    bc = BodoSQLContext(
+        {
+            "t1": df,
+            "t2": pd.DataFrame({"C": [b"345253"] * 100}),
+        }
+    )
+    check_func(impl, (bc, query), py_output=py_output)
