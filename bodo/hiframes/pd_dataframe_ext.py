@@ -2400,6 +2400,8 @@ def _get_df_args(data, index, columns, dtype, copy):
             )
         copy_str = ".copy()" if copy else ""
         columns_consts = get_overload_const_list(columns)
+        if columns_consts is None:
+            raise_bodo_error("pd.DataFrame(): constant column names required")
         n_cols = len(columns_consts)
         data_val_types = {c: data.copy(ndim=1) for c in columns_consts}
         data_arrs = ["data[:,{}]{}".format(i, copy_str) for i in range(n_cols)]
@@ -2409,6 +2411,8 @@ def _get_df_args(data, index, columns, dtype, copy):
         col_names = data_dict.keys()
     else:
         col_names = get_overload_const_list(columns)
+        if col_names is None:
+            raise_bodo_error("pd.DataFrame(): constant column names required")
 
     df_len = _get_df_len_from_info(
         data_dict, data_val_types, col_names, index_is_none, index_arg
