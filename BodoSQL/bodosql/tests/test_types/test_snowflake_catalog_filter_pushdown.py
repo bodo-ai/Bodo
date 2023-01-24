@@ -419,7 +419,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "hELlO"]
+            expected_output = py_output[py_output.a.str.lower() == "hello"]
             check_func(
                 impl,
                 (bc, query1),
@@ -436,7 +436,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.startswith("hE")]
+            expected_output = py_output[py_output.a.str.lower().str.startswith("he")]
             check_func(
                 impl,
                 (bc, query2),
@@ -453,7 +453,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.endswith("lO")]
+            expected_output = py_output[py_output.a.str.lower().str.endswith("lo")]
             check_func(
                 impl,
                 (bc, query3),
@@ -470,9 +470,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[
-                py_output.a.str.contains("e") | py_output.a.str.contains("E")
-            ]
+            expected_output = py_output[py_output.a.str.lower().str.contains("e")]
             check_func(
                 impl,
                 (bc, query4),
@@ -489,7 +487,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a == "b%Bf"]
+            expected_output = py_output[py_output.a.str.lower() == "b%bf"]
             check_func(
                 impl,
                 (bc, query5),
@@ -506,7 +504,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.startswith("b%")]
+            expected_output = py_output[py_output.a.str.lower().str.startswith("b%")]
             check_func(
                 impl,
                 (bc, query6),
@@ -523,7 +521,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.endswith("%Bf")]
+            expected_output = py_output[py_output.a.str.lower().str.endswith("%bf")]
             check_func(
                 impl,
                 (bc, query7),
@@ -540,7 +538,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         stream = io.StringIO()
         logger = create_string_io_logger(stream)
         with set_logging_stream(logger, 1):
-            expected_output = py_output[py_output.a.str.contains("%B")]
+            expected_output = py_output[py_output.a.str.lower().str.contains("%b")]
             check_func(
                 impl,
                 (bc, query8),
