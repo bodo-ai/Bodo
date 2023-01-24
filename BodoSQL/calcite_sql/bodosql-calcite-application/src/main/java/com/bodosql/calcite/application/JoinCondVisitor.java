@@ -9,10 +9,7 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlBinaryOperator;
-import org.apache.calcite.sql.SqlKind;
-import org.apache.calcite.sql.SqlOperator;
-import org.apache.calcite.sql.SqlPrefixOperator;
+import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Pair;
 
@@ -107,7 +104,7 @@ public class JoinCondVisitor {
       HashSet<String> mergeCols) {
     /**
      * Visit node for a call within a join condition. This should be limited to logical operators,
-     * comparison operators (excluding <=>), and arithmetic operators.
+     * comparison operators (excluding <=>), arithmetic operators, and POW().
      *
      * <p>Returns a Pair<Str, Bool> containing the generated code and if there is an equality
      * expression.
@@ -206,6 +203,18 @@ public class JoinCondVisitor {
         String notCond = "(~" + val1Info.getKey() + ")";
         return new Pair<>(notCond, val1Info.getValue());
       }
+    } else if (joinNode.getOperator() instanceof SqlFunction
+        && joinNode.getOperator().toString().equals("POW")) {
+      // TODO[BE-4274]: support all possible functions
+      List<RexNode> operands = joinNode.getOperands();
+      Pair<String, Boolean> val1Info =
+          visitJoinCond(operands.get(0), leftColNames, rightColNames, mergeCols);
+      String val1 = val1Info.getKey();
+      Pair<String, Boolean> val2Info =
+          visitJoinCond(operands.get(1), leftColNames, rightColNames, mergeCols);
+      String val2 = val2Info.getKey();
+      boolean hasEquals = val1Info.getValue() || val2Info.getValue();
+      return new Pair<>("pow(" + val1 + "," + val2 + ")", hasEquals);
     }
     throw new BodoSQLCodegenException(
         String.format(
