@@ -305,6 +305,41 @@ def test_ilike_filter_pushdown(datapath, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['uuid']")
 
 
+def test_coalese_filter_pushdown(datapath, memory_leak_check):
+    """
+    Test coalesce support in Parquet filter pushdown
+    """
+    filename = datapath("date_coalesce.pq")
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    def impl(bc):
+        return bc.sql(
+            "select * from table1 where coalesce(A, current_date()) > '2015-01-01'"
+        )
+
+    df = pd.read_parquet(filename)
+    py_output = df[
+        df.A.fillna(pd.Timestamp.now().date()) > pd.to_datetime("2015-01-01").date()
+    ]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+
+        check_func(impl, (bc,), py_output=py_output, reset_index=True, sort_output=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(
+            stream,
+            "(((pa.compute.coalesce(ds.field('A'), ds.scalar(f0)).cast(pyarrow.timestamp('ns'), safe=False) > ds.scalar(f1))))",
+        )
+
+
 @pytest.mark.slow
 def test_table_path_filter_pushdown_multitable(datapath, memory_leak_check):
     """

@@ -69,6 +69,7 @@ from bodo.utils.typing import (
     is_overload_constant_int,
     is_overload_constant_str,
     is_overload_none,
+    is_scalar_type,
     raise_bodo_error,
 )
 from bodo.utils.utils import (
@@ -1034,13 +1035,7 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
         # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
-        filter_vars = set()
-        for predicate_list in filters:
-            for v in predicate_list:
-                # If v[2] is a variable add it to the filter_vars. If its
-                # a compile time constant (i.e. NULL) then don't add it.
-                if isinstance(v[2], ir.Var):
-                    filter_vars.add(v[2].name)
+        filter_vars = {v.name for v in bodo.ir.connector.get_filter_vars(filters)}
 
         # data array/table variables should not be used in filter expressions directly
         non_filter_vars = {v.name for v in read_node.list_vars()}
@@ -1107,10 +1102,23 @@ class TypingTransforms:
             else:
                 related_vars |= stmt_vars - df_names
 
+            # non-filter tuple variables can contain both filter and non-filter
+            # variables inside. For example, in tuple input to coalesce((A, c)), c can
+            # be a filter variable (that needs pushed before the read node) but A is not
+            if is_assign(stmt) and is_expr(stmt.value, "build_tuple"):
+                if stmt.target.name in filter_vars:
+                    filter_vars |= stmt_vars
+                else:
+                    for v in stmt_vars:
+                        if v not in filter_vars:
+                            non_filter_vars.add(v)
+                continue
+
             if stmt_vars & filter_vars:
                 filter_vars |= stmt_vars
             else:
                 non_filter_vars |= stmt_vars
+
         require(not (filter_vars & non_filter_vars))
 
         # move IR nodes for filter expressions before the reader node
@@ -1628,9 +1636,9 @@ class TypingTransforms:
         # We don't do this check if there is a call expression because isnull
         # is always supported.
         if not is_sql and not is_call(index_def):
-            lhs_arr_typ = read_node.original_out_types[
-                read_node.original_df_colnames.index(cond[0])
-            ]
+            lhs_arr_typ = self._get_filter_col_type(
+                cond[0], read_node.original_out_types, read_node.original_df_colnames
+            )
             lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
             require(cond[2].name in self.typemap)
             rhs_scalar_typ = self.typemap[cond[2].name]
@@ -1644,6 +1652,28 @@ class TypingTransforms:
 
         # Pyarrow format, e.g.: [[("a", "==", 2)]]
         return [[cond]]
+
+    def _get_filter_col_type(self, col_val, out_types, col_names):
+        """Return column type for column representation in filter predicate
+
+        Args:
+            col_val (str | tuple): column name or tuple representing its computation
+            out_types (list(types.Type)): output types of read node
+            col_names (list(str)): output column names of read node
+
+        Returns:
+            types.Type: array type of predicate column
+        """
+        if isinstance(col_val, str):
+            return out_types[col_names.index(col_val)]
+
+        # only coalesce is supported currently
+        assert (
+            isinstance(col_val, tuple)
+            and len(col_val) == 3
+            and col_val[1] == "coalesce"
+        ), "invalid column in filter predicate"
+        return out_types[col_names.index(col_val[0])]
 
     def _get_col_name(self, var, df_var, df_col_names, func_ir):
         """get column name for dataframe column access like df["A"] if possible.
@@ -1682,6 +1712,31 @@ class TypingTransforms:
                     func_ir, var_def.args[1], arg_types=self.arg_types
                 )
                 return df_col_names[col_ind]
+
+            # coalesce can be called on the filter column, which will be pushed down
+            # e.g. where coalesce(L_COMMITDATE, current_date()) >= '1998-10-30'
+            if fdef == ("coalesce", "bodo.libs.bodosql_array_kernels"):
+                # coalesce takes a tuple input
+                # We only push down 2-arg scalar case, i.e. coalesce((column, scalar))
+                require((len(var_def.args) == 1) and not var_def.kws)
+                args = find_build_tuple(self.func_ir, var_def.args[0])
+                require(len(args) == 2)
+
+                # make sure arg[1] is scalar
+                arg_type = self.typemap.get(args[1].name, None)
+                if arg_type in (None, types.undefined, types.unknown):
+                    self.needs_transform = True
+                    raise GuardException
+
+                require(
+                    is_scalar_type(arg_type)
+                    and arg_type != types.none
+                    and not isinstance(arg_type, types.Optional)
+                )
+
+                col_name = self._get_col_name(args[0], df_var, df_col_names, func_ir)
+                return (col_name, "coalesce", args[1])
+
             require(
                 isinstance(fdef, tuple)
                 and len(fdef) == 2
