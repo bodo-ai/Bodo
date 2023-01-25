@@ -5,6 +5,7 @@ Equivalent of __init__.py for all BodoSQL array kernel files
 
 from bodo.libs.bodosql_array_kernel_utils import *  # noqa
 from bodo.libs.bodosql_casting_array_kernels import *  # noqa
+from bodo.libs.bodosql_comparison_array_kernels import *  # noqa
 from bodo.libs.bodosql_datetime_array_kernels import *  # noqa
 from bodo.libs.bodosql_json_array_kernels import *  # noqa
 from bodo.libs.bodosql_like_array_kernels import *  # noqa
@@ -100,6 +101,7 @@ broadcasted_fixed_arg_functions = {
     "editdistance_no_max",
     "editdistance_with_max",
     "endswith",
+    "equal",
     "equal_null",
     "exp",
     "factorial",
@@ -118,6 +120,8 @@ broadcasted_fixed_arg_functions = {
     "get_millisecond",
     "get_microsecond",
     "get_nanosecond",
+    "greater_than",
+    "greater_than_or_equal",
     "haversine",
     "initcap",
     "insert",
@@ -133,6 +137,8 @@ broadcasted_fixed_arg_functions = {
     "last_day",
     "left",
     "length",
+    "less_than",
+    "less_than_or_equal",
     "like_kernel",
     "ln",
     "log",
@@ -148,6 +154,7 @@ broadcasted_fixed_arg_functions = {
     "negate",
     "negate_interval",
     "next_day",
+    "not_equal",
     "nullif",
     "ord_ascii",
     "position",

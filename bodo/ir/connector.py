@@ -650,8 +650,9 @@ def generate_arrow_filters(
                 if v[1] == "ALWAYS_TRUE":
                     # Special operator handling the true case.
                     expr_val = "ds.scalar(True)"
-                elif v[1] == "ALWAYS_FALSE":
-                    # Special operator handling the true case.
+                elif v[1] in ("ALWAYS_FALSE", "ALWAYS_NULL"):
+                    # Special operators for False. Since we are
+                    # filtering we can map NULL -> False.
                     expr_val = "ds.scalar(False)"
                 elif isinstance(v[2], ir.Var):
                     # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).

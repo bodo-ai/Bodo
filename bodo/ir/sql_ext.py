@@ -423,8 +423,9 @@ def sql_distributed_run(
                     if p[1] == "ALWAYS_TRUE":
                         # Special operator for True
                         single_filter = ["(TRUE)"]
-                    elif p[1] == "ALWAYS_FALSE":
-                        # Special operator for False
+                    elif p[1] in ("ALWAYS_FALSE", "ALWAYS_NULL"):
+                        # Special operators for False. Since we are
+                        # filtering we can map NULL -> False.
                         single_filter = ["(FALSE)"]
                     elif p[1] in ("startswith", "endswith", "contains"):
                         single_filter = [
