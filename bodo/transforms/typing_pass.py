@@ -628,8 +628,7 @@ class TypingTransforms:
             )
 
         if (
-            is_expr(index_def, "binop")
-            or self._is_and_filter_pushdown(index_def)
+            self._is_logical_op_filter_pushdown(index_def)
             or self._is_na_filter_pushdown_func(index_def, index_call_name)
             or self._is_isin_filter_pushdown_func(index_def, index_call_name)
             or self._starts_ends_with_filter_pushdown_func(index_def, index_call_name)
@@ -827,7 +826,7 @@ class TypingTransforms:
         # If we don't have a binary operation, then we just pass
         # the single def as the index_def and set the lhs_def
         # and rhs_def to none.
-        if is_expr(index_def, "binop") or self._is_and_filter_pushdown(index_def):
+        if self._is_logical_op_filter_pushdown(index_def):
             lhs_def = get_definition(func_ir, get_binop_arg(index_def, 0))
             lhs_def = self._remove_series_wrappers_from_def(lhs_def)
             rhs_def = get_definition(func_ir, get_binop_arg(index_def, 1))
@@ -1154,9 +1153,9 @@ class TypingTransforms:
         be excluded from filter dependency reordering
         """
         # e.g. (df["A"] == 3) | (df["A"] == 4)
-        if (
-            is_expr(index_def, "binop") and index_def.fn == operator.or_
-        ) or self._is_and_filter_pushdown(index_def):
+        if self._is_or_filter_pushdown(index_def) or self._is_and_filter_pushdown(
+            index_def
+        ):
             left_nodes = self._get_filter_nodes(
                 self._remove_series_wrappers_from_def(
                     get_definition(func_ir, get_binop_arg(index_def, 0))
@@ -1453,7 +1452,7 @@ class TypingTransforms:
             Function that abstracts away the recursive steps of getting the filters
             from the child exprs of index_def.
             """
-            if is_expr(child_def, "binop") or self._is_and_filter_pushdown(child_def):
+            if self._is_logical_op_filter_pushdown(child_def):
                 l_def = get_definition(func_ir, get_binop_arg(child_def, 0))
                 l_def = self._remove_series_wrappers_from_def(l_def)
                 r_def = get_definition(func_ir, get_binop_arg(child_def, 1))
@@ -1476,8 +1475,8 @@ class TypingTransforms:
                 ]
             return child_or
 
-        if is_expr(index_def, "binop") or self._is_and_filter_pushdown(index_def):
-            if is_expr(index_def, "binop") and index_def.fn == operator.or_:
+        if self._is_logical_op_filter_pushdown(index_def):
+            if self._is_or_filter_pushdown(index_def):
                 left_or = get_child_filter(lhs_def)
                 right_or = get_child_filter(rhs_def)
                 return left_or + right_or
@@ -1487,7 +1486,7 @@ class TypingTransforms:
 
                 # rhs is Or
                 # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
-                if is_expr(rhs_def, "binop") and rhs_def.fn == operator.or_:
+                if self._is_or_filter_pushdown(rhs_def):
                     # lhs And rhs.lhs (A And B)
                     new_lhs = ir.Expr.binop(
                         operator.and_,
@@ -1528,7 +1527,7 @@ class TypingTransforms:
 
                 # lhs is Or
                 # e.g. "(B Or C) And A" -> "(B And A) Or (C And A)"
-                if is_expr(lhs_def, "binop") and lhs_def.fn == operator.or_:
+                if self._is_or_filter_pushdown(lhs_def):
                     # lhs.lhs And rhs (B And A)
                     new_lhs = ir.Expr.binop(
                         operator.and_,
@@ -1582,51 +1581,29 @@ class TypingTransforms:
                         filters.append(left_or_cond + right_or_cond)
                 return filters
 
-        # literal case
-        # TODO(ehsan): support 'in' and 'not in'
-        op_map = {
-            operator.eq: "=" if is_sql_op else "==",
-            operator.ne: "<>" if is_sql_op else "!=",
-            operator.lt: "<",
-            operator.le: "<=",
-            operator.gt: ">",
-            operator.ge: ">=",
-        }
-
-        # Operator mapping used to support situations
-        # where the column is on the RHS. Since Pyarrow
-        # format is ("col", op, scalar), we must invert certain
-        # operators.
-        right_colname_op_map = {
-            operator.eq: "=" if is_sql_op else "==",
-            operator.ne: "<>" if is_sql_op else "!=",
-            operator.lt: ">",
-            operator.le: ">=",
-            operator.gt: "<",
-            operator.ge: "<=",
-        }
-
-        if is_expr(index_def, "binop"):
-            require(index_def.fn in op_map)
-            left_colname = guard(
-                self._get_col_name, index_def.lhs, df_var, df_col_names, func_ir
-            )
+        # TODO: Support NOT
+        if self._is_cmp_op_filter_pushdown(index_def):
+            lhs = get_binop_arg(index_def, 0)
+            rhs = get_binop_arg(index_def, 1)
+            left_colname = guard(self._get_col_name, lhs, df_var, df_col_names, func_ir)
             right_colname = guard(
-                self._get_col_name, index_def.rhs, df_var, df_col_names, func_ir
+                self._get_col_name, rhs, df_var, df_col_names, func_ir
             )
 
             require(
                 (left_colname and not right_colname)
                 or (right_colname and not left_colname)
             )
-            if right_colname:
-                cond = (
-                    right_colname,
-                    right_colname_op_map[index_def.fn],
-                    index_def.lhs,
-                )
-            else:
-                cond = (left_colname, op_map[index_def.fn], index_def.rhs)
+            colname = left_colname if left_colname else right_colname
+            scalar = rhs if left_colname else lhs
+            op = get_cmp_operator(
+                index_def,
+                self.typemap[scalar.name],
+                is_sql_op,
+                right_colname is not None,
+                self.func_ir,
+            )
+            cond = (colname, op, scalar)
         else:
             cond = self._get_call_filter(
                 index_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
@@ -4587,17 +4564,101 @@ class TypingTransforms:
             )
         )
 
-    def _is_and_filter_pushdown(self, index_def):
+    def _is_logical_op_filter_pushdown(self, index_def: ir.Expr) -> bool:
+        """Performs an equality check on the index_def expr with the possible
+        logical operators (AND, OR, or a comparison operator). This also supports
+        the equivalent BodoSQL array kernels to ensure that
+        we can support filter pushdown for both the Pythonic version of these
+        comparison operators and their SQL array kernels.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid logical operation
+
+        Returns:
+            bool: Is this expression a valid logical operator?
+        """
+        return (
+            self._is_cmp_op_filter_pushdown(index_def)
+            or self._is_and_filter_pushdown(index_def)
+            or self._is_or_filter_pushdown(index_def)
+        )
+
+    def _is_cmp_op_filter_pushdown(self, index_def: ir.Expr) -> bool:
+        """
+        Performs an equality check on the index_def expr with the valid
+        comparison operators (e.g. !=) or their equivalent BodoSQL array kernels
+        (e.g. bodo.libs.bodosql_array_kernels.not_equal). This is to ensure that
+        we can support filter pushdown for both the Pythonic version of these
+        comparison operators and their SQL array kernels.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid comparison operation.
+
+        Returns:
+            bool: Is this expression a valid comparison operation?
+        """
+        if is_expr(index_def, "binop"):
+            return index_def.fn in (
+                operator.eq,
+                operator.ne,
+                operator.lt,
+                operator.gt,
+                operator.le,
+                operator.ge,
+            )
+        elif is_call(index_def):
+            call_name = guard(find_callname, self.func_ir, index_def, self.typemap)
+            if (
+                len(call_name) == 2
+                and call_name[1] == "bodo.libs.bodosql_array_kernels"
+            ):
+                return call_name[0] in (
+                    "equal",
+                    "not_equal",
+                    "less_than",
+                    "greater_than",
+                    "less_than_or_equal",
+                    "greater_than_or_equal",
+                )
+        return False
+
+    def _is_and_filter_pushdown(self, index_def: ir.Expr) -> bool:
         """
         Performs an equality check on the index_def expr with & / AND,
         depending on whether the operator is a binop or a function call respectively.
         This is to ensure that we can support filter pushdown for AND as well instead of just &.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid AND operation.
+
+        Returns:
+            bool: Is this expression a valid AND operation?
         """
         if is_expr(index_def, "binop"):
             return index_def.fn == operator.and_
         elif is_call(index_def):
             call_name = guard(find_callname, self.func_ir, index_def, self.typemap)
             return call_name == ("booland", "bodo.libs.bodosql_array_kernels")
+        else:
+            return False
+
+    def _is_or_filter_pushdown(self, index_def: ir.Expr) -> bool:
+        """
+        Performs an equality check on the index_def expr with | / OR,
+        depending on whether the operator is a binop or a function call respectively.
+        This is to ensure that we can support filter pushdown for OR as well instead of just |.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid OR operation.
+
+        Returns:
+            bool: Is this expression a valid OR operation?
+        """
+        if is_expr(index_def, "binop"):
+            return index_def.fn == operator.or_
+        elif is_call(index_def):
+            call_name = guard(find_callname, self.func_ir, index_def, self.typemap)
+            return call_name == ("boolor", "bodo.libs.bodosql_array_kernels")
         else:
             return False
 
@@ -4932,6 +4993,84 @@ def get_binop_arg(child_def, arg_no):
             return child_def.rhs
 
     return child_def.args[arg_no]
+
+
+def get_cmp_operator(
+    index_def: ir.Expr,
+    scalar_type: types.Type,
+    is_sql_op: bool,
+    reverse_op: bool,
+    func_ir: ir.FunctionIR,
+) -> str:
+    """Derive the operator string used for filter pushdown with binary
+    comparison operators. These operators can either be a binop or a call to
+    a BodoSQL array kernel.
+
+    Args:
+        index_def (ir.Expr): The expression in the IR responsible for the comparison.
+            This is either a binop or a call expression.
+        scalar_type (types.Type): The type of the scalar type. This is used for validation
+            and a special None case with call expressions.
+        is_sql_op (bool): Should the operator be output using standard SQL syntax or pyarrow
+            sytnax.
+        reverse_op (bool): Is the column arg1 and not arg0. This is important for "reversing" certain
+            operators as opposed to the function. For example (scalar < column) should output
+            ">" despite the binop being operator.lt.
+        func_ir (ir.FunctionIR): The function IR object. This is used to get the callname.
+
+    Returns:
+        str: The filter pushdown operator string.
+
+    Raise GuardException: The function is not formatted in way that can handle filter pushdown.
+    """
+    # Map the BodoSQL array kernels to equivalent operators.
+    fn_name_map = {
+        "equal": operator.eq,
+        "not_equal": operator.ne,
+        "less_than": operator.lt,
+        "greater_than": operator.gt,
+        "less_than_or_equal": operator.le,
+        "greater_than_or_equal": operator.ge,
+    }
+    # Map the operator to its filter pushdown operator string.
+    if reverse_op:
+        # Operator mapping used to support situations
+        # where the column is on the RHS. Since Pyarrow
+        # format is ("col", op, scalar), we must invert certain
+        # operators.
+        op_map = {
+            operator.eq: "=" if is_sql_op else "==",
+            operator.ne: "<>" if is_sql_op else "!=",
+            operator.lt: ">",
+            operator.le: ">=",
+            operator.gt: "<",
+            operator.ge: "<=",
+        }
+    else:
+        op_map = {
+            operator.eq: "=" if is_sql_op else "==",
+            operator.ne: "<>" if is_sql_op else "!=",
+            operator.lt: "<",
+            operator.le: "<=",
+            operator.gt: ">",
+            operator.ge: ">=",
+        }
+    # The other argument must be a scalar, not an array
+    require(not bodo.utils.utils.is_array_typ(scalar_type, True))
+    if is_call(index_def):
+        # We can't do filter pushdown with optional types yet.
+        require(scalar_type != types.optional)
+        if scalar_type == types.none:
+            # SQL comparison functions always return NULL if an input is NULL.
+            return "ALWAYS_NULL"
+        callname = guard(find_callname, func_ir, index_def)
+        require(callname is not None)
+        op = fn_name_map[callname[0]]
+    else:
+        # Python operators shouldn't compare with None or optional values.
+        require(scalar_type not in (types.optional, types.none))
+        op = index_def.fn
+    return op_map[op]
 
 
 def guard_const(func, *args, **kwargs):

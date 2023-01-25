@@ -520,11 +520,10 @@ def test_nullif_columns(bodosql_nullable_numeric_types, spark_info, memory_leak_
     )
 
 
-@pytest.mark.skip("Support setting a NULL scalar")
 def test_nullif_scalar(basic_df, spark_info, memory_leak_check):
     """Checks nullif function with all scalar values"""
     query = "Select NULLIF(0, 0) from table1"
-    check_query(query, basic_df, spark_info, check_names=False)
+    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
 @pytest.mark.slow

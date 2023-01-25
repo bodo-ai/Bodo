@@ -314,7 +314,6 @@ def test_timestamp_null_literal(basic_df, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip("Enable once OR has an array kernel")
 def test_boolean_null_literals(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     tests that boolean literals are correctly parsed by BodoSQL

@@ -890,19 +890,19 @@ def comparison_ops(request):
         pytest.param(
             "BIT_AND",
             marks=pytest.mark.skip(
-                "Bitwise agregations not currently supported, see [BE-919]"
+                "Bitwise aggregations not currently supported, see [BE-919]"
             ),
         ),
         pytest.param(
             "BIT_OR",
             marks=pytest.mark.skip(
-                "Bitwise agregations not currently supported, see [BE-919]"
+                "Bitwise aggregations not currently supported, see [BE-919]"
             ),
         ),
         pytest.param(
             "BIT_XOR",
             marks=pytest.mark.skip(
-                "Bitwise agregations not currently supported, see [BE-919]"
+                "Bitwise aggregations not currently supported, see [BE-919]"
             ),
         ),
         "AVG",

@@ -1,14 +1,10 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
-import static com.bodosql.calcite.application.BodoSQLExprType.meet_elementwise_op;
 import static com.bodosql.calcite.application.Utils.Utils.generateNullCheck;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLExprType;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
+import java.util.*;
 import org.apache.calcite.avatica.*;
 import org.apache.calcite.rel.type.*;
 import org.apache.calcite.sql.SqlKind;
@@ -25,18 +21,12 @@ public class BinOpCodeGen {
    * than two arguments because repeated use of the same operator are grouped into the same Node.
    *
    * @param args The arguments to the binop.
-   * @param exprTypes The exprType of each argument.
    * @param binOp The Binary operator to apply to each pair of arguments.
-   * @param isScalar Is this function used inside an apply and should always generate scalar code.
    * @param argDataTypes List of SQL data types for the input to the binary operation.
    * @return The code generated for the BinOp call.
    */
   public static String generateBinOpCode(
-      List<String> args,
-      List<BodoSQLExprType.ExprType> exprTypes,
-      SqlOperator binOp,
-      boolean isScalar,
-      List<RelDataType> argDataTypes) {
+      List<String> args, SqlOperator binOp, List<RelDataType> argDataTypes) {
     SqlKind binOpKind = binOp.getKind();
     // Handle the Datetime functions that are either tz-aware or tz-naive
     if (argDataTypes.size() == 2
@@ -75,17 +65,7 @@ public class BinOpCodeGen {
         return genIntervalMultiplyCode(args, isArg0Interval);
       }
     }
-    // add pd.Series() around column arguments since binary operators assume Series input
-    // (arrays don't have full support)
-    List<String> update_args = new ArrayList<>();
-    for (int i = 0; i < args.size(); i++) {
-      String new_arg = args.get(i);
-      if (!isScalar && exprTypes.get(i) == BodoSQLExprType.ExprType.COLUMN) {
-        new_arg = String.format("pd.Series(%s)", new_arg);
-      }
-      update_args.add(new_arg);
-    }
-    return generateBinOpCodeHelper(update_args, exprTypes, binOpKind, isScalar);
+    return generateBinOpCodeHelper(args, binOpKind);
   }
   /**
    * Helper function that returns the necessary generated code for a BinOp Call. This function may
@@ -93,155 +73,69 @@ public class BinOpCodeGen {
    * same Node.
    *
    * @param args The arguments to the binop.
-   * @param exprTypes The exprType of each argument.
    * @param binOpKind The SqlKind of the binary operator
-   * @param isScalar Is this function used inside an apply and should always generate scalar code.
    * @return The code generated for the BinOp call.
    */
-  public static String generateBinOpCodeHelper(
-      List<String> args,
-      List<BodoSQLExprType.ExprType> exprTypes,
-      SqlKind binOpKind,
-      boolean isScalar) {
-    String columnOperator;
-    String scalarOperator;
-    // Is the column operator generated as a function call
-    boolean columnIsFunction = false;
-    // Is the scalar operator generated as a function call
-    boolean scalarIsFunction = false;
+  public static String generateBinOpCodeHelper(List<String> args, SqlKind binOpKind) {
+    final String fn;
     switch (binOpKind) {
       case EQUALS:
-        columnOperator = "==";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_equal";
+        fn = "bodo.libs.bodosql_array_kernels.equal";
         break;
       case NULL_EQUALS:
-        columnIsFunction = true;
-        columnOperator = "bodosql.libs.sql_operators.sql_null_equal_column";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.null_handling.sql_null_equal_scalar";
+        fn = "bodo.libs.bodosql_array_kernels.equal_null";
         break;
       case NOT_EQUALS:
-        columnOperator = "!=";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_not_equal";
+        fn = "bodo.libs.bodosql_array_kernels.not_equal";
         break;
       case LESS_THAN:
-        columnOperator = "<";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_less_than";
+        fn = "bodo.libs.bodosql_array_kernels.less_than";
         break;
       case GREATER_THAN:
-        columnOperator = ">";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_greater_than";
+        fn = "bodo.libs.bodosql_array_kernels.greater_than";
         break;
       case LESS_THAN_OR_EQUAL:
-        columnOperator = "<=";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_less_than_or_equal";
+        fn = "bodo.libs.bodosql_array_kernels.less_than_or_equal";
         break;
       case GREATER_THAN_OR_EQUAL:
-        columnOperator = ">=";
-        scalarIsFunction = true;
-        scalarOperator = "bodosql.libs.generated_lib.sql_null_checking_greater_than_or_equal";
+        fn = "bodo.libs.bodosql_array_kernels.greater_than_or_equal";
         break;
       case PLUS:
-        columnIsFunction = true;
-        columnOperator = "bodo.libs.bodosql_array_kernels.add_numeric";
-        scalarIsFunction = true;
-        scalarOperator = "bodo.libs.bodosql_array_kernels.add_numeric";
+        fn = "bodo.libs.bodosql_array_kernels.add_numeric";
         break;
       case MINUS:
-        columnIsFunction = true;
-        columnOperator = "bodo.libs.bodosql_array_kernels.subtract_numeric";
-        scalarIsFunction = true;
-        scalarOperator = "bodo.libs.bodosql_array_kernels.subtract_numeric";
+        fn = "bodo.libs.bodosql_array_kernels.subtract_numeric";
         break;
       case TIMES:
-        columnIsFunction = true;
-        columnOperator = "bodo.libs.bodosql_array_kernels.multiply_numeric";
-        scalarIsFunction = true;
-        scalarOperator = "bodo.libs.bodosql_array_kernels.multiply_numeric";
+        fn = "bodo.libs.bodosql_array_kernels.multiply_numeric";
         break;
       case DIVIDE:
-        columnIsFunction = true;
-        columnOperator = "bodo.libs.bodosql_array_kernels.divide_numeric";
-        scalarIsFunction = true;
-        scalarOperator = "bodo.libs.bodosql_array_kernels.divide_numeric";
+        fn = "bodo.libs.bodosql_array_kernels.divide_numeric";
         break;
       case AND:
-        columnIsFunction = true;
-        columnOperator = "bodo.libs.bodosql_array_kernels.booland";
-        scalarIsFunction = true;
-        scalarOperator = "bodo.libs.bodosql_array_kernels.booland";
+        fn = "bodo.libs.bodosql_array_kernels.booland";
         break;
       default:
         throw new BodoSQLCodegenException(
             "Unsupported Operator, " + binOpKind + " specified in query.");
     }
-    StringBuilder newOp = new StringBuilder();
-    StringBuilder functionStack = new StringBuilder();
-    newOp.append("(");
-    BodoSQLExprType.ExprType exprType = exprTypes.get(0);
-    String operator;
-    boolean wasFunction;
-    boolean isFunction = false;
-    /**
-     * Iterate through the arguments to generate the necessary code. For operators that map to
-     * operators in Pandas, generate ARG0 OP ARG1. For operators that map to functions generate
-     * OP(ARG0, ARG1)
-     *
-     * <p>To keep inserting function calls to front, we use two StringBuilders so we can keep
-     * finding the starting position.
-     */
+    StringBuilder codeBuilder = new StringBuilder();
+    /** Create the function calls */
     for (int i = 0; i < args.size() - 1; i++) {
-      exprType = meet_elementwise_op(exprType, exprTypes.get(i + 1));
-      wasFunction = isFunction;
-      if (isScalar || exprType == BodoSQLExprType.ExprType.SCALAR) {
-        operator = scalarOperator;
-        isFunction = scalarIsFunction;
-      } else {
-        operator = columnOperator;
-        isFunction = columnIsFunction;
+      // Generate n - 1 function calls
+      codeBuilder.append(fn).append("(");
+    }
+    for (int i = 0; i < args.size(); i++) {
+      // Insert arguments and add , and closing )
+      codeBuilder.append(args.get(i));
+      if (i != 0) {
+        codeBuilder.append(")");
       }
-      if (isFunction) {
-        functionStack.insert(0, operator + "(");
-        functionStack.append(args.get(i));
-        if (wasFunction) {
-          functionStack.append(")");
-        }
-        functionStack.append(", ");
-      } else {
-        if (wasFunction) {
-          newOp.append(functionStack).append(args.get(i)).append(")");
-          // Clear the function stack
-          functionStack = new StringBuilder();
-        } else {
-          newOp.append(args.get(i));
-        }
-        newOp.append(" ").append(operator).append(" ");
+      if (i != (args.size() - 1)) {
+        codeBuilder.append(", ");
       }
     }
-    newOp.append(functionStack);
-    newOp.append(args.get(args.size() - 1)).append(")");
-    if (isFunction) {
-      newOp.append(")");
-    }
-    // make sure the output is array type for column cases
-    // (output is Series here since input is converted to Series in generateBinOpCode)
-    // The exception is AND and numerics always output an array
-    if (!isScalar
-        && exprType == BodoSQLExprType.ExprType.COLUMN
-        && (binOpKind != SqlKind.AND
-            && binOpKind != SqlKind.PLUS
-            && binOpKind != SqlKind.MINUS
-            && binOpKind != SqlKind.TIMES
-            && binOpKind != SqlKind.DIVIDE)) {
-      newOp.insert(0, "bodo.hiframes.pd_series_ext.get_series_data(");
-      newOp.append(")");
-    }
-    return newOp.toString();
+    return codeBuilder.toString();
   }
 
   /**
@@ -268,11 +162,11 @@ public class BinOpCodeGen {
    * Function that generates code for a single argument in OR.
    *
    * @param argCode The code generate for that single argument
-   * @param appendOperator Should the operator be added to generated string
+   * @param isFirstArg Is the argument the first input to a function call?
+   * @param isLastArg Is the argument the last input to a function call?
    * @param inputVar The name of the input table which columns reference
    * @param nullSet Set of columns that may need to be treated as null. If this argument is treated
    *     as column then the set will be empty.
-   * @param isScalar Is this function used inside an apply and should always generate scalar code.
    * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
    *     Operations that operate per row (i.e. Case switch this to True). This is used for
    *     determining if an expr returns a scalar or a column.
@@ -280,11 +174,11 @@ public class BinOpCodeGen {
    */
   public static String generateOrCode(
       String argCode,
-      boolean appendOperator,
+      boolean isFirstArg,
+      boolean isLastArg,
       String inputVar,
       List<String> colNames,
       HashSet<String> nullSet,
-      boolean isScalar,
       boolean isSingleRow) {
     StringBuilder newArg = new StringBuilder();
     // This generates code as (False if (pd.isna(col0) or ... pd.isna(coln)) else argCode)
@@ -292,12 +186,13 @@ public class BinOpCodeGen {
     newArg.append("(");
     newArg.append(generateNullCheck(inputVar, colNames, nullSet, "False", argCode, isSingleRow));
     newArg.append(")");
-    if (appendOperator) {
-      if (isScalar) {
-        newArg.append(" or ");
-      } else {
-        newArg.append(" | ");
-      }
+    // If we are the last arg to a function we need a closing )
+    if (isLastArg) {
+      newArg.append(")");
+    }
+    // If we are the first arg to a function we need a trailing ,
+    if (isFirstArg) {
+      newArg.append(", ");
     }
     return newArg.toString();
   }
