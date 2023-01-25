@@ -11,6 +11,7 @@ import pandas as pd
 from numba.core import ir, types
 from numba.core.ir_utils import replace_vars_inner, visit_vars_inner
 
+import bodo
 from bodo.hiframes.table import TableType
 from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
@@ -143,6 +144,33 @@ def connector_typeinfer(node, typeinferer):
         typeinferer.lock_type(col_var.name, typ, loc=node.loc)
 
 
+def _visit_predicate_tuple_vars(tup, callback, cbdata):
+    """visit variables in a tuple representing a filter pushdown predicate
+    e.g. ('l_commitdate', 'coalesce', v1)
+
+    Args:
+        tup (tuple): tuple representing predicate
+        callback (function): variable visit callback function
+        cbdata (any): callback function's input
+
+    Returns:
+        tuple: updated tuple values
+    """
+    assert isinstance(tup, tuple), "_visit_predicate_tuple_vars: tuple input expected"
+
+    out_data = []
+    for v in tup:
+        out_val = v
+        if isinstance(v, tuple):
+            out_val = _visit_predicate_tuple_vars(v, callback, cbdata)
+        elif isinstance(v, ir.Var):
+            out_val = visit_vars_inner(v, callback, cbdata)
+
+        out_data.append(out_val)
+
+    return tuple(out_data)
+
+
 def visit_vars_connector(node, callback, cbdata):
     if debug_prints():  # pragma: no cover
         print("visiting {} vars for:".format(node.connector_typ), node)
@@ -165,13 +193,59 @@ def visit_vars_connector(node, callback, cbdata):
     if node.connector_typ in ("parquet", "sql") and node.filters:
         for predicate in node.filters:
             for i in range(len(predicate)):
-                val = predicate[i]
-                # e.g. handle ("A", "==", v)
+                val = list(predicate[i])
+                # e.g. handle ("A", "==", v),
+                # [(('l_commitdate', 'coalesce', v1), '>=', v2)]
+                val[0] = (
+                    _visit_predicate_tuple_vars(val[0], callback, cbdata)
+                    if isinstance(val[0], tuple)
+                    else val[0]
+                )
                 predicate[i] = (
                     val[0],
                     val[1],
                     visit_vars_inner(val[2], callback, cbdata),
                 )
+
+
+def _get_predicate_tuple_vars(tup):
+    """get variables in a tuple representing a filter pushdown predicate
+    (could be nested)
+    e.g. ('l_commitdate', 'coalesce', v1) -> [v1]
+
+    Args:
+        tup (tuple): tuple of predicate
+
+    Returns:
+        list(ir.Var): variables in predicate
+    """
+    assert isinstance(tup, tuple), "_get_predicate_tuple_vars: tuple input expected"
+    vars = []
+    for v in tup:
+        if isinstance(v, ir.Var):
+            vars.append(v)
+        if isinstance(v, tuple):
+            vars += _get_predicate_tuple_vars(v)
+
+    return vars
+
+
+def get_filter_vars(filters):
+    """get all variables in filters of a read node (that will be pushed down)
+    e.g. [[(('l_commitdate', 'coalesce', v1), '>=', v2)]] -> [v1, v2]
+
+    Args:
+        filters (list(list)): filters (list of predicates)
+
+    Returns:
+        list(ir.Var): all variables in filters
+    """
+    filter_vars = []
+    for predicate_list in filters:
+        for v in predicate_list:
+            filter_vars += _get_predicate_tuple_vars(v)
+
+    return filter_vars
 
 
 def connector_usedefs(node, use_set=None, def_set=None):
@@ -193,12 +267,8 @@ def connector_usedefs(node, use_set=None, def_set=None):
             use_set.add(node.skiprows.name)
 
     if node.connector_typ in ("parquet", "sql") and node.filters:
-        for predicate_list in node.filters:
-            for v in predicate_list:
-                # If v[2] is a variable add it to the use set. If its
-                # a compile time constant (i.e. NULL) then don't add it.
-                if isinstance(v[2], ir.Var):
-                    use_set.add(v[2].name)
+        vars = get_filter_vars(node.filters)
+        use_set.update({v.name for v in vars})
 
     return numba.core.analysis._use_defs_result(usemap=use_set, defmap=def_set)
 
@@ -208,6 +278,32 @@ def get_copies_connector(node, typemap):
     # it just kills the output columns
     kill_set = set(v.name for v in node.out_vars)
     return set(), kill_set
+
+
+def _replace_predicate_tuple_vars(tup, var_dict):
+    """replace variables in a tuple representing a filter pushdown predicate
+    e.g. ('l_commitdate', 'coalesce', v1)
+
+    Args:
+        tup (tuple): tuple representing predicate
+        var_dict (dict(str, ir.Var)): map for variable replacement
+
+    Returns:
+        tuple: updated tuple values
+    """
+    assert isinstance(tup, tuple), "_replace_predicate_tuple_vars: tuple input expected"
+
+    out_data = []
+    for v in tup:
+        out_val = v
+        if isinstance(v, tuple):
+            out_val = _replace_predicate_tuple_vars(v, var_dict)
+        elif isinstance(v, ir.Var):
+            out_val = replace_vars_inner(v, var_dict)
+
+        out_data.append(out_val)
+
+    return tuple(out_data)
 
 
 def apply_copies_connector(
@@ -227,8 +323,14 @@ def apply_copies_connector(
     if node.connector_typ in ("parquet", "sql") and node.filters:
         for predicate in node.filters:
             for i in range(len(predicate)):
-                val = predicate[i]
-                # e.g. handle ("A", "==", v)
+                val = list(predicate[i])
+                # e.g. handle ("A", "==", v),
+                # [(('l_commitdate', 'coalesce', v1), '>=', v2)]
+                val[0] = (
+                    _replace_predicate_tuple_vars(val[0], var_dict)
+                    if isinstance(val[0], tuple)
+                    else val[0]
+                )
                 predicate[i] = (val[0], val[1], replace_vars_inner(val[2], var_dict))
     if node.connector_typ == "csv":
         node.nrows = replace_vars_inner(node.nrows, var_dict)
@@ -262,7 +364,7 @@ def generate_filter_map(filters):
     if filters:
         filter_vars = []
         # handle predicate pushdown variables that need to be passed to C++/SQL
-        pred_vars = [v[2] for predicate_list in filters for v in predicate_list]
+        pred_vars = get_filter_vars(filters)
         # variables may be repeated due to distribution of Or over And in predicates, so
         # remove duplicates. Cannot use ir.Var objects in set directly.
         var_set = set()
@@ -439,6 +541,31 @@ def is_connector_table_parallel(node, array_dists, typemap, node_name):
     return parallel
 
 
+def _get_filter_column_arrow_expr(col_val, filter_map):
+    """returns Arrow expr code for filter column,
+    e.g. ("A", "coalesce", v1) - > pa.compute.coalesce(ds.field('A'), ds.scalar(f1))
+
+    Args:
+        col_val (tuple|str): column representation in filter
+        filter_map (dict(str, int)): map of IR variable names to read function variable
+            names. E.g. {'_v14call_method_6_224': 'f0'}
+
+    Returns:
+        str: Arrow expression for filter column
+    """
+    if isinstance(col_val, str):
+        return f"ds.field('{col_val}')"
+
+    # only coalesce is supported currently
+    assert (
+        isinstance(col_val, tuple) and len(col_val) == 3 and col_val[1] == "coalesce"
+    ), "invalid column in filter predicate"
+    scalar_val = (
+        filter_map[col_val[2].name] if isinstance(col_val[2], ir.Var) else col_val[2]
+    )
+    return f"pa.compute.coalesce(ds.field('{col_val[0]}'), ds.scalar({scalar_val}))"
+
+
 def generate_arrow_filters(
     filters,
     filter_map,
@@ -515,6 +642,7 @@ def generate_arrow_filters(
             dnf_and_conds = []
             expr_and_conds = []
             for v in predicate:
+                col_expr = _get_filter_column_arrow_expr(v[0], filter_map)
                 # First update expr since these include all expressions.
                 # If v[2] is a var we pass the variable at runtime,
                 # otherwise we pass a constant (i.e. NULL) which
@@ -541,12 +669,12 @@ def generate_arrow_filters(
                     if v[1] == "in":
                         # Expected output for this format should look like
                         # ds.field('A').isin(filter_var)
-                        expr_val = f"ds.field('{v[0]}').isin({filter_var})"
+                        expr_val = f"{col_expr}.isin({filter_var})"
 
                     elif v[1] == "case_insensitive_equality":
                         # case_insensitive_equality is just == with both inputs converted
                         # to lower case. This is used by ilike
-                        expr_val = f"(pa.compute.ascii_lower(ds.field('{v[0]}'){column_cast}) == pa.compute.ascii_lower(ds.scalar({filter_var}){scalar_cast}))"
+                        expr_val = f"(pa.compute.ascii_lower({col_expr}{column_cast}) == pa.compute.ascii_lower(ds.scalar({filter_var}){scalar_cast}))"
 
                     elif v[1] in (
                         "startswith",
@@ -575,11 +703,11 @@ def generate_arrow_filters(
                         scalar_arg = filter_var
                         # Expected output for this format should look like
                         # pa.compute.func(ds.field('A'), scalar, ignore_case=var)
-                        expr_val = f"pa.compute.{func_name}(ds.field('{v[0]}'), {scalar_arg}, ignore_case={ignore_case})"
+                        expr_val = f"pa.compute.{func_name}({col_expr}, {scalar_arg}, ignore_case={ignore_case})"
                     else:
                         # Expected output for this format should like
                         # (ds.field('A') > ds.scalar(py_var))
-                        expr_val = f"(ds.field('{v[0]}'){column_cast} {v[1]} ds.scalar({filter_var}){scalar_cast})"
+                        expr_val = f"({col_expr}{column_cast} {v[1]} ds.scalar({filter_var}){scalar_cast})"
                 else:
                     # Currently the only constant expressions we support are IS [NOT] NULL
                     assert (
@@ -591,7 +719,7 @@ def generate_arrow_filters(
                         prefix = ""
                     # Expected output for this format should like
                     # (~ds.field('A').is_null())
-                    expr_val = f"({prefix}ds.field('{v[0]}').is_null())"
+                    expr_val = f"({prefix}{col_expr}.is_null())"
                 expr_and_conds.append(expr_val)
                 # Now handle the dnf section. We can only append a value if its not a constant
                 # expression and is a partition column. If we already know skip_partitions = False,
@@ -658,7 +786,38 @@ def generate_arrow_filters(
             else:
                 dnf_filter_str = f"({dnf_or_str})"
         expr_filter_str = f"({expr_or_str})"
+
+    if bodo.user_logging.get_verbose_level() >= 1:
+        msg = "Arrow filters pushed down:\n%s\n%s\n"
+        bodo.user_logging.log_message(
+            "Filter Pushdown",
+            msg,
+            dnf_filter_str,
+            expr_filter_str,
+        )
+
     return dnf_filter_str, expr_filter_str
+
+
+def _get_filter_column_type(col_val, col_types, orig_colname_map):
+    """get column type for column representation in filter predicate
+
+    Args:
+        col_val (str | tuple): column name or compute representation
+        col_types (list(types.Type)): output data types of read node
+        orig_colname_map (dict(str, int)): map of column name to its index in output
+
+    Returns:
+        types.Type: data type of column
+    """
+    if isinstance(col_val, str):
+        return col_types[orig_colname_map[col_val]]
+
+    # only coalesce is supported currently
+    assert (
+        isinstance(col_val, tuple) and len(col_val) == 3 and col_val[1] == "coalesce"
+    ), "invalid column in filter predicate"
+    return col_types[orig_colname_map[col_val[0]]]
 
 
 def determine_filter_cast(
@@ -693,7 +852,7 @@ def determine_filter_cast(
     import bodo
 
     colname = filter_val[0]
-    lhs_arr_typ = col_types[orig_colname_map[colname]]
+    lhs_arr_typ = _get_filter_column_type(filter_val[0], col_types, orig_colname_map)
     lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
     if source == "parquet" and colname in partition_names:
         # Always cast partitions to protect again multiple types

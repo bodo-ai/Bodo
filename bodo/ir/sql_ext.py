@@ -257,6 +257,34 @@ def remove_dead_sql(
     return sql_node
 
 
+def _get_sql_column_str(p0, converted_colnames, filter_map):
+    """get SQL code for representing a column in filter pushdown.
+    E.g. WHERE  ( ( coalesce(\"L_COMMITDATE\", {f0}) >= {f1} ) )
+
+    Args:
+        p0 (tuple|str): column name or tuple representing the computation for the column
+        converted_colnames (set(str)): column names that need converted to upper case
+        filter_map (dict(str,str)): map of IR variable names to read function variable
+            names. E.g. {'_v14call_method_6_224': 'f0'}
+
+
+    Returns:
+        str: code representing the column (e.g. "A", "coalesce(\"L_COMMITDATE\", {f0})")
+    """
+    if isinstance(p0, tuple):
+
+        col_name = _get_sql_column_str(p0[0], converted_colnames, filter_map)
+
+        scalar_val = (
+            "{" + filter_map[p0[2].name] + "}" if isinstance(p0[2], ir.Var) else p0[2]
+        )
+        return f"{p0[1]}({col_name}, {scalar_val})"
+
+    assert isinstance(p0, str), "_get_sql_column_str: expected string column name"
+    col_name = convert_col_name(p0, converted_colnames)
+    return '\\"' + col_name + '\\"'
+
+
 def sql_distributed_run(
     sql_node: SqlReader,
     array_dists,
@@ -384,9 +412,9 @@ def sql_distributed_run(
                     # just load the value directly, otherwise load the variable
                     # at runtime.
                     p0, p2 = p[0], p[2]
-
-                    p0 = convert_col_name(p0, sql_node.converted_colnames)
-                    p0 = '\\"' + p0 + '\\"'
+                    p0 = _get_sql_column_str(
+                        p0, sql_node.converted_colnames, filter_map
+                    )
                     scalar_filter = (
                         "{" + filter_map[p[2].name] + "}"
                         if isinstance(p2, ir.Var)
@@ -463,6 +491,15 @@ def sql_distributed_run(
                     and_conds.append(" ".join(single_filter))
                 or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
             where_cond = " WHERE " + " OR ".join(or_conds)
+            if bodo.user_logging.get_verbose_level() >= 1:
+                msg = "SQL filter pushed down:\n%s\n%s\n"
+                filter_source = sql_node.loc.strformat()
+                bodo.user_logging.log_message(
+                    "Filter Pushdown",
+                    msg,
+                    filter_source,
+                    where_cond,
+                )
             for ir_varname, arg in filter_map.items():
                 if ir_varname in scalars_to_unpack:
                     num_elements = typemap[ir_varname].count
@@ -716,6 +753,11 @@ def _get_snowflake_sql_literal_scalar(filter_value):
         return (
             lambda filter_value: f"date '{filter_value.strftime('%Y-%m-%d')}'"
         )  # pragma: no cover
+    elif filter_type == bodo.datetime64ns:
+        # datetime64 needs to be a Timestamp literal
+        return lambda filter_value: bodo.ir.sql_ext._get_snowflake_sql_literal_scalar(
+            pd.Timestamp(filter_value)
+        )
     else:
         raise BodoError(
             f"pd.read_sql(): Internal error, unsupported scalar type {filter_type} used in filter pushdown."
@@ -734,6 +776,7 @@ def _get_snowflake_sql_literal(filter_value):
         bodo.datetime_date_type,
         types.unicode_type,
         types.bool_,
+        bodo.datetime64ns,
     )
     filter_type = types.unliteral(filter_value)
     if (

@@ -15,6 +15,7 @@ from bodosql.tests.test_types.snowflake_catalog_common import (  # noqa
 import bodo
 from bodo.tests.user_logging_utils import (
     check_logger_msg,
+    check_logger_no_msg,
     create_string_io_logger,
     set_logging_stream,
 )
@@ -161,6 +162,88 @@ def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
         assert fir.meta_head_only_info[0] is not None
         check_logger_msg(stream, "Columns loaded ['mycol', 'mycol2']")
         check_logger_msg(stream, "Constant limit detected, reading at most 5 rows")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
+    """
+    Test filter pushdown with with coalesce on a column.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(
+        catalog=bodosql.SnowflakeCatalog(
+            os.environ["SF_USERNAME"],
+            os.environ["SF_PASSWORD"],
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            "TEST_DB",
+            connection_params={"schema": "PUBLIC"},
+        )
+    )
+
+    query = "select * from BODOSQL_ALL_SUPPORTED where coalesce(mycol2, current_date()) > '2022-01-01'"
+
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string("TEST_DB", "PUBLIC"),
+    )
+
+    # make sure filter pushdown worked
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl, (bc, query), py_output=py_output, sort_output=True, reset_index=True
+        )
+        check_logger_msg(stream, "Columns loaded ['mycol', 'mycol2']")
+        check_logger_msg(stream, "Filter pushdown successfully performed")
+        check_logger_msg(stream, r"WHERE  ( ( coalesce(\"MYCOL2\", {f0}) > {f1} ) )")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
+    """
+    Make sure coalesce with two column input is not pushed down since not supported yet
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    bc = bodosql.BodoSQLContext(
+        catalog=bodosql.SnowflakeCatalog(
+            os.environ["SF_USERNAME"],
+            os.environ["SF_PASSWORD"],
+            "bodopartner.us-east-1",
+            "DEMO_WH",
+            "SNOWFLAKE_SAMPLE_DATA",
+            connection_params={"schema": "PUBLIC"},
+        )
+    )
+
+    query = "select l_commitdate from TPCH_SF1.LINEITEM where coalesce(l_commitdate, l_shipdate) > '1998-10-29'"
+
+    py_output = pd.read_sql(
+        query,
+        get_snowflake_connection_string("SNOWFLAKE_SAMPLE_DATA", "PUBLIC"),
+    )
+
+    # make sure filter pushdown was not performed
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl, (bc, query), py_output=py_output, sort_output=True, reset_index=True
+        )
+        check_logger_no_msg(stream, "Filter pushdown successfully performed")
 
 
 @pytest.mark.skipif(
