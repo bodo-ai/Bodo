@@ -2364,7 +2364,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
             assert operandsInfo.size() == 2;
             // Format string should be a string literal.
             // This is required by the function definition.
-            assert fnOperation.operands.get(1) instanceof RexLiteral;
+            if (!(fnOperation.operands.get(1) instanceof RexLiteral)) {
+              throw new BodoSQLCodegenException(
+                  "Error STR_TO_DATE(): 'Format' must be a string literal");
+            }
             outputName =
                 generateStrToDateName(operandsInfo.get(0).getName(), operandsInfo.get(1).getName());
             strExpr =
@@ -2511,10 +2514,13 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR)) {
               throw new BodoSQLCodegenException(
                   "Error, invalid argument types passed to DATE_FORMAT");
-            } else {
-              return generateDateFormatCode(
-                  operandsInfo.get(0), exprTypes.get(0), operandsInfo.get(1), isSingleRow);
             }
+            if (!(fnOperation.operands.get(1) instanceof RexLiteral)) {
+              throw new BodoSQLCodegenException(
+                  "Error DATE_FORMAT(): 'Format' must be a string literal");
+            }
+            return generateDateFormatCode(
+                operandsInfo.get(0), exprTypes.get(0), operandsInfo.get(1), isSingleRow);
           case "CURRENT_DATE":
           case "CURDATE":
             assert operandsInfo.size() == 0;
@@ -2973,7 +2979,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
     SqlOperator binOp = operation.getOperator();
     if (binOp.getKind() == SqlKind.OR) {
-      // Handle OR separately because it needs to handle NULL for short circuiting
+      // Handle OR separately because it has special NULL handling
       return visitORScan(operation, colNames, id, inputVar, isSingleRow, ctx);
     }
     // Store the argument types for TZ-Aware data
@@ -2994,7 +3000,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       return generateConcatFnInfo(argInfos);
     }
     String name = generateBinOpName(names, binOp);
-    String codeGen = generateBinOpCode(args, exprTypes, binOp, isSingleRow, argDataTypes);
+    String codeGen = generateBinOpCode(args, binOp, argDataTypes);
     return new RexNodeVisitorInfo(name, codeGen);
   }
 
@@ -3023,56 +3029,35 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
-    StringBuilder outputCode = new StringBuilder("(");
+    StringBuilder outputCode = new StringBuilder();
     // Keep lists for name generation
     List<String> names = new ArrayList<>();
     SqlOperator binOp = operation.getOperator();
-    HashSet<String> prevSet = new HashSet<>();
-    BodoCtx prevCtx =
-        new BodoCtx(
-            ctx.getColsToAddList(), new HashSet<>(), ctx.getUsedColumns(), ctx.getNamedParams());
-    RexNodeVisitorInfo prevInfo =
-        visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, prevCtx);
-    names.add(prevInfo.getName());
-    boolean isScalar = isSingleRow;
-    BodoSQLExprType.ExprType exprType =
-        exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operation.operands.get(0), id));
-    // If the current exprType is column, we cannot clear the nullSet
-    if (!isScalar) {
-      ctx.getNeedNullCheckColumns().addAll(prevSet);
-      prevSet.removeAll(prevSet);
+    for (int i = 0; i < operation.operands.size() - 1; i++) {
+      // Generate n - 1 function calls
+      outputCode.append("bodo.libs.bodosql_array_kernels.boolor(");
     }
-    for (int i = 1; i < operation.operands.size(); i++) {
+    for (int i = 0; i < operation.operands.size(); i++) {
       RexNode operand = operation.operands.get(i);
       HashSet<String> newSet = new HashSet<>();
       BodoCtx newCtx =
           new BodoCtx(ctx.getColsToAddList(), newSet, ctx.getUsedColumns(), ctx.getNamedParams());
       RexNodeVisitorInfo info = visitRexNode(operand, colNames, id, inputVar, isSingleRow, newCtx);
       names.add(info.getName());
-      // Update scalar value. If we are inside apply we always output scalar.
-      // Else if we ever find a column we are no longer scalar
-      exprType =
-          meet_elementwise_op(
-              exprType,
-              exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operation.operands.get(i), id)));
-      isScalar = isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR;
       outputCode.append(
           generateOrCode(
-              prevInfo.getExprCode(), true, inputVar, colNames, prevSet, isScalar, isSingleRow));
-      // Save current as prev
-      prevInfo = info;
-      prevSet = newSet;
-      // If the current exprType is column, we cannot clear the nullSet
-      if (!isScalar) {
-        ctx.getNeedNullCheckColumns().addAll(prevSet);
-        prevSet.removeAll(prevSet);
+              info.getExprCode(),
+              i != operation.operands.size() - 1,
+              i != 0,
+              inputVar,
+              colNames,
+              newSet,
+              isSingleRow));
+      // Update the nullSet if are computing with columns
+      if (!isSingleRow) {
+        ctx.getNeedNullCheckColumns().addAll(newSet);
       }
     }
-    outputCode
-        .append(
-            generateOrCode(
-                prevInfo.getExprCode(), false, inputVar, colNames, prevSet, isScalar, isSingleRow))
-        .append(")");
     String name = generateBinOpName(names, binOp);
     String codeGen = outputCode.toString();
     return new RexNodeVisitorInfo(name, codeGen);

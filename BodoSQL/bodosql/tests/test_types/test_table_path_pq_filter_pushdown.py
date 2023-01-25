@@ -433,7 +433,7 @@ def test_table_path_no_filter_pushdown(datapath, memory_leak_check):
 
 
 @pytest.mark.slow
-def test_table_path_col_pruning_and_filter_pushdown_implicite_casting(
+def test_table_path_col_pruning_and_filter_pushdown_implicit_casting(
     datapath,
     memory_leak_check,
 ):

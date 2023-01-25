@@ -1417,7 +1417,7 @@ def test_dict_str2bool(args, answers, func):
         return pd.Series(bodo.libs.bodosql_array_kernels.endswith(s, t))
 
     if func not in answers:
-        pytest.skip("ignore this comibnation of arguments")
+        pytest.skip("ignore this combination of arguments")
 
     impl = {
         "equal_null": impl1,

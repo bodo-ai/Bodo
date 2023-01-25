@@ -57,16 +57,6 @@ def generate_and_write_library():
     This function should be called within setup.py"""
 
     library_fns_info = [
-        ("equal", generate_standard_python_fn_call("operator.eq"), 2),
-        ("not_equal", generate_standard_python_fn_call("operator.ne"), 2),
-        ("less_than", generate_standard_python_fn_call("operator.lt"), 2),
-        ("less_than_or_equal", generate_standard_python_fn_call("operator.le"), 2),
-        ("greater_than", generate_standard_python_fn_call("operator.gt"), 2),
-        (
-            "greater_than_or_equal",
-            generate_standard_python_fn_call("operator.ge"),
-            2,
-        ),
         # DATETIME fns
         ("strftime", generate_standard_method_call("strftime"), 2),
         (

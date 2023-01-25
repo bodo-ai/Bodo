@@ -560,18 +560,15 @@ def test_utc_timestamp(basic_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skip(
-    "Requires engine fix for overflow issue with pd.Timestamp.floor, see [BE-1022]"
-)
 def test_utc_date(basic_df, spark_info, memory_leak_check):
     """tests utc_date"""
 
     query = f"SELECT A, EXTRACT(day from UTC_DATE()), (EXTRACT(HOUR from UTC_DATE()) + EXTRACT(MINUTE from UTC_DATE()) + EXTRACT(SECOND from UTC_DATE()) ) = 0  from table1"
     expected_output = pd.DataFrame(
         {
-            "unkown_name1": basic_df["table1"]["A"],
-            "unkown_name2": pd.Timestamp.now().day,
-            "unkown_name5": True,
+            "unknown_name1": basic_df["table1"]["A"],
+            "unknown_name2": pd.Timestamp.now().day,
+            "unknown_name5": True,
         }
     )
     check_query(
@@ -1048,9 +1045,6 @@ def make_spark_interval(interval_str, value):
         raise Exception(f"Error, need a case for timeunit: {interval_str}")
 
 
-@pytest.mark.skip(
-    "Need pd.Timedelta * integer series support for column case, see BE-1054"
-)
 def test_timestamp_add_cols(
     spark_info, mysql_interval_str, dt_fn_dataframe, memory_leak_check
 ):

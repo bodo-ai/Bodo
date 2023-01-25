@@ -14,9 +14,6 @@ def test_logical_or_columns(bodosql_boolean_types, spark_info, memory_leak_check
     )
 
 
-@pytest.mark.skip(
-    "Columnwise AND behavior on NULL values not yet fixed in our Calcite visitor"
-)
 def test_logical_and_columns(bodosql_boolean_types, spark_info, memory_leak_check):
     """insures that logical and works correctly for columns of boolean values"""
     query2 = "SELECT A and B from table1"
@@ -26,9 +23,6 @@ def test_logical_and_columns(bodosql_boolean_types, spark_info, memory_leak_chec
 
 
 @pytest.mark.slow
-@pytest.mark.skip(
-    "Scalar AND behavior on NULL values not yet fixed in our Calcite visitor"
-)
 def test_logical_and_scalars(bodosql_boolean_types, spark_info, memory_leak_check):
     """insures that logical and works correctly for scalar boolean values"""
     query1 = "SELECT (CASE WHEN A and B THEN 0 ELSE 1 end) from table1"
@@ -38,7 +32,6 @@ def test_logical_and_scalars(bodosql_boolean_types, spark_info, memory_leak_chec
 
 
 @pytest.mark.slow
-@pytest.mark.skip("Scalar OR behavior on NULLs not yet fixed in our Calcite visitor")
 def test_logical_or_scalars(bodosql_boolean_types, spark_info, memory_leak_check):
     """insures that logical or works correctly for scalar boolean values"""
     query2 = "SELECT (CASE WHEN A or B THEN 0 ELSE 1 end) from table1"

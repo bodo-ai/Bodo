@@ -561,7 +561,7 @@ def nullif_util(arr0, arr1):
     arg_types = [arr0, arr1]
     # If the first argument is NULL, the output is always NULL
     propagate_null = [True, False]
-    # NA check needs to come first here, otherwise the equalify check misbehaves
+    # NA check needs to come first here, otherwise the equality check misbehaves
 
     if arr1 == bodo.none:
         scalar_text = "res[i] = arg0\n"
