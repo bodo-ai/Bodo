@@ -12,6 +12,7 @@ import org.apache.calcite.rel.logical.*;
 import org.apache.calcite.rel.rules.*;
 import org.apache.calcite.rex.*;
 import org.apache.calcite.sql.*;
+import org.apache.calcite.sql.fun.*;
 import org.apache.calcite.tools.*;
 import org.immutables.value.*;
 
@@ -354,7 +355,15 @@ public class ProjectionSubcolumnEliminationRule
         replaceNode = replaceNode || !newOperand.equals(oldOperand);
       }
       if (replaceNode) {
-        return builder.call(callNode.getOperator(), newOperands);
+        if (callNode.getOperator() instanceof SqlCastFunction) {
+          // TODO: Replace with a simpler cast API instead Calcite
+          return builder
+              .getCluster()
+              .getRexBuilder()
+              .makeCast(callNode.getType(), newOperands.get(0));
+        } else {
+          return builder.call(callNode.getOperator(), newOperands);
+        }
       }
     }
     // This portion is unchanged.
@@ -430,7 +439,15 @@ public class ProjectionSubcolumnEliminationRule
         replaceNode = replaceNode || !newOperand.equals(oldOperand);
       }
       if (replaceNode) {
-        return builder.call(callNode.getOperator(), newOperands);
+        if (callNode.getOperator() instanceof SqlCastFunction) {
+          // TODO: Replace with a simpler cast API instead Calcite
+          return builder
+              .getCluster()
+              .getRexBuilder()
+              .makeCast(callNode.getType(), newOperands.get(0));
+        } else {
+          return builder.call(callNode.getOperator(), newOperands);
+        }
       }
     }
     // The node is unchanged.
