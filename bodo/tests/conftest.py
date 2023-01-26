@@ -502,3 +502,26 @@ def iceberg_table_conn():
 )
 def cmp_op(request):
     return request.param
+
+
+@pytest.fixture(
+    params=[
+        "quarter",
+        "yyyy",
+        "week",
+        "mm",
+        "days",
+        "hour",
+        "minute",
+        "S",
+        "ms",
+        "us",
+        "nsecond",
+    ]
+)
+def datetime_part_strings(request):
+    """
+    Fixture containing a representative set of datetime part strings
+    for use in testing, including aliases.
+    """
+    return request.param

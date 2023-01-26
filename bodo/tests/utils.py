@@ -2325,3 +2325,29 @@ def find_nested_dispatcher_and_args(
         return cached_info[
             (numba.core.registry.cpu_target.typing_context, arg_types, ())
         ]
+
+
+def nanoseconds_to_other_time_units(val, unit_str):
+    supported_time_parts = [
+        "hour",
+        "minute",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+    ]
+
+    assert unit_str in supported_time_parts
+
+    if unit_str == "hour":
+        return val // ((10**9) * 3600)
+    elif unit_str == "minute":
+        return val // ((10**9) * 60)
+    elif unit_str == "second":
+        return val // (10**9)
+    elif unit_str == "millisecond":
+        return val // (10**6)
+    elif unit_str == "microsecond":
+        return val // (10**3)
+    else:
+        return val
