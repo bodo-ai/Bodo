@@ -85,6 +85,12 @@ class SqlReader(ir.Stmt):
         is_merge_into: bool,
         file_list_type,
         snapshot_id_type,
+        # Only for Snowflake. Temporary, until
+        # we have native Date support in BodoSQL.
+        # These are the originally date columns that
+        # we will be casting to datetime64[ns]
+        # (potentially an unsafe cast) during the read.
+        sf_dt_to_ts_cols: List[int],
     ):
         self.connector_typ = "sql"
         self.sql_request = sql_request
@@ -145,9 +151,17 @@ class SqlReader(ir.Stmt):
             self.file_list_type = types.none
             self.snapshot_id_type = types.none
 
+        # Only for Snowflake.
+        # These are the originally date columns that
+        # we will be casting to datetime64[ns]
+        # (potentially an unsafe cast) during the read.
+        # This is required until
+        # we have native Date support in BodoSQL.
+        self.sf_dt_to_ts_cols = sf_dt_to_ts_cols
+
     def __repr__(self):  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
-        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into})"
+        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into}, sf_dt_to_ts_cols={self.sf_dt_to_ts_cols})"
 
 
 def parse_dbtype(con_str):
@@ -552,6 +566,7 @@ def sql_distributed_run(
         sql_node.is_select_query,
         sql_node.is_merge_into,
         is_independent,
+        sql_node.sf_dt_to_ts_cols,
     )
 
     schema_type = types.none if sql_node.database_schema is None else string_type
@@ -996,6 +1011,7 @@ def _gen_sql_reader_py(
     is_select_query: bool,
     is_merge_into: bool,
     is_independent: bool,
+    sf_dt_to_ts_cols: List[int],
 ):
     """
     Function that generates the main SQL implementation. There are
@@ -1036,6 +1052,11 @@ def _gen_sql_reader_py(
         is_merge_into: Does this query result from a merge into query? If so
             this limits the filtering we can do with Iceberg as we
             must load entire files.
+        sf_dt_to_ts_cols: Only for Snowflake. Temporary, until we have native
+            Date support in BodoSQL. These are the originally date columns
+            that we will be casting to datetime64[ns] (potentially an unsafe
+            cast) during the read. We need to pass this information to C++
+            so it can do the unsafe cast.
     """
     # a unique int used to create global variables with unique names
     call_id = next_label()
@@ -1245,6 +1266,9 @@ def _gen_sql_reader_py(
             for i in out_used_cols
             if col_typs[i] == dict_str_arr_type
         ]
+        dt_to_ts_cols = [
+            col_indices_map[i] for i in out_used_cols if i in sf_dt_to_ts_cols
+        ]
 
         nullable_cols = [int(is_nullable(col_typs[i])) for i in out_used_cols]
         # Handle if we need to append an index
@@ -1252,6 +1276,7 @@ def _gen_sql_reader_py(
             nullable_cols.append(int(is_nullable(index_column_type)))
         snowflake_dict_cols_array = np.array(snowflake_dict_cols, dtype=np.int32)
         nullable_cols_array = np.array(nullable_cols, dtype=np.int32)
+        dt_to_ts_cols_array = np.array(dt_to_ts_cols, dtype=np.int32)
         # Track the total number of rows for loading 0 columns. If we load any
         # data this is garbage.
         func_text += (
@@ -1267,6 +1292,8 @@ def _gen_sql_reader_py(
             f"    nullable_cols_array.ctypes,\n"
             f"    snowflake_dict_cols_array.ctypes,\n"
             f"    {len(snowflake_dict_cols_array)},\n"
+            f"    dt_to_ts_cols_array.ctypes,\n"
+            f"    {len(dt_to_ts_cols_array)},\n"
             f"    total_rows_np.ctypes,\n"
             f"    {is_select_query and len(used_col_names) == 0},\n"
             f"    {is_select_query},\n"
@@ -1425,6 +1452,7 @@ def _gen_sql_reader_py(
                 "snowflake_read": _snowflake_read,
                 "nullable_cols_array": nullable_cols_array,
                 "snowflake_dict_cols_array": snowflake_dict_cols_array,
+                "dt_to_ts_cols_array": dt_to_ts_cols_array,
             }
         )
     else:
@@ -1604,6 +1632,8 @@ _snowflake_read = types.ExternalFunction(
         types.voidptr,  # _is_nullable
         types.voidptr,  # _str_as_dict_cols
         types.int32,  # num_str_as_dict_cols
+        types.voidptr,  # _allow_unsafe_dt_to_ts_cast_cols
+        types.int32,  # num_allow_unsafe_dt_to_ts_cast_cols
         types.voidptr,  # total_nrows
         types.boolean,  # _only_length_query
         types.boolean,  # _is_select_query

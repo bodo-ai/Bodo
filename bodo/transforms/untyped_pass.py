@@ -963,6 +963,10 @@ class UntypedPass:
             sql_const, con_const, _bodo_read_as_dict, lhs, rhs.loc, self._is_independent
         )
 
+        # Collect the columns where we cast dates to datetime64[ns] during the read.
+        # Only applicable when _bodo_read_date_as_dt64.
+        sf_dt_to_ts_cols = []
+
         # convert date array types to datetime64
         if _bodo_read_date_as_dt64:
             import pyarrow as pa
@@ -976,6 +980,7 @@ class UntypedPass:
                 if bodo_type == bodo.datetime_date_array_type:
                     bodo_type = types.Array(bodo.datetime64ns, 1, "C")
                     pa_field = pa.field(pa_field.name, pa.timestamp("ns"))
+                    sf_dt_to_ts_cols.append(i)
                 new_out_types.append(bodo_type)
                 new_pyarrow_fields.append(pa_field)
 
@@ -1021,6 +1026,7 @@ class UntypedPass:
                 False,  # is_merge_into
                 types.none,  # file_list_type
                 types.none,  # snapshot_id_type
+                sf_dt_to_ts_cols,
             )
         ]
 
