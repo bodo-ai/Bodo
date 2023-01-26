@@ -376,6 +376,36 @@ def bodosql_datetime_types(request):
             "table1": pd.DataFrame(
                 {
                     "A": [
+                        pd.NaT,
+                        pd.Timestamp("2020-01-16 22:06:10.378782"),
+                        pd.Timestamp("2000-01-21 02:23:16.009049"),
+                        pd.Timestamp("2010-01-08 12:10:20.097528"),
+                    ]
+                }
+            ),
+            "table2": pd.DataFrame(
+                {
+                    "B": [
+                        pd.Timestamp("2013-01-16 05:25:32.145547"),
+                        pd.Timestamp("2019-01-17 01:17:56.740445"),
+                        pd.NaT,
+                        pd.Timestamp("2015-01-29 06:35:09.810264"),
+                    ]
+                }
+            ),
+        },
+    ]
+)
+def bodosql_datetime_types_small(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        {
+            "table1": pd.DataFrame(
+                {
+                    "A": [
                         datetime.date(2011, 4, 24),
                         datetime.date(2020, 6, 7),
                         datetime.date(2022, 1, 1),

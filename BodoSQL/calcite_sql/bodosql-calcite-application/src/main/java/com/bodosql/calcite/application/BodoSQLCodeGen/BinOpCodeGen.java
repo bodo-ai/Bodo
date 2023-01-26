@@ -262,7 +262,8 @@ public class BinOpCodeGen {
     assert args.size() == 2;
     final String arg0 = args.get(0);
     final String arg1 = args.get(1);
-    return String.format("bodo.libs.bodosql_array_kernels.date_sub_date(%s, %s)", arg0, arg1);
+    return String.format(
+        "bodo.libs.bodosql_array_kernels.date_sub_date_unit('DAY', %s, %s)", arg1, arg0);
   }
 
   /**

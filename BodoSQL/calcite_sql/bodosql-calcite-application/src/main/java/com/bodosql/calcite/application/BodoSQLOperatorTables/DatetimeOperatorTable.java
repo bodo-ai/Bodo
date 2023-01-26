@@ -241,8 +241,17 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           null,
           // What Input Types does the function accept. This function accepts only
           // (Datetime, Datetime)
-          OperandTypes.sequence(
-              "DATEDIFF(TIMESTAMP, TIMESTAMP)", OperandTypes.TIMESTAMP, OperandTypes.TIMESTAMP),
+
+          OperandTypes.or(
+              OperandTypes.sequence(
+                  "DATEDIFF(CHARACTER, TIMESTAMP, TIMESTAMP)",
+                  OperandTypes.CHARACTER,
+                  OperandTypes.TIMESTAMP,
+                  OperandTypes.TIMESTAMP),
+              OperandTypes.sequence(
+                  "DATEDIFF(TIMESTAMP, TIMESTAMP)",
+                  OperandTypes.TIMESTAMP,
+                  OperandTypes.TIMESTAMP)),
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
