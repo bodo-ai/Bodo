@@ -2353,12 +2353,26 @@ public class PandasCodeGenVisitor extends RelVisitor {
             return new RexNodeVisitorInfo(outputName, addExpr);
 
           case "DATEDIFF":
-            assert operandsInfo.size() == 2;
-            outputName =
-                generateDateDiffName(operandsInfo.get(0).getName(), operandsInfo.get(1).getName());
+            RexNodeVisitorInfo arg1;
+            RexNodeVisitorInfo arg2;
+
+            String datetimePart = "\"DAY\"";
+
+            if (operandsInfo.size() == 2) {
+              arg1 = operandsInfo.get(1);
+              arg2 = operandsInfo.get(0);
+            } else if (operandsInfo.size() == 3) { // this is the Snowflake option
+              datetimePart = operandsInfo.get(0).getExprCode();
+              arg1 = operandsInfo.get(1);
+              arg2 = operandsInfo.get(2);
+            } else {
+              throw new BodoSQLCodegenException(
+                  "Invalid number of arguments to DATEDIFF! Must be 2 or 3.");
+            }
+
+            outputName = generateDateDiffName(datetimePart, arg1.getName(), arg2.getName());
             String diffExpr =
-                generateDateDiffCode(
-                    operandsInfo.get(0).getExprCode(), operandsInfo.get(1).getExprCode());
+                generateDateDiffCode(datetimePart, arg1.getExprCode(), arg2.getExprCode());
             return new RexNodeVisitorInfo(outputName, diffExpr);
           case "STR_TO_DATE":
             assert operandsInfo.size() == 2;

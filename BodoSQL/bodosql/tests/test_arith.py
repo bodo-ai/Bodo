@@ -417,7 +417,7 @@ def test_date_arithmetic_case(bodosql_date_types, memory_leak_check):
     )
 
 
-def test_date_sub_date(bodosql_date_types, memory_leak_check):
+def test_date_sub_date_unit_day(bodosql_date_types, memory_leak_check):
     """Tests - on two date columns. The output in SQL is an integer."""
     query = "select A - B as col1 from table1"
     # Spark doesn't support date arithmetic with integers
@@ -436,7 +436,7 @@ def test_date_sub_date(bodosql_date_types, memory_leak_check):
     )
 
 
-def test_date_sub_date_case(bodosql_date_types, memory_leak_check):
+def test_date_sub_date_unit_day_case(bodosql_date_types, memory_leak_check):
     """Tests - on two date columns with case. The output in SQL is an integer."""
 
     query = "select CASE WHEN A > B THEN A - B ELSE B - A END as col1 from table1"
