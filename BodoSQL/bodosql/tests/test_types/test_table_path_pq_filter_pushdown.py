@@ -305,7 +305,7 @@ def test_ilike_filter_pushdown(datapath, memory_leak_check):
         check_logger_msg(stream, "Columns loaded ['uuid']")
 
 
-def test_coalese_filter_pushdown(datapath, memory_leak_check):
+def test_coalesce_filter_pushdown(datapath, memory_leak_check):
     """
     Test coalesce support in Parquet filter pushdown
     """
