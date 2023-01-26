@@ -2785,7 +2785,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String argCode = arg.getExprCode();
     RexNode patternNode = operands.get(1);
 
-    if (!(patternNode instanceof RexLiteral)) {
+    // The regular expression functions only support literal patterns
+    if ((opName.equals("REGEXP") || opName.equals("RLIKE"))
+        && !(patternNode instanceof RexLiteral)) {
       throw new BodoSQLCodegenException(
           String.format("%s Error: Pattern must be a string literal", opName));
     }
@@ -2796,10 +2798,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String sqlEscape = "''";
     if (operands.size() == 3) {
       RexNode escapeNode = operands.get(2);
-      if (!(escapeNode instanceof RexLiteral)) {
-        throw new BodoSQLCodegenException(
-            String.format("%s Error: Escape must be a string literal", opName));
-      }
       RexNodeVisitorInfo escape =
           visitRexNode(escapeNode, colNames, id, inputVar, isSingleRow, ctx);
       sqlEscape = escape.getExprCode();

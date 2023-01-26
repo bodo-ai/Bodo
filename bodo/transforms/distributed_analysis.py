@@ -57,6 +57,7 @@ from bodo.utils.typing import (
     BodoError,
     BodoWarning,
     get_overload_const_str,
+    is_overload_constant_tuple,
     is_overload_false,
     is_overload_none,
     is_tuple_like_type,
@@ -1617,24 +1618,25 @@ class DistributedAnalysis:
             return
 
         if fdef == ("concat_ws", "bodo.libs.bodosql_array_kernels"):
-            # Note: this will fail if the tuple argument is not constant,
-            # but this should never happen because we control code generation
-            elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
-            assert (
-                elems is not None
-            ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
+            # If the generate tuple is a constant we skip this path and
+            # cannot have any arrays.
+            if not is_overload_constant_tuple(self.typemap[rhs.args[0].name]):
+                elems = guard(find_build_tuple, self.func_ir, rhs.args[0])
+                assert (
+                    elems is not None
+                ), f"Internal error, unable to find build tuple for arg0 of {func_name}"
 
-            arrays = [lhs]
-            for arg in elems:
-                if is_array_typ(self.typemap[arg.name]):
-                    arrays.append(arg.name)
-            # Get the information about the separator
-            sep_name = rhs.args[1].name
-            if is_array_typ(self.typemap[sep_name]):
-                arrays.append(sep_name)
-            if len(arrays) > 1:
-                self._meet_several_array_dists(arrays, array_dists)
-            return
+                arrays = [lhs]
+                for arg in elems:
+                    if is_array_typ(self.typemap[arg.name]):
+                        arrays.append(arg.name)
+                # Get the information about the separator
+                sep_name = rhs.args[1].name
+                if is_array_typ(self.typemap[sep_name]):
+                    arrays.append(sep_name)
+                if len(arrays) > 1:
+                    self._meet_several_array_dists(arrays, array_dists)
+                return
 
         if fdef == ("is_in", "bodo.libs.bodosql_array_kernels"):
 

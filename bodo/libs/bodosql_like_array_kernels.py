@@ -6,7 +6,7 @@ import re
 from typing import Tuple
 
 from numba.core import types
-from numba.extending import overload
+from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
@@ -16,6 +16,7 @@ from bodo.utils.typing import (
     get_overload_const_str,
     is_overload_constant_bool,
     is_overload_constant_str,
+    is_overload_none,
     raise_bodo_error,
 )
 
@@ -320,38 +321,96 @@ def convert_sql_pattern_to_python_compile_time(
     )
 
 
+# Compute the patterns at runtime by compiling the compile time code with numba.
+convert_sql_pattern_to_python_runtime = register_jitable(
+    convert_sql_pattern_to_python_compile_time
+)
+
+
 def like_kernel(arr, pattern, escape, case_insensitive):  # pragma: no cover
     pass
 
 
 @overload(like_kernel, no_unliteral=True)
 def overload_like_kernel(arr, pattern, escape, case_insensitive):
-    if not is_overload_constant_str(pattern):  # pragma: no cover
-        raise_bodo_error("like_kernel(): 'pattern' must be a constant string")
-    if not is_overload_constant_str(pattern):  # pragma: no cover
-        raise_bodo_error("like_kernel(): 'escape' must be a constant string")
+    """BodoSQL array kernel to implement the SQL like and ilike
+    operations.
+
+    Args:
+        arr (types.Type): A string scalar or column.
+        pattern (types.Type): A scalar or column for the pattern.
+        escape (types.StringLiteral): A scalar or column for the escape character. If
+            there is no escape this will be the empty string and a string literal.
+        case_insensitive (types.BooleanLiteral): Is the operation case insensitive.
+            ilike=True, like=False
+
+    Returns:
+        types.Type: A boolean array or scalar for if the arr matches.
+    """
     if not is_overload_constant_bool(case_insensitive):  # pragma: no cover
         raise_bodo_error("like_kernel(): 'case_insensitive' must be a constant boolean")
 
-    if isinstance(arr, types.optional):  # pragma: no cover
-        return unopt_argument(
-            f"bodo.libs.bodosql_array_kernels.like_kernel",
-            ["arr", "pattern", "escape", "case_insensitive"],
-            0,
-        )
+    # Note: We don't check case_insensitive because it must be a boolean literal.
+    for i, arg in enumerate((arr, pattern, escape)):
+        if isinstance(arg, types.optional):  # pragma: no cover
+            return unopt_argument(
+                f"bodo.libs.bodosql_array_kernels.like_kernel",
+                ["arr", "pattern", "escape", "case_insensitive"],
+                i,
+            )
 
-    def impl(arr, pattern, escape, case_insensitive):  # pragma: no cover
-        return like_kernel_util(arr, pattern, escape, case_insensitive)
+    if is_overload_constant_str(pattern) and is_overload_constant_str(escape):
+        # Take an optimized path if the pattern and escape are both literals.
+        # If either one is not a literal then we cannot compute the pattern
+        # at compile time.
+        def impl(arr, pattern, escape, case_insensitive):  # pragma: no cover
+            return like_kernel_const_pattern_util(
+                arr, pattern, escape, case_insensitive
+            )
+
+    elif bodo.utils.utils.is_array_typ(pattern, True) or bodo.utils.utils.is_array_typ(
+        escape, True
+    ):
+
+        def impl(arr, pattern, escape, case_insensitive):  # pragma: no cover
+            return like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive)
+
+    else:
+
+        def impl(arr, pattern, escape, case_insensitive):  # pragma: no cover
+            return like_kernel_scalar_pattern_util(
+                arr, pattern, escape, case_insensitive
+            )
 
     return impl
 
 
-def like_kernel_util(arr, pattern, escape, case_insensitive):  # pragma: no cover
+def like_kernel_const_pattern_util(
+    arr, pattern, escape, case_insensitive
+):  # pragma: no cover
     pass
 
 
-@overload(like_kernel_util, no_unliteral=True)
-def overload_like_kernel_util(arr, pattern, escape, case_insensitive):
+@overload(like_kernel_const_pattern_util, no_unliteral=True)
+def overload_like_kernel_const_pattern_util(arr, pattern, escape, case_insensitive):
+    """Implementation of the SQL like and ilike kernels with both the pattern and escape
+    are constant strings. In this case the pattern is computed at compile time and
+    the generated code is optimized based on the pattern
+
+    Args:
+        arr (types.Type): A string scalar or column.
+        pattern (types.StringLiteral): A string literal for the pattern.
+        escape (types.StringLiteral): A string literal for the escape character. If
+            there is no escape this will be the empty string.
+        case_insensitive (types.BooleanLiteral): Is the operation case insensitive.
+            ilike=True, like=False
+
+    Raises:
+        BodoError: One of the inputs doesn't match the expected format.
+
+    Returns:
+        types.Type: A boolean array or scalar for if the arr matches.
+    """
     verify_string_arg(arr, "LIKE_KERNEL", "arr")
     if not is_overload_constant_str(pattern):  # pragma: no cover
         raise_bodo_error("like_kernel(): 'pattern' must be a constant string")
@@ -365,11 +424,11 @@ def overload_like_kernel_util(arr, pattern, escape, case_insensitive):
         )
     if not is_overload_constant_bool(case_insensitive):  # pragma: no cover
         raise_bodo_error("like_kernel(): 'case_insensitive' must be a constant boolean")
-    case_insensitive = get_overload_const_bool(case_insensitive)
+    is_case_insensitive = get_overload_const_bool(case_insensitive)
 
     arg_names = ["arr", "pattern", "escape", "case_insensitive"]
     arg_types = [arr, pattern, escape, case_insensitive]
-    # We only support nulls for arr at this time.
+    # By definition only the array can contain nulls.
     propagate_null = [True, False, False, False]
     out_dtype = bodo.boolean_array
     # Some paths have prefix and/or need extra globals
@@ -384,30 +443,189 @@ def overload_like_kernel_util(arr, pattern, escape, case_insensitive):
         must_match_end,
         match_anything,
     ) = convert_sql_pattern_to_python_compile_time(
-        const_pattern, const_escape, case_insensitive
+        const_pattern, const_escape, is_case_insensitive
     )
     if match_anything:
         scalar_text = "res[i] = True\n"
     else:
-        if case_insensitive:
+        if is_case_insensitive:
             # To match non-wildcards make everything lower case
             scalar_text = "arg0 = arg0.lower()\n"
         else:
             scalar_text = ""
-        extra_globals["python_pattern"] = python_pattern
         if requires_regex:
-            extra_globals["re"] = re
-            prefix_code = "matcher = re.compile(python_pattern)"
+            extra_globals["matcher"] = re.compile(python_pattern)
             scalar_text += "res[i] = bool(matcher.search(arg0))\n"
-        elif must_match_start and must_match_end:
-            scalar_text += "res[i] = arg0 == python_pattern\n"
-        elif must_match_start:
-            scalar_text += "res[i] = arg0.startswith(python_pattern)\n"
-        elif must_match_end:
-            scalar_text += "res[i] = arg0.endswith(python_pattern)\n"
         else:
-            scalar_text += "res[i] = python_pattern in arg0\n"
+            extra_globals["python_pattern"] = python_pattern
+            if must_match_start and must_match_end:
+                scalar_text += "res[i] = arg0 == python_pattern\n"
+            elif must_match_start:
+                scalar_text += "res[i] = arg0.startswith(python_pattern)\n"
+            elif must_match_end:
+                scalar_text += "res[i] = arg0.endswith(python_pattern)\n"
+            else:
+                scalar_text += "res[i] = python_pattern in arg0\n"
 
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        prefix_code=prefix_code,
+        extra_globals=extra_globals,
+    )
+
+
+def like_kernel_arr_pattern_util(
+    arr, pattern, escape, case_insensitive
+):  # pragma: no cover
+    pass
+
+
+@overload(like_kernel_arr_pattern_util, no_unliteral=True)
+def overload_like_kernel_arr_pattern_util(arr, pattern, escape, case_insensitive):
+    """Implementation of the SQL like and ilike kernels where either the pattern or the escape
+    are an array. In this case the pattern must be computed on each iteration of the loop
+    at runtime.
+
+    Args:
+        arr (types.Type): A string scalar or column.
+        pattern (types.Type): A scalar scalar or column for the pattern.
+        escape (types.StringLiteral): A scalar scalar or column for the escape character.
+        case_insensitive (types.BooleanLiteral): Is the operation case insensitive.
+            ilike=True, like=False
+
+    Returns:
+        types.Type: A boolean array or scalar for if the arr matches.
+    """
+    verify_string_arg(arr, "LIKE_KERNEL", "arr")
+    verify_string_arg(pattern, "LIKE_KERNEL", "arr")
+    verify_string_arg(escape, "LIKE_KERNEL", "arr")
+    if not is_overload_constant_bool(case_insensitive):  # pragma: no cover
+        raise_bodo_error("like_kernel(): 'case_insensitive' must be a constant boolean")
+    is_case_insensitive = get_overload_const_bool(case_insensitive)
+
+    arg_names = ["arr", "pattern", "escape", "case_insensitive"]
+    arg_types = [arr, pattern, escape, case_insensitive]
+    # By definition case_insensitive cannot be null.
+    propagate_null = [True, True, True, False]
+    out_dtype = bodo.boolean_array
+    extra_globals = {
+        "convert_sql_pattern": convert_sql_pattern_to_python_runtime,
+    }
+    prefix_code = None
+    scalar_text = ""
+    if is_case_insensitive and not is_overload_none(arr):
+        if not bodo.utils.utils.is_array_typ(arr, True):
+            # If the output is an array, but the first argument is a scalar we need to convert
+            # it to lower case do it once before the loop to avoid overhead on each iteration.
+            prefix_code = "arr = arr.lower()"
+        else:
+            # lower each element instead.
+            scalar_text += "arg0 = arg0.lower()\n"
+    # Convert the pattern on each iteration since it may change.
+    # XXX Consider moving to a helper function to keep the IR smaller?
+    scalar_text += "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = convert_sql_pattern(arg1, arg2, case_insensitive)\n"
+    scalar_text += "if match_anything:\n"
+    scalar_text += "  res[i] = True\n"
+    scalar_text += "elif requires_regex:\n"
+    scalar_text += "  matcher = re.compile(python_pattern)\n"
+    scalar_text += "  res[i] = bool(matcher.search(arg0))\n"
+    scalar_text += "elif must_match_start and must_match_end:\n"
+    scalar_text += "  res[i] = arg0 == python_pattern\n"
+    scalar_text += "elif must_match_start:\n"
+    scalar_text += "  res[i] = arg0.startswith(python_pattern)\n"
+    scalar_text += "elif must_match_end:\n"
+    scalar_text += "  res[i] = arg0.endswith(python_pattern)\n"
+    scalar_text += "else:\n"
+    scalar_text += "  res[i] = python_pattern in arg0\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+        prefix_code=prefix_code,
+        extra_globals=extra_globals,
+    )
+
+
+def like_kernel_scalar_pattern_util(
+    arr, pattern, escape, case_insensitive
+):  # pragma: no cover
+    pass
+
+
+@overload(like_kernel_scalar_pattern_util, no_unliteral=True)
+def overload_like_kernel_scalar_pattern_util(arr, pattern, escape, case_insensitive):
+    """Implementation of the SQL like and ilike kernels where both the pattern and the escape
+    are scalars. In this case the pattern must be computed on each iteration of the loop
+    at runtime.
+
+    Args:
+        arr (types.Type): A string scalar or column.
+        pattern (types.Type): A scalar scalar or column for the pattern.
+        escape (types.StringLiteral): A scalar scalar or column for the escape character.
+        case_insensitive (types.BooleanLiteral): Is the operation case insensitive.
+            ilike=True, like=False
+
+    Returns:
+        types.Type: A boolean array or scalar for if the arr matches.
+    """
+    verify_string_arg(arr, "LIKE_KERNEL", "arr")
+    verify_string_arg(pattern, "LIKE_KERNEL", "arr")
+    verify_string_arg(escape, "LIKE_KERNEL", "arr")
+    if not is_overload_constant_bool(case_insensitive):  # pragma: no cover
+        raise_bodo_error("like_kernel(): 'case_insensitive' must be a constant boolean")
+    is_case_insensitive = get_overload_const_bool(case_insensitive)
+
+    arg_names = ["arr", "pattern", "escape", "case_insensitive"]
+    arg_types = [arr, pattern, escape, case_insensitive]
+    # By definition case_insensitive cannot be null.
+    propagate_null = [True, True, True, False]
+    out_dtype = bodo.boolean_array
+    extra_globals = {
+        "convert_sql_pattern": convert_sql_pattern_to_python_runtime,
+        # A dummy matcher used to ensure type stability if we don't
+        # need a regex so we don't always have to call compile.
+        "global_matcher": re.compile(""),
+    }
+    if is_overload_none(pattern) or is_overload_none(escape):
+        # Avoid typing issues due to the prefix code if pattern or
+        # escape is null and arr is an array.
+        prefix_code = None
+        scalar_text = "pass"
+    else:
+        # Convert the pattern as prefix code so we don't compute the pattern multiple times on each iteration.
+        prefix_code = "(python_pattern, requires_regex, must_match_start, must_match_end, match_anything) = convert_sql_pattern(pattern, escape, case_insensitive)\n"
+        # If we need to compile the code generate a global matcher. Otherwise match a lowered
+        # matcher for type stability
+        prefix_code += "if requires_regex:\n"
+        prefix_code += "    matcher = re.compile(python_pattern)\n"
+        prefix_code += "else:\n"
+        prefix_code += "    matcher = global_matcher\n"
+        # Generate the scalar code.
+        if is_case_insensitive:
+            # If we are case insensitive we converted the pattern and arg
+            # to lower case to all safe comparisons.
+            scalar_text = "arg0 = arg0.lower()\n"
+        else:
+            scalar_text = ""
+        # XXX Consider moving to a helper function to keep the IR smaller?
+        scalar_text += "if match_anything:\n"
+        scalar_text += "  res[i] = True\n"
+        scalar_text += "elif requires_regex:\n"
+        scalar_text += "  res[i] = bool(matcher.search(arg0))\n"
+        scalar_text += "elif must_match_start and must_match_end:\n"
+        scalar_text += "  res[i] = arg0 == python_pattern\n"
+        scalar_text += "elif must_match_start:\n"
+        scalar_text += "  res[i] = arg0.startswith(python_pattern)\n"
+        scalar_text += "elif must_match_end:\n"
+        scalar_text += "  res[i] = arg0.endswith(python_pattern)\n"
+        scalar_text += "else:\n"
+        scalar_text += "  res[i] = python_pattern in arg0\n"
     return gen_vectorized(
         arg_names,
         arg_types,

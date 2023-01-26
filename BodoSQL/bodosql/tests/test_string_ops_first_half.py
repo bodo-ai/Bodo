@@ -21,6 +21,53 @@ def test_like(
     )
 
 
+def test_like_ilike_non_literal_pattern(
+    bodosql_string_types, spark_info, memory_leak_check
+):
+    """
+    tests that like and ilike works for non-literal patterns
+    """
+    query1 = f"select A from table1 where A like lower('H%' || 'o')"
+    query2 = f"select A from table1 where A ilike upper('H%' || 'o')"
+    check_query(
+        query1,
+        bodosql_string_types,
+        spark_info,
+    )
+    check_query(
+        query2,
+        bodosql_string_types,
+        spark_info,
+        equivalent_spark_query=f"select A from table1 where lower(A) like lower('H%' || 'o')",
+    )
+
+
+def test_like_ilike_arr_pattern(spark_info, memory_leak_check):
+    """
+    tests that like and ilike works for array patterns
+    """
+    df = pd.DataFrame(
+        {
+            "A": ["hello", "HeLLo", "world", "WORld", None, "Bar"] * 4,
+            "B": ["%Lo", "%Lo", None, "%d", "%s", "bar"] * 4,
+        }
+    )
+    ctx = {"table1": df}
+    query1 = f"select A from table1 where A like B"
+    query2 = f"select A from table1 where A ilike B"
+    check_query(
+        query1,
+        ctx,
+        spark_info,
+    )
+    check_query(
+        query2,
+        ctx,
+        spark_info,
+        equivalent_spark_query=f"select A from table1 where lower(A) like lower(B)",
+    )
+
+
 def test_like_ilike_basic_escape(spark_info, memory_leak_check):
     """
     tests that like and like works for a couple different possible regex strings
@@ -74,6 +121,63 @@ def test_like_ilike_basic_escape(spark_info, memory_leak_check):
         ctx,
         spark_info,
         equivalent_spark_query=spark_query4,
+    )
+
+
+def test_like_ilike_non_constant_basic_escape(memory_leak_check):
+    """
+    tests that like and ilike works for a couple different possible regex strings
+    with escape with non-constant escapes.
+
+    Note: Spark doesn't support non-literal escape values.
+    """
+    df = pd.DataFrame({"A": ["afe_fe", "rewrew%rew", "%", "A_", "_", None, None] * 5})
+    ctx = {"table1": df}
+    query1 = "select A from table1 where A like '%^%%' escape upper('^')"
+    query2 = "select A from table1 where A ilike '%a^_%' escape lower('^')"
+
+    check_query(
+        query1,
+        ctx,
+        None,
+        expected_output=df[[False, True, True, False, False, False, False] * 5],
+    )
+    check_query(
+        query2,
+        ctx,
+        None,
+        expected_output=df[[False, False, False, True, False, False, False] * 5],
+    )
+
+
+def test_like_ilike_arr_escape(memory_leak_check):
+    """
+    tests that like and ilike works for arr escape values
+
+    Note: Spark doesn't support non-literal escape values.
+    """
+    df = pd.DataFrame(
+        {
+            "A": ["hello", "HeLLo", "world", "WORl%d", None, "Bar"] * 4,
+            "B": ["%Lo", "%Lo", None, "%^%d", "%s", "bar"] * 4,
+            "C": ["", "", "^", "^", "*", None] * 4,
+        }
+    )
+    ctx = {"table1": df}
+    expected_output = df[["A"]]
+    query1 = f"select A from table1 where A like B escape C"
+    query2 = f"select A from table1 where A ilike B escape C"
+    check_query(
+        query1,
+        ctx,
+        None,
+        expected_output=expected_output[[False, True, False, True, False, False] * 4],
+    )
+    check_query(
+        query2,
+        ctx,
+        None,
+        expected_output=expected_output[[True, True, False, True, False, False] * 4],
     )
 
 
