@@ -150,14 +150,49 @@ def test_convert_sql_pattern_to_python_with_escapes_compile_time(memory_leak_che
     assert func("Fa%A%", "A", True) == ("^fa.*%$", True, True, True, False)
 
 
-@pytest.mark.parametrize(
-    "is_case_insensitive",
-    [
-        False,
-        True,
-    ],
+@pytest.fixture(params=[False, True])
+def is_case_insensitive(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        # Note: This array has length 24
+        pd.Series(
+            [
+                "hello",
+                None,
+                "heLLo",
+                "helLo",
+                "World",
+                "he^lo",
+                "hel^lO",
+                "he_lLO",
+                "he_xLO",
+                "HELLO",
+                "HE%LO",
+                "E&lo",
+                "HELLOOOOOOO",
+                "human",
+                None,
+                "H",
+                "E",
+                "L",
+                "L",
+                "O",
+                "^",
+                "_",
+                "%",
+                None,
+            ]
+        ).values
+    ]
 )
-def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
+def like_arr(request):
+    return request.param
+
+
+def test_like_constant_pattern_escape(is_case_insensitive, like_arr, memory_leak_check):
     """
     Test all of the various paths for LIKE/ILIKE from the like_kernel with a constant
     pattern and escape value.
@@ -224,34 +259,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             arr, "he^__Lo", "^", is_case_insensitive
         )
 
-    S = pd.Series(
-        [
-            "hello",
-            None,
-            "heLLo",
-            "helLo",
-            "World",
-            "he^lo",
-            "hel^lO",
-            "he_lLO",
-            "he_xLO",
-            "HELLO",
-            "HE%LO",
-            "E&lo",
-            "HELLOOOOOOO",
-            "human",
-            None,
-            "H",
-            "E",
-            "L",
-            "L",
-            "O",
-            "^",
-            "_",
-            "%",
-        ]
-    )
-    arr = S.values
+    arr = like_arr
     # We hardcode each of the answer to avoid an overly complicated expected output
     # that just matches the Python code.
     if is_case_insensitive:
@@ -279,6 +287,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -305,6 +314,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl1, (arr,), py_output=pd.array(answer))
@@ -334,6 +344,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -360,6 +371,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl2, (arr,), py_output=pd.array(answer))
@@ -389,6 +401,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -415,6 +428,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl3, (arr,), py_output=pd.array(answer))
@@ -444,6 +458,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -470,6 +485,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl4, (arr,), py_output=pd.array(answer))
@@ -499,6 +515,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -525,6 +542,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl5, (arr,), py_output=pd.array(answer))
@@ -554,6 +572,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -580,6 +599,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl6, (arr,), py_output=pd.array(answer))
@@ -609,6 +629,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -635,6 +656,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl7, (arr,), py_output=pd.array(answer))
@@ -664,6 +686,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -690,6 +713,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl8, (arr,), py_output=pd.array(answer))
@@ -719,6 +743,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -745,6 +770,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl9, (arr,), py_output=pd.array(answer))
@@ -774,6 +800,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
     else:
         answer = [
@@ -800,6 +827,7 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
             False,
             False,
             False,
+            None,
         ]
 
     check_func(test_impl10, (arr,), py_output=pd.array(answer))
@@ -807,3 +835,916 @@ def test_like_constant_pattern_escape(is_case_insensitive, memory_leak_check):
     # Test once with a scalar
     scalar = arr[3]
     check_func(test_impl1, (scalar,), py_output=True)
+
+
+def test_like_scalar_pattern_escape(is_case_insensitive, like_arr, memory_leak_check):
+    """
+    Test all of the various paths for LIKE/ILIKE from the like_kernel with a scalar
+    pattern and escape value. These test the same tests as test_like_constant_pattern_escape
+    but the pattern and escape aren't always constant.
+    """
+
+    def test_impl1(arr, pattern):
+        # Test with only a pattern
+        return bodo.libs.bodosql_array_kernels.like_kernel(
+            arr, pattern, "", is_case_insensitive
+        )
+
+    def test_impl2(arr, escape):
+        # Test with only an escape
+        return bodo.libs.bodosql_array_kernels.like_kernel(
+            arr, "he^%Lo", escape, is_case_insensitive
+        )
+
+    def test_impl3(arr, pattern, escape):
+        # Test with a pattern and escape
+        return bodo.libs.bodosql_array_kernels.like_kernel(
+            arr, pattern, escape, is_case_insensitive
+        )
+
+    arr = like_arr
+    # We hardcode each of the answer to avoid an overly complicated expected output
+    # that just matches the Python code.
+    if is_case_insensitive:
+        answer = [
+            True,
+            None,
+            True,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            False,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test the equality case
+    check_func(test_impl1, (arr, "helLo"), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            True,
+            None,
+            True,
+            True,
+            False,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            True,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test the endswith case
+    check_func(test_impl1, (arr, "%Lo"), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            True,
+            None,
+            True,
+            True,
+            False,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            False,
+            True,
+            True,
+            None,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            True,
+            False,
+            True,
+            False,
+            None,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test the startswith case
+    check_func(test_impl1, (arr, "H%"), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            True,
+            None,
+            True,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            False,
+            False,
+            True,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            False,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test the contains case.
+    check_func(test_impl1, (arr, "%elL%"), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            True,
+            None,
+            True,
+            True,
+            False,
+            True,
+            False,
+            False,
+            False,
+            True,
+            True,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            True,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test the regex case
+    check_func(test_impl1, (arr, "he_Lo"), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test once with just an escape to ensure its tested.
+    # Tests the equality case
+    check_func(test_impl2, (arr, "^"), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test the endswith case
+    check_func(test_impl3, (arr, "%>%Lo", ">"), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test the startswith case
+    check_func(test_impl3, (arr, "He<%%", "<"), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test the contains case
+    check_func(test_impl3, (arr, "%E&%l%", "&"), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            True,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    # Test the regex case
+    check_func(test_impl3, (arr, "he^__Lo", "^"), py_output=pd.array(answer))
+
+    # Test once with a scalar
+    scalar = arr[3]
+    check_func(test_impl1, (scalar, "helLo"), py_output=True)
+
+
+def test_like_arr_pattern_escape(is_case_insensitive, like_arr, memory_leak_check):
+    """
+    Test for LIKE/ILIKE from the like_kernel where either
+    the pattern or the escape is an array. This mixes several types
+    of patterns together.
+    """
+    arr = like_arr
+    pattern_arr = pd.Series(
+        [
+            None,
+            "helLo",
+            None,
+            "he^__Lo",
+            "%E&%l%",
+            "%>%Lo",
+            "He<%%",
+            "he^%Lo",
+            "he_Lo",
+            "%elL%",
+            "H%",
+            "%lO",
+        ]
+        * 2
+    ).values
+    escape_arr = pd.Series(["", "&", None, "^"] * 6).values
+
+    def test_impl1(arr, pattern):
+        # Test with only a pattern
+        return bodo.libs.bodosql_array_kernels.like_kernel(
+            arr, pattern, "", is_case_insensitive
+        )
+
+    def test_impl2(arr, escape):
+        # Test with only an escape
+        return bodo.libs.bodosql_array_kernels.like_kernel(
+            arr, "he^%Lo", escape, is_case_insensitive
+        )
+
+    def test_impl3(arr, pattern, escape):
+        # Test with a pattern and escape
+        return bodo.libs.bodosql_array_kernels.like_kernel(
+            arr, pattern, escape, is_case_insensitive
+        )
+
+    if is_case_insensitive:
+        answer = [
+            None,
+            None,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            True,
+            True,
+            None,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+    else:
+        answer = [
+            None,
+            None,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            False,
+            None,
+            False,
+            None,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            None,
+        ]
+
+    check_func(test_impl1, (arr, pattern_arr), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            False,
+            None,
+            None,
+            False,
+            False,
+            True,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            None,
+        ]
+    else:
+        answer = [
+            False,
+            None,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            None,
+        ]
+
+    check_func(test_impl2, (arr, escape_arr), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            None,
+            None,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            True,
+            None,
+            True,
+            None,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            None,
+        ]
+    else:
+        answer = [
+            None,
+            None,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            None,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            False,
+            False,
+            None,
+            None,
+        ]
+
+    check_func(test_impl3, (arr, pattern_arr, escape_arr), py_output=pd.array(answer))
+
+    if is_case_insensitive:
+        answer = [
+            None,
+            True,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            True,
+            True,
+            None,
+            True,
+            None,
+            True,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            True,
+            True,
+            None,
+            True,
+        ]
+    else:
+        answer = [
+            None,
+            True,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            True,
+            True,
+            None,
+            False,
+            None,
+            True,
+            None,
+            False,
+            False,
+            False,
+            None,
+            False,
+            True,
+            True,
+            None,
+            False,
+        ]
+    # Test once with a scalar
+    scalar = arr[3]
+    check_func(
+        test_impl3, (scalar, pattern_arr, escape_arr), py_output=pd.array(answer)
+    )
+
+
+def test_like_kernel_optional(memory_leak_check):
+    def impl(A, B, C, flag0, flag1, flag2):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        arg2 = C if flag2 else None
+        return bodo.libs.bodosql_array_kernels.like_kernel(
+            arg0, arg1, arg2, False
+        ), bodo.libs.bodosql_array_kernels.like_kernel(arg0, arg1, arg2, True)
+
+    arg = "maximum"
+    pattern = "%Um"
+    escape = "^"
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            for flag2 in [True, False]:
+                answer = (False, True) if flag0 and flag1 and flag2 else None
+                check_func(
+                    impl,
+                    (arg, pattern, escape, flag0, flag1, flag2),
+                    py_output=answer,
+                )
