@@ -753,3 +753,127 @@ def test_snowflake_ilike_regex_pushdown(test_db_snowflake_catalog, memory_leak_c
                 stream, "Filter pushdown successfully performed. Moving filter step:"
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_like_non_constant_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that queries with like and non-constant patterns support filter
+    pushdown. This is tested both with and without escapes.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame({"A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10})
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "like_non_constant_pushdown_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        # equality test
+        query1 = f"Select a from {table_name} where a like 'hE_l' || 'O'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a == "hELlO"]
+            check_func(
+                impl,
+                (bc, query1),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query2 = (
+            f"Select a from {table_name} where a like 'b' || '^%_f' escape upper('^')"
+        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a == "b%Bf"]
+            check_func(
+                impl,
+                (bc, query2),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_ilike_non_constant_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that queries with ilike and non-constant patterns support filter
+    pushdown. This is tested both with and without escapes.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame({"A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10})
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "ilike_non_constant_pushdown_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        # equality test
+        query1 = f"Select a from {table_name} where a ilike 'he' || '_lo'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a == "hELlO"]
+            check_func(
+                impl,
+                (bc, query1),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query2 = (
+            f"Select a from {table_name} where a ilike 'b^' || '%_F' escape lower('^')"
+        )
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a == "b%Bf"]
+            check_func(
+                impl,
+                (bc, query2),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")

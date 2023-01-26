@@ -1352,29 +1352,46 @@ class TypingTransforms:
         if case_insensitive_type in (None, types.undefined, types.unknown):
             self.needs_transform = True
             raise GuardException
-        if not (
-            is_overload_constant_str(pattern_type)
-            and is_overload_constant_str(escape_type)
-            and is_overload_constant_bool(case_insensitive_type)
-        ):
-            raise GuardException
+        require(is_overload_constant_bool(case_insensitive_type))
         # Fetch case sensitive information. If is_case_insensitive == True
         # then we will create new operations that can be replaced by
         # arrow and snowflake.
         is_case_insensitive = get_overload_const_bool(case_insensitive_type)
-
-        pattern_const = get_overload_const_str(pattern_type)
-        escape_const = get_overload_const_str(escape_type)
-        # Convert the pattern from SQL to Python for pushdown.
-        (
-            final_pattern,
-            requires_regex,
-            must_match_start,
-            must_match_end,
-            match_anything,
-        ) = bodo.libs.bodosql_like_array_kernels.convert_sql_pattern_to_python_compile_time(
-            pattern_const, escape_const, is_case_insensitive
-        )
+        # If either pattern or escape is not literal it must be the regex case
+        # or always False.
+        match_nothing = False
+        requires_regex = False
+        if not (
+            is_overload_constant_str(pattern_type)
+            and is_overload_constant_str(escape_type)
+        ):
+            # We don't support filter pushdown with optional types
+            # or array types.
+            pattern_type = types.unliteral(pattern_type)
+            escape_type = types.unliteral(escape_type)
+            require(
+                pattern_type in (types.unicode_type, types.none)
+                and escape_type in (types.unicode_type, types.none)
+            )
+            if pattern_type == types.none or escape_type == types.none:
+                match_nothing = True
+                # Generate a dummy pattern to get an ir.Var.
+                final_pattern = ""
+            else:
+                requires_regex = True
+        else:
+            pattern_const = get_overload_const_str(pattern_type)
+            escape_const = get_overload_const_str(escape_type)
+            # Convert the pattern from SQL to Python for pushdown.
+            (
+                final_pattern,
+                requires_regex,
+                must_match_start,
+                must_match_end,
+                match_anything,
+            ) = bodo.libs.bodosql_like_array_kernels.convert_sql_pattern_to_python_compile_time(
+                pattern_const, escape_const, is_case_insensitive
+            )
         # We cannot do filter pushdown if the expression requires us to keep like/use a regex.
         if requires_regex:
             # Regex can only be handled with a SQL interface
@@ -1387,7 +1404,9 @@ class TypingTransforms:
             # later in filter pushdown.
             expr_value = ir.Expr.build_tuple([pattern_arg, escape_arg], call_def.loc)
         else:
-            if match_anything:
+            if match_nothing:
+                op = "ALWAYS_NULL"
+            elif match_anything:
                 # We don't have a way to represent a True filter yet.
                 op = "ALWAYS_TRUE"
             elif must_match_start and must_match_end:
@@ -4805,13 +4824,14 @@ class TypingTransforms:
         # Pattern and escape are args 1 and 2
         for arg_no in (1, 2):
             const_arg = args[arg_no].name
-            const_type = self.typemap.get(const_arg, None)
-            if const_type in (None, types.unknown, types.undefined):
+            arg_type = self.typemap.get(const_arg, None)
+            if arg_type in (None, types.unknown, types.undefined):
                 self.needs_transform = True
                 return False
 
-            if not is_overload_constant_str(const_type):
-                # An argument is not a constant so skip filter pushdown.
+            if types.unliteral(arg_type) not in (types.unicode_type, types.none):
+                # We don't support filter pushdown with optional types
+                # or arrays.
                 return False
 
         # case insensitive is argument 3
