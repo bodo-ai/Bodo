@@ -195,6 +195,12 @@ class ArrowDataframeReader {
     bool create_dict_encoding_from_strings = false;
     std::set<std::string> str_as_dict_colnames;
 
+    // Names of columns for which we allow an "unsafe" cast from
+    // date to datetime64[ns]. This is currently only used by
+    // SnowflakeReader, and only when _bodo_read_date_as_dt64=True
+    // in the pd.read_sql call.
+    std::set<std::string> allow_unsafe_dt_to_ts_cast_colnames;
+
     /// Total number of rows in the dataset (all pieces)
     int64_t total_rows = 0;
 
@@ -206,8 +212,10 @@ class ArrowDataframeReader {
     int64_t rows_left;  // only used during ArrowDataframeReader::read()
 
     /// initialize reader
-    void init_arrow_reader(const std::vector<int32_t>& str_as_dict_cols = {},
-                           bool create_dict_from_string = false);
+    void init_arrow_reader(
+        const std::vector<int32_t>& str_as_dict_cols = {},
+        bool create_dict_from_string = false,
+        const std::vector<int32_t>& allow_unsafe_dt_to_ts_cast_cols = {});
 
     /**
      * Helper Function to Upcast Runtime Data to Expected Reader Schema
