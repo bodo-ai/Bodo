@@ -22,8 +22,8 @@ public class LikeCodeGen {
   public static String generateLikeCode(
       String opName, String expr, String SQLRegex, String SQLEscape) {
     StringBuilder likeParts = new StringBuilder();
-    boolean patternRegex = (opName == "REGEXP" || opName == "RLIKE");
-    boolean caseInsensitive = (opName == "ILIKE");
+    boolean patternRegex = (opName.equals("REGEXP") || opName.equals("RLIKE"));
+    boolean caseInsensitive = (opName.equals("ILIKE"));
     if (patternRegex) {
       // Note we ignore SQLEscape because it is not a valid argument to these functions.
       likeParts.append("bodo.libs.bodosql_array_kernels.regexp_like(").append(expr);

@@ -129,10 +129,12 @@ public class ExprTypeVisitor {
           "IF",
           "IFF",
           "IFNULL",
+          "ILIKE",
           "INITCAP",
           "INSERT",
           "INSTR",
           "LEFT",
+          "LIKE",
           "LOG",
           "LPAD",
           "LTRIM",
@@ -349,7 +351,8 @@ public class ExprTypeVisitor {
         || node.getOperator() instanceof SqlCaseOperator
         || node.getOperator() instanceof SqlSubstringFunction
         || node.getOperator() instanceof SqlDatetimePlusOperator
-        || node.getOperator() instanceof SqlDatetimeSubtractionOperator) {
+        || node.getOperator() instanceof SqlDatetimeSubtractionOperator
+        || node.getOperator() instanceof SqlLikeOperator) {
       // Binary, Case, and substring operators compute the meet of the operands.
       BodoSQLExprType.ExprType exprType = BodoSQLExprType.ExprType.SCALAR;
       for (RexNode operand : node.operands) {
@@ -359,9 +362,8 @@ public class ExprTypeVisitor {
       exprTypes.put(key, exprType);
     } else if (node.getOperator() instanceof SqlPostfixOperator
         || node.getOperator() instanceof SqlPrefixOperator
-        || node.getOperator() instanceof SqlCastFunction
-        || node.getOperator() instanceof SqlLikeOperator) {
-      // Postfix, Prefix, Like and Cast operators are the same as operand 0
+        || node.getOperator() instanceof SqlCastFunction) {
+      // Postfix, Prefix and Cast operators are the same as operand 0
       RexNode child = node.operands.get(0);
       String childKey = generateRexNodeKey(child, id);
       exprTypes.put(key, exprTypes.get(childKey));
