@@ -807,7 +807,7 @@ def test_to_sql_table_name(table_names):
 
 
 @pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
-@pytest.mark.parametrize("df_size", [17000 * 3, 2])
+@pytest.mark.parametrize("df_size", [17000 * 3, 2, 0])
 @pytest.mark.parametrize("sf_write_overlap", [True, False])
 @pytest.mark.parametrize("sf_write_use_put", [True, False])
 @pytest.mark.parametrize("snowflake_user", [1, pytest.param(3, marks=pytest.mark.slow)])
@@ -817,6 +817,7 @@ def test_to_sql_snowflake(
     """
     Tests that df.to_sql works as expected. Since Snowflake has a limit of ~16k
     per insert, we insert 17k rows per rank to emulate a "large" insert.
+    We also test for the empty dataframe case.
     """
 
     # Skip test if env vars with snowflake creds required for this test are not set.
