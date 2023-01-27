@@ -227,6 +227,7 @@ def test_tpch_q4(tpch_data, spark_info, memory_leak_check):
                        o_orderpriority
                      order by
                        o_orderpriority
+
     """
     bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
