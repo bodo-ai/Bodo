@@ -240,7 +240,7 @@ public class Utils {
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float32";
         } else {
-          dtype = "np.float32";
+          dtype = "pd.Float32Dtype()";
         }
         break;
       case DOUBLE:
@@ -248,7 +248,7 @@ public class Utils {
         if (outputScalar) {
           dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_float64";
         } else {
-          dtype = "np.float64";
+          dtype = "pd.Float64Dtype()";
         }
         break;
       case DATE:
