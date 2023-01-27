@@ -24,7 +24,7 @@ test_arrs = [
             -139,
         ]
     ),
-    pd.Series([1, -1, 0.1, -0.1, 1234, np.nan, -4321, 3], dtype=np.float32),
+    pd.Series([1, -1, 0.1, -0.1, 1234, pd.NA, -4321, 3], dtype=pd.Float32Dtype()),
     pd.Series([-1, 0, 1, None, 2], dtype=pd.Int32Dtype()),
 ]
 
@@ -81,6 +81,9 @@ def test_trig_single_arg_funcs(arr, func, memory_leak_check):
         py_output=conv_answer,
         check_dtype=False,
         reset_index=True,
+        # This test can output NaN, so we don't convert to nullable float
+        # as this will be coerced to NA.
+        convert_to_nullable_float=False,
     )
 
 

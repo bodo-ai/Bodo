@@ -163,7 +163,7 @@ def create_trig_func_overload(func_name):
         func_name = func_name.lower()
 
         def overload_func(arr):
-            """Handles cases where func_name recieves an optional argument and forwards
+            """Handles cases where func_name receives an optional argument and forwards
             to the appropriate version of the real implementation"""
             if isinstance(arr, types.optional):
                 return unopt_argument(
@@ -183,7 +183,7 @@ def create_trig_func_overload(func_name):
         func_name = func_name.lower()
 
         def overload_func(arr0, arr1):
-            """Handles cases where func_name recieves optional arguments and forwards
+            """Handles cases where func_name receives optional arguments and forwards
             to the appropriate version of the real implementation"""
             args = [arr0, arr1]
             for i in range(2):
@@ -262,7 +262,10 @@ def create_trig_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
-            out_dtype = types.Array(bodo.float64, 1, "C")
+            if bodo.libs.float_arr_ext._use_nullable_float:
+                out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+            else:
+                out_dtype = types.Array(bodo.float64, 1, "C")
 
             return gen_vectorized(
                 arg_names, arg_types, propagate_null, scalar_text, out_dtype
@@ -283,7 +286,10 @@ def create_trig_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
-            out_dtype = types.Array(bodo.float64, 1, "C")
+            if bodo.libs.float_arr_ext._use_nullable_float:
+                out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+            else:
+                out_dtype = types.Array(bodo.float64, 1, "C")
 
             return gen_vectorized(
                 arg_names,

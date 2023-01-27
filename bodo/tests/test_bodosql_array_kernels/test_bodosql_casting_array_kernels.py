@@ -205,12 +205,21 @@ def test_cast_float64(numeric_arrays, memory_leak_check):
         else:
             return np.float64(elem)
 
-    answer = vectorized_sol(args, float64_scalar_fn, None)
+    answer = vectorized_sol(args, float64_scalar_fn, "Float64")
+    check_dtype = True
+    arg = numeric_arrays[0]
+    if isinstance(arg, pd.Series) and isinstance(arg.iloc[0], str):
+        # The str example tests casting "NaN" -> np.nan. If we set
+        # dtype="Float64" then Pandas will cast this to pd.NA.
+        # As a result we just compare with float64
+        check_dtype = False
+        answer = answer.astype(np.float64)
+
     check_func(
         impl,
         args,
         py_output=answer,
-        check_dtype=True,
+        check_dtype=check_dtype,
         reset_index=True,
         convert_to_nullable_float=False,
     )
@@ -233,13 +242,22 @@ def test_cast_float32(numeric_arrays, memory_leak_check):
         else:
             return np.float32(elem)
 
-    answer = vectorized_sol(args, float32_scalar_fn, None)
+    answer = vectorized_sol(args, float32_scalar_fn, "Float32")
+    check_dtype = True
+    arg = numeric_arrays[0]
+    if isinstance(arg, pd.Series) and isinstance(arg.iloc[0], str):
+        # The str example tests casting "NaN" -> np.nan. If we set
+        # dtype="Float32" then Pandas will cast this to pd.NA.
+        # As a result we just compare with float64
+        check_dtype = False
+        answer = answer.astype(np.float32)
     check_func(
         impl,
         args,
         py_output=answer,
-        check_dtype=False,
+        check_dtype=check_dtype,
         reset_index=True,
+        convert_to_nullable_float=False,
     )
 
 

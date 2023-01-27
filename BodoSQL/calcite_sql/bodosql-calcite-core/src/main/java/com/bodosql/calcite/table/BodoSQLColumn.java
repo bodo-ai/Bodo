@@ -336,9 +336,9 @@ public interface BodoSQLColumn {
         case UINT64:
           return "UInt64";
         case FLOAT32:
-          return "float32";
+          return "Float32";
         case FLOAT64:
-          return "float64";
+          return "Float64";
         case BOOL8:
           return "boolean";
         case STRING:

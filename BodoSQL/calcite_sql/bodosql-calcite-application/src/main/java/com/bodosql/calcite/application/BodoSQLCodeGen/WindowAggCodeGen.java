@@ -808,12 +808,14 @@ public class WindowAggCodeGen {
         case "VAR_SAMP":
         case "VARIANCE_SAMP":
         case "VARIANCE_POP":
-          funcText.append("np.empty(" + partitionLength + ", dtype=np.float64)\n");
+          funcText.append(
+              "bodo.libs.float_arr_ext.alloc_float_array(" + partitionLength + ", bodo.float64)\n");
           break;
 
           // The functions that always have a (positive) integer output
         case "COUNT(*)":
-          funcText.append("np.empty(" + partitionLength + ", dtype=np.uint32)\n");
+          funcText.append(
+              "bodo.libs.int_arr_ext.alloc_int_array(" + partitionLength + ", bodo.uint32)\n");
           break;
 
           // If MIN/MAX, verify that the inputs are not strings
