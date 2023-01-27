@@ -4479,6 +4479,7 @@ def to_sql_overload(
     # PUT command later to perform the actual upload
     func_text += "        ev_upload_df = tracing.Event('upload_df', is_parallel=False)           \n"
     func_text += "        upload_threads_in_progress = []\n"
+    func_text += "        num_files = len(range(0, len(df), chunksize))\n"
     func_text += "        for chunk_idx, i in enumerate(range(0, len(df), chunksize)):           \n"
 
     # Create a unique filename for uploaded chunk with quotes/backslashes escaped
@@ -4566,13 +4567,19 @@ def to_sql_overload(
 
     # Generate snowflake schema from bodo datatypes.
     sf_schema = bodo.io.snowflake.gen_snowflake_schema(df.columns, df.data)
+
+    # Compute the total number of files written.
+    func_text += (
+        "        sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)\n"
+    )
+    func_text += "        num_files_global = bodo.libs.distributed_api.dist_reduce(num_files, np.int32(sum_op))\n"
     # In object mode on rank 0: Create a new table if needed, execute COPY_INTO,
     # and clean up created internal stage.
     func_text += (
         "        with bodo.objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
         f"                cursor, stage_name, location, {sf_schema},\n"
-        "                if_exists, old_creds, tmp_folder,\n"
+        "                if_exists, num_files_global, old_creds, tmp_folder,\n"
         "                azure_stage_direct_upload, old_core_site,\n"
         "                old_sas_token,\n"
         "            )\n"

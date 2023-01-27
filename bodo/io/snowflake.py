@@ -1119,9 +1119,25 @@ def execute_copy_into(
     copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()  # type: ignore
 
     # Compute diagnostic output
-    nsuccess = sum(1 if e[1] == "LOADED" else 0 for e in copy_results)
+
+    # We have had instances where the output of 'fetchall' may not have tuples with expected
+    # lengths or values, hence the error handling.
+    def check_chunk_load_success(e) -> int:
+        if isinstance(e, tuple) and (len(e) >= 2) and (e[1] == "LOADED"):
+            return 1
+        return 0
+
+    def check_num_loaded_rows(e) -> int:
+        if isinstance(e, tuple) and len(e) >= 4:
+            try:
+                return int(e[3])
+            except ValueError:  # pragma: no cover
+                return 0
+        return 0
+
+    nsuccess = sum(check_chunk_load_success(e) for e in copy_results)
     nchunks = len(copy_results)
-    nrows = sum(int(e[3]) for e in copy_results)
+    nrows = sum(check_num_loaded_rows(e) for e in copy_results)
     out = (nsuccess, nchunks, nrows, copy_results)
 
     ev.add_attribute("copy_into_nsuccess", nsuccess)
@@ -1129,7 +1145,10 @@ def execute_copy_into(
     ev.add_attribute("copy_into_nrows", nrows)
 
     if os.environ.get("BODO_SF_WRITE_DEBUG") is not None:
-        print(f"[Snowflake Write] copy_into results: {repr(copy_results)}")
+        print(f"[Snowflake Write] COPY INTO results:\n{repr(copy_results)}")
+        print(
+            f"[Snowflake Write] Total rows: {nrows}. Total files processed: {nchunks}. Total files successfully processed: {nsuccess}"
+        )
     ev.finalize()
 
     return out
@@ -1469,6 +1488,7 @@ def create_table_copy_into(
     location: str,
     sf_schema,
     if_exists: str,
+    num_files_uploaded: int,
     old_creds,
     tmp_folder: TemporaryDirectory,
     azure_stage_direct_upload: bool,
@@ -1490,6 +1510,9 @@ def create_table_copy_into(
             "replace": If table exists, drop it, recreate it, and insert data.
                 Create if does not exist
             "append": If table exists, insert data. Create if does not exist
+        num_files_uploaded: Number of files that were uploaded to the stage. We use this
+            to validate that the COPY INTO went through successfully. Also, in case
+            this is 0, we skip the COPY INTO step.
         old_creds (Dict(str, str or None)): Old environment variables to restore.
             Previously overwritten to update credentials for uploading to stage
         tmp_folder: TemporaryDirectory object to clean up
@@ -1523,6 +1546,7 @@ def create_table_copy_into(
             )
             cursor.execute(begin_transaction_sql)
 
+            # Table should be created even if the dataframe is empty.
             create_table_handle_exists(
                 cursor,
                 stage_name,
@@ -1530,15 +1554,25 @@ def create_table_copy_into(
                 sf_schema,
                 if_exists,
             )
-            (nsuccess, nchunks, nrows, copy_into_result) = execute_copy_into(
-                cursor,
-                stage_name,
-                location,
-                sf_schema,
-            )
 
-            if nsuccess != nchunks:
-                raise BodoError(f"Snowflake write copy_into failed: {copy_into_result}")
+            # No point of running COPY INTO if there are no files.
+            if num_files_uploaded > 0:
+                (nsuccess, nchunks, nrows, copy_into_result) = execute_copy_into(
+                    cursor,
+                    stage_name,
+                    location,
+                    sf_schema,
+                )
+
+                if nchunks != num_files_uploaded:
+                    raise BodoError(
+                        f"Snowflake write failed. Expected COPY INTO to have processed {num_files_uploaded} files, but only {nchunks} files were found. Full COPY INTO result:\n{repr(copy_into_result)}"
+                    )
+
+                if nsuccess != nchunks:
+                    raise BodoError(
+                        f"Snowflake write failed. {nchunks} files were loaded, but only {nsuccess} were successful. Full COPY INTO result:\n{repr(copy_into_result)}"
+                    )
 
             commit_transaction_sql = (
                 "COMMIT /* Python:bodo.io.snowflake.create_table_copy_into() */"
