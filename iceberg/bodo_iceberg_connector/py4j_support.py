@@ -3,7 +3,8 @@ Contains information used to access the Java package via py4j.
 """
 import os
 import sys
-from typing import Any, List
+import warnings
+from typing import Any, List, cast
 
 from mpi4py import MPI
 from py4j.java_collections import ListConverter
@@ -17,6 +18,43 @@ CLASSES = {}
 
 # Dictionary mapping table info -> Reader obj
 table_dict = {}
+
+
+def get_java_path() -> str:
+    """
+    Ensure that the Java executable Py4J uses is the OpenJDK package
+    installed in the current conda environment
+    """
+
+    # Currently inside a conda subenvironment
+    if "CONDA_PREFIX" in os.environ:
+        conda_prefix = os.environ["CONDA_PREFIX"]
+        if "JAVA_HOME" in os.environ:
+            java_home = os.environ["JAVA_HOME"]
+            if java_home != os.path.join(conda_prefix, "lib", "jvm"):
+                warnings.warn(
+                    "$JAVA_HOME is currently set to a location that isn't installed by Conda. "
+                    "It is recommended that you use OpenJDK v11 from Conda with the Bodo Iceberg Connector. To do so, first run\n"
+                    "    conda install openjdk=11 -c conda-forge\n"
+                    "and then reactivate your environment via\n"
+                    f"    conda deactivate && conda activate {conda_prefix}"
+                )
+            return os.path.join(java_home, "bin", "java")
+
+        else:
+            warnings.warn(
+                "$JAVA_HOME is currently unset. This occurs when OpenJDK is not installed in your conda environment or when your environment has recently changed by not reactivates. The Bodo Iceberg Connector will default to using you system's Java."
+                "It is recommended that you use OpenJDK v11 from Conda with the Bodo Iceberg Connector. To do so, first run\n"
+                "    conda install openjdk=11 -c conda-forge\n"
+                "and then reactivate your environment via\n"
+                f"    conda deactivate && conda activate {conda_prefix}"
+            )
+            # TODO: In this case, should we default to conda java?
+            return "java"
+
+    # Don't do anything in a pip environment
+    # TODO: Some debug logging would be good here
+    return "java"
 
 
 def launch_jvm():
@@ -35,19 +73,19 @@ def launch_jvm():
         cur_file_path = os.path.dirname(os.path.abspath(__file__))
         full_path = os.path.join(cur_file_path, "jars", "bodo-iceberg-reader.jar")
 
-        # TODO: we do not currently specify a port here. In this case, launch_gateway launches
-        # using an arbitrary free ephemeral port. Launching with specified port can lead to
-        # hangs if the port is already in use, and has caused errors on CI, so we are ommiting it
-        # for now
-
         # Die on exit will close the gateway server when this python process exits or is killed.
         # We don't need to specify a classpath here, as the executable JAR has a baked in default
         # classpath, which will point to the folder that contains all the needed dependencies.
-        gateway_port = launch_gateway(
-            jarpath=full_path,
-            redirect_stderr=sys.stderr,
-            redirect_stdout=sys.stdout,
-            die_on_exit=True,
+        java_path = get_java_path()
+        gateway_port = cast(
+            int,
+            launch_gateway(
+                jarpath=full_path,
+                java_path=java_path,
+                redirect_stderr=sys.stderr,
+                redirect_stdout=sys.stdout,
+                die_on_exit=True,
+            ),
         )
 
         # TODO: Test out auto_convert=True for converting collections (esp lists)
