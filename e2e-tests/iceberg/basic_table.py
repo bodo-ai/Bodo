@@ -69,9 +69,7 @@ def get_spark_iceberg(nessie_token):
 # ------------------------ Cleanup Code ------------------------
 def cleanup_nessie(nessie_token: str, table_name: str):
     spark = get_spark_iceberg(nessie_token)
-    spark.sql(f"DROP TABLE nessie_catalog.{table_name}")
-    fs = pafs.S3FileSystem(region="us-east-1")
-    fs.delete_dir_contents(f"{BUCKET_NAME}/nessie")
+    spark.sql(f"DROP TABLE nessie_catalog.{table_name} PURGE")
 
 
 def cleanup_glue(table_name: str):
@@ -204,10 +202,11 @@ if __name__ == "__main__":
             cleanup_glue(table_name)
             print("Cleaning up Nessie...")
             cleanup_nessie(nessie_token, table_name)
-            print("Successfully Finished Cleanup...")
         except Exception as e:
             cleanup_failed = True
             print(f"Failed During Cleanup...\n{e}", file=sys.stderr)
+        else:
+            print("Successfully Finished Cleanup...")
 
     cleanup_failed = comm.bcast(cleanup_failed)
     if cleanup_failed:

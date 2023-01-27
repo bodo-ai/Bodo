@@ -1,10 +1,12 @@
 import os
 import sys
 import warnings
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from bodo_iceberg_connector.errors import IcebergError, IcebergWarning
+
+CatalogType = Literal["hadoop", "hive", "nessie", "glue"]
 
 
 def _get_first(elems: Dict[str, List[str]], param: str) -> Optional[str]:
@@ -72,31 +74,36 @@ def parse_conn_str(
 
 
 def gen_table_loc(
-    catalog_type: str, warehouse: str, db_name: str, table_name: str
+    catalog_type: CatalogType,
+    warehouse: str,
+    db_name: str,
+    table_name: str,
 ) -> str:
-    """Construct Table Data Location from Warehouse and Connection Info"""
+    """
+    Construct Table Location from Warehouse, Database Schema, and Table Name
+    Note that this should only be used when creating a new table,
+    as we have seen problems with guessing the location in the past
+
+    TODO: Replace once we add PyIceberg
+    """
+
     inner_name = (
-        db_name + ".db"
-        if catalog_type == "glue" or catalog_type == "nessie"
-        else db_name
+        db_name + ".db" if catalog_type == "glue" or catalog_type == "hive" else db_name
     )
 
-    # We attach `data` since C++ code expects the directory
-    # where the parquet files should be written
     return os.path.join(warehouse, inner_name, table_name)
 
 
-def gen_file_loc(
-    catalog_type: str, table_loc: str, db_name: str, table_name: str, file_name: str
-) -> str:
+def gen_file_loc(table_loc: str, db_name: str, table_name: str, file_name: str) -> str:
     """Construct Valid Paths for Files Written to Iceberg"""
 
-    if catalog_type == "hadoop":
-        return os.path.join(db_name, table_name, "data", file_name)
-    elif catalog_type in ["glue", "nessie", "hadoop-s3"]:
+    # S3 warehouse requires absolute file paths
+    if table_loc.startswith("s3a://") or table_loc.startswith("s3://"):
         return os.path.join(table_loc, file_name)
     else:
-        return file_name
+        # TODO: Not sure if this is the best approach
+        # How can we use the table or data location instead?
+        return os.path.join(db_name, table_name, "data", file_name)
 
 
 def normalize_loc(loc: str):

@@ -604,17 +604,9 @@ def get_table_details_before_write(
                 # `iceberg_schema_str` will be empty, so we need to create it
                 # from the PyArrow schema of the dataframe.
                 iceberg_schema_str = connector.pyarrow_to_iceberg_schema_str(df_schema)
-        except connector.IcebergError as e:
-            # Only include Java error info in dev mode because it contains at lot of
-            # unnecessary info about internal packages and dependencies.
-            if (
-                isinstance(e, connector.IcebergJavaError)
-                and numba.core.config.DEVELOPER_MODE
-            ):  # pragma: no cover
-                comm_exc = BodoError(f"{e.message}: {e.java_error}")
-            else:
-                comm_exc = BodoError(e.message)
 
+        except connector.IcebergError as e:
+            comm_exc = BodoError(e.message)
         except Exception as e:
             comm_exc = e
 
