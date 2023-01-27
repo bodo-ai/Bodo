@@ -602,7 +602,10 @@ def regr_valx_util(y, x):
     propogate_null = [True] * 2
     scalar_text = "res[i] = arg1"
 
-    out_dtype = types.Array(bodo.float64, 1, "C")
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    else:
+        out_dtype = types.Array(bodo.float64, 1, "C")
 
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
 
