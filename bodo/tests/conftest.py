@@ -1,4 +1,5 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
+import functools
 import gc
 import glob
 import hashlib
@@ -108,6 +109,10 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodo_14of15,
         pytest.mark.bodo_15of15,
     ]
+    # Sort the collected items. This is needed due to a niche issue with azure CI:
+    # https://bodo.atlassian.net/browse/BE-4190
+    items.sort(key=functools.cmp_to_key(fn_compare))
+
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
@@ -146,6 +151,14 @@ def pytest_collection_modifyitems(items):
             else:
                 group_marker = group_from_hash(testname, num_groups)
             item.add_marker(getattr(pytest.mark, group_marker))
+
+
+def fn_compare(fn1, fn2):
+    # Note, could do some hashing for slightly faster comparisons, but we could end up with
+    # dupe hashes which are sorted differently on different ranks, which would lead to some REALLY
+    # nasty to debug errors, so we're just taking the performance hit, and doing string comparison,
+    # since this doesn't need to be performant
+    return fn1.module.__name__ + str(fn1) < fn2.module.__name__ + str(fn2)
 
 
 def group_from_hash(testname, num_groups):

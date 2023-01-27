@@ -1,4 +1,5 @@
 import datetime
+import functools
 import hashlib
 import os
 import sys
@@ -1686,6 +1687,10 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodosql_10of11,
         pytest.mark.bodosql_11of11,
     ]
+    # Sort the items. This is needed due to a niche issue with azure CI:
+    # https://bodo.atlassian.net/browse/BE-4190
+    items.sort(key=functools.cmp_to_key(bodo.tests.conftest.fn_compare))
+
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is
