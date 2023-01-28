@@ -737,7 +737,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
         return lambda filter_value: f"$${filter_value}$$"  # pragma: no cover
     elif (
         isinstance(filter_type, (types.Integer, types.Float))
-        or filter_value == types.bool_
+        or filter_type == types.bool_
     ):
         # Numeric and boolean values can just return the string representation
         return lambda filter_value: str(filter_value)  # pragma: no cover
