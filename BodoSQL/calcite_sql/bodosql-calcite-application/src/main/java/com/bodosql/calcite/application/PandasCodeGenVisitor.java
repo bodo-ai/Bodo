@@ -2543,6 +2543,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
             assert operandsInfo.size() == 1;
             return getYearWeekFnInfo(operandsInfo.get(0));
           case "MONTHNAME":
+          case "MONTH_NAME":
           case "DAYNAME":
           case "WEEKDAY":
           case "LAST_DAY":

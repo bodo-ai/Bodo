@@ -63,6 +63,7 @@ public class ExprTypeVisitor {
           "MINUTE",
           "MONTH",
           "MONTHNAME",
+          "MONTH_NAME",
           "NEXT_DAY",
           "NULLIF",
           "ORD",
