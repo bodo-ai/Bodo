@@ -1704,6 +1704,11 @@ Bodo SQL currently supports the following Timestamp functions:
 
     Computes the string name of the month of the timestamp value.
 
+#### MONTH_NAME
+-   `MONTH_NAME(timestamp_val)`
+
+    Computes the string name of the month of the timestamp value.
+
 #### TO_DAYS
 -   `TO_DAYS(timestamp_val)`
 
