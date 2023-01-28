@@ -560,6 +560,21 @@ def float_str_overload(v):
         return impl
 
 
+@overload(str)
+def str_bool(v):
+    """support str(boolean)"""
+    # TODO: Move to Numba
+    if v == types.boolean:
+
+        def impl(v):  # pragma: no cover
+            if v:
+                return "True"
+            else:
+                return "False"
+
+        return impl
+
+
 @overload(format, no_unliteral=True)
 def overload_format(value, format_spec=""):
     """overload python's 'format' builtin function (using objmode if necessary)"""

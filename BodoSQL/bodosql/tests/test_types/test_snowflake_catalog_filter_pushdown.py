@@ -877,3 +877,80 @@ def test_snowflake_ilike_non_constant_pushdown(
                 stream, "Filter pushdown successfully performed. Moving filter step:"
             )
             check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that queries with WHERE using a boolean column supports
+    filter pushdown.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {
+            "A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10,
+            "B": [True, False, False, True] * 10,
+            "C": [True, True, True, False] * 10,
+        }
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(new_df, "where_column_table", db, schema) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        query1 = f"Select a from {table_name} where b"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.b][["a"]]
+            check_func(
+                impl,
+                (bc, query1),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query2 = f"Select a from {table_name} where b or c"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.b | py_output.c][["a"]]
+            check_func(
+                impl,
+                (bc, query2),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query3 = f"Select a from {table_name} where b and c"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.b & py_output.c][["a"]]
+            check_func(
+                impl,
+                (bc, query3),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")

@@ -620,19 +620,18 @@ class TypingTransforms:
         # BodoSQL generates wrappers around exprs like Series.values that need removed
         index_def = self._remove_series_wrappers_from_def(index_def)
         value_def = guard(get_definition, self.func_ir, rhs.value)
-        index_call_name = None
-        # Check call expresions for isna, isnull, notna, notnull, and isin.
-        if is_call(index_def):
-            index_call_name = guard(
-                find_callname, self.func_ir, index_def, self.typemap
-            )
-
+        # If we have a constant filter it cannot be a boolean filter.
+        if not isinstance(rhs.index, ir.Var):
+            return nodes + [assign]
+        index_typ = self.typemap.get(rhs.index.name, None)
+        # If we cannot determine the type we will try again later.
+        if index_typ in (None, types.unknown, types.undefined):
+            self.needs_transform = True
+            return nodes + [assign]
+        # If our filter is a boolean array or series then we can perform filter pushdown.
         if (
-            self._is_logical_op_filter_pushdown(index_def)
-            or self._is_na_filter_pushdown_func(index_def, index_call_name)
-            or self._is_isin_filter_pushdown_func(index_def, index_call_name)
-            or self._starts_ends_with_filter_pushdown_func(index_def, index_call_name)
-            or self._is_like_filter_pushdown_func(index_def, index_call_name)
+            bodo.utils.utils.is_array_typ(index_typ, True)
+            and index_typ.dtype == types.boolean
         ):
             pushdown_results = guard(
                 self._follow_patterns_to_init_dataframe, assign, self.func_ir
@@ -826,7 +825,7 @@ class TypingTransforms:
         # If we don't have a binary operation, then we just pass
         # the single def as the index_def and set the lhs_def
         # and rhs_def to none.
-        if self._is_logical_op_filter_pushdown(index_def):
+        if self._is_logical_op_filter_pushdown(index_def, func_ir):
             lhs_def = get_definition(func_ir, get_binop_arg(index_def, 0))
             lhs_def = self._remove_series_wrappers_from_def(lhs_def)
             rhs_def = get_definition(func_ir, get_binop_arg(index_def, 1))
@@ -1153,9 +1152,9 @@ class TypingTransforms:
         be excluded from filter dependency reordering
         """
         # e.g. (df["A"] == 3) | (df["A"] == 4)
-        if self._is_or_filter_pushdown(index_def) or self._is_and_filter_pushdown(
-            index_def
-        ):
+        if self._is_or_filter_pushdown(
+            index_def, func_ir
+        ) or self._is_and_filter_pushdown(index_def, func_ir):
             left_nodes = self._get_filter_nodes(
                 self._remove_series_wrappers_from_def(
                     get_definition(func_ir, get_binop_arg(index_def, 0))
@@ -1171,12 +1170,65 @@ class TypingTransforms:
             return {index_def} | left_nodes | right_nodes
         return {index_def}
 
+    def _get_column_filter(
+        self,
+        col_def: ir.Expr,
+        func_ir: ir.FunctionIR,
+        df_var: ir.Var,
+        df_col_names,
+        is_sql_op: bool,
+        new_ir_assigns: List[ir.Stmt],
+    ) -> Tuple[str, str, ir.Var]:
+        """Function used by _get_partition_filters to extract filters
+        related to columns with boolean data. Returns a single filter
+        comparing the boolean column to True.
+
+        Args:
+            col_def (ir.Expr): The IR expression for the column. There may be a transformation
+                function on the column.
+            func_ir (ir.FunctionIR): The function IR used for traversing definitions and calls.
+            df_var (ir.Var): The DataFrame variable to check for columns
+            df_col_names (N Tuple[str, ...]): A tuple of column names for the DataFrame.
+            is_sql_op (bool): Should the equality operator have SQL or arrow syntax.
+            new_ir_assigns (List[ir.Stmt]): List of statements to add the IR when new IR variables
+                must be created. This is update with the True variable.
+
+        Returns:
+            Tuple[str, str, ir.Var]: The filter for a column with a boolean output type.
+        """
+        colname = guard(self._get_col_name, col_def, df_var, df_col_names, func_ir)
+        require(colname)
+        # Verify that the column has a boolean type.
+        df_typ = self.typemap[df_var.name]
+        col_num = df_typ.column_index[colname]
+        col_typ = df_typ.data[col_num]
+        require(
+            bodo.utils.utils.is_array_typ(col_typ, False)
+            and col_typ.dtype == types.boolean
+        )
+
+        # Generate a == TRUE for the column. This allows using the partition filters in
+        # Arrow.
+        # Generate the True variable.
+        # Create a new IR Expr for the constant pattern.
+        expr_value = ir.Const(True, col_def.loc)
+        # Generate a variable from the Expr
+        new_name = mk_unique_var("true_var")
+        new_var = ir.Var(ir.Scope(None, col_def.loc), new_name, col_def.loc)
+        new_assign = ir.Assign(target=new_var, value=expr_value, loc=col_def.loc)
+        # Append the assign so we update the IR.
+        new_ir_assigns.append(new_assign)
+        # Update the definitions. This is safe since the name is unique.
+        func_ir._definitions[new_name] = [expr_value]
+        cond = (colname, "=" if is_sql_op else "==", new_var)
+        return cond
+
     def _get_call_filter(
         self, call_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
     ):
         """
         Function used by _get_partition_filters to extract filters
-        related to series method calls.
+        related to series or array method calls.
 
         Currently this supports null related filters and isin.
         """
@@ -1205,7 +1257,7 @@ class TypingTransforms:
             "bodo.libs.bodosql_array_kernels",
         ):  # pragma: no cover
             return self._get_bodosql_array_kernel_is_in_filter(
-                call_list, call_def, func_ir, df_var, df_col_names
+                call_def, func_ir, df_var, df_col_names
             )
         elif call_list[0] in ("startswith", "endswith"):  # pragma: no cover
             return self._get_starts_ends_with_filter(
@@ -1258,7 +1310,7 @@ class TypingTransforms:
         return (colname, op, list_set_arg)
 
     def _get_bodosql_array_kernel_is_in_filter(
-        self, call_list, call_def, func_ir, df_var, df_col_names
+        self, call_def, func_ir, df_var, df_col_names
     ):  # pragma: no cover
         """
         Function used by _get_partition_filters to extract isin related
@@ -1451,7 +1503,6 @@ class TypingTransforms:
         https://arrow.apache.org/docs/python/generated/pyarrow.parquet.ParquetDataset.html#pyarrow.parquet.ParquetDataset
         Throws GuardException if not possible.
         """
-        require(is_expr(index_def, "binop") or is_call(index_def))
         is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
         # Iceberg uses arrow operators instead of SQL operators.
         is_sql_op = is_sql and read_node.db_type != "iceberg"
@@ -1471,7 +1522,7 @@ class TypingTransforms:
             Function that abstracts away the recursive steps of getting the filters
             from the child exprs of index_def.
             """
-            if self._is_logical_op_filter_pushdown(child_def):
+            if self._is_logical_op_filter_pushdown(child_def, func_ir):
                 l_def = get_definition(func_ir, get_binop_arg(child_def, 0))
                 l_def = self._remove_series_wrappers_from_def(l_def)
                 r_def = get_definition(func_ir, get_binop_arg(child_def, 1))
@@ -1479,7 +1530,7 @@ class TypingTransforms:
                 child_or = self._get_partition_filters(
                     child_def, df_var, l_def, r_def, func_ir, read_node, new_ir_assigns
                 )
-            else:
+            elif self._is_call_op_filter_pushdown(child_def, func_ir):
                 child_or = [
                     [
                         self._get_call_filter(
@@ -1492,20 +1543,33 @@ class TypingTransforms:
                         )
                     ]
                 ]
+            else:
+                child_or = [
+                    [
+                        self._get_column_filter(
+                            child_def,
+                            func_ir,
+                            df_var,
+                            df_col_names,
+                            is_sql_op,
+                            new_ir_assigns,
+                        )
+                    ]
+                ]
             return child_or
 
-        if self._is_logical_op_filter_pushdown(index_def):
-            if self._is_or_filter_pushdown(index_def):
+        if self._is_logical_op_filter_pushdown(index_def, func_ir):
+            if self._is_or_filter_pushdown(index_def, func_ir):
                 left_or = get_child_filter(lhs_def)
                 right_or = get_child_filter(rhs_def)
                 return left_or + right_or
 
             # And case: distribute Or over And to normalize if needed
-            if self._is_and_filter_pushdown(index_def):
+            if self._is_and_filter_pushdown(index_def, func_ir):
 
                 # rhs is Or
                 # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
-                if self._is_or_filter_pushdown(rhs_def):
+                if self._is_or_filter_pushdown(rhs_def, func_ir):
                     # lhs And rhs.lhs (A And B)
                     new_lhs = ir.Expr.binop(
                         operator.and_,
@@ -1546,7 +1610,7 @@ class TypingTransforms:
 
                 # lhs is Or
                 # e.g. "(B Or C) And A" -> "(B And A) Or (C And A)"
-                if self._is_or_filter_pushdown(lhs_def):
+                if self._is_or_filter_pushdown(lhs_def, func_ir):
                     # lhs.lhs And rhs (B And A)
                     new_lhs = ir.Expr.binop(
                         operator.and_,
@@ -1601,7 +1665,7 @@ class TypingTransforms:
                 return filters
 
         # TODO: Support NOT
-        if self._is_cmp_op_filter_pushdown(index_def):
+        if self._is_cmp_op_filter_pushdown(index_def, func_ir):
             lhs = get_binop_arg(index_def, 0)
             rhs = get_binop_arg(index_def, 1)
             left_colname = guard(self._get_col_name, lhs, df_var, df_col_names, func_ir)
@@ -1623,8 +1687,13 @@ class TypingTransforms:
                 self.func_ir,
             )
             cond = (colname, op, scalar)
-        else:
+        elif self._is_call_op_filter_pushdown(index_def, func_ir):
             cond = self._get_call_filter(
+                index_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
+            )
+        else:
+            # Filter pushdown is just on a boolean column.
+            cond = self._get_column_filter(
                 index_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
             )
 
@@ -1689,7 +1758,7 @@ class TypingTransforms:
             fdef = find_callname(func_ir, var_def)
             # calling pd.to_datetime() on a string column is possible since pyarrow
             # matches the data types before filter comparison (in this case, calls
-            # pd.Timestamp on partiton's string value)
+            # pd.Timestamp on partition's string value)
             # BodoSQL generates pd.Series(arr) calls for expressions
             if fdef in (("to_datetime", "pandas"), ("Series", "pandas")):
                 # We don't want to perform filter pushdown if there is a format argument
@@ -4584,7 +4653,45 @@ class TypingTransforms:
             )
         )
 
-    def _is_logical_op_filter_pushdown(self, index_def: ir.Expr) -> bool:
+    def _is_call_op_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """Performs an equality check on the index_def expr with the possible
+        call expressions that represent filters.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid call filter.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid logical operator?
+        """
+        if is_expr(index_def, "call"):
+            call_list = find_callname(func_ir, index_def, self.typemap)
+            if len(call_list) == 2 and (
+                isinstance(call_list[1], ir.Var)
+                # checking call_list[1] == "pandas" to handle pd.isna/pd.notna cases generated
+                # by BodoSQL
+                or call_list[1] == "pandas"
+                or call_list[1] == "bodo.libs.bodosql_array_kernels"
+            ):
+                return call_list[0] in (
+                    "notna",
+                    "isna",
+                    "notnull",
+                    "isnull",
+                    "isin",
+                    "startswith",
+                    "endswith",
+                ) or call_list in (
+                    ("is_in", "bodo.libs.bodosql_array_kernels"),
+                    ("like_kernel", "bodo.libs.bodosql_array_kernels"),
+                )
+        return False
+
+    def _is_logical_op_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
         """Performs an equality check on the index_def expr with the possible
         logical operators (AND, OR, or a comparison operator). This also supports
         the equivalent BodoSQL array kernels to ensure that
@@ -4593,17 +4700,20 @@ class TypingTransforms:
 
         Args:
             index_def (ir.Expr): The expression that may be a valid logical operation
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
 
         Returns:
             bool: Is this expression a valid logical operator?
         """
         return (
-            self._is_cmp_op_filter_pushdown(index_def)
-            or self._is_and_filter_pushdown(index_def)
-            or self._is_or_filter_pushdown(index_def)
+            self._is_cmp_op_filter_pushdown(index_def, func_ir)
+            or self._is_and_filter_pushdown(index_def, func_ir)
+            or self._is_or_filter_pushdown(index_def, func_ir)
         )
 
-    def _is_cmp_op_filter_pushdown(self, index_def: ir.Expr) -> bool:
+    def _is_cmp_op_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
         """
         Performs an equality check on the index_def expr with the valid
         comparison operators (e.g. !=) or their equivalent BodoSQL array kernels
@@ -4613,6 +4723,7 @@ class TypingTransforms:
 
         Args:
             index_def (ir.Expr): The expression that may be a valid comparison operation.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
 
         Returns:
             bool: Is this expression a valid comparison operation?
@@ -4627,7 +4738,7 @@ class TypingTransforms:
                 operator.ge,
             )
         elif is_call(index_def):
-            call_name = guard(find_callname, self.func_ir, index_def, self.typemap)
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
             if (
                 len(call_name) == 2
                 and call_name[1] == "bodo.libs.bodosql_array_kernels"
@@ -4642,7 +4753,9 @@ class TypingTransforms:
                 )
         return False
 
-    def _is_and_filter_pushdown(self, index_def: ir.Expr) -> bool:
+    def _is_and_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
         """
         Performs an equality check on the index_def expr with & / AND,
         depending on whether the operator is a binop or a function call respectively.
@@ -4650,6 +4763,7 @@ class TypingTransforms:
 
         Args:
             index_def (ir.Expr): The expression that may be a valid AND operation.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
 
         Returns:
             bool: Is this expression a valid AND operation?
@@ -4657,12 +4771,14 @@ class TypingTransforms:
         if is_expr(index_def, "binop"):
             return index_def.fn == operator.and_
         elif is_call(index_def):
-            call_name = guard(find_callname, self.func_ir, index_def, self.typemap)
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
             return call_name == ("booland", "bodo.libs.bodosql_array_kernels")
         else:
             return False
 
-    def _is_or_filter_pushdown(self, index_def: ir.Expr) -> bool:
+    def _is_or_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
         """
         Performs an equality check on the index_def expr with | / OR,
         depending on whether the operator is a binop or a function call respectively.
@@ -4670,6 +4786,7 @@ class TypingTransforms:
 
         Args:
             index_def (ir.Expr): The expression that may be a valid OR operation.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
 
         Returns:
             bool: Is this expression a valid OR operation?
@@ -4677,7 +4794,7 @@ class TypingTransforms:
         if is_expr(index_def, "binop"):
             return index_def.fn == operator.or_
         elif is_call(index_def):
-            call_name = guard(find_callname, self.func_ir, index_def, self.typemap)
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
             return call_name == ("boolor", "bodo.libs.bodosql_array_kernels")
         else:
             return False
