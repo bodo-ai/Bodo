@@ -15,13 +15,14 @@ public class DatetimeFnCodeGen {
           "DAYNAME",
           "LAST_DAY",
           "MONTHNAME",
+          "MONTH_NAME",
           "NEXT_DAY",
           "PREVIOUS_DAY",
           "WEEKDAY",
           "YEAROFWEEK",
           "YEAROFWEEKISO");
 
-  // HashMap of all trig functions which maps to array kernels
+  // HashMap of all datetime functions which maps to array kernels
   // which handle all combinations of scalars/arrays/nulls.
   static HashMap<String, String> equivalentFnMap = new HashMap<>();
 
@@ -29,6 +30,8 @@ public class DatetimeFnCodeGen {
     for (String fn : fnList) {
       if (fn.equals("YEAROFWEEK")) {
         equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.get_year");
+      } else if (fn.equals("MONTH_NAME")) {
+        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.monthname");
       } else {
         equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels." + fn.toLowerCase());
       }

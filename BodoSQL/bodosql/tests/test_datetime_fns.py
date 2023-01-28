@@ -732,10 +732,20 @@ def test_dayname_scalars(basic_df, spark_info, memory_leak_check):
     )
 
 
-def test_monthname_cols(spark_info, dt_fn_dataframe, memory_leak_check):
+@pytest.mark.parametrize(
+    "fn_name", ["MONTHNAME", pytest.param("MONTH_NAME", marks=pytest.mark.slow)]
+)
+@pytest.mark.parametrize("wrap_case", [True, False])
+def test_monthname_cols(
+    fn_name, wrap_case, spark_info, dt_fn_dataframe, memory_leak_check
+):
     """tests the monthname function on column inputs. Needed since the equivalent function has different syntax"""
 
-    query = "SELECT MONTHNAME(timestamps) from table1"
+    if wrap_case:
+        query = f"SELECT CASE WHEN timestamps IS NULL THEN {fn_name}(timestamps) else {fn_name}(timestamps) END FROM table1"
+    else:
+        query = f"SELECT {fn_name}(timestamps) from table1"
+
     spark_query = "SELECT DATE_FORMAT(timestamps, 'MMMM') from table1"
 
     check_query(
@@ -748,11 +758,12 @@ def test_monthname_cols(spark_info, dt_fn_dataframe, memory_leak_check):
     )
 
 
-def test_monthname_scalars(basic_df, spark_info, memory_leak_check):
+@pytest.mark.parametrize("fn_name", ["MONTHNAME", "MONTH_NAME"])
+def test_monthname_scalars(fn_name, basic_df, spark_info, memory_leak_check):
     """tests the monthname function on scalar inputs. Needed since the equivalent function has different syntax"""
 
     # since monthname is a fn we defined, don't need to worry about calcite performing optimizations
-    query = "SELECT MONTHNAME(TIMESTAMP '2021-03-03'), MONTHNAME(TIMESTAMP '2021-03-13'), MONTHNAME(TIMESTAMP '2021-03-01')"
+    query = f"SELECT {fn_name}(TIMESTAMP '2021-03-03'), {fn_name}(TIMESTAMP '2021-03-13'), {fn_name}(TIMESTAMP '2021-03-01')"
     spark_query = "SELECT DATE_FORMAT('2021-03-03', 'MMMM'), DATE_FORMAT('2021-03-13', 'MMMM'), DATE_FORMAT('2021-03-01', 'MMMM')"
 
     check_query(
@@ -2512,7 +2523,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
     2. SELECT A, CASE WHEN B THEN WEEK(A) ELSE NULL END, ... from table1
     """
     calculations = []
-    for func in ["WEEK", "QUARTER", "DAYNAME", "MONTHNAME"]:
+    for func in ["WEEK", "QUARTER", "DAYNAME", "MONTHNAME", "MONTH_NAME"]:
         if case:
             calculations.append(f"CASE WHEN B THEN {func}(A) ELSE NULL END")
         else:
