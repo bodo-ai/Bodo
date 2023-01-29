@@ -471,6 +471,12 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
                         # build_tuple doesn't have any side effects
                         if isinstance(rhs, ir.Expr) and rhs.op == "build_tuple":
                             continue
+                        # build_set doesn't have any side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op == "build_set":
+                            continue
+                        # build_list doesn't have any side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op == "build_list":
+                            continue
                         # Binary operators are safe to remove because they don't have any
                         # side effects
                         if isinstance(rhs, ir.Expr) and rhs.op == "binop":
@@ -486,6 +492,13 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
                             "getitem",
                         ):
                             continue
+                        # All BodoSQL array kernels don't have side effects
+                        if isinstance(rhs, ir.Expr) and rhs.op == "call":
+                            call_name = guard(find_callname, func_ir, rhs, typemap)
+                            if call_name is not None and call_name[1:] == (
+                                "bodo.libs.bodosql_array_kernels",
+                            ):
+                                continue
                     if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
                         continue
 
