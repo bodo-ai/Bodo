@@ -65,13 +65,11 @@ public class LiteralCodeGen {
           case INTERVAL_MONTH:
           case INTERVAL_YEAR_MONTH:
           case NULL:
-            codeBuilder.append("None");
-            break;
           case FLOAT:
           case REAL:
           case DOUBLE:
           case DECIMAL:
-            codeBuilder.append("np.nan");
+            codeBuilder.append("None");
             break;
           default:
             throw new BodoSQLCodegenException(
