@@ -51,6 +51,7 @@ def test_numeric_window_functions(
         check_names=False,
         return_codegen=True,
         only_jit_1DVar=True,
+        convert_expected_output_to_nullable_float=False,
     )["pandas_code"]
 
     # Verify that fusion is working correctly. The term window_frames[1] refers

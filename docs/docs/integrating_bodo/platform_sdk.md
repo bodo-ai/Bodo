@@ -411,6 +411,7 @@ Module responsible for managing clusters in workspace.
 <!-- - [get cluster](#get-cluster) -->
 <!-- - [remove cluster](#remove-cluster) -->
 <!-- - [scale cluster](#scale-cluster) -->
+<!-- - [list jobs for cluster](#list-jobs-for-cluster) -->
 
 ##### Available instance types {#available-instance-types}
 
@@ -553,6 +554,37 @@ scale_cluster = ScaleCluster(
     workers_quantity=NEW_WORKERS_QUANTITY
 )
 cluster: ClusterResponse = client.cluster.scale(scale_cluster)
+```
+
+##### List jobs for a cluster {#list-jobs-for-cluster}
+```BodoClient.cluster.list_jobs(uuid)```
+
+Gets all jobs for cluster
+
+```python3
+from bodosdk.models import WorkspaceKeys, JobResponse
+from bodosdk.client import get_bodo_client
+
+keys = WorkspaceKeys(
+    client_id='XYZ',
+    secret_key='XYZ'
+)
+client = get_bodo_client(keys)
+jobs: List[JobResponse] = client.cluster.list_jobs(uuid)
+```
+
+Get active jobs for cluster
+
+```python3
+from bodosdk.models import WorkspaceKeys, JobResponse, JobStatus
+from bodosdk.client import get_bodo_client
+
+keys = WorkspaceKeys(
+    client_id='XYZ',
+    secret_key='XYZ'
+)
+client = get_bodo_client(keys)
+jobs: List[JobResponse] = client.cluster.list_jobs(uuid, status=[JobStatus.NEW, JobStatus.INPROGRESS])
 ```
 
 ### Workspace resource {#workspace-resource}

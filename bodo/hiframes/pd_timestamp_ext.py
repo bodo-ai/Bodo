@@ -1619,17 +1619,20 @@ def series_str_td64_astype(data):  # pragma: no cover
 @numba.njit
 def datetime_datetime_to_dt64(val):  # pragma: no cover
     """convert datetime.datetime to np.datetime64"""
-    with numba.objmode(res='NPDatetime("ns")'):
-        res = np.datetime64(val).astype("datetime64[ns]")
-
-    return res
+    return integer_to_dt64(pd.Timestamp(val).value)
 
 
 @register_jitable
 def datetime_date_arr_to_dt64_arr(arr):  # pragma: no cover
     """convert array of datetime.date to np.datetime64"""
-    with numba.objmode(res='NPDatetime("ns")[::1]'):
-        res = np.array(arr, dtype="datetime64[ns]")
+    n = len(arr)
+    res = np.empty(n, bodo.datetime64ns)
+    for i in range(n):
+        if bodo.libs.array_kernels.isna(arr, i):
+            bodo.libs.array_kernels.setna(res, i)
+            continue
+        res[i] = integer_to_dt64(pd.Timestamp(arr[i]).value)
+
     return res
 
 
@@ -1654,6 +1657,8 @@ def to_datetime_scalar(
     separate call to avoid adding extra basic blocks to user function for simplicity
     """
     with numba.objmode(t="pd_timestamp_tz_naive_type"):
+        # A `tz_localize(None)` is required to handle inputs with a tz offset
+        # because the return type is a naive timestamp.
         t = pd.to_datetime(
             a,
             errors=errors,
@@ -1666,7 +1671,7 @@ def to_datetime_scalar(
             infer_datetime_format=infer_datetime_format,
             origin=origin,
             cache=cache,
-        )
+        ).tz_localize(None)
     return t
 
 

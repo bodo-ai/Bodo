@@ -12,9 +12,6 @@ from bodosql.tests.utils import check_query
 
 @pytest.fixture(
     params=[
-        #  currently not supported, we may add support for timedeltas greater then one month later
-        # ("1 YEAR", pd.Timedelta(365, "D")),
-        # ("1 MONTH", pd.Timedelta(31, "D")),
         ("1 DAY", pd.Timedelta(1, "D")),
         ("1 HOUR", pd.Timedelta(1, "H")),
         ("1 MINUTE", pd.Timedelta(1, "m")),
@@ -48,7 +45,6 @@ def test_timestamp_literals(
     )
 
 
-@pytest.mark.skip("[BS-173] issues with extract on ")
 def test_timestamp_literals_extract(
     basic_df, timestamp_literal_strings, spark_info, memory_leak_check
 ):
@@ -73,10 +69,10 @@ def test_timestamp_literals_extract(
 
 
 @pytest.mark.skip(
-    "Currently parses with calcite, unusported timestamp due to a pandas error"
+    "Currently parses with calcite, unsupported timestamp due to a pandas error"
 )
 def test_timestamp_literal_pd_error(basic_df, spark_info, memory_leak_check):
-    """This is a specific test case that is parsed correctly by calacite, but generates a runtime pandas error.
+    """This is a specific test case that is parsed correctly by calcite, but generates a runtime pandas error.
     If we want to support this, it'll probably be a quicker fix then the other ones
     """
     query = """
@@ -97,7 +93,7 @@ def test_timestamp_literal_pd_error(basic_df, spark_info, memory_leak_check):
 @pytest.mark.skip("Currently unsupported timestamp literal formats")
 def test_mysql_timestamp_literal(basic_df, spark_info, memory_leak_check):
     """tests a number of different timestamp formats that are currently supported by MySQL, but which we
-    may/may not ultimatley end up supporting"""
+    may/may not ultimately end up supporting"""
 
     spark_query = """
     SELECT
@@ -272,14 +268,13 @@ def test_integer_literals(basic_df, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip("[BS-154], float literals not comparing to spark properly")
 def test_float_literals(basic_df, spark_info, memory_leak_check):
     """
     tests that float literals are correctly parsed by BodoSQL
     """
     query = """
     SELECT
-        A, .0103, -0.0, 13.2
+        A, .0103 as B, -0.0 as C, 13.2 as D
     FROM
         table1
     """
@@ -288,7 +283,7 @@ def test_float_literals(basic_df, spark_info, memory_leak_check):
         basic_df,
         spark_info,
         check_dtype=False,
-        check_names=False,
+        convert_columns_decimal=["B", "C", "D"],
     )
 
 
@@ -319,9 +314,6 @@ def test_timestamp_null_literal(basic_df, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip(
-    "numba error converting none to a numpy dtype, not sure if we want to support this"
-)
 def test_boolean_null_literals(bodosql_boolean_types, spark_info, memory_leak_check):
     """
     tests that boolean literals are correctly parsed by BodoSQL
@@ -386,4 +378,28 @@ def test_integer_null_literals(basic_df, spark_info, memory_leak_check):
         spark_info,
         check_dtype=False,
         check_names=False,
+    )
+
+
+def test_backslash_literals(spark_info, memory_leak_check):
+    """
+    tests that integer literals are correctly parsed by BodoSQL
+    """
+    query1 = r"""
+    SELECT
+        '\\' as A
+    """
+    query2 = r"""
+    SELECT
+        '\n' as A
+    """
+    check_query(
+        query1,
+        {},
+        spark_info,
+    )
+    check_query(
+        query2,
+        {},
+        spark_info,
     )

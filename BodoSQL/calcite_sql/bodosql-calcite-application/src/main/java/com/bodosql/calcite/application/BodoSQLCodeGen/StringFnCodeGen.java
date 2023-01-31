@@ -3,28 +3,11 @@ package com.bodosql.calcite.application.BodoSQLCodeGen;
 import static com.bodosql.calcite.application.Utils.Utils.*;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
-import com.bodosql.calcite.application.BodoSQLExprType;
 import com.bodosql.calcite.application.RexNodeVisitorInfo;
 import java.util.HashMap;
 import java.util.List;
 
 public class StringFnCodeGen {
-
-  // Hashmap of functions for which there is a one to one mapping between the SQL function call,
-  // and a function call for the scalar case in the form of FN(scalar_expr). If the function has
-  // more then one argument,
-  // the mapping is only valid of all of the arguments are scalars
-  // IE SQLFN(x1, x2, x3) => FN(x1, x2, x3)
-  // EX CHAR(x) => chr(x)
-  // OR CHAR(C) => C.apply(chr)
-  static HashMap<String, String> equivalentFnMapScalars;
-
-  // Hashmap of functions for which there is a one to one mapping between the SQL function call,
-  // and a pandas method call for the column case. If the function has more then one argument,
-  // the mapping is valid if the first argument is a column, and all subsequent values are scalars
-  // IE FN(C, x1, x2, x3) => C.FNAME(x1, x2, x3...)
-  // EX UPPER(C) => C.str.upper()
-  static HashMap<String, String> equivalentPandasMethodMapColumns;
 
   // Hashmap of functions for which there is a one to one mapping between the SQL function call,
   // and a function call where any of the arguments can be scalars or vectors.
@@ -33,27 +16,15 @@ public class StringFnCodeGen {
   static HashMap<String, String> equivalentFnMapBroadcast;
 
   static {
-    equivalentFnMapScalars = new HashMap<>();
-    equivalentPandasMethodMapColumns = new HashMap<>();
     equivalentFnMapBroadcast = new HashMap<>();
-
-    equivalentFnMapScalars.put("CHAR_LENGTH", "bodosql.libs.generated_lib.sql_null_checking_len");
-    equivalentPandasMethodMapColumns.put("CHAR_LENGTH", "str.len");
-    equivalentFnMapScalars.put("LENGTH", "bodosql.libs.generated_lib.sql_null_checking_len");
-    equivalentPandasMethodMapColumns.put("LENGTH", "str.len");
-    equivalentFnMapScalars.put("LEN", "bodosql.libs.generated_lib.sql_null_checking_len");
-    equivalentPandasMethodMapColumns.put("LEN", "str.len");
-    equivalentFnMapScalars.put(
-        "CHARACTER_LENGTH", "bodosql.libs.generated_lib.sql_null_checking_len");
-    equivalentPandasMethodMapColumns.put("CHARACTER_LENGTH", "str.len");
-    equivalentFnMapScalars.put("LCASE", "bodosql.libs.generated_lib.sql_null_checking_lower");
-    equivalentFnMapScalars.put("LOWER", "bodosql.libs.generated_lib.sql_null_checking_lower");
-    equivalentPandasMethodMapColumns.put("LCASE", "str.lower");
-    equivalentPandasMethodMapColumns.put("LOWER", "str.lower");
-    equivalentFnMapScalars.put("UCASE", "bodosql.libs.generated_lib.sql_null_checking_upper");
-    equivalentFnMapScalars.put("UPPER", "bodosql.libs.generated_lib.sql_null_checking_upper");
-    equivalentPandasMethodMapColumns.put("UCASE", "str.upper");
-    equivalentPandasMethodMapColumns.put("UPPER", "str.upper");
+    equivalentFnMapBroadcast.put("CHAR_LENGTH", "bodo.libs.bodosql_array_kernels.length");
+    equivalentFnMapBroadcast.put("LENGTH", "bodo.libs.bodosql_array_kernels.length");
+    equivalentFnMapBroadcast.put("LEN", "bodo.libs.bodosql_array_kernels.length");
+    equivalentFnMapBroadcast.put("CHARACTER_LENGTH", "bodo.libs.bodosql_array_kernels.length");
+    equivalentFnMapBroadcast.put("LCASE", "bodo.libs.bodosql_array_kernels.lower");
+    equivalentFnMapBroadcast.put("LOWER", "bodo.libs.bodosql_array_kernels.lower");
+    equivalentFnMapBroadcast.put("UCASE", "bodo.libs.bodosql_array_kernels.upper");
+    equivalentFnMapBroadcast.put("UPPER", "bodo.libs.bodosql_array_kernels.upper");
     equivalentFnMapBroadcast.put("CONTAINS", "bodo.libs.bodosql_array_kernels.contains");
     equivalentFnMapBroadcast.put("LPAD", "bodo.libs.bodosql_array_kernels.lpad");
     equivalentFnMapBroadcast.put("RPAD", "bodo.libs.bodosql_array_kernels.rpad");
@@ -90,12 +61,10 @@ public class StringFnCodeGen {
    * @param fnName The name of the function
    * @param arg1Expr The string expression of arg1
    * @param arg1Name The name of arg1
-   * @param isSingleRow boolean value that determines if this function call is taking place within
-   *     an apply (or all the arguments are scalar)
    * @return The RexNodeVisitorInfo corresponding to the function call
    */
   public static RexNodeVisitorInfo getSingleArgStringFnInfo(
-      String fnName, String arg1Expr, String arg1Name, boolean isSingleRow) {
+      String fnName, String arg1Expr, String arg1Name) {
     String new_fn_name = fnName + "(" + arg1Name + ")";
 
     // If the functions has a broadcasted array kernel, always use it
@@ -103,22 +72,7 @@ public class StringFnCodeGen {
       String fn_expr = equivalentFnMapBroadcast.get(fnName);
       return new RexNodeVisitorInfo(new_fn_name, fn_expr + "(" + arg1Expr + ")");
       // Otherwise, either use the scalar implementation or the Series implementation
-    } else if (isSingleRow) {
-      if (equivalentFnMapScalars.containsKey(fnName)) {
-        String scalar_fn_str = equivalentFnMapScalars.get(fnName);
-        return new RexNodeVisitorInfo(new_fn_name, scalar_fn_str + "(" + arg1Expr + ")");
-      }
-    } else if (equivalentPandasMethodMapColumns.containsKey(fnName)) {
-      String pandas_method = equivalentPandasMethodMapColumns.get(fnName);
-      return new RexNodeVisitorInfo(
-          new_fn_name,
-          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-              + arg1Expr
-              + ")."
-              + pandas_method
-              + "())");
     }
-
     // If we made it here, something has gone very wrong
     throw new BodoSQLCodegenException("Internal Error: Function: " + fnName + "not supported");
   }
@@ -454,24 +408,21 @@ public class StringFnCodeGen {
    * @return The rexVisitorInfo for the trim call
    */
   public static RexNodeVisitorInfo generateTrimFnInfo(
-      RexNodeVisitorInfo flagInfo,
-      RexNodeVisitorInfo stringToBeTrimmed,
-      BodoSQLExprType.ExprType exprType,
-      boolean isSingleRow) {
-    String trimFn;
+      RexNodeVisitorInfo flagInfo, RexNodeVisitorInfo stringToBeTrimmed) {
+    String fnName;
     String trimName;
 
     switch (flagInfo.getExprCode()) {
       case "BOTH":
-        trimFn = "strip";
+        fnName = "trim";
         trimName = "TRIM";
         break;
       case "LEADING":
-        trimFn = "lstrip";
+        fnName = "ltrim";
         trimName = "LTRIM";
         break;
       case "TRAILING":
-        trimFn = "rstrip";
+        fnName = "rtrim";
         trimName = "RTRIM";
         break;
       default:
@@ -480,23 +431,9 @@ public class StringFnCodeGen {
     }
 
     String outputName = trimName + "(" + stringToBeTrimmed.getName() + ")";
-    String outputExpr;
-    if (isSingleRow || exprType == exprType.SCALAR) {
-      outputExpr =
-          "bodosql.libs.generated_lib.sql_null_checking_"
-              + trimFn
-              + "("
-              + stringToBeTrimmed.getExprCode()
-              + ", "
-              + "\" \")";
-    } else {
-      outputExpr =
-          "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-              + stringToBeTrimmed.getExprCode()
-              + ").str."
-              + trimFn
-              + "(\" \"))";
-    }
+    String outputExpr =
+        String.format(
+            "bodo.libs.bodosql_array_kernels.%s(%s)", fnName, stringToBeTrimmed.getExprCode());
     return new RexNodeVisitorInfo(outputName, outputExpr);
   }
 }

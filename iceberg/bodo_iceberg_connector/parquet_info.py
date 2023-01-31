@@ -41,14 +41,16 @@ def bodo_connector_get_parquet_file_list(
     )
 
     if warehouse_loc is not None:
-        warehouse_loc = _remove_prefix(warehouse_loc, "file:")
+        warehouse_loc = _remove_prefix(
+            warehouse_loc.replace("s3a://", "s3://"), "file:"
+        )
 
     # filepath is a URI (file:///User/sw/...) or a relative path that needs converted to
     # a full path
     # Replace Hadoop S3A URI scheme with regular S3 Scheme
     file_paths = [x.filepath for x in pq_infos]
 
-    out = []
+    sanitized_paths = []
     for path in file_paths:
         if _has_uri_scheme(path):
             res = _remove_prefix(path.replace("s3a://", "s3://"), "file:")
@@ -56,9 +58,9 @@ def bodo_connector_get_parquet_file_list(
             res = os.path.join(warehouse_loc, path)
         else:
             res = path
-        out.append(res)
+        sanitized_paths.append(res)
 
-    return out, file_paths
+    return sanitized_paths, file_paths
 
 
 def bodo_connector_get_parquet_info(warehouse, schema, table, filters):

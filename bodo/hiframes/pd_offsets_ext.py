@@ -5,6 +5,7 @@ Implement support for the various classes in pd.tseries.offsets.
 import operator
 
 import llvmlite.binding as ll
+import numba
 import numpy as np
 import pandas as pd
 import pytz
@@ -31,7 +32,6 @@ from bodo.hiframes.datetime_datetime_ext import datetime_datetime_type
 from bodo.hiframes.pd_timestamp_ext import (
     PandasTimestampType,
     get_days_in_month,
-    pd_timestamp_tz_naive_type,
     tz_has_transition_times,
 )
 from bodo.libs import hdatetime_ext
@@ -964,87 +964,93 @@ make_attribute_wrapper(DateOffsetType, "has_kws", "_has_kws")
 
 
 # Add implementation derived from https://dateutil.readthedocs.io/en/stable/relativedelta.html
-@register_jitable
+@numba.generated_jit(nopython=True)
 def relative_delta_addition(dateoffset, ts):  # pragma: no cover
     """Performs the general addition performed by relative delta according to the
     passed in DateOffset
     """
-    if dateoffset._has_kws:
-        sign = -1 if dateoffset.n < 0 else 1
-        for _ in range(np.abs(dateoffset.n)):
-            year = ts.year
-            month = ts.month
-            day = ts.day
-            hour = ts.hour
-            minute = ts.minute
-            second = ts.second
-            microsecond = ts.microsecond
-            nanosecond = ts.nanosecond
+    tz = ts.tz
 
-            if dateoffset._year != -1:
-                year = dateoffset._year
-            year += sign * dateoffset._years
-            if dateoffset._month != -1:
-                month = dateoffset._month
-            month += sign * dateoffset._months
+    def impl(dateoffset, ts):
+        if dateoffset._has_kws:
+            sign = -1 if dateoffset.n < 0 else 1
+            for _ in range(np.abs(dateoffset.n)):
+                year = ts.year
+                month = ts.month
+                day = ts.day
+                hour = ts.hour
+                minute = ts.minute
+                second = ts.second
+                microsecond = ts.microsecond
+                nanosecond = ts.nanosecond
 
-            year, month, new_day = calculate_month_end_date(year, month, day, 0)
-            # If the day is out of bounds roll back to a legal date
-            if day > new_day:
-                day = new_day
+                if dateoffset._year != -1:
+                    year = dateoffset._year
+                year += sign * dateoffset._years
+                if dateoffset._month != -1:
+                    month = dateoffset._month
+                month += sign * dateoffset._months
 
-            # Remaining values can be handled with a timedelta to give the same
-            # effect as happening 1 at a time
-            if dateoffset._day != -1:
-                day = dateoffset._day
-            if dateoffset._hour != -1:
-                hour = dateoffset._hour
-            if dateoffset._minute != -1:
-                minute = dateoffset._minute
-            if dateoffset._second != -1:
-                second = dateoffset._second
-            if dateoffset._microsecond != -1:
-                microsecond = dateoffset._microsecond
-            if dateoffset._nanosecond != -1:
-                nanosecond = dateoffset._nanosecond
+                year, month, new_day = calculate_month_end_date(year, month, day, 0)
+                # If the day is out of bounds roll back to a legal date
+                if day > new_day:
+                    day = new_day
 
-            ts = pd.Timestamp(
-                year=year,
-                month=month,
-                day=day,
-                hour=hour,
-                minute=minute,
-                second=second,
-                microsecond=microsecond,
-                nanosecond=nanosecond,
-            )
+                # Remaining values can be handled with a timedelta to give the same
+                # effect as happening 1 at a time
+                if dateoffset._day != -1:
+                    day = dateoffset._day
+                if dateoffset._hour != -1:
+                    hour = dateoffset._hour
+                if dateoffset._minute != -1:
+                    minute = dateoffset._minute
+                if dateoffset._second != -1:
+                    second = dateoffset._second
+                if dateoffset._microsecond != -1:
+                    microsecond = dateoffset._microsecond
+                if dateoffset._nanosecond != -1:
+                    nanosecond = dateoffset._nanosecond
 
-            # Pandas ignores nanosecond/nanoseconds because it uses relative delta
-            # However, starting 1.4 it adds it if nanoseconds is used alone or with
-            # non _kwds_use_relativedelta arguments
-            # Bodo opts to always include nanoseconds and nanosecond
-            td = pd.Timedelta(
-                days=dateoffset._days + 7 * dateoffset._weeks,
-                hours=dateoffset._hours,
-                minutes=dateoffset._minutes,
-                seconds=dateoffset._seconds,
-                microseconds=dateoffset._microseconds,
-            )
-            td = td + pd.Timedelta(dateoffset._nanoseconds, unit="ns")
-            if sign == -1:
-                td = -td
+                ts = pd.Timestamp(
+                    year=year,
+                    month=month,
+                    day=day,
+                    hour=hour,
+                    minute=minute,
+                    second=second,
+                    microsecond=microsecond,
+                    nanosecond=nanosecond,
+                    tz=tz,
+                )
 
-            ts = ts + td
+                # Pandas ignores nanosecond/nanoseconds because it uses relative delta
+                # However, starting 1.4 it adds it if nanoseconds is used alone or with
+                # non _kwds_use_relativedelta arguments
+                # Bodo opts to always include nanoseconds and nanosecond
+                td = pd.Timedelta(
+                    days=dateoffset._days + 7 * dateoffset._weeks,
+                    hours=dateoffset._hours,
+                    minutes=dateoffset._minutes,
+                    seconds=dateoffset._seconds,
+                    microseconds=dateoffset._microseconds,
+                )
+                td = td + pd.Timedelta(dateoffset._nanoseconds, unit="ns")
+                if sign == -1:
+                    td = -td
 
-            if dateoffset._weekday != -1:
-                # roll forward by determining the difference in day of the week
-                # We only accept labeling a day of the week 0..6
-                curr_weekday = ts.weekday()
-                days_forward = (dateoffset._weekday - curr_weekday) % 7
-                ts = ts + pd.Timedelta(days=days_forward)
-        return ts
-    else:
-        return pd.Timedelta(days=dateoffset.n) + ts
+                ts = ts + td
+
+                if dateoffset._weekday != -1:
+                    # roll forward by determining the difference in day of the week
+                    # We only accept labeling a day of the week 0..6
+                    curr_weekday = ts.weekday()
+                    days_forward = (dateoffset._weekday - curr_weekday) % 7
+                    ts = ts + pd.Timedelta(days=days_forward)
+            return ts
+        else:
+            return pd.Timedelta(days=dateoffset.n) + ts
+
+    return impl
 
 
 def overload_add_operator_date_offset_type(lhs, rhs):
@@ -1052,7 +1058,7 @@ def overload_add_operator_date_offset_type(lhs, rhs):
     These will be reused to implement arrays.
     """
     # rhs is a timestamp
-    if lhs == date_offset_type and rhs == pd_timestamp_tz_naive_type:
+    if lhs == date_offset_type and isinstance(rhs, PandasTimestampType):
 
         def impl(lhs, rhs):  # pragma: no cover
             ts = relative_delta_addition(lhs, rhs)
@@ -1075,9 +1081,9 @@ def overload_add_operator_date_offset_type(lhs, rhs):
 
     # offset is the rhs
     if (
-        lhs in [datetime_datetime_type, pd_timestamp_tz_naive_type, datetime_date_type]
-        and rhs == date_offset_type
-    ):
+        lhs in [datetime_datetime_type, datetime_date_type]
+        or isinstance(lhs, PandasTimestampType)
+    ) and rhs == date_offset_type:
 
         def impl(lhs, rhs):  # pragma: no cover
             return rhs + lhs

@@ -9,7 +9,7 @@ import pytest
 from bodosql.tests.utils import check_query
 from pandas.api.types import is_bool_dtype, is_float_dtype
 
-from bodo.tests.bodosql_array_kernel_tests.test_bodosql_snowflake_conversion_array_kernels import (
+from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_conversion_array_kernels import (
     _dates,
     _dates_nans,
     _times,

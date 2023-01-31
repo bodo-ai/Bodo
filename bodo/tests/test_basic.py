@@ -324,7 +324,7 @@ def test_reduce2(test_dtypes_input, test_funcs_input, memory_leak_check):
         n = 21
         np.random.seed(0)
         A = np.random.randint(0, 10, n).astype(dtype)
-        check_func(test_impl, (A,))
+        check_func(test_impl, (A,), convert_to_nullable_float=False)
 
 
 @pytest.mark.slow
@@ -367,7 +367,7 @@ def test_reduce_filter1(test_dtypes_input, test_funcs_input, memory_leak_check):
         n = 21
         np.random.seed(0)
         A = np.random.randint(0, 10, n).astype(dtype)
-        check_func(test_impl, (A,))
+        check_func(test_impl, (A,), convert_to_nullable_float=False)
 
 
 def test_array_reduce(memory_leak_check):
@@ -548,7 +548,7 @@ def test_np_array(memory_leak_check):
     # TODO: enable when supported by Numba
     # check_func(test_impl1, (np.ones(11),))
     check_func(test_impl1, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
-    check_func(test_impl2, (np.ones(11),))
+    check_func(test_impl2, (np.ones(11),), convert_to_nullable_float=False)
     check_func(test_impl2, ([1, 2, 5, 1, 2, 3],), is_out_distributed=False)
 
 

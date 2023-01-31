@@ -81,6 +81,7 @@ def test_single_op_trig_fns_cols(
         spark_info,
         check_names=False,
         check_dtype=False,
+        convert_expected_output_to_nullable_float=False,
     )
 
 
@@ -115,6 +116,7 @@ def test_single_op_trig_fns_scalars(
         spark_info,
         check_names=False,
         check_dtype=False,
+        convert_expected_output_to_nullable_float=False,
     )
 
 

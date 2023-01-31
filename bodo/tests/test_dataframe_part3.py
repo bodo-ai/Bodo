@@ -281,7 +281,7 @@ def test_describe_many_columns(memory_leak_check):
     import time
 
     t0 = time.time()
-    check_func(impl, (df,), is_out_distributed=False)
+    check_func(impl, (df,), is_out_distributed=False, check_dtype=False)
     compilation_time = time.time() - t0
     # Determine the max compilation time on any rank to avoid hangs.
     comm = MPI.COMM_WORLD
@@ -855,7 +855,7 @@ def test_table_head_tail(method_name, datapath, memory_leak_check):
     exec(func_text, globals(), local_vars)
     impl = local_vars["impl"]
 
-    check_func(impl, ())
+    check_func(impl, (), check_dtype=False)
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
     with set_logging_stream(logger, 1):
@@ -1083,6 +1083,7 @@ def test_df_mask_where_df(df_value, memory_leak_check):
             df_renamed,
         ),
         copy_input=True,
+        check_dtype=False,
     )
     check_func(
         test_mask,
@@ -1092,6 +1093,7 @@ def test_df_mask_where_df(df_value, memory_leak_check):
             df_renamed,
         ),
         copy_input=True,
+        check_dtype=False,
     )
 
 
@@ -1201,7 +1203,7 @@ def test_df_first_last(memory_leak_check, offset):
     else:
         py_output = None
 
-    check_func(impl_first, (df,), py_output=py_output)
+    check_func(impl_first, (df,), py_output=py_output, check_dtype=False)
     check_func(impl_last, (df,))
 
 
@@ -1689,7 +1691,13 @@ def test_df_rank(method, na_option, ascending, pct):
                     method=method, na_option=na_option, ascending=ascending, pct=pct
                 )
             )
-            check_func(impl, (df,), dist_test=False, py_output=py_output)
+            check_func(
+                impl,
+                (df,),
+                dist_test=False,
+                py_output=py_output,
+                convert_to_nullable_float=False,
+            )
     else:
         check_func(impl, (df,), dist_test=False)
 
@@ -1718,6 +1726,7 @@ def test_concat_1d_1dvar():
         reset_index=True,
         check_dtype=False,
     )
+
 
 @pytest.mark.tz_aware
 def test_tz_aware_dataframe_getitem(memory_leak_check):

@@ -663,7 +663,7 @@ def verify_int_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
 
     raises: BodoError if the argument is not an integer, integer column, or NULL
     """
@@ -792,7 +792,7 @@ def verify_string_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not a string, string column, or null
     """
     if not is_valid_string_arg(arg):
@@ -806,7 +806,7 @@ def verify_scalar_string_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not a scalar string
     """
     if arg not in (types.unicode_type, bodo.none) and not isinstance(
@@ -821,7 +821,7 @@ def verify_binary_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not binary data or null
     """
     if not is_valid_binary_arg(arg):
@@ -834,7 +834,7 @@ def verify_string_binary_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not binary data, string, string column or null
     returns: True if the argument is a string, False if the argument is binary data
     """
@@ -855,7 +855,7 @@ def verify_string_numeric_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
     raises: BodoError if the argument is not a string, integer, float, boolean, string column,
             integer column, float column, or boolean column
     """
@@ -872,7 +872,7 @@ def verify_boolean_arg(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
 
     raises: BodoError if the argument is not an boolean, boolean column, or NULL
     """
@@ -968,7 +968,7 @@ def verify_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
 
     raises: BodoError if the argument is not a datetime, datetime column, or NULL
     """
@@ -1005,8 +1005,8 @@ def verify_sql_interval(arg, f_name, a_name):  # pragma: no cover
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
-    raises: BodoError if the argument is a valid interval type
+        a_name (string): the name of the argument being checked
+    raises: BodoError if the argument is a invalid interval type
     """
     if not (
         is_overload_none(arg)
@@ -1015,6 +1015,21 @@ def verify_sql_interval(arg, f_name, a_name):  # pragma: no cover
     ):
         raise_bodo_error(
             f"{f_name} {a_name} argument must be a Timedelta scalar/column, DateOffset, or null"
+        )
+
+
+def verify_td_arg(arg, f_name, a_name):  # pragma: no cover
+    """Verifies that one of the arguments to a SQL function is a timedelta
+    array or scalar.
+    Args:
+        arg (dtype): the dtype of the argument being checked
+        f_name (string): the name of the function being checked
+        a_name (string): the name of the argument being checked
+    raises: BodoError if the argument is an invalid timedelta type
+    """
+    if not (is_overload_none(arg) or is_valid_timedelta_arg(arg)):
+        raise_bodo_error(
+            f"{f_name} {a_name} argument must be a Timedelta scalar/column or null"
         )
 
 
@@ -1059,7 +1074,7 @@ def verify_time_or_datetime_arg_allow_tz(arg, f_name, a_name):  # pragma: no cov
     Args:
         arg (dtype): the dtype of the argument being checked
         f_name (string): the name of the function being checked
-        a_name (string): the name of the argument being chekced
+        a_name (string): the name of the argument being checked
 
     raises: BodoError if the argument is not a datetime, datetime column, or NULL
     """

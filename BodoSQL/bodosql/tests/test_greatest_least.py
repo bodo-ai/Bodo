@@ -322,3 +322,23 @@ def test_greatest_tz_aware_columns(
         S = df.min(axis=1)
     py_output = pd.DataFrame({"output": S})
     check_query(query, ctx, None, expected_output=py_output)
+
+
+def test_least_datetime_strings(representative_tz, memory_leak_check):
+    """
+    tests that Least works with datetimes + valid strings (to be converted to datetimes)
+    """
+
+    df = pd.DataFrame(
+        {
+            "A": pd.Series([pd.Timestamp("2000-08-17"), pd.Timestamp("1999-08-17")]),
+            "B": pd.Series([None, pd.Timestamp("1999-08-17")]),
+            "C": pd.Series(["1999-09-17", pd.Timestamp("1999-09-17")]),
+        }
+    )
+    ctx = {"table1": df}
+
+    query = "SELECT LEAST(A,B,C) as output FROM table1"
+    S = df.min(axis=1, skipna=False)
+    py_output = pd.DataFrame({"output": S})
+    check_query(query, ctx, None, expected_output=py_output)

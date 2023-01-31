@@ -87,10 +87,10 @@ def get_iceberg_info(port: int, conn_str: str, schema: str, table: str, error=Tr
 
     Port is unused and kept in case we opt to switch back to py4j
     """
-    try:
-        # Parse conn_str to determine catalog type and warehouse location
-        catalog_type, warehouse = parse_conn_str(conn_str)
+    # Parse conn_str to determine catalog type and warehouse location
+    catalog_type, warehouse = parse_conn_str(conn_str)
 
+    try:
         # Construct Table Reader
         bodo_iceberg_table_reader = get_java_table_handler(
             conn_str,
@@ -116,7 +116,7 @@ def get_iceberg_info(port: int, conn_str: str, schema: str, table: str, error=Tr
                 raise IcebergError(
                     "`warehouse` parameter required in connection string"
                 )
-            table_loc = gen_table_loc(catalog_type, warehouse, schema, table)
+            table_loc = gen_table_loc(catalog_type, warehouse, schema, table)  # type: ignore
 
         else:
             schema_id: Optional[int] = java_table_info.getSchemaID()

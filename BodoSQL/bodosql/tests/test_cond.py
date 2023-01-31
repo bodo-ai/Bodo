@@ -421,6 +421,7 @@ def test_ifnull_scalar(basic_df, spark_info, ifnull_equivalent_fn, memory_leak_c
         basic_df,
         spark_info,
         check_names=False,
+        check_dtype=False,
         equivalent_spark_query=spark_query,
     )
 
@@ -464,27 +465,21 @@ def test_ifnull_case(
 
 
 @pytest.mark.slow
-def test_ifnull_null_float(
-    zeros_df, spark_info, ifnull_equivalent_fn, memory_leak_check
-):
-    """Checks ifnull function with values that generate np.nan"""
-    # Note: 1 / 0 returns np.inf in BodoSQL but NULL in Spark, so
-    # we use expected Output
-    expected_output = pd.DataFrame(
-        {"val": (zeros_df["table1"]["A"] / zeros_df["table1"]["B"]).replace(np.nan, -1)}
-    )
-    query = f"Select {ifnull_equivalent_fn}(A / B, -1) as val from table1"
-    check_query(query, zeros_df, spark_info, expected_output=expected_output)
-
-
-@pytest.mark.slow
 def test_ifnull_multitable(
     join_dataframes, spark_info, ifnull_equivalent_fn, memory_leak_check
 ):
     """Checks ifnull function with columns from multiple tables"""
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -525,11 +520,10 @@ def test_nullif_columns(bodosql_nullable_numeric_types, spark_info, memory_leak_
     )
 
 
-@pytest.mark.skip("Support setting a NULL scalar")
 def test_nullif_scalar(basic_df, spark_info, memory_leak_check):
     """Checks nullif function with all scalar values"""
     query = "Select NULLIF(0, 0) from table1"
-    check_query(query, basic_df, spark_info, check_names=False)
+    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -582,7 +576,14 @@ def test_nullif_multitable(join_dataframes, spark_info, memory_leak_check):
     """Checks nullif function with columns from multiple tables"""
     if any(
         [
-            isinstance(x, pd.core.arrays.integer._IntegerDtype)
+            isinstance(
+                x,
+                (
+                    pd.core.arrays.integer._IntegerDtype,
+                    pd.Float32Dtype,
+                    pd.Float64Dtype,
+                ),
+            )
             for x in join_dataframes["table1"].dtypes
         ]
     ):

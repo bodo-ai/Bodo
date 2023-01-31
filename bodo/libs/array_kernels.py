@@ -1961,7 +1961,8 @@ def concat_overload(arr_list):
             for t in arr_list.types
         )
         and any(
-            isinstance(t, types.Array) and isinstance(t.dtype, types.Float)
+            isinstance(t, (types.Array, FloatingArrayType))
+            and isinstance(t.dtype, types.Float)
             for t in arr_list.types
         )
     ):

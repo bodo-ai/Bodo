@@ -2234,7 +2234,13 @@ def _gen_join_cpp_call(
     def needs_typechange(in_type, need_nullable, is_same_key):
         return (
             isinstance(in_type, types.Array)
-            and not is_dtype_nullable(in_type.dtype)
+            and (
+                not is_dtype_nullable(in_type.dtype)
+                or (
+                    bodo.libs.float_arr_ext._use_nullable_float
+                    and isinstance(in_type.dtype, types.Float)
+                )
+            )
             and need_nullable
             and not is_same_key
         )

@@ -133,7 +133,9 @@ class SeriesType(types.IterableType, types.ArrayCompatible):
             if other.dtype == self.dtype or not other.dtype.is_precise():
                 return SeriesType(
                     self.dtype,
-                    self.data.unify(typingctx, other.data),
+                    self.data
+                    if self.data == other.data
+                    else self.data.unify(typingctx, other.data),
                     new_index,
                     dist=dist,
                 )

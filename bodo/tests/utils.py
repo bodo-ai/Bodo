@@ -149,6 +149,7 @@ def check_func(
     rtol=1e-05,
     use_table_format=None,
     use_dict_encoded_strings=None,
+    convert_to_nullable_float=True,
 ):
     """test bodo compilation of function 'func' on arguments using REP, 1D, and 1D_Var
     inputs/outputs
@@ -188,7 +189,10 @@ def check_func(
     - use_dict_encoded_strings: flag for loading string arrays in dictionary-encoded
     format for testing.
     If None, tests both formats if input arguments have string arrays.
-    - check_typing_issues:
+    - check_typing_issues: raise an error if there is a typing issue for input args.
+    Runs bodo typing on arguments and converts warnings to errors.
+    - convert_to_nullable_float: convert float inputs to nullable float if the global
+    nullable float flag is on.
     """
 
     # We allow the environment flag BODO_TESTING_ONLY_RUN_1D_VAR to change the default
@@ -227,8 +231,9 @@ def check_func(
         run_seq = False
 
     # convert float input to nullable float to test new nullable float functionality
-    if bodo.libs.float_arr_ext._use_nullable_float:
-        args = convert_to_nullable_float(args)
+    if convert_to_nullable_float and bodo.libs.float_arr_ext._use_nullable_float:
+        args = _convert_float_to_nullable_float(args)
+        py_output = _convert_float_to_nullable_float(py_output)
 
     call_args = tuple(_get_arg(a, copy_input) for a in args)
     w = None
@@ -405,6 +410,7 @@ def check_func(
             rtol,
             use_table_format=False,
             use_dict_encoded_strings=use_dict_encoded_strings,
+            convert_to_nullable_float=convert_to_nullable_float,
         )
 
     # test dict-encoded string type if there is any string array in input
@@ -437,14 +443,15 @@ def check_func(
             # use_table_format=False above so we just test use_table_format=True for it
             use_table_format=True if use_table_format is None else use_table_format,
             use_dict_encoded_strings=True,
+            convert_to_nullable_float=convert_to_nullable_float,
         )
 
 
-def convert_to_nullable_float(arg):
-    """Convert float array/Series/DataFrame to nullable float"""
+def _convert_float_to_nullable_float(arg):
+    """Convert float array/Series/Index/DataFrame to nullable float"""
     # tuple
     if isinstance(arg, tuple):
-        return tuple(convert_to_nullable_float(a) for a in arg)
+        return tuple(_convert_float_to_nullable_float(a) for a in arg)
 
     # Numpy float array
     if (
@@ -454,15 +461,17 @@ def convert_to_nullable_float(arg):
     ):
         return pd.array(arg)
 
-    # Series with float data
-    if isinstance(arg, pd.Series) and arg.dtype in (np.float32, np.float64):
+    # Series/Index with float data
+    if isinstance(arg, (pd.Series, pd.Index)) and arg.dtype in (np.float32, np.float64):
         return arg.astype("Float32" if arg.dtype == np.float32 else "Float64")
 
     # DataFrame float columns
     if isinstance(arg, pd.DataFrame) and any(
         a in (np.float32, np.float64) for a in arg.dtypes
     ):
-        return pd.DataFrame({c: convert_to_nullable_float(arg[c]) for c in arg.columns})
+        return pd.DataFrame(
+            {c: _convert_float_to_nullable_float(arg[c]) for c in arg.columns}
+        )
 
     return arg
 
@@ -1345,6 +1354,10 @@ class AnalysisTestPipeline(bodo.compiler.BodoCompiler):
     additional ArrayAnalysis pass that preserves analysis object
     """
 
+    # Avoid copy propagation so we don't delete variables used to
+    # check array analysis.
+    avoid_copy_propagation = True
+
     def define_pipelines(self):
         [pipeline] = self._create_bodo_pipeline(
             distributed=True, inline_calls_pass=False
@@ -1378,7 +1391,14 @@ def string_list_ent(x):
             l_str.append(estr)
         return "{" + ", ".join(l_str) + "}"
     if isinstance(
-        x, (list, np.ndarray, pd.arrays.IntegerArray, pd.arrays.ArrowStringArray)
+        x,
+        (
+            list,
+            np.ndarray,
+            pd.arrays.IntegerArray,
+            pd.arrays.FloatingArray,
+            pd.arrays.ArrowStringArray,
+        ),
     ):
         l_str = []
         for e_val in x:
@@ -1447,6 +1467,7 @@ def convert_non_pandas_columns(df):
                     np.ndarray,
                     pd.arrays.BooleanArray,
                     pd.arrays.IntegerArray,
+                    pd.arrays.FloatingArray,
                     pd.arrays.StringArray,
                     pd.arrays.ArrowStringArray,
                 ),
@@ -1461,7 +1482,14 @@ def convert_non_pandas_columns(df):
                         nb_array_item += 1
                     for e_val in e_ent:
                         if isinstance(
-                            e_val, (list, dict, np.ndarray, pd.arrays.IntegerArray)
+                            e_val,
+                            (
+                                list,
+                                dict,
+                                np.ndarray,
+                                pd.arrays.IntegerArray,
+                                pd.arrays.FloatingArray,
+                            ),
                         ):
                             nb_arrow_array_item += 1
             if isinstance(e_ent, dict):
@@ -1508,6 +1536,7 @@ def convert_non_pandas_columns(df):
                     np.ndarray,
                     pd.arrays.BooleanArray,
                     pd.arrays.IntegerArray,
+                    pd.arrays.FloatingArray,
                     pd.arrays.StringArray,
                     pd.arrays.ArrowStringArray,
                 ),
@@ -2296,3 +2325,29 @@ def find_nested_dispatcher_and_args(
         return cached_info[
             (numba.core.registry.cpu_target.typing_context, arg_types, ())
         ]
+
+
+def nanoseconds_to_other_time_units(val, unit_str):
+    supported_time_parts = [
+        "hour",
+        "minute",
+        "second",
+        "millisecond",
+        "microsecond",
+        "nanosecond",
+    ]
+
+    assert unit_str in supported_time_parts
+
+    if unit_str == "hour":
+        return val // ((10**9) * 3600)
+    elif unit_str == "minute":
+        return val // ((10**9) * 60)
+    elif unit_str == "second":
+        return val // (10**9)
+    elif unit_str == "millisecond":
+        return val // (10**6)
+    elif unit_str == "microsecond":
+        return val // (10**3)
+    else:
+        return val

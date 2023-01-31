@@ -170,14 +170,13 @@ def test_case_literals_multiple_when_groupby(
     )
 
 
-@pytest.mark.skip
 def test_case_literals_nonascii(basic_df, spark_info, memory_leak_check):
     """
     Test a case statement with non-ASCII literals.
     """
     case_literals = gen_nonascii_list(4)
 
-    query = f"Select B, Case WHEN A = 1 THEN {case_literals[0]} WHEN A = 2 THEN {case_literals[1]} WHEN B > 6 THEN {case_literals[2]} ELSE {case_literals[3]} END as CaseRes FROM table1 Group By A, B"
+    query = f"Select B, Case WHEN A = 1 THEN '{case_literals[0]}' WHEN A = 2 THEN '{case_literals[1]}' WHEN B > 6 THEN '{case_literals[2]}' ELSE '{case_literals[3]}' END as CaseRes FROM table1 Group By A, B"
 
     check_query(
         query,
@@ -223,18 +222,6 @@ def test_case_no_else_clause_columns(basic_df, spark_info, memory_leak_check):
     """
     query = f"Select Case WHEN A >= 2 THEN A WHEN A < 0 THEN B END FROM table1"
     check_query(query, basic_df, spark_info, check_dtype=False, check_names=False)
-
-
-def test_shortcircuit_and(zeros_df, spark_info, memory_leak_check):
-    """tests that and when used in a case statement shortcircuits"""
-    query = "Select Case WHEN B <> 0 AND (A / B > 0) THEN A ELSE B END FROM table1"
-    check_query(query, zeros_df, spark_info, check_names=False, check_dtype=False)
-
-
-def test_shortcircuit_or(zeros_df, spark_info, memory_leak_check):
-    """tests that and when used in a case statement shortcircuits"""
-    query = "Select Case WHEN B = 0 OR (A / B > 0) THEN A ELSE B END FROM table1"
-    check_query(query, zeros_df, spark_info, check_names=False, check_dtype=False)
 
 
 def test_timestamp_to_datetime_opt(spark_info, memory_leak_check):

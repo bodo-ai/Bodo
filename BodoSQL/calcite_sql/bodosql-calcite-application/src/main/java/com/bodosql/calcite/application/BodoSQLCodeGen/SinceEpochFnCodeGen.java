@@ -48,20 +48,11 @@ public class SinceEpochFnCodeGen {
    * @param isScalar should the input value be treated as a scalar
    * @return the rexNodeVisitorInfo for the function call
    */
-  public static RexNodeVisitorInfo generateFromUnixTimeCode(
-      RexNodeVisitorInfo arg1Info, boolean isScalar) {
+  public static RexNodeVisitorInfo generateFromUnixTimeCode(RexNodeVisitorInfo arg1Info) {
     String name = "FROM_UNIXTIME(" + arg1Info.getName() + ")";
-    String outputExpression;
-    if (isScalar) {
-      outputExpression =
-          "bodo.utils.conversion.box_if_dt64(bodo.libs.bodosql_array_kernels.second_timestamp("
-              + arg1Info.getExprCode()
-              + "))";
-    } else {
-      outputExpression =
-          "bodo.libs.bodosql_array_kernels.second_timestamp(" + arg1Info.getExprCode() + ")";
-    }
-
+    String outputExpression =
+        String.format(
+            "bodo.libs.bodosql_array_kernels.second_timestamp(%s)", arg1Info.getExprCode());
     return new RexNodeVisitorInfo(name, outputExpression);
   }
 

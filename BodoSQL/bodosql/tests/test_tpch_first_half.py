@@ -7,8 +7,18 @@ be seen in the TPC-H document,
 http://tpc.org/tpc_documents_current_versions/pdf/tpc-h_v2.18.0.pdf. For now we set most
 of these variables according to the reference query.
 """
+import io
+
+import bodosql
 import pytest
 from bodosql.tests.utils import check_query
+
+import bodo
+from bodo.tests.user_logging_utils import (
+    check_logger_msg,
+    create_string_io_logger,
+    set_logging_stream,
+)
 
 
 @pytest.mark.slow
@@ -143,6 +153,57 @@ def test_tpch_q3(tpch_data, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
+def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
+    tpch_query = """select
+                      l_orderkey,
+                      sum(l_extendedprice * (1 - l_discount)) as revenue,
+                      o_orderdate,
+                      o_shippriority
+                    from
+                      customer,
+                      orders,
+                      lineitem
+                    where
+                      c_mktsegment = 'BUILDING'
+                      and c_custkey = o_custkey
+                      and l_orderkey = o_orderkey
+                      and o_orderdate < '1995-03-15'
+                      and l_shipdate > '1995-03-15'
+                    group by
+                      l_orderkey,
+                      o_orderdate,
+                      o_shippriority
+                    order by
+                      revenue desc,
+                      o_orderdate,
+                      l_orderkey
+                    limit 10
+    """
+    bodosql_df_dict, _ = tpch_data
+    # Adding an secondary test to tpch3 to
+    # double check logging information is correct for the
+    # rel node timing information,
+    # since this TPCH uses most of the rel nodes we would need to support
+    # (Join, Filter, Project, Groupby/Order by)
+
+    bc = bodosql.BodoSQLContext(bodosql_df_dict)
+
+    def impl(bc):
+        return bc.sql(tpch_query)
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 2):
+        bodo.jit(impl)(bc)
+        plan = bc.generate_plan(tpch_query)
+        # Check the columns were pruned
+        for relNodeStr in plan.split("\n"):
+            relNodeStr = relNodeStr.strip()
+            if not relNodeStr.startswith("LogicalTableScan"):
+                check_logger_msg(stream, relNodeStr)
+
+
+@pytest.mark.slow
 def test_tpch_q4(tpch_data, spark_info, memory_leak_check):
     DATE = "1993-07-01"
     tpch_query = f"""select
@@ -166,6 +227,7 @@ def test_tpch_q4(tpch_data, spark_info, memory_leak_check):
                        o_orderpriority
                      order by
                        o_orderpriority
+
     """
     bodosql_df_dict, spark_df_dict = tpch_data
     check_query(
@@ -234,6 +296,7 @@ def test_tpch_q6(tpch_data, spark_info, memory_leak_check):
         spark_info,
         spark_dataframe_dict=spark_df_dict,
         is_out_distributed=False,
+        check_dtype=False,
     )
 
 

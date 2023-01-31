@@ -7,11 +7,11 @@ import static com.bodosql.calcite.application.BodoSQLCodeGen.CondOpCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ConversionCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateDiffCodeGen.*;
-import static com.bodosql.calcite.application.BodoSQLCodeGen.DateSubCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.ExtractCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.FilterCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.JoinCodeGen.*;
+import static com.bodosql.calcite.application.BodoSQLCodeGen.JsonCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LikeCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LiteralCodeGen.*;
 import static com.bodosql.calcite.application.BodoSQLCodeGen.LogicalValuesCodeGen.*;
@@ -31,6 +31,7 @@ import static com.bodosql.calcite.application.BodoSQLExprType.*;
 import static com.bodosql.calcite.application.JoinCondVisitor.*;
 import static com.bodosql.calcite.application.Utils.AggHelpers.*;
 import static com.bodosql.calcite.application.Utils.Utils.*;
+import static com.bodosql.calcite.application.Utils.Utils.getBodoIndent;
 
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowAggCodeGen;
 import com.bodosql.calcite.application.BodoSQLCodeGen.WindowedAggregationArgument;
@@ -39,6 +40,7 @@ import com.bodosql.calcite.table.BodoSqlTable;
 import com.bodosql.calcite.table.LocalTableImpl;
 import com.google.common.collect.Range;
 import java.util.*;
+import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.prepare.RelOptTableImpl;
 import org.apache.calcite.rel.RelFieldCollation;
 import org.apache.calcite.rel.RelNode;
@@ -139,6 +141,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
   // Extra arguments to pass to the write code for the fileList and Snapshot
   // id in the form of "argName1=varName1, argName2=varName2"
   private @Nullable String fileListAndSnapshotIdArgs;
+
+  private static int RelNodeTimingVerboseLevel = 2;
 
   public PandasCodeGenVisitor(
       HashMap<String, BodoSQLExprType.ExprType> exprTypesMap,
@@ -319,9 +323,11 @@ public class PandasCodeGenVisitor extends RelVisitor {
         exprCodes.add(literalExpr.getExprCode());
       }
     }
+    this.genRelnodeTimerStart(node);
     this.generatedCode.append(generateLogicalValuesCode(outVar, exprCodes, node.getRowType()));
     this.columnNamesStack.push(columnNames);
     this.varGenStack.push(outVar);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -342,6 +348,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else {
       RelNode input = node.getInput();
       this.visit(input, 0, node);
+      this.genRelnodeTimerStart(node);
       String inVar = varGenStack.pop();
       columnNames = columnNamesStack.pop();
       // The hashset is unused because the result should always be empty.
@@ -355,6 +362,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               filterPair.getExprCode(),
               exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node.getCondition(), nodeId))));
       this.varCache.put(nodeId, new Pair<>(outVar, columnNames));
+      this.genRelnodeTimerStop(node);
     }
     this.columnNamesStack.push(columnNames);
     varGenStack.push(outVar);
@@ -374,12 +382,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
       childExprs.add(varGenStack.pop());
       childExprsColumns.add(columnNamesStack.pop());
     }
+    this.genRelnodeTimerStart(node);
     String outVar = this.genDfVar();
     List<String> columnNames = node.getRowType().getFieldNames();
     this.generatedCode.append(
         generateUnionCode(outVar, columnNames, childExprs, childExprsColumns, node.all));
     varGenStack.push(outVar);
     columnNamesStack.push(columnNames);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -402,6 +412,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     String outVar = this.genDfVar();
     List<String> colNames = node.getRowType().getFieldNames();
+    this.genRelnodeTimerStart(node);
 
     this.generatedCode.append(
         generateIntersectCode(
@@ -409,6 +420,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     varGenStack.push(outVar);
     columnNamesStack.push(colNames);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -425,7 +437,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String lhsExpr = varGenStack.pop();
     List<String> lhsColNames = columnNamesStack.pop();
 
-    this.visit(node.getInputs().get(01), 1, node);
+    this.visit(node.getInputs().get(1), 1, node);
     String rhsExpr = varGenStack.pop();
     List<String> rhsColNames = columnNamesStack.pop();
 
@@ -435,6 +447,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String outVar = this.genDfVar();
     String throwAwayVar = this.genDfVar();
     List<String> colNames = new ArrayList<>();
+    this.genRelnodeTimerStart(node);
 
     this.generatedCode.append(
         generateExceptCode(
@@ -442,6 +455,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     varGenStack.push(outVar);
     columnNamesStack.push(colNames);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -452,6 +466,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   public void visitLogicalSort(LogicalSort node) {
     RelNode input = node.getInput();
     this.visit(input, 0, node);
+    this.genRelnodeTimerStart(node);
     String inVar = varGenStack.pop();
     List<String> colNames = columnNamesStack.pop();
     /* handle case for queries with "ORDER BY" clause */
@@ -506,6 +521,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         generateSortCode(inVar, outVar, colNames, sortOrders, limitStr, offsetStr));
     varGenStack.push(outVar);
     columnNamesStack.push(colNames);
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -526,6 +542,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       outputColumns = cacheInfo.getValue();
     } else {
       this.visit(node.getInput(), 0, node);
+      this.genRelnodeTimerStart(node);
       String projectInVar = varGenStack.pop();
       List<String> colNames = columnNamesStack.pop();
       // ChildExprs operations produced.
@@ -666,6 +683,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 this,
                 colNames.size());
       }
+      this.genRelnodeTimerStop(node);
     }
     this.generatedCode.append(outputCode);
     this.columnNamesStack.push(outputColumns);
@@ -705,6 +723,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     assert node.getOperation() == TableModify.Operation.MERGE;
 
     this.visit(node.getInput(0), 0, node);
+    this.genRelnodeTimerStart(node);
     String deltaDfVar = this.varGenStack.pop();
     List<String> currentDeltaDfColNames = this.columnNamesStack.pop();
 
@@ -772,6 +791,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           .append("\n");
       this.generatedCode.append(outputCode);
     }
+    this.genRelnodeTimerStop(node);
   }
 
   /**
@@ -797,6 +817,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     // Generate code for a projection.
     List<RelNode> inputs = node.getInputs();
     this.visit(node.getInput(), 0, node);
+    this.genRelnodeTimerStart(node);
     // Generate the to_sql code
     StringBuilder outputCode = new StringBuilder();
     List<String> colNames = this.columnNamesStack.pop();
@@ -812,6 +833,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     outputCode.append(handleCastAndRenameBeforeWrite(outVar, colNames, bodoSqlTable));
     outputCode.append(getBodoIndent()).append(bodoSqlTable.generateWriteCode(outVar)).append("\n");
     this.generatedCode.append(outputCode);
+    this.genRelnodeTimerStop(node);
   }
 
   public String handleCastAndRenameBeforeWrite(
@@ -867,6 +889,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String outputVar = this.genDfVar();
     List<String> outputColumns = node.getRowType().getFieldNames();
     if (isSnowflakeCatalogTable(bodoSqlTable)) {
+      this.genRelnodeTimerStart(node);
       // If we are updating Snowflake we push the query into Snowflake.
       // We require the Snowflake Catalog to ensure we don't need to remap
       // any names.
@@ -896,6 +919,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         this.generatedCode.append(makeQuoted(colName)).append(", ");
       }
       this.generatedCode.append("]\n");
+      this.genRelnodeTimerStop(node);
     } else {
       throw new BodoSQLCodegenException(
           "Delete only supported when all source tables are found within a user's Snowflake"
@@ -960,6 +984,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       RelNode inputNode = node.getInput();
       this.visit(inputNode, 0, node);
+      this.genRelnodeTimerStart(node);
       List<String> inputColumnNames = columnNamesStack.pop();
       String inVar = varGenStack.pop();
       List<String> outputDfNames = new ArrayList<>();
@@ -1061,6 +1086,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         finalOutVar = outputDfNames.get(0);
       }
       this.varCache.put(nodeId, new Pair<>(finalOutVar, expectedOutputCols));
+      this.genRelnodeTimerStop(node);
     }
     varGenStack.push(finalOutVar);
     columnNamesStack.push(expectedOutputCols);
@@ -1292,13 +1318,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     RexNodeVisitorInfo column =
         visitRexNode(node.operands.get(1), colNames, id, inputVar, isSingleRow, ctx);
     String name = generateExtractName(dateVal.getName(), column.getName());
-    String codeExpr =
-        generateExtractCode(
-            dateVal.getExprCode(),
-            column.getExprCode(),
-            isSingleRow
-                || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id))
-                    == BodoSQLExprType.ExprType.SCALAR));
+    String codeExpr = generateExtractCode(dateVal.getExprCode(), column.getExprCode());
     return new RexNodeVisitorInfo(name, codeExpr);
   }
 
@@ -2173,8 +2193,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // which makes it difficult to strip non space values. However, this situation doesn't seem
         // to happen with the currently added string functions, so for now it's no an issue
         assert operandsInfo.get(1).getExprCode().equals("\" \"");
-        return generateTrimFnInfo(
-            operandsInfo.get(0), operandsInfo.get(2), exprTypes.get(2), isSingleRow);
+        return generateTrimFnInfo(operandsInfo.get(0), operandsInfo.get(2));
 
       case NULLIF:
         assert operandsInfo.size() == 2;
@@ -2190,7 +2209,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
       case POSITION:
         return generatePosition(operandsInfo);
-
       case OTHER:
       case OTHER_FUNCTION:
         /* If sqlKind = other function, the only recourse is to match on the name of the function. */
@@ -2302,6 +2320,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
             }
           case "DATE_ADD":
           case "ADDDATE":
+          case "SUBDATE":
+          case "DATE_SUB":
             assert operandsInfo.size() == 2;
             // If the second argument is a timedelta, switch to manual addition
             boolean manual_addition =
@@ -2329,90 +2349,39 @@ public class PandasCodeGenVisitor extends RelVisitor {
             String arg1Expr = operandsInfo.get(1).getExprCode();
             String addExpr =
                 generateMySQLDateAddCode(
-                    operandsInfo.get(0).getExprCode(), arg1Expr, manual_addition);
+                    operandsInfo.get(0).getExprCode(), arg1Expr, manual_addition, fnName);
             return new RexNodeVisitorInfo(outputName, addExpr);
 
-          case "SUBDATE":
-          case "DATE_SUB":
-            assert operandsInfo.size() == 2;
-
-            RelDataType arg0Type = fnOperation.getOperands().get(0).getType();
-
-            // Cast arg0 to from string to timestamp, if needed
-            if (SqlTypeName.STRING_TYPES.contains(arg0Type.getSqlTypeName())) {
-              RelDataType inputType = fnOperation.getOperands().get(0).getType();
-              // The output type will always be the timestamp the string is being cast to.
-              RelDataType outputType = fnOperation.getType();
-              String casted_expr =
-                  generateCastCode(
-                      operandsInfo.get(0).getExprCode(),
-                      inputType,
-                      outputType,
-                      exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
-              operandsInfo.set(
-                  0, new RexNodeVisitorInfo(operandsInfo.get(0).getName(), casted_expr));
-            }
-            outputName =
-                generateDateSubName(operandsInfo.get(0).getName(), operandsInfo.get(1).getName());
-            // DateSub should generate scalar code when inside an apply, or all the arguments are
-            // scalar
-            boolean dateSubGeneratesScalarCode =
-                isSingleRow
-                    || (exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR
-                        && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR);
-
-            // if the second argument is an integer, need to convert it to the int * days
-            if (SqlTypeName.INT_TYPES.contains(
-                fnOperation.getOperands().get(1).getType().getSqlTypeName())) {
-              arg1Expr =
-                  intExprToIntervalDays(
-                      operandsInfo.get(1).getExprCode(),
-                      exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
-            } else {
-              arg1Expr = operandsInfo.get(1).getExprCode();
-            }
-            final String subExpr;
-            if (arg0Type instanceof TZAwareSqlType) {
-              List<String> args = List.of(operandsInfo.get(0).getExprCode(), arg1Expr);
-              subExpr = genTZAwareIntervalArithCode(args, SqlKind.MINUS, true);
-            } else {
-              subExpr =
-                  generateDateSubCode(
-                      operandsInfo.get(0).getExprCode(), arg1Expr, dateSubGeneratesScalarCode);
-            }
-            return new RexNodeVisitorInfo(outputName, subExpr);
-
           case "DATEDIFF":
-            assert operandsInfo.size() == 2;
-            outputName =
-                generateDateDiffName(operandsInfo.get(0).getName(), operandsInfo.get(1).getName());
-            boolean arg0Scalar =
-                isSingleRow
-                    || (exprTypesMap.get(
-                            ExprTypeVisitor.generateRexNodeKey(fnOperation.operands.get(0), id))
-                        == BodoSQLExprType.ExprType.SCALAR);
-            boolean arg1Scalar =
-                isSingleRow
-                    || (exprTypesMap.get(
-                            ExprTypeVisitor.generateRexNodeKey(fnOperation.operands.get(1), id))
-                        == BodoSQLExprType.ExprType.SCALAR);
-            boolean outputScalar =
-                isSingleRow
-                    || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id))
-                        == BodoSQLExprType.ExprType.SCALAR);
+            RexNodeVisitorInfo arg1;
+            RexNodeVisitorInfo arg2;
+
+            String datetimePart = "\"DAY\"";
+
+            if (operandsInfo.size() == 2) {
+              arg1 = operandsInfo.get(1);
+              arg2 = operandsInfo.get(0);
+            } else if (operandsInfo.size() == 3) { // this is the Snowflake option
+              datetimePart = operandsInfo.get(0).getExprCode();
+              arg1 = operandsInfo.get(1);
+              arg2 = operandsInfo.get(2);
+            } else {
+              throw new BodoSQLCodegenException(
+                  "Invalid number of arguments to DATEDIFF! Must be 2 or 3.");
+            }
+
+            outputName = generateDateDiffName(datetimePart, arg1.getName(), arg2.getName());
             String diffExpr =
-                generateDateDiffCode(
-                    operandsInfo.get(0).getExprCode(),
-                    arg0Scalar,
-                    operandsInfo.get(1).getExprCode(),
-                    arg1Scalar,
-                    outputScalar);
+                generateDateDiffCode(datetimePart, arg1.getExprCode(), arg2.getExprCode());
             return new RexNodeVisitorInfo(outputName, diffExpr);
           case "STR_TO_DATE":
             assert operandsInfo.size() == 2;
             // Format string should be a string literal.
             // This is required by the function definition.
-            assert fnOperation.operands.get(1) instanceof RexLiteral;
+            if (!(fnOperation.operands.get(1) instanceof RexLiteral)) {
+              throw new BodoSQLCodegenException(
+                  "Error STR_TO_DATE(): 'Format' must be a string literal");
+            }
             outputName =
                 generateStrToDateName(operandsInfo.get(0).getName(), operandsInfo.get(1).getName());
             strExpr =
@@ -2559,20 +2528,22 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 && exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR)) {
               throw new BodoSQLCodegenException(
                   "Error, invalid argument types passed to DATE_FORMAT");
-            } else {
-              return generateDateFormatCode(
-                  operandsInfo.get(0), exprTypes.get(0), operandsInfo.get(1), isSingleRow);
             }
+            if (!(fnOperation.operands.get(1) instanceof RexLiteral)) {
+              throw new BodoSQLCodegenException(
+                  "Error DATE_FORMAT(): 'Format' must be a string literal");
+            }
+            return generateDateFormatCode(
+                operandsInfo.get(0), exprTypes.get(0), operandsInfo.get(1), isSingleRow);
           case "CURRENT_DATE":
           case "CURDATE":
             assert operandsInfo.size() == 0;
             return generateCurdateCode(fnName);
           case "YEARWEEK":
             assert operandsInfo.size() == 1;
-            return getYearWeekFnInfo(
-                operandsInfo.get(0),
-                exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+            return getYearWeekFnInfo(operandsInfo.get(0));
           case "MONTHNAME":
+          case "MONTH_NAME":
           case "DAYNAME":
           case "WEEKDAY":
           case "LAST_DAY":
@@ -2593,8 +2564,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "DATE_PART":
             assert operandsInfo.size() == 2;
             assert exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR;
-            return generateDatePart(
-                operandsInfo, exprTypes.get(1) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+            return generateDatePart(operandsInfo);
           case "TO_DAYS":
             return generateToDaysCode(operandsInfo.get(0));
           case "TO_SECONDS":
@@ -2616,9 +2586,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "UNIX_TIMESTAMP":
             return generateUnixTimestamp();
           case "FROM_UNIXTIME":
-            return generateFromUnixTimeCode(
-                operandsInfo.get(0),
-                exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow);
+            return generateFromUnixTimeCode(operandsInfo.get(0));
+          case "JSON_EXTRACT_PATH_TEXT":
+            return generateJsonTwoArgsInfo(fnName, operandsInfo.get(0), operandsInfo.get(1));
           case "RLIKE":
           case "REGEXP_LIKE":
             if (!(2 <= operandsInfo.size() && operandsInfo.size() <= 3)) {
@@ -2697,14 +2667,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               throw new BodoSQLCodegenException(fnName + " requires providing only 1 argument");
             }
             return getSingleArgStringFnInfo(
-                fnName,
-                operandsInfo.get(0).getExprCode(),
-                operandsInfo.get(0).getName(),
-                isSingleRow
-                    || (exprTypesMap.get(
-                            ExprTypeVisitor.generateRexNodeKey(
-                                fnOperation.getOperands().get(0), id))
-                        == BodoSQLExprType.ExprType.SCALAR));
+                fnName, operandsInfo.get(0).getExprCode(), operandsInfo.get(0).getName());
           case "FORMAT":
           case "REPEAT":
           case "STRCMP":
@@ -2762,10 +2725,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "WEEKISO":
             return new RexNodeVisitorInfo(
                 fnName + "(" + operandsInfo.get(0).getName() + ")",
-                generateExtractCode(
-                    fnName,
-                    operandsInfo.get(0).getExprCode(),
-                    exprTypes.get(0) == BodoSQLExprType.ExprType.SCALAR || isSingleRow));
+                generateExtractCode(fnName, operandsInfo.get(0).getExprCode()));
           case "REGR_VALX":
           case "REGR_VALY":
             return getDoubleArgCondFnInfo(
@@ -2812,32 +2772,40 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
+
     // The input node has ${index} as its first operand, where
     // ${index} is something like $3, and a SQL regular expression
-    // as its second operand.
-    RexNode colIndex = node.operands.get(0);
+    // as its second operand. If there is an escape value it will
+    // be the third value, although it is not required and only supported
+    // for LIKE and ILIKE
+    String opName = node.getOperator().getName();
+    List<RexNode> operands = node.getOperands();
+    RexNode colIndex = operands.get(0);
     RexNodeVisitorInfo arg = visitRexNode(colIndex, colNames, id, inputVar, isSingleRow, ctx);
     String argName = arg.getName();
     String argCode = arg.getExprCode();
-    RexNode patternNode = node.operands.get(1);
+    RexNode patternNode = operands.get(1);
 
-    if (!(patternNode instanceof RexLiteral)) {
-      throw new BodoSQLCodegenException("Error: Pattern must be a string literal");
+    // The regular expression functions only support literal patterns
+    if ((opName.equals("REGEXP") || opName.equals("RLIKE"))
+        && !(patternNode instanceof RexLiteral)) {
+      throw new BodoSQLCodegenException(
+          String.format("%s Error: Pattern must be a string literal", opName));
     }
     RexNodeVisitorInfo pattern =
         visitRexNode(patternNode, colNames, id, inputVar, isSingleRow, ctx);
     String sqlPattern = pattern.getExprCode();
-    String opName = node.op.getName();
+    // If escape is missing use the empty string.
+    String sqlEscape = "''";
+    if (operands.size() == 3) {
+      RexNode escapeNode = operands.get(2);
+      RexNodeVisitorInfo escape =
+          visitRexNode(escapeNode, colNames, id, inputVar, isSingleRow, ctx);
+      sqlEscape = escape.getExprCode();
+    }
     String name = generateLikeName(opName, argName, sqlPattern);
     /* Assumption: Typing in LIKE requires this to be a string type. */
-    String likeCode =
-        generateLikeCode(
-            opName,
-            argCode,
-            sqlPattern,
-            isSingleRow
-                || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(node, id))
-                    == BodoSQLExprType.ExprType.SCALAR));
+    String likeCode = generateLikeCode(opName, argCode, sqlPattern, sqlEscape);
     return new RexNodeVisitorInfo(name, likeCode);
   }
 
@@ -3024,7 +2992,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
     SqlOperator binOp = operation.getOperator();
     if (binOp.getKind() == SqlKind.OR) {
-      // Handle OR separately because it needs to handle NULL for short circuiting
+      // Handle OR separately because it has special NULL handling
       return visitORScan(operation, colNames, id, inputVar, isSingleRow, ctx);
     }
     // Store the argument types for TZ-Aware data
@@ -3044,16 +3012,8 @@ public class PandasCodeGenVisitor extends RelVisitor {
       }
       return generateConcatFnInfo(argInfos);
     }
-    if (binOp.getKind() == SqlKind.OTHER && binOp.getName().equals("||")) {
-      // Support the concat operator by using the concat array kernel.
-      List<RexNodeVisitorInfo> argInfos = new ArrayList<>();
-      for (int i = 0; i < names.size(); i++) {
-        argInfos.add(new RexNodeVisitorInfo(names.get(i), args.get(i)));
-      }
-      return generateConcatFnInfo(argInfos);
-    }
     String name = generateBinOpName(names, binOp);
-    String codeGen = generateBinOpCode(args, exprTypes, binOp, isSingleRow, argDataTypes);
+    String codeGen = generateBinOpCode(args, binOp, argDataTypes);
     return new RexNodeVisitorInfo(name, codeGen);
   }
 
@@ -3082,56 +3042,35 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
-    StringBuilder outputCode = new StringBuilder("(");
+    StringBuilder outputCode = new StringBuilder();
     // Keep lists for name generation
     List<String> names = new ArrayList<>();
     SqlOperator binOp = operation.getOperator();
-    HashSet<String> prevSet = new HashSet<>();
-    BodoCtx prevCtx =
-        new BodoCtx(
-            ctx.getColsToAddList(), new HashSet<>(), ctx.getUsedColumns(), ctx.getNamedParams());
-    RexNodeVisitorInfo prevInfo =
-        visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, prevCtx);
-    names.add(prevInfo.getName());
-    boolean isScalar = isSingleRow;
-    BodoSQLExprType.ExprType exprType =
-        exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operation.operands.get(0), id));
-    // If the current exprType is column, we cannot clear the nullSet
-    if (!isScalar) {
-      ctx.getNeedNullCheckColumns().addAll(prevSet);
-      prevSet.removeAll(prevSet);
+    for (int i = 0; i < operation.operands.size() - 1; i++) {
+      // Generate n - 1 function calls
+      outputCode.append("bodo.libs.bodosql_array_kernels.boolor(");
     }
-    for (int i = 1; i < operation.operands.size(); i++) {
+    for (int i = 0; i < operation.operands.size(); i++) {
       RexNode operand = operation.operands.get(i);
       HashSet<String> newSet = new HashSet<>();
       BodoCtx newCtx =
           new BodoCtx(ctx.getColsToAddList(), newSet, ctx.getUsedColumns(), ctx.getNamedParams());
       RexNodeVisitorInfo info = visitRexNode(operand, colNames, id, inputVar, isSingleRow, newCtx);
       names.add(info.getName());
-      // Update scalar value. If we are inside apply we always output scalar.
-      // Else if we ever find a column we are no longer scalar
-      exprType =
-          meet_elementwise_op(
-              exprType,
-              exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operation.operands.get(i), id)));
-      isScalar = isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR;
       outputCode.append(
           generateOrCode(
-              prevInfo.getExprCode(), true, inputVar, colNames, prevSet, isScalar, isSingleRow));
-      // Save current as prev
-      prevInfo = info;
-      prevSet = newSet;
-      // If the current exprType is column, we cannot clear the nullSet
-      if (!isScalar) {
-        ctx.getNeedNullCheckColumns().addAll(prevSet);
-        prevSet.removeAll(prevSet);
+              info.getExprCode(),
+              i != operation.operands.size() - 1,
+              i != 0,
+              inputVar,
+              colNames,
+              newSet,
+              isSingleRow));
+      // Update the nullSet if are computing with columns
+      if (!isSingleRow) {
+        ctx.getNeedNullCheckColumns().addAll(newSet);
       }
     }
-    outputCode
-        .append(
-            generateOrCode(
-                prevInfo.getExprCode(), false, inputVar, colNames, prevSet, isScalar, isSingleRow))
-        .append(")");
     String name = generateBinOpName(names, binOp);
     String codeGen = outputCode.toString();
     return new RexNodeVisitorInfo(name, codeGen);
@@ -3211,15 +3150,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
-    boolean outputScalar =
-        isSingleRow
-            || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operation, id))
-                == BodoSQLExprType.ExprType.SCALAR);
     RexNodeVisitorInfo seriesOp =
         visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
     String name = generatePrefixOpName(seriesOp.getName(), operation.getOperator());
-    String codeExpr =
-        generatePrefixOpCode(seriesOp.getExprCode(), operation.getOperator(), outputScalar);
+    String codeExpr = generatePrefixOpCode(seriesOp.getExprCode(), operation.getOperator());
     return new RexNodeVisitorInfo(name, codeExpr);
   }
 
@@ -3431,6 +3365,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       outputColNames = cacheInfo.getValue();
     } else {
       this.visit(node.getLeft(), 0, node);
+      this.genRelnodeTimerStart(node);
       List<String> leftColNames = columnNamesStack.pop();
       String leftTable = varGenStack.pop();
       this.visit(node.getRight(), 1, node);
@@ -3466,6 +3401,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
               mergeCols);
       this.generatedCode.append(joinCode);
       this.varCache.put(nodeId, new Pair<>(outVar, outputColNames));
+      this.genRelnodeTimerStop(node);
     }
     columnNamesStack.push(outputColNames);
     varGenStack.push(outVar);
@@ -3494,5 +3430,60 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
 
     return true;
+  }
+
+  /**
+   * Adds code to the generated python that logs a simple message that tells the user the node being
+   * executed, and starts a timer. Only works if verboseLevel is set to 1 or greater.
+   *
+   * <p>This is currently very rough, and should only be used for internal debugging
+   *
+   * @param node The node being timed
+   */
+  private void genRelnodeTimerStart(RelNode node) {
+    if (this.verboseLevel >= this.RelNodeTimingVerboseLevel) {
+      int node_id = node.getId();
+
+      // Some logic to get the first line of the full relTree (the string of the node that we're
+      // interested in)
+      String nodeStr = Arrays.stream(RelOptUtil.toString(node).split("\n")).findFirst().get();
+      String msgString =
+          new StringBuilder(getBodoIndent())
+              .append("t_" + node_id)
+              .append(" = time.time()\n")
+              .append(getBodoIndent())
+              .append(
+                  "bodo.user_logging.log_message('RELNODE_TIMING', '''beginning execution of"
+                      + " node: ")
+              .append(nodeStr)
+              .append("''')\n")
+              .toString();
+      this.generatedCode.append(msgString);
+    }
+  }
+
+  /**
+   * Adds code to the generated python that logs a simple message that tells the user the node being
+   * executed has finished, and prints the execution time. Only works if verboseLevel is set to 1 or
+   * greater.
+   *
+   * <p>This is currently very rough, and should only be used for internal debugging
+   *
+   * @param node The node being timed
+   */
+  private void genRelnodeTimerStop(RelNode node) {
+    if (this.verboseLevel >= this.RelNodeTimingVerboseLevel) {
+      int node_id = node.getId();
+
+      String msgString =
+          new StringBuilder(getBodoIndent())
+              .append(
+                  "bodo.user_logging.log_message('RELNODE_TIMING', f'Execution time: {time.time()"
+                      + " - t_")
+              .append(node_id)
+              .append("}')\n")
+              .toString();
+      this.generatedCode.append(msgString);
+    }
   }
 }
