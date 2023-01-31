@@ -3,7 +3,7 @@
 ## Set up DEV environment on platform
 
 1. SSH into any of the cluster nodes.
-1. Set your [Github token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token) as an environment variable: `export GITHUB_TOKEN=<token>`
+1. Set your [Github token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token#creating-a-personal-access-token-classic) as an environment variable: `export GITHUB_TOKEN=<token>`
 1. Clone Bodo repository on all machines using a Github token: `psh git clone https://$GITHUB_TOKEN@github.com/Bodo-inc/Bodo.git`.
    This will also set the token in the Git Remote Origin URL, and therefore future git actions won't ask for credentials.
 1. Install `conda-lock` on all nodes: `psh sudo /opt/conda/bin/mamba install conda-lock -c conda-forge -n base --yes`
@@ -42,8 +42,10 @@ personal machine, and then pull the changes on the nodes and rebuild. e.g.
    On AWS workspaces, running `update_hostfile` from the terminal should update the activity timer.
 
 1. You can use the `BodoSQLWrapper.py` script to execute a SQL query from a `.sql` file directly:
-   `px python -u BodoSQLWrapper.py -c snowflake_creds.json -f query.sql -p query_pandas.py -w BODO_WH -d BODO_DB -o bodo_out.pq 2>&1 | tee log.txt`.
-   `2>&1 | tee log.txt` sends both stdout and stderr to both the terminal and `log.txt`.
+   `px python -u BodoSQLWrapper.py -c snowflake_creds.json -f query.sql -p query_pandas.py -w <BODO_WH> -d <BODO_DB> -o bodo_out.pq 2>&1 | tee logs-$(date '+%Y-%m-%d-%H:%M:%S').txt`.
+   `2>&1 | tee log.txt` sends both stdout and stderr to both the terminal and the log file.
+   `$(date '+%Y-%m-%d-%H:%M:%S')` appends the execution time to the name of the log file.
+   This is useful to ensure that all log files are retained and not overwritten by future executions.
 
 ## Useful notes
 
