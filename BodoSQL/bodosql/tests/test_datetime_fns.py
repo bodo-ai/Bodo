@@ -2539,6 +2539,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
             "q": large_tz_df.A.dt.quarter,
             "d": large_tz_df.A.dt.day_name(),
             "m": large_tz_df.A.dt.month_name(),
+            "m2": large_tz_df.A.dt.month_name(),
         }
     )
     if case:
@@ -2546,6 +2547,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
         py_output["q"][~large_tz_df["B"]] = None
         py_output["d"][~large_tz_df["B"]] = None
         py_output["m"][~large_tz_df["B"]] = None
+        py_output["m2"][~large_tz_df["B"]] = None
 
     check_query(
         query,
