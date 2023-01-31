@@ -1465,3 +1465,90 @@ def test_snowflake_zero_cols(memory_leak_check):
         bodo.jit(test_impl_index)(query, conn)
         # Check that we only load the index.
         check_logger_msg(stream, "Columns loaded ['l_orderkey']")
+
+
+def test_snowflake_read_with_bodo_read_date_as_dt64_overflow_behavior(
+    memory_leak_check,
+):
+    """
+    Test that the `_bodo_read_date_as_dt64` argument of pd.read_sql
+    works as expected. In particular, test that date values like
+    9999-02-01 (which would cause overflow when converted to datetime64[ns])
+    are cast without error (matching Bodo's pd.Series.astype behavior).
+
+    This functionality is temporary, and therefore this test should be removed
+    once we have fixed the underlying gap with Date type in BodoSQL.
+
+    Test table can be created as:
+
+    df = pd.DataFrame(
+        {
+            "A": np.arange(0, 50),
+            "B": np.arange(0, 100, 2),
+            "C": pd.Series(
+                [
+                    date(2018, 11, 12),
+                    date(2019, 11, 12),
+                    date(2018, 12, 12),
+                    date(2017, 11, 16),
+                    None,
+                    date(2017, 11, 30),
+                    date(2019, 11, 12),
+                    date(9999, 2, 1),  # This is the troublesome row
+                    date(2018, 12, 20),
+                    date(2017, 12, 12),
+                ]
+                * 5
+            ),
+            "D": np.arange(50, 100),
+            "F": pd.Series(
+                [
+                    date(2018, 11, 12),
+                    date(2019, 11, 12),
+                    date(2018, 12, 12),
+                    date(2017, 11, 16),
+                    None,
+                    date(2017, 11, 30),
+                    date(2019, 11, 12),
+                    date(9999, 2, 1),  # This is the troublesome row
+                    date(2018, 12, 20),
+                    date(2017, 12, 12),
+                ]
+                * 5
+            ),
+            "E": np.arange(500, 550),
+        }
+    )
+    conn = f"snowflake://<username>:<password>@<account>/TEST_DB/public?warehouse=DEMO_WH"
+    df.to_sql("sf_dt_ts_repro", conn, schema="public", if_exists="replace", index=False)
+    """
+
+    def impl(conn):
+        df = pd.read_sql(
+            "select * from test_db.public.sf_dt_ts_repro",
+            conn,
+            _bodo_read_date_as_dt64=True,
+        )
+        # To test that column re-arrangement and pruning work as expected
+        return df[["b", "d", "c", "e", "f"]]
+
+    # Regular Python `astype` raises an `OutOfBoundsDatetime` exception, but Bodo
+    # doesn't, which is the behavior we're trying to replicate.
+    @bodo.jit
+    def as_type_impl(conn):
+        df = pd.read_sql(
+            "select * from test_db.public.sf_dt_ts_repro",
+            conn,
+        )
+        df["c"] = df["c"].astype("datetime64[ns]")
+        df["f"] = df["f"].astype("datetime64[ns]")
+        return df[["b", "d", "c", "e", "f"]]
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    as_type_out = as_type_impl(conn)
+    as_type_out = bodo.allgatherv(as_type_out)
+
+    check_func(impl, (conn,), sort_output=True, py_output=as_type_out)

@@ -31,5 +31,5 @@ dependencies:
 
   # Java
   - openjdk =11
-  - py4j
+  - py4j ==0.10.9.5
   - maven

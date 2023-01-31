@@ -50,6 +50,7 @@ public class LiteralCodeGen {
           case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
           case TIME:
             // TODO: Support all remaining interval types.
+          case INTERVAL_WEEK:
           case INTERVAL_DAY_HOUR:
           case INTERVAL_DAY_MINUTE:
           case INTERVAL_DAY_SECOND:
@@ -64,13 +65,11 @@ public class LiteralCodeGen {
           case INTERVAL_MONTH:
           case INTERVAL_YEAR_MONTH:
           case NULL:
-            codeBuilder.append("None");
-            break;
           case FLOAT:
           case REAL:
           case DOUBLE:
           case DECIMAL:
-            codeBuilder.append("np.nan");
+            codeBuilder.append("None");
             break;
           default:
             throw new BodoSQLCodegenException(
@@ -180,6 +179,7 @@ public class LiteralCodeGen {
             /* according to https://calcite.apache.org/javadocAggregate/org/apache/calcite/rex/RexLiteral.html,
             INTERVAL_YEAR/YEAR_MONTH/MONTH are measured in months, and everything else is measured in miliseconds
              */
+          case INTERVAL_WEEK:
           case INTERVAL_DAY_HOUR:
           case INTERVAL_DAY_MINUTE:
           case INTERVAL_DAY_SECOND:
@@ -232,7 +232,7 @@ public class LiteralCodeGen {
       // Simply calling toString creates a string with charset information attached
       // IE UTF-8:"hello world". This is needed to convert to a python literal string
       // TODO: check if this handles dealing with non-ascii strings
-      return as_Nls.asSql(false, false);
+      return escapePythonQuotes(as_Nls.asSql(false, false));
     } else if (scalarVal instanceof BigDecimal) {
       return scalarVal.toString();
     } else {

@@ -1278,7 +1278,9 @@ def _gen_dummy_alloc(t, colnum=0, is_input=False):
         int_typ_name = int_typ_name[:-7]  # remove trailing "Dtype()"
         return f"bodo.hiframes.pd_series_ext.get_series_data(pd.Series([1], dtype='{int_typ_name}'))"
     elif isinstance(t, FloatingArrayType):
-        return f"bodo.hiframes.pd_series_ext.get_series_data(pd.Series([1.0], dtype='{t.dtype}'))"
+        # Float32 or Float64
+        float_typ_name = str(t.dtype).capitalize()
+        return f"bodo.hiframes.pd_series_ext.get_series_data(pd.Series([1.0], dtype='{float_typ_name}'))"
     elif isinstance(t, BooleanArrayType):
         return "bodo.libs.bool_arr_ext.init_bool_array(np.empty(0, np.bool_), np.empty(0, np.uint8))"
     elif isinstance(t, StringArrayType):
@@ -2351,8 +2353,9 @@ def compile_to_optimized_ir(func, arg_typs, typingctx, targetctx):
     inline_overload_pass = numba.core.typed_passes.InlineOverloads()
     inline_overload_pass.run_pass(pm)
 
+    # TODO: Can we capture parfor_metadata for error messages?
     series_pass = bodo.transforms.series_pass.SeriesPass(
-        f_ir, typingctx, targetctx, typemap, calltypes, {}, False
+        f_ir, typingctx, targetctx, typemap, calltypes, {}, optimize_inplace_ops=False
     )
     series_pass.run()
     # change the input type to UDF from Series to Array since Bodo passes Arrays to UDFs

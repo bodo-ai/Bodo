@@ -41,10 +41,11 @@ public class LogicalValuesCodeGen {
       of values to fill in the rows in the table */
       for (int i = 0; i < columnNames.size(); i++) {
         String colName = columnNames.get(i);
-        outputStr.append(makeQuoted(colName)).append(": ");
-        outputStr.append(argExprs.get(i)).append(",");
+        // using coerce_to_array(use_nullable_array=True) to create nullable columns by default
+        outputStr.append(makeQuoted(colName)).append(": bodo.utils.conversion.coerce_to_array(");
+        outputStr.append(argExprs.get(i)).append(", True, True, scalar_to_arr_len=1),");
       }
-      outputStr.append("}, index=pd.RangeIndex(0, 1, 1))\n");
+      outputStr.append("})\n");
     }
     return outputStr.toString();
   }

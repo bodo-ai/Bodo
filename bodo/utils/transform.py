@@ -1272,6 +1272,7 @@ def get_const_func_output_type(
         # run SeriesPass to simplify Series calls (e.g. pd.Series)
         typingctx = numba.core.registry.cpu_target.typing_context
         targetctx = numba.core.registry.cpu_target.target_context
+        # TODO: Can we capture parfor_metadata for error messages?
         series_pass = bodo.transforms.series_pass.SeriesPass(
             f_ir,
             typingctx,

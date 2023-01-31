@@ -28,10 +28,9 @@ class DataFileInfo:
 def process_file_infos(
     fnames: List[str],
     all_metrics: Dict[str, Any],
-    catalog_type,
-    table_loc,
-    db_name,
-    table_name,
+    table_loc: str,
+    db_name: str,
+    table_name: str,
 ):
     """
     Process file name and metrics to a JSON string that can be transmitted
@@ -40,7 +39,6 @@ def process_file_infos(
     Args:
         fnames: List of file paths (possibly relative or absolute)
         all_metrics: Metrics about written data to include in commit
-        catalog_type: Type of catalog the Iceberg table is in
         table_loc: Warehouse location of data/ path (and files)
         db_name: Namespace / Database schema containing Iceberg table
         table_name: Name of Iceberg table
@@ -49,10 +47,7 @@ def process_file_infos(
         JSON String Representing DataFileInfo objects
     """
 
-    fnames = [
-        gen_file_loc(catalog_type, table_loc, db_name, table_name, name)
-        for name in fnames
-    ]
+    fnames = [gen_file_loc(table_loc, db_name, table_name, name) for name in fnames]
 
     file_infos = [
         asdict(DataFileInfo(fname, size, count))
@@ -98,7 +93,7 @@ def commit_write(
     catalog_type, _ = parse_conn_str(conn_str)
     handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
     file_info_str = process_file_infos(
-        fnames, all_metrics, catalog_type, table_loc, db_name, table_name
+        fnames, all_metrics, table_loc, db_name, table_name
     )
 
     if mode == "create":
@@ -158,7 +153,7 @@ def commit_merge_cow(
         conn_str: Connection string to Iceberg catalog
         db_name: Namespace / Database schema of table
         table_name: Name of Iceberg table to write to
-        table_loc: Warehouse location of data/ folder for Iceberg table
+        table_loc: Location of data/ folder for an Iceberg table
         old_fnames: List of old file paths to invalidate in commit
         new_fnames: List of written files to replace old_fnames
         all_metrics: Iceberg metrics for new_fnames
@@ -169,14 +164,17 @@ def commit_merge_cow(
     """
 
     catalog_type, _ = parse_conn_str(conn_str)
-    handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
-
     old_fnames_java = convert_list_to_java(old_fnames)
     new_file_info_str = process_file_infos(
-        new_fnames, all_metrics, catalog_type, table_loc, db_name, table_name
+        new_fnames,
+        all_metrics,
+        table_loc,
+        db_name,
+        table_name,
     )
 
     try:
+        handler = get_java_table_handler(conn_str, catalog_type, db_name, table_name)
         handler.mergeCOWTable(old_fnames_java, new_file_info_str, snapshot_id)
     except Py4JError as e:
         # Note: Py4JError is the base class for all types of Py4j Exceptions.

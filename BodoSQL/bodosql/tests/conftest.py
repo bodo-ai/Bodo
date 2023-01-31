@@ -1,4 +1,5 @@
 import datetime
+import functools
 import hashlib
 import os
 import sys
@@ -367,6 +368,36 @@ def bodosql_large_numeric_types(request):
     ]
 )
 def bodosql_datetime_types(request):
+    return request.param
+
+
+@pytest.fixture(
+    params=[
+        {
+            "table1": pd.DataFrame(
+                {
+                    "A": [
+                        pd.NaT,
+                        pd.Timestamp("2020-01-16 22:06:10.378782"),
+                        pd.Timestamp("2000-01-21 02:23:16.009049"),
+                        pd.Timestamp("2010-01-08 12:10:20.097528"),
+                    ]
+                }
+            ),
+            "table2": pd.DataFrame(
+                {
+                    "B": [
+                        pd.Timestamp("2013-01-16 05:25:32.145547"),
+                        pd.Timestamp("2019-01-17 01:17:56.740445"),
+                        pd.NaT,
+                        pd.Timestamp("2015-01-29 06:35:09.810264"),
+                    ]
+                }
+            ),
+        },
+    ]
+)
+def bodosql_datetime_types_small(request):
     return request.param
 
 
@@ -890,19 +921,19 @@ def comparison_ops(request):
         pytest.param(
             "BIT_AND",
             marks=pytest.mark.skip(
-                "Bitwise agregations not currently supported, see [BE-919]"
+                "Bitwise aggregations not currently supported, see [BE-919]"
             ),
         ),
         pytest.param(
             "BIT_OR",
             marks=pytest.mark.skip(
-                "Bitwise agregations not currently supported, see [BE-919]"
+                "Bitwise aggregations not currently supported, see [BE-919]"
             ),
         ),
         pytest.param(
             "BIT_XOR",
             marks=pytest.mark.skip(
-                "Bitwise agregations not currently supported, see [BE-919]"
+                "Bitwise aggregations not currently supported, see [BE-919]"
             ),
         ),
         "AVG",
@@ -1656,6 +1687,10 @@ def pytest_collection_modifyitems(items):
         pytest.mark.bodosql_10of11,
         pytest.mark.bodosql_11of11,
     ]
+    # Sort the items. This is needed due to a niche issue with azure CI:
+    # https://bodo.atlassian.net/browse/BE-4190
+    items.sort(key=functools.cmp_to_key(bodo.tests.conftest.fn_compare))
+
     # BODO_TEST_PYTEST_MOD environment variable indicates that we only want
     # to run the tests from the given test file. In this case, we add the
     # "single_mod" mark to the tests belonging to that module. This envvar is

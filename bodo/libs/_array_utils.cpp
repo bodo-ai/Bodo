@@ -201,23 +201,23 @@ void append_to_out_array(std::shared_ptr<arrow::Array> input_array,
  * @param f function that takes output array index and returns input array index
  * to find corresponding data
  * @param nRowOut number of rows in output array
- * @param use_nullable_int use nullable integer data type if input data is
- * integer
+ * @param use_nullable_arr use nullable integer/float data type if input data is
+ * Numpy integer/float
  * @return array_info* output data array as specified by input
  */
 template <typename F>
 array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr, F f,
                                                size_t nRowOut,
-                                               bool use_nullable_int = false) {
+                                               bool use_nullable_arr = false) {
     array_info* out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
     uint64_t siztype = numpy_item_size[dtype];
     std::vector<char> vectNaN = RetrieveNaNentry(dtype);
     char* in_data1 = in_arr->data1;
-    // use nullable int array if dtype is integer and use_nullable_int is
-    // specified
-    if (use_nullable_int && is_integer(dtype)) {
+    // use nullable int/float array if dtype is integer/float and
+    // use_nullable_arr is specified
+    if (use_nullable_arr && (is_integer(dtype) || is_float(dtype))) {
         out_arr = alloc_array(nRowOut, -1, -1,
                               bodo_array_type::NULLABLE_INT_BOOL, dtype, 0, 0);
         char* out_data1 = out_arr->data1;
@@ -254,7 +254,7 @@ array_info* RetrieveArray_SingleColumn_F_numpy(array_info* in_arr, F f,
 template <typename F>
 array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
                                          size_t nRowOut,
-                                         bool use_nullable_int = false) {
+                                         bool use_nullable_arr = false) {
     array_info* out_arr = NULL;
     bodo_array_type::arr_type_enum arr_type = in_arr->arr_type;
     Bodo_CTypes::CTypeEnum dtype = in_arr->dtype;
@@ -483,7 +483,7 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
     }
     if (arr_type == bodo_array_type::NUMPY) {
         out_arr = RetrieveArray_SingleColumn_F_numpy(in_arr, f, nRowOut,
-                                                     use_nullable_int);
+                                                     use_nullable_arr);
     }
     if (arr_type == bodo_array_type::ARROW) {
         // Arrow builder for output array. builds it dynamically (buffer
@@ -519,10 +519,10 @@ array_info* RetrieveArray_SingleColumn_F(array_info* in_arr, F f,
 
 array_info* RetrieveArray_SingleColumn(array_info* in_arr,
                                        std::vector<int64_t> const& ListIdx,
-                                       bool use_nullable_int) {
+                                       bool use_nullable_arr) {
     return RetrieveArray_SingleColumn_F(
         in_arr, [&](size_t iRow) -> int64_t { return ListIdx[iRow]; },
-        ListIdx.size(), use_nullable_int);
+        ListIdx.size(), use_nullable_arr);
 }
 
 array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
@@ -545,7 +545,7 @@ array_info* RetrieveArray_SingleColumn_arr(array_info* in_arr,
 array_info* RetrieveArray_TwoColumns(
     array_info* const& arr1, array_info* const& arr2,
     std::vector<std::pair<std::ptrdiff_t, std::ptrdiff_t>> const& ListPairWrite,
-    int const& ChoiceColumn, bool const& map_integer_type) {
+    int const& ChoiceColumn, bool const& use_nullable_arr) {
     if ((arr1 != nullptr) && (arr2 != nullptr) &&
         (arr1->arr_type == bodo_array_type::DICT) &&
         (arr2->arr_type == bodo_array_type::DICT) &&
@@ -779,7 +779,7 @@ array_info* RetrieveArray_TwoColumns(
         // ---unsigned integer: value 0
         // ---floating point: std::nan as here both notions match.
         uint64_t siztype = numpy_item_size[dtype];
-        if (!map_integer_type) {
+        if (!use_nullable_arr) {
             std::vector<char> vectNaN = RetrieveNaNentry(dtype);
             out_arr = alloc_array(nRowOut, -1, -1, arr_type, dtype, 0, 0);
             for (size_t iRow = 0; iRow < nRowOut; iRow++) {

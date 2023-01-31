@@ -3,6 +3,7 @@ package com.bodosql.calcite.application;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.CastingOperatorTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.CondOperatorTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.DatetimeOperatorTable;
+import com.bodosql.calcite.application.BodoSQLOperatorTables.JsonOperatorTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.NumericOperatorTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.SinceEpochFnTable;
 import com.bodosql.calcite.application.BodoSQLOperatorTables.StringOperatorTable;
@@ -10,11 +11,13 @@ import com.bodosql.calcite.application.BodoSQLOperatorTables.ThreeOperatorString
 import com.bodosql.calcite.application.BodoSQLTypeSystems.BodoSQLRelDataTypeSystem;
 import com.bodosql.calcite.application.bodo_sql_rules.AliasPreservingAggregateProjectMergeRule;
 import com.bodosql.calcite.application.bodo_sql_rules.AliasPreservingProjectJoinTransposeRule;
+import com.bodosql.calcite.application.bodo_sql_rules.DependencyCheckingProjectMergeRule;
 import com.bodosql.calcite.application.bodo_sql_rules.InnerJoinRemoveRule;
 import com.bodosql.calcite.application.bodo_sql_rules.JoinReorderConditionRule;
 import com.bodosql.calcite.application.bodo_sql_rules.LimitProjectTransposeRule;
 import com.bodosql.calcite.application.bodo_sql_rules.LogicalFilterReorderConditionRule;
 import com.bodosql.calcite.application.bodo_sql_rules.ProjectUnaliasedRemoveRule;
+import com.bodosql.calcite.application.bodo_sql_rules.ProjectionSubcolumnEliminationRule;
 import com.bodosql.calcite.catalog.BodoSQLCatalog;
 import com.bodosql.calcite.schema.BodoSqlSchema;
 import com.bodosql.calcite.schema.CatalogSchemaImpl;
@@ -178,6 +181,7 @@ public class RelationalAlgebraGenerator {
       sqlOperatorTables.add(DatetimeOperatorTable.instance());
       sqlOperatorTables.add(NumericOperatorTable.instance());
       sqlOperatorTables.add(StringOperatorTable.instance());
+      sqlOperatorTables.add(JsonOperatorTable.instance());
       sqlOperatorTables.add(CondOperatorTable.instance());
       sqlOperatorTables.add(SinceEpochFnTable.instance());
       sqlOperatorTables.add(ThreeOperatorStringTable.instance());
@@ -366,9 +370,10 @@ public class RelationalAlgebraGenerator {
               .addRuleInstance(FilterMergeRule.Config.DEFAULT.toRule())
               /*
                  Planner rule that merges a Project into another Project,
-                 provided the projects aren't projecting identical sets of input references.
+                 provided the projects aren't projecting identical sets of input references
+                 and don't have any dependencies.
               */
-              .addRuleInstance(ProjectMergeRule.Config.DEFAULT.toRule())
+              .addRuleInstance(DependencyCheckingProjectMergeRule.Config.DEFAULT.toRule())
               /*
               Planner rule that pushes a Filter past a Aggregate.
                  */
@@ -509,6 +514,15 @@ public class RelationalAlgebraGenerator {
               .addRuleInstance(LogicalFilterReorderConditionRule.Config.DEFAULT.toRule())
               // Push a limit before a project (e.g. select col as alias from table limit 10)
               .addRuleInstance(LimitProjectTransposeRule.Config.DEFAULT.toRule())
+              // If a column has been repeated or rewritten as a part of another column, possibly
+              // due to aliasing, then replace a projection with multiple projections.
+              // For example convert:
+              // LogicalProject(x=[$0], x2=[+($0, 10)], x3=[/(+($0, 10), 2)], x4=[*(/(+($0, 10), 2),
+              // 3)])
+              // to
+              // LogicalProject(x=[$0], x2=[$1], x3=[/(+($1, 10), 2)], x4=[*(/(+($1, 10), 2), 3)])
+              //  LogicalProject(x=[$0], x2=[+($0, 10)])
+              .addRuleInstance(ProjectionSubcolumnEliminationRule.Config.DEFAULT.toRule())
               .build();
 
     } else {

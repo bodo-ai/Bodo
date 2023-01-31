@@ -12,9 +12,9 @@ from py4j.protocol import Py4JError
 def bodo_connector_get_current_snapshot_id(
     conn_str: str, db_name: str, table: str
 ) -> int:
-    try:
-        catalog_type, _ = parse_conn_str(conn_str)
+    catalog_type, _ = parse_conn_str(conn_str)
 
+    try:
         bodo_iceberg_table_reader = get_java_table_handler(
             conn_str,
             catalog_type,

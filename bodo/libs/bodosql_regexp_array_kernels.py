@@ -18,7 +18,7 @@ def posix_to_re(pattern):
     Mappings found here: https://github.com/micromatch/posix-character-classes
 
     Currently, errors are caused when a null terminator is inside of the
-    embedded stirng literals, so [:ascii:] and [:word:] start at character 1
+    embedded string literals, so [:ascii:] and [:word:] start at character 1
     instead of character 0.
 
     Args:

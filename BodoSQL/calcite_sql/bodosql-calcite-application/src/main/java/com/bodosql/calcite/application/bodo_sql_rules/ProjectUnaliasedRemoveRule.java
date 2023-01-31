@@ -85,7 +85,7 @@ public class ProjectUnaliasedRemoveRule extends RelRule<ProjectUnaliasedRemoveRu
     // in the withOperandSupplier below.
     Project project = call.rel(0);
     // Double check the input is trivial. This is probably
-    // necessary but can detect other application failures.
+    // unnecessary but can detect other application failures.
     assert isTrivial(project);
     RelNode stripped = project.getInput();
     stripped = convert(stripped, project.getConvention());

@@ -458,16 +458,27 @@ def now_equivalent_fns(request):
         ),
         pytest.param(
             "SELECT A, GETDATE() - interval '6' months from table1",
-            id="no_case-minus_interval",
+            id="no_case-minus_interval-month",
+        ),
+        pytest.param(
+            "SELECT A, GETDATE() + interval '5' weeks from table1",
+            id="no_case-plus_interval-week",
+        ),
+        pytest.param(
+            "SELECT A, GETDATE() - interval '8 weeks' from table1",
+            id="no_case-minus_interval-week-sf-syntax",
+        ),
+        pytest.param(
+            "SELECT A, GETDATE() - interval '8' weeks from table1",
+            id="no_case-minus_interval-week",
         ),
         pytest.param(
             "SELECT A, GETDATE() + interval '5' days from table1",
-            id="no_case-plus_interval",
+            id="no_case-plus_interval-day",
         ),
         pytest.param(
             "SELECT A, CASE WHEN EXTRACT(MONTH from GETDATE()) = A then 'y' ELSE 'n' END from table1",
             id="case",
-            marks=pytest.mark.skip("[BE-3909] Fix GETDATE inside of CASE"),
         ),
     ],
 )
@@ -479,6 +490,9 @@ def test_getdate(query, spark_info, memory_leak_check):
             {"A": pd.Series(list(range(1, 13)), dtype=pd.Int32Dtype())}
         )
     }
+
+    if query == "SELECT A, GETDATE() - interval '8 weeks' from table1":
+        spark_query = "SELECT A, CURRENT_DATE() - interval '8' weeks from table1"
 
     check_query(
         query,
@@ -546,18 +560,15 @@ def test_utc_timestamp(basic_df, spark_info, memory_leak_check):
 
 
 @pytest.mark.slow
-@pytest.mark.skip(
-    "Requires engine fix for overflow issue with pd.Timestamp.floor, see [BE-1022]"
-)
 def test_utc_date(basic_df, spark_info, memory_leak_check):
     """tests utc_date"""
 
     query = f"SELECT A, EXTRACT(day from UTC_DATE()), (EXTRACT(HOUR from UTC_DATE()) + EXTRACT(MINUTE from UTC_DATE()) + EXTRACT(SECOND from UTC_DATE()) ) = 0  from table1"
     expected_output = pd.DataFrame(
         {
-            "unkown_name1": basic_df["table1"]["A"],
-            "unkown_name2": pd.Timestamp.now().day,
-            "unkown_name5": True,
+            "unknown_name1": basic_df["table1"]["A"],
+            "unknown_name2": pd.Timestamp.now().day,
+            "unknown_name5": True,
         }
     )
     check_query(
@@ -721,10 +732,20 @@ def test_dayname_scalars(basic_df, spark_info, memory_leak_check):
     )
 
 
-def test_monthname_cols(spark_info, dt_fn_dataframe, memory_leak_check):
+@pytest.mark.parametrize(
+    "fn_name", ["MONTHNAME", pytest.param("MONTH_NAME", marks=pytest.mark.slow)]
+)
+@pytest.mark.parametrize("wrap_case", [True, False])
+def test_monthname_cols(
+    fn_name, wrap_case, spark_info, dt_fn_dataframe, memory_leak_check
+):
     """tests the monthname function on column inputs. Needed since the equivalent function has different syntax"""
 
-    query = "SELECT MONTHNAME(timestamps) from table1"
+    if wrap_case:
+        query = f"SELECT CASE WHEN timestamps IS NULL THEN {fn_name}(timestamps) else {fn_name}(timestamps) END FROM table1"
+    else:
+        query = f"SELECT {fn_name}(timestamps) from table1"
+
     spark_query = "SELECT DATE_FORMAT(timestamps, 'MMMM') from table1"
 
     check_query(
@@ -737,11 +758,12 @@ def test_monthname_cols(spark_info, dt_fn_dataframe, memory_leak_check):
     )
 
 
-def test_monthname_scalars(basic_df, spark_info, memory_leak_check):
+@pytest.mark.parametrize("fn_name", ["MONTHNAME", "MONTH_NAME"])
+def test_monthname_scalars(fn_name, basic_df, spark_info, memory_leak_check):
     """tests the monthname function on scalar inputs. Needed since the equivalent function has different syntax"""
 
     # since monthname is a fn we defined, don't need to worry about calcite performing optimizations
-    query = "SELECT MONTHNAME(TIMESTAMP '2021-03-03'), MONTHNAME(TIMESTAMP '2021-03-13'), MONTHNAME(TIMESTAMP '2021-03-01')"
+    query = f"SELECT {fn_name}(TIMESTAMP '2021-03-03'), {fn_name}(TIMESTAMP '2021-03-13'), {fn_name}(TIMESTAMP '2021-03-01')"
     spark_query = "SELECT DATE_FORMAT('2021-03-03', 'MMMM'), DATE_FORMAT('2021-03-13', 'MMMM'), DATE_FORMAT('2021-03-01', 'MMMM')"
 
     check_query(
@@ -1034,9 +1056,6 @@ def make_spark_interval(interval_str, value):
         raise Exception(f"Error, need a case for timeunit: {interval_str}")
 
 
-@pytest.mark.skip(
-    "Need pd.Timedelta * integer series support for column case, see BE-1054"
-)
 def test_timestamp_add_cols(
     spark_info, mysql_interval_str, dt_fn_dataframe, memory_leak_check
 ):
@@ -1902,6 +1921,87 @@ def test_subdate_td_scalars(
     )
 
 
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case"),
+    ],
+)
+@pytest.mark.parametrize(
+    "interval_amt",
+    [
+        pytest.param(100, id="integer"),
+        pytest.param("INTERVAL '4' days + INTERVAL '6' hours", id="timedelta_add"),
+        pytest.param("INTERVAL '4' days - INTERVAL '6' hours", id="timedelta_sub"),
+    ],
+)
+def test_tz_aware_subdate(use_case, interval_amt, memory_leak_check):
+    if use_case:
+        query = f"SELECT DT, CASE WHEN DT IS NULL THEN NULL ELSE SUBDATE(DT, {interval_amt}) END from table1"
+    else:
+        query = f"SELECT DT, DATE_SUB(DT, {interval_amt}) from table1"
+
+    input_ts = [
+        "2018-3-1 12:30:59.251125999",
+        "2018-3-12",
+        None,
+        "2018-9-29 6:00:00",
+        "2018-11-6",
+    ]
+    if isinstance(interval_amt, int):
+        output_ts = [
+            "2017-11-21 12:30:59.251125999",
+            "2017-12-02",
+            None,
+            "2018-06-21 06:00:00",
+            "2018-07-29",
+        ]
+    elif "+" in interval_amt:
+        output_ts = [
+            "2018-02-25 06:30:59.251125999",
+            "2018-03-07 18:00:00",
+            None,
+            "2018-09-25",
+            "2018-11-01 18:00:00",
+        ]
+    else:
+        output_ts = [
+            "2018-02-25 18:30:59.251125999",
+            "2018-03-08 6:00:00",
+            None,
+            "2018-09-25 12:00:00",
+            "2018-11-02 6:00:00",
+        ]
+
+    tz = "US/Pacific" if use_case else "Poland"
+    table1 = pd.DataFrame(
+        {
+            "DT": pd.Series(
+                [None if ts is None else pd.Timestamp(ts, tz=tz) for ts in input_ts]
+            )
+        }
+    )
+    expected_output = pd.DataFrame(
+        {
+            0: table1.DT,
+            1: pd.Series(
+                [None if ts is None else pd.Timestamp(ts, tz=tz) for ts in output_ts]
+            ),
+        }
+    )
+
+    check_query(
+        query,
+        {"table1": table1},
+        None,
+        check_names=False,
+        check_dtype=False,
+        expected_output=expected_output,
+        only_jit_1DVar=True,
+    )
+
+
 def test_yearweek(spark_info, dt_fn_dataframe, memory_leak_check):
     """Test for YEARWEEK, which returns a 6-character string
     with the date's year and week (1-53) concatenated together"""
@@ -2423,7 +2523,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
     2. SELECT A, CASE WHEN B THEN WEEK(A) ELSE NULL END, ... from table1
     """
     calculations = []
-    for func in ["WEEK", "QUARTER", "DAYNAME", "MONTHNAME"]:
+    for func in ["WEEK", "QUARTER", "DAYNAME", "MONTHNAME", "MONTH_NAME"]:
         if case:
             calculations.append(f"CASE WHEN B THEN {func}(A) ELSE NULL END")
         else:
@@ -2439,6 +2539,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
             "q": large_tz_df.A.dt.quarter,
             "d": large_tz_df.A.dt.day_name(),
             "m": large_tz_df.A.dt.month_name(),
+            "m2": large_tz_df.A.dt.month_name(),
         }
     )
     if case:
@@ -2446,6 +2547,7 @@ def test_tz_aware_week_quarter_dayname(large_tz_df, case, memory_leak_check):
         py_output["q"][~large_tz_df["B"]] = None
         py_output["d"][~large_tz_df["B"]] = None
         py_output["m"][~large_tz_df["B"]] = None
+        py_output["m2"][~large_tz_df["B"]] = None
 
     check_query(
         query,
@@ -2650,6 +2752,7 @@ def test_tz_aware_previous_day_case(
     check_query(query, ctx, None, expected_output=py_output, check_dtype=False)
 
 
+@pytest.mark.tz_aware
 def test_date_trunc_tz_aware(date_trunc_literal, memory_leak_check):
     query = f"SELECT DATE_TRUNC('{date_trunc_literal}', A) as output from table1"
     df = pd.DataFrame(
@@ -2974,6 +3077,7 @@ def test_tz_aware_subdate_interval_day_case(memory_leak_check):
 
 
 @pytest.mark.tz_aware
+@pytest.mark.skip(reason="[BE-4239] Fix how BodoSQL processes Interval Month literals")
 def test_tz_aware_subdate_interval_month(memory_leak_check):
     """
     Test subdate on tz-aware data with a Month Interval argument.
@@ -3014,10 +3118,10 @@ def test_tz_aware_subdate_interval_month_case(memory_leak_check):
         }
     )
     ctx = {"table1": df}
-    query1 = "SELECT CASE WHEN B THEN SUBDATE(A, Interval 4 Months) END as output from table1"
-    query2 = "SELECT CASE WHEN B THEN DATE_SUB(A, Interval 4 Months) END as output from table1"
+    query1 = "SELECT CASE WHEN B THEN SUBDATE(A, Interval 1 Months) END as output from table1"
+    query2 = "SELECT CASE WHEN B THEN DATE_SUB(A, Interval 1 Months) END as output from table1"
 
-    S = df.A - pd.DateOffset(months=4)
+    S = df.A - pd.DateOffset(months=1)
     S[~df.B] = None
     py_output = pd.DataFrame({"output": S})
     check_query(query1, ctx, None, expected_output=py_output)

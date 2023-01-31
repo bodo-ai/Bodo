@@ -29,7 +29,7 @@ public class BodoArrayHelpers {
       case FLOAT:
       case DOUBLE:
       case DECIMAL:
-        return String.format("np.empty(%s, dtype=np.float64)", len);
+        return String.format("bodo.libs.float_arr_ext.alloc_float_array(%s, bodo.float64)", len);
       case DATE:
       case TIMESTAMP:
         return String.format("np.empty(%s, dtype=\"datetime64[ns]\")", len);
@@ -109,12 +109,18 @@ public class BodoArrayHelpers {
           return "numba.core.types.Array(bodo.int64, 1, 'C')";
         }
       case FLOAT:
-        // TODO: Add nullable support
-        return "numba.core.types.Array(bodo.float32, 1, 'C')";
+        if (nullable) {
+          return "bodo.FloatingArrayType(bodo.float32)";
+        } else {
+          return "numba.core.types.Array(bodo.float32, 1, 'C')";
+        }
       case DOUBLE:
       case DECIMAL:
-        // TODO: Add nullable support
-        return "numba.core.types.Array(bodo.float64, 1, 'C')";
+        if (nullable) {
+          return "bodo.FloatingArrayType(bodo.float64)";
+        } else {
+          return "numba.core.types.Array(bodo.float64, 1, 'C')";
+        }
       case DATE:
         // TODO: Add proper date support
       case TIMESTAMP:

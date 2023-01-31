@@ -9,8 +9,11 @@ import pytest
 
 import bodo
 from bodo.libs.bodosql_array_kernels import *
+from bodo.libs.bodosql_datetime_array_kernels import (
+    standardize_snowflake_date_time_part_compile_time,
+)
 from bodo.tests.timezone_common import generate_date_trunc_func
-from bodo.tests.utils import check_func
+from bodo.tests.utils import check_func, nanoseconds_to_other_time_units
 
 
 @pytest.mark.parametrize(
@@ -649,6 +652,32 @@ def test_dayofyear(dates_scalar_vector, memory_leak_check):
     )
 
 
+def test_get_weekofyear(dates_scalar_vector, memory_leak_check):
+    def impl(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.get_weekofyear(arr))
+
+    # avoid pd.Series() conversion for scalar output
+    if isinstance(dates_scalar_vector, pd.Timestamp):
+        impl = lambda arr: bodo.libs.bodosql_array_kernels.get_weekofyear(arr)
+
+    # Simulates get_weekofyear on a single row
+    def get_weekofyear_scalar_fn(elem):
+        if pd.isna(elem):
+            return None
+        else:
+            elem = pd.Timestamp(elem)
+            return elem.weekofyear
+
+    answer = vectorized_sol((dates_scalar_vector,), get_weekofyear_scalar_fn, None)
+    check_func(
+        impl,
+        (dates_scalar_vector,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
 @pytest.mark.parametrize(
     "days",
     [
@@ -1238,22 +1267,6 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
 
 
 @pytest.mark.parametrize(
-    "part",
-    [
-        "quarter",
-        "yyyy",
-        "week",
-        "mm",
-        "days",
-        "hour",
-        "minute",
-        "S",
-        "ms",
-        "us",
-        "nsecond",
-    ],
-)
-@pytest.mark.parametrize(
     "ts_input",
     [
         pytest.param(
@@ -1312,28 +1325,356 @@ def test_tz_aware_interval_add_timedelta(ts_val, memory_leak_check):
         ),
     ],
 )
-def test_date_trunc(part, ts_input, memory_leak_check):
+def test_date_trunc(datetime_part_strings, ts_input, memory_leak_check):
     """
     Tests date_trunc array kernel on various inputs, testing all the different code paths
     in the generated kernel.
     """
 
-    def impl(part, arr):
-        return pd.Series(bodo.libs.bodosql_array_kernels.date_trunc(part, arr))
+    def impl(datetime_part_strings, arr):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.date_trunc(datetime_part_strings, arr)
+        )
 
     # avoid pd.Series() conversion for scalar output
     if isinstance(ts_input, pd.Timestamp):
-        impl = lambda part, arr: bodo.libs.bodosql_array_kernels.date_trunc(part, arr)
+        impl = lambda datetime_part_strings, arr: bodo.libs.bodosql_array_kernels.date_trunc(
+            datetime_part_strings, arr
+        )
 
     # Simulates date_trunc on a single row
-    def date_trunc_scalar_fn(part, ts_input):
-        return generate_date_trunc_func(part)(ts_input)
+    def date_trunc_scalar_fn(datetime_part_strings, ts_input):
+        return generate_date_trunc_func(datetime_part_strings)(ts_input)
 
-    answer = vectorized_sol((part, ts_input), date_trunc_scalar_fn, None)
+    answer = vectorized_sol(
+        (datetime_part_strings, ts_input), date_trunc_scalar_fn, None
+    )
     check_func(
         impl,
-        (part, ts_input),
+        (datetime_part_strings, ts_input),
         py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "interval_input",
+    [
+        pytest.param(pd.DateOffset(years=1, months=-4), id="date-offset-scalar"),
+        pytest.param(pd.Timedelta(seconds=42), id="timedelta-scalar"),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timedelta(days=1),
+                    None,
+                    pd.Timedelta(seconds=-42),
+                    pd.Timedelta(microseconds=15),
+                    pd.Timedelta(days=-1, minutes=15),
+                ]
+                * 6
+            ).values,
+            id="timedelta-vector",
+        ),
+    ],
+)
+def test_interval_multiply(interval_input, memory_leak_check):
+    """
+    Tests interval_multiply with the different interval types and
+    on arrays.
+    """
+    int_value = 6
+    int_array = pd.array([1, None, -4, 5, 0] * 6, dtype="Int64")
+
+    def impl(interval, integer):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.interval_multiply(interval, integer)
+        )
+
+    scalar_integer_impl = impl
+    # If we have a scalar interval then the scalar integer outputs a scalar.
+    if isinstance(interval_input, (pd.Timedelta, pd.DateOffset)):
+        scalar_integer_impl = (
+            lambda interval, integer: bodo.libs.bodosql_array_kernels.interval_multiply(
+                interval, integer
+            )
+        )
+
+    def interval_scalar_fn(interval, integer):
+        if pd.isna(interval) or pd.isna(integer):
+            return None
+        else:
+            if isinstance(interval, np.timedelta64):
+                interval = pd.Timedelta(interval)
+            return interval * integer
+
+    scalar_integer_answer = vectorized_sol(
+        (interval_input, int_value), interval_scalar_fn, None
+    )
+    check_func(
+        scalar_integer_impl,
+        (interval_input, int_value),
+        py_output=scalar_integer_answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+    if not isinstance(interval_input, pd.DateOffset):
+        # DateOffset can't be used with an array input.
+        vector_integer_answer = vectorized_sol(
+            (interval_input, int_array), interval_scalar_fn, None
+        )
+        check_func(
+            impl,
+            (interval_input, int_array),
+            py_output=vector_integer_answer,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "interval_input",
+    [
+        pytest.param(pd.Timedelta(seconds=42), id="timedelta-scalar"),
+        pytest.param(
+            pd.Series(
+                [
+                    pd.Timedelta(days=1),
+                    None,
+                    pd.Timedelta(seconds=-42),
+                    pd.Timedelta(microseconds=15),
+                    pd.Timedelta(days=-1, minutes=15),
+                ]
+                * 6
+            ).values,
+            id="timedelta-vector",
+        ),
+    ],
+)
+def test_interval_add_interval(interval_input, memory_leak_check):
+    """
+    Tests support for interval_add_interval on various Interval types.
+    """
+
+    def impl(arr0, arr1):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.interval_add_interval(arr0, arr1)
+        )
+
+    is_scalar = isinstance(interval_input, (pd.Timedelta, pd.DateOffset))
+
+    # If we have a scalar interval then the scalar integer outputs a scalar.
+    if is_scalar:
+        impl = lambda arr0, arr1: bodo.libs.bodosql_array_kernels.interval_add_interval(
+            arr0, arr1
+        )
+
+    def interval_scalar_fn(arg0, arg1):
+        if pd.isna(arg0) or pd.isna(arg1):
+            return None
+        else:
+            if isinstance(arg0, np.timedelta64):
+                arg0 = pd.Timedelta(arg0)
+            if isinstance(arg1, np.timedelta64):
+                arg1 = pd.Timedelta(arg1)
+            return arg0 + arg1
+
+    answer = vectorized_sol((interval_input, interval_input), interval_scalar_fn, None)
+    check_func(
+        impl,
+        (interval_input, interval_input),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+    if not is_scalar:
+        # testing adding an array with scalars
+        scalar_value = pd.Timedelta(interval_input[0])
+        answer = vectorized_sol(
+            (interval_input, scalar_value), interval_scalar_fn, None
+        )
+        check_func(
+            impl,
+            (interval_input, scalar_value),
+            py_output=answer,
+            check_dtype=False,
+            reset_index=True,
+        )
+        check_func(
+            impl,
+            (scalar_value, interval_input),
+            py_output=answer,
+            check_dtype=False,
+            reset_index=True,
+        )
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pytest.param(pd.Timestamp("2022-12-25 4:40:45"), id="scalar"),
+        pytest.param(
+            pd.Series(
+                [
+                    "2023-1-1",
+                    None,
+                    "2023-1-10",
+                    "2020-11-21",
+                    "2022-12-31",
+                ]
+                * 6
+            ).values,
+            id="vector",
+        ),
+    ],
+)
+def test_create_date(arg, memory_leak_check):
+    """
+    Tests create_date with array and scalar data.
+    """
+
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.create_date(arg))
+
+    # Scalar isn't wrapped in a series.
+    if isinstance(arg, (pd.Timestamp, str)):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.create_date(arg)
+
+    def days_scalar_fn(arg):
+        if pd.isna(arg):
+            return None
+        else:
+            return pd.Timestamp(arg).normalize()
+
+    answer = vectorized_sol((arg,), days_scalar_fn, None)
+
+    check_func(
+        impl,
+        (arg,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pytest.param(pd.Timestamp("2022-12-25 4:40:45"), id="scalar"),
+        pytest.param(
+            pd.Series(
+                [
+                    "2023-1-1 00:00:00",
+                    None,
+                    "2023-1-10 12:00:01",
+                    "2020-11-21",
+                    "2022-12-31 23:11:11.433",
+                ]
+                * 6
+            ).values,
+            id="vector",
+        ),
+    ],
+)
+def test_create_timestamp(arg, memory_leak_check):
+    """
+    Tests create_timestamp with array and scalar data.
+    """
+
+    def impl(arg):
+        return pd.Series(bodo.libs.bodosql_array_kernels.create_timestamp(arg))
+
+    # Scalar isn't wrapped in a series.
+    if isinstance(arg, (pd.Timestamp, str)):
+        impl = lambda arg: bodo.libs.bodosql_array_kernels.create_timestamp(arg)
+
+    def days_scalar_fn(arg):
+        if pd.isna(arg):
+            return None
+        else:
+            return pd.Timestamp(arg)
+
+    answer = vectorized_sol((arg,), days_scalar_fn, None)
+
+    check_func(
+        impl,
+        (arg,),
+        py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+def date_sub_unit_fn(unit, arg0, arg1):
+    if pd.isna(arg0) or pd.isna(arg1):
+        return None
+    else:
+        A = pd.Timestamp(arg0)
+        B = pd.Timestamp(arg1)
+
+        datetime_part = standardize_snowflake_date_time_part_compile_time(unit)(unit)
+        if datetime_part == "year":
+            return B.year - A.year
+        elif datetime_part == "quarter":
+            yr_diff = (B.year - A.year) * 4
+            q_diff = B.quarter - A.quarter
+            return yr_diff + q_diff
+        elif datetime_part == "month":
+            yr_diff = (B.year - A.year) * 12
+            m_diff = B.month - A.month
+            return yr_diff + m_diff
+        elif datetime_part == "week":
+            yr_diff = bodo.libs.bodosql_array_kernels.get_iso_weeks_between_years(
+                A.year, B.year
+            )
+            wk_diff = B.week - A.week
+            return yr_diff + wk_diff
+        elif datetime_part == "day":
+            return (B - A).days
+        else:
+            return nanoseconds_to_other_time_units((B - A).value, datetime_part)
+
+
+def test_date_sub_date_unit(datetime_part_strings, memory_leak_check):
+    """
+    Tests date_sub_date_unit with array and scalar data.
+    """
+
+    def impl(unit, arg0, arg1):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.date_sub_date_unit(
+                numba.literally(unit), arg0, arg1
+            )
+        )
+
+    scalar_impl = (
+        lambda unit, arg0, arg1: bodo.libs.bodosql_array_kernels.date_sub_date_unit(
+            numba.literally(unit), arg0, arg1
+        )
+    )
+
+    S0 = pd.Series(list(pd.date_range("2022-1-1", freq="29D", periods=30)) + [None] * 4)
+    S1 = pd.Series(
+        [None] * 4 + list(pd.date_range("2023-11-1", freq="-50D", periods=30))
+    )
+    arr0 = S0.values
+    arr1 = S1.values
+    scalar0 = S0[0]
+    scalar1 = S1[15]
+
+    args = (datetime_part_strings, arr0, arr1)
+    check_func(
+        impl,
+        args,
+        py_output=vectorized_sol(args, date_sub_unit_fn, None),
+        check_dtype=False,
+        reset_index=True,
+    )
+    args = (datetime_part_strings, scalar0, scalar1)
+    check_func(
+        scalar_impl,
+        args,
+        py_output=vectorized_sol(args, date_sub_unit_fn, None),
         check_dtype=False,
         reset_index=True,
     )
@@ -1558,5 +1899,144 @@ def test_option_date_trunc(memory_leak_check):
             check_func(
                 impl,
                 (part, ts, flag0, flag1),
+                py_output=answer,
+            )
+
+
+@pytest.mark.slow
+def test_option_get_weekofyear(memory_leak_check):
+    """
+    Tests get_weekofyear array kernel on optional input
+    """
+
+    def impl(arg, flag):
+        arg0 = arg if flag else None
+        return bodo.libs.bodosql_array_kernels.get_weekofyear(arg0)
+
+    arg = pd.Timestamp("2022-11-6 12:40:45", tz="US/Pacific")
+
+    for flag in [True, False]:
+        answer = arg.weekofyear if flag else None
+        check_func(
+            impl,
+            (arg, flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.slow
+def test_option_interval_multiply(memory_leak_check):
+    """
+    Tests interval_multiply array kernel on optional inputs.
+    """
+
+    def impl(interval, integer, flag0, flag1):
+        arg0 = interval if flag0 else None
+        arg1 = integer if flag1 else None
+        return bodo.libs.bodosql_array_kernels.interval_multiply(arg0, arg1)
+
+    arg0 = pd.Timedelta(days=14, seconds=12)
+    arg1 = -14
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = arg0 * arg1 if flag0 and flag1 else None
+            check_func(
+                impl,
+                (arg0, arg1, flag0, flag1),
+                py_output=answer,
+            )
+
+
+@pytest.mark.slow
+def test_interval_add_interval_optional(memory_leak_check):
+    """
+    Tests interval_add_interval with optional data.
+    """
+
+    def impl(A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+        return bodo.libs.bodosql_array_kernels.interval_add_interval(arg0, arg1)
+
+    A = pd.Timedelta(days=17)
+    B = pd.Timedelta(seconds=-4)
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = A + B if flag0 and flag1 else None
+            check_func(
+                impl,
+                (A, B, flag0, flag1),
+                py_output=answer,
+            )
+
+
+@pytest.mark.slow
+def test_create_date_optional(memory_leak_check):
+    """
+    Tests create_date with optional data.
+    """
+
+    def impl(arg, flag):
+        arg0 = arg if flag else None
+        return bodo.libs.bodosql_array_kernels.create_date(arg0)
+
+    arg = "2022-11-1"
+    for flag in [True, False]:
+        answer = pd.Timestamp(arg) if flag else None
+        check_func(
+            impl,
+            (arg, flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.slow
+def test_create_timestamp_optional(memory_leak_check):
+    """
+    Tests create_timestamp with optional data.
+    """
+
+    def impl(arg, flag):
+        arg0 = arg if flag else None
+        return bodo.libs.bodosql_array_kernels.create_timestamp(arg0)
+
+    arg = "2022-11-1 12:32:31"
+    for flag in [True, False]:
+        answer = pd.Timestamp(arg) if flag else None
+        check_func(
+            impl,
+            (arg, flag),
+            py_output=answer,
+        )
+
+
+@pytest.mark.slow
+def test_date_sub_date_unit_optional(datetime_part_strings, memory_leak_check):
+    """
+    Tests date_sub_date_unit with optional data.
+    """
+
+    def impl(date_or_time_part, A, B, flag0, flag1):
+        arg0 = A if flag0 else None
+        arg1 = B if flag1 else None
+
+        return bodo.libs.bodosql_array_kernels.date_sub_date_unit(
+            numba.literally(date_or_time_part), arg0, arg1
+        )
+
+    # Note that pd.Timestamp constructor does not accept a millisecond argument
+    # Year, month, day, hour, minute, second, microsecond, nanosecond
+    A = pd.Timestamp(2022, 11, 14, 1, 12, 10, 10, 10)
+    B = pd.Timestamp(2021, 12, 2, 10, 2, 50, 1, 999)
+
+    answer = date_sub_unit_fn(datetime_part_strings, A, B)
+
+    for flag0 in [True, False]:
+        for flag1 in [True, False]:
+            answer = answer if flag0 and flag1 else None
+            check_func(
+                impl,
+                (datetime_part_strings, A, B, flag0, flag1),
                 py_output=answer,
             )

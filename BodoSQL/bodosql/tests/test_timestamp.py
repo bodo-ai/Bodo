@@ -66,6 +66,72 @@ def test_datediff_literals(basic_df, spark_info, memory_leak_check):
     check_query(query3, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
+@pytest.mark.parametrize(
+    "query, expected_output",
+    [
+        pytest.param(
+            "SELECT DATEDIFF('YEAR', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            pd.DataFrame({"A": pd.Series([-6])}),
+            id="year",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('QUARTER', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            pd.DataFrame({"A": pd.Series([-21])}),
+            id="quarter",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('MONTH', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            pd.DataFrame({"A": pd.Series([-62])}),
+            id="month",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('WEEK', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            pd.DataFrame({"A": pd.Series([-271])}),
+            id="week",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('DAY', TIMESTAMP '2017-02-28', TIMESTAMP '2011-12-25')",
+            pd.DataFrame({"A": pd.Series([-1892])}),
+            id="day",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('HOUR', TIMESTAMP '2017-02-28 10:10:10', TIMESTAMP '2011-12-25 22:33:33')",
+            pd.DataFrame({"A": pd.Series([-45396])}),
+            id="hour",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('MINUTE', TIMESTAMP '2017-02-28 12:10:05', TIMESTAMP '2011-12-25 10:10:10')",
+            pd.DataFrame({"A": pd.Series([-2724600])}),
+            id="minute",
+        ),
+        pytest.param(
+            "SELECT DATEDIFF('SECOND', TIMESTAMP '2011-02-28 22:33:33', TIMESTAMP '2017-12-25 12:10:05')",
+            pd.DataFrame({"A": pd.Series([215271392])}),
+            id="second",
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_datediff_args3_literals(query, expected_output, basic_df, memory_leak_check):
+    """
+    Checks that calling DATEDIFF on timestamp literals behaves as expected.
+    Tests all possible datetime parts except for subsecond units.
+
+    Timestamp precision for literals in Calcite is currently limited to seconds
+    and will be addressed in a follow-up issue: [BE-4272]
+
+    """
+
+    check_query(
+        query,
+        basic_df,
+        spark=None,
+        expected_output=expected_output,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
 @pytest.mark.slow
 def test_str_to_date_literals(basic_df, spark_info, memory_leak_check):
     """
@@ -98,13 +164,116 @@ def test_datediff_multitable_columns(
     bodosql_datetime_types, spark_info, memory_leak_check
 ):
     """
-    Checks that calling DATEDIFF on literals behaves as expected
+    Checks that calling DATEDIFF on columns behaves as expected
     """
-    bodosql_datetime_types["table2"] = bodosql_datetime_types["table1"]
-    query = "SELECT DATEDIFF(table1.A, table2.B) from table1, table2"
+    query = "SELECT DATEDIFF(table1.A, table1.B) from table1"
 
     check_query(
         query, bodosql_datetime_types, spark_info, check_names=False, check_dtype=False
+    )
+
+
+@pytest.mark.parametrize(
+    "query, spark_query",
+    [
+        pytest.param(
+            "select DATEDIFF('YEAR', table1.A, table1.B) from table1",
+            "select (year(table1.B) - year(table1.A)) from table1",
+            id="year",
+        ),
+        pytest.param(
+            "select DATEDIFF('DAY', table1.A, table1.B) from table1",
+            "select DATEDIFF(table1.B, table1.A) from table1",
+            id="day",
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_datediff_args3_multitable_columns_date(
+    query, spark_query, bodosql_datetime_types, spark_info, memory_leak_check
+):
+    """
+    Checks that calling DATEDIFF with date parts on columns behaves as expected.
+
+    Used https://kontext.tech/article/830/spark-date-difference-in-seconds-minutes-hours
+    for defining equivalent Spark queries
+    """
+    check_query(
+        query,
+        bodosql_datetime_types,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "query, spark_query",
+    [
+        pytest.param(
+            "select DATEDIFF('SECOND', table1.A, table2.B) from table1, table2",
+            "select ((bigint(to_timestamp(table2.B))-bigint(to_timestamp(table1.A)))) from table1, table2",
+            id="second",
+        ),
+        pytest.param(
+            "select DATEDIFF('MILLISECOND', table1.A, table2.B) from table1, table2",
+            "select ((bigint(to_timestamp(table2.B))-bigint(to_timestamp(table1.A))) * 1000) from table1, table2",
+            id="millisecond",
+        ),
+        pytest.param(
+            "select DATEDIFF('MICROSECOND', table1.A, table2.B) from table1, table2",
+            "select ((bigint(to_timestamp(table2.B))-bigint(to_timestamp(table1.A))) * 1000 * 1000) from table1, table2",
+            id="microsecond",
+        ),
+        pytest.param(
+            "select DATEDIFF('NANOSECOND', table1.A, table2.B) from table1, table2",
+            "select ((bigint(to_timestamp(table2.B))-bigint(to_timestamp(table1.A))) * 1000 * 1000 * 1000) from table1, table2",
+            id="nanosecond",
+        ),
+    ],
+)
+@pytest.mark.slow
+def test_datediff_args3_multitable_columns_time(
+    query, spark_query, bodosql_datetime_types_small, spark_info, memory_leak_check
+):
+    """
+    Checks that calling DATEDIFF with time parts on columns behaves as expected.
+
+    Used https://kontext.tech/article/830/spark-date-difference-in-seconds-minutes-hours
+    for defining equivalent Spark queries
+    """
+    check_query(
+        query,
+        bodosql_datetime_types_small,
+        spark=spark_info,
+        equivalent_spark_query=spark_query,
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.slow
+def test_datediff_args3_multitable_columns_case(
+    bodosql_datetime_types, spark_info, memory_leak_check
+):
+    """
+    Checks that calling DATEDIFF on columns in a case statement
+    works as expected.
+    """
+    spark_datediff = "DATEDIFF(table1.B, table1.A)"
+    bodo_datediff = "DATEDIFF('DAY', table1.A, table1.B)"
+
+    query = f"SELECT CASE WHEN {bodo_datediff} > 30 THEN {bodo_datediff} ELSE -1 END as res from table1"
+    spark_query = f"SELECT CASE WHEN {spark_datediff} > 30 THEN {spark_datediff} ELSE -1 END as res from table1"
+
+    check_query(
+        query,
+        bodosql_datetime_types,
+        spark_info,
+        equivalent_spark_query=spark_query,
+        check_names=False,
+        check_dtype=False,
     )
 
 
@@ -179,3 +348,42 @@ def test_str_date_case_stmt(spark_info, memory_leak_check):
         check_names=False,
         check_dtype=False,
     )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            "2013-04-28T20:57:01.123456789+00:00",
+            id='YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM_no_offset',
+        ),
+        pytest.param(
+            "2013-04-28T20:57:01.123456789+07:00",
+            id='YYYY-MM-DD"T"HH24:MI:SS.FFTZH:TZM_with_offset',
+        ),
+    ]
+)
+def timestamp_literal(request):
+    return request.param
+
+
+@pytest.mark.skip("Needs calcite support")
+def test_timestamp_from_utc_literal(timestamp_literal, memory_leak_check):
+    """
+    Checks that a timestamp can be created from a literal with a UTC offset
+    """
+    value = pd.Timestamp(timestamp_literal).tz_convert("UTC").tz_localize(None)
+    query = f"SELECT TIMESTAMP '{timestamp_literal}' AS ts"
+    ctx = {}
+    expected_output = pd.DataFrame({"ts": value}, index=np.arange(1))
+    check_query(query, ctx, None, expected_output=expected_output)
+
+
+def test_timestamp_cast_utc_literal(timestamp_literal, memory_leak_check):
+    """
+    Checks that a timestamp can be cast from a literal with a UTC offset
+    """
+    value = pd.Timestamp(timestamp_literal).tz_localize(None)
+    query = f"SELECT CAST ('{timestamp_literal}' AS TIMESTAMP) AS ts"
+    ctx = {}
+    expected_output = pd.DataFrame({"ts": value}, index=np.arange(1))
+    check_query(query, ctx, None, expected_output=expected_output)

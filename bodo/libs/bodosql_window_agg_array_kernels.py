@@ -141,8 +141,11 @@ def windowed_sum(S, lower_bound, upper_bound):
     setup_block = "total = 0"
     enter_block = "total += elem"
     exit_block = "total -= elem"
+
     if isinstance(S.dtype, types.Integer):
         out_dtype = bodo.libs.int_arr_ext.IntegerArrayType(types.int64)
+    elif bodo.libs.float_arr_ext._use_nullable_float:
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
     else:
         out_dtype = types.Array(bodo.float64, 1, "C")
 

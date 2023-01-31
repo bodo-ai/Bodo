@@ -489,6 +489,10 @@ the Python types for each type keyword:
     Users are responsible for ensuring that conversion is possible
     (e.g. `CAST(str_col as INTEGER)`).
 
+### ::
+
+Infix cast operator. Equivalent to cast, but the format is `value::Typename`
+
 ### JOIN
 
 A `JOIN` clause is used to combine rows from two or more tables,
@@ -2304,6 +2308,24 @@ BodoSQL currently supports the following regex functions:
     ```sql
     SELECT REGEXP_INSTR(A, '([[:upper]][[:lower:]]+), ([[:upper]][[:lower:]]+)', 1, 1, 0, 'e', 2)
     ```
+
+
+###  JSON Functions
+
+
+BodoSQL currently supports the following JSON functions:
+
+#### JSON_EXTRACT_PATH_TEXT
+-   `JSON_EXTRACT_PATH_TEXT(data, path)`
+
+    Parses the string `data` as if it were JSON data, then extracts values from
+    within (possibly multiple times if the data is nested) using the string `path`.
+
+    Obeys the following specification: https://docs.snowflake.com/en/sql-reference/functions/json_extract_path_text.html
+
+    Note: cases where the data or path are malformed/erroneus often result in
+    an exception being raised, but sometimes return `NULL` instead. Which occurs
+    may vary for the same type of error depending on where in the string it occurs.
 
 
 ###   Control Flow Functions

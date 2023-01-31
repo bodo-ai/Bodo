@@ -1911,7 +1911,7 @@ def test_pd_to_timedelta(memory_leak_check):
         return pd.to_timedelta(a, "D")
 
     S = pd.Series([1.0, 2.2, np.nan, 4.2], [3, 1, 0, -2], name="AA")
-    check_func(impl, (S,))
+    check_func(impl, (S,), py_output=pd.to_timedelta(S, "D"))
 
 
 @pytest.mark.slow
@@ -1947,7 +1947,7 @@ def test_pd_to_timedelta_float_arr(memory_leak_check):
         return pd.to_timedelta(a, "D")
 
     arr = np.array([1.0, 2.2, np.nan, 4.2] * 5)
-    check_func(impl, (arr,))
+    check_func(impl, (arr,), py_output=pd.to_timedelta(arr, "D"))
 
 
 @pytest.mark.slow

@@ -12,7 +12,12 @@ from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import raise_bodo_error
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_str,
+    is_overload_constant_str,
+    raise_bodo_error,
+)
 
 
 def standardize_snowflake_date_time_part(part_str):  # pragma: no cover
@@ -127,6 +132,14 @@ def overload_standardize_snowflake_date_time_part(part_str):
             )
 
     return impl
+
+
+# overload_standardize_snowflake_date_time_part is only usable at runtime,
+# setting the function like this should make it possible to call
+# from regular python since this function never type checks
+standardize_snowflake_date_time_part_compile_time = (
+    overload_standardize_snowflake_date_time_part
+)
 
 
 @numba.generated_jit(nopython=True)
@@ -274,6 +287,10 @@ def get_month(arr):  # pragma: no cover
 
 
 def get_week(arr):  # pragma: no cover
+    return
+
+
+def get_weekofyear(arr):  # pragma: no cover
     return
 
 
@@ -458,21 +475,21 @@ def add_interval_util(start_dt, interval):
     Returns:
         datetime series/scalar: start_dt + interval
     """
-
     verify_datetime_arg_allow_tz(start_dt, "add_interval", "start_dt")
+    verify_sql_interval(interval, "add_interval", "interval")
     time_zone = get_tz_if_exists(start_dt)
 
     arg_names = ["start_dt", "interval"]
     arg_types = [start_dt, interval]
     propagate_null = [True] * 2
     scalar_text = ""
-    is_vector = bodo.utils.utils.is_array_typ(
-        interval, True
-    ) or bodo.utils.utils.is_array_typ(start_dt, True)
     extra_globals = None
     # Modified logic from add_interval_xxx functions
     if time_zone is not None:
-        if bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone):
+        if (
+            bodo.hiframes.pd_offsets_ext.tz_has_transition_times(time_zone)
+            and interval != bodo.date_offset_type
+        ):
             tz_obj = pytz.timezone(time_zone)
             trans = np.array(tz_obj._utc_transition_times, dtype="M8[ns]").view("i8")
             deltas = np.array(tz_obj._transition_info)[:, 0]
@@ -483,7 +500,10 @@ def add_interval_util(start_dt, interval):
             )
             extra_globals = {"trans": trans, "deltas": deltas}
             scalar_text += f"start_value = arg0.value\n"
-            scalar_text += "end_value = start_value + arg0.value\n"
+            # Wrap the interval in a pd.Timedelta if dealing with an array of intervals
+            if bodo.utils.utils.is_array_typ(interval, True):
+                scalar_text += f"arg1 = bodo.utils.conversion.box_if_dt64(arg1)\n"
+            scalar_text += "end_value = start_value + arg1.value\n"
             scalar_text += (
                 "start_trans = np.searchsorted(trans, start_value, side='right') - 1\n"
             )
@@ -491,15 +511,30 @@ def add_interval_util(start_dt, interval):
                 "end_trans = np.searchsorted(trans, end_value, side='right') - 1\n"
             )
             scalar_text += "offset = deltas[start_trans] - deltas[end_trans]\n"
-            scalar_text += "arg1 = pd.Timedelta(arg1.value + offset)\n"
+            scalar_text += "arg1 = pd.Timedelta(end_value - start_value + offset)\n"
         scalar_text += f"res[i] = arg0 + arg1\n"
         out_dtype = bodo.DatetimeArrayType(time_zone)
     else:
+        # Scalars will return Timestamp values while vectors will remain
+        # in datetime64 format
+        is_vector = bodo.utils.utils.is_array_typ(start_dt, True)
         unbox_str = (
-            "bodo.utils.conversion.unbox_if_tz_naive_timestamp" if is_vector else ""
+            "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+            if bodo.utils.utils.is_array_typ(start_dt, True)
+            or bodo.utils.utils.is_array_typ(interval, True)
+            else ""
         )
-        box_str = "bodo.utils.conversion.box_if_dt64" if is_vector else ""
-        scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) + arg1)\n"
+        box_str0 = (
+            "bodo.utils.conversion.box_if_dt64"
+            if bodo.utils.utils.is_array_typ(start_dt, True)
+            else ""
+        )
+        box_str1 = (
+            "bodo.utils.conversion.box_if_dt64"
+            if bodo.utils.utils.is_array_typ(interval, True)
+            else ""
+        )
+        scalar_text = f"res[i] = {unbox_str}({box_str0}(arg0) + {box_str1}(arg1))\n"
 
         out_dtype = types.Array(bodo.datetime64ns, 1, "C")
 
@@ -559,7 +594,7 @@ def add_interval_nanoseconds_util(amount, start_dt):  # pragma: no cover
 
 def create_add_interval_func_overload(unit):  # pragma: no cover
     def overload_func(amount, start_dt):
-        """Handles cases where this interval addition function recieves optional
+        """Handles cases where this interval addition function receives optional
         arguments and forwards to the appropriate version of the real implementation"""
         args = [amount, start_dt]
         for i in range(2):
@@ -685,7 +720,7 @@ def create_add_interval_util_overload(unit):  # pragma: no cover
                 else:
                     scalar_text += "td = pd.Timedelta(end_value - start_value)\n"
 
-            # Handle months/years via the following steps:
+            # Handle other units via the following steps:
             # 1. Find the starting ns
             # 2. Find the ending ns by extracting the ns and adding the ns
             #    value of the timedelta
@@ -806,6 +841,10 @@ def get_week_util(arr):  # pragma: no cover
     return
 
 
+def get_weekofyear_util(arr):  # pragma: no cover
+    return
+
+
 def get_hour_util(arr):  # pragma: no cover
     return
 
@@ -886,6 +925,7 @@ def create_dt_extract_fn_util_overload(fn_name):  # pragma: no cover
             "get_quarter": f"{box_str}(arg0).quarter",
             "get_month": f"{box_str}(arg0).month",
             "get_week": f"{box_str}(arg0).week",
+            "get_weekofyear": f"{box_str}(arg0).weekofyear",
             "get_hour": f"{box_str}(arg0).hour",
             "get_minute": f"{box_str}(arg0).minute",
             "get_second": f"{box_str}(arg0).second",
@@ -919,6 +959,7 @@ def _install_dt_extract_fn_overload():
         ("get_quarter", get_quarter, get_quarter_util),
         ("get_month", get_month, get_month_util),
         ("get_week", get_week, get_week_util),
+        ("get_weekofyear", get_weekofyear, get_weekofyear_util),
         ("get_hour", get_hour, get_hour_util),
         ("get_minute", get_minute, get_minute_util),
         ("get_second", get_second, get_second_util),
@@ -2091,6 +2132,446 @@ def overload_tz_aware_interval_add_util(tz_arg, interval_arg):
     # Check for changing utc offsets
     scalar_text += "  timedelta = bodo.hiframes.pd_offsets_ext.update_timedelta_with_transition(arg0, timedelta)\n"
     scalar_text += "  res[i] = arg0 + timedelta\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def interval_multiply(interval_arg, integer_arg):  # pragma: no cover
+    pass
+
+
+@overload(interval_multiply)
+def overload_interval_multiply(interval_arg, integer_arg):
+    """BodoSQL kernel for multiplying an interval by an integer.
+    Typically intervals are scalars, so in most cases this kernel
+    will just handle scalars. However, we do allow certain intervals
+    to be array, so we can have array outputs. The integer argument
+    should only be an array if the interval can be represented as
+    an array.
+
+    Args:
+        interval_arg (types.Type): Either a DateOffset or Timedelta scalar or array
+        integer_arg (types.Type): An integer scalar (or in rare cases array)
+
+    Returns:
+        types.Type: Interval scalar or array returned after multiplying the results.
+    """
+    for i, arg in enumerate((interval_arg, integer_arg)):
+        if isinstance(arg, types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.interval_multiply",
+                ["interval_arg", "integer_arg"],
+                i,
+            )
+
+    def impl(interval_arg, integer_arg):  # pragma: no cover
+        return interval_multiply_util(interval_arg, integer_arg)
+
+    return impl
+
+
+def interval_multiply_util(interval_arg, integer_arg):  # pragma: no cover
+    pass
+
+
+@overload(interval_multiply_util)
+def overload_interval_multiply_util(interval_arg, integer_arg):
+    """BodoSQL kernel for multiplying an interval by an integer.
+    Typically intervals are scalars, so in most cases this kernel
+    will just handle scalars. However, we do allow certain intervals
+    to be array, so we can have array outputs. The integer argument
+    should only be an array if the interval can be represented as
+    an array.
+
+    Args:
+        interval_arg (types.Type): Either a DateOffset or Timedelta scalar or array
+        integer_arg (types.Type): An integer scalar (or in rare cases array)
+
+    Returns:
+        types.Type: Interval scalar or array returned after multiplying the results.
+    """
+    verify_sql_interval(interval_arg, "INTERVAL_MULTIPLY", "interval_arg")
+    verify_int_arg(integer_arg, "INTERVAL_MULTIPLY", "integer_arg")
+    arg_names = ["interval_arg", "integer_arg"]
+    arg_types = [interval_arg, integer_arg]
+    propagate_null = [True, True]
+
+    is_interval_arr = bodo.utils.utils.is_array_typ(interval_arg, True)
+    is_integer_arr = bodo.utils.utils.is_array_typ(integer_arg, True)
+
+    if interval_arg == bodo.date_offset_type:
+        if is_integer_arr:
+            raise BodoError(
+                "interval_multiply(): Integer array cannot be provided if multiplying a date offset."
+            )
+        out_dtype = bodo.date_offset_type
+    else:
+        out_dtype = types.Array(bodo.timedelta64ns, 1, "C")
+
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if is_interval_arr or is_integer_arr
+        else ""
+    )
+    box_str = "bodo.utils.conversion.box_if_dt64" if is_interval_arr else ""
+
+    scalar_text = f"res[i] = {unbox_str}({box_str}(arg0) * arg1)\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def interval_add_interval(arr0, arr1):  # pragma: no cover
+    pass
+
+
+@overload(interval_add_interval)
+def overload_interval_add_interval(arr0, arr1):
+    """BodoSQL kernel for adding two intervals together. While this should
+    typically just be between two scalars the array case is technically possible.
+    Note: We do not support adding a DateOffset with a Timedelta.
+
+    Args:
+        arr0 (types.Type): Either a DateOffset or Timedelta scalar or array
+        arr1 (types.Type): Either a DateOffset or Timedelta scalar or array
+
+    Returns:
+        types.Type: Interval scalar or array returned after adding the results.
+    """
+    for i, arg in enumerate((arr0, arr1)):
+        if isinstance(arg, types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.interval_add_interval",
+                ["arr0", "arr1"],
+                i,
+            )
+
+    def impl(arr0, arr1):  # pragma: no cover
+        return interval_add_interval_util(arr0, arr1)
+
+    return impl
+
+
+def interval_add_interval_util(arr0, arr1):  # pragma: no cover
+    pass
+
+
+@overload(interval_add_interval_util)
+def overload_interval_add_interval_util(arr0, arr1):
+    """BodoSQL kernel for adding two intervals together. While this should
+    typically just be between two scalars the array case is technically possible.
+    Note: We do not support adding a DateOffset with a Timedelta.
+
+    Args:
+        arr0 (types.Type): Either a DateOffset or Timedelta scalar or array
+        arr1 (types.Type): Either a DateOffset or Timedelta scalar or array
+
+    Returns:
+        types.Type: Interval scalar or array returned after adding the results.
+    """
+    verify_td_arg(arr0, "INTERVAL_ADD_INTERVAL", "arr0")
+    verify_td_arg(arr1, "INTERVAL_ADD_INTERVAL", "arr1")
+    arg_names = ["arr0", "arr1"]
+    arg_types = [arr0, arr1]
+    propagate_null = [True, True]
+
+    out_dtype = types.Array(bodo.timedelta64ns, 1, "C")
+    box_str0 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr0, True)
+        else ""
+    )
+    box_str1 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr1, True)
+        else ""
+    )
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(arr0, True)
+        or bodo.utils.utils.is_array_typ(arr1, True)
+        else ""
+    )
+
+    scalar_text = f"res[i] = {unbox_str}({box_str0}(arg0) + {box_str1}(arg1))\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def create_date(arr):  # pragma: no cover
+    pass
+
+
+@overload(create_date)
+def overload_create_date(arr):
+    """BodoSQL array kernel to create a date. Currently since
+    we don't have a proper date type in Bodo we need to create
+    a naive, normalized timestamp. This function will accept
+    anything accepted by the `pd.Timestamp()` constructor
+    now, so we don't type check.
+
+    Args:
+        arr (types.Types): scalar or array of input values
+
+    Returns:
+        types.Type: scalar or array of "Date" values (normalized Timestamps).
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.create_date_util",
+            ["arr"],
+            0,
+        )
+
+    def impl(arr):  # pragma: no cover
+        return create_date_util(arr)
+
+    return impl
+
+
+def create_date_util(arr):  # pragma: no cover
+    pass
+
+
+@overload(create_date_util)
+def overload_create_date_util(arr):  # pragma: no cover
+    """BodoSQL array kernel to create a date. Currently since
+    we don't have a proper date type in Bodo we need to create
+    a naive, normalized timestamp. This function will accept
+    anything accepted by the `pd.Timestamp()` constructor
+    now, so we don't type check.
+
+    Args:
+        arr (types.Types): scalar or array of input values
+
+    Returns:
+        types.Type: scalar or array of "Date" values (normalized Timestamps).
+    """
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0).normalize())\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def create_timestamp(arr):  # pragma: no cover
+    pass
+
+
+@overload(create_timestamp)
+def overload_create_timestamp(arr):
+    """BodoSQL array kernel to create a Timestamp. This function will accept
+    anything accepted by the `pd.Timestamp()` constructor
+    now, so we don't type check.
+
+    Args:
+        arr (types.Types): scalar or array of input values
+
+    Returns:
+        types.Type: scalar or array of Timestamp values.
+    """
+    if isinstance(arr, types.optional):  # pragma: no cover
+        return unopt_argument(
+            "bodo.libs.bodosql_array_kernels.create_timestamp_util",
+            ["arr"],
+            0,
+        )
+
+    def impl(arr):  # pragma: no cover
+        return create_timestamp_util(arr)
+
+    return impl
+
+
+def create_timestamp_util(arr):  # pragma: no cover
+    pass
+
+
+@overload(create_timestamp_util)
+def overload_create_timestamp_util(arr):  # pragma: no cover
+    """BodoSQL array kernel to create a Timestamp. This function will accept
+    anything accepted by the `pd.Timestamp()` constructor
+    now, so we don't type check.
+
+    Args:
+        arr (types.Types): scalar or array of input values
+
+    Returns:
+        types.Type: scalar or array of Timestamp values.
+    """
+    arg_names = ["arr"]
+    arg_types = [arr]
+    propagate_null = [True]
+    out_dtype = types.Array(bodo.datetime64ns, 1, "C")
+    unbox_str = (
+        "bodo.utils.conversion.unbox_if_tz_naive_timestamp"
+        if bodo.utils.utils.is_array_typ(arr, True)
+        else ""
+    )
+
+    scalar_text = f"res[i] = {unbox_str}(pd.Timestamp(arg0))\n"
+    return gen_vectorized(
+        arg_names,
+        arg_types,
+        propagate_null,
+        scalar_text,
+        out_dtype,
+    )
+
+
+def date_sub_date_unit(unit, arr0, arr1):  # pragma: no cover
+    pass
+
+
+@overload(date_sub_date_unit)
+def overload_date_sub_date_unit(date_or_time_part, arr0, arr1):
+    """Array kernel that supports subtracting two dates
+    with SQL semantics. The result is in the number of {unit}
+    between the two dates as an integer.
+
+    Args:
+        date_or_time_part (types.Type): A string scalar denoting the unit of time for the result
+        arr0 (types.Type): Date column or scalar
+        arr1 (types.Type): Date column or scalar
+
+    Returns:
+        types.Type: Integer number of {units} between the dates (arr1 - arr0)
+    """
+    args = (date_or_time_part, arr0, arr1)
+    for i in range(len(args)):
+        if isinstance(args[i], types.optional):  # pragma: no cover
+            return unopt_argument(
+                "bodo.libs.bodosql_array_kernels.date_sub_date_unit",
+                ["date_or_time_part", "arr0", "arr1"],
+                i,
+            )
+
+    def impl(date_or_time_part, arr0, arr1):  # pragma: no cover
+        return date_sub_date_unit_util(date_or_time_part, arr0, arr1)
+
+    return impl
+
+
+def date_sub_date_unit_util(date_or_time_part, arr0, arr1):  # pragma: no cover
+    pass
+
+
+@overload(date_sub_date_unit_util)
+def overload_date_sub_date_unit_util(date_or_time_part, arr0, arr1):  # pragma: no cover
+    """Array kernel that supports subtracting two dates
+     with SQL semantics. The result is in the number of {units}
+     between the two dates as an integer.
+
+     Args:
+         date_or_time_part (types.Type): A string scalar denoting the unit of time for the result
+         arr0 (types.Type): Date column or scalar
+         arr1 (types.Type): Date column or scalar
+
+    Returns:
+        types.Type: Integer number of {units} between the dates (arr1 - arr0)
+    """
+    # TODO: When we have a formal date type in SQL this should only
+    # accept dates.
+    verify_string_arg(date_or_time_part, "DATE_SUB_DATE_UNIT", "date_or_time_part")
+    verify_datetime_arg(arr0, "DATE_SUB_DATE_UNIT", "arr0")
+    verify_datetime_arg(arr1, "DATE_SUB_DATE_UNIT", "arr1")
+
+    unit = ""
+    if is_overload_constant_str(date_or_time_part):
+        unit = get_overload_const_str(date_or_time_part)
+    else:
+        raise_bodo_error("Date or time part provided is not a string literal!")
+
+    datetime_part = standardize_snowflake_date_time_part_compile_time(unit)(unit)
+
+    arg_names = ["date_or_time_part", "arr0", "arr1"]
+    arg_types = [date_or_time_part, arr0, arr1]
+    propagate_null = [True, True, True]
+    out_dtype = bodo.IntegerArrayType(bodo.int64)
+    box_str0 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr0, True)
+        else ""
+    )
+    box_str1 = (
+        "bodo.utils.conversion.box_if_dt64"
+        if bodo.utils.utils.is_array_typ(arr1, True)
+        else ""
+    )
+
+    arg1 = f"{box_str0}(arg1)"
+    arg2 = f"{box_str1}(arg2)"
+
+    # We use PandasTimestampType's API for extracting date parts
+    # PDTimeDeltaType's API for extracting time parts.
+
+    # Snowflake disregards datetime parts that occur after the one specified
+    # when performing the DATEDIFF. E.g. DATEDIFF(YEAR, '2020-12-31', '2021-01-01')
+    # is functionally equivalent to DATEDIFF(YEAR, '2020-01-01', '2021-01-01')
+    if datetime_part == "year":
+        scalar_text = f"res[i] = ({arg2}.year - {arg1}.year)\n"
+    elif datetime_part == "quarter":
+        scalar_text = f"yr_diff = ({arg2}.year - {arg1}.year) * 4\n"
+        scalar_text += f"res[i] = yr_diff + ({arg2}.quarter - {arg1}.quarter)"
+    elif datetime_part == "month":
+        # Calculate the difference in months derived from difference in years
+        scalar_text = f"yr_diff = ({arg2}.year - {arg1}.year) * 12\n"
+
+        # then add the difference in months derived from difference in the months
+        scalar_text += f"res[i] = yr_diff + ({arg2}.month - {arg1}.month)\n"
+    elif datetime_part == "week":
+        scalar_text = f"iso_yr_diff = bodo.libs.bodosql_array_kernels.get_iso_weeks_between_years({arg1}.year, {arg2}.year)\n"
+        scalar_text += f"wk_diff = {arg2}.week - {arg1}.week\n"
+        scalar_text += f"res[i] = iso_yr_diff + wk_diff\n"
+    elif datetime_part == "day":
+        scalar_text = f"res[i] = ({arg2} - {arg1}).days\n"
+    else:
+        # A Pandas Timedelta value attribute is in nanoseconds by default
+        timedelta_str = f"({arg2} - {arg1}).value"
+
+        if datetime_part == "hour":
+            scalar_text = (
+                f"res[i] = {timedelta_str} // {((1000 * 1000 * 1000) * 3600)}\n"
+            )
+        elif datetime_part == "minute":
+            scalar_text = f"res[i] = {timedelta_str} // {((1000 * 1000 * 1000) * 60)}\n"
+        elif datetime_part == "second":
+            scalar_text = f"res[i] = {timedelta_str} // {(1000 * 1000 * 1000)}\n"
+        elif datetime_part == "millisecond":
+            scalar_text = f"res[i] = {timedelta_str} // {(1000 * 1000)}\n"
+        elif datetime_part == "microsecond":
+            scalar_text = f"res[i] = {timedelta_str} // 1000\n"
+        elif datetime_part == "nanosecond":
+            scalar_text = f"res[i] = {timedelta_str}\n"
+        else:
+            raise ValueError("Invalid datetime part for DATEDIFF!")
+
     return gen_vectorized(
         arg_names,
         arg_types,

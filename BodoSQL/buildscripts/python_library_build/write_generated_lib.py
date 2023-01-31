@@ -14,9 +14,6 @@ REPO_ROOT = os.path.join(
 )
 # TODO: put the generated library/testing path in a global variable somewhere that is commonly accessible
 GENERATED_LIB_FILE_PATH = os.path.join(REPO_ROOT, "bodosql", "libs", "generated_lib.py")
-GENERATED_LIB_TESTCASES_PATH = os.path.join(
-    REPO_ROOT, "bodosql", "tests", "test_generated_lib_testcases.py"
-)
 
 
 def write_generated_lib(lib_string, file_path=GENERATED_LIB_FILE_PATH):
@@ -27,39 +24,9 @@ def write_generated_lib(lib_string, file_path=GENERATED_LIB_FILE_PATH):
     lib_file.close()
 
 
-def write_generated_lib_testcases(
-    testcases_string,
-    file_path=GENERATED_LIB_TESTCASES_PATH,
-    library_file_path=None,
-    module_name=None,
-):
-    """Writes the generated library testcases to the specified file location
-
-    If library file path and module name are BOTH specified, it will import the file found at library_file_path
-    as a module with the suplied module_name. Otherwise, the arguments have no effect
-    """
-    # w option will overwrite the file if it already exists
-    lib_file = open(file_path, "w")
-
-    # if both module name and library_file_path != None, we need to prepend an import of the module with the specified module name
-    if module_name != None and library_file_path != None:
-        # Code for importing a module from an arbitrary file location is modified from here:
-        # https://stackoverflow.com/questions/67631/how-to-import-a-module-given-the-full-path
-        import_text = f"""
-import importlib.util
-spec = importlib.util.spec_from_file_location("__temporary_module_name_", \"{library_file_path}\")
-{module_name} = importlib.util.module_from_spec(spec)
-spec.loader.exec_module({module_name})
-"""
-        testcases_string = import_text + testcases_string
-
-    lib_file.write(testcases_string)
-    lib_file.close()
-
-
 def generate_standard_python_fn_call(fn_name):
     """given the name of the function call, returns a lambda function that
-    returns the correctly formatted function call when suplied a list of argument"""
+    returns the correctly formatted function call when supplied a list of argument"""
 
     def impl(args_list):
         args_list = ", ".join(args_list)
@@ -70,7 +37,7 @@ def generate_standard_python_fn_call(fn_name):
 
 def generate_standard_method_call(method_name):
     """given the name of the method call, returns a lambda function that
-    returns the correctly formated method call when suplied a list of arguments"""
+    returns the correctly formatted method call when supplied a list of arguments"""
 
     def impl(args_list):
         method_args_string = ", ".join(args_list[1:])
@@ -79,10 +46,10 @@ def generate_standard_method_call(method_name):
     return impl
 
 
-def generate_atribute_reference(atribute_name):
-    """given the name of the atribute, returns a lambda function that returns
-    the correctly formated atribute reference when suplied a list of arguments"""
-    return lambda x: f"{x[0]}.{atribute_name}"
+def generate_attribute_reference(attribute_name):
+    """given the name of the attribute, returns a lambda function that returns
+    the correctly formatted attribute reference when supplied a list of arguments"""
+    return lambda x: f"{x[0]}.{attribute_name}"
 
 
 def generate_and_write_library():
@@ -90,58 +57,7 @@ def generate_and_write_library():
     This function should be called within setup.py"""
 
     library_fns_info = [
-        ("not", generate_standard_python_fn_call("not"), 1),
-        ("addition", generate_standard_python_fn_call("operator.add"), 2),
-        ("subtraction", generate_standard_python_fn_call("operator.sub"), 2),
-        ("multiplication", generate_standard_python_fn_call("operator.mul"), 2),
-        ("true_division", generate_standard_python_fn_call("np.true_divide"), 2),
-        ("modulo", generate_standard_python_fn_call("np.mod"), 2),
-        ("power", generate_standard_python_fn_call("operator.pow"), 2),
-        ("equal", generate_standard_python_fn_call("operator.eq"), 2),
-        ("not_equal", generate_standard_python_fn_call("operator.ne"), 2),
-        ("less_than", generate_standard_python_fn_call("operator.lt"), 2),
-        ("less_than_or_equal", generate_standard_python_fn_call("operator.le"), 2),
-        ("greater_than", generate_standard_python_fn_call("operator.gt"), 2),
-        (
-            "greater_than_or_equal",
-            generate_standard_python_fn_call("operator.ge"),
-            2,
-        ),
-        # library wrappers
-        (
-            "sql_to_python",
-            generate_standard_python_fn_call("bodosql.libs.regex.sql_to_python"),
-            1,
-        ),
-        # string Fn's
-        ("strip", generate_standard_method_call("strip"), 2),
-        ("lstrip", generate_standard_method_call("lstrip"), 2),
-        ("rstrip", generate_standard_method_call("rstrip"), 2),
-        ("len", generate_standard_python_fn_call("len"), 1),
-        ("upper", generate_standard_method_call("upper"), 1),
-        ("lower", generate_standard_method_call("lower"), 1),
-        # stuff for like
-        ("in", (lambda args_list: f"({args_list[0]} in {args_list[1]})"), 2),
-        (
-            "re_match",
-            (lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}))"),
-            2,
-        ),
-        # stuff for case insensitive like
-        (
-            "in_nocase",
-            (lambda args_list: f"({args_list[0]}.lower() in {args_list[1]}.lower())"),
-            2,
-        ),
-        (
-            "re_match_nocase",
-            (
-                lambda args_list: f"bool(re.match({args_list[0]}, {args_list[1]}, flags=re.I))"
-            ),
-            2,
-        ),
         # DATETIME fns
-        ("timestamp_dayfloor", lambda x: f"{x[0]}.floor(freq='D')", 1),
         ("strftime", generate_standard_method_call("strftime"), 2),
         (
             "pd_to_datetime_with_format",
@@ -150,10 +66,6 @@ def generate_and_write_library():
             ),
             2,
         ),
-        ("yearofweek", generate_atribute_reference("isocalendar()[0]"), 1),
-        ("weekofyear", generate_atribute_reference("weekofyear"), 1),
-        ("pd_timedelta_days", generate_atribute_reference("days"), 1),
-    ] + [
         # Scalar Conversion functions
         ("scalar_conv_bool", generate_standard_python_fn_call("np.bool_"), 1),
         ("scalar_conv_int8", generate_standard_python_fn_call("np.int8"), 1),
