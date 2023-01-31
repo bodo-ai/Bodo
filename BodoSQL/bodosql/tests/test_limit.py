@@ -22,12 +22,36 @@ def test_limit_offset_numeric(bodosql_numeric_types, spark_info, memory_leak_che
 
 
 @pytest.mark.slow
-def test_limit_offset_keyword(basic_df, spark_info, memory_leak_check):
+def test_limit_offset_keyword(basic_df, memory_leak_check):
     """test queries with limit and offset. Here offset=1 and limit=4"""
     query = "select B,C from table1 limit 4 offset 1"
     # Spark doesn't support offset so use an expected output
     expected_output = basic_df["table1"].iloc[1:5, [1, 2]]
-    check_query(query, basic_df, spark_info, expected_output=expected_output)
+    check_query(query, basic_df, None, expected_output=expected_output)
+
+
+@pytest.mark.slow
+def test_fetch(basic_df, memory_leak_check):
+    """test queries with fetch"""
+    query1 = "select B,C from table1 FETCH FIRST 4 ROW"
+    query2 = "select B,C from table1 FETCH FIRST 4 ROWS ONLY"
+    # Next and first mean the same thing
+    query3 = "select B,C from table1 FETCH NEXT 4 ROWS"
+    # Generate an expected output
+    expected_output1 = basic_df["table1"].iloc[:4, [1, 2]]
+    check_query(query1, basic_df, None, expected_output=expected_output1)
+    check_query(query2, basic_df, None, expected_output=expected_output1)
+    check_query(query3, basic_df, None, expected_output=expected_output1)
+    # Test adding an offset
+    query4 = "select B,C from table1 OFFSET 1 ROWS FETCH FIRST 4 ROW"
+    query5 = "select B,C from table1 OFFSET 1 ROW FETCH FIRST 4 ROWS ONLY"
+    # Next and first mean the same thing
+    query6 = "select B,C from table1 OFFSET 1 ROWS FETCH NEXT 4 ROWS"
+    # Generate an expected output
+    expected_output2 = basic_df["table1"].iloc[1:5, [1, 2]]
+    check_query(query4, basic_df, None, expected_output=expected_output2)
+    check_query(query5, basic_df, None, expected_output=expected_output2)
+    check_query(query6, basic_df, None, expected_output=expected_output2)
 
 
 def test_limit_tz_aware(representative_tz, memory_leak_check):

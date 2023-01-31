@@ -144,10 +144,6 @@ def test_string_fns_cols(
     else:
         spark_query = None
 
-    # Trim fn's not supported on columns. see BE-965
-    if bodo_fn_name in {"LTRIM", "RTRIM", "TRIM"}:
-        return
-
     check_query(
         query,
         bodosql_string_fn_testing_df,

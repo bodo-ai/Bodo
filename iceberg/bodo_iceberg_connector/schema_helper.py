@@ -15,7 +15,7 @@ def pyarrow_to_iceberg_schema_str(arrow_schema: pa.Schema) -> str:
     """Convert a PyArrow schema to an JSON-encoded Iceberg schema string"""
     gateway = launch_jvm()
     schema = arrow_to_iceberg_schema(arrow_schema)
-    return gateway.jvm.org.apache.iceberg.SchemaParser.toJson(schema)
+    return gateway.jvm.org.apache.iceberg.SchemaParser.toJson(schema)  # type: ignore
 
 
 def arrow_schema_j2py(jvm_schema) -> pa.Schema:

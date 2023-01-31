@@ -1,0 +1,6 @@
+LogicalSort(sort0=[$1], sort1=[$2], dir0=[ASC-nulls-first], dir1=[ASC-nulls-first])
+  LogicalProject(A=[$0], C=[$1], E=[$2], WINDOW_AGG_ASC=[$3])
+    LogicalFilter(condition=[$4])
+      LogicalProject(A=[$0], C=[$1], E=[$2], WINDOW_AGG_ASC=[$3], EXPR$4=[OR(>($3, 1), >=(MEDIAN($0) OVER (PARTITION BY $2 ORDER BY $4 DESC ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 1))])
+        LogicalProject(A=[$0], C=[$2], E=[$4], WINDOW_AGG_ASC=[MEDIAN($0) OVER (PARTITION BY $2 ORDER BY $4 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)], $f4=[$0], $f5=[$2], $f6=[$4])
+          LogicalTableScan(table=[[__bodolocal__, table1]])

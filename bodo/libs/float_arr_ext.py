@@ -17,6 +17,7 @@ from numba.extending import (
     box,
     intrinsic,
     lower_builtin,
+    lower_cast,
     make_attribute_wrapper,
     models,
     overload,
@@ -46,6 +47,7 @@ from bodo.utils.indexing import (
     array_setitem_slice_index,
 )
 from bodo.utils.typing import (
+    BodoArrayIterator,
     BodoError,
     check_unsupported_args,
     is_iterable_type,
@@ -57,10 +59,10 @@ from bodo.utils.typing import (
     raise_bodo_error,
 )
 
-_use_nullable_float = int(os.environ.get("BODO_USE_NULLABLE_FLOAT", "0"))
+_use_nullable_float = int(os.environ.get("BODO_USE_NULLABLE_FLOAT", "1"))
 
 
-class FloatingArrayType(types.ArrayCompatible):
+class FloatingArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
         super(FloatingArrayType, self).__init__(name=f"FloatingArrayType({dtype})")
@@ -74,12 +76,20 @@ class FloatingArrayType(types.ArrayCompatible):
         return FloatingArrayType(self.dtype)
 
     @property
+    def iterator_type(self):
+        return BodoArrayIterator(self)
+
+    @property
     def get_pandas_scalar_type_instance(self):  # pragma: no cover
         """
         Get the Pandas dtype instance that matches stored
         scalars.
         """
         return pd.Float64Dtype() if self.dtype == types.float64 else pd.Float32Dtype()
+
+    def unify(self, typingctx, other):
+        if isinstance(other, types.Array) and isinstance(other.dtype, types.Float):
+            return other
 
 
 # store data and nulls as regular numpy arrays without payload machinery
@@ -97,6 +107,9 @@ class FloatingArrayModel(models.StructModel):
 
 make_attribute_wrapper(FloatingArrayType, "data", "_data")
 make_attribute_wrapper(FloatingArrayType, "null_bitmap", "_null_bitmap")
+
+
+lower_builtin("getiter", FloatingArrayType)(numba.np.arrayobj.getiter_array)
 
 
 @typeof_impl.register(pd.arrays.FloatingArray)
@@ -676,6 +689,23 @@ def overload_float_arr_astype(A, dtype, copy=True):  # pragma: no cover
     ).astype(nb_dtype)
 
 
+@lower_cast(types.Array, FloatingArrayType)
+def cast_float_array(context, builder, fromty, toty, val):
+    """cast regular float array to nullable float array"""
+    f = lambda A: bodo.utils.conversion.coerce_to_array(
+        A, use_nullable_array=True
+    )  # pragma: no cover
+    return context.compile_internal(builder, f, toty(fromty), [val])
+
+
+@lower_cast(FloatingArrayType, types.Array)
+def cast_float_array(context, builder, fromty, toty, val):
+    """cast nullable float array to regular float array"""
+    dtype = toty.dtype
+    f = lambda A: A.astype(dtype)  # pragma: no cover
+    return context.compile_internal(builder, f, toty(fromty), [val])
+
+
 ############################### numpy ufuncs #################################
 
 
@@ -784,6 +814,38 @@ def _install_unary_ops():
 
 
 _install_unary_ops()
+
+
+@overload(np.var, inline="always")
+def overload_var(A):
+    """Implements np.var() for nullable float arrays.
+    Unlike Numpy arrays, this currently skips NAs to match SQL behavior since it's
+    used in BodoSQL groupby:
+    https://github.com/Bodo-inc/Bodo/blob/9384eee70c35eb16fd88e70456b4e6a89a485059/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/BodoSQLCodeGen/AggCodeGen.java#L48
+    """
+    if not isinstance(A, FloatingArrayType):
+        return
+
+    def impl(A):
+        return bodo.libs.array_ops.array_op_var(A, True, 0)
+
+    return impl
+
+
+@overload(np.std, inline="always")
+def overload_std(A):
+    """Implements np.std() for nullable float arrays.
+    Unlike Numpy arrays, this currently skips NAs to match SQL behavior since it's
+    used in BodoSQL groupby:
+    https://github.com/Bodo-inc/Bodo/blob/9384eee70c35eb16fd88e70456b4e6a89a485059/BodoSQL/calcite_sql/bodosql-calcite-application/src/main/java/com/bodosql/calcite/application/BodoSQLCodeGen/AggCodeGen.java#L48
+    """
+    if not isinstance(A, FloatingArrayType):
+        return
+
+    def impl(A):
+        return bodo.libs.array_ops.array_op_std(A, True, 0)
+
+    return impl
 
 
 # inlining in Series pass but avoiding inline="always" since there are Numba-only cases

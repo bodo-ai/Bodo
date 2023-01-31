@@ -1,0 +1,4 @@
+LogicalProject(x=[$0], x2=[$1], x3=[$2], x4=[*($2, 3)], x5=[$3], x6=[$4])
+  LogicalProject(x=[$0], x2=[$1], x3=[/($1, 2)], x5=[+($3, *($2, 7))], x6=[$2])
+    LogicalProject(x=[$0], x2=[+($0, 10)], x6=[-($3, 17)], $f3=[$1])
+      LogicalTableScan(table=[[__bodolocal__, table1]])

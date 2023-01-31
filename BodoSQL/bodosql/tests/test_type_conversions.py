@@ -12,7 +12,7 @@ def test_simple_cast(basic_df, spark_info, memory_leak_check):
     Checks that integer casting of constants behaves as expected
     """
     query = "SELECT CAST(1.0 AS integer)"
-    check_query(query, basic_df, spark_info, check_names=False)
+    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -22,16 +22,12 @@ def test_float_to_int_cast(
     """
     Checks that numeric casting of constants behaves as expected
     """
-    # SparkSQL outputs Decimal type as object type
-    if sql_numeric_typestrings == "DECIMAL":
-        check_dtype = False
-    else:
-        check_dtype = True
     # Spark converts this to 0, but Bodo uses Decimal and Double interchangably
     if sql_numeric_typestrings == "DECIMAL" and numeric_values == 0.001:
         return
     query = f"SELECT CAST({numeric_values} AS {sql_numeric_typestrings})"
-    check_query(query, basic_df, spark_info, check_names=False, check_dtype=check_dtype)
+    # check_dtype=False since Bodo returns nullable columns by default
+    check_query(query, basic_df, spark_info, check_names=False, check_dtype=False)
 
 
 def test_numeric_column_casting(

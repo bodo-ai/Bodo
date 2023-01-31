@@ -5,7 +5,6 @@ supported but has implicit conversions that can be automated.
 """
 import datetime
 
-import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_query
@@ -46,7 +45,7 @@ def test_categorical(memory_leak_check):
             "A": df["A"].astype(str),
             "B": df["B"].astype("Int64"),
             "C": df["C"].astype("UInt64"),
-            "D": df["D"].astype(np.float64),
+            "D": df["D"].astype("Float64"),
             "E": df["E"].astype("datetime64[ns]"),
             "F": df["F"].astype("timedelta64[ns]"),
             "G": df["G"].astype("boolean"),

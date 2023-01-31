@@ -77,6 +77,7 @@ from bodo.hiframes.series_str_impl import (
 from bodo.hiframes.split_impl import StringArraySplitViewType
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.bool_arr_ext import (
+    BooleanArrayType,
     boolean_array,
     is_valid_boolean_array_logical_op,
 )
@@ -152,6 +153,8 @@ class SeriesPass:
         calltypes,
         _locals,
         optimize_inplace_ops=True,
+        avoid_copy_propagation=False,
+        parfor_metadata=None,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -167,6 +170,11 @@ class SeriesPass:
         self.optimize_inplace_ops = optimize_inplace_ops
         # Loc object of current location being translated
         self.curr_loc = self.func_ir.loc
+        # Skip copy propagation. This is used for testing purposes where
+        # copy propagation interferes with simple checks of the IR.
+        self.avoid_copy_propagation = avoid_copy_propagation
+        # Metadata information for parfor used to track user variables
+        self.parfor_metadata = parfor_metadata
 
     def run(self):
         """run series/dataframe transformations"""
@@ -248,7 +256,7 @@ class SeriesPass:
                     # replace inst.value to a call with target args
                     # as expected by inline_closure_call
                     inst.value = ir.Expr.call(
-                        ir.Var(block.scope, "dummy", inst.loc),
+                        ir.Var(block.scope, mk_unique_var("dummy"), inst.loc),
                         rp_func.args,
                         (),
                         inst.loc,
@@ -256,7 +264,10 @@ class SeriesPass:
                     # replace "target" of Setitem nodes since inline_closure_call
                     # assumes an assignment and sets "target" to return value
                     if isinstance(inst, (ir.SetItem, ir.StaticSetItem)):
-                        inst.target = ir.Var(block.scope, "dummy", inst.loc)
+                        dummy_varname = mk_unique_var("dummy")
+                        inst.target = ir.Var(block.scope, dummy_varname, inst.loc)
+                        # Append the dummy var to the typemap for correctness.
+                        self.typemap[dummy_varname] = types.none
                     block.body = new_body + block.body[i:]
                     # save work_list length to know how many new items are added
                     n_prev_work_items = len(work_list)
@@ -1481,6 +1492,49 @@ class SeriesPass:
                 self, impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=()
             )
 
+        # inline builtin calls on Bodo nullable arrays (NOTE: our overload
+        # implementation which has inline='always' may not be pick up by Numba since
+        # Bodo arrays are iterables, see test_int_array.py::test_min)
+        if (
+            func_mod == "builtins"
+            and func_name in ("min", "max", "sum")
+            and len(rhs.args) == 1
+            and isinstance(
+                self.typemap[rhs.args[0].name],
+                (IntegerArrayType, FloatingArrayType, BooleanArrayType),
+            )
+        ):
+
+            impl = getattr(bodo.libs.array_kernels, "overload_array_" + func_name)(
+                self.typemap[rhs.args[0].name]
+            )
+            return replace_func(
+                self, impl, rhs.args, pysig=numba.core.utils.pysignature(impl), kws=()
+            )
+
+        # inline Series methods (necessary since used in min/max/sum array overloads
+        # above)
+        if (
+            isinstance(func_mod, ir.Var)
+            and isinstance(self.typemap[func_mod.name], SeriesType)
+            and func_name in ("min", "max", "sum")
+            and len(rhs.args) == 0
+        ):
+            rhs.args.insert(0, func_mod)
+            arg_typs = tuple(self.typemap[v.name] for v in rhs.args)
+            kw_typs = {name: self.typemap[v.name] for name, v in dict(rhs.kws).items()}
+
+            impl = getattr(bodo.hiframes.series_impl, "overload_series_" + func_name)(
+                *arg_typs, **kw_typs
+            )
+            return replace_func(
+                self,
+                impl,
+                rhs.args,
+                pysig=numba.core.utils.pysignature(impl),
+                kws=dict(rhs.kws),
+            )
+
         # inline ufuncs on IntegerArray
         if (
             func_mod in ("numpy", "ufunc")
@@ -1593,6 +1647,20 @@ class SeriesPass:
             var_def = guard(get_definition, self.func_ir, rhs.args[0])
             call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
             if call_def == ("init_integer_array", "bodo.libs.int_arr_ext"):
+                assign.value = var_def.args[1]
+                return [assign]
+
+        if fdef == ("get_float_arr_data", "bodo.libs.float_arr_ext"):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
+            if call_def == ("init_float_array", "bodo.libs.float_arr_ext"):
+                assign.value = var_def.args[0]
+                return [assign]
+
+        if fdef == ("get_float_arr_bitmap", "bodo.libs.float_arr_ext"):
+            var_def = guard(get_definition, self.func_ir, rhs.args[0])
+            call_def = guard(find_callname, self.func_ir, var_def, self.typemap)
+            if call_def == ("init_float_array", "bodo.libs.float_arr_ext"):
                 assign.value = var_def.args[1]
                 return [assign]
 
@@ -1961,6 +2029,23 @@ class SeriesPass:
         # doesn't have inline pass)
         if fdef in (("notna", "pandas"), ("notnull", "pandas")) and not rhs.kws:
             impl = bodo.hiframes.dataframe_impl.overload_notna(
+                self.typemap[rhs.args[0].name]
+            )
+            return compile_func_single_block(
+                impl,
+                rhs.args,
+                assign.target,
+                self,
+            )
+
+        # inline np.var()/np.std() on nullable float arrays to be parallelized
+        if (
+            fdef in (("std", "numpy"), ("var", "numpy"))
+            and not rhs.kws
+            and len(rhs.args) == 1
+            and isinstance(self.typemap[rhs.args[0].name], FloatingArrayType)
+        ):
+            impl = getattr(bodo.libs.float_arr_ext, "overload_" + func_name)(
                 self.typemap[rhs.args[0].name]
             )
             return compile_func_single_block(
@@ -3719,6 +3804,28 @@ class SeriesPass:
         """Simplify IR after Series pass transforms."""
         changed = False
         self.func_ir.blocks = ir_utils.simplify_CFG(self.func_ir.blocks)
+        if not self.avoid_copy_propagation:
+            # Apply copy propagation. There will be many extra assignments if we
+            # inline code.
+            in_cps, _ = ir_utils.copy_propagate(self.func_ir.blocks, self.typemap)
+            save_copies = ir_utils.apply_copy_propagate(
+                self.func_ir.blocks,
+                in_cps,
+                ir_utils.get_name_var_table(self.func_ir.blocks),
+                self.typemap,
+                self.calltypes,
+            )
+            # Restore any user variable names.
+            # Note: user variables may still be eliminated because of dead code elimination
+            # but we attempt to capture them in metadata.
+            var_rename_map = ir_utils.restore_copy_var_names(
+                self.func_ir.blocks, save_copies, self.typemap
+            )
+            if self.parfor_metadata is not None:
+                if "var_rename_map" not in self.parfor_metadata:
+                    self.parfor_metadata["var_rename_map"] = {}
+                self.parfor_metadata["var_rename_map"].update(var_rename_map)
+
         while ir_utils.remove_dead(
             self.func_ir.blocks, self.func_ir.arg_names, self.func_ir, self.typemap
         ):

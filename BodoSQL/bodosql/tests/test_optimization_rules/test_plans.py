@@ -9,6 +9,24 @@ import pytest
 
 
 @pytest.fixture()
+def dummy_test_ctx():
+    """A schema used for testing dummy plans. This doesn't resemble any
+    customer setup/use case.
+    """
+    return {
+        "table1": pd.DataFrame(
+            {
+                "A": pd.Series([42], dtype=pd.Int64Dtype()),
+                "B": pd.Series([42.0], dtype=pd.Float64Dtype()),
+                "C": pd.Series([42], dtype=pd.Int64Dtype()),
+                "D": pd.Series([42.0], dtype=pd.Float32Dtype()),
+                "E": pd.Series([42], dtype=pd.Int64Dtype()),
+            }
+        )
+    }
+
+
+@pytest.fixture()
 def engage3_ctx():
     """The schemas of the tables used inPOC1. Schemas manually
     recreated by observing the schema on Snowflake and creating DataFrames
@@ -336,9 +354,25 @@ def engage3_ctx():
             ("plan_data/engage3.sql", "plan_data/engage3_expected.txt", "engage3"),
             id="engage3",
         ),
+        pytest.param(
+            (
+                "plan_data/subcolumn_elimination.sql",
+                "plan_data/subcolumn_elimination_expected.txt",
+                "dummy_test",
+            ),
+            id="subcolumn_elimination",
+        ),
+        pytest.param(
+            (
+                "plan_data/qualify_subcolumn_elimination.sql",
+                "plan_data/qualify_subcolumn_elimination_expected.txt",
+                "dummy_test",
+            ),
+            id="qualify_subcolumn_elimination",
+        ),
     ],
 )
-def test_plan(plan_tests, tpch_data_schema_only, engage3_ctx, datapath):
+def test_plan(plan_tests, tpch_data_schema_only, engage3_ctx, dummy_test_ctx, datapath):
     """Tests that the sql files in the plan_data directory generate the same
     plan string as the reference solutions."""
     query_path, expected_path, ctx_str = plan_tests
@@ -348,6 +382,8 @@ def test_plan(plan_tests, tpch_data_schema_only, engage3_ctx, datapath):
         ctx = tpch_data_schema_only[0]
     elif ctx_str == "engage3":
         ctx = engage3_ctx
+    elif ctx_str == "dummy_test":
+        ctx = dummy_test_ctx
     else:
         pytest.skip(f"CTX name unknown: {ctx_str}")
     with open(datapath(query_path), "r") as f:

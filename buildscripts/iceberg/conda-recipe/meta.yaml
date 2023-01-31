@@ -20,7 +20,6 @@ requirements:
     - setuptools <63
     - openjdk >=9.0,<12
     - maven
-    - ninja
 
   run:
     - python >=3.8,<3.11

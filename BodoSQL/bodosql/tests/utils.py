@@ -28,7 +28,11 @@ from pyspark.sql.types import (
 )
 
 import bodo
-from bodo.tests.utils import _get_dist_arg, reduce_sum
+from bodo.tests.utils import (
+    _convert_float_to_nullable_float,
+    _get_dist_arg,
+    reduce_sum,
+)
 
 
 class InputDist(Enum):
@@ -56,6 +60,8 @@ def check_query(
     convert_columns_string: Optional[List[str]] = None,
     convert_columns_timedelta: Optional[List[str]] = None,
     convert_columns_decimal: Optional[List[str]] = None,
+    convert_input_to_nullable_float: bool = True,
+    convert_expected_output_to_nullable_float: bool = True,
     convert_float_nan: bool = False,
     convert_columns_bool: Optional[List[str]] = None,
     convert_columns_tz_naive: Optional[List[str]] = None,
@@ -131,6 +137,12 @@ def check_query(
             columns to td64 types. This is because SparkSQL doesn't
             natively support timedelta types and converts the result
             to int64. This argument is only used if expected_output=None.
+
+        convert_input_to_nullable_float: Convert float columns in inputs
+            to nullable float if the nullable float global flag is enabled.
+
+        convert_expected_output_to_nullable_float: Convert float columns in expected
+            output to nullable float if the nullable float global flag is enabled.
 
         convert_float_nan: Convert NaN values in float columns to None.
             This is used when Spark and Bodo will have different output
@@ -324,6 +336,19 @@ def check_query(
             expected_output = convert_spark_timedelta(
                 expected_output, convert_columns_timedelta
             )
+        if (
+            convert_input_to_nullable_float
+            and bodo.libs.float_arr_ext._use_nullable_float
+        ):
+            dataframe_dict = {
+                c: _convert_float_to_nullable_float(df)
+                for c, df in dataframe_dict.items()
+            }
+        if (
+            convert_expected_output_to_nullable_float
+            and bodo.libs.float_arr_ext._use_nullable_float
+        ):
+            expected_output = _convert_float_to_nullable_float(expected_output)
         if convert_float_nan:
             expected_output = convert_spark_nan_none(expected_output)
         if convert_columns_decimal:

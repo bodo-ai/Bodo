@@ -42,6 +42,10 @@ def cosh(arr):  # pragma: no cover
     return
 
 
+def cot(arr):  # pragma: no cover
+    return
+
+
 def sin(arr):  # pragma: no cover
     return
 
@@ -103,6 +107,10 @@ def cosh_util(arr):  # pragma: no cover
     return
 
 
+def cot_util(arr):  # pragma: no cover
+    return
+
+
 def sin_util(arr):  # pragma: no cover
     return
 
@@ -137,6 +145,7 @@ funcs_utils_names = (
     (atan2, atan2_util, "ATAN2"),
     (cos, cos_util, "COS"),
     (cosh, cosh_util, "COSH"),
+    (cot, cot_util, "COT"),
     (sin, sin_util, "SIN"),
     (sinh, sinh_util, "SINH"),
     (tan, tan_util, "TAN"),
@@ -154,11 +163,11 @@ def create_trig_func_overload(func_name):
         func_name = func_name.lower()
 
         def overload_func(arr):
-            """Handles cases where func_name recieves an optional argument and forwards
+            """Handles cases where func_name receives an optional argument and forwards
             to the appropriate version of the real implementation"""
             if isinstance(arr, types.optional):
                 return unopt_argument(
-                    f"bodo.libs.bodosql_array_kernels.{func_name}", ["arr"], 0
+                    f"bodo.libs.bodosql_array_kernels.{func_name}_util", ["arr"], 0
                 )
 
             func_text = "def impl(arr):\n"
@@ -174,7 +183,7 @@ def create_trig_func_overload(func_name):
         func_name = func_name.lower()
 
         def overload_func(arr0, arr1):
-            """Handles cases where func_name recieves optional arguments and forwards
+            """Handles cases where func_name receives optional arguments and forwards
             to the appropriate version of the real implementation"""
             args = [arr0, arr1]
             for i in range(2):
@@ -236,6 +245,8 @@ def create_trig_util_overload(func_name):  # pragma: no cover
                 scalar_text += "res[i] = np.cos(arg0)"
             elif func_name == "COSH":
                 scalar_text += "res[i] = np.cosh(arg0)"
+            elif func_name == "COT":
+                scalar_text += "res[i] = np.divide(1, np.tan(arg0))"
             elif func_name == "SIN":
                 scalar_text += "res[i] = np.sin(arg0)"
             elif func_name == "SINH":
@@ -251,7 +262,10 @@ def create_trig_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
-            out_dtype = types.Array(bodo.float64, 1, "C")
+            if bodo.libs.float_arr_ext._use_nullable_float:
+                out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+            else:
+                out_dtype = types.Array(bodo.float64, 1, "C")
 
             return gen_vectorized(
                 arg_names, arg_types, propagate_null, scalar_text, out_dtype
@@ -272,7 +286,10 @@ def create_trig_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
-            out_dtype = types.Array(bodo.float64, 1, "C")
+            if bodo.libs.float_arr_ext._use_nullable_float:
+                out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+            else:
+                out_dtype = types.Array(bodo.float64, 1, "C")
 
             return gen_vectorized(
                 arg_names,

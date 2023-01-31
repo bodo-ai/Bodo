@@ -240,3 +240,219 @@ def test_parse_json(arg):
     # [BE-3772] distributed testing currently banned because of segfaulting on
     # gatherv with the array type
     check_func(impl, (arg,), py_output=answer, check_dtype=False, only_seq=True)
+
+
+@pytest.mark.parametrize(
+    "data, path, answer",
+    [
+        pytest.param(
+            '{"key": "value"}',
+            "key",
+            "value",
+            id="scalar_test",
+        ),
+        pytest.param(
+            None,
+            "key",
+            None,
+            id="null_test",
+        ),
+        pytest.param(
+            '{"first": "Daemon", "last": "Targaryen", "hair": "platinum"}',
+            pd.Series(["first", None, '["last"]', "age", "hair"]),
+            pd.Series(["Daemon", None, "Targaryen", None, "platinum"]),
+            id="simple_map",
+        ),
+        pytest.param(
+            '[ "Alpha" , "Beta" , "Gamma" ]',
+            pd.Series(["[0]", None, "[1]", "[3]", "[2]"]),
+            pd.Series(["Alpha", None, "Beta", None, "Gamma"]),
+            id="simple_array",
+        ),
+        pytest.param(
+            '{"[0]": "A", "[\'Z\']": "B", "]": \'C\', "Y\\"":"D", \'Q\': "R\\""}',
+            pd.Series(['["[0]"]', "[\"['Z']\"]", '["]"]', "['Y\"']", "Q"]),
+            pd.Series(["A", "B", "C", "D", 'R"']),
+            id="escape_test",
+        ),
+        pytest.param(
+            '\n{\n    "Name" :"Daemon Targaryen","Location":{\n\n "Continent" : "Westeros","Castle" :"Dragonstone"\n\n},\n\n            "Spouses": [\n\n{"First":"Rhea","Last":"Royce"},\n\n{ "First":"Laena", "Last" :"Velaryon" },{"First": "Rhaenyra", "Last": "Targaryen"}],\n"Age": 40}',
+            pd.Series(
+                [
+                    "Name",
+                    "Location.Continent",
+                    "Location.Castle",
+                    "Spouses[0].First",
+                    "Spouses[0].Last",
+                    "Spouses[1]['First']",
+                    'Spouses[1]["Last"]',
+                    "Spouses[2].First",
+                    "Spouses[2].Last",
+                ]
+            ),
+            pd.Series(
+                [
+                    "Daemon Targaryen",
+                    "Westeros",
+                    "Dragonstone",
+                    "Rhea",
+                    "Royce",
+                    "Laena",
+                    "Velaryon",
+                    "Rhaenyra",
+                    "Targaryen",
+                ]
+            ),
+            id="house_of_dragon_map",
+        ),
+        pytest.param(
+            '[[["A",\'B\'],["C","D"]],[[\'E\',\'F\'],["G","H"]]]',
+            pd.Series(
+                [
+                    "[0][0][0]",
+                    "[0][0][3]",
+                    "[0][0][1]",
+                    "[5][0][0]",
+                    "[0][1][0]",
+                    "[0][1][1]",
+                    "[1][0][0]",
+                    "[1][0][1]",
+                    "[1][1][0]",
+                    "[1][1][1]",
+                    "[1][2][1]",
+                ]
+            ),
+            pd.Series(["A", None, "B", None, "C", "D", "E", "F", "G", "H", None]),
+            id="nested_grid_array",
+        ),
+        pytest.param(
+            '[{"Name":\'Ringo\',\'Courses\':[{"Name":"CS","Grade":"A"},{"Name":"Science","Grade":"C"}]},{"Name":"Paul","Courses":[{"Name":"Math","Grade":"B"},{"Name":"CS","Grade":"A"},{"Name":"English","Grade":"A"}]},{"Name":"John","Courses":[{"Name":"English","Grade":"A"},{"Name":"Art","Grade":"A"},{"Name":"Math","Grade":"D"}]}]',
+            pd.Series(
+                [
+                    '[0]["Name"]',
+                    '[0]["Courses"][0]["Name"]',
+                    '[0]["Courses"][0]["Grade"]',
+                    '[0]["Courses"][1].Name',
+                    '[0]["Courses"][1].Grade',
+                    '[0]["Courses"][2].Name',
+                    '[0]["Courses"][1].Foo',
+                    "[1].Name",
+                    '[1].Courses[0]["Name"]',
+                    '[1].Courses[0]["Grade"]',
+                    '[1].Courses[1]["Name"]',
+                    '[1].Courses[1]["Grade"]',
+                    '[1].Courses[2]["Name"]',
+                    '[1].Courses[2]["Grade"]',
+                    '[1].course[2]["Name"]',
+                    '["2"].Courses[2]["Grade"]',
+                    "[2].Name",
+                    '[2].Courses[0]["Name"]',
+                    '[2].Courses[0]["Grade"]',
+                    '[2].Courses[1]["Name"]',
+                    "[2].Courses[1].Grade",
+                    "[2].Courses[2].Name",
+                    "[2].Courses[2].Grade",
+                ]
+            ),
+            pd.Series(
+                [
+                    "Ringo",
+                    "CS",
+                    "A",
+                    "Science",
+                    "C",
+                    None,
+                    None,
+                    "Paul",
+                    "Math",
+                    "B",
+                    "CS",
+                    "A",
+                    "English",
+                    "A",
+                    None,
+                    None,
+                    "John",
+                    "English",
+                    "A",
+                    "Art",
+                    "A",
+                    "Math",
+                    "D",
+                ]
+            ),
+            id="roster_map_array",
+        ),
+        pytest.param(
+            " { \"Snake\" : '🐍' , '😊' : \"Smile\" , \"Sigma\" : 'Σ' } ",
+            pd.Series(
+                [
+                    "Snake",
+                    None,
+                    '["😊"]',
+                    "Scissor",
+                    "Sigma",
+                ]
+            ),
+            pd.Series(
+                [
+                    "🐍",
+                    None,
+                    "Smile",
+                    None,
+                    "Σ",
+                ]
+            ),
+            id="non_ascii",
+        ),
+    ],
+)
+def test_json_extract_path_text(data, path, answer):
+    def impl(data, path):
+        return pd.Series(
+            bodo.libs.bodosql_array_kernels.json_extract_path_text(data, path)
+        )
+
+    if not (isinstance(data, pd.Series) or isinstance(path, pd.Series)):
+        impl = (
+            lambda data, path: bodo.libs.bodosql_array_kernels.json_extract_path_text(
+                data, path
+            )
+        )
+
+    check_func(impl, (data, path), py_output=answer, check_dtype=False)
+
+
+@pytest.mark.parametrize(
+    "data, path",
+    [
+        pytest.param('{"A": "B"}', "", id="empty_path"),
+        pytest.param('{"A": "B"}', ".A", id="dot_prefix_path"),
+        pytest.param('{"A": "B"}', "A..B", id="double_dot_path"),
+        pytest.param('{"A": "B"}', "A.", id="dot_suffix_path"),
+        pytest.param('{"A": "B"}', 'A.["B"]', id="dot_bracket_path"),
+        pytest.param('["A", "B", "C", "D", "E"]', "[-3]", id="negative_index_path"),
+        pytest.param('["A", "B", "C", "D", "E"]', "[0 1]", id="malformed_index_path"),
+        pytest.param('{"A": "B"}', "[\" ']", id="malformed_bracket_path"),
+        pytest.param('{"A" "B"}', "A", id="missing_colon_data"),
+        pytest.param('{"A": [{"B"]}}', "A", id="improper_internal_data"),
+        pytest.param('{"A\': "B"}', "A", id="inconsistent_quote_data"),
+    ],
+)
+def test_json_extract_path_text_invalid(data, path):
+    """Check cases where JSON_EXTRACT_PATH_TEXT raises an exception, such as
+    malformed JSON data or invalid path strings.
+
+    Note: some malformed cases that should raise an exception instead output
+    None because they are not detected by this function. This is because
+    the function hunts for a specific entry in the JSON data and parses
+    along the way, rather than scanning the entire string and making sure
+    it is well formed."""
+
+    def impl(data, path):
+        return bodo.libs.bodosql_array_kernels.json_extract_path_text(data, path)
+
+    func = bodo.jit(impl)
+
+    with pytest.raises(ValueError):
+        func(data, path)

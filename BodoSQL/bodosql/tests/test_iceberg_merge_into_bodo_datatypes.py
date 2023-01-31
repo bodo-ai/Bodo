@@ -207,4 +207,5 @@ def test_merge_into_bodo_datatypes_as_expr(
         reset_index=True,
         sort_output=True,
         only_1DVar=True,
+        check_dtype=False,
     )

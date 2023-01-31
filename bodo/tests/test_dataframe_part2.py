@@ -273,7 +273,14 @@ def test_set_column_native_reflect(memory_leak_check):
         f(df)
         return df
 
+    # nullable float column
+    def impl2():
+        df = pd.DataFrame({"A": pd.Series(np.ones(4)).astype("Float64")})
+        f(df)
+        return df
+
     check_func(impl, (), only_seq=True)
+    check_func(impl2, (), only_seq=True)
 
 
 def test_set_multi_column_reflect(memory_leak_check):
@@ -733,8 +740,8 @@ def test_df_apply_general_colnames(memory_leak_check):
         },
         index=[3, 1, 4, 6, 0],
     )
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl1, (df,), convert_to_nullable_float=False)
+    check_func(impl2, (df,), convert_to_nullable_float=False)
     check_func(impl3, (df,))
 
 
@@ -928,8 +935,8 @@ def test_df_apply_df_output(memory_leak_check):
         return df.apply(g, axis=1)
 
     df = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0]})
-    check_func(impl1, (df,))
-    check_func(impl2, (df,))
+    check_func(impl1, (df,), check_dtype=False)
+    check_func(impl2, (df,), check_dtype=False)
 
 
 def test_df_apply_df_output_multicolumn(memory_leak_check):
@@ -1655,8 +1662,8 @@ def test_df_setitem_multi(memory_leak_check):
             "D": np.arange(n) + 1.0,
         }
     )
-    check_func(impl1, (df,), copy_input=True)
-    check_func(impl2, (df,), copy_input=True)
+    check_func(impl1, (df,), copy_input=True, convert_to_nullable_float=False)
+    check_func(impl2, (df,), copy_input=True, convert_to_nullable_float=False)
     with pytest.raises(
         BodoError,
         match=r"Dataframe.apply\(\): only axis=1 supported for user-defined functions",
@@ -1980,7 +1987,7 @@ def test_iloc_setitem(memory_leak_check):
 
     n = 11
     df = pd.DataFrame({"A": np.arange(n), "B": np.arange(n) ** 2, "C": np.ones(n)})
-    check_func(impl1, (df,), copy_input=True)
+    check_func(impl1, (df,), copy_input=True, convert_to_nullable_float=False)
     check_func(impl2, (df,), copy_input=True)
     check_func(impl3, (df,), copy_input=True)
     # TODO: Support impl4
@@ -2957,10 +2964,36 @@ def test_df_mem_usage(memory_leak_check):
         {"A": [1, 2, 3, 4, 5, 6], "B": [2.1, 3.2, 4.4, 5.2, 10.9, 6.8]},
         index=pd.date_range(start="2018-04-24", end="2018-04-27", periods=6, name="A"),
     )
-    py_out = pd.Series([48, 48, 48], index=["Index", "A", "B"])
-    check_func(impl1, (df,), py_output=py_out, is_out_distributed=False)
-    py_out = pd.Series([48, 48], index=["A", "B"])
-    check_func(impl2, (df,), py_output=py_out, is_out_distributed=False)
+    # 1 extra byte for null_bit_map per rank
+    null_bitmap_byte = 1 if bodo.libs.float_arr_ext._use_nullable_float else 0
+    col_B_size = 48 + null_bitmap_byte
+    col_B_size_parallel = col_B_size + null_bitmap_byte * (bodo.get_size() - 1)
+    py_out = pd.Series([48, 48, col_B_size], index=["Index", "A", "B"])
+    py_out_parallel = pd.Series(
+        [48, 48, col_B_size_parallel], index=["Index", "A", "B"]
+    )
+    check_func(impl1, (df,), py_output=py_out, is_out_distributed=False, only_seq=True)
+    check_func(
+        impl1, (df,), py_output=py_out_parallel, is_out_distributed=False, only_1D=True
+    )
+    py_out = pd.Series([48, col_B_size], index=["A", "B"])
+    py_out_parallel = pd.Series([48, col_B_size_parallel], index=["A", "B"])
+    check_func(
+        impl2,
+        (df,),
+        py_output=py_out,
+        is_out_distributed=False,
+        check_dtype=False,
+        only_seq=True,
+    )
+    check_func(
+        impl2,
+        (df,),
+        py_output=py_out_parallel,
+        is_out_distributed=False,
+        check_dtype=False,
+        only_1D=True,
+    )
     # Empty DataFrame
     df = pd.DataFrame()
     # StringIndex only. Bodo has different underlying arrays than Pandas
@@ -2972,7 +3005,7 @@ def test_df_mem_usage(memory_leak_check):
     check_func(impl1, (df,), only_1D=True, py_output=py_out, is_out_distributed=False)
 
     # Empty and no index.
-    check_func(impl2, (df,), is_out_distributed=False)
+    check_func(impl2, (df,), is_out_distributed=False, check_dtype=False)
 
 
 from .test_matplotlib import bodo_check_figures_equal

@@ -1658,6 +1658,7 @@ def to_nullable_type(t):
     Converts data in DataFrame and Series types as well.
     """
     from bodo.hiframes.pd_dataframe_ext import DataFrameType
+    from bodo.hiframes.pd_index_ext import NumericIndexType
     from bodo.hiframes.pd_series_ext import SeriesType
 
     if isinstance(t, DataFrameType):
@@ -1665,7 +1666,12 @@ def to_nullable_type(t):
         return DataFrameType(new_data, t.index, t.columns, t.dist, t.is_table_format)
 
     if isinstance(t, SeriesType):
-        return SeriesType(t.dtype, to_nullable_type(t.data), t.index, t.name_typ)
+        return SeriesType(
+            t.dtype, to_nullable_type(t.data), t.index, t.name_typ, t.dist
+        )
+
+    if isinstance(t, NumericIndexType):
+        return NumericIndexType(t.dtype, t.name_typ, to_nullable_type(t.data))
 
     if isinstance(t, types.Array):
         if t.dtype == types.bool_:
