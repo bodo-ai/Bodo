@@ -64,7 +64,8 @@ public class ConversionCodeGen {
    */
   public static RexNodeVisitorInfo generateDateFnCode(String datetimeStr) {
     return new RexNodeVisitorInfo(
-        "DATE(" + datetimeStr + ")", "pd.Timestamp(" + datetimeStr + ").floor(freq=\"D\")");
+        "DATE(" + datetimeStr + ")",
+        "bodo.libs.bodosql_array_kernels.create_date(" + datetimeStr + ")");
   }
 
   /**
@@ -149,6 +150,7 @@ public class ConversionCodeGen {
    */
   public static RexNodeVisitorInfo generateTimestampFnCode(String datetimeStr) {
     return new RexNodeVisitorInfo(
-        "TIMESTAMP(" + datetimeStr + ")", "pd.Timestamp(" + datetimeStr + ")");
+        "TIMESTAMP(" + datetimeStr + ")",
+        "bodo.libs.bodosql_array_kernels.create_timestamp(" + datetimeStr + ")");
   }
 }

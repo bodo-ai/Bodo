@@ -931,7 +931,7 @@ def test_heterogeneous_series_df_apply_astype(to_type):
             if not pd.isna(x)
             else float_func[to_type](np.nan)
         )
-        check_func(test_impl, (df_float,), py_output=exp_output)
+        check_func(test_impl, (df_float,), py_output=exp_output, check_dtype=False)
     elif to_type == "datetime64[ns]":
         # astype behavior fails when iterating through rows in pandas
         py_output = df_dt.astype(to_type)
@@ -1204,6 +1204,7 @@ def test_np_mod(numeric_series_val):
 
     check_func(impl, (numeric_series_val, numeric_series_val), check_dtype=False)
     check_func(impl, (10, numeric_series_val), check_dtype=False)
+
 
 @pytest.mark.tz_aware
 def test_tz_aware_series_getitem(memory_leak_check):

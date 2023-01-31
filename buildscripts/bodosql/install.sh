@@ -65,4 +65,4 @@ set -x
 # ---- Install packages from Conda ----
 
 # Needed for BodoSQL
-$MAMBA_INSTALL -c conda-forge pytest pytest-cov pytest-timeout maven py4j openjdk=11 credstash pyspark=3.2
+$MAMBA_INSTALL -c conda-forge pytest pytest-cov pytest-timeout maven py4j=0.10.9.5 openjdk=11 credstash pyspark=3.2

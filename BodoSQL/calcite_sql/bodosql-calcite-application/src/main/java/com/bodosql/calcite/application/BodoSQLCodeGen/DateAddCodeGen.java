@@ -152,12 +152,17 @@ public class DateAddCodeGen {
    *
    * @param arg0 The first starting datetime (or string).
    * @param arg1 The amount of days to add to the starting datetime.
-   * @param manual_addition Is the second argument a timedelta?
+   * @param adding_delta Is the second argument a timedelta?
+   * @param fnName The name of the function
    * @return The code generated that matches the DateAdd expression.
    */
-  public static String generateMySQLDateAddCode(String arg0, String arg1, boolean manual_addition) {
+  public static String generateMySQLDateAddCode(
+      String arg0, String arg1, boolean adding_delta, String fnName) {
     StringBuilder addBuilder = new StringBuilder();
-    if (manual_addition) {
+    if (fnName.equals("SUBDATE") || fnName.equals("DATE_SUB")) {
+      arg1 = "bodo.libs.bodosql_array_kernels.negate(" + arg1 + ")";
+    }
+    if (adding_delta) {
       addBuilder
           .append("bodo.libs.bodosql_array_kernels.add_interval(")
           .append(arg0)

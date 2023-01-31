@@ -624,10 +624,16 @@ def test_dataframe_concat(series_val):
             reset_index=True,
             convert_columns_to_pandas=True,
             py_output=py_output,
+            convert_to_nullable_float=False,
         )
     else:
         check_func(
-            f, (df1, df2), sort_output=True, reset_index=True, py_output=py_output
+            f,
+            (df1, df2),
+            sort_output=True,
+            reset_index=True,
+            py_output=py_output,
+            convert_to_nullable_float=False,
         )
 
 
@@ -1359,17 +1365,7 @@ def test_series_diff(numeric_series_val, memory_leak_check):
     def impl(S):
         return S.diff()
 
-    # TODO: Support nullable arrays
-    if isinstance(
-        numeric_series_val.dtype,
-        (pd.core.arrays.integer._IntegerDtype, pd.Float32Dtype, pd.Float64Dtype),
-    ):
-        with pytest.raises(
-            BodoError, match="Series.diff.* column input type .* not supported"
-        ):
-            bodo.jit(impl)(numeric_series_val)
-    else:
-        check_func(impl, (numeric_series_val,))
+    check_func(impl, (numeric_series_val,))
 
 
 @pytest.mark.slow
@@ -3082,7 +3078,13 @@ def test_series_getitem_str_and_series_init_dict_grpby_apply():
         )
         return ans
 
-    check_func(test_impl, (df,), sort_output=True, reset_index=True)
+    check_func(
+        test_impl,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
 
 
 def test_series_init_empty_dict():

@@ -157,12 +157,12 @@ array_info* RetrieveArray_TwoColumns(
  *
  * @param array_info* : the input pointer
  * @param ListIdx is the vector of list of rows selected
- * @param use_nullable_int use nullable int output for Numpy array input
+ * @param use_nullable_arr use nullable int/float output for Numpy array input
  * @return one array
  */
 array_info* RetrieveArray_SingleColumn(array_info* in_arr,
                                        std::vector<int64_t> const& ListIdx,
-                                       bool use_nullable_int = false);
+                                       bool use_nullable_arr = false);
 
 /** This function uses the combinatorial information computed in the
  * "ListIdx" array and return the coulm with the selecetd rows.

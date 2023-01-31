@@ -71,8 +71,9 @@ from bodo.libs.array import (
 )
 from bodo.libs.array_item_arr_ext import ArrayItemArrayType
 from bodo.libs.binary_arr_ext import binary_array_type
-from bodo.libs.bool_arr_ext import boolean_array
+from bodo.libs.bool_arr_ext import BooleanArrayType, boolean_array
 from bodo.libs.decimal_arr_ext import DecimalArrayType
+from bodo.libs.float_arr_ext import FloatingArrayType
 from bodo.libs.int_arr_ext import IntegerArrayType
 from bodo.libs.str_arr_ext import str_arr_from_sequence
 from bodo.libs.str_ext import string_type, unicode_to_utf8
@@ -1679,7 +1680,7 @@ def set_df_index(typingctx, df_t, index_t=None):
 
 
 @intrinsic
-def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
+def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type_t=None):
     """Set df column and reflect to parent Python object
     return a new df.
     """
@@ -1693,18 +1694,42 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
     index_typ = df_type.index
     is_new_col = col_name not in df_type.columns
     col_ind = n_cols
+    cast_arr_to_nullable = False
+    arr_type = arr_type_t
+
     if is_new_col:
         data_typs += (arr_type,)
         column_names += (col_name,)
         new_n_cols += 1
     else:
         col_ind = df_type.columns.index(col_name)
+        # handle setting non-nullable array to nullable column
+        if (
+            isinstance(
+                data_typs[col_ind],
+                (FloatingArrayType, IntegerArrayType, BooleanArrayType),
+            )
+            and isinstance(arr_type, types.Array)
+            and arr_type.dtype == data_typs[col_ind].dtype
+        ):
+            arr_type = data_typs[col_ind]
+            cast_arr_to_nullable = True
         data_typs = tuple(
             (arr_type if i == col_ind else data_typs[i]) for i in range(n_cols)
         )
 
     def codegen(context, builder, signature, args):
         df_arg, _, arr_arg = args
+
+        if cast_arr_to_nullable:
+            arr_arg = context.compile_internal(
+                builder,
+                lambda A: bodo.utils.conversion.coerce_to_array(
+                    A, use_nullable_array=True
+                ),
+                arr_type(arr_type_t),
+                [arr_arg],
+            )
 
         in_dataframe_payload = get_dataframe_payload(context, builder, df_type, df_arg)
         in_dataframe = cgutils.create_struct_proxy(df_type)(
@@ -1818,12 +1843,15 @@ def set_df_column_with_reflect(typingctx, df_type, cname_type, arr_type=None):
 
             pyapi.gil_release(gil_state)  # release GIL
 
+        if cast_arr_to_nullable:
+            context.nrt.decref(builder, arr_type, arr_arg)
+
         return out_dataframe
 
     ret_typ = DataFrameType(
         data_typs, index_typ, column_names, df_type.dist, df_type.is_table_format
     )
-    sig = signature(ret_typ, df_type, cname_type, arr_type)
+    sig = signature(ret_typ, df_type, cname_type, arr_type_t)
     return sig, codegen
 
 
@@ -2372,6 +2400,8 @@ def _get_df_args(data, index, columns, dtype, copy):
             )
         copy_str = ".copy()" if copy else ""
         columns_consts = get_overload_const_list(columns)
+        if columns_consts is None:
+            raise_bodo_error("pd.DataFrame(): constant column names required")
         n_cols = len(columns_consts)
         data_val_types = {c: data.copy(ndim=1) for c in columns_consts}
         data_arrs = ["data[:,{}]{}".format(i, copy_str) for i in range(n_cols)]
@@ -2381,6 +2411,8 @@ def _get_df_args(data, index, columns, dtype, copy):
         col_names = data_dict.keys()
     else:
         col_names = get_overload_const_list(columns)
+        if col_names is None:
+            raise_bodo_error("pd.DataFrame(): constant column names required")
 
     df_len = _get_df_len_from_info(
         data_dict, data_val_types, col_names, index_is_none, index_arg
@@ -2759,15 +2791,23 @@ class JoinTyper(AbstractTemplate):
         index_typ = RangeIndexType(types.none)
         # Convert range index to numeric index
         convert_range = False
+        index_to_nullable = False
         if left_index and right_index and not is_overload_str(how, "asof"):
             index_typ = left_df.index
             convert_range = True
         elif left_index and not right_index:
             index_typ = right_df.index
             convert_range = True
+            if is_left:
+                # for left join on left Index, the output array corresponding to right
+                # Index becomes the output dataframe's Index, which should be nullable
+                # since left join may insert nulls.
+                index_to_nullable = True
         elif right_index and not left_index:
             index_typ = left_df.index
             convert_range = True
+            if is_right:
+                index_to_nullable = True
 
         if convert_range and isinstance(
             index_typ, bodo.hiframes.pd_index_ext.RangeIndexType
@@ -2775,6 +2815,9 @@ class JoinTyper(AbstractTemplate):
             # If the index comes from one of the tables it will no longer be a range
             # as the entries will be shuffled
             index_typ = bodo.hiframes.pd_index_ext.NumericIndexType(types.int64)
+
+        if index_to_nullable:
+            index_typ = to_nullable_type(index_typ)
 
         out_df = DataFrameType(
             tuple(data), index_typ, tuple(columns), is_table_format=True
@@ -4436,6 +4479,7 @@ def to_sql_overload(
     # PUT command later to perform the actual upload
     func_text += "        ev_upload_df = tracing.Event('upload_df', is_parallel=False)           \n"
     func_text += "        upload_threads_in_progress = []\n"
+    func_text += "        num_files = len(range(0, len(df), chunksize))\n"
     func_text += "        for chunk_idx, i in enumerate(range(0, len(df), chunksize)):           \n"
 
     # Create a unique filename for uploaded chunk with quotes/backslashes escaped
@@ -4523,13 +4567,19 @@ def to_sql_overload(
 
     # Generate snowflake schema from bodo datatypes.
     sf_schema = bodo.io.snowflake.gen_snowflake_schema(df.columns, df.data)
+
+    # Compute the total number of files written.
+    func_text += (
+        "        sum_op = np.int32(bodo.libs.distributed_api.Reduce_Type.Sum.value)\n"
+    )
+    func_text += "        num_files_global = bodo.libs.distributed_api.dist_reduce(num_files, np.int32(sum_op))\n"
     # In object mode on rank 0: Create a new table if needed, execute COPY_INTO,
     # and clean up created internal stage.
     func_text += (
         "        with bodo.objmode():\n"
         "            bodo.io.snowflake.create_table_copy_into(\n"
         f"                cursor, stage_name, location, {sf_schema},\n"
-        "                if_exists, old_creds, tmp_folder,\n"
+        "                if_exists, num_files_global, old_creds, tmp_folder,\n"
         "                azure_stage_direct_upload, old_core_site,\n"
         "                old_sas_token,\n"
         "            )\n"

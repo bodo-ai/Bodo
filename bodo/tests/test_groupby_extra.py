@@ -40,7 +40,13 @@ def test_agg_single_str(test_groupby_agg_df, memory_leak_check):
         return df.groupby(["A", "B"], as_index=False).agg("mean")
 
     check_func(test_impl1, (test_groupby_agg_df,), sort_output=True, reset_index=True)
-    check_func(test_impl2, (test_groupby_agg_df,), sort_output=True, reset_index=True)
+    check_func(
+        test_impl2,
+        (test_groupby_agg_df,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
     # Pandas seems to detect that every value can be represented as an integer and returns
     # int instead of float for the dtype of column C.
     check_func(
@@ -49,6 +55,7 @@ def test_agg_single_str(test_groupby_agg_df, memory_leak_check):
         sort_output=True,
         reset_index=True,
         check_dtype=False,
+        convert_to_nullable_float=False,
     )
 
 

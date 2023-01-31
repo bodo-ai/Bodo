@@ -1226,7 +1226,7 @@ def remove_dead_columns(
                 elif fdef == ("table_filter", "bodo.hiframes.table"):
                     # In this case, we've encountered a getitem that filters
                     # the rows of a table. At this step, we can also
-                    # filter out columns that are not live out of this statment.
+                    # filter out columns that are not live out of this statement.
 
                     # Compute all columns that are live at this statement.
                     used_columns = _find_used_columns(

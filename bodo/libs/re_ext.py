@@ -83,6 +83,15 @@ def unbox_re_pattern(typ, obj, c):
     return NativeValue(obj)
 
 
+@lower_constant(RePatternType)
+def pattern_constant(context, builder, ty, pyval):
+    """
+    get LLVM constant by serializing the Python value.
+    """
+    pyapi = context.get_python_api(builder)
+    return pyapi.unserialize(pyapi.serialize_object(pyval))
+
+
 # data type for storing re.Match objects or None
 # handling None is required since functions like re.seach() return either Match object
 # or None (when there is no match)

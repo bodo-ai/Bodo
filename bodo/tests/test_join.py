@@ -1306,6 +1306,7 @@ def test_merge_right_index_rm_dead(memory_leak_check):
         cal_average_by_payment_type,
         (df,),
         sort_output=True,
+        check_dtype=False,
     )
 
 

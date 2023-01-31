@@ -42,7 +42,11 @@ from bodo.transforms.table_column_del_pass import (
     ir_extension_table_column_use,
     remove_dead_column_extensions,
 )
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import (
+    BodoError,
+    get_overload_const_str,
+    is_overload_constant_str,
+)
 from bodo.utils.utils import check_and_propagate_cpp_exception
 
 if bodo.utils.utils.has_pyarrow():
@@ -81,6 +85,12 @@ class SqlReader(ir.Stmt):
         is_merge_into: bool,
         file_list_type,
         snapshot_id_type,
+        # Only for Snowflake. Temporary, until
+        # we have native Date support in BodoSQL.
+        # These are the originally date columns that
+        # we will be casting to datetime64[ns]
+        # (potentially an unsafe cast) during the read.
+        sf_dt_to_ts_cols: List[int],
     ):
         self.connector_typ = "sql"
         self.sql_request = sql_request
@@ -141,9 +151,17 @@ class SqlReader(ir.Stmt):
             self.file_list_type = types.none
             self.snapshot_id_type = types.none
 
+        # Only for Snowflake.
+        # These are the originally date columns that
+        # we will be casting to datetime64[ns]
+        # (potentially an unsafe cast) during the read.
+        # This is required until
+        # we have native Date support in BodoSQL.
+        self.sf_dt_to_ts_cols = sf_dt_to_ts_cols
+
     def __repr__(self):  # pragma: no cover
         out_varnames = tuple(v.name for v in self.out_vars)
-        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into})"
+        return f"{out_varnames} = SQLReader(sql_request={self.sql_request}, connection={self.connection}, col_names={self.df_colnames}, types={self.out_types}, df_out={self.df_out}, limit={self.limit}, unsupported_columns={self.unsupported_columns}, unsupported_arrow_types={self.unsupported_arrow_types}, is_select_query={self.is_select_query}, index_column_name={self.index_column_name}, index_column_type={self.index_column_type}, out_used_cols={self.out_used_cols}, database_schema={self.database_schema}, pyarrow_schema={self.pyarrow_schema}, is_merge_into={self.is_merge_into}, sf_dt_to_ts_cols={self.sf_dt_to_ts_cols})"
 
 
 def parse_dbtype(con_str):
@@ -251,6 +269,34 @@ def remove_dead_sql(
         sql_node.snapshot_id_live = False
         sql_node.snapshot_id_type = types.none
     return sql_node
+
+
+def _get_sql_column_str(p0, converted_colnames, filter_map):
+    """get SQL code for representing a column in filter pushdown.
+    E.g. WHERE  ( ( coalesce(\"L_COMMITDATE\", {f0}) >= {f1} ) )
+
+    Args:
+        p0 (tuple|str): column name or tuple representing the computation for the column
+        converted_colnames (set(str)): column names that need converted to upper case
+        filter_map (dict(str,str)): map of IR variable names to read function variable
+            names. E.g. {'_v14call_method_6_224': 'f0'}
+
+
+    Returns:
+        str: code representing the column (e.g. "A", "coalesce(\"L_COMMITDATE\", {f0})")
+    """
+    if isinstance(p0, tuple):
+
+        col_name = _get_sql_column_str(p0[0], converted_colnames, filter_map)
+
+        scalar_val = (
+            "{" + filter_map[p0[2].name] + "}" if isinstance(p0[2], ir.Var) else p0[2]
+        )
+        return f"{p0[1]}({col_name}, {scalar_val})"
+
+    assert isinstance(p0, str), "_get_sql_column_str: expected string column name"
+    col_name = convert_col_name(p0, converted_colnames)
+    return '\\"' + col_name + '\\"'
 
 
 def sql_distributed_run(
@@ -368,6 +414,11 @@ def sql_distributed_run(
             # -> (l_linestatus <> var1) OR (l_shipmode = var2)
             # [[('l_linestatus', '<>', var1)], [('l_shipmode', '=', var2))]]
             or_conds = []
+            # Certain scalar values (e.g. like, ilike) are tuples of multiple variables
+            # used in the same operation. If they are in this list, rather than convert
+            # the tuple to a Snowflake usable literal we convert the individual elements
+            # in the tuple to Snowflake usable literals.
+            scalars_to_unpack = []
             for and_list in sql_node.filters:
                 and_conds = []
                 for p in and_list:
@@ -375,16 +426,22 @@ def sql_distributed_run(
                     # just load the value directly, otherwise load the variable
                     # at runtime.
                     p0, p2 = p[0], p[2]
-
-                    p0 = convert_col_name(p0, sql_node.converted_colnames)
-                    p0 = '\\"' + p0 + '\\"'
+                    p0 = _get_sql_column_str(
+                        p0, sql_node.converted_colnames, filter_map
+                    )
                     scalar_filter = (
-                        ("{" + filter_map[p[2].name] + "}")
-                        if isinstance(p[2], ir.Var)
+                        "{" + filter_map[p[2].name] + "}"
+                        if isinstance(p2, ir.Var)
                         else p2
                     )
-                    if p[1] in ("startswith", "endswith"):
-                        # This path should only be taken with Snowflake
+                    if p[1] == "ALWAYS_TRUE":
+                        # Special operator for True
+                        single_filter = ["(TRUE)"]
+                    elif p[1] in ("ALWAYS_FALSE", "ALWAYS_NULL"):
+                        # Special operators for False. Since we are
+                        # filtering we can map NULL -> False.
+                        single_filter = ["(FALSE)"]
+                    elif p[1] in ("startswith", "endswith", "contains"):
                         single_filter = [
                             "(",
                             p[1],
@@ -392,17 +449,81 @@ def sql_distributed_run(
                             p0,
                             ",",
                             scalar_filter,
-                            ")",
+                            "))",
+                        ]
+                    elif p[1] in (
+                        "case_insensitive_startswith",
+                        "case_insensitive_endswith",
+                        "case_insensitive_contains",
+                        "case_insensitive_equality",
+                    ):
+                        op = p[1][len("case_insensitive_") :]
+                        if op == "equality":
+                            # Equality is just =, not a function
+                            single_filter = [
+                                "(LOWER(",
+                                p0,
+                                ") = LOWER(",
+                                scalar_filter,
+                                "))",
+                            ]
+                        else:
+                            single_filter = [
+                                "(",
+                                op,
+                                "(LOWER(",
+                                p0,
+                                "), LOWER(",
+                                scalar_filter,
+                                ")))",
+                            ]
+                    elif p[1] in ("like", "ilike"):
+                        # You can't pass the empty string to escape. As a result we
+                        # must confirm its not the empty string
+                        has_escape = True
+                        escape_typ = typemap[p[2].name][1]
+                        if is_overload_constant_str(escape_typ):
+                            escape_val = get_overload_const_str(escape_typ)
+                            has_escape = escape_val != ""
+                        escape_section = (
+                            f"escape {{{filter_map[p[2].name]}[1]}}"
+                            if has_escape
+                            else ""
+                        )
+                        single_filter = [
+                            "(",
+                            p0,
+                            p[1],
+                            f"{{{filter_map[p[2].name]}[0]}} {escape_section}",
                             ")",
                         ]
+                        # Indicate the tuple variable is not directly passed to Snowflake, instead its
+                        # components are.
+                        scalars_to_unpack.append(p[2].name)
                     else:
                         single_filter = ["(", p0, p[1], scalar_filter, ")"]
 
                     and_conds.append(" ".join(single_filter))
                 or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
             where_cond = " WHERE " + " OR ".join(or_conds)
-            for i, arg in enumerate(filter_map.values()):
-                func_text += f"    {arg} = get_sql_literal({arg})\n"
+            if bodo.user_logging.get_verbose_level() >= 1:
+                msg = "SQL filter pushed down:\n%s\n%s\n"
+                filter_source = sql_node.loc.strformat()
+                bodo.user_logging.log_message(
+                    "Filter Pushdown",
+                    msg,
+                    filter_source,
+                    where_cond,
+                )
+            for ir_varname, arg in filter_map.items():
+                if ir_varname in scalars_to_unpack:
+                    num_elements = typemap[ir_varname].count
+                    elems = ", ".join(
+                        [f"get_sql_literal({arg}[{i}])" for i in range(num_elements)]
+                    )
+                    func_text += f"    {arg} = ({elems},)\n"
+                else:
+                    func_text += f"    {arg} = get_sql_literal({arg})\n"
             # Append filters via a format string. This format string is created and populated
             # at runtime because filter variables aren't necessarily constants (but they are scalars).
             func_text += f'    sql_request = f"{{sql_request}} {where_cond}"\n'
@@ -445,6 +566,7 @@ def sql_distributed_run(
         sql_node.is_select_query,
         sql_node.is_merge_into,
         is_independent,
+        sql_node.sf_dt_to_ts_cols,
     )
 
     schema_type = types.none if sql_node.database_schema is None else string_type
@@ -615,7 +737,7 @@ def _get_snowflake_sql_literal_scalar(filter_value):
         return lambda filter_value: f"$${filter_value}$$"  # pragma: no cover
     elif (
         isinstance(filter_type, (types.Integer, types.Float))
-        or filter_value == types.bool_
+        or filter_type == types.bool_
     ):
         # Numeric and boolean values can just return the string representation
         return lambda filter_value: str(filter_value)  # pragma: no cover
@@ -647,6 +769,11 @@ def _get_snowflake_sql_literal_scalar(filter_value):
         return (
             lambda filter_value: f"date '{filter_value.strftime('%Y-%m-%d')}'"
         )  # pragma: no cover
+    elif filter_type == bodo.datetime64ns:
+        # datetime64 needs to be a Timestamp literal
+        return lambda filter_value: bodo.ir.sql_ext._get_snowflake_sql_literal_scalar(
+            pd.Timestamp(filter_value)
+        )
     else:
         raise BodoError(
             f"pd.read_sql(): Internal error, unsupported scalar type {filter_type} used in filter pushdown."
@@ -665,6 +792,7 @@ def _get_snowflake_sql_literal(filter_value):
         bodo.datetime_date_type,
         types.unicode_type,
         types.bool_,
+        bodo.datetime64ns,
     )
     filter_type = types.unliteral(filter_value)
     if (
@@ -883,6 +1011,7 @@ def _gen_sql_reader_py(
     is_select_query: bool,
     is_merge_into: bool,
     is_independent: bool,
+    sf_dt_to_ts_cols: List[int],
 ):
     """
     Function that generates the main SQL implementation. There are
@@ -923,6 +1052,11 @@ def _gen_sql_reader_py(
         is_merge_into: Does this query result from a merge into query? If so
             this limits the filtering we can do with Iceberg as we
             must load entire files.
+        sf_dt_to_ts_cols: Only for Snowflake. Temporary, until we have native
+            Date support in BodoSQL. These are the originally date columns
+            that we will be casting to datetime64[ns] (potentially an unsafe
+            cast) during the read. We need to pass this information to C++
+            so it can do the unsafe cast.
     """
     # a unique int used to create global variables with unique names
     call_id = next_label()
@@ -1132,6 +1266,9 @@ def _gen_sql_reader_py(
             for i in out_used_cols
             if col_typs[i] == dict_str_arr_type
         ]
+        dt_to_ts_cols = [
+            col_indices_map[i] for i in out_used_cols if i in sf_dt_to_ts_cols
+        ]
 
         nullable_cols = [int(is_nullable(col_typs[i])) for i in out_used_cols]
         # Handle if we need to append an index
@@ -1139,6 +1276,7 @@ def _gen_sql_reader_py(
             nullable_cols.append(int(is_nullable(index_column_type)))
         snowflake_dict_cols_array = np.array(snowflake_dict_cols, dtype=np.int32)
         nullable_cols_array = np.array(nullable_cols, dtype=np.int32)
+        dt_to_ts_cols_array = np.array(dt_to_ts_cols, dtype=np.int32)
         # Track the total number of rows for loading 0 columns. If we load any
         # data this is garbage.
         func_text += (
@@ -1154,6 +1292,8 @@ def _gen_sql_reader_py(
             f"    nullable_cols_array.ctypes,\n"
             f"    snowflake_dict_cols_array.ctypes,\n"
             f"    {len(snowflake_dict_cols_array)},\n"
+            f"    dt_to_ts_cols_array.ctypes,\n"
+            f"    {len(dt_to_ts_cols_array)},\n"
             f"    total_rows_np.ctypes,\n"
             f"    {is_select_query and len(used_col_names) == 0},\n"
             f"    {is_select_query},\n"
@@ -1312,6 +1452,7 @@ def _gen_sql_reader_py(
                 "snowflake_read": _snowflake_read,
                 "nullable_cols_array": nullable_cols_array,
                 "snowflake_dict_cols_array": snowflake_dict_cols_array,
+                "dt_to_ts_cols_array": dt_to_ts_cols_array,
             }
         )
     else:
@@ -1491,6 +1632,8 @@ _snowflake_read = types.ExternalFunction(
         types.voidptr,  # _is_nullable
         types.voidptr,  # _str_as_dict_cols
         types.int32,  # num_str_as_dict_cols
+        types.voidptr,  # _allow_unsafe_dt_to_ts_cast_cols
+        types.int32,  # num_allow_unsafe_dt_to_ts_cast_cols
         types.voidptr,  # total_nrows
         types.boolean,  # _only_length_query
         types.boolean,  # _is_select_query
