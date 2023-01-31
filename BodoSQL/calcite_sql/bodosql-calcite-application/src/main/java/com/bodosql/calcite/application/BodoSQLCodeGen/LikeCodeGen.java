@@ -1,6 +1,5 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.SQLToPython.RegexHelpers.*;
 import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 
 /**
@@ -11,140 +10,40 @@ public class LikeCodeGen {
    * Function that return the necessary generated code for a like operator. This generates different
    * code depending on if the SQLRegex is a string known at compile time or an expression.
    *
+   * @param opName The name of the expression being executed.
    * @param expr The expression that needs to be compared to the regex.
    * @param SQLRegex SQL Regular Expression. This is either a literal string or an expression that
    *     will be evaluated at runtime. In either case the SQLRegex must be converted to a Python
    *     regular expression.
-   * @param outputScalar Should the output generate scalar code.
+   * @param SQLEscape Character used to escape wildcards in like and ilike. This value is ignored by
+   *     the pattern functions.
    * @return The code generated that matches the Like expression.
    */
   public static String generateLikeCode(
-      String opName, String expr, String SQLRegex, boolean outputScalar) {
+      String opName, String expr, String SQLRegex, String SQLEscape) {
     StringBuilder likeParts = new StringBuilder();
-    // TODO: can the SQL Regex be null? I assume if it is, we can say it's not allowed
-    String in_func_string = "";
-    String match_func_string = "";
-
-    boolean patternRegex = (opName == "REGEXP" || opName == "RLIKE");
-    boolean caseInsensitive = (opName == "ILIKE");
-
-    if (caseInsensitive) {
-      in_func_string = "bodosql.libs.generated_lib.sql_null_checking_in_nocase(";
-      match_func_string = "bodosql.libs.generated_lib.sql_null_checking_re_match_nocase(";
+    boolean patternRegex = (opName.equals("REGEXP") || opName.equals("RLIKE"));
+    boolean caseInsensitive = (opName.equals("ILIKE"));
+    if (patternRegex) {
+      // Note we ignore SQLEscape because it is not a valid argument to these functions.
+      likeParts.append("bodo.libs.bodosql_array_kernels.regexp_like(").append(expr);
+      likeParts.append(", ").append(SQLRegex);
+      likeParts.append(", ").append(makeQuoted("")).append(")");
     } else {
-      in_func_string = "bodosql.libs.generated_lib.sql_null_checking_in(";
-      match_func_string = "bodosql.libs.generated_lib.sql_null_checking_re_match(";
-    }
-    /* If the SQL Regex doesn't contain a SQL wildcard we can convert the
-    value to an equality check. */
-    int numWildcards = getNumSQLWildcards(SQLRegex);
-    if (numWildcards == 0) {
-      // Handles RLIKE and REGEXP here
-      if (patternRegex) {
-        likeParts.append("bodo.libs.bodosql_array_kernels.regexp_like(").append(expr);
-        likeParts.append(", ").append(SQLRegex);
-        likeParts.append(", ").append(makeQuoted("")).append(")");
+      likeParts
+          .append("bodo.libs.bodosql_array_kernels.like_kernel(")
+          .append(expr)
+          .append(", ")
+          .append(SQLRegex)
+          .append(", ")
+          .append(SQLEscape)
+          .append(", ");
+      if (caseInsensitive) {
+        likeParts.append("True");
       } else {
-        likeParts.append(expr).append(" == ").append(SQLRegex);
+        likeParts.append("False");
       }
-    } else {
-      int prevLen = SQLRegex.length();
-      String trimmedRegex = trimPercentWildcard(SQLRegex);
-      // Determine if the expression started and ended with %
-      boolean startPercent = SQLRegex.charAt(1) == '%';
-      boolean endPercent = SQLRegex.charAt(prevLen - 2) == '%';
-      /* If all the wildcards were at the front or end, generate special code without regular expressions. */
-      if (prevLen == (trimmedRegex.length() + numWildcards)) {
-        // If both start and end had %, use contains with regex=False
-        if (outputScalar) {
-          if (startPercent && endPercent) {
-            likeParts.append(in_func_string);
-            likeParts.append(trimmedRegex).append(", ").append(expr).append(")");
-          } else {
-            likeParts
-                .append(match_func_string)
-                .append(convertSQLRegexToPython(trimmedRegex, startPercent, endPercent))
-                .append(", ")
-                .append(expr)
-                .append(")");
-          }
-        } else {
-          if (startPercent && endPercent) {
-            if (caseInsensitive) {
-              likeParts
-                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-                  .append(expr)
-                  .append(").str.lower().str.contains(")
-                  .append(trimmedRegex)
-                  .append(".lower(), regex=False))");
-            } else {
-              likeParts
-                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-                  .append(expr)
-                  .append(").str.contains(")
-                  .append(trimmedRegex)
-                  .append(", regex=False))");
-            }
-          } else if (startPercent) {
-            if (caseInsensitive) {
-              likeParts
-                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-                  .append(expr)
-                  .append(").str.lower().str.endswith(")
-                  .append(trimmedRegex)
-                  .append(".lower()))");
-            } else {
-              likeParts
-                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-                  .append(expr)
-                  .append(").str.endswith(")
-                  .append(trimmedRegex)
-                  .append("))");
-            }
-          } else {
-            if (caseInsensitive) {
-              likeParts
-                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-                  .append(expr)
-                  .append(").str.lower().str.startswith(")
-                  .append(trimmedRegex)
-                  .append(".lower()))");
-            } else {
-              likeParts
-                  .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-                  .append(expr)
-                  .append(").str.startswith(")
-                  .append(trimmedRegex)
-                  .append("))");
-            }
-          }
-        }
-      } else {
-        if (outputScalar) {
-          likeParts
-              .append(match_func_string)
-              .append(convertSQLRegexToPython(trimmedRegex, startPercent, endPercent))
-              .append(", ")
-              .append(expr)
-              .append(")");
-        } else {
-          if (caseInsensitive) {
-            likeParts
-                .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-                .append(expr)
-                .append(").str.lower().str.contains(")
-                .append(convertSQLRegexToPython(trimmedRegex, startPercent, endPercent))
-                .append(".lower()))");
-          } else {
-            likeParts
-                .append("bodo.hiframes.pd_series_ext.get_series_data(pd.Series(")
-                .append(expr)
-                .append(").str.contains(")
-                .append(convertSQLRegexToPython(trimmedRegex, startPercent, endPercent))
-                .append("))");
-          }
-        }
-      }
+      likeParts.append(")");
     }
     return likeParts.toString();
   }

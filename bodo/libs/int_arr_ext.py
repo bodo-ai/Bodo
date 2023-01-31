@@ -48,6 +48,7 @@ from bodo.utils.indexing import (
     array_setitem_slice_index,
 )
 from bodo.utils.typing import (
+    BodoArrayIterator,
     BodoError,
     check_unsupported_args,
     is_iterable_type,
@@ -61,7 +62,7 @@ from bodo.utils.typing import (
 )
 
 
-class IntegerArrayType(types.ArrayCompatible):
+class IntegerArrayType(types.IterableType, types.ArrayCompatible):
     def __init__(self, dtype):
         self.dtype = dtype
         super(IntegerArrayType, self).__init__(name=f"IntegerArrayType({dtype})")
@@ -73,6 +74,10 @@ class IntegerArrayType(types.ArrayCompatible):
 
     def copy(self):
         return IntegerArrayType(self.dtype)
+
+    @property
+    def iterator_type(self):
+        return BodoArrayIterator(self)
 
     @property
     def get_pandas_scalar_type_instance(self):
@@ -104,6 +109,9 @@ class IntegerArrayModel(models.StructModel):
 
 make_attribute_wrapper(IntegerArrayType, "data", "_data")
 make_attribute_wrapper(IntegerArrayType, "null_bitmap", "_null_bitmap")
+
+
+lower_builtin("getiter", IntegerArrayType)(numba.np.arrayobj.getiter_array)
 
 
 @typeof_impl.register(pd.arrays.IntegerArray)

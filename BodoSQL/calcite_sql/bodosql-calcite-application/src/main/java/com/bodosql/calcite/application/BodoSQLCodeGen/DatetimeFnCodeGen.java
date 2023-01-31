@@ -15,13 +15,14 @@ public class DatetimeFnCodeGen {
           "DAYNAME",
           "LAST_DAY",
           "MONTHNAME",
+          "MONTH_NAME",
           "NEXT_DAY",
           "PREVIOUS_DAY",
           "WEEKDAY",
           "YEAROFWEEK",
           "YEAROFWEEKISO");
 
-  // HashMap of all trig functions which maps to array kernels
+  // HashMap of all datetime functions which maps to array kernels
   // which handle all combinations of scalars/arrays/nulls.
   static HashMap<String, String> equivalentFnMap = new HashMap<>();
 
@@ -29,6 +30,8 @@ public class DatetimeFnCodeGen {
     for (String fn : fnList) {
       if (fn.equals("YEAROFWEEK")) {
         equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.get_year");
+      } else if (fn.equals("MONTH_NAME")) {
+        equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels.monthname");
       } else {
         equivalentFnMap.put(fn, "bodo.libs.bodosql_array_kernels." + fn.toLowerCase());
       }
@@ -209,45 +212,30 @@ public class DatetimeFnCodeGen {
     return new RexNodeVisitorInfo(fnName, fnExpression);
   }
 
-  public static RexNodeVisitorInfo getYearWeekFnInfo(
-      RexNodeVisitorInfo arg0Info, boolean isScalar) {
-
-    String outputExpr;
+  /**
+   * Helper function that handles codegen for YearWeek
+   *
+   * @param arg0Info The name and codegen for the argument.
+   * @return The RexNodeVisitorInfo corresponding to the function call
+   */
+  public static RexNodeVisitorInfo getYearWeekFnInfo(RexNodeVisitorInfo arg0Info) {
     String arg0Expr = arg0Info.getExprCode();
 
     // performs yearNum * 100 + week num
-    if (isScalar) {
-      // TODO: Null check this
-      outputExpr =
-          "(bodo.libs.bodosql_array_kernels.get_year("
-              + arg0Expr
-              + ") * 100 + bodosql.libs.generated_lib.sql_null_checking_weekofyear("
-              + arg0Expr
-              + "))";
-    } else {
-      outputExpr =
-          "bodo.hiframes.pd_series_ext.get_series_data((pd.Series("
-              + arg0Expr
-              + ").dt.year * 100 + pd.Series("
-              + arg0Expr
-              + ").dt.isocalendar().week))";
-    }
+    // TODO: Add proper null checking on scalars by converting * and +
+    // to an array kernel
+    String outputExpr =
+        String.format(
+            "bodo.libs.bodosql_array_kernels.add_numeric(bodo.libs.bodosql_array_kernels.multiply_numeric(bodo.libs.bodosql_array_kernels.get_year(%s),"
+                + " 100), bodo.libs.bodosql_array_kernels.get_weekofyear(%s))",
+            arg0Expr, arg0Expr);
 
     String name = "YEARWEEK(" + arg0Info.getName() + ")";
     return new RexNodeVisitorInfo(name, outputExpr);
   }
 
-  public static String intExprToIntervalDays(String expr, boolean useScalar) {
-    String arg1Expr;
-    if (useScalar) {
-      arg1Expr =
-          "bodo.utils.conversion.box_if_dt64(bodo.libs.bodosql_array_kernels.int_to_days("
-              + expr
-              + "))";
-    } else {
-      arg1Expr = "bodo.libs.bodosql_array_kernels.int_to_days(" + expr + ")";
-    }
-    return arg1Expr;
+  public static String intExprToIntervalDays(String expr) {
+    return "bodo.libs.bodosql_array_kernels.int_to_days(" + expr + ")";
   }
 
   /**

@@ -194,7 +194,11 @@ def test_setitem_cat_array_runtime(cat_arr_value):
         slice(1, 4),
     ]:
         check_func(
-            test_impl, (cat_arr_value, idx, val), dist_test=False, copy_input=True
+            test_impl,
+            (cat_arr_value, idx, val),
+            dist_test=False,
+            copy_input=True,
+            convert_to_nullable_float=False,
         )
 
 

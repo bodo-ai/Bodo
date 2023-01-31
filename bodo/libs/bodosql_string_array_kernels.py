@@ -11,6 +11,7 @@ from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
+from bodo.utils.typing import BodoError
 
 
 @numba.generated_jit(nopython=True)
@@ -825,9 +826,7 @@ def endswith_util(source, suffix):
     if arr_is_string != verify_string_binary_arg(
         suffix, "endswith", "suffix"
     ):  # pragma: no cover
-        raise bodo.utils.typing.BodoError(
-            "String and suffix must both be strings or both binary"
-        )
+        raise BodoError("String and suffix must both be strings or both binary")
 
     arg_names = ["source", "suffix"]
     arg_types = [source, suffix]
@@ -902,9 +901,7 @@ def insert_util(arr, pos, length, inject):
     if arr_is_string != verify_string_binary_arg(
         inject, "INSERT", "inject"
     ):  # pragma: no cover
-        raise bodo.utils.typing.BodoError(
-            "String and injected value must both be strings or both binary"
-        )
+        raise BodoError("String and injected value must both be strings or both binary")
 
     arg_names = ["arr", "pos", "length", "inject"]
     arg_types = [arr, pos, length, inject]
@@ -1016,9 +1013,7 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
         pad_is_string = verify_string_binary_arg(pad_string, func_name, "pad_string")
         arr_is_string = verify_string_binary_arg(arr, func_name, "arr")
         if arr_is_string != pad_is_string:
-            raise bodo.utils.typing.BodoError(
-                "Pad string and arr must be the same type!"
-            )
+            raise BodoError("Pad string and arr must be the same type!")
 
         out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
 
@@ -1121,9 +1116,7 @@ def position_util(substr, source, start):
     if is_str != verify_string_binary_arg(
         source, "POSITION", "source"
     ):  # pragma: no cover
-        raise bodo.utils.typing.BodoError(
-            "Substring and source must be both strings or both binary"
-        )
+        raise BodoError("Substring and source must be both strings or both binary")
     verify_int_arg(start, "POSITION", "start")
 
     assert is_str, "[BE-3717] Support binary find with 3 args"
@@ -1359,16 +1352,14 @@ def startswith_util(source, prefix):
         prefix (string array/series/scalar): the string(s) being searched for
 
     Returns:
-        booleam series/scalar: whether or not the source contains the prefix
+        boolean series/scalar: whether or not the source contains the prefix
     """
 
     arr_is_string = verify_string_binary_arg(source, "startswith", "source")
     if arr_is_string != verify_string_binary_arg(
         prefix, "startswith", "prefix"
     ):  # pragma: no cover
-        raise bodo.utils.typing.BodoError(
-            "String and prefix must both be strings or both binary"
-        )
+        raise BodoError("String and prefix must both be strings or both binary")
 
     arg_names = ["source", "prefix"]
     arg_types = [source, prefix]
@@ -1616,3 +1607,139 @@ def translate_util(arr, source, target):
         out_dtype,
         may_cause_duplicate_dict_array_values=True,
     )
+
+
+def length(arr):  # pragma: no cover
+    pass
+
+
+def lower(arr):  # pragma: no cover
+    pass
+
+
+def upper(arr):  # pragma: no cover
+    pass
+
+
+def trim(arr):  # pragma: no cover
+    pass
+
+
+def ltrim(arr):  # pragma: no cover
+    pass
+
+
+def rtrim(arr):  # pragma: no cover
+    pass
+
+
+def length_util(arr):  # pragma: no cover
+    pass
+
+
+def lower_util(arr):  # pragma: no cover
+    pass
+
+
+def upper_util(arr):  # pragma: no cover
+    pass
+
+
+def trim_util(arr):  # pragma: no cover
+    pass
+
+
+def ltrim_util(arr):  # pragma: no cover
+    pass
+
+
+def rtrim_util(arr):  # pragma: no cover
+    pass
+
+
+def create_one_arg_str_fn_overload(fn_name):
+    def overload_func(arr):
+        """Handles cases where this one argument string function recieves optional
+        arguments and forwards to the appropriate version of the real implementation"""
+        if isinstance(arr, types.optional):  # pragma: no cover
+            return unopt_argument(
+                f"bodo.libs.bodosql_array_kernels.{fn_name}_util",
+                ["arr"],
+                0,
+            )
+
+        func_text = "def impl(arr):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{fn_name}_util(arr)"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+
+        return loc_vars["impl"]
+
+    return overload_func
+
+
+def create_one_arg_str_fn_util_overload(fn_name):
+    """Creates an overload function to support one argument string
+    functions.
+
+    Args:
+        fn_name: the function being implemented
+
+    Returns:
+        (function): a utility that takes in a string (either can be scalars
+        or vectors) and returns the corresponding component based on the desired
+        function.
+    """
+
+    def overload_one_arg_str_fn(arr):  # pragma: no cover
+        if fn_name == "length":
+            # Length also supports binary data.
+            verify_string_binary_arg(arr, fn_name, "arr")
+            out_dtype = bodo.IntegerArrayType(types.int64)
+            may_cause_duplicate_dict_array_values = False
+            fn_call = "len(arg0)"
+        else:
+            verify_string_arg(arr, fn_name, "arr")
+            out_dtype = bodo.string_array_type
+            may_cause_duplicate_dict_array_values = True
+            if "trim" in fn_name:
+                method_name = fn_name.replace("trim", "strip")
+                fn_call = f"arg0.{method_name}(' ')"
+            else:
+                fn_call = f"arg0.{fn_name}()"
+
+        arg_names = ["arr"]
+        arg_types = [arr]
+        propagate_null = [True]
+        scalar_text = f"res[i] = {fn_call}"
+
+        return gen_vectorized(
+            arg_names,
+            arg_types,
+            propagate_null,
+            scalar_text,
+            out_dtype,
+            may_cause_duplicate_dict_array_values=may_cause_duplicate_dict_array_values,
+        )
+
+    return overload_one_arg_str_fn
+
+
+def _install_one_arg_str_fn_overloads():
+    """Creates and installs the overloads for one argument string functions"""
+    funcs_utils_names = [
+        ("length", length, length_util),
+        ("lower", lower, lower_util),
+        ("upper", upper, upper_util),
+        ("trim", trim, trim_util),
+        ("ltrim", ltrim, ltrim_util),
+        ("rtrim", rtrim, rtrim_util),
+    ]
+    for fn_name, func, util in funcs_utils_names:
+        func_overload_impl = create_one_arg_str_fn_overload(fn_name)
+        overload(func)(func_overload_impl)
+        util_overload_impl = create_one_arg_str_fn_util_overload(fn_name)
+        overload(util)(util_overload_impl)
+
+
+_install_one_arg_str_fn_overloads()

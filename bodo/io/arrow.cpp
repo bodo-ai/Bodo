@@ -30,11 +30,14 @@ table_info* iceberg_pq_read(const char* conn, const char* database_schema,
 
 // --------- function defined in snowflake_reader.cpp ---------
 table_info* snowflake_read(const char* query, const char* conn, bool parallel,
-                           bool is_independent, PyObject* pyarrow_schema,
+                           bool is_independent, PyObject* arrow_schema,
                            int64_t n_fields, int32_t* _is_nullable,
-                           int32_t* str_as_dict_cols,
-                           int32_t num_str_as_dict_cols, int64_t* total_nrows,
-                           bool _only_length_query, bool _is_select_query);
+                           int32_t* _str_as_dict_cols,
+                           int32_t num_str_as_dict_cols,
+                           int32_t* _allow_unsafe_dt_to_ts_cast_cols,
+                           int32_t num_allow_unsafe_dt_to_ts_cast_cols,
+                           int64_t* total_nrows, bool _only_length_query,
+                           bool _is_select_query);
 
 // --------- functions defined in parquet_write.cpp ---------
 int64_t pq_write_py_entry(const char* filename, const table_info* table,

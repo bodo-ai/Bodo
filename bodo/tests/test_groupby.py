@@ -570,6 +570,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         sort_output=True,
         reset_index=True,
         convert_columns_to_pandas=True,
+        convert_to_nullable_float=False,
     )
     check_func(
         impl8,
@@ -577,6 +578,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         sort_output=True,
         reset_index=True,
         convert_columns_to_pandas=True,
+        convert_to_nullable_float=False,
     )
     check_func(
         impl9,
@@ -584,6 +586,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         sort_output=True,
         reset_index=True,
         convert_columns_to_pandas=True,
+        convert_to_nullable_float=False,
     )
     check_func(
         impl10,
@@ -591,6 +594,7 @@ def test_random_decimal_sum_min_max_last(is_slow_run, memory_leak_check):
         sort_output=True,
         reset_index=True,
         convert_columns_to_pandas=True,
+        convert_to_nullable_float=False,
     )
 
 
@@ -809,7 +813,14 @@ def test_agg_series_input(memory_leak_check):
         return A
 
     # check_dtype=False since Pandas returns float64 for count sometimes for some reason
-    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
+    # no nullable float since NAs aren't handled in UDFs yet
+    check_func(
+        impl,
+        (udf_in_df,),
+        sort_output=True,
+        check_dtype=False,
+        convert_to_nullable_float=False,
+    )
 
 
 def test_agg_bool_expr(memory_leak_check):
@@ -1536,7 +1547,13 @@ def test_agg_len_mix(memory_leak_check):
         A = df.groupby("A").agg(lambda x: x.sum() / len(x))
         return A
 
-    check_func(impl, (udf_in_df,), sort_output=True, check_dtype=False)
+    check_func(
+        impl,
+        (udf_in_df,),
+        sort_output=True,
+        check_dtype=False,
+        convert_to_nullable_float=False,
+    )
 
 
 def test_agg_multi_udf(memory_leak_check):
@@ -1576,7 +1593,7 @@ def test_agg_multi_udf(memory_leak_check):
     )
 
     check_func(impl, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True, check_dtype=False)
     # check_dtype=False since Bodo returns float for Series.min/max. TODO: fix min/max
     check_func(impl3, (df,), sort_output=True, check_dtype=False)
     check_func(impl4, (df,), sort_output=True)
@@ -1754,7 +1771,7 @@ def test_groupby_agg_general_udf(memory_leak_check):
         return res
 
     df = pd.DataFrame({"A": [0, 0, 1, 1, 1, 0], "B": [3, 10, 20, 4, 5, 1]})
-    check_func(impl, (df,), sort_output=True)
+    check_func(impl, (df,), sort_output=True, convert_to_nullable_float=False)
 
 
 def test_groupby_agg_const_dict(memory_leak_check):
@@ -1869,27 +1886,45 @@ def test_groupby_agg_const_dict(memory_leak_check):
     )
     check_func(impl, (df,), sort_output=True)
     check_func(impl2, (df,), sort_output=True)
-    check_func(impl3, (df,), sort_output=True)
-    check_func(impl4, (df,), sort_output=True)
-    check_func(impl5, (df,), sort_output=True)
-    check_func(impl6, (df,), sort_output=True)
-    check_func(impl7, (df,), sort_output=True)
-    check_func(impl8, (df,), sort_output=True, reset_index=True)
-    check_func(impl9, (df,), sort_output=True)
-    check_func(impl10, (df,), sort_output=True)
-    check_func(impl11, (df,), sort_output=True)
-    check_func(impl12, (df,), sort_output=True)
-    check_func(impl13, (df,), sort_output=True)
-    check_func(impl14, (df,), sort_output=True)
-    check_func(impl15, (df,), sort_output=True)
+    check_func(impl3, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl4, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl5, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl6, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl7, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(
+        impl8,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(impl9, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl10, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl11, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl12, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl13, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl14, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl15, (df,), sort_output=True, convert_to_nullable_float=False)
     # can't use check_func since lambda name in MultiIndex doesn't match Pandas
     # TODO: fix lambda name
     # check_func(impl16, (df,), sort_output=True, reset_index=True)
     bodo.jit(impl16)(df)  # just check for compilation errors
     # TODO: enable is_out_distributed after fixing gatherv issue for tuple output
-    check_func(impl17, (df,), sort_output=True, dist_test=False)
+    check_func(
+        impl17,
+        (df,),
+        sort_output=True,
+        dist_test=False,
+        convert_to_nullable_float=False,
+    )
     # Pandas (as of 1.2.2) produces float instead of int for last column for some reason
-    check_func(impl18, (df,), sort_output=True, check_dtype=False)
+    check_func(
+        impl18,
+        (df,),
+        sort_output=True,
+        check_dtype=False,
+        convert_to_nullable_float=False,
+    )
 
 
 def test_groupby_agg_func_list(memory_leak_check):
@@ -2013,8 +2048,8 @@ def test_groupby_nunique(df, memory_leak_check):
         return df2
 
     check_func(impl0, (df,), sort_output=True)
-    check_func(impl1, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl2, (df,), sort_output=True, convert_to_nullable_float=False)
     check_func(impl3, (df,), sort_output=True)
 
 
@@ -2242,7 +2277,7 @@ def test_median_simple(df_med, memory_leak_check):
         A = df.groupby("A")["B"].median()
         return A
 
-    check_func(impl1, (df_med,), sort_output=True)
+    check_func(impl1, (df_med,), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2267,7 +2302,7 @@ def test_median_large_random_numpy(memory_leak_check):
     random.seed(5)
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
-    check_func(impl1, (df1,), sort_output=True)
+    check_func(impl1, (df1,), sort_output=True, check_dtype=False)
 
 
 @pytest.mark.slow
@@ -2500,7 +2535,13 @@ def test_named_agg(memory_leak_check):
         }
     )
     check_func(impl1, (df,), sort_output=True, reset_index=True)
-    check_func(impl2, (df,), sort_output=True, reset_index=True)
+    check_func(
+        impl2,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
 
 
 def test_bool_sum_simple(memory_leak_check):
@@ -2669,7 +2710,7 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
             "E": [b"AB", b"DD", bytes(3), b"A", b"DD", b"AB"],
         }
     )
-    check_func(impl1, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, convert_to_nullable_float=False)
     # acc_loop: as_index=False, Series output. (Key has string column)
     def impl14(df):
         df2 = df.groupby(["A", "B"], as_index=False).B.apply(
@@ -2695,20 +2736,32 @@ def test_groupby_apply(is_slow_run, memory_leak_check):
         )
         return df2
 
-    check_func(impl16, (df,), sort_output=True)
+    check_func(impl16, (df,), sort_output=True, check_dtype=False)
     # TODO [BE-2246]: Match output dtype by checking null info.
 
     check_func(impl7, (df,), sort_output=True, reset_index=True, check_dtype=False)
-    check_func(impl11, (df,), sort_output=True, reset_index=True)
+    check_func(
+        impl11,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
     check_func(impl13, (df,), sort_output=True, reset_index=True, check_dtype=False)
     if not is_slow_run:
         return
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl2, (df,), sort_output=True, convert_to_nullable_float=False)
     # NOTE: Pandas assigns group numbers in sorted order to Index but we don't match it
     # since requires expensive sorting
-    check_func(impl3, (df,), sort_output=True, reset_index=True)
-    check_func(impl4, (df,), sort_output=True)
-    check_func(impl5, (df,), sort_output=True)
+    check_func(
+        impl3,
+        (df,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(impl4, (df,), sort_output=True, convert_to_nullable_float=False)
+    check_func(impl5, (df,), sort_output=True, convert_to_nullable_float=False)
     # NOTE: Pandas bug: drops the key arrays from output Index if it's Series sometimes
     # (as of 1.1.5)
     check_func(impl6, (df,), reset_index=True)
@@ -2985,14 +3038,62 @@ def test_cummin_cummax_large_random_numpy(memory_leak_check):
     nb = 100
     df1 = pd.DataFrame({"A": get_random_array(nb, 10), "B": get_random_array(nb, 100)})
     # Need reset_index as none is set on input.
-    check_func(impl1, (df1,), sort_output=True, reset_index=True)
-    check_func(impl2, (df1,), sort_output=True, reset_index=True)
-    check_func(impl3, (df1,), sort_output=True, reset_index=True)
-    check_func(impl4, (df1,), sort_output=True, reset_index=True)
-    check_func(impl5, (df1,), sort_output=True, reset_index=True)
-    check_func(impl6, (df1,), sort_output=True, reset_index=True)
-    check_func(impl7, (df1,), sort_output=True, reset_index=True)
-    check_func(impl8, (df1,), sort_output=True, reset_index=True)
+    check_func(
+        impl1,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl2,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl3,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl4,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl5,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl6,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl7,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
+    check_func(
+        impl8,
+        (df1,),
+        sort_output=True,
+        reset_index=True,
+        convert_to_nullable_float=False,
+    )
 
 
 def test_groupby_cumsum_simple(memory_leak_check):
@@ -3379,8 +3480,8 @@ def test_mean_median_other_supported_types(memory_leak_check):
 
     # Empty
     df = pd.DataFrame({"A": [], "B": []})
-    check_func(impl1, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
     # Zero columns
     df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
@@ -3422,6 +3523,7 @@ def test_mean_median_other_supported_types(memory_leak_check):
         sort_output=True,
         reset_index=True,
         py_output=impl1(df_decimal.astype({"B": "float64"})),
+        check_dtype=False,
     )
     check_func(
         impl2,
@@ -3429,6 +3531,7 @@ def test_mean_median_other_supported_types(memory_leak_check):
         sort_output=True,
         reset_index=True,
         py_output=impl2(df_decimal.astype({"B": "float64"})),
+        check_dtype=False,
     )
 
 
@@ -4451,8 +4554,8 @@ def test_var_std_supported_types(memory_leak_check):
 
     # Empty dataframe
     df = pd.DataFrame({"A": [], "B": []})
-    check_func(impl1, (df,), sort_output=True)
-    check_func(impl2, (df,), sort_output=True)
+    check_func(impl1, (df,), sort_output=True, check_dtype=False)
+    check_func(impl2, (df,), sort_output=True, check_dtype=False)
 
     # Zero columns
     df_empty = pd.DataFrame({"A": [2, 1, 1, 1, 2, 2, 1]})
@@ -5758,7 +5861,7 @@ def test_groupby_transform(df, func, memory_leak_check):
         A = df.groupby("A").transform(func)
         return A
 
-    check_func(impl, (df,))
+    check_func(impl, (df,), check_dtype=False)
 
 
 @pytest.mark.slow

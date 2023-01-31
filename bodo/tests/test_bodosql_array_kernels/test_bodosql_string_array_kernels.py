@@ -37,7 +37,7 @@ from bodo.tests.utils import check_func, gen_nonascii_list
         ),
     ],
 )
-def test_contains(args):
+def test_contains(args, memory_leak_check):
     def impl(arr, pattern):
         return pd.Series(bodo.libs.bodosql_array_kernels.contains(arr, pattern))
 
@@ -78,7 +78,7 @@ def test_contains(args):
         ),
     ],
 )
-def test_char(n):
+def test_char(n, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.char(arr))
 
@@ -341,7 +341,7 @@ def test_char(n):
         ),
     ],
 )
-def test_editdistance(args):
+def test_editdistance(args, memory_leak_check):
     """Answers calculated with https://planetcalc.com/1721/"""
 
     def impl1(s, t):
@@ -401,7 +401,7 @@ def test_editdistance(args):
         pytest.param((None, 5), id="all_scalar_with_null", marks=pytest.mark.slow),
     ],
 )
-def test_format(args):
+def test_format(args, memory_leak_check):
     def impl(arr, places):
         return pd.Series(bodo.libs.bodosql_array_kernels.format(arr, places))
 
@@ -495,7 +495,7 @@ def test_format(args):
         ),
     ],
 )
-def test_initcap(args):
+def test_initcap(args, memory_leak_check):
     def impl(arr, delim):
         return pd.Series(bodo.libs.bodosql_array_kernels.initcap(arr, delim))
 
@@ -508,6 +508,119 @@ def test_initcap(args):
         impl,
         args,
         py_output=answer,
+        check_dtype=False,
+        reset_index=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        pytest.param(
+            pd.Series(
+                [" r 32r23 ", "   ", "3r", "", "R#2r3", "🟥🟧🟨🟩🟦🟪 foo 🟥🟧🟨🟩🟦🟪"] * 2
+                + [None] * 4
+            ).values,
+            id="vector",
+        ),
+        pytest.param(
+            "  fewfew   ",
+            id="scalar",
+        ),
+    ],
+)
+def test_string_one_arg_fns(arg, memory_leak_check):
+    """
+    Tests for the BodoSQL array kernel for length, upper, lower, trim,
+    ltrim, and rtrim. We test theses together because they use
+    the same infrastructure.
+    """
+
+    def impl1(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.length(arr))
+
+    def impl2(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.upper(arr))
+
+    def impl3(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.lower(arr))
+
+    def impl4(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.trim(arr))
+
+    def impl5(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.ltrim(arr))
+
+    def impl6(arr):
+        return pd.Series(bodo.libs.bodosql_array_kernels.rtrim(arr))
+
+    # avoid Series conversion for scalar output
+    if isinstance(arg, str):
+        impl1 = lambda arr: bodo.libs.bodosql_array_kernels.length(arr)
+        impl2 = lambda arr: bodo.libs.bodosql_array_kernels.upper(arr)
+        impl3 = lambda arr: bodo.libs.bodosql_array_kernels.lower(arr)
+        impl4 = lambda arr: bodo.libs.bodosql_array_kernels.trim(arr)
+        impl5 = lambda arr: bodo.libs.bodosql_array_kernels.ltrim(arr)
+        impl6 = lambda arr: bodo.libs.bodosql_array_kernels.rtrim(arr)
+
+    def length_fn(val):
+        if pd.isna(val):
+            return None
+        else:
+            return len(val)
+
+    length_fn = lambda val: None if pd.isna(val) else len(val)
+    upper_fn = lambda val: None if pd.isna(val) else val.upper()
+    lower_fn = lambda val: None if pd.isna(val) else val.lower()
+    trim_fn = lambda val: None if pd.isna(val) else val.strip(" ")
+    ltrim_fn = lambda val: None if pd.isna(val) else val.lstrip(" ")
+    rtrim_fn = lambda val: None if pd.isna(val) else val.rstrip(" ")
+
+    answer1 = vectorized_sol((arg,), length_fn, object)
+    answer2 = vectorized_sol((arg,), upper_fn, object)
+    answer3 = vectorized_sol((arg,), lower_fn, object)
+    answer4 = vectorized_sol((arg,), trim_fn, object)
+    answer5 = vectorized_sol((arg,), ltrim_fn, object)
+    answer6 = vectorized_sol((arg,), rtrim_fn, object)
+    check_func(
+        impl1,
+        (arg,),
+        py_output=answer1,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl2,
+        (arg,),
+        py_output=answer2,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl3,
+        (arg,),
+        py_output=answer3,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl4,
+        (arg,),
+        py_output=answer4,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl5,
+        (arg,),
+        py_output=answer5,
+        check_dtype=False,
+        reset_index=True,
+    )
+    check_func(
+        impl6,
+        (arg,),
+        py_output=answer6,
         check_dtype=False,
         reset_index=True,
     )
@@ -606,7 +719,7 @@ def test_initcap(args):
         pytest.param((b"bar", 1, 0, b"foo"), b"foobar", id="all_scalar_binary"),
     ],
 )
-def test_insert(args, answer):
+def test_insert(args, answer, memory_leak_check):
     def impl(source, pos, len, inject):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.insert(source, pos, len, inject)
@@ -650,7 +763,7 @@ def test_insert(args, answer):
         ),
     ],
 )
-def test_instr(args):
+def test_instr(args, memory_leak_check):
     def impl(arr0, arr1):
         return pd.Series(bodo.libs.bodosql_array_kernels.instr(arr0, arr1))
 
@@ -765,7 +878,7 @@ def test_instr(args):
         ),
     ],
 )
-def test_left_right(args):
+def test_left_right(args, memory_leak_check):
     def impl1(arr, n_chars):
         return pd.Series(bodo.libs.bodosql_array_kernels.left(arr, n_chars))
 
@@ -926,7 +1039,7 @@ def test_left_right(args):
         ),
     ],
 )
-def test_lpad_rpad(args):
+def test_lpad_rpad(args, memory_leak_check):
     def impl1(arr, length, lpad_string):
         return pd.Series(bodo.libs.bodosql_array_kernels.lpad(arr, length, lpad_string))
 
@@ -1003,7 +1116,7 @@ def test_lpad_rpad(args):
         ),
     ],
 )
-def test_ord_ascii(s):
+def test_ord_ascii(s, memory_leak_check):
     def impl(arr):
         return pd.Series(bodo.libs.bodosql_array_kernels.ord_ascii(arr))
 
@@ -1080,7 +1193,7 @@ def test_ord_ascii(s):
         ),
     ],
 )
-def test_position(args, answer):
+def test_position(args, answer, memory_leak_check):
     def impl(substr, source, start):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.position(substr, source, start)
@@ -1123,7 +1236,7 @@ def test_position(args, answer):
         pytest.param((None, None), id="all_scalar_with_null", marks=pytest.mark.slow),
     ],
 )
-def test_repeat(args):
+def test_repeat(args, memory_leak_check):
     def impl(arr, repeats):
         return pd.Series(bodo.libs.bodosql_array_kernels.repeat(arr, repeats))
 
@@ -1204,7 +1317,7 @@ def test_repeat(args):
         ),
     ],
 )
-def test_replace(args):
+def test_replace(args, memory_leak_check):
     def impl(arr, to_replace, replace_with):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.replace(arr, to_replace, replace_with)
@@ -1326,7 +1439,7 @@ def test_rtrimmed_length(strings, answer, memory_leak_check):
         ),
     ],
 )
-def test_space(numbers):
+def test_space(numbers, memory_leak_check):
     def impl(n_chars):
         return pd.Series(bodo.libs.bodosql_array_kernels.space(n_chars))
 
@@ -1452,7 +1565,7 @@ def test_space(numbers):
         ),
     ],
 )
-def test_split_part(args):
+def test_split_part(args, memory_leak_check):
     def impl(source, delim, target):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.split_part(source, delim, target)
@@ -1569,7 +1682,7 @@ def test_split_part(args):
     ],
 )
 @pytest.mark.parametrize("startswith", [True, False])
-def test_startswith_endswith(args, startswith):
+def test_startswith_endswith(args, startswith, memory_leak_check):
     def startswith_impl(source, prefix):
         return pd.Series(bodo.libs.bodosql_array_kernels.startswith(source, prefix))
 
@@ -1639,7 +1752,7 @@ def test_startswith_endswith(args, startswith):
         pytest.param(("alphabet", "soup"), id="all_scalar"),
     ],
 )
-def test_strcmp(args):
+def test_strcmp(args, memory_leak_check):
     def impl(arr0, arr1):
         return pd.Series(bodo.libs.bodosql_array_kernels.strcmp(arr0, arr1))
 
@@ -1761,7 +1874,7 @@ def test_strcmp(args):
         ),
     ],
 )
-def test_strtok(args):
+def test_strtok(args, memory_leak_check):
     def impl(source, delim, target):
         return pd.Series(bodo.libs.bodosql_array_kernels.strtok(source, delim, target))
 
@@ -1848,7 +1961,7 @@ def test_strtok(args):
         ),
     ],
 )
-def test_substring(args):
+def test_substring(args, memory_leak_check):
     def impl(arr, start, length):
         return pd.Series(bodo.libs.bodosql_array_kernels.substring(arr, start, length))
 
@@ -1937,7 +2050,7 @@ def test_substring(args):
         ),
     ],
 )
-def test_substring_index(args):
+def test_substring_index(args, memory_leak_check):
     def impl(arr, delimiter, occurrences):
         return pd.Series(
             bodo.libs.bodosql_array_kernels.substring_index(arr, delimiter, occurrences)
@@ -1986,7 +2099,7 @@ def test_substring_index(args):
         ),
     ],
 )
-def test_space(numbers):
+def test_space(numbers, memory_leak_check):
     def impl(n_chars):
         return pd.Series(bodo.libs.bodosql_array_kernels.space(n_chars))
 
@@ -2091,7 +2204,7 @@ def test_space(numbers):
         ),
     ],
 )
-def test_translate(args):
+def test_translate(args, memory_leak_check):
     def impl(arr, source, target):
         return pd.Series(bodo.libs.bodosql_array_kernels.translate(arr, source, target))
 
@@ -2131,7 +2244,7 @@ def test_option_char_ord_ascii(memory_leak_check):
 
 
 @pytest.mark.slow
-def test_option_format():
+def test_option_format(memory_leak_check):
     def impl(A, B, flag0, flag1):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -2145,7 +2258,7 @@ def test_option_format():
 
 
 @pytest.mark.slow
-def test_option_left_right():
+def test_option_left_right(memory_leak_check):
     def impl1(scale1, scale2, flag1, flag2):
         arr = scale1 if flag1 else None
         n_chars = scale2 if flag2 else None
@@ -2182,7 +2295,7 @@ def test_option_left_right():
 
 
 @pytest.mark.slow
-def test_option_lpad_rpad():
+def test_option_lpad_rpad(memory_leak_check):
     def impl1(arr, length, lpad_string, flag1, flag2):
         B = length if flag1 else None
         C = lpad_string if flag2 else None
@@ -2226,7 +2339,7 @@ def test_option_lpad_rpad():
 
 
 @pytest.mark.slow
-def test_option_reverse_repeat_replace_space():
+def test_option_reverse_repeat_replace_space(memory_leak_check):
     def impl(A, B, C, D, flag0, flag1, flag2, flag3):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -2257,7 +2370,7 @@ def test_option_reverse_repeat_replace_space():
 
 
 @pytest.mark.slow
-def test_option_startswith_endswith_insert_position():
+def test_option_startswith_endswith_insert_position(memory_leak_check):
     def impl(A, B, C, D, flag0, flag1):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -2287,7 +2400,7 @@ def test_option_startswith_endswith_insert_position():
 
 
 @pytest.mark.slow
-def test_strcmp_instr_option():
+def test_strcmp_instr_option(memory_leak_check):
     def impl(A, B, flag0, flag1):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -2305,7 +2418,7 @@ def test_strcmp_instr_option():
 
 
 @pytest.mark.slow
-def test_option_strtok_split_part():
+def test_option_strtok_split_part(memory_leak_check):
     def impl(A, B, C, flag0, flag1, flag2):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -2328,7 +2441,7 @@ def test_option_strtok_split_part():
 
 
 @pytest.mark.slow
-def test_option_substring():
+def test_option_substring(memory_leak_check):
     def impl(A, B, C, D, E, flag0, flag1, flag2, flag3, flag4):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -2357,7 +2470,7 @@ def test_option_substring():
 
 
 @pytest.mark.slow
-def test_option_translate_initcap():
+def test_option_translate_initcap(memory_leak_check):
     def impl(A, B, C, flag0, flag1, flag2):
         arg0 = A if flag0 else None
         arg1 = B if flag1 else None
@@ -2387,3 +2500,36 @@ def test_option_translate_initcap():
                     py_output=(a0, a1),
                     dist_test=False,
                 )
+
+
+@pytest.mark.slow
+def test_option_string_one_arg_fns(memory_leak_check):
+    """
+    Tests optional support for length, upper, lower,
+    trim, ltrim, and rtrim.
+    """
+
+    def impl(A, flag):
+        arg = A if flag else None
+        return (
+            bodo.libs.bodosql_array_kernels.length(arg),
+            bodo.libs.bodosql_array_kernels.upper(arg),
+            bodo.libs.bodosql_array_kernels.lower(arg),
+            bodo.libs.bodosql_array_kernels.trim(arg),
+            bodo.libs.bodosql_array_kernels.ltrim(arg),
+            bodo.libs.bodosql_array_kernels.rtrim(arg),
+        )
+
+    str_val = "    The night is dark and full of terrors.     "
+    for flag in [True, False]:
+        a0 = len(str_val) if flag else None
+        a1 = str_val.upper() if flag else None
+        a2 = str_val.lower() if flag else None
+        a3 = str_val.strip(" ") if flag else None
+        a4 = str_val.lstrip(" ") if flag else None
+        a5 = str_val.rstrip(" ") if flag else None
+        check_func(
+            impl,
+            (str_val, flag),
+            py_output=(a0, a1, a2, a3, a4, a5),
+        )

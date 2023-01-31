@@ -555,6 +555,15 @@ def test_float_arr_shape(memory_leak_check):
 
 
 @pytest.mark.slow
+def test_list(memory_leak_check):
+    def test_impl(A):
+        return list(A)
+
+    A = pd.array([3.2, 1.3, -2.9], "Float64")
+    check_func(test_impl, (A,), only_seq=True)
+
+
+@pytest.mark.slow
 def test_float_arr_dtype(nullable_float_values, float_dtype, memory_leak_check):
     def test_impl(A):
         return A.dtype
@@ -618,3 +627,36 @@ def test_float_arr_series_conversion(float_dtype, memory_leak_check):
     arr = pd.array([float(i) if i % 2 else None for i in range(30)], dtype=float_dtype)
 
     check_func(impl, (arr,))
+
+
+@pytest.mark.slow
+def test_float_arr_series_box_unbox(float_dtype, memory_leak_check):
+    def impl(A):
+        return A
+
+    s = pd.Series([float(i) if i % 2 else None for i in range(30)], dtype=float_dtype)
+
+    check_func(impl, (s,))
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "impl",
+    [
+        # where
+        pytest.param(lambda A: A.where(A > 15), id="where_no_other"),
+        pytest.param(lambda A: A.where(A > 15, 0.0), id="where_other_scalar"),
+        pytest.param(lambda A: A.where(A > 15, A + 1.0), id="where_other_arr"),
+        # mask
+        pytest.param(lambda A: A.mask(A > 15), id="mask_no_other"),
+        pytest.param(lambda A: A.mask(A > 15, 0.0), id="mask_other_scalar"),
+        pytest.param(lambda A: A.mask(A > 15, A + 1.0), id="mask_other_arr"),
+    ],
+)
+def test_float_arr_series_where_mask(impl, memory_leak_check):
+    if not bodo.libs.float_arr_ext._use_nullable_float:
+        pytest.skip("Requires nullable float")
+
+    s = pd.Series([float(i) if i % 2 else None for i in range(30)], dtype="Float64")
+
+    check_func(impl, (s,))

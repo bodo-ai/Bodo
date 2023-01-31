@@ -8,7 +8,7 @@ import operator
 import types as pytypes
 import warnings
 from collections import defaultdict
-from typing import Dict, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 import numba
 import numpy as np
@@ -61,12 +61,15 @@ from bodo.utils.typing import (
     get_literal_value,
     get_overload_const_bool,
     get_overload_const_int,
+    get_overload_const_str,
     is_const_func_type,
     is_list_like_index_type,
     is_literal_type,
     is_overload_constant_bool,
     is_overload_constant_int,
+    is_overload_constant_str,
     is_overload_none,
+    is_scalar_type,
     raise_bodo_error,
 )
 from bodo.utils.utils import (
@@ -115,6 +118,8 @@ class BodoTypeInference(PartialTypeInference):
         curr_typing_pass_required = False
         # flag indicating that transformation has run at least once
         ran_transform = False
+        # flag indicating that loop unrolling has been tried at least once
+        tried_unrolling = False
         # flag for when another transformation pass is needed (to avoid break before
         # next transform)
         needs_transform = False
@@ -151,10 +156,11 @@ class BodoTypeInference(PartialTypeInference):
                 state.flags,
                 True,
                 ran_transform,
+                tried_unrolling,
             )
             ran_transform = True
             prev_needs_transform = needs_transform
-            changed, needs_transform = typing_transforms_pass.run()
+            changed, needs_transform, tried_unrolling = typing_transforms_pass.run()
             rerun_after_dce = typing_transforms_pass.rerun_after_dce
             # transform pass has failed if transform was needed but IR is not changed.
             # This avoids infinite loop, see [BE-140]
@@ -185,9 +191,14 @@ class BodoTypeInference(PartialTypeInference):
                 state.flags,
                 False,
                 ran_transform,
+                tried_unrolling,
             )
             ran_transform = True
-            local_changed, needs_transform = typing_transforms_pass.run()
+            (
+                local_changed,
+                needs_transform,
+                tried_unrolling,
+            ) = typing_transforms_pass.run()
             changed_after_typing = changed_after_typing or local_changed
             rerun_after_dce = typing_transforms_pass.rerun_after_dce
         # some cases need a second transform pass to raise the proper error
@@ -204,8 +215,13 @@ class BodoTypeInference(PartialTypeInference):
                 state.flags,
                 False,
                 True,
+                tried_unrolling,
             )
-            local_changed, needs_transform = typing_transforms_pass.run()
+            (
+                local_changed,
+                needs_transform,
+                tried_unrolling,
+            ) = typing_transforms_pass.run()
             changed_after_typing = changed_after_typing or local_changed
         if skipped_transform_in_typing or changed_after_typing:
             # need to rerun type inference if the IR changed
@@ -311,6 +327,7 @@ class TypingTransforms:
         flags,
         change_required,
         ran_transform,
+        tried_unrolling,
     ):
         self.func_ir = func_ir
         self.typingctx = typingctx
@@ -339,8 +356,10 @@ class TypingTransforms:
         self.flags = flags
         # a change in the IR in current pass is required to enable typing
         self.change_required = change_required
-        # whether transform has run before (e.g. loop unrolling is attempted)
+        # whether transform has run before
         self.ran_transform = ran_transform
+        # whether loop unrolling has been tried at least once
+        self.tried_unrolling = tried_unrolling
         self.changed = False
         # whether another transformation pass is needed (see _run_setattr)
         self.needs_transform = False
@@ -386,16 +405,18 @@ class TypingTransforms:
         # try loop unrolling if some const values couldn't be resolved
         if self._require_const:
             self._try_loop_unroll_for_const()
+            self.tried_unrolling = True
 
         # try unrolling a loop with constant range if everything else failed
         if self.change_required and not self.changed and not self.needs_transform:
             self._try_unroll_const_loop()
+            self.tried_unrolling = True
 
         # Remove any transformed variables that are not used anymore
         # since cases like agg dicts may not be type stable
         mini_dce(self.func_ir)
 
-        return self.changed, self.needs_transform
+        return self.changed, self.needs_transform, self.tried_unrolling
 
     def _run_assign(self, assign, label):
         rhs = assign.value
@@ -599,19 +620,18 @@ class TypingTransforms:
         # BodoSQL generates wrappers around exprs like Series.values that need removed
         index_def = self._remove_series_wrappers_from_def(index_def)
         value_def = guard(get_definition, self.func_ir, rhs.value)
-        index_call_name = None
-        # Check call expresions for isna, isnull, notna, notnull, and isin.
-        if is_call(index_def):
-            index_call_name = guard(
-                find_callname, self.func_ir, index_def, self.typemap
-            )
-
+        # If we have a constant filter it cannot be a boolean filter.
+        if not isinstance(rhs.index, ir.Var):
+            return nodes + [assign]
+        index_typ = self.typemap.get(rhs.index.name, None)
+        # If we cannot determine the type we will try again later.
+        if index_typ in (None, types.unknown, types.undefined):
+            self.needs_transform = True
+            return nodes + [assign]
+        # If our filter is a boolean array or series then we can perform filter pushdown.
         if (
-            is_expr(index_def, "binop")
-            or self._is_and_filter_pushdown(index_def)
-            or self._is_na_filter_pushdown_func(index_def, index_call_name)
-            or self._is_isin_filter_pushdown_func(index_def, index_call_name)
-            or self._starts_ends_with_filter_pushdown_func(index_def, index_call_name)
+            bodo.utils.utils.is_array_typ(index_typ, True)
+            and index_typ.dtype == types.boolean
         ):
             pushdown_results = guard(
                 self._follow_patterns_to_init_dataframe, assign, self.func_ir
@@ -805,7 +825,7 @@ class TypingTransforms:
         # If we don't have a binary operation, then we just pass
         # the single def as the index_def and set the lhs_def
         # and rhs_def to none.
-        if is_expr(index_def, "binop") or self._is_and_filter_pushdown(index_def):
+        if self._is_logical_op_filter_pushdown(index_def, func_ir):
             lhs_def = get_definition(func_ir, get_binop_arg(index_def, 0))
             lhs_def = self._remove_series_wrappers_from_def(lhs_def)
             rhs_def = get_definition(func_ir, get_binop_arg(index_def, 1))
@@ -815,6 +835,7 @@ class TypingTransforms:
             rhs_def = None
 
         df_var = assign.value.value
+        new_ir_assigns = []
         filters = self._get_partition_filters(
             index_def,
             df_var,
@@ -823,7 +844,12 @@ class TypingTransforms:
             func_ir,
             # SQL generates different operators than pyarrow
             read_node,
+            # Some filters may require generating additional IR variables.
+            # This will be updated in place.
+            new_ir_assigns,
         )
+        # Append any new assigns to the working body
+        working_body = working_body + new_ir_assigns
         self._check_non_filter_df_use_after_filter(
             set(used_dfs.keys()), assign, func_ir
         )
@@ -1007,13 +1033,7 @@ class TypingTransforms:
         Throws GuardException if not possible.
         """
         # e.g. [[("a", "0", ir.Var("val"))]] -> {"val"}
-        filter_vars = set()
-        for predicate_list in filters:
-            for v in predicate_list:
-                # If v[2] is a variable add it to the filter_vars. If its
-                # a compile time constant (i.e. NULL) then don't add it.
-                if isinstance(v[2], ir.Var):
-                    filter_vars.add(v[2].name)
+        filter_vars = {v.name for v in bodo.ir.connector.get_filter_vars(filters)}
 
         # data array/table variables should not be used in filter expressions directly
         non_filter_vars = {v.name for v in read_node.list_vars()}
@@ -1080,10 +1100,23 @@ class TypingTransforms:
             else:
                 related_vars |= stmt_vars - df_names
 
+            # non-filter tuple variables can contain both filter and non-filter
+            # variables inside. For example, in tuple input to coalesce((A, c)), c can
+            # be a filter variable (that needs pushed before the read node) but A is not
+            if is_assign(stmt) and is_expr(stmt.value, "build_tuple"):
+                if stmt.target.name in filter_vars:
+                    filter_vars |= stmt_vars
+                else:
+                    for v in stmt_vars:
+                        if v not in filter_vars:
+                            non_filter_vars.add(v)
+                continue
+
             if stmt_vars & filter_vars:
                 filter_vars |= stmt_vars
             else:
                 non_filter_vars |= stmt_vars
+
         require(not (filter_vars & non_filter_vars))
 
         # move IR nodes for filter expressions before the reader node
@@ -1119,9 +1152,9 @@ class TypingTransforms:
         be excluded from filter dependency reordering
         """
         # e.g. (df["A"] == 3) | (df["A"] == 4)
-        if (
-            is_expr(index_def, "binop") and index_def.fn == operator.or_
-        ) or self._is_and_filter_pushdown(index_def):
+        if self._is_or_filter_pushdown(
+            index_def, func_ir
+        ) or self._is_and_filter_pushdown(index_def, func_ir):
             left_nodes = self._get_filter_nodes(
                 self._remove_series_wrappers_from_def(
                     get_definition(func_ir, get_binop_arg(index_def, 0))
@@ -1137,10 +1170,65 @@ class TypingTransforms:
             return {index_def} | left_nodes | right_nodes
         return {index_def}
 
-    def _get_call_filter(self, call_def, func_ir, df_var, df_col_names, is_snowflake):
+    def _get_column_filter(
+        self,
+        col_def: ir.Expr,
+        func_ir: ir.FunctionIR,
+        df_var: ir.Var,
+        df_col_names,
+        is_sql_op: bool,
+        new_ir_assigns: List[ir.Stmt],
+    ) -> Tuple[str, str, ir.Var]:
+        """Function used by _get_partition_filters to extract filters
+        related to columns with boolean data. Returns a single filter
+        comparing the boolean column to True.
+
+        Args:
+            col_def (ir.Expr): The IR expression for the column. There may be a transformation
+                function on the column.
+            func_ir (ir.FunctionIR): The function IR used for traversing definitions and calls.
+            df_var (ir.Var): The DataFrame variable to check for columns
+            df_col_names (N Tuple[str, ...]): A tuple of column names for the DataFrame.
+            is_sql_op (bool): Should the equality operator have SQL or arrow syntax.
+            new_ir_assigns (List[ir.Stmt]): List of statements to add the IR when new IR variables
+                must be created. This is update with the True variable.
+
+        Returns:
+            Tuple[str, str, ir.Var]: The filter for a column with a boolean output type.
+        """
+        colname = guard(self._get_col_name, col_def, df_var, df_col_names, func_ir)
+        require(colname)
+        # Verify that the column has a boolean type.
+        df_typ = self.typemap[df_var.name]
+        col_num = df_typ.column_index[colname]
+        col_typ = df_typ.data[col_num]
+        require(
+            bodo.utils.utils.is_array_typ(col_typ, False)
+            and col_typ.dtype == types.boolean
+        )
+
+        # Generate a == TRUE for the column. This allows using the partition filters in
+        # Arrow.
+        # Generate the True variable.
+        # Create a new IR Expr for the constant pattern.
+        expr_value = ir.Const(True, col_def.loc)
+        # Generate a variable from the Expr
+        new_name = mk_unique_var("true_var")
+        new_var = ir.Var(ir.Scope(None, col_def.loc), new_name, col_def.loc)
+        new_assign = ir.Assign(target=new_var, value=expr_value, loc=col_def.loc)
+        # Append the assign so we update the IR.
+        new_ir_assigns.append(new_assign)
+        # Update the definitions. This is safe since the name is unique.
+        func_ir._definitions[new_name] = [expr_value]
+        cond = (colname, "=" if is_sql_op else "==", new_var)
+        return cond
+
+    def _get_call_filter(
+        self, call_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
+    ):
         """
         Function used by _get_partition_filters to extract filters
-        related to series method calls.
+        related to series or array method calls.
 
         Currently this supports null related filters and isin.
         """
@@ -1169,15 +1257,18 @@ class TypingTransforms:
             "bodo.libs.bodosql_array_kernels",
         ):  # pragma: no cover
             return self._get_bodosql_array_kernel_is_in_filter(
-                call_list, call_def, func_ir, df_var, df_col_names
+                call_def, func_ir, df_var, df_col_names
             )
-        elif (
-            call_list[0] in ("startswith", "endswith") and is_snowflake
-        ):  # pragma: no cover
-            # This path is only taken on Azure because snowflake
-            # is not tested on AWS.
+        elif call_list[0] in ("startswith", "endswith"):  # pragma: no cover
             return self._get_starts_ends_with_filter(
                 call_list, call_def, func_ir, df_var, df_col_names
+            )
+        elif call_list == (
+            "like_kernel",
+            "bodo.libs.bodosql_array_kernels",
+        ):  # pragma: no cover
+            return self._get_like_filter(
+                call_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
             )
         else:
             # Trigger a GuardException because we have hit an unknown function.
@@ -1219,7 +1310,7 @@ class TypingTransforms:
         return (colname, op, list_set_arg)
 
     def _get_bodosql_array_kernel_is_in_filter(
-        self, call_list, call_def, func_ir, df_var, df_col_names
+        self, call_def, func_ir, df_var, df_col_names
     ):  # pragma: no cover
         """
         Function used by _get_partition_filters to extract isin related
@@ -1261,17 +1352,160 @@ class TypingTransforms:
         op = call_list[0]
         return (colname, op, call_def.args[0])
 
+    def _get_like_filter(
+        self,
+        call_def: ir.Expr,
+        func_ir: ir.FunctionIR,
+        df_var: ir.Var,
+        df_col_names,
+        is_sql_op: bool,
+        new_ir_assigns: List[ir.Var],
+    ) -> Tuple[str, str, ir.Var]:  # pragma: no cover
+        """Generate a filter for like. If the values in like are proper constants
+        then this generates the correct operations
+
+        Args:
+            call_def (ir.Expr): An IR expression representing the call in the IR. This contains
+                access to the call details, such as the arguments.
+            func_ir (ir.FunctionIR): The current IR for the function. This is needed to update
+                definitions and extract information like column names.
+            df_var (ir.Var): The IR variable for the DataFrame being accessed by the kernel. This is
+                used to determine the original column name for filter pushdown.
+            df_col_names (Tuple[str, ...]): n-tuple of DataFrame column names
+            is_sql_op (bool): Is the operation targeting sql or parquet/iceberg. This
+                influences the generated op string.
+            new_ir_assigns (List[ir.Stmt]): A list of ir.Stmt values that are created when generating
+                the filters. If this filter succeeds we will append to this list.
+
+        Returns:
+            Tuple[str, str, ir.Var]: A tuple for this particular filter. It has the form
+                (column_name, op (e.g. <), Variable). Since like/ilike require a transformation
+                to get the pattern into this standard form we generate a new Variable add append
+                it to the IR.
+
+        Raises GuardException: If the inputs cannot be converted to a valid filter.
+        """
+        args = call_def.args
+        # Get the column names
+        colname = self._get_col_name(args[0], df_var, df_col_names, func_ir)
+        # Get the other args. We can only do filter pushdown if all of them are literals
+        pattern_arg = args[1]
+        pattern_type = self.typemap.get(pattern_arg.name, None)
+        if pattern_type in (None, types.undefined, types.unknown):
+            self.needs_transform = True
+            raise GuardException
+        escape_arg = args[2]
+        escape_type = self.typemap.get(escape_arg.name, None)
+        if escape_type in (None, types.undefined, types.unknown):
+            self.needs_transform = True
+            raise GuardException
+        case_insensitive_arg = args[3]
+        case_insensitive_type = self.typemap.get(case_insensitive_arg.name, None)
+        if case_insensitive_type in (None, types.undefined, types.unknown):
+            self.needs_transform = True
+            raise GuardException
+        require(is_overload_constant_bool(case_insensitive_type))
+        # Fetch case sensitive information. If is_case_insensitive == True
+        # then we will create new operations that can be replaced by
+        # arrow and snowflake.
+        is_case_insensitive = get_overload_const_bool(case_insensitive_type)
+        # If either pattern or escape is not literal it must be the regex case
+        # or always False.
+        match_nothing = False
+        requires_regex = False
+        if not (
+            is_overload_constant_str(pattern_type)
+            and is_overload_constant_str(escape_type)
+        ):
+            # We don't support filter pushdown with optional types
+            # or array types.
+            pattern_type = types.unliteral(pattern_type)
+            escape_type = types.unliteral(escape_type)
+            require(
+                pattern_type in (types.unicode_type, types.none)
+                and escape_type in (types.unicode_type, types.none)
+            )
+            if pattern_type == types.none or escape_type == types.none:
+                match_nothing = True
+                # Generate a dummy pattern to get an ir.Var.
+                final_pattern = ""
+            else:
+                requires_regex = True
+        else:
+            pattern_const = get_overload_const_str(pattern_type)
+            escape_const = get_overload_const_str(escape_type)
+            # Convert the pattern from SQL to Python for pushdown.
+            (
+                final_pattern,
+                requires_regex,
+                must_match_start,
+                must_match_end,
+                match_anything,
+            ) = bodo.libs.bodosql_like_array_kernels.convert_sql_pattern_to_python_compile_time(
+                pattern_const, escape_const, is_case_insensitive
+            )
+        # We cannot do filter pushdown if the expression requires us to keep like/use a regex.
+        if requires_regex:
+            # Regex can only be handled with a SQL interface
+            require(is_sql_op)
+            if is_case_insensitive:
+                op = "ilike"
+            else:
+                op = "like"
+            # Generate an ir.Expr. This is a tuple that will be unpacked
+            # later in filter pushdown.
+            expr_value = ir.Expr.build_tuple([pattern_arg, escape_arg], call_def.loc)
+        else:
+            if match_nothing:
+                op = "ALWAYS_NULL"
+            elif match_anything:
+                # We don't have a way to represent a True filter yet.
+                op = "ALWAYS_TRUE"
+            elif must_match_start and must_match_end:
+                # This is equality
+                if is_case_insensitive:
+                    op = "case_insensitive_equality"
+                else:
+                    op = "=" if is_sql_op else "=="
+            elif must_match_start:
+                if is_case_insensitive:
+                    op = "case_insensitive_startswith"
+                else:
+                    op = "startswith"
+            elif must_match_end:
+                if is_case_insensitive:
+                    op = "case_insensitive_endswith"
+                else:
+                    op = "endswith"
+            else:
+                if is_case_insensitive:
+                    op = "case_insensitive_contains"
+                else:
+                    op = "contains"
+
+            # Create a new IR Expr for the constant pattern.
+            expr_value = ir.Const(final_pattern, call_def.loc)
+        # Generate a variable from the Expr
+        new_name = mk_unique_var("like_python_var")
+        new_var = ir.Var(ir.Scope(None, call_def.loc), new_name, call_def.loc)
+        new_assign = ir.Assign(target=new_var, value=expr_value, loc=call_def.loc)
+        # Append the assign so we update the IR.
+        new_ir_assigns.append(new_assign)
+        # Update the definitions. This is safe since the name is unique.
+        func_ir._definitions[new_name] = [expr_value]
+        return (colname, op, new_var)
+
     def _get_partition_filters(
-        self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node
+        self, index_def, df_var, lhs_def, rhs_def, func_ir, read_node, new_ir_assigns
     ):
         """get filters for predicate pushdown if possible.
         Returns filters in pyarrow DNF format (e.g. [[("a", "==", 1)][("a", "==", 2)]]):
         https://arrow.apache.org/docs/python/generated/pyarrow.parquet.ParquetDataset.html#pyarrow.parquet.ParquetDataset
         Throws GuardException if not possible.
         """
-        require(is_expr(index_def, "binop") or is_call(index_def))
         is_sql = isinstance(read_node, bodo.ir.sql_ext.SqlReader)
-        is_snowflake = is_sql and read_node.db_type == "snowflake"
+        # Iceberg uses arrow operators instead of SQL operators.
+        is_sql_op = is_sql and read_node.db_type != "iceberg"
         # NOTE: I/O nodes update df_colnames in DCE but typing pass is before
         # optimizations
         # SqlReader doesn't have original_df_colnames so needs special casing
@@ -1288,36 +1522,54 @@ class TypingTransforms:
             Function that abstracts away the recursive steps of getting the filters
             from the child exprs of index_def.
             """
-            if is_expr(child_def, "binop") or self._is_and_filter_pushdown(child_def):
+            if self._is_logical_op_filter_pushdown(child_def, func_ir):
                 l_def = get_definition(func_ir, get_binop_arg(child_def, 0))
                 l_def = self._remove_series_wrappers_from_def(l_def)
                 r_def = get_definition(func_ir, get_binop_arg(child_def, 1))
                 r_def = self._remove_series_wrappers_from_def(r_def)
                 child_or = self._get_partition_filters(
-                    child_def, df_var, l_def, r_def, func_ir, read_node
+                    child_def, df_var, l_def, r_def, func_ir, read_node, new_ir_assigns
                 )
-            else:
+            elif self._is_call_op_filter_pushdown(child_def, func_ir):
                 child_or = [
                     [
                         self._get_call_filter(
-                            child_def, func_ir, df_var, df_col_names, is_snowflake
+                            child_def,
+                            func_ir,
+                            df_var,
+                            df_col_names,
+                            is_sql_op,
+                            new_ir_assigns,
+                        )
+                    ]
+                ]
+            else:
+                child_or = [
+                    [
+                        self._get_column_filter(
+                            child_def,
+                            func_ir,
+                            df_var,
+                            df_col_names,
+                            is_sql_op,
+                            new_ir_assigns,
                         )
                     ]
                 ]
             return child_or
 
-        if is_expr(index_def, "binop") or self._is_and_filter_pushdown(index_def):
-            if is_expr(index_def, "binop") and index_def.fn == operator.or_:
+        if self._is_logical_op_filter_pushdown(index_def, func_ir):
+            if self._is_or_filter_pushdown(index_def, func_ir):
                 left_or = get_child_filter(lhs_def)
                 right_or = get_child_filter(rhs_def)
                 return left_or + right_or
 
             # And case: distribute Or over And to normalize if needed
-            if self._is_and_filter_pushdown(index_def):
+            if self._is_and_filter_pushdown(index_def, func_ir):
 
                 # rhs is Or
                 # e.g. "A And (B Or C)" -> "(A And B) Or (A And C)"
-                if is_expr(rhs_def, "binop") and rhs_def.fn == operator.or_:
+                if self._is_or_filter_pushdown(rhs_def, func_ir):
                     # lhs And rhs.lhs (A And B)
                     new_lhs = ir.Expr.binop(
                         operator.and_,
@@ -1334,6 +1586,7 @@ class TypingTransforms:
                         new_lhs_rdef,
                         func_ir,
                         read_node,
+                        new_ir_assigns,
                     )
                     # lhs And rhs.rhs (A And C)
                     new_rhs = ir.Expr.binop(
@@ -1351,12 +1604,13 @@ class TypingTransforms:
                         new_rhs_rdef,
                         func_ir,
                         read_node,
+                        new_ir_assigns,
                     )
                     return left_or + right_or
 
                 # lhs is Or
                 # e.g. "(B Or C) And A" -> "(B And A) Or (C And A)"
-                if is_expr(lhs_def, "binop") and lhs_def.fn == operator.or_:
+                if self._is_or_filter_pushdown(lhs_def, func_ir):
                     # lhs.lhs And rhs (B And A)
                     new_lhs = ir.Expr.binop(
                         operator.and_,
@@ -1373,6 +1627,7 @@ class TypingTransforms:
                         rhs_def,
                         func_ir,
                         read_node,
+                        new_ir_assigns,
                     )
                     # lhs.rhs And rhs (C And A)
                     new_rhs = ir.Expr.binop(
@@ -1390,6 +1645,7 @@ class TypingTransforms:
                         rhs_def,
                         func_ir,
                         read_node,
+                        new_ir_assigns,
                     )
                     return left_or + right_or
 
@@ -1408,65 +1664,46 @@ class TypingTransforms:
                         filters.append(left_or_cond + right_or_cond)
                 return filters
 
-        # literal case
-        # TODO(ehsan): support 'in' and 'not in'
-        # Iceberg uses arrow operators instead of SQL operators.
-        use_sql_ops = is_sql and read_node.db_type != "iceberg"
-        op_map = {
-            operator.eq: "=" if use_sql_ops else "==",
-            operator.ne: "<>" if use_sql_ops else "!=",
-            operator.lt: "<",
-            operator.le: "<=",
-            operator.gt: ">",
-            operator.ge: ">=",
-        }
-
-        # Operator mapping used to support situations
-        # where the column is on the RHS. Since Pyarrow
-        # format is ("col", op, scalar), we must invert certain
-        # operators.
-        right_colname_op_map = {
-            operator.eq: "=" if is_sql else "==",
-            operator.ne: "<>" if is_sql else "!=",
-            operator.lt: ">",
-            operator.le: ">=",
-            operator.gt: "<",
-            operator.ge: "<=",
-        }
-
-        if is_expr(index_def, "binop"):
-            require(index_def.fn in op_map)
-            left_colname = guard(
-                self._get_col_name, index_def.lhs, df_var, df_col_names, func_ir
-            )
+        # TODO: Support NOT
+        if self._is_cmp_op_filter_pushdown(index_def, func_ir):
+            lhs = get_binop_arg(index_def, 0)
+            rhs = get_binop_arg(index_def, 1)
+            left_colname = guard(self._get_col_name, lhs, df_var, df_col_names, func_ir)
             right_colname = guard(
-                self._get_col_name, index_def.rhs, df_var, df_col_names, func_ir
+                self._get_col_name, rhs, df_var, df_col_names, func_ir
             )
 
             require(
                 (left_colname and not right_colname)
                 or (right_colname and not left_colname)
             )
-            if right_colname:
-                cond = (
-                    right_colname,
-                    right_colname_op_map[index_def.fn],
-                    index_def.lhs,
-                )
-            else:
-                cond = (left_colname, op_map[index_def.fn], index_def.rhs)
-        else:
+            colname = left_colname if left_colname else right_colname
+            scalar = rhs if left_colname else lhs
+            op = get_cmp_operator(
+                index_def,
+                self.typemap[scalar.name],
+                is_sql_op,
+                right_colname is not None,
+                self.func_ir,
+            )
+            cond = (colname, op, scalar)
+        elif self._is_call_op_filter_pushdown(index_def, func_ir):
             cond = self._get_call_filter(
-                index_def, func_ir, df_var, df_col_names, is_snowflake
+                index_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
+            )
+        else:
+            # Filter pushdown is just on a boolean column.
+            cond = self._get_column_filter(
+                index_def, func_ir, df_var, df_col_names, is_sql_op, new_ir_assigns
             )
 
         # If this is parquet we need to verify this is a filter we can process.
         # We don't do this check if there is a call expression because isnull
         # is always supported.
         if not is_sql and not is_call(index_def):
-            lhs_arr_typ = read_node.original_out_types[
-                read_node.original_df_colnames.index(cond[0])
-            ]
+            lhs_arr_typ = self._get_filter_col_type(
+                cond[0], read_node.original_out_types, read_node.original_df_colnames
+            )
             lhs_scalar_typ = bodo.utils.typing.element_type(lhs_arr_typ)
             require(cond[2].name in self.typemap)
             rhs_scalar_typ = self.typemap[cond[2].name]
@@ -1480,6 +1717,28 @@ class TypingTransforms:
 
         # Pyarrow format, e.g.: [[("a", "==", 2)]]
         return [[cond]]
+
+    def _get_filter_col_type(self, col_val, out_types, col_names):
+        """Return column type for column representation in filter predicate
+
+        Args:
+            col_val (str | tuple): column name or tuple representing its computation
+            out_types (list(types.Type)): output types of read node
+            col_names (list(str)): output column names of read node
+
+        Returns:
+            types.Type: array type of predicate column
+        """
+        if isinstance(col_val, str):
+            return out_types[col_names.index(col_val)]
+
+        # only coalesce is supported currently
+        assert (
+            isinstance(col_val, tuple)
+            and len(col_val) == 3
+            and col_val[1] == "coalesce"
+        ), "invalid column in filter predicate"
+        return out_types[col_names.index(col_val[0])]
 
     def _get_col_name(self, var, df_var, df_col_names, func_ir):
         """get column name for dataframe column access like df["A"] if possible.
@@ -1499,7 +1758,7 @@ class TypingTransforms:
             fdef = find_callname(func_ir, var_def)
             # calling pd.to_datetime() on a string column is possible since pyarrow
             # matches the data types before filter comparison (in this case, calls
-            # pd.Timestamp on partiton's string value)
+            # pd.Timestamp on partition's string value)
             # BodoSQL generates pd.Series(arr) calls for expressions
             if fdef in (("to_datetime", "pandas"), ("Series", "pandas")):
                 # We don't want to perform filter pushdown if there is a format argument
@@ -1518,6 +1777,31 @@ class TypingTransforms:
                     func_ir, var_def.args[1], arg_types=self.arg_types
                 )
                 return df_col_names[col_ind]
+
+            # coalesce can be called on the filter column, which will be pushed down
+            # e.g. where coalesce(L_COMMITDATE, current_date()) >= '1998-10-30'
+            if fdef == ("coalesce", "bodo.libs.bodosql_array_kernels"):
+                # coalesce takes a tuple input
+                # We only push down 2-arg scalar case, i.e. coalesce((column, scalar))
+                require((len(var_def.args) == 1) and not var_def.kws)
+                args = find_build_tuple(self.func_ir, var_def.args[0])
+                require(len(args) == 2)
+
+                # make sure arg[1] is scalar
+                arg_type = self.typemap.get(args[1].name, None)
+                if arg_type in (None, types.undefined, types.unknown):
+                    self.needs_transform = True
+                    raise GuardException
+
+                require(
+                    is_scalar_type(arg_type)
+                    and arg_type != types.none
+                    and not isinstance(arg_type, types.Optional)
+                )
+
+                col_name = self._get_col_name(args[0], df_var, df_col_names, func_ir)
+                return (col_name, "coalesce", args[1])
+
             require(
                 isinstance(fdef, tuple)
                 and len(fdef) == 2
@@ -2928,6 +3212,7 @@ class TypingTransforms:
                 _bodo_merge_into,  # is_merge_into
                 file_list_type,  # file_list_type
                 snapshot_id_type,  # snapshot_id_type
+                [],  # sf_dt_to_ts_cols
             )
         ]
         data_args = ["table_val", "idx_arr_val", "file_list_val", "snapshot_id_val"]
@@ -3741,7 +4026,7 @@ class TypingTransforms:
             )
         except BodoConstUpdatedError as e:
             # loop unrolling can potentially make updated lists constants
-            if self.ran_transform and err_msg:
+            if self.ran_transform and err_msg and self.tried_unrolling:
                 raise BodoError(f"{err_msg} but {e}\n{loc.strformat()}\n")
             else:
                 # save for potential loop unrolling
@@ -4368,17 +4653,149 @@ class TypingTransforms:
             )
         )
 
-    def _is_and_filter_pushdown(self, index_def):
+    def _is_call_op_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """Performs an equality check on the index_def expr with the possible
+        call expressions that represent filters.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid call filter.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid logical operator?
+        """
+        if is_expr(index_def, "call"):
+            call_list = find_callname(func_ir, index_def, self.typemap)
+            if len(call_list) == 2 and (
+                isinstance(call_list[1], ir.Var)
+                # checking call_list[1] == "pandas" to handle pd.isna/pd.notna cases generated
+                # by BodoSQL
+                or call_list[1] == "pandas"
+                or call_list[1] == "bodo.libs.bodosql_array_kernels"
+            ):
+                return call_list[0] in (
+                    "notna",
+                    "isna",
+                    "notnull",
+                    "isnull",
+                    "isin",
+                    "startswith",
+                    "endswith",
+                ) or call_list in (
+                    ("is_in", "bodo.libs.bodosql_array_kernels"),
+                    ("like_kernel", "bodo.libs.bodosql_array_kernels"),
+                )
+        return False
+
+    def _is_logical_op_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """Performs an equality check on the index_def expr with the possible
+        logical operators (AND, OR, or a comparison operator). This also supports
+        the equivalent BodoSQL array kernels to ensure that
+        we can support filter pushdown for both the Pythonic version of these
+        comparison operators and their SQL array kernels.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid logical operation
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid logical operator?
+        """
+        return (
+            self._is_cmp_op_filter_pushdown(index_def, func_ir)
+            or self._is_and_filter_pushdown(index_def, func_ir)
+            or self._is_or_filter_pushdown(index_def, func_ir)
+        )
+
+    def _is_cmp_op_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """
+        Performs an equality check on the index_def expr with the valid
+        comparison operators (e.g. !=) or their equivalent BodoSQL array kernels
+        (e.g. bodo.libs.bodosql_array_kernels.not_equal). This is to ensure that
+        we can support filter pushdown for both the Pythonic version of these
+        comparison operators and their SQL array kernels.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid comparison operation.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid comparison operation?
+        """
+        if is_expr(index_def, "binop"):
+            return index_def.fn in (
+                operator.eq,
+                operator.ne,
+                operator.lt,
+                operator.gt,
+                operator.le,
+                operator.ge,
+            )
+        elif is_call(index_def):
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
+            if (
+                len(call_name) == 2
+                and call_name[1] == "bodo.libs.bodosql_array_kernels"
+            ):
+                return call_name[0] in (
+                    "equal",
+                    "not_equal",
+                    "less_than",
+                    "greater_than",
+                    "less_than_or_equal",
+                    "greater_than_or_equal",
+                )
+        return False
+
+    def _is_and_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
         """
         Performs an equality check on the index_def expr with & / AND,
         depending on whether the operator is a binop or a function call respectively.
         This is to ensure that we can support filter pushdown for AND as well instead of just &.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid AND operation.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid AND operation?
         """
         if is_expr(index_def, "binop"):
             return index_def.fn == operator.and_
         elif is_call(index_def):
-            call_name = guard(find_callname, self.func_ir, index_def, self.typemap)
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
             return call_name == ("booland", "bodo.libs.bodosql_array_kernels")
+        else:
+            return False
+
+    def _is_or_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """
+        Performs an equality check on the index_def expr with | / OR,
+        depending on whether the operator is a binop or a function call respectively.
+        This is to ensure that we can support filter pushdown for OR as well instead of just |.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid OR operation.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid OR operation?
+        """
+        if is_expr(index_def, "binop"):
+            return index_def.fn == operator.or_
+        elif is_call(index_def):
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
+            return call_name == ("boolor", "bodo.libs.bodosql_array_kernels")
         else:
             return False
 
@@ -4483,8 +4900,7 @@ class TypingTransforms:
     def _starts_ends_with_filter_pushdown_func(self, index_def, index_call_name):
         """
         Does an expression match a supported startswith/endswith call that can be
-        used in filter pushdown. Currently these optimizations are only supported
-        when loaded from Snowflake.
+        used in filter pushdown.
         """
         if not (
             is_call(index_def) and index_call_name[0] in ("startswith", "endswith")
@@ -4503,6 +4919,50 @@ class TypingTransforms:
         if not isinstance(method_obj_type, SeriesStrMethodType):
             return False
 
+        return True
+
+    def _is_like_filter_pushdown_func(self, index_def: ir.Stmt, index_call_name):
+        """Does an expression match a like call that may be possible to support
+        in filter pushdown?
+
+        Args:
+            index_def (ir.Stmt): The index expression to check.
+            index_call_name (Tuple[str, str | ir.Var]): A 2-tuple identifying the function call.
+        """
+        if not (
+            is_call(index_def)
+            and index_call_name == ("like_kernel", "bodo.libs.bodosql_array_kernels")
+        ):
+            return False
+
+        # Filter pushdown is currently only possible if both the pattern and escape are constants
+        # and we are doing case sensitive matching.
+        args = index_def.args
+        # Pattern and escape are args 1 and 2
+        for arg_no in (1, 2):
+            const_arg = args[arg_no].name
+            arg_type = self.typemap.get(const_arg, None)
+            if arg_type in (None, types.unknown, types.undefined):
+                self.needs_transform = True
+                return False
+
+            if types.unliteral(arg_type) not in (types.unicode_type, types.none):
+                # We don't support filter pushdown with optional types
+                # or arrays.
+                return False
+
+        # case insensitive is argument 3
+        case_insensitive = args[3].name
+        case_insensitive_type = self.typemap.get(case_insensitive, None)
+        if case_insensitive_type in (None, types.unknown, types.undefined):
+            self.needs_transform = True
+            return False
+
+        # We may need to recompile to get the constant version to avoid errors.
+        if not is_overload_constant_bool(case_insensitive_type):
+            return False
+
+        # We can do filter pushdown for both values of case_insensitive.
         return True
 
 
@@ -4671,6 +5131,84 @@ def get_binop_arg(child_def, arg_no):
             return child_def.rhs
 
     return child_def.args[arg_no]
+
+
+def get_cmp_operator(
+    index_def: ir.Expr,
+    scalar_type: types.Type,
+    is_sql_op: bool,
+    reverse_op: bool,
+    func_ir: ir.FunctionIR,
+) -> str:
+    """Derive the operator string used for filter pushdown with binary
+    comparison operators. These operators can either be a binop or a call to
+    a BodoSQL array kernel.
+
+    Args:
+        index_def (ir.Expr): The expression in the IR responsible for the comparison.
+            This is either a binop or a call expression.
+        scalar_type (types.Type): The type of the scalar type. This is used for validation
+            and a special None case with call expressions.
+        is_sql_op (bool): Should the operator be output using standard SQL syntax or pyarrow
+            sytnax.
+        reverse_op (bool): Is the column arg1 and not arg0. This is important for "reversing" certain
+            operators as opposed to the function. For example (scalar < column) should output
+            ">" despite the binop being operator.lt.
+        func_ir (ir.FunctionIR): The function IR object. This is used to get the callname.
+
+    Returns:
+        str: The filter pushdown operator string.
+
+    Raise GuardException: The function is not formatted in way that can handle filter pushdown.
+    """
+    # Map the BodoSQL array kernels to equivalent operators.
+    fn_name_map = {
+        "equal": operator.eq,
+        "not_equal": operator.ne,
+        "less_than": operator.lt,
+        "greater_than": operator.gt,
+        "less_than_or_equal": operator.le,
+        "greater_than_or_equal": operator.ge,
+    }
+    # Map the operator to its filter pushdown operator string.
+    if reverse_op:
+        # Operator mapping used to support situations
+        # where the column is on the RHS. Since Pyarrow
+        # format is ("col", op, scalar), we must invert certain
+        # operators.
+        op_map = {
+            operator.eq: "=" if is_sql_op else "==",
+            operator.ne: "<>" if is_sql_op else "!=",
+            operator.lt: ">",
+            operator.le: ">=",
+            operator.gt: "<",
+            operator.ge: "<=",
+        }
+    else:
+        op_map = {
+            operator.eq: "=" if is_sql_op else "==",
+            operator.ne: "<>" if is_sql_op else "!=",
+            operator.lt: "<",
+            operator.le: "<=",
+            operator.gt: ">",
+            operator.ge: ">=",
+        }
+    # The other argument must be a scalar, not an array
+    require(not bodo.utils.utils.is_array_typ(scalar_type, True))
+    if is_call(index_def):
+        # We can't do filter pushdown with optional types yet.
+        require(scalar_type != types.optional)
+        if scalar_type == types.none:
+            # SQL comparison functions always return NULL if an input is NULL.
+            return "ALWAYS_NULL"
+        callname = guard(find_callname, func_ir, index_def)
+        require(callname is not None)
+        op = fn_name_map[callname[0]]
+    else:
+        # Python operators shouldn't compare with None or optional values.
+        require(scalar_type not in (types.optional, types.none))
+        op = index_def.fn
+    return op_map[op]
 
 
 def guard_const(func, *args, **kwargs):
