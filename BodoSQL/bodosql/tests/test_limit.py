@@ -54,6 +54,15 @@ def test_fetch(basic_df, memory_leak_check):
     check_query(query6, basic_df, None, expected_output=expected_output2)
 
 
+@pytest.mark.slow
+def test_top(basic_df, memory_leak_check):
+    """test queries with top"""
+    query1 = "select TOP 4 B,C from table1"
+    # Generate an expected output
+    expected_output1 = basic_df["table1"].iloc[:4, [1, 2]]
+    check_query(query1, basic_df, None, expected_output=expected_output1)
+
+
 def test_limit_tz_aware(representative_tz, memory_leak_check):
     """test limit and variants with tz_aware data"""
     df = pd.DataFrame(
