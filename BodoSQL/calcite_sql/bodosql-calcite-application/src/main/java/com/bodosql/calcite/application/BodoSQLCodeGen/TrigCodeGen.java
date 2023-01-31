@@ -9,8 +9,8 @@ import java.util.List;
 public class TrigCodeGen {
   static List<String> fnList =
       Arrays.asList(
-          "acos", "acosh", "asin", "asinh", "atan", "atanh", "atan2", "cos", "cosh", "sin", "sinh",
-          "tan", "tanh", "degrees", "radians");
+          "acos", "acosh", "asin", "asinh", "atan", "atanh", "atan2", "cos", "cosh", "cot", "sin",
+          "sinh", "tan", "tanh", "degrees", "radians");
   static List<String> doubleArgFns = Arrays.asList("atan2");
 
   // HashMap of all trig functions which maps to array kernels
@@ -34,10 +34,7 @@ public class TrigCodeGen {
   public static RexNodeVisitorInfo getSingleArgTrigFnInfo(
       String fnName, String arg1Expr, String arg1Name) {
     String new_fn_name = fnName + "(" + arg1Name + ")";
-    // COT generates the same code for scalar and column
-    if (fnName.equals("COT")) {
-      return new RexNodeVisitorInfo(new_fn_name, generateCotCode(arg1Expr));
-    } else if (equivalentFnMap.containsKey(fnName)) {
+    if (equivalentFnMap.containsKey(fnName)) {
       return new RexNodeVisitorInfo(
           new_fn_name, equivalentFnMap.get(fnName) + "(" + arg1Expr + ")");
     } else {
@@ -62,17 +59,5 @@ public class TrigCodeGen {
     String new_fn_name = fnName + "(" + arg1Name + "," + arg2Name + ")";
     return new RexNodeVisitorInfo(
         new_fn_name, equivalentFnMap.get(fnName) + "(" + arg1Expr + ", " + arg2Expr + ")");
-  }
-
-  /**
-   * Function that return the necessary generated code for a COT Function Call.
-   *
-   * @param strExpr The expression on which to perform the COT call.
-   * @return The code generated that matches the Tan expression.
-   */
-  public static String generateCotCode(String strExpr) {
-    StringBuilder strBuilder = new StringBuilder();
-    strBuilder.append("np.divide(1,np.tan(").append(strExpr).append("))");
-    return strBuilder.toString();
   }
 }

@@ -1980,7 +1980,7 @@ def test_init_timedelta_index_array_analysis(memory_leak_check):
 
 @pytest.mark.parametrize("field", bodo.hiframes.pd_timestamp_ext.timedelta_fields)
 def test_timedelta_field(timedelta_index_val, field, memory_leak_check):
-    """tests timdelta index.field. This should be inlined in series pass"""
+    """tests timedelta index.field. This should be inlined in series pass"""
 
     func_text = "def impl(A):\n"
     func_text += "  return A.{}\n".format(field)
@@ -2706,7 +2706,12 @@ def test_index_unique(idx):
         ),
         pytest.param(
             (
-                pd.Index([1.0, 2.0, 3.0, 2.0, 1.0]),
+                pd.Index(
+                    [1.0, 2.0, 3.0, 2.0, 1.0],
+                    dtype="Float64"
+                    if bodo.libs.float_arr_ext._use_nullable_float
+                    else "float64",
+                ),
                 pd.array([True, True, False, False, False]),
                 pd.Series([0.1, 0.2, 0.3, 0.4, 0.5]),
             ),
@@ -2861,11 +2866,16 @@ def test_index_unique(idx):
                 pd.array([True, False, False, True, True]),
                 pd.Series([0.1, 0.2, 0.3, 0.4, 0.5]),
             ),
-            marks=pytest.mark.slow,
+            marks=pytest.mark.skip(reason="Pandas still uses deprecated Float64Index"),
         ),
         pytest.param(
             (
-                pd.Index([0.1, 0.2, 0.3, 0.4, 0.5]),
+                pd.Index(
+                    [0.1, 0.2, 0.3, 0.4, 0.5],
+                    dtype="Float64"
+                    if bodo.libs.float_arr_ext._use_nullable_float
+                    else "float64",
+                ),
                 pd.array([False, True, True, False, True]),
                 pd.Series([1, 2, 3, 4, 5]),
             ),
@@ -3534,7 +3544,7 @@ def test_index_cmp_ops(op, memory_leak_check):
     "index",
     [
         pd.Index([10, 12], dtype="Int64"),
-        pd.Index([10.1, 12.1], dtype="float64"),
+        pd.Index([10.1, 12.1], dtype="Float64"),
         pd.Index([10, 12], dtype="UInt64"),
         pd.date_range(start="2018-04-24", end="2018-04-27", periods=3, name="A"),
         pd.timedelta_range(start="1D", end="3D", name="A"),
@@ -3594,7 +3604,11 @@ def test_index_nbytes(index, memory_leak_check):
     # data = 16 bytes
     # null_bit_map= 1 byte if 1 rank, 2 bytes if > 1 rank
     # Total = 16 + num_ranks bytes
-    elif isinstance(index, pd.Index) and str(index.dtype) in ["Int64", "UInt64"]:
+    elif isinstance(index, pd.Index) and str(index.dtype) in [
+        "Int64",
+        "UInt64",
+        "Float64",
+    ]:
         py_out = 16 + (1 if bodo.get_size() == 1 else 2)
         check_func(impl, (index,), py_output=py_out, only_1D=True)
 
@@ -3668,7 +3682,9 @@ def test_index_simple_attributes(index):
     # Bodo diverges from the Pandas API by always returning the numpy dtype in
     # ambiguous cases.
     if isinstance(index.dtype, np.dtype):
-        check_func(impl3, (index,), dist_test=dist_test)
+        check_func(
+            impl3, (index,), dist_test=dist_test, convert_to_nullable_float=False
+        )
 
 
 @pytest.mark.parametrize(

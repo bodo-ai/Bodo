@@ -489,6 +489,10 @@ the Python types for each type keyword:
     Users are responsible for ensuring that conversion is possible
     (e.g. `CAST(str_col as INTEGER)`).
 
+### ::
+
+Infix cast operator. Equivalent to cast, but the format is `value::Typename`
+
 ### JOIN
 
 A `JOIN` clause is used to combine rows from two or more tables,
@@ -1407,7 +1411,28 @@ Bodo SQL currently supports the following Timestamp functions:
 -   `DATEDIFF(timestamp_val1, timestamp_val2)`
 
     Computes the difference in days between two Timestamp
-    values
+    values (timestamp_val1 - timestamp_val2)
+
+
+-   `DATEDIFF(unit, timestamp_val1, timestamp_val2)`
+
+    Computes the difference between two Timestamp
+    values (timestamp_val2 - timestamp_val1) in terms of unit
+
+    Allows the following units, with the specified
+    abbreviations as string literals:
+
+    -   YEAR: `year`, `years`, `yr`, `yrs`, `y`, `yy`, `yyy`, `yyyy`
+    -   QUARTER: `quarter`, `quarters`, `q`, `qtr`, `qtrs`
+    -   MONTH: `month`, `months`, `mm`, `mon`, `mons`
+    -   WEEK: `week`, `weeks`, `weekofyear`, `w`, `wk`, `woy`, `wy`
+    -   DAY: `day`, `days`, `dayofmonth`, `d`, `dd`
+    -   HOUR: `hour`, `hours`, `hrs`, `h`, `hr`, `hrs`
+    -   MINUTE: `minute`, `minutes`, `m`, `mi`, `min`, `mins`
+    -   SECOND: `second`, `seconds`, `s`, `sec`, `secs`
+    -   MILLISECOND: `millisecond`, `milliseconds`, `ms`, `msecs`
+    -   MICROSECOND: `microsecond`, `microseconds`, `us`, `usec`
+    -   NANOSECOND: `nanosecond`, `nanoseconds`, `nanosec`, `nsec`, `nsecs`, `nsecond`, `ns`, `nanonsecs`
 
 #### STR_TO_DATE
 -   `STR_TO_DATE(str_val, literal_format_string)`
@@ -1676,6 +1701,11 @@ Bodo SQL currently supports the following Timestamp functions:
 
 #### MONTHNAME
 -   `MONTHNAME(timestamp_val)`
+
+    Computes the string name of the month of the timestamp value.
+
+#### MONTH_NAME
+-   `MONTH_NAME(timestamp_val)`
 
     Computes the string name of the month of the timestamp value.
 
@@ -2301,6 +2331,20 @@ BodoSQL currently supports the following regex functions:
     ```sql
     SELECT REGEXP_INSTR(A, '([[:upper]][[:lower:]]+), ([[:upper]][[:lower:]]+)', 1, 1, 0, 'e', 2)
     ```
+
+
+###  JSON Functions
+
+
+BodoSQL currently supports the following JSON functions:
+
+#### JSON_EXTRACT_PATH_TEXT
+-   `JSON_EXTRACT_PATH_TEXT(data, path)`
+
+    Parses the string `data` as if it were JSON data, then extracts values from
+    within (possibly multiple times if the data is nested) using the string `path`.
+
+    Obeys the following specification: https://docs.snowflake.com/en/sql-reference/functions/json_extract_path_text.html
 
 
 ###   Control Flow Functions

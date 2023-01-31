@@ -9,7 +9,7 @@ import pytest
 from bodosql.tests.test_datetime_fns import dt_fn_dataframe  # noqa
 from bodosql.tests.utils import check_query, make_tables_nullable
 
-from bodo.tests.bodosql_array_kernel_tests.test_bodosql_snowflake_date_conversion_array_kernels import (  # pragma: no cover
+from bodo.tests.test_bodosql_array_kernels.test_bodosql_snowflake_date_conversion_array_kernels import (  # pragma: no cover
     scalar_to_date_equiv_fn,
 )
 from bodo.tests.timezone_common import representative_tz  # noqa

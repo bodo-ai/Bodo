@@ -411,22 +411,16 @@ def get_parquet_dataset(
         try:
             import gcsfs
         except ImportError:
-            message = (
+            raise BodoError(
                 "Couldn't import gcsfs, which is required for Google cloud access."
                 " gcsfs can be installed by calling"
                 " 'conda install -c conda-forge gcsfs'.\n"
             )
-            raise BodoError(message)
 
     if protocol == "http":
-        try:
-            import fsspec
-        except ImportError:
-            message = (
-                "Couldn't import fsspec, which is required for http access."
-                " fsspec can be installed by calling"
-                " 'conda install -c conda-forge fsspec'.\n"
-            )
+        # fsspec is a required Bodo dependency
+        # We don't need a try-catch in case its not installed
+        import fsspec
 
     fs = []
 
@@ -753,14 +747,20 @@ def get_parquet_dataset(
                 and total_num_row_groups < bodo.get_size()
                 and total_num_row_groups != 0
             ):
+                if isinstance(fpath, list) and len(fpath) > 5:
+                    fpath_tidbit = "[{}, ... {} more files]".format(
+                        ", ".join(fpath[:5]), len(fpath) - 5
+                    )
+                else:
+                    fpath_tidbit = fpath
+
                 warnings.warn(
                     BodoWarning(
-                        f"""Total number of row groups in parquet dataset {fpath} ({total_num_row_groups}) is too small for effective IO parallelization.
-For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()}). For more details, refer to
-https://docs.bodo.ai/latest/file_io/#parquet-section.
-"""
+                        f"Total number of row groups in parquet dataset {fpath_tidbit} ({total_num_row_groups}) is too small for effective IO parallelization."
+                        "For best performance the number of row groups should be greater than the number of workers ({bodo.get_size()}). For more details, refer to https://docs.bodo.ai/latest/file_io/#parquet-section."
                     )
                 )
+
             # print a warning if average row group size < 1 MB and reading from remote filesystem
             if total_num_row_groups == 0:
                 avg_row_group_size_bytes = 0
@@ -774,7 +774,7 @@ https://docs.bodo.ai/latest/file_io/#parquet-section.
             ):
                 warnings.warn(
                     BodoWarning(
-                        f"""Parquet average row group size is small ({avg_row_group_size_bytes} bytes) and can have negative impact on performance when reading from remote sources"""
+                        f"Parquet average row group size is small ({avg_row_group_size_bytes} bytes) and can have negative impact on performance when reading from remote sources"
                     )
                 )
             if tracing.is_tracing():
@@ -1060,7 +1060,11 @@ def _pa_schemas_match(pa_schema1, pa_schema2):
     return True
 
 
-def _get_sample_pq_pieces(pq_dataset, pa_schema, is_iceberg):
+def _get_sample_pq_pieces(
+    pq_dataset: Optional[ParquetDataset],
+    pa_schema: pa.Schema,
+    is_iceberg: bool,
+):
     """get a sample of pieces in the Parquet dataset to avoid the overhead of opening
     every file in compile time.
 
@@ -1070,14 +1074,15 @@ def _get_sample_pq_pieces(pq_dataset, pa_schema, is_iceberg):
     filters are applied.
 
     Args:
-        pq_dataset (ParquetDataset): input Parquet dataset
-        pa_schema (pyarrow.lib.Schema): Arrow schema to check
+        pq_dataset: input Parquet dataset
+        pa_schema: Arrow schema to check
+        is_iceberg: Whether the dataset it part of an Iceberg table
 
     Returns:
-        list(ParquetPiece): a sample of filtered pieces
+        list(ParquetPiece): A sample of filtered pieces
     """
-
-    pieces = pq_dataset.pieces
+    # Bodo IO uses None to represent an empty dataset, which has 0 pieces
+    pieces = pq_dataset.pieces if pq_dataset else []
 
     # a sample of N files where N is the number of ranks. Each rank looks at
     # the metadata of a different random file

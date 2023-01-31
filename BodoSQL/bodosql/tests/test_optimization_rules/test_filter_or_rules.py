@@ -31,27 +31,27 @@ def test_logical_filter_rule(basic_df, spark_info, memory_leak_check):
     result1 = check_query(query1, basic_df, spark_info, return_codegen=True)
     gen_code1 = result1["pandas_code"]
     assert gen_code1.count("booland") == 1, "Expected 1 booland after optimization"
-    assert gen_code1.count("|") == 1, "Expected 1 | after optimization"
+    assert gen_code1.count("boolor") == 1, "Expected 1 boolor after optimization"
     result2 = check_query(query2, basic_df, spark_info, return_codegen=True)
     gen_code2 = result2["pandas_code"]
     assert gen_code2.count("booland") == 1, "Expected 1 booland after optimization"
-    assert gen_code2.count("|") == 2, "Expected 2 | after optimization"
+    assert gen_code2.count("boolor") == 2, "Expected 2 boolor after optimization"
     result3 = check_query(query3, basic_df, spark_info, return_codegen=True)
     gen_code3 = result3["pandas_code"]
     assert gen_code3.count("booland") == 1, "Expected 1 booland after optimization"
-    assert gen_code3.count("|") == 1, "Expected 1 | after optimization"
+    assert gen_code3.count("boolor") == 1, "Expected 1 boolor after optimization"
     result4 = check_query(query4, basic_df, spark_info, return_codegen=True)
     gen_code4 = result4["pandas_code"]
     assert gen_code4.count("booland") == 2, "Expected 2 booland after optimization"
-    assert gen_code4.count("|") == 2, "Expected 2 | after optimization"
+    assert gen_code4.count("boolor") == 2, "Expected 2 boolor after optimization"
     result5 = check_query(query5, basic_df, spark_info, return_codegen=True)
     gen_code5 = result5["pandas_code"]
     assert gen_code5.count("booland") == 2, "Expected 2 booland after no-optimization"
-    assert gen_code5.count("|") == 1, "Expected 1 | after no-optimization"
+    assert gen_code5.count("boolor") == 1, "Expected 1 boolor after no-optimization"
     result6 = check_query(query6, basic_df, spark_info, return_codegen=True)
     gen_code6 = result6["pandas_code"]
     assert gen_code6.count("booland") == 4, "Expected 4 booland after no-optimization"
-    assert gen_code6.count("|") == 2, "Expected 2 | after no-optimization"
+    assert gen_code6.count("boolor") == 2, "Expected 2 boolor after no-optimization"
 
 
 def test_join_filter_rule(spark_info, memory_leak_check):

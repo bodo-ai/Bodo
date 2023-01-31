@@ -258,7 +258,12 @@ def test_simple_numeric_table_read(
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
     py_out["E"] = py_out["E"].astype("Int32")
     py_out["F"] = py_out["F"].astype("Int64")
-    check_func(impl, (table_name, conn, db_schema), py_output=py_out)
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=py_out,
+        convert_to_nullable_float=False,
+    )
 
 
 @pytest.mark.slow
@@ -390,7 +395,12 @@ def test_column_pruning(iceberg_database, iceberg_table_conn):
         check_logger_msg(stream, "Columns loaded ['A', 'D']")
 
     py_out = sync_dtypes(py_out, res.dtypes.values.tolist())
-    check_func(impl, (table_name, conn, db_schema), py_output=py_out)
+    check_func(
+        impl,
+        (table_name, conn, db_schema),
+        py_output=py_out,
+        convert_to_nullable_float=False,
+    )
 
 
 def test_dict_encoded_string_arrays(iceberg_database, iceberg_table_conn):

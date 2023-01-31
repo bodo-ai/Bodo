@@ -187,22 +187,6 @@ def test_null_when_or(bodosql_nullable_numeric_types, spark_info, memory_leak_ch
     )
 
 
-@pytest.mark.slow
-def test_null_when_or_shortcircuit(
-    bodosql_nullable_numeric_types, spark_info, memory_leak_check
-):
-    """tests a case statement where when may have null values using or is handled properly."""
-    query = "Select Case WHEN A is NULL OR B < 6 THEN B ELSE C END FROM table1"
-    check_query(
-        query,
-        bodosql_nullable_numeric_types,
-        spark_info,
-        check_names=False,
-        check_dtype=False,
-        convert_float_nan=True,
-    )
-
-
 def test_null_when_and(bodosql_nullable_numeric_types, spark_info, memory_leak_check):
     """tests a case statement where when may have null values using or is handled properly."""
     query = "Select Case WHEN A > 2 AND B < 6 THEN B ELSE C END FROM table1"

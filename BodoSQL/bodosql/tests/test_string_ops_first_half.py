@@ -21,11 +21,171 @@ def test_like(
     )
 
 
+def test_like_ilike_non_literal_pattern(
+    bodosql_string_types, spark_info, memory_leak_check
+):
+    """
+    tests that like and ilike works for non-literal patterns
+    """
+    query1 = f"select A from table1 where A like lower('H%' || 'o')"
+    query2 = f"select A from table1 where A ilike upper('H%' || 'o')"
+    check_query(
+        query1,
+        bodosql_string_types,
+        spark_info,
+    )
+    check_query(
+        query2,
+        bodosql_string_types,
+        spark_info,
+        equivalent_spark_query=f"select A from table1 where lower(A) like lower('H%' || 'o')",
+    )
+
+
+def test_like_ilike_arr_pattern(spark_info, memory_leak_check):
+    """
+    tests that like and ilike works for array patterns
+    """
+    df = pd.DataFrame(
+        {
+            "A": ["hello", "HeLLo", "world", "WORld", None, "Bar"] * 4,
+            "B": ["%Lo", "%Lo", None, "%d", "%s", "bar"] * 4,
+        }
+    )
+    ctx = {"table1": df}
+    query1 = f"select A from table1 where A like B"
+    query2 = f"select A from table1 where A ilike B"
+    check_query(
+        query1,
+        ctx,
+        spark_info,
+    )
+    check_query(
+        query2,
+        ctx,
+        spark_info,
+        equivalent_spark_query=f"select A from table1 where lower(A) like lower(B)",
+    )
+
+
+def test_like_ilike_basic_escape(spark_info, memory_leak_check):
+    """
+    tests that like and like works for a couple different possible regex strings
+    with escape
+    """
+    df = pd.DataFrame(
+        {
+            "A": [
+                "afe_fe",
+                "rewrew%Rew",
+                "W%rew",
+                "%",
+                "_",
+                "W_nf",
+                "w_x",
+                "w_X",
+                None,
+                None,
+            ]
+            * 5
+        }
+    )
+    ctx = {"table1": df}
+    query1 = "select A from table1 where A like '%w^%%' escape '^'"
+    query2 = "select A from table1 where A ilike '%w^_%' escape '^'"
+    # Spark doesn't support ilike
+    spark_query2 = "select A from table1 where lower(A) like lower('%w^_%') escape '^'"
+    query3 = "select A from table1 where A like '^%R%' escape '^'"
+    query4 = "select A from table1 where A ilike '^_X%' escape '^'"
+    # Spark doesn't support ilike
+    spark_query4 = "select A from table1 where lower(A) like lower('^_X%') escape '^'"
+
+    check_query(
+        query1,
+        ctx,
+        spark_info,
+    )
+    check_query(
+        query2,
+        ctx,
+        spark_info,
+        equivalent_spark_query=spark_query2,
+    )
+    check_query(
+        query3,
+        ctx,
+        spark_info,
+    )
+    check_query(
+        query4,
+        ctx,
+        spark_info,
+        equivalent_spark_query=spark_query4,
+    )
+
+
+def test_like_ilike_non_constant_basic_escape(memory_leak_check):
+    """
+    tests that like and ilike works for a couple different possible regex strings
+    with escape with non-constant escapes.
+
+    Note: Spark doesn't support non-literal escape values.
+    """
+    df = pd.DataFrame({"A": ["afe_fe", "rewrew%rew", "%", "A_", "_", None, None] * 5})
+    ctx = {"table1": df}
+    query1 = "select A from table1 where A like '%^%%' escape upper('^')"
+    query2 = "select A from table1 where A ilike '%a^_%' escape lower('^')"
+
+    check_query(
+        query1,
+        ctx,
+        None,
+        expected_output=df[[False, True, True, False, False, False, False] * 5],
+    )
+    check_query(
+        query2,
+        ctx,
+        None,
+        expected_output=df[[False, False, False, True, False, False, False] * 5],
+    )
+
+
+def test_like_ilike_arr_escape(memory_leak_check):
+    """
+    tests that like and ilike works for arr escape values
+
+    Note: Spark doesn't support non-literal escape values.
+    """
+    df = pd.DataFrame(
+        {
+            "A": ["hello", "HeLLo", "world", "WORl%d", None, "Bar"] * 4,
+            "B": ["%Lo", "%Lo", None, "%^%d", "%s", "bar"] * 4,
+            "C": ["", "", "^", "^", "*", None] * 4,
+        }
+    )
+    ctx = {"table1": df}
+    expected_output = df[["A"]]
+    query1 = f"select A from table1 where A like B escape C"
+    query2 = f"select A from table1 where A ilike B escape C"
+    check_query(
+        query1,
+        ctx,
+        None,
+        expected_output=expected_output[[False, True, False, True, False, False] * 4],
+    )
+    check_query(
+        query2,
+        ctx,
+        None,
+        expected_output=expected_output[[True, True, False, True, False, False] * 4],
+    )
+
+
 def test_ilike(bodosql_string_types, regex_string, spark_info, memory_leak_check):
     """
     tests that ilike works for a variety of different possible regex strings
     """
-    # Note that Spark's like SQL function is case sensititve by default, so we use
+    # Note that Spark's like SQL function is case sensitive by default, so we use
     # the lower function to simulate case insensitivity
     check_query(
         f"select A from table1 where A ilike {regex_string}",
@@ -97,7 +257,7 @@ def test_like_cols(
         f"select A from table1 where C {like_expression} {regex_string} or B {like_expression} {regex_string}",
         basic_df,
         spark_info,
-        check_dtype=False,  # need this for case where the select retuns empty table
+        check_dtype=False,  # need this for case where the select returns empty table
     )
 
 
@@ -180,7 +340,7 @@ def test_upper_lower_like_constants(
     string_constants,
     spark_info,
     like_expression,
-    # memory_leak_check, Seems to be leaking memory sporadically, see [BS-534]
+    memory_leak_check,
 ):
     """
     Tests that lower/upper works on string constants
@@ -211,19 +371,16 @@ def test_pythonic_regex(
     pythonic_regex,
     spark_info,
     like_expression,
-    # TODO: re add memory_leak_check, see BS-534
+    memory_leak_check,
 ):
     """
-    checks that pythonic regex is working as inteded
+    checks that pythonic regex is working as intended
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '{pythonic_regex}'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_wildcardless_like(pandas_code)
 
 
 @pytest.mark.slow
@@ -231,19 +388,16 @@ def test_all_percent(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # TODO: re add memory_leak_check, see BS-534
+    memory_leak_check,
 ):
     """
-    checks that a regex that is all %% is correct and properly optimized
+    checks that a regex that is all %% is correct
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_and_end_percent_like(pandas_code)
 
 
 @pytest.mark.slow
@@ -251,7 +405,7 @@ def test_all_percent_scalar(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # TODO: re add memory_leak_check, see BS-534
+    memory_leak_check,
 ):
     """
     checks that a regex that is all %% is correct
@@ -269,35 +423,31 @@ def test_all_percent_scalar(
 def test_leading_percent(
     bodosql_string_types,
     spark_info,
-    like_expression,  # TODO: re add memory_leak_check, see BS-534
+    like_expression,
+    memory_leak_check,
 ):
     """
-    checks that a regex starting with % is correct and properly optimized
+    checks that a regex starting with % is correct
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%o'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_percent_like(pandas_code)
 
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%.o'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_percent_like(pandas_code)
 
 
 @pytest.mark.slow
 def test_leading_percent_scalar(
     bodosql_string_types,
     spark_info,
-    like_expression,  # TODO: re add memory_leak_check, see BS-534
+    like_expression,
+    memory_leak_check,
 ):
     """
     checks that a regex starting with % is correct
@@ -316,36 +466,30 @@ def test_trailing_percent(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # TODO: re add memory_leak_check, see BS-534
+    memory_leak_check,
 ):
     """
-    checks that a regex ending with % is correct and properly optimized
+    checks that a regex ending with % is correct
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} 'h%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_end_percent_like(pandas_code)
 
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} 'h.%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_end_percent_like(pandas_code)
 
 
 @pytest.mark.slow
 def test_trailing_percent_scalar(
     bodosql_string_types,
     spark_info,
-    like_expression
-    # TODO: re add memory_leak_check, see BS-534
+    like_expression,
+    memory_leak_check,
 ):
     """
     checks that a regex ending with % is correct
@@ -364,28 +508,22 @@ def test_both_percent(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # memory_leak_check Seems to be failing memory leak check intermitently, see BS-534
+    memory_leak_check,
 ):
     """
-    checks that a regex starting and ending with % is correct and properly optimized
+    checks that a regex starting and ending with % is correct
     """
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%e%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_and_end_percent_like(pandas_code)
 
-    result = check_query(
+    check_query(
         f"select A from table1 where A {like_expression} '%e.%'",
         bodosql_string_types,
         spark_info,
-        return_codegen=True,
     )
-    pandas_code = result["pandas_code"]
-    check_start_and_end_percent_like(pandas_code)
 
 
 @pytest.mark.slow
@@ -393,7 +531,7 @@ def test_both_percent_scalar(
     bodosql_string_types,
     spark_info,
     like_expression,
-    # memory_leak_check Seems to be failing memory leak check intermitently, see BS-534
+    memory_leak_check,
 ):
     """
     checks that a regex starting and ending with % is correct
@@ -412,40 +550,6 @@ def test_both_percent_scalar(
         check_names=False,
         check_dtype=False,
     )
-
-
-def check_wildcardless_like(pandas_code):
-    """
-    Checks that given pandas_code doesn't contain any contains
-    code because the regular expression didn't contain any
-    SQL wildcards.
-    """
-    assert ".str.contains" not in pandas_code
-
-
-def check_start_percent_like(pandas_code):
-    """
-    Checks that given pandas_code doesn't uses endswith
-    because the regular expression only included % at the beginning.
-    """
-    assert ".str.endswith" in pandas_code
-
-
-def check_end_percent_like(pandas_code):
-    """
-    Checks that given pandas_code doesn't uses startswith
-    because the regular expression only included % at the beginning.
-    """
-    assert ".str.startswith" in pandas_code
-
-
-def check_start_and_end_percent_like(pandas_code):
-    """
-    Checks that given pandas_code doesn't uses regex=False
-    because the regular expression only included % at the beginning
-    and end.
-    """
-    assert "regex=False" in pandas_code
 
 
 @pytest.mark.slow

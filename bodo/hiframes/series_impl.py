@@ -3742,7 +3742,7 @@ def overload_series_diff(S, periods=1):
     # Bodo specific limitations for supported types
     # Currently only float (not nullable), int (not nullable), and dt64 are supported
     if not (
-        isinstance(S.data, types.Array)
+        isinstance(S.data, (types.Array, IntegerArrayType, FloatingArrayType))
         and (
             isinstance(S.data.dtype, (types.Number))
             or S.data.dtype == bodo.datetime64ns
@@ -4189,7 +4189,7 @@ def _validate_self_other_mask_where(
     # - a Series or 1-dim Numpy array with the "same" type as S
 
     # Bodo Limitation. Where is only supported for binary/string arrays and numpy arrays
-    # Nullable int/bool arrays can be used, but they may have the wrong type or
+    # Nullable int/float/bool arrays can be used, but they may have the wrong type or
     # drop NaN values.
     val_is_nan = is_overload_constant_nan(other)
     if not (
@@ -4198,7 +4198,10 @@ def _validate_self_other_mask_where(
         or val_is_nan
         or is_scalar_type(other)
         or (
-            isinstance(other, types.Array)
+            isinstance(
+                other,
+                (types.Array, IntegerArrayType, FloatingArrayType, BooleanArrayType),
+            )
             and other.ndim >= 1
             and other.ndim <= max_ndim
         )
@@ -4241,11 +4244,11 @@ def _validate_self_other_mask_where(
                     and (
                         (
                             bodo.utils.utils.is_array_typ(other)
-                            and isinstance(other.dtype, types.Integer)
+                            and isinstance(other.dtype, (types.Integer, types.Float))
                         )
                         or (
                             is_series_type(other)
-                            and isinstance(other.dtype, types.Integer)
+                            and isinstance(other.dtype, (types.Integer, types.Float))
                         )
                     )
                 )
@@ -4255,8 +4258,7 @@ def _validate_self_other_mask_where(
                 )
             )
             and (
-                isinstance(arr, BooleanArrayType)
-                or isinstance(arr, (IntegerArrayType, FloatingArrayType))
+                isinstance(arr, (BooleanArrayType, IntegerArrayType, FloatingArrayType))
             )
         )
     ):
@@ -5073,7 +5075,9 @@ def overload_np_where(condition, x, y):
     if y_data == types.none:
         # X is always an array if other input is None.
         # TODO: add proper error checking for np.where
-        if isinstance(x_dtype, types.Number):
+        if isinstance(x, FloatingArrayType):
+            out_dtype = x
+        elif isinstance(x_dtype, types.Number):
             # Pandas converts integers to floats
             out_dtype = types.Array(types.float64, 1, "C")
         else:

@@ -184,3 +184,27 @@ if _check_pandas_change:
 
 
 pd.core.arrays.string_arrow.ArrowStringArray.to_numpy = to_numpy
+
+
+# Add support for pow() in join conditions
+pd.core.computation.ops.MATHOPS = pd.core.computation.ops.MATHOPS + ("pow",)
+
+
+def FuncNode__init__(self, name: str) -> None:
+    if name not in pd.core.computation.ops.MATHOPS:
+        raise ValueError(f'"{name}" is not a supported function')
+    self.name = name
+    # Bodo change: handle pow() which is not in Numpy
+    self.func = pow if name == "pow" else getattr(np, name)
+
+
+if _check_pandas_change:  # pragma: no cover
+    lines = inspect.getsource(pd.core.computation.ops.FuncNode.__init__)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "2207410cf00628243d6994f708f05b324cdac1ecf0b02e199f5bbfe6972fd4fa"
+    ):
+        warnings.warn("pd.core.computation.ops.FuncNode.__init__ has changed")
+
+
+pd.core.computation.ops.FuncNode.__init__ = FuncNode__init__

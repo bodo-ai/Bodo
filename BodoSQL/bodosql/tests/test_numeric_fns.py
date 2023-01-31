@@ -183,6 +183,7 @@ def test_double_op_numeric_fns_cols(
         check_names=False,
         check_dtype=False,
         equivalent_spark_query=spark_query,
+        convert_expected_output_to_nullable_float=False,
     )
 
 
@@ -517,6 +518,7 @@ def test_double_op_numeric_fns_scalars(
         check_names=False,
         check_dtype=False,
         equivalent_spark_query=spark_query,
+        convert_expected_output_to_nullable_float=False,
     )
 
 

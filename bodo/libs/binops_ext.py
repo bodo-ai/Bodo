@@ -936,7 +936,7 @@ def time_series_operation(lhs, rhs):
 
 
 def args_td_and_int_array(lhs, rhs):
-    """helper function to check if the operands consist of a pandas timedelta, and an initeger array"""
+    """helper function to check if the operands consist of a pandas timedelta, and an integer array"""
     one_op_array = (
         isinstance(lhs, IntegerArrayType)
         or (isinstance(lhs, types.Array) and isinstance(lhs.dtype, types.Integer))

@@ -5,6 +5,7 @@ Implements miscellaneous array kernels that are specific to BodoSQL
 
 import numba
 from numba.core import types
+from numba.extending import overload
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
@@ -560,7 +561,7 @@ def nullif_util(arr0, arr1):
     arg_types = [arr0, arr1]
     # If the first argument is NULL, the output is always NULL
     propagate_null = [True, False]
-    # NA check needs to come first here, otherwise the equalify check misbehaves
+    # NA check needs to come first here, otherwise the equality check misbehaves
 
     if arr1 == bodo.none:
         scalar_text = "res[i] = arg0\n"
@@ -601,6 +602,134 @@ def regr_valx_util(y, x):
     propogate_null = [True] * 2
     scalar_text = "res[i] = arg1"
 
-    out_dtype = types.Array(bodo.float64, 1, "C")
+    if bodo.libs.float_arr_ext._use_nullable_float:
+        out_dtype = bodo.libs.float_arr_ext.FloatingArrayType(bodo.float64)
+    else:
+        out_dtype = types.Array(bodo.float64, 1, "C")
 
     return gen_vectorized(arg_names, arg_types, propogate_null, scalar_text, out_dtype)
+
+
+def is_true(arr):  # pragma: no cover
+    pass
+
+
+def is_false(arr):  # pragma: no cover
+    pass
+
+
+def is_not_true(arr):  # pragma: no cover
+    pass
+
+
+def is_not_false(arr):  # pragma: no cover
+    pass
+
+
+def is_true_util(arr):  # pragma: no cover
+    pass
+
+
+def is_false_util(arr):  # pragma: no cover
+    pass
+
+
+def is_not_true_util(arr):  # pragma: no cover
+    pass
+
+
+def is_not_false_util(arr):  # pragma: no cover
+    pass
+
+
+def create_is_func_overload(fn_name):  # pragma: no cover
+    def overload_func(arr):
+        """Handles functions for x is [NOT] TRUE/FALSE. These have special
+        NA handling that requires custom kernels."""
+        if isinstance(arr, types.optional):
+            return unopt_argument(
+                f"bodo.libs.bodosql_array_kernels.{fn_name}_util",
+                ["arr"],
+                0,
+            )
+
+        func_text = "def impl(arr):\n"
+        func_text += f"  return bodo.libs.bodosql_array_kernels.{fn_name}_util(arr)"
+        loc_vars = {}
+        exec(func_text, {"bodo": bodo}, loc_vars)
+
+        return loc_vars["impl"]
+
+    return overload_func
+
+
+def create_is_func_util_overload(fn_name):  # pragma: no cover
+    """Create overload functions to handle for x is [NOT] TRUE/FALSE. These have special
+        NA handling that requires custom kernels.
+
+    Args:
+        fn_name: the function being implemented
+
+    Returns:
+        (function): a utility that takes in a boolean value and returns the appropriate
+        value.
+    """
+
+    def overload_is_func(arr):
+        verify_boolean_arg(arr, fn_name, "arr")
+        arg_names = ["arr"]
+        arg_types = [arr]
+        # NA has custom handling
+        propagate_null = [False]
+        if "not" in fn_name:
+            # e.g. NULL IS NOT FALSE == TRUE
+            na_output = True
+            operator_str = "!="
+        else:
+            # e.g. NULL IS FALSE == False
+            na_output = False
+            operator_str = "=="
+
+        if "true" in fn_name:
+            target_val = True
+        else:
+            target_val = False
+
+        scalar_text = ""
+        if bodo.utils.utils.is_array_typ(arr, True):
+            scalar_text += "if bodo.libs.array_kernels.isna(arr, i):\n"
+        else:
+            scalar_text += "if arr is None:\n"
+        scalar_text += f"  res[i] = {na_output}\n"
+        scalar_text += "else:\n"
+        scalar_text += f"  res[i] = arg0 {operator_str} {target_val}\n"
+
+        # These functions can't output null so we switch to a non-nullable
+        # array.
+        out_dtype = types.Array(types.bool_, 1, "C")
+
+        return gen_vectorized(
+            arg_names, arg_types, propagate_null, scalar_text, out_dtype
+        )
+
+    return overload_is_func
+
+
+def _install_is_overload():
+    """Creates and installs the overloads for is functions.
+    These are functions with custom null handling that map
+    NA -> Booleans"""
+    funcs_utils_names = [
+        ("is_true", is_true, is_true_util),
+        ("is_false", is_false, is_false_util),
+        ("is_not_true", is_not_true, is_not_true_util),
+        ("is_not_false", is_not_false, is_not_false_util),
+    ]
+    for fn_name, func, util in funcs_utils_names:
+        func_overload_impl = create_is_func_overload(fn_name)
+        overload(func)(func_overload_impl)
+        util_overload_impl = create_is_func_util_overload(fn_name)
+        overload(util)(util_overload_impl)
+
+
+_install_is_overload()

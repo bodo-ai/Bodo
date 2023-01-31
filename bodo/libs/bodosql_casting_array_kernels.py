@@ -112,8 +112,12 @@ fname_to_equiv = {
 
 # mapping from function name to desired out_dtype
 fname_to_dtype = {
-    "float64": types.Array(bodo.float64, 1, "C"),
-    "float32": types.Array(bodo.float32, 1, "C"),
+    "float64": bodo.libs.float_arr_ext.FloatingArrayType(types.float64)
+    if bodo.libs.float_arr_ext._use_nullable_float
+    else types.Array(bodo.float64, 1, "C"),
+    "float32": bodo.libs.float_arr_ext.FloatingArrayType(types.float32)
+    if bodo.libs.float_arr_ext._use_nullable_float
+    else types.Array(bodo.float32, 1, "C"),
     "int64": bodo.libs.int_arr_ext.IntegerArrayType(types.int64),
     "int32": bodo.libs.int_arr_ext.IntegerArrayType(types.int32),
     "int16": bodo.libs.int_arr_ext.IntegerArrayType(types.int16),

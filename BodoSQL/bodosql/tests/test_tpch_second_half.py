@@ -417,7 +417,8 @@ def test_tpch_q20(tpch_data, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip("Filter needs to pushed past join or we need a proper cross join")
+@pytest.mark.timeout(600)
+@pytest.mark.slow
 def test_tpch_q21(tpch_data, spark_info, memory_leak_check):
     NATION = "SAUDI ARABIA"
     tpch_query = f"""select

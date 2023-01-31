@@ -5,6 +5,7 @@ Test correctness of SQL join queries on BodoSQL
 
 import copy
 
+import numpy as np
 import pandas as pd
 import pytest
 from bodosql.tests.utils import check_efficient_join, check_query
@@ -73,6 +74,7 @@ def test_multitable_join_cond(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -189,6 +191,7 @@ def test_and_join(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -237,6 +240,7 @@ def test_or_join(join_dataframes, spark_info, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -275,6 +279,7 @@ def test_join_types(join_dataframes, spark_info, join_type, memory_leak_check):
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -318,6 +323,7 @@ def test_join_different_size_tables(
                     pd.Float64Dtype,
                 ),
             )
+            or x in (np.float32, np.float64)
             for x in join_dataframes["table1"].dtypes
         ]
     ):
@@ -618,3 +624,19 @@ def test_tz_aware_join(representative_tz, memory_leak_check):
     py_output = py_output[["A_x", "B_y", "C_x", "D_y"]]
     py_output.columns = ["A", "B", "C", "D"]
     check_query(query, ctx, None, expected_output=py_output)
+
+
+def test_join_pow(spark_info, join_type, memory_leak_check):
+    """
+    Make sure pow() works inside join conditions
+    """
+    df1 = pd.DataFrame({"A": [2, 4, 3] * 4, "B": [3.1, 2.2, 0.1] * 4})
+    df2 = pd.DataFrame({"C": [1, 2] * 3, "D": [1.1, 3.3] * 3})
+    query1 = f"select * from t1 {join_type} join t2 on pow(t1.A - t2.C, 2) > 11"
+    query2 = f"select * from t1 {join_type} join t2 on pow(pow(t1.A - t2.C, 2) + pow(t1.B - t2.D,2),.5)<2"
+    ctx = {
+        "t1": df1,
+        "t2": df2,
+    }
+    check_query(query1, ctx, spark_info, check_dtype=False, check_names=False)
+    check_query(query2, ctx, spark_info, check_dtype=False, check_names=False)
