@@ -122,7 +122,9 @@ def get_iceberg_type_info(
                 raise BodoError("No such Iceberg table found")
 
         except bodo_iceberg_connector.IcebergError as e:
-            col_names_or_err = BodoError(e.message)
+            col_names_or_err = BodoError(
+                f"Failed to Get Typing Info from Iceberg Table: {e.message}"
+            )
 
     comm = MPI.COMM_WORLD
     col_names_or_err = comm.bcast(col_names_or_err)
@@ -173,7 +175,9 @@ def get_iceberg_file_list(
             conn, database_schema, table_name, filters
         )
     except bodo_iceberg_connector.IcebergError as e:
-        raise BodoError(e.message)
+        raise BodoError(
+            f"Failed to Get List of Parquet Data Files from Iceberg Table: {e.message}"
+        )
 
     return res
 
@@ -203,7 +207,9 @@ def get_iceberg_snapshot_id(table_name: str, conn: str, database_schema: str):
             table_name,
         )
     except bodo_iceberg_connector.IcebergError as e:
-        raise BodoError(e.message)
+        raise BodoError(
+            f"Failed to Get the Snapshot ID from an Iceberg Table: {e.message}"
+        )
 
     return snapshot_id
 

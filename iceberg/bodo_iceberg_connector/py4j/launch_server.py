@@ -1,3 +1,0 @@
-import bodo_iceberg_connector.py4j.gateway
-
-bodo_iceberg_connector.gateway.launch_default_java_process_async()

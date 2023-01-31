@@ -43,6 +43,9 @@ export NESSIE_AUTH_TOKEN=`credstash -r us-east-2 get nessie_auth_token`
 # ------ AWS Role ARN for tests -------
 export BODO_E2E_TEST_ROLE_ARN_TO_ASSUME=`credstash -r us-east-2 get bodo.engine.nightly.iam_role`
 
+# ------ Clean Maven and Spark Ivy Cache ------
+rm -rf $HOME/.ivy2/cache $HOME/.ivy2/jars $HOME/.m2/repository
+
 # --------- Run Tests -----------
 cd e2e-tests
 pytest -s -v --durations=0 --ignore=deep_learning
