@@ -1,4 +1,4 @@
-# Example usage: python -u BodoSQLWrapper.py -c creds.json -f query.sql -w BODO_WH -d BODO_DB
+# Example usage: python -u BodoSQLWrapper.py -c creds.json -f query.sql
 # To see all options, run: python -u BodoSQLWrapper.py --help
 
 import argparse
@@ -56,17 +56,37 @@ def main(args):
     with open(args.catalog_creds, "r") as f:
         catalog = json.load(f)
 
+    warehouse = args.warehouse if args.warehouse else catalog.get("SF_WAREHOUSE")
+    if warehouse is None:
+        raise ValueError(
+            "No warehouse specified in either the credentials file or through the arguments."
+        )
+
+    database = args.database if args.database else catalog.get("SF_DATABASE")
+    if database is None:
+        raise ValueError(
+            "No database specified in either the credentials file or through the arguments."
+        )
+
     # Create catalog from credentials and args
     bsql_catalog = bodosql.SnowflakeCatalog(
         username=catalog["SF_USERNAME"],
         password=catalog["SF_PASSWORD"],
         account=catalog["SF_ACCOUNT"],
-        warehouse=args.warehouse,
-        database=args.database,
+        warehouse=warehouse,
+        database=database,
     )
 
     # Create context
     bc = bodosql.BodoSQLContext(catalog=bsql_catalog)
+
+    # Generate the plan and write it to a file
+    if args.generate_plan_filename:
+        plan_text = bc.generate_plan(sql_text)
+        if bodo.get_rank() == 0:
+            with open(args.generate_plan_filename, "w") as f:
+                f.write(plan_text)
+            print("Saved Plan to: ", args.generate_plan_filename)
 
     # Convert to pandas and write to file
     if args.pandas_out_filename:
@@ -113,7 +133,7 @@ if __name__ == "__main__":
         "-c",
         "--catalog_creds",
         required=True,
-        help="Path to Snowflake credentials file. The following keys must be present: SF_USERNAME, SF_PASSWORD and SF_ACCOUNT.",
+        help="Path to Snowflake credentials file. The following keys must be present: SF_USERNAME, SF_PASSWORD and SF_ACCOUNT. The following keys are optional: SF_WAREHOUSE, SF_DATABASE",
     )
     parser.add_argument(
         "-f", "--filename", required=True, help="Path to .sql file with the query."
@@ -121,14 +141,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "-w",
         "--warehouse",
-        required=True,
-        help="Snowflake warehouse to use for getting metadata, as well as I/O.",
+        required=False,
+        help="Optional: Snowflake warehouse to use for getting metadata, as well as I/O. When provided, this will override the default value in the credentials file.",
     )
     parser.add_argument(
         "-d",
         "--database",
-        required=True,
-        help="Snowflake Database which has the required tables.",
+        required=False,
+        help="Optional: Snowflake Database which has the required tables. When provided, this will override the default value in the credentials file.",
     )
     parser.add_argument(
         "-o",
@@ -153,6 +173,12 @@ if __name__ == "__main__":
         "--trace",
         required=False,
         help="Optional: If provided, the tracing will be used and the trace file will be written to this location",
+    )
+    parser.add_argument(
+        "-g",
+        "--generate_plan_filename",
+        required=False,
+        help="Optional: Write the SQL plan to this location.",
     )
 
     args = parser.parse_args()
