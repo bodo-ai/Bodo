@@ -8,7 +8,6 @@ from typing import List, Tuple
 from urllib.parse import urlparse
 
 from bodo_iceberg_connector.catalog_conn import _remove_prefix, parse_conn_str
-from bodo_iceberg_connector.config import DEFAULT_PORT
 from bodo_iceberg_connector.errors import IcebergJavaError
 from bodo_iceberg_connector.filter_to_java import convert_expr_to_java_parsable
 from bodo_iceberg_connector.py4j_support import get_java_table_handler
@@ -36,9 +35,7 @@ def bodo_connector_get_parquet_file_list(
         /Users/bodo/iceberg_db/my_table/part01.pq and the path in list 2 would be
         iceberg_db/my_table/part01.pq.
     """
-    pq_infos, warehouse_loc = get_bodo_parquet_info(
-        DEFAULT_PORT, conn_str, db_name, table, filters
-    )
+    pq_infos, warehouse_loc = get_bodo_parquet_info(conn_str, db_name, table, filters)
 
     if warehouse_loc is not None:
         warehouse_loc = _remove_prefix(
@@ -69,11 +66,11 @@ def bodo_connector_get_parquet_info(warehouse, schema, table, filters):
     is set and controlled by a default value for the bodo_iceberg_connector
     package.
     """
-    out, _ = get_bodo_parquet_info(DEFAULT_PORT, warehouse, schema, table, filters)
+    out, _ = get_bodo_parquet_info(warehouse, schema, table, filters)
     return out
 
 
-def get_bodo_parquet_info(port, conn_str: str, db_name: str, table: str, filters):
+def get_bodo_parquet_info(conn_str: str, db_name: str, table: str, filters):
     """
     Returns the BodoIcebergParquetInfo for a table.
     Port is unused and kept in case we opt to switch back to py4j

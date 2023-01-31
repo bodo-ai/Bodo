@@ -1,4 +1,3 @@
-import bodo_iceberg_connector.py4j_support
 from bodo_iceberg_connector.errors import IcebergError, IcebergJavaError
 from bodo_iceberg_connector.parquet_info import (
     bodo_connector_get_parquet_file_list,

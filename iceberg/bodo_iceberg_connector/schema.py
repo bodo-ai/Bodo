@@ -10,7 +10,6 @@ from bodo_iceberg_connector.catalog_conn import (
     normalize_loc,
     parse_conn_str,
 )
-from bodo_iceberg_connector.config import DEFAULT_PORT
 from bodo_iceberg_connector.errors import IcebergError, IcebergJavaError
 from bodo_iceberg_connector.py4j_support import (
     get_java_table_handler,
@@ -46,7 +45,7 @@ def get_typing_info(conn_str: str, schema: str, table: str):
         iceberg_schema_str,
         partition_spec,
         sort_order,
-    ) = get_iceberg_info(DEFAULT_PORT, conn_str, schema, table, False)
+    ) = get_iceberg_info(conn_str, schema, table, False)
     return (
         warehouse,
         schema_id,
@@ -63,9 +62,7 @@ def get_iceberg_typing_schema(conn_str: str, schema: str, table: str):
     used at typing. Also returns the pyarrow schema object.
     """
     # TODO: Combine with get_typing_info?
-    _, _, schemas, pyarrow_schema, _, _, _ = get_iceberg_info(
-        DEFAULT_PORT, conn_str, schema, table
-    )
+    _, _, schemas, pyarrow_schema, _, _, _ = get_iceberg_info(conn_str, schema, table)
     assert schemas is not None
     return (schemas.colnames, schemas.coltypes, pyarrow_schema)
 
@@ -75,12 +72,12 @@ def get_iceberg_runtime_schema(conn_str: str, schema: str, table: str):
     Returns the table schema information for a given iceberg table
     used at runtime.
     """
-    _, _, schemas, _, _, _, _ = get_iceberg_info(DEFAULT_PORT, conn_str, schema, table)
+    _, _, schemas, _, _, _, _ = get_iceberg_info(conn_str, schema, table)
     assert schemas is not None
     return (schemas.field_ids, schemas.coltypes)
 
 
-def get_iceberg_info(port: int, conn_str: str, schema: str, table: str, error=True):
+def get_iceberg_info(conn_str: str, schema: str, table: str, error: bool = True):
     """
     Returns all of the necessary Bodo schemas for an iceberg table,
     both using field_id and names.
