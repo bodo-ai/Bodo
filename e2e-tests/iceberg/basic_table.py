@@ -29,10 +29,10 @@ def get_spark_iceberg(nessie_token):
         SparkSession.builder.appName("Iceberg with Spark")
         .config(
             "spark.jars.packages",
-            "org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:0.14.1,"
-            "software.amazon.awssdk:bundle:2.15.40,"
-            "software.amazon.awssdk:url-connection-client:2.15.40,"
-            "org.projectnessie:nessie-spark-3.2-extensions:0.44.0",
+            "org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:1.0.0,"
+            "software.amazon.awssdk:bundle:2.19.13,"
+            "software.amazon.awssdk:url-connection-client:2.19.13,"
+            "org.projectnessie:nessie-spark-extensions-3.2_2.12:0.47.1",
         )
         .config(
             "spark.sql.catalog.nessie_catalog", "org.apache.iceberg.spark.SparkCatalog"
@@ -59,7 +59,7 @@ def get_spark_iceberg(nessie_token):
         .config(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,"
-            "org.projectnessie.spark.extensions.NessieSpark32SessionExtensions",
+            "org.projectnessie.spark.extensions.NessieSparkSessionExtensions",
         )
         .getOrCreate()
     )
