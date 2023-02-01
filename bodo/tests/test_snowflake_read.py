@@ -23,16 +23,17 @@ from bodo.tests.user_logging_utils import (
     create_string_io_logger,
     set_logging_stream,
 )
-from bodo.tests.utils import check_func, get_snowflake_connection_string
+from bodo.tests.utils import (
+    check_func,
+    get_snowflake_connection_string,
+    pytest_snowflake,
+)
 from bodo.utils.typing import BodoWarning
 
 if TYPE_CHECKING:
     from pytest_mock import MockerFixture
 
 
-pytest_snowflake = pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
-)
 pytestmark = pytest_snowflake
 
 
@@ -659,7 +660,6 @@ def test_snowflake_use_index(memory_leak_check):
 
 
 # TODO: Re-add this test once [BE-2758] is resolved
-# @pytest_snowflake
 @pytest.mark.skip(reason="Outdated index returned by pandas")
 def test_snowflake_use_index_dead_table(memory_leak_check):
     """
@@ -1552,3 +1552,31 @@ def test_snowflake_read_with_bodo_read_date_as_dt64_overflow_behavior(
     as_type_out = bodo.allgatherv(as_type_out)
 
     check_func(impl, (conn,), sort_output=True, py_output=as_type_out)
+
+
+@pytest.mark.slow
+def test_read_sql_error_snowflake(memory_leak_check):
+    """This test for incorrect credentials and SQL sentence with snowflake"""
+
+    db = "SNOWFLAKE_SAMPLE_DATA"
+    schema = "TPCH_SF1"
+    conn = get_snowflake_connection_string(db, schema)
+
+    def test_impl_sql_err(conn):
+        sql_request = "select * from invalid"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    with pytest.raises(RuntimeError, match="Error executing query"):
+        bodo.jit(test_impl_sql_err)(conn)
+
+    def test_impl_credentials_err(conn):
+        sql_request = "select * from LINEITEM LIMIT 10"
+        frame = pd.read_sql(sql_request, conn)
+        return frame
+
+    account = "bodopartner.us-east-1"
+    warehouse = "DEMO_WH"
+    conn = f"snowflake://unknown:wrong@{account}/{db}/{schema}?warehouse={warehouse}"
+    with pytest.raises(RuntimeError, match="Error executing query"):
+        bodo.jit(test_impl_credentials_err)(conn)

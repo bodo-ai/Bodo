@@ -21,16 +21,18 @@ from bodo.tests.utils import (
     check_func,
     get_snowflake_connection_string,
     get_start_end,
+    pytest_snowflake,
     reduce_sum,
     snowflake_cred_env_vars_present,
 )
 from bodo.utils.testing import ensure_clean_snowflake_table
 from bodo.utils.typing import BodoWarning
 
+pytestmark = pytest_snowflake
+
 # ---------------Distributed Snowflake Write Unit Tests ------------------
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 @pytest.mark.parametrize("is_temporary", [True, False])
 def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     """
@@ -89,7 +91,6 @@ def test_snowflake_write_create_internal_stage(is_temporary, memory_leak_check):
     bodo.barrier()
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 @pytest.mark.parametrize("is_temporary", [True, False])
 def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     """
@@ -155,7 +156,6 @@ def test_snowflake_write_drop_internal_stage(is_temporary, memory_leak_check):
     bodo.barrier()
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     """
     Tests uploading files to Snowflake internal stage using PUT command
@@ -283,7 +283,6 @@ def test_snowflake_write_do_upload_and_cleanup(memory_leak_check):
     bodo.barrier()
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_snowflake_write_create_table_handle_exists(memory_leak_check):
     """
     Test Snowflake write table creation, both with and without a pre-existing table
@@ -482,7 +481,6 @@ def test_snowflake_write_create_table_handle_exists(memory_leak_check):
     bodo.barrier()
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_snowflake_write_execute_copy_into(memory_leak_check):
     """
     Tests executing COPY_INTO into a Snowflake table from internal stage
@@ -738,7 +736,6 @@ def test_snowflake_write_join_all_threads(memory_leak_check):
         test_join_all_threads_impl_3()
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_to_sql_wrong_password():
     """
     Tests that df.to_sql produces a reasonable exception if
@@ -757,7 +754,6 @@ def test_to_sql_wrong_password():
         )
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 @pytest.mark.parametrize(
     "table_names",
     [
@@ -806,7 +802,6 @@ def test_to_sql_table_name(table_names):
     )
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 @pytest.mark.parametrize("df_size", [17000 * 3, 2, 0])
 @pytest.mark.parametrize("sf_write_overlap", [True, False])
 @pytest.mark.parametrize("sf_write_use_put", [True, False])
@@ -922,7 +917,6 @@ def test_to_sql_snowflake(
         bodo.io.snowflake.SF_WRITE_UPLOAD_USING_PUT = old_sf_write_use_put
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
     """
     Tests that df.to_sql works with all Bodo's supported dataframe datatypes
@@ -1040,7 +1034,6 @@ def test_snowflake_to_sql_bodo_datatypes_part1(memory_leak_check):
     assert n_passed == n_pes, "test_snowflake_to_sql_bodo_datatypes failed"
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
     """
     Tests that df.to_sql works with all Bodo's supported dataframe datatypes
@@ -1175,7 +1168,6 @@ def test_snowflake_to_sql_bodo_datatypes_part2(memory_leak_check):
     assert n_passed == n_pes, "test_snowflake_to_sql_bodo_datatypes_part2 failed"
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_snowflake_to_sql_bodo_datatypes_part3(memory_leak_check):
     """
     Tests that df.to_sql works with all Bodo's supported dataframe datatypes
@@ -1252,7 +1244,6 @@ def test_snowflake_to_sql_bodo_datatypes_part3(memory_leak_check):
     assert n_passed == n_pes, "test_snowflake_to_sql_bodo_datatypes_part3 failed"
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_to_sql_snowflake_user2(memory_leak_check):
     """
     Tests that df.to_sql works when the Snowflake account password has special
@@ -1305,7 +1296,6 @@ def test_to_sql_snowflake_user2(memory_leak_check):
     check_func(read, (conn,), py_output=df, dist_test=False, check_dtype=False)
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
 def test_snowflake_to_sql_colname_case(memory_leak_check):
     """
     Tests that df.to_sql works with different upper/lower case of column name
@@ -1374,3 +1364,23 @@ def test_snowflake_to_sql_colname_case(memory_leak_check):
         n_passed = reduce_sum(passed)
         n_pes = bodo.get_size()
         assert n_passed == n_pes, "test_snowflake_to_sql_colname_case failed"
+
+
+@pytest.mark.slow
+def test_to_sql_schema_warning(memory_leak_check):
+    """[BE-2117] This test for not using schema with snowflake"""
+
+    db = "TEST_DB"
+    schema = "PUBLIC"
+    conn = get_snowflake_connection_string(db, schema)
+
+    def impl(df, table_name, conn):
+        df.to_sql(table_name, conn, if_exists="replace", index=False)
+
+    df = pd.DataFrame({"A": [1.12, 1.1] * 5, "B": [213, -7] * 5})
+    tablename = "schema_warning_table"
+    if bodo.get_rank() == 0:  # warning is thrown only on rank 0
+        with pytest.warns(BodoWarning, match="schema argument is recommended"):
+            bodo.jit(impl)(df, tablename, conn)
+    else:
+        bodo.jit(impl)(df, tablename, conn)

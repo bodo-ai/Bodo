@@ -4,7 +4,6 @@ Tests various components of the TablePath type both inside and outside a
 direct BodoSQLContext.
 """
 import io
-import os
 
 import bodosql
 import pandas as pd
@@ -21,6 +20,7 @@ from bodo.tests.utils import (
     TypeInferenceTestPipeline,
     check_func,
     get_snowflake_connection_string,
+    pytest_snowflake,
 )
 
 
@@ -152,10 +152,7 @@ def test_table_path_pq_bodosqlContext_jit(
     check_func(impl, (filename,), py_output=py_output)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
+@pytest_snowflake
 def test_table_path_sql_bodosqlContext_python(memory_leak_check):
     def impl(table_name, conn_str):
         bc = bodosql.BodoSQLContext(
@@ -188,10 +185,7 @@ def test_table_path_sql_bodosqlContext_python(memory_leak_check):
     )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
+@pytest_snowflake
 def test_table_path_sql_bodosqlContext_jit(memory_leak_check):
     def impl(table_name):
         bc = bodosql.BodoSQLContext(

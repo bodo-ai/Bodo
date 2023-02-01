@@ -19,6 +19,7 @@ from bodo.tests.utils import (
     count_array_OneD_Vars,
     count_array_OneDs,
     count_array_REPs,
+    pytest_snowflake,
 )
 from bodo.utils.typing import BodoError
 
@@ -44,9 +45,7 @@ from bodo.utils.typing import BodoError
                     connection_params={"schema": "PUBLIC"},
                 ),
             ),
-            marks=pytest.mark.skipif(
-                "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
-            ),
+            marks=pytest_snowflake,
         )
     ]
 )
@@ -185,9 +184,7 @@ def test_remove_view(memory_leak_check):
                 ),
             ),
             id="snowflake-catalog",
-            marks=pytest.mark.skipif(
-                "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
-            ),
+            marks=pytest_snowflake,
         ),
     ],
 )
@@ -234,9 +231,7 @@ def test_bodosql_context_boxing(bc, memory_leak_check):
                 ),
             ),
             id="snowflake-catalog",
-            marks=pytest.mark.skipif(
-                "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
-            ),
+            marks=pytest_snowflake,
         ),
     ],
 )

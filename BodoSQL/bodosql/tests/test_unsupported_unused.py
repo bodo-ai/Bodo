@@ -4,20 +4,21 @@
 Tests that check passing an unsupported type to BodoSQL in various
 contexts where the column can be pruned by Bodo
 """
-import os
 
 import bodosql
 import pandas as pd
 import pytest
 
 import bodo
-from bodo.tests.utils import check_func, get_snowflake_connection_string
-
-
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
+from bodo.tests.utils import (
+    check_func,
+    get_snowflake_connection_string,
+    pytest_snowflake,
 )
+
+pytestmark = pytest_snowflake
+
+
 def test_snowflake_read_sql_unused(memory_leak_check):
     """
     Tests pruning Snowflake columns when passing the DataFrame
@@ -66,10 +67,6 @@ def test_snowflake_read_sql_unused(memory_leak_check):
         )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_table_path_unused(memory_leak_check):
     """
     Tests pruning Snowflake columns when passing the DataFrame
@@ -111,10 +108,6 @@ def test_snowflake_table_path_unused(memory_leak_check):
         )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_table_path_unused_subquery(memory_leak_check):
     """
     Tests pruning Snowflake columns when passing the DataFrame

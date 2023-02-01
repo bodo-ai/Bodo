@@ -22,7 +22,7 @@ ENV PATH /root/mambaforge/bin/:${PATH}
 RUN mamba create -n BODODEV -y numpy scipy pandas=${BODO_PD_VERSION:-'1.4.*'} boost-cpp=1.74.0 cmake h5py mpich mpi 'gcc_linux-64>=9' 'gxx_linux-64>=9' python=3.9 -c conda-forge
 RUN mamba install -n BODODEV -y numba=0.55.2 'hdf5=1.12.*=*mpich*' pyarrow=9.0.0 fsspec -c conda-forge
 RUN mamba install -n BODODEV -y sqlalchemy pymysql xlrd openpyxl mpi4py cython hdfs3 ccache -c conda-forge
-RUN mamba install -n BODODEV -y openjdk=11 pytest ipython
+RUN mamba install -n BODODEV -y openjdk=11 pytest flaky ipython
 # RUN mamba install -n BODODEV scikit-learn='1.1.*' -c conda-forge
 
 # installing hadoop and libhdfs (JNI)
