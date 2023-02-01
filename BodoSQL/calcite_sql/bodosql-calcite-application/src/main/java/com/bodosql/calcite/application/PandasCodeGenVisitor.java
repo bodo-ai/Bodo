@@ -535,6 +535,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<String> outputColumns = new ArrayList();
     int nodeId = node.getId();
     String outputCode = "";
+    boolean needsTimerStop = false;
     if (this.isNodeCached(node)) {
       Pair<String, List<String>> cacheInfo = this.varCache.get(nodeId);
       outputCode = String.format("  %s = %s\n", projectOutVar, cacheInfo.getKey());
@@ -543,6 +544,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     } else {
       this.visit(node.getInput(), 0, node);
       this.genRelnodeTimerStart(node);
+      needsTimerStop = true;
       String projectInVar = varGenStack.pop();
       List<String> colNames = columnNamesStack.pop();
       // ChildExprs operations produced.
@@ -683,10 +685,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 this,
                 colNames.size());
       }
-      this.genRelnodeTimerStop(node);
     }
     this.generatedCode.append(outputCode);
     this.columnNamesStack.push(outputColumns);
+    if (needsTimerStop) {
+      this.genRelnodeTimerStop(node);
+    }
     varGenStack.push(projectOutVar);
   }
 
@@ -3365,12 +3369,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
       outputColNames = cacheInfo.getValue();
     } else {
       this.visit(node.getLeft(), 0, node);
-      this.genRelnodeTimerStart(node);
       List<String> leftColNames = columnNamesStack.pop();
       String leftTable = varGenStack.pop();
       this.visit(node.getRight(), 1, node);
       List<String> rightColNames = columnNamesStack.pop();
       String rightTable = varGenStack.pop();
+      this.genRelnodeTimerStart(node);
 
       RexNode cond = node.getCondition();
 
@@ -3443,20 +3447,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void genRelnodeTimerStart(RelNode node) {
     if (this.verboseLevel >= this.RelNodeTimingVerboseLevel) {
       int node_id = node.getId();
-
-      // Some logic to get the first line of the full relTree (the string of the node that we're
-      // interested in)
-      String nodeStr = Arrays.stream(RelOptUtil.toString(node).split("\n")).findFirst().get();
       String msgString =
           new StringBuilder(getBodoIndent())
               .append("t_" + node_id)
               .append(" = time.time()\n")
-              .append(getBodoIndent())
-              .append(
-                  "bodo.user_logging.log_message('RELNODE_TIMING', '''beginning execution of"
-                      + " node: ")
-              .append(nodeStr)
-              .append("''')\n")
               .toString();
       this.generatedCode.append(msgString);
     }
@@ -3474,14 +3468,23 @@ public class PandasCodeGenVisitor extends RelVisitor {
   private void genRelnodeTimerStop(RelNode node) {
     if (this.verboseLevel >= this.RelNodeTimingVerboseLevel) {
       int node_id = node.getId();
+      // Some logic to get the first line of the full relTree (the string of the node that we're
+      // interested in)
+      String nodeStr = Arrays.stream(RelOptUtil.toString(node).split("\n")).findFirst().get();
 
+      this.generatedCode
+          .append(getBodoIndent())
+          .append("node_string = ")
+          .append("'''")
+          .append(nodeStr)
+          .append("'''\n");
       String msgString =
           new StringBuilder(getBodoIndent())
               .append(
-                  "bodo.user_logging.log_message('RELNODE_TIMING', f'Execution time: {time.time()"
-                      + " - t_")
+                  "bodo.user_logging.log_message('RELNODE_TIMING', f'''Execution time for RelNode"
+                      + " {node_string}: {time.time() - t_")
               .append(node_id)
-              .append("}')\n")
+              .append("}''')\n")
               .toString();
       this.generatedCode.append(msgString);
     }
