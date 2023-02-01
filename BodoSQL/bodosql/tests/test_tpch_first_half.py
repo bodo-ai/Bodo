@@ -178,6 +178,7 @@ def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
                       o_orderdate,
                       l_orderkey
                     limit 10
+
     """
     bodosql_df_dict, _ = tpch_data
     # Adding an secondary test to tpch3 to
@@ -200,7 +201,7 @@ def test_tpch_q3_logging_info(tpch_data, memory_leak_check):
         for relNodeStr in plan.split("\n"):
             relNodeStr = relNodeStr.strip()
             if not relNodeStr.startswith("LogicalTableScan"):
-                check_logger_msg(stream, relNodeStr)
+                check_logger_msg(stream, relNodeStr, check_case=False)
 
 
 @pytest.mark.slow

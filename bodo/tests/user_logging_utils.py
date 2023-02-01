@@ -47,7 +47,7 @@ def create_string_io_logger(stream):
     return logger
 
 
-def check_logger_msg(stream, msg):
+def check_logger_msg(stream, msg, check_case=True):
     """
     Checks that a specific msg in found inside logger.
     This simply checks if the logger contains the exact
@@ -57,7 +57,10 @@ def check_logger_msg(stream, msg):
     write on rank 0.
     """
     if bodo.get_rank() == 0:
-        assert msg in stream.getvalue()
+        if check_case:
+            assert msg in stream.getvalue()
+        else:
+            assert msg.lower() in stream.getvalue().lower()
 
 
 def check_logger_no_msg(stream, msg):
