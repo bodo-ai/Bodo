@@ -42,6 +42,23 @@ public class BodoSQLRelDataTypeSystem implements RelDataTypeSystem {
 
   @Override
   public int getDefaultPrecision(SqlTypeName typeName) {
+    switch (typeName) {
+      case INTERVAL_YEAR:
+      case INTERVAL_YEAR_MONTH:
+      case INTERVAL_MONTH:
+      case INTERVAL_WEEK:
+      case INTERVAL_DAY:
+      case INTERVAL_DAY_HOUR:
+      case INTERVAL_DAY_MINUTE:
+      case INTERVAL_DAY_SECOND:
+      case INTERVAL_HOUR:
+      case INTERVAL_HOUR_MINUTE:
+      case INTERVAL_HOUR_SECOND:
+      case INTERVAL_MINUTE:
+      case INTERVAL_MINUTE_SECOND:
+      case INTERVAL_SECOND:
+        return SqlTypeName.MAX_INTERVAL_START_PRECISION;
+    }
     return defaultTypeSystem.getDefaultPrecision(typeName);
   }
 

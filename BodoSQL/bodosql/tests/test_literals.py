@@ -403,3 +403,21 @@ def test_backslash_literals(spark_info, memory_leak_check):
         {},
         spark_info,
     )
+
+
+def test_large_day_literals(bodosql_date_types, memory_leak_check):
+    """
+    tests that Interval literals with large offsets are handled by BodoSQL.
+    
+    """
+    query = "select A + Interval '180 Days' as output from table1"
+    expected_output = pd.DataFrame(
+        {"output": bodosql_date_types["table1"]["A"] + pd.Timedelta(days=180)}
+    )
+    check_query(
+        query,
+        bodosql_date_types,
+        None,
+        expected_output=expected_output,
+        check_dtype=False,
+    )
