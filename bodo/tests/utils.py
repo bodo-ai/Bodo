@@ -20,6 +20,7 @@ import numba
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import pytest
 from mpi4py import MPI
 from numba.core import ir, types
 from numba.core.compiler_machinery import FunctionPass, register_pass
@@ -2351,3 +2352,12 @@ def nanoseconds_to_other_time_units(val, unit_str):
         return val // (10**3)
     else:
         return val
+
+
+pytest_snowflake = pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ, reason="requires Azure Pipelines"
+)(
+    pytest.mark.flaky(
+        rerun_filter=lambda err, *args: "HTTP 503: Service Unavailable" in str(err)
+    )
+)

@@ -1,5 +1,4 @@
 # Copyright (C) 2022 Bodo Inc. All rights reserved.
-import os
 
 import pandas as pd
 import pytest
@@ -9,6 +8,7 @@ import bodo
 from bodo.tests.utils import (
     check_caching,
     get_snowflake_connection_string,
+    pytest_snowflake,
     sql_user_pass_and_hostname,
 )
 
@@ -180,7 +180,7 @@ def test_cache_sql_hardcoded_aws(fn_distribution, is_cached, memory_leak_check):
     check_caching(test_impl_hardcoded, (), is_cached, fn_distribution)
 
 
-@pytest.mark.skipif("AGENT_NAME" not in os.environ, reason="requires Azure Pipelines")
+@pytest_snowflake
 def test_cache_sql_snowflake(fn_distribution, is_cached, memory_leak_check):
     """
     Tests that caching works on Snowflake queries

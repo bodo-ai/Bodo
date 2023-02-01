@@ -3,12 +3,10 @@
 Tests write with a Snowflake SQL TablePath.
 """
 import datetime
-import os
 
 import bodosql
 import numpy as np
 import pandas as pd
-import pytest
 from mpi4py import MPI
 
 import bodo
@@ -16,13 +14,12 @@ from bodo.tests.utils import (
     check_func,
     create_snowflake_table,
     get_snowflake_connection_string,
+    pytest_snowflake,
 )
 
+pytestmark = pytest_snowflake
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
+
 def test_insert_into(memory_leak_check):
     """Tests writing to a Snowflake DB with copy into.
     To enable the full suite of check_func we recreate the
@@ -92,10 +89,6 @@ def test_insert_into(memory_leak_check):
         )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_insert_into_date(memory_leak_check):
     """Tests writing to a Snowflake DB with copy into
     using date columns. Date columns currently require

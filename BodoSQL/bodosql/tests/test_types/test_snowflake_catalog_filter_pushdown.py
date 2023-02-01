@@ -24,7 +24,10 @@ from bodo.tests.utils import (
     check_func,
     create_snowflake_table,
     get_snowflake_connection_string,
+    pytest_snowflake,
 )
+
+pytestmark = pytest_snowflake
 
 
 @pytest.fixture(
@@ -39,10 +42,6 @@ def simple_queries(request):
     return request.param
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_simple_filter_pushdown(memory_leak_check):
     def impl(bc, query):
         return bc.sql(query)
@@ -88,10 +87,6 @@ def test_snowflake_catalog_simple_filter_pushdown(memory_leak_check):
     test_impl(bc, query, conn_str, "l_suppkey")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_zero_columns_pruning(memory_leak_check):
     """
     Test loading just a length from a table in a Snowflake Catalog.
@@ -126,10 +121,6 @@ def test_snowflake_catalog_zero_columns_pruning(memory_leak_check):
     check_func(impl, (bc, query), py_output=py_output, is_out_distributed=False)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
     """
     Test limit pushdown with loading from a table from a Snowflake catalog.
@@ -164,10 +155,6 @@ def test_snowflake_catalog_just_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Constant limit detected, reading at most 5 rows")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
     """
     Test filter pushdown with with coalesce on a column.
@@ -206,10 +193,6 @@ def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
         check_logger_msg(stream, r"WHERE  ( ( coalesce(\"MYCOL2\", {f0}) > {f1} ) )")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
     """
     Make sure coalesce with two column input is not pushed down since not supported yet
@@ -246,10 +229,6 @@ def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
         check_logger_no_msg(stream, "Filter pushdown successfully performed")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_limit_pushdown(memory_leak_check):
     """
     Test limit pushdown with loading from a table from a Snowflake catalog.
@@ -290,10 +269,6 @@ def test_snowflake_catalog_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that queries with like perform filter pushdown for all the
@@ -471,10 +446,6 @@ def test_snowflake_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that queries with ilike perform filter pushdown for all the
@@ -635,10 +606,6 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_like_regex_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that queries with LIKE that perform filter pushdown where the pattern
@@ -695,10 +662,6 @@ def test_snowflake_like_regex_pushdown(test_db_snowflake_catalog, memory_leak_ch
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_ilike_regex_pushdown(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests that queries with ILIKE that perform filter pushdown where the pattern
@@ -755,10 +718,6 @@ def test_snowflake_ilike_regex_pushdown(test_db_snowflake_catalog, memory_leak_c
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_like_non_constant_pushdown(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -817,10 +776,6 @@ def test_snowflake_like_non_constant_pushdown(
             check_logger_msg(stream, "Columns loaded ['a']")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_ilike_non_constant_pushdown(
     test_db_snowflake_catalog, memory_leak_check
 ):

@@ -3,11 +3,9 @@
 Tests filter pushdown with a Snowflake SQL TablePath.
 """
 import io
-import os
 
 import bodosql
 import pandas as pd
-import pytest
 
 import bodo
 from bodo.tests.user_logging_utils import (
@@ -19,13 +17,12 @@ from bodo.tests.utils import (
     DistTestPipeline,
     check_func,
     get_snowflake_connection_string,
+    pytest_snowflake,
 )
 
+pytestmark = pytest_snowflake
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
+
 def test_simple_filter_pushdown(memory_leak_check):
     def impl1(table_name):
         bc = bodosql.BodoSQLContext(
@@ -92,10 +89,6 @@ def test_simple_filter_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_zero_columns_pruning(memory_leak_check):
     """
     Test loading just a length from a Snowflake table.
@@ -129,10 +122,6 @@ def test_zero_columns_pruning(memory_leak_check):
     )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_limit_pushdown(memory_leak_check):
     """
     Test limit pushdown with loading from a Snowflake table.
@@ -170,10 +159,6 @@ def test_snowflake_limit_pushdown(memory_leak_check):
         check_logger_msg(stream, "Filter pushdown successfully performed")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_in_pushdown(memory_leak_check):
     """
     Test in pushdown with loading from a Snowflake table.

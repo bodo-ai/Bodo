@@ -26,8 +26,11 @@ from bodo.tests.utils import (
     check_func,
     create_snowflake_table,
     get_snowflake_connection_string,
+    pytest_snowflake,
 )
 from bodo.utils.typing import BodoError
+
+pytestmark = pytest_snowflake
 
 
 @pytest.fixture(
@@ -166,10 +169,6 @@ def test_snowflake_catalog_constructor(memory_leak_check):
     # check_func(impl4, ())
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_read(
     snowflake_sample_data_snowflake_catalog, memory_leak_check
 ):
@@ -186,10 +185,6 @@ def test_snowflake_catalog_read(
     check_func(impl, (bc,), py_output=py_output)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_insert_into(
     test_db_snowflake_catalog, use_default_schema, memory_leak_check
 ):
@@ -236,10 +231,6 @@ def test_snowflake_catalog_insert_into(
         assert_tables_equal(output_df, result_df)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_insert_into_read(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -282,10 +273,6 @@ def test_snowflake_catalog_insert_into_read(
         )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_insert_into_null_literal(
     test_db_snowflake_catalog, memory_leak_check
 ):
@@ -327,10 +314,6 @@ def test_snowflake_catalog_insert_into_null_literal(
         )
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_default(
     snowflake_sample_data_snowflake_catalog, memory_leak_check
 ):
@@ -371,10 +354,6 @@ def test_snowflake_catalog_default(
     check_func(impl3, (bc,), py_output=local_table, reset_index=True)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_snowflake_catalog_read_tpch(
     snowflake_sample_data_snowflake_catalog, memory_leak_check
 ):
@@ -418,10 +397,6 @@ def test_snowflake_catalog_read_tpch(
     check_func(impl, (bc,), py_output=py_output, reset_index=True)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_read_timing_debug_message(
     snowflake_sample_data_snowflake_catalog, memory_leak_check
 ):
@@ -444,10 +419,6 @@ def test_read_timing_debug_message(
         check_logger_msg(stream, "Finished reading table REGION")
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
     """
     Tests a simple delete clause inside of Snowflake.
@@ -500,10 +471,6 @@ def test_delete_simple(test_db_snowflake_catalog, memory_leak_check):
         assert_tables_equal(output_df, result_df)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_delete_named_param(test_db_snowflake_catalog):
     """
     Tests submitting a delete query with a named param. Since we just
@@ -536,10 +503,6 @@ def test_delete_named_param(test_db_snowflake_catalog):
             impl(query, bc, 1)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_delete_bodosql_syntax(test_db_snowflake_catalog):
     """
     Tests submitting a delete query with SQL that does not match
@@ -589,10 +552,6 @@ def assert_tables_equal(df1: pd.DataFrame, df2: pd.DataFrame):
     pd.testing.assert_frame_equal(df1, df2)
 
 
-@pytest.mark.skipif(
-    "AGENT_NAME" not in os.environ,
-    reason="requires Azure Pipelines",
-)
 def test_current_timestamp_case(
     snowflake_sample_data_snowflake_catalog, memory_leak_check
 ):
