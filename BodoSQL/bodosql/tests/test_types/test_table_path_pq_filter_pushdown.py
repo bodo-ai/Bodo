@@ -1061,3 +1061,47 @@ def test_in_filter_pushdown_e2e(datapath):
         )
 
         check_logger_msg(stream, "Filter pushdown successfully performed.")
+
+
+@pytest.mark.slow
+def test_multiple_loads_filter_pushdown(datapath, memory_leak_check):
+    """
+    Tests that multiple loads of the same table with different filters
+    results in filter pushdown succeeding, and two different
+    pd.read_parquet calls.
+    """
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    filename = datapath("tpch-test-data/parquet/lineitem.parquet")
+    read_df = pd.read_parquet(filename)
+    t1 = read_df[read_df.L_LINENUMBER == 3]
+    t2 = read_df[read_df.L_SHIPMODE == "SHIP"]
+    join_output = t1.merge(t2, on="L_ORDERKEY")
+    expected_output = pd.DataFrame({"cnt": [len(join_output)]})
+
+    test_query = """
+        select count(*) as cnt from table1 t1
+            INNER JOIN table1 t2
+            ON t1.L_ORDERKEY = t2.L_ORDERKEY
+        WHERE t1.L_LINENUMBER = 3 and t2.L_SHIPMODE = 'SHIP'"""
+
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(
+            impl,
+            (bc, test_query),
+            py_output=expected_output,
+            is_out_distributed=False,
+        )
+        check_logger_msg(stream, "Filter pushdown successfully performed.")
+
+    generate_code = bc.convert_to_pandas(test_query)
+    assert generate_code.count("pd.read_parquet") == 2, "Expected 2 read parquet calls"

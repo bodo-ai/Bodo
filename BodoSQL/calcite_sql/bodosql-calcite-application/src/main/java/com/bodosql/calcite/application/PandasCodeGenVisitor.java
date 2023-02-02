@@ -273,7 +273,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
   @Override
   public void visit(RelNode node, int ordinal, RelNode parent) {
     if (node instanceof TableScan) {
-      this.visitTableScan((TableScan) node);
+      this.visitTableScan((TableScan) node, !(parent instanceof LogicalFilter));
     } else if (node instanceof Join) {
       this.visitJoin((Join) node);
     } else if (node instanceof LogicalSort) {
@@ -3275,8 +3275,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
    * Visitor for Table Scan.
    *
    * @param node TableScan node being visited
+   * @param canLoadFromCache Can we load the variable from cache? This is set to False if we have a
+   *     filter that wasn't previously cached to enable filter pushdown.
    */
-  public void visitTableScan(TableScan node) {
+  public void visitTableScan(TableScan node, boolean canLoadFromCache) {
 
     if (!(node instanceof LogicalTableScan || node instanceof LogicalTargetTableScan)) {
       throw new BodoSQLCodegenException(
@@ -3289,7 +3291,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
     String outVar = this.genDfVar();
     List<String> columnNames = node.getRowType().getFieldNames();
     int nodeId = node.getId();
-    if (this.isNodeCached(node)) {
+    if (canLoadFromCache && this.isNodeCached(node)) {
       Pair<String, List<String>> cacheInfo = this.varCache.get(nodeId);
       columnNames = cacheInfo.getValue();
       this.generatedCode.append(String.format("  %s = %s\n", outVar, cacheInfo.getKey()));
