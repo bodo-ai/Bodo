@@ -63,8 +63,7 @@ public class SinceEpochFnCodeGen {
    */
   public static RexNodeVisitorInfo generateUnixTimestamp() {
     String name = "UNIX_TIMESTAMP()";
-    String output =
-        "(pd.Timestamp.now() - pd.Timestamp(year=1970, month=1, day=1)).total_seconds()";
+    String output = "(pd.Timestamp.now().value // 1000000000)";
     return new RexNodeVisitorInfo(name, output);
   }
 }

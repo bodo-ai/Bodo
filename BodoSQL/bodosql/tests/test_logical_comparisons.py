@@ -78,7 +78,6 @@ def test_is_logical_not_columns(
 
 
 @pytest.mark.slow
-@pytest.mark.skip("Is not True/False currently failing due to null issues, see BS-485")
 def test_logical_is_not_scalars(
     bodosql_boolean_types, spark_info, is_clause_literal_values, memory_leak_check
 ):

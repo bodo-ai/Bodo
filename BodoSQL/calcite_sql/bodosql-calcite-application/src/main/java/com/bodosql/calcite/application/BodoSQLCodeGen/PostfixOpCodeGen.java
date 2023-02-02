@@ -1,8 +1,5 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
-import static com.bodosql.calcite.application.Utils.Utils.checkNotNullColumns;
-import static com.bodosql.calcite.application.Utils.Utils.checkNullColumns;
-
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import java.util.*;
 import org.apache.calcite.sql.*;
@@ -16,46 +13,17 @@ public class PostfixOpCodeGen {
    *
    * @param arg The arg expr.
    * @param postfixOp The postfix operator.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param nullSet The nullset used by IS_NULL and IS_NOT_NULL.
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param outputScalar Should the output generate scalar code.
    * @return The code generated that matches the Postfix Operator call.
    */
-  public static String generatePostfixOpCode(
-      String arg,
-      SqlOperator postfixOp,
-      String inputVar,
-      List<String> colNames,
-      HashSet<String> nullSet,
-      boolean isSingleRow,
-      boolean outputScalar) {
+  public static String generatePostfixOpCode(String arg, SqlOperator postfixOp) {
     StringBuilder codeBuilder = new StringBuilder();
     SqlKind kind = postfixOp.getKind();
     switch (kind) {
       case IS_NULL:
-        if (outputScalar) {
-          if (nullSet.size() > 0) {
-            codeBuilder.append(checkNullColumns(inputVar, colNames, nullSet, isSingleRow));
-          } else {
-            codeBuilder.append("pd.isna(").append(arg).append(")");
-          }
-        } else {
-          codeBuilder.append("pd.isna(").append(arg).append(")");
-        }
+        codeBuilder.append("pd.isna(").append(arg).append(")");
         break;
       case IS_NOT_NULL:
-        if (outputScalar) {
-          if (nullSet.size() > 0) {
-            codeBuilder.append(checkNotNullColumns(inputVar, colNames, nullSet, isSingleRow));
-          } else {
-            codeBuilder.append("pd.notna(").append(arg).append(")");
-          }
-        } else {
-          codeBuilder.append("pd.notna(").append(arg).append(")");
-        }
+        codeBuilder.append("pd.notna(").append(arg).append(")");
         break;
       case IS_NOT_FALSE:
       case IS_NOT_TRUE:

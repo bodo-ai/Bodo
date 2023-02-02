@@ -2671,6 +2671,14 @@ def int_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
     return arr[ind]
 
 
+def int_optional_getitem(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
+    pass
+
+
+def int_isna(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
+    pass
+
+
 def transform_str_getitem_output(data, length):
     """
     Transform the final output of string/bytes data.
@@ -2884,6 +2892,54 @@ def int_getitem_overload(arr, ind, arr_start, total_len, is_1D):
         return val
 
     return getitem_impl
+
+
+@overload(int_optional_getitem, no_unliteral=True)
+def int_optional_getitem_overload(arr, ind, arr_start, total_len, is_1D):
+    if bodo.utils.typing.is_nullable(arr):
+        # If the array type is nullable then have an optional return type.
+        def impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
+            if int_isna(arr, ind, arr_start, total_len, is_1D):
+                return None
+            else:
+                return int_getitem(arr, ind, arr_start, total_len, is_1D)
+
+    else:
+
+        def impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
+            return int_getitem(arr, ind, arr_start, total_len, is_1D)
+
+    return impl
+
+
+@overload(int_isna, no_unliteral=True)
+def int_isn_overload(arr, ind, arr_start, total_len, is_1D):
+    def impl(arr, ind, arr_start, total_len, is_1D):  # pragma: no cover
+        if ind >= total_len:
+            raise IndexError("index out of bounds")
+
+        # TODO: avoid sending to root in case of 1D since position can be
+        # calculated
+
+        # send data to rank 0 and broadcast
+        root = np.int32(0)
+        tag = np.int32(11)
+        send_arr = np.zeros(1, np.bool_)
+        if arr_start <= ind < (arr_start + len(arr)):
+            data = bodo.libs.array_kernels.isna(arr, ind - arr_start)
+            send_arr = np.full(1, data)
+            isend(send_arr, np.int32(1), root, tag, True)
+
+        rank = bodo.libs.distributed_api.get_rank()
+        val = False
+        if rank == root:
+            val = recv(np.bool_, ANY_SOURCE, tag)
+
+        dummy_use(send_arr)
+        val = bcast_scalar(val)
+        return val
+
+    return impl
 
 
 def get_chunk_bounds(A):  # pragma: no cover

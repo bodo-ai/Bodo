@@ -344,6 +344,8 @@ no_side_effect_call_tuples = {
     ("lower",),
     # BodoSQL
     ("__bodosql_replace_columns_dummy", "dataframe_impl", "hiframes", bodo),
+    # Indexing
+    ("scalar_optional_getitem", "indexing", "utils", bodo),
 }
 
 
@@ -1086,6 +1088,16 @@ def get_const_value_inner(
         kw_types = {k: bodo.typeof(v) for k, v in kwargs.items()}
         require(_func_is_pure(py_func, arg_types, kw_types))
         return py_func(*args, **kwargs)
+
+    # BodoSQL optional getitem
+    if call_name == ("scalar_optional_getitem", "bodo.utils.indexing"):
+        value = get_const_value_inner(
+            func_ir, var_def.args[0], arg_types, typemap, updated_containers
+        )
+        index = get_const_value_inner(
+            func_ir, var_def.args[1], arg_types, typemap, updated_containers
+        )
+        return value[index]
 
     raise GuardException("Constant value not found")
 

@@ -2,6 +2,7 @@
 """
 Test correctness of SQL queries that are depenent on time since year 0, or the unix epoch
 """
+import numpy as np
 import pandas as pd
 from bodosql.tests.utils import check_query
 
@@ -157,25 +158,26 @@ def test_to_days_scalars(spark_info, bodosql_datetime_types, memory_leak_check):
     )
 
 
-def test_unix_timestamp(spark_info, basic_df, memory_leak_check):
+def test_unix_timestamp(basic_df, memory_leak_check):
     """tests the unix_timestamp function."""
 
-    # essentially, omit the last 3 digits durring the check.
+    # essentially, omit the last 3 digits during the check.
     # This will sometimes randomly fail, if the test takes place
     # right as the ten thousandths place changes values
-    # query = "SELECT A, Ceiling(UNIX_TIMESTAMP() / 10000) from table1"
-    # spark_query = "SELECT A, Ceiling(to_unix_timestamp(current_timestamp())/10000) from table1"
-
-    query = "SELECT A, UNIX_TIMESTAMP() from table1"
-    spark_query = "SELECT A, to_unix_timestamp(current_timestamp()) from table1"
+    query = "SELECT A, Floor(UNIX_TIMESTAMP() / 10000) as output from table1"
+    expected_output = pd.DataFrame(
+        {
+            "A": basic_df["table1"]["A"],
+            "output": np.float64(pd.Timestamp.now().value // (10000 * 1000000000)),
+        }
+    )
 
     check_query(
         query,
         basic_df,
-        spark_info,
-        check_names=False,
+        None,
+        expected_output=expected_output,
         check_dtype=False,
-        equivalent_spark_query=spark_query,
     )
 
 

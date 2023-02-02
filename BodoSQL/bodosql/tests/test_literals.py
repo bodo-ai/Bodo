@@ -287,14 +287,13 @@ def test_float_literals(basic_df, spark_info, memory_leak_check):
     )
 
 
-@pytest.mark.skip("calcite parse error, uncertain if we ever want to support it")
 def test_timestamp_null_literal(basic_df, spark_info, memory_leak_check):
     """
     tests that timestamp literals are correctly parsed by BodoSQL
     """
     query1 = """
     SELECT
-        A, (CAST TIMESTAMP) NULL
+        A, CAST(NULL as TIMESTAMP)
     FROM
         table1
     """
@@ -346,16 +345,13 @@ def test_boolean_null_literals(bodosql_boolean_types, spark_info, memory_leak_ch
     )
 
 
-@pytest.mark.skip(
-    "numba error converting none to a numpy dtype, not sure if we want to support this"
-)
 def test_integer_null_literals(basic_df, spark_info, memory_leak_check):
     """
     tests that integer literals are correctly parsed by BodoSQL
     """
     query1 = """
     SELECT
-        A + NULL
+        A, +NULL
     FROM
         table1
     """

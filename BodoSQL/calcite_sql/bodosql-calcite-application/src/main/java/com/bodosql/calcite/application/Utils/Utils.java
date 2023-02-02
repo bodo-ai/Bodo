@@ -93,105 +93,6 @@ public class Utils {
   }
 
   /**
-   * Takes a set of columns, an if result, and an else result and generates code that returns the if
-   * result if any column is NULL and otherwise the else case.
-   *
-   * @param inputVar the input table which the columns reference
-   * @param colSet Set of columns names
-   * @param ifCase Code to return if any column is null.
-   * @param elseCase Code to return if no column is null.
-   * @param isInsideCase flag for whether this is inside CASE codegen
-   * @return A string representing the code generated to check if any of the columns is null.
-   */
-  public static String generateNullCheck(
-      String inputVar,
-      List<String> colNames,
-      HashSet<String> colSet,
-      String ifCase,
-      String elseCase,
-      boolean isInsideCase) {
-    if (colSet.size() == 0) {
-      return elseCase;
-    }
-    StringBuilder result = new StringBuilder();
-    result.append("(").append(ifCase).append(" if ");
-    result.append(checkNullColumns(inputVar, colNames, colSet, isInsideCase));
-    result.append(" else ").append(elseCase).append(")");
-    return result.toString();
-  }
-
-  /**
-   * Generates code for checking if any column in a set is null.
-   *
-   * @param inputVar Name of the input table, which the columns reference
-   * @param colSet Set of column names
-   * @param isInsideCase flag for whether this is inside CASE codegen
-   * @return A string representing the code generated to check if any of the columns is null.
-   */
-  public static String checkNullColumns(
-      String inputVar, List<String> colNames, HashSet<String> colSet, boolean isInsideCase) {
-    if (colSet.size() == 0) {
-      return "";
-    }
-    StringBuilder nullCheck = new StringBuilder();
-    nullCheck.append("(");
-    // Convert to a sorted set so the same code is generated
-    // on very core.
-    TreeSet<String> sortedColSet = new TreeSet<>(colSet);
-    for (String col : sortedColSet) {
-      String isNullCode = String.format("pd.isna(%s) or ", inputVar + "[" + makeQuoted(col) + "]");
-      if (isInsideCase) {
-        // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value
-        // accesses (e.g. T1_1[i])
-        isNullCode =
-            String.format("pd.isna(%s) or ", inputVar + "_" + colNames.indexOf(col) + "[i]");
-      }
-      nullCheck.append(isNullCode);
-    }
-    // Remove the final OR
-    nullCheck.delete(nullCheck.length() - 3, nullCheck.length());
-    nullCheck.append(")");
-    return nullCheck.toString();
-  }
-
-  /**
-   * Generates code for checking that no column in a set is null.
-   *
-   * @param inputVar Name of the input table, which the columns reference
-   * @param colSet Set of column names
-   * @param isInsideCase flag for whether this is inside CASE codegen
-   * @return A string representing the code generated that no column is null.
-   */
-  public static String checkNotNullColumns(
-      String inputVar, List<String> colNames, HashSet<String> colSet, boolean isInsideCase) {
-    if (colSet.size() == 0) {
-      return "";
-    }
-    StringBuilder nullCheck = new StringBuilder();
-    nullCheck.append("(");
-    // Convert to a sorted set so the same code is generated
-    // on very core.
-    TreeSet<String> sortedColSet = new TreeSet<>(colSet);
-    for (String col : sortedColSet) {
-      String notNullCode =
-          String.format("pd.notna(%s) and ", inputVar + "[" + makeQuoted(col) + "]");
-      if (isInsideCase) {
-        // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value
-        // accesses (e.g. T1_1[i])
-        // notna() is same as not isna() for scalars (eliminates notna function inlining)
-        assert colNames.contains(col);
-        notNullCode =
-            String.format("(not pd.isna(%s)) and ", inputVar + "_" + colNames.indexOf(col) + "[i]");
-      }
-      nullCheck.append(notNullCode);
-    }
-    // Remove the final AND
-    nullCheck.delete(nullCheck.length() - 4, nullCheck.length());
-    nullCheck.append(")");
-    return nullCheck.toString();
-  }
-
-  /**
    * Function to convert a SQL type to a matching Pandas type.
    *
    * @param typeName SQL Type.
@@ -254,10 +155,7 @@ public class Utils {
       case DATE:
       case TIMESTAMP:
         if (outputScalar) {
-          // pd.to_datetime(None) returns None in standard python, but not in Bodo
-          // This should likely be in the engine itself, to match pandas behavior
-          // BE-2882
-          dtype = "pd.to_datetime";
+          dtype = "bodosql.libs.generated_lib.sql_null_checking_scalar_conv_pd_to_datetime";
         } else {
           dtype = "np.dtype(\"datetime64[ns]\")";
         }
@@ -484,15 +382,9 @@ public class Utils {
       BodoCtx ctx,
       String lambdaFnStr,
       RelDataType outputType,
-      List<String> colNames,
       PandasCodeGenVisitor pdVisitorClass) {
     // We assume, at this point, that the ctx.colsToAddList has been added to inputVar, and
-    // the arguments/nullset have been renamed appropriately.
-    // TODO: Do everything needed for df applies in this function, so it's more understandable.
-
-    lambdaFnStr =
-        generateNullCheck(
-            inputVar, colNames, ctx.getNeedNullCheckColumns(), "None", lambdaFnStr, true);
+    // the arguments have been renamed appropriately.
 
     // pass named parameters as kws to bodosql_case_placeholder()
     // sorting to make sure the same code is generated on each rank
@@ -514,7 +406,7 @@ public class Utils {
     //   (bodo.hiframes.pd_dataframe_ext.get_dataframe_data(df3, 0), ),
     //   len(df3),
     //   MetaType(('  df3_0 = arrs[0]',)),
-    //   '((None if (pd.isna(df3_0[i]) ) else np.int64(1),
+    //   '((None if (pd.isna(bodo.utils.indexing.scalar_optional_getitem(df3_0)) ) else np.int64(1),
     //   IntegerArrayType(int64),
     // )
     StringBuilder inputDataStr = new StringBuilder();

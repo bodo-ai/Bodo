@@ -499,6 +499,11 @@ def mini_dce(func_ir, typemap=None, alias_map=None, arg_aliases=None):
                                 "bodo.libs.bodosql_array_kernels",
                             ):
                                 continue
+                            elif call_name == (
+                                "scalar_optional_getitem",
+                                "bodo.utils.indexing",
+                            ):
+                                continue
                     if isinstance(rhs, ir.Var) and lhs.name == rhs.name:
                         continue
 
@@ -3804,6 +3809,9 @@ def remove_dead_parfor(
         alias_map,
         first_block_saved_values,
         lives_n_aliases,
+        # Bodo Change: Pass func_ir as an extra argument to
+        # enable find_callname
+        func_ir,
     )
 
     # remove saved first block setitems if array potentially changed later
@@ -3819,6 +3827,17 @@ def remove_dead_parfor(
                 and stmt.value.index.name == parfor.index_var.name
             ):
                 continue
+            # Bodo Change: Remove get items found via the BodoSQL
+            # optional getitem function.
+            elif (
+                isinstance(stmt, ir.Assign)
+                and isinstance(stmt.value, ir.Expr)
+                and stmt.value.op == "call"
+                and guard(find_callname, func_ir, stmt.value)
+                == ("scalar_optional_getitem", "bodo.utils.indexing")
+                and stmt.value.args[1].name == parfor.index_var.name
+            ):
+                continue
             varnames = set(v.name for v in stmt.list_vars())
             rm_arrs = varnames & saved_arrs
             for a in rm_arrs:
@@ -3832,7 +3851,14 @@ def remove_dead_parfor(
         block = parfor.loop_body[l]
         saved_values = first_block_saved_values.copy()
         _update_parfor_get_setitems(
-            block.body, parfor.index_var, alias_map, saved_values, lives_n_aliases
+            block.body,
+            parfor.index_var,
+            alias_map,
+            saved_values,
+            lives_n_aliases,
+            # Bodo Change: Pass func_ir as an extra argument to
+            # enable find_callname
+            func_ir,
         )
 
     # after getitem replacement, remove extra setitems
@@ -6298,7 +6324,6 @@ def _handle_matches(self):
 
 if _check_numba_change:  # pragma: no cover
     lines = inspect.getsource(array_exprs.RewriteArrayExprs._handle_matches)
-    print(hashlib.sha256(lines.encode()).hexdigest())
     if (
         hashlib.sha256(lines.encode()).hexdigest()
         != "7ebb92bfdfdd905ba85795d99fa3620103a39ab6251bd6bf49bb3987548231d1"
@@ -6310,3 +6335,278 @@ if _check_numba_change:  # pragma: no cover
 array_exprs.RewriteArrayExprs._handle_matches = _handle_matches
 
 #### END MONKEY PATCH FOR FIXING ISSUES UNCOVERED BY COPY PROPAGATION ####
+
+
+#### BEGIN PATCH OF GETITEM OPTIMIZATIONS TO SUPPORT scalar_optional_getitem ####
+
+# Bodo Change: Pass func_ir as the last argument. All uses of this function
+# are included below in numba_compat.py
+def has_cross_iter_dep(parfor, func_ir):
+    # we conservatively assume there is cross iteration dependency when
+    # the parfor index is used in any expression since the expression could
+    # be used for indexing arrays
+    # TODO: make it more accurate using ud-chains
+    indices = {l.index_variable for l in parfor.loop_nests}
+    for b in parfor.loop_body.values():
+        for stmt in b.body:
+            # GetItem/SetItem nodes are fine since can't have expression inside
+            # and only simple indices are possible
+            if isinstance(stmt, (ir.SetItem, ir.StaticSetItem)):
+                continue
+            # tuples are immutable so no expression on parfor possible
+            if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Expr):
+                op = stmt.value.op
+                if op in ["build_tuple", "getitem", "static_getitem"]:
+                    continue
+                # Bodo Change treat scalar_optional_getitem the same as getitem
+                elif op == "call" and guard(find_callname, func_ir, stmt.value) == (
+                    "scalar_optional_getitem",
+                    "bodo.utils.indexing",
+                ):
+                    continue
+            # other statements can have potential violations
+            if not indices.isdisjoint(stmt.list_vars()):
+                numba.parfors.parfor.dprint("has_cross_iter_dep found", indices, stmt)
+                return True
+    return False
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.parfors.parfor.has_cross_iter_dep)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "d79fa2cde3112a2fec69def6f707c09618a2ebc78dc720b6757a45c648ee8918"
+    ):
+        warnings.warn("numba.parfors.parfor.has_cross_iter_dep has changed")
+
+numba.parfors.parfor.has_cross_iter_dep = has_cross_iter_dep
+
+
+# Bodo Change: Pass func_ir as the last argument. All uses of this function
+# are included below in numba_compat.py
+def try_fuse(equiv_set, parfor1, parfor2, metadata, func_ir):
+    """try to fuse parfors and return a fused parfor, otherwise return None"""
+    numba.parfors.parfor.dprint("try_fuse: trying to fuse \n", parfor1, "\n", parfor2)
+
+    # default report is None
+    report = None
+
+    # fusion of parfors with different dimensions not supported yet
+    if len(parfor1.loop_nests) != len(parfor2.loop_nests):
+        numba.parfors.parfor.dprint("try_fuse: parfors number of dimensions mismatch")
+        msg = "- fusion failed: number of loops mismatched, %s, %s."
+        fmt = "parallel loop #%s has a nest of %s loops"
+        l1 = fmt % (parfor1.id, len(parfor1.loop_nests))
+        l2 = fmt % (parfor2.id, len(parfor2.loop_nests))
+        report = numba.parfors.parfor.FusionReport(
+            parfor1.id, parfor2.id, msg % (l1, l2)
+        )
+        return None, report
+
+    ndims = len(parfor1.loop_nests)
+    # all loops should be equal length
+
+    def is_equiv(x, y):
+        return x == y or equiv_set.is_equiv(x, y)
+
+    def get_user_varname(v):
+        """get original variable name by user if possible"""
+        if not isinstance(v, ir.Var):
+            return v
+        v = v.name
+        if "var_rename_map" in metadata and v in metadata["var_rename_map"]:
+            user_varname = metadata["var_rename_map"][v]
+            return user_varname
+        return v
+
+    for i in range(ndims):
+        nest1 = parfor1.loop_nests[i]
+        nest2 = parfor2.loop_nests[i]
+        if not (
+            is_equiv(nest1.start, nest2.start)
+            and is_equiv(nest1.stop, nest2.stop)
+            and is_equiv(nest1.step, nest2.step)
+        ):
+            numba.parfors.parfor.dprint(
+                "try_fuse: parfor dimension correlation mismatch", i
+            )
+            msg = "- fusion failed: loop dimension mismatched in axis %s. "
+            msg += "slice(%s, %s, %s) != " % (
+                get_user_varname(nest1.start),
+                get_user_varname(nest1.stop),
+                get_user_varname(nest1.step),
+            )
+            msg += "slice(%s, %s, %s)" % (
+                get_user_varname(nest2.start),
+                get_user_varname(nest2.stop),
+                get_user_varname(nest2.step),
+            )
+            report = numba.parfors.parfor.FusionReport(parfor1.id, parfor2.id, msg % i)
+            return None, report
+
+    # TODO: make sure parfor1's reduction output is not used in parfor2
+    # only data parallel loops
+    # Bodo Change: Pass an additional argument to has_cross_iter_dep
+    if has_cross_iter_dep(parfor1, func_ir) or has_cross_iter_dep(parfor2, func_ir):
+        numba.parfors.parfor.dprint("try_fuse: parfor cross iteration dependency found")
+        msg = (
+            "- fusion failed: cross iteration dependency found "
+            "between loops #%s and #%s"
+        )
+        report = numba.parfors.parfor.FusionReport(
+            parfor1.id, parfor2.id, msg % (parfor1.id, parfor2.id)
+        )
+        return None, report
+
+    # find parfor1's defs, only body is considered since init_block will run
+    # first after fusion as well
+    p1_body_usedefs = numba.parfors.parfor.compute_use_defs(parfor1.loop_body)
+    p1_body_defs = set()
+    for defs in p1_body_usedefs.defmap.values():
+        p1_body_defs |= defs
+
+    p2_usedefs = numba.parfors.parfor.compute_use_defs(parfor2.loop_body)
+    p2_uses = numba.parfors.parfor.compute_use_defs({0: parfor2.init_block}).usemap[0]
+    for uses in p2_usedefs.usemap.values():
+        p2_uses |= uses
+
+    if not p1_body_defs.isdisjoint(p2_uses):
+        numba.parfors.parfor.dprint("try_fuse: parfor2 depends on parfor1 body")
+        msg = (
+            "- fusion failed: parallel loop %s has a dependency on the "
+            "body of parallel loop %s. "
+        )
+        report = numba.parfors.parfor.FusionReport(
+            parfor1.id, parfor2.id, msg % (parfor1.id, parfor2.id)
+        )
+        return None, report
+
+    return numba.parfors.parfor.fuse_parfors_inner(parfor1, parfor2)
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.parfors.parfor.try_fuse)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "e808c358f351f8c7b38bdddb018ae9aea2e67062fa716f6c9ebe8c00ca9c397b"
+    ):
+        warnings.warn("numba.parfors.parfor.try_fuse has changed")
+
+numba.parfors.parfor.try_fuse = try_fuse
+
+
+def fuse_parfors(self, array_analysis, blocks):
+    for label, block in blocks.items():
+        equiv_set = array_analysis.get_equiv_set(label)
+        fusion_happened = True
+        while fusion_happened:
+            fusion_happened = False
+            new_body = []
+            i = 0
+            while i < len(block.body) - 1:
+                stmt = block.body[i]
+                next_stmt = block.body[i + 1]
+                if isinstance(stmt, numba.parfors.parfor.Parfor) and isinstance(
+                    next_stmt, numba.parfors.parfor.Parfor
+                ):
+                    # we have to update equiv_set since they have changed due to
+                    # variables being renamed before fusion.
+                    equiv_set = array_analysis.get_equiv_set(label)
+                    stmt.equiv_set = equiv_set
+                    next_stmt.equiv_set = equiv_set
+                    # Bodo Change: Pass the func_ir to try_fuse
+                    fused_node, fuse_report = try_fuse(
+                        equiv_set,
+                        stmt,
+                        next_stmt,
+                        self.metadata["parfors"],
+                        self.func_ir,
+                    )
+                    # accumulate fusion reports
+                    self.diagnostics.fusion_reports.append(fuse_report)
+                    if fused_node is not None:
+                        fusion_happened = True
+                        self.diagnostics.fusion_info[stmt.id].extend([next_stmt.id])
+                        new_body.append(fused_node)
+                        self.fuse_recursive_parfor(fused_node, equiv_set)
+                        i += 2
+                        continue
+                new_body.append(stmt)
+                if isinstance(stmt, numba.parfors.parfor.Parfor):
+                    self.fuse_recursive_parfor(stmt, equiv_set)
+                i += 1
+            new_body.append(block.body[-1])
+            block.body = new_body
+    return
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.parfors.parfor.ParforPass.fuse_parfors)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "c333368ebe1ea0b1103fc4fd10ea9556ae9df39910411857aa1df75887cf73e2"
+    ):
+        warnings.warn("numba.parfors.parfor.ParforPass.fuse_parfors has changed")
+
+numba.parfors.parfor.ParforPass.fuse_parfors = fuse_parfors
+
+
+# Bodo Change: Pass func_ir as the last argument. All uses of this function
+# are included above in numba_compat.py
+def _update_parfor_get_setitems(
+    block_body, index_var, alias_map, saved_values, lives, func_ir
+):
+    """
+    replace getitems of a previously set array in a block of parfor loop body
+    """
+    for stmt in block_body:
+        if (
+            isinstance(stmt, (ir.StaticSetItem, ir.SetItem))
+            and numba.parfors.parfor.get_index_var(stmt).name == index_var.name
+            and stmt.target.name not in lives
+        ):
+            # saved values of aliases of SetItem target array are invalid
+            for w in alias_map.get(stmt.target.name, []):
+                saved_values.pop(w, None)
+            # set saved value after invalidation since alias_map may
+            # contain the array itself (e.g. pi example)
+            saved_values[stmt.target.name] = stmt.value
+            continue
+        if isinstance(stmt, ir.Assign) and isinstance(stmt.value, ir.Expr):
+            rhs = stmt.value
+            if rhs.op == "getitem" and isinstance(rhs.index, ir.Var):
+                if rhs.index.name == index_var.name:
+                    # replace getitem if value saved
+                    stmt.value = saved_values.get(rhs.value.name, rhs)
+                    continue
+            # Treat BodoSQL's scalar_optional_getitem the same as a regular getitem
+            elif rhs.op == "call" and guard(find_callname, func_ir, stmt.value) == (
+                "scalar_optional_getitem",
+                "bodo.utils.indexing",
+            ):
+                if rhs.args[1].name == index_var.name:
+                    # replace scalar_optional_getitem if value saved
+                    stmt.value = saved_values.get(rhs.args[0].name, rhs)
+                    continue
+        # conservative assumption: array is modified if referenced
+        # remove all referenced arrays
+        for v in stmt.list_vars():
+            saved_values.pop(v.name, None)
+            # aliases are potentially modified as well
+            for w in alias_map.get(v.name, []):
+                saved_values.pop(w, None)
+
+    return
+
+
+if _check_numba_change:  # pragma: no cover
+    lines = inspect.getsource(numba.parfors.parfor._update_parfor_get_setitems)
+    if (
+        hashlib.sha256(lines.encode()).hexdigest()
+        != "6ee7f52faf2ab117dc0630e2eab0c8c8ffdf63476e95fc4c6afb7013d47194fe"
+    ):
+        warnings.warn("numba.parfors.parfor._update_parfor_get_setitems has changed")
+
+numba.parfors.parfor._update_parfor_get_setitems = _update_parfor_get_setitems
+
+#### END PATCH OF GETITEM OPTIMIZATIONS TO SUPPORT scalar_optional_getitem ####

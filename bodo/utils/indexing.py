@@ -490,3 +490,42 @@ def unoptional(typingctx, val_t=None):
         return out_val
 
     return val_t.type(val_t), codegen
+
+
+def scalar_optional_getitem(A, idx):  # pragma: no cover
+    pass
+
+
+@overload(scalar_optional_getitem)
+def overload_scalar_optional_getitem(A, idx):
+    """An implementation of getitem that returns None if the array is NULL. This is
+    used by BodoSQL to select individual elements with correction optional type support
+    inside CASE statements.
+
+    Args:
+        A (types.Type): Input Array
+        idx (types.Integer): Index to fetch in the array.
+
+    Raises:
+        BodoError: The index is not the correct type.
+
+    Returns:
+        types.Type: A[idx] if the data isn't null and otherwise None.
+    """
+    if not isinstance(idx, types.Integer):
+        raise BodoError("scalar_optional_getitem(): Can only select a single element")
+
+    if bodo.utils.typing.is_nullable(A):
+        # If the array type is nullable then have an optional return type.
+        def impl(A, idx):  # pragma: no cover
+            if bodo.libs.array_kernels.isna(A, idx):
+                return None
+            else:
+                return bodo.utils.conversion.box_if_dt64(A[idx])
+
+        return impl
+    else:
+        # If the data isn't nullable we don't need to return an optional type.
+        return lambda A, idx: bodo.utils.conversion.box_if_dt64(
+            A[idx]
+        )  # pragma: no cover
