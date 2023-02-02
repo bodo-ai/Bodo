@@ -1375,20 +1375,14 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     List<String> names = new ArrayList<>();
     List<String> args = new ArrayList<>();
-    List<HashSet<String>> needNullCheckColumns = new ArrayList<>();
 
     BodoCtx localCtx = new BodoCtx();
 
     for (int i = 0; i < operands.size(); i++) {
-      localCtx.setNeedNullCheckColumns(new HashSet<>());
       RexNodeVisitorInfo visitorInfo =
           visitRexNode(node.operands.get(i), colNames, id, inputVar, true, localCtx);
       names.add(visitorInfo.getName());
       args.add(visitorInfo.getExprCode());
-      // Note: This creates many sets and could end up being expensive.
-      // It may be useful to generate code node by node to avoid repeated
-      // sets.
-      needNullCheckColumns.add(localCtx.getNeedNullCheckColumns());
     }
     String name = generateCaseName(names);
 
@@ -1422,14 +1416,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
     String codeExpr =
         generateCaseCode(
-            args,
-            generateApply,
-            needNullCheckColumns,
-            localCtx,
-            inputVar,
-            node.getType(),
-            colNames,
-            pdVisitorClass);
+            args, generateApply, localCtx, inputVar, node.getType(), colNames, pdVisitorClass);
 
     return new RexNodeVisitorInfo(name, codeExpr);
   }
@@ -1593,13 +1580,12 @@ public class PandasCodeGenVisitor extends RelVisitor {
 
         // Since we're adding the column to the dataframe before the apply, we return
         // an expression that references the added column.
-        // Since the column may contain null values, we have to null check the column
-        ctx.getNeedNullCheckColumns().add(colName);
         ctx.getUsedColumns().add(colInd);
-        // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value
+        // NOTE: Codegen for bodosql_case_placeholder() expects column value
         // accesses
-        // (e.g. T1_1[i])
-        String returnExpr = "bodo.utils.conversion.box_if_dt64(" + inputVar + "_" + colInd + "[i])";
+        // (e.g. bodo.utils.indexing.scalar_optional_getitem(T1_1, i))
+        String returnExpr =
+            "bodo.utils.indexing.scalar_optional_getitem(" + inputVar + "_" + colInd + ", i)";
         outputRexInfoList.add(new RexNodeVisitorInfo(curAggOp.toString(), returnExpr));
       } else {
         outputRexInfoList.add(new RexNodeVisitorInfo(curAggOp.toString(), outputColExprs.get(i)));
@@ -2098,12 +2084,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
         || fnName == "DECODE") {
       List<String> names = new ArrayList<>();
       List<String> codeExprs = new ArrayList<>();
-      List<HashSet<String>> nullsets = new ArrayList<>();
       BodoCtx localCtx = new BodoCtx();
       int j = 0;
       for (RexNode operand : fnOperation.operands) {
-        localCtx.setNeedNullCheckColumns(new HashSet<>());
-        nullsets.add(localCtx.getNeedNullCheckColumns());
         RexNodeVisitorInfo operandInfo =
             visitRexNode(operand, colNames, id, inputVar, isSingleRow, localCtx);
         names.add(operandInfo.getName());
@@ -2111,7 +2094,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
         // Need to unbox scalar timestamp values.
         if (isSingleRow || (exprTypes.get(j) == BodoSQLExprType.ExprType.SCALAR)) {
           expr = "bodo.utils.conversion.unbox_if_tz_naive_timestamp(" + expr + ")";
-          expr = generateNullCheck(inputVar, colNames, nullsets.get(j), "None", expr, isSingleRow);
         }
         codeExprs.add(expr);
         j++;
@@ -2147,9 +2129,7 @@ public class PandasCodeGenVisitor extends RelVisitor {
       }
 
       // If we're not the top level apply, we need to pass back the information so that it is
-      // properly handled
-      // by the actual top level apply
-      // null columns are handled by the coalesce itself, so don't need to pass those back
+      // properly handled by the actual top level apply
       ctx.getColsToAddList().addAll(localCtx.getColsToAddList());
       ctx.getNamedParams().addAll(localCtx.getNamedParams());
       ctx.getUsedColumns().addAll(localCtx.getUsedColumns());
@@ -2278,42 +2258,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
                     + operandsInfo.get(0).getExprCode()
                     + ", 0)";
             return new RexNodeVisitorInfo(exprName, exprCode);
-          case "UPPER":
-            assert operandsInfo.size() == 1;
-            outputName = operandsInfo.get(0).getName();
-            String exprUppercase;
-            expr = operandsInfo.get(0).getExprCode();
-            exprType = exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id));
-            if (isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR) {
-              exprUppercase = expr + ".upper()";
-            } else if (exprType == BodoSQLExprType.ExprType.COLUMN) {
-              exprUppercase =
-                  "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                      + expr
-                      + ").str.upper())";
-            } else {
-              throw new BodoSQLCodegenException(
-                  "Internal Error: Function: upper only supported for column and scalar types");
-            }
-            return new RexNodeVisitorInfo(outputName, exprUppercase);
-          case "LOWER":
-            assert operandsInfo.size() == 1;
-            outputName = operandsInfo.get(0).getName();
-            String exprLowercase;
-            expr = operandsInfo.get(0).getExprCode();
-            exprType = exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(fnOperation, id));
-            if (isSingleRow || exprType == BodoSQLExprType.ExprType.SCALAR) {
-              exprLowercase = expr + ".lower()";
-            } else if (exprType == BodoSQLExprType.ExprType.COLUMN) {
-              exprLowercase =
-                  "bodo.hiframes.pd_series_ext.get_series_data(pd.Series("
-                      + expr
-                      + ").str.lower())";
-            } else {
-              throw new BodoSQLCodegenException(
-                  "Internal Error: Function: lower only supported for column and scalar types");
-            }
-            return new RexNodeVisitorInfo(outputName, exprLowercase);
           case "DATEADD":
           case "TIMEADD":
             // If DATEADD receives 3 arguments, use the Snowflake DATEADD.
@@ -2664,7 +2608,9 @@ public class PandasCodeGenVisitor extends RelVisitor {
           case "LENGTH":
           case "REVERSE":
           case "LCASE":
+          case "LOWER":
           case "UCASE":
+          case "UPPER":
           case "SPACE":
           case "RTRIMMED_LENGTH":
             if (operandsInfo.size() != 1) {
@@ -2995,10 +2941,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     List<String> args = new ArrayList<>();
     List<BodoSQLExprType.ExprType> exprTypes = new ArrayList<>();
     SqlOperator binOp = operation.getOperator();
-    if (binOp.getKind() == SqlKind.OR) {
-      // Handle OR separately because it has special NULL handling
-      return visitORScan(operation, colNames, id, inputVar, isSingleRow, ctx);
-    }
     // Store the argument types for TZ-Aware data
     List<RelDataType> argDataTypes = new ArrayList<>();
     for (RexNode operand : operation.operands) {
@@ -3018,65 +2960,6 @@ public class PandasCodeGenVisitor extends RelVisitor {
     }
     String name = generateBinOpName(names, binOp);
     String codeGen = generateBinOpCode(args, binOp, argDataTypes);
-    return new RexNodeVisitorInfo(name, codeGen);
-  }
-
-  /**
-   * Visitor for RexCall involving OR. This generates code after each pair of nodes because column
-   * outputs need to handle NULL.
-   *
-   * @param operation Binary operator RexCall being visited
-   * @param colNames List of colNames used in the relational expression
-   * @param id The RelNode id used to uniquely identify the table.
-   * @param inputVar Name of dataframe from which InputRefs select Columns
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @param ctx A ctx object containing the Hashset of columns used that need null handling, the
-   *     List of precomputed column variables that need to be added to the dataframe before an
-   *     apply, and the list of named parameters that need to be passed to an apply function as
-   *     arguments.
-   * @return RexNodeVisitorInfo containing the new column name and the code generated for the
-   *     relational expression.
-   */
-  private RexNodeVisitorInfo visitORScan(
-      RexCall operation,
-      List<String> colNames,
-      int id,
-      String inputVar,
-      boolean isSingleRow,
-      BodoCtx ctx) {
-    StringBuilder outputCode = new StringBuilder();
-    // Keep lists for name generation
-    List<String> names = new ArrayList<>();
-    SqlOperator binOp = operation.getOperator();
-    for (int i = 0; i < operation.operands.size() - 1; i++) {
-      // Generate n - 1 function calls
-      outputCode.append("bodo.libs.bodosql_array_kernels.boolor(");
-    }
-    for (int i = 0; i < operation.operands.size(); i++) {
-      RexNode operand = operation.operands.get(i);
-      HashSet<String> newSet = new HashSet<>();
-      BodoCtx newCtx =
-          new BodoCtx(ctx.getColsToAddList(), newSet, ctx.getUsedColumns(), ctx.getNamedParams());
-      RexNodeVisitorInfo info = visitRexNode(operand, colNames, id, inputVar, isSingleRow, newCtx);
-      names.add(info.getName());
-      outputCode.append(
-          generateOrCode(
-              info.getExprCode(),
-              i != operation.operands.size() - 1,
-              i != 0,
-              inputVar,
-              colNames,
-              newSet,
-              isSingleRow));
-      // Update the nullSet if are computing with columns
-      if (!isSingleRow) {
-        ctx.getNeedNullCheckColumns().addAll(newSet);
-      }
-    }
-    String name = generateBinOpName(names, binOp);
-    String codeGen = outputCode.toString();
     return new RexNodeVisitorInfo(name, codeGen);
   }
 
@@ -3104,29 +2987,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
       String inputVar,
       boolean isSingleRow,
       BodoCtx ctx) {
-    boolean outputScalar =
-        isSingleRow
-            || (exprTypesMap.get(ExprTypeVisitor.generateRexNodeKey(operation, id))
-                == BodoSQLExprType.ExprType.SCALAR);
-    SqlKind operatorKind = operation.getOperator().kind;
-    // Since Scalar IS_NULL/IS_NOT_NULL will handle null for all children, use a new set
-    if (operatorKind == SqlKind.IS_NULL || operatorKind == SqlKind.IS_NOT_NULL) {
-      ctx =
-          new BodoCtx(
-              ctx.getColsToAddList(), new HashSet<>(), ctx.getUsedColumns(), ctx.getNamedParams());
-    }
     RexNodeVisitorInfo seriesOp =
         visitRexNode(operation.operands.get(0), colNames, id, inputVar, isSingleRow, ctx);
     String name = generatePostfixOpName(seriesOp.getName(), operation.getOperator());
-    String codeExpr =
-        generatePostfixOpCode(
-            seriesOp.getExprCode(),
-            operation.getOperator(),
-            inputVar,
-            colNames,
-            ctx.getNeedNullCheckColumns(),
-            isSingleRow,
-            outputScalar);
+    String codeExpr = generatePostfixOpCode(seriesOp.getExprCode(), operation.getOperator());
     return new RexNodeVisitorInfo(name, codeExpr);
   }
 
@@ -3222,22 +3086,15 @@ public class PandasCodeGenVisitor extends RelVisitor {
         String.format(
             "bodo.hiframes.pd_dataframe_ext.get_dataframe_data(%s, %d)", inputVar, node.getIndex());
     if (isSingleRow) {
-      // Float types don't have a nullable vs non-nullable array. Until we have nullable
-      // support we treat NaN as NULL, so this keeps things consistent
-      SqlTypeName typeName = node.getType().getSqlTypeName();
-      boolean is_floating_type =
-          typeName.equals(SqlTypeName.FLOAT)
-              || typeName.equals(SqlTypeName.DOUBLE)
-              || typeName.equals(SqlTypeName.DECIMAL);
-      // If we are processing inside CASE we need to track nulls and used columns
-      if (node.getType().isNullable() || is_floating_type) {
-        // Only track nulls if the type is nullable.
-        ctx.getNeedNullCheckColumns().add(colName);
-      }
       ctx.getUsedColumns().add(node.getIndex());
-      // NOTE: Codegen for bodosql_case_placeholder() expects table_column[i] column value accesses
-      // (e.g. T1_1[i])
-      refValue = "bodo.utils.conversion.box_if_dt64(" + inputVar + "_" + node.getIndex() + "[i])";
+      // NOTE: Codegen for bodosql_case_placeholder() expects column value accesses
+      // (e.g. bodo.utils.indexing.scalar_optional_getitem(T1_1, i))
+      refValue =
+          "bodo.utils.indexing.scalar_optional_getitem("
+              + inputVar
+              + "_"
+              + node.getIndex()
+              + ", i)";
     }
     return new RexNodeVisitorInfo(colName, refValue);
   }

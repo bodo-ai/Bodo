@@ -16,6 +16,7 @@ from bodo.utils.typing import (
     BodoError,
     get_overload_const_str,
     is_overload_constant_str,
+    is_overload_none,
     raise_bodo_error,
 )
 
@@ -150,7 +151,9 @@ def add_interval(start_dt, interval):
     for i in range(len(args)):
         if isinstance(args[i], types.optional):  # pragma: no cover
             return unopt_argument(
-                "bodo.libs.bodosql_array_kernels.add_interval_util", ["arr"], i
+                "bodo.libs.bodosql_array_kernels.add_interval",
+                ["start_dt", "interval"],
+                i,
             )
 
     def impl(start_dt, interval):  # pragma: no cover
@@ -1094,7 +1097,9 @@ def create_dt_diff_fn_util_overload(unit):  # pragma: no cover
         verify_datetime_arg_allow_tz(arr0, "diff_" + unit, "arr0")
         verify_datetime_arg_allow_tz(arr1, "diff_" + unit, "arr1")
         tz = get_tz_if_exists(arr0)
-        if get_tz_if_exists(arr1) != tz:
+        if get_tz_if_exists(arr1) != tz and not (
+            is_overload_none(arr0) or is_overload_none(arr1)
+        ):
             raise_bodo_error(f"diff_{unit}: both arguments must have the same timezone")
 
         arg_names = ["arr0", "arr1"]

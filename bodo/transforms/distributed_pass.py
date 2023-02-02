@@ -470,6 +470,9 @@ class DistributedPass:
         else:
             func_name, func_mod = fdef
 
+        if fdef == ("scalar_optional_getitem", "bodo.utils.indexing"):
+            return self._run_getitem_scalar_optional(assign, equiv_set, avail_vars)
+
         if (
             fdef == ("table_filter", "bodo.hiframes.table")
             and self._is_1D_or_1D_Var_arr(lhs)
@@ -3284,6 +3287,56 @@ class DistributedPass:
         ):
             return self._run_dist_getitem(
                 node, full_node, arr, index_var, equiv_set, avail_vars, out
+            )
+
+        return out
+
+    def _run_getitem_scalar_optional(self, full_node, equiv_set, avail_vars):
+        """Transform distributed getitem/setitem operations"""
+        out = [full_node]
+        lhs = full_node.target
+        rhs = full_node.value
+        arr = rhs.args[0]
+        index_var = rhs.args[1]
+
+        # adjust parallel access indices (in parfors)
+        # 1D_Var arrays need adjustment if 1D_Var parfor has start adjusted
+        if (
+            self._is_1D_arr(arr.name)
+            or (
+                self._is_1D_Var_arr(arr.name)
+                and arr.name in self._1D_Var_array_accesses
+                and index_var.name in self._1D_Var_array_accesses[arr.name]
+            )
+        ) and (arr.name, index_var.name) in self._parallel_accesses:
+            start_var, nodes = self._get_parallel_access_start_var(
+                arr, equiv_set, index_var, avail_vars
+            )
+            sub_nodes = self._get_ind_sub(index_var, start_var)
+            out = nodes + sub_nodes
+            # Update the index with the modified index.
+            rhs.args[1] = sub_nodes[-1].target
+            # Update the calltypes if the index was a literal.
+            if isinstance(self.typemap[index_var.name], types.Literal):
+                self._set_ith_arg_to_unliteral(rhs, 1)
+            out.append(full_node)
+        # parallel access in 1D_Var case, no need to transform
+        elif (arr.name, index_var.name) in self._parallel_accesses:
+            return out
+        elif self._is_1D_or_1D_Var_arr(arr.name):
+            start_var, nodes = self._get_dist_start_var(arr, equiv_set, avail_vars)
+            size_var = self._get_dist_var_len(arr, nodes, equiv_set, avail_vars)
+            is_1D = self._is_1D_arr(arr.name)
+            return nodes + compile_func_single_block(
+                eval(
+                    "lambda arr, ind, start, tot_len: bodo.libs.distributed_api.int_optional_getitem("
+                    "    arr, ind, start, tot_len, _is_1D"
+                    ")"
+                ),
+                [arr, index_var, start_var, size_var],
+                lhs,
+                self,
+                extra_globals={"_is_1D": is_1D},
             )
 
         return out

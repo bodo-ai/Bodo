@@ -1,5 +1,7 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
+import static com.bodosql.calcite.application.BodoSQLCodeGen.DatetimeFnCodeGen.generateDateTruncCode;
+import static com.bodosql.calcite.application.Utils.Utils.makeQuoted;
 import static com.bodosql.calcite.application.Utils.Utils.sqlTypenameToPandasTypename;
 import static org.apache.calcite.sql.type.SqlTypeName.DATE;
 import static org.apache.calcite.sql.type.SqlTypeName.TIMESTAMP_WITH_LOCAL_TIME_ZONE;
@@ -75,32 +77,32 @@ public class CastCodeGen {
           break;
         }
       default:
+        StringBuilder asTypeBuilder = new StringBuilder();
         SqlTypeName typeName = outputType.getSqlTypeName();
         String dtype = sqlTypenameToPandasTypename(typeName, outputScalar);
         if (outputScalar) {
-          codeBuilder.append(dtype).append("(").append(arg).append(")");
+          asTypeBuilder.append(dtype).append("(").append(arg).append(")");
         } else {
           // TODO: replace Series.astype/dt with array operation
-          codeBuilder
+          asTypeBuilder
               .append("bodo.hiframes.pd_series_ext.get_series_data(")
               .append("pd.Series(")
               .append(arg)
               .append(").astype(")
               .append(dtype)
-              .append(", _bodo_nan_to_str=False)");
+              .append(", _bodo_nan_to_str=False))");
         }
         // Date needs special handling to truncate timestamp. We always round down.
         // TODO: Remove once we support Date type natively
         if (typeName == SqlTypeName.DATE) {
-          if (outputScalar) {
-            codeBuilder.append(".floor(freq=\"D\")");
-          } else {
-            codeBuilder.append(".dt.floor(freq=\"D\")");
-          }
-        }
-        // Add the closing parenthesis the output array as expected elsewhere
-        if (!outputScalar) {
-          codeBuilder.append(")");
+          // Generate a dummy visitor so we can reuse DATE_TRUNC code.
+          RexNodeVisitorInfo dayVisitor = new RexNodeVisitorInfo("", makeQuoted("day"));
+          codeBuilder.append(
+              generateDateTruncCode(
+                      dayVisitor, new RexNodeVisitorInfo("", asTypeBuilder.toString()))
+                  .getExprCode());
+        } else {
+          codeBuilder.append(asTypeBuilder);
         }
     }
     return codeBuilder.toString();

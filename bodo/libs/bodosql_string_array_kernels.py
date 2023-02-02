@@ -11,7 +11,7 @@ from numba.extending import overload, register_jitable
 
 import bodo
 from bodo.libs.bodosql_array_kernel_utils import *
-from bodo.utils.typing import BodoError
+from bodo.utils.typing import BodoError, is_overload_none
 
 
 @numba.generated_jit(nopython=True)
@@ -823,8 +823,8 @@ def endswith_util(source, suffix):
     """
 
     arr_is_string = verify_string_binary_arg(source, "endswith", "source")
-    if arr_is_string != verify_string_binary_arg(
-        suffix, "endswith", "suffix"
+    if arr_is_string != verify_string_binary_arg(suffix, "endswith", "suffix") and not (
+        is_overload_none(source) or is_overload_none(suffix)
     ):  # pragma: no cover
         raise BodoError("String and suffix must both be strings or both binary")
 
@@ -898,8 +898,8 @@ def insert_util(arr, pos, length, inject):
     arr_is_string = verify_string_binary_arg(arr, "INSERT", "arr")
     verify_int_arg(pos, "INSERT", "pos")
     verify_int_arg(length, "INSERT", "length")
-    if arr_is_string != verify_string_binary_arg(
-        inject, "INSERT", "inject"
+    if arr_is_string != verify_string_binary_arg(inject, "INSERT", "inject") and not (
+        is_overload_none(arr) or is_overload_none(inject)
     ):  # pragma: no cover
         raise BodoError("String and injected value must both be strings or both binary")
 
@@ -1012,7 +1012,9 @@ def create_lpad_rpad_util_overload(func_name):  # pragma: no cover
     def overload_lpad_rpad_util(arr, length, pad_string):
         pad_is_string = verify_string_binary_arg(pad_string, func_name, "pad_string")
         arr_is_string = verify_string_binary_arg(arr, func_name, "arr")
-        if arr_is_string != pad_is_string:
+        if arr_is_string != pad_is_string and not (
+            is_overload_none(pad_string) or is_overload_none(arr)
+        ):
             raise BodoError("Pad string and arr must be the same type!")
 
         out_dtype = bodo.string_array_type if arr_is_string else bodo.binary_array_type
@@ -1113,8 +1115,8 @@ def position_util(substr, source, start):
     """
 
     is_str = verify_string_binary_arg(substr, "POSITION", "substr")
-    if is_str != verify_string_binary_arg(
-        source, "POSITION", "source"
+    if is_str != verify_string_binary_arg(source, "POSITION", "source") and not (
+        is_overload_none(substr) or is_overload_none(is_str)
     ):  # pragma: no cover
         raise BodoError("Substring and source must be both strings or both binary")
     verify_int_arg(start, "POSITION", "start")
@@ -1358,6 +1360,8 @@ def startswith_util(source, prefix):
     arr_is_string = verify_string_binary_arg(source, "startswith", "source")
     if arr_is_string != verify_string_binary_arg(
         prefix, "startswith", "prefix"
+    ) and not (
+        is_overload_none(source) or is_overload_none(prefix)
     ):  # pragma: no cover
         raise BodoError("String and prefix must both be strings or both binary")
 
