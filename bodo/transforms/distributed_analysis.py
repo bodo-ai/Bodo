@@ -948,6 +948,11 @@ class DistributedAnalysis:
                 array_dists[table] = out_dist
             return
 
+        if fdef == ("scalar_optional_getitem", "bodo.utils.indexing"):
+            # scalar_optional_getitem is used by BodoSQL to load scalars.
+            # This doesn't impact the distribution of any array.
+            return
+
         if (
             func_name == "predict_proba"
             and "bodo.libs.xgb_ext" in sys.modules
@@ -4445,6 +4450,8 @@ def _get_array_accesses(blocks, func_ir, typemap, accesses=None):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, True))
                         if fdef == ("set_bit_to_arr", "bodo.libs.int_arr_ext"):
                             accesses.add((rhs.args[0].name, rhs.args[1].name, True))
+                        if fdef == ("scalar_optional_getitem", "bodo.utils.indexing"):
+                            accesses.add((rhs.args[0].name, rhs.args[1].name, False))
             for T, f in array_accesses_extensions.items():
                 if isinstance(inst, T):
                     f(inst, func_ir, typemap, accesses)

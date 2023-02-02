@@ -1,7 +1,6 @@
 package com.bodosql.calcite.application.BodoSQLCodeGen;
 
 import static com.bodosql.calcite.application.BodoSQLCodeGen.DateAddCodeGen.generateMySQLDateAddCode;
-import static com.bodosql.calcite.application.Utils.Utils.generateNullCheck;
 
 import com.bodosql.calcite.application.BodoSQLCodegenException;
 import java.util.*;
@@ -115,6 +114,9 @@ public class BinOpCodeGen {
       case AND:
         fn = "bodo.libs.bodosql_array_kernels.booland";
         break;
+      case OR:
+        fn = "bodo.libs.bodosql_array_kernels.boolor";
+        break;
       default:
         throw new BodoSQLCodegenException(
             "Unsupported Operator, " + binOpKind + " specified in query.");
@@ -156,45 +158,6 @@ public class BinOpCodeGen {
       nameBuilder.append(", ").append(names.get(i)).append(")");
     }
     return nameBuilder.toString();
-  }
-
-  /**
-   * Function that generates code for a single argument in OR.
-   *
-   * @param argCode The code generate for that single argument
-   * @param isFirstArg Is the argument the first input to a function call?
-   * @param isLastArg Is the argument the last input to a function call?
-   * @param inputVar The name of the input table which columns reference
-   * @param nullSet Set of columns that may need to be treated as null. If this argument is treated
-   *     as column then the set will be empty.
-   * @param isSingleRow Boolean for if table references refer to a single row or the whole table.
-   *     Operations that operate per row (i.e. Case switch this to True). This is used for
-   *     determining if an expr returns a scalar or a column.
-   * @return The code generated for that single argument.
-   */
-  public static String generateOrCode(
-      String argCode,
-      boolean isFirstArg,
-      boolean isLastArg,
-      String inputVar,
-      List<String> colNames,
-      HashSet<String> nullSet,
-      boolean isSingleRow) {
-    StringBuilder newArg = new StringBuilder();
-    // This generates code as (False if (pd.isna(col0) or ... pd.isna(coln)) else argCode)
-    // There may be ways to refactor this to generate more efficient code.
-    newArg.append("(");
-    newArg.append(generateNullCheck(inputVar, colNames, nullSet, "False", argCode, isSingleRow));
-    newArg.append(")");
-    // If we are the last arg to a function we need a closing )
-    if (isLastArg) {
-      newArg.append(")");
-    }
-    // If we are the first arg to a function we need a trailing ,
-    if (isFirstArg) {
-      newArg.append(", ");
-    }
-    return newArg.toString();
   }
 
   /**
