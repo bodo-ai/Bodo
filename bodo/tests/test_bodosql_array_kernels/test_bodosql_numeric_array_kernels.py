@@ -1317,10 +1317,12 @@ single_arg_np_map = {
     "square": "np.square",
 }
 single_arg_np_list = list(single_arg_np_map.keys())
+# Note: round is not tested because there is no good way to test the kernel
+# without hardcoding the output data to match Snowflake semantics, which is
+# already done for BodoSQL tests
 double_arg_np_map = {
     "mod": "(lambda a, b: np.fmod(a, b) if b != 0 else np.nan)",
     "power": "(lambda a, b: np.power(np.float64(a), b))",
-    "round": "np.round",
     "trunc": "(lambda a, b: np.trunc(a * (10 ** b)) * (10 ** -b) if int(b) == b else np.nan)",
 }
 double_arg_np_list = list(double_arg_np_map.keys())
@@ -1412,9 +1414,6 @@ def test_numeric_single_arg_option(func):
 def test_numeric_double_arg_funcs(arr0, arr1, func):
     if len(arr0) != len(arr1):
         return
-    if func == "round":
-        if any(np.int64(arr1) != arr1):
-            return
     test_impl = "def impl(arr0, arr1):\n"
     test_impl += (
         f"  return pd.Series(bodo.libs.bodosql_array_kernels.{func}(arr0, arr1))"

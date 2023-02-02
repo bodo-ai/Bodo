@@ -80,8 +80,6 @@ def bodosql_conv_df(request):
         ("CBRT", "CBRT", "mixed_ints"),
         ("FACTORIAL", "FACTORIAL", "positive_ints"),
         ("FLOOR", "FLOOR", "mixed_floats"),
-        ("ROUND", "ROUND", "mixed_floats"),
-        ("ROUND", "ROUND", "mixed_ints"),
         ("SIGN", "SIGN", "mixed_floats"),
         ("SIGN", "SIGN", "mixed_ints"),
         # the second argument to POW for SQUARE (2) is provided below
@@ -109,11 +107,6 @@ def single_op_numeric_fn_info(request):
         ("MOD", "MOD", "mixed_ints", "mixed_ints"),
         ("MOD", "MOD", "mixed_ints", "mixed_floats"),
         ("MOD", "MOD", "unsigned_int64s", "unsigned_int32s"),
-        ("TRUNCATE", "ROUND", "mixed_floats", "3"),
-        ("TRUNC", "ROUND", "mixed_floats", "3"),
-    ]
-    + [("ROUND", "ROUND", "mixed_floats", x) for x in ["2", "1", "3"]]
-    + [
         ("POW", "POW", "positive_floats", "mixed_floats"),
         ("POWER", "POWER", "positive_floats", "mixed_floats"),
         ("POW", "POW", "mixed_floats", "mixed_ints"),
@@ -659,4 +652,142 @@ def test_div0_scalars(spark_info):
         check_dtype=False,
         check_names=False,
         sort_output=False,
+    )
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            (
+                pd.Series(
+                    [-123456] * 5 + [None, 0, 156, 155, 165, 175], dtype=pd.Int32Dtype()
+                ),
+                pd.Series(
+                    [1, -1, -2, None, -3, 1, 2, -5, -1, -1, -1], dtype=pd.Int32Dtype()
+                ),
+                pd.Series(
+                    [
+                        -123456,
+                        -123460,
+                        -123500,
+                        None,
+                        -123000,
+                        None,
+                        0,
+                        0,
+                        160,
+                        170,
+                        180,
+                    ],
+                    dtype=pd.Int32Dtype(),
+                ),
+            ),
+            id="integers-with_scale",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        15.57407724654902,
+                        -218.5039863261519,
+                        None,
+                        -0.1425465430742778,
+                        11578.212823495775,
+                        0.5,
+                        1.5,
+                        2.5,
+                        -0.5,
+                        -1.5,
+                        -2.5,
+                    ]
+                ),
+                0,
+                pd.Series(
+                    [16.0, -219.0, None, 0.0, 11578, 1.0, 2.0, 3.0, -1.0, -2.0, -3.0]
+                ),
+            ),
+            id="floats-no_scale",
+        ),
+        pytest.param(
+            (
+                pd.Series(
+                    [
+                        15.57407724654902,
+                        -21.85039863261519,
+                        None,
+                        -0.1425465430742778,
+                        11578.212823495775,
+                        0.05,
+                        -12.3495,
+                        -47.65,
+                        25.0,
+                    ]
+                    * 3
+                ),
+                [1] * 9 + [4] * 9 + [-1] * 9,
+                pd.Series(
+                    [
+                        15.6,
+                        -21.9,
+                        None,
+                        -0.1,
+                        11578.2,
+                        0.1,
+                        -12.3,
+                        -47.7,
+                        25.0,
+                        15.5741,
+                        -21.8504,
+                        None,
+                        -0.1425,
+                        11578.2128,
+                        0.05,
+                        -12.3495,
+                        -47.65,
+                        25.0,
+                        20.0,
+                        -20.0,
+                        None,
+                        0.0,
+                        11580.0,
+                        0.0,
+                        -10.0,
+                        -50.0,
+                        30.0,
+                    ]
+                ),
+            ),
+            id="floats-with_scale",
+        ),
+    ]
+)
+def round_data(request):
+    """Tests the behavior of the ROUND function. Hardcoded answers obtained
+    from Snowflake to ensure that the correct rounding behavior is achieved"""
+    data, scale, answer = request.param
+    ctx = {"table1": pd.DataFrame({"A": data, "S": scale})}
+    scale_str = "" if scale is 0 else ", S"
+    return ctx, scale_str, answer
+
+
+@pytest.mark.parametrize(
+    "use_case",
+    [
+        pytest.param(False, id="no_case"),
+        pytest.param(True, id="with_case", marks=pytest.mark.slow),
+    ],
+)
+def test_round(round_data, use_case, spark_info, memory_leak_check):
+    ctx, scale_str, answer = round_data
+    if use_case:
+        query = f"SELECT CASE WHEN A < -999999 THEN NULL ELSE ROUND(A{scale_str}) END FROM table1"
+    else:
+        query = f"SELECT ROUND(A{scale_str}) FROM table1"
+    check_query(
+        query,
+        ctx,
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        expected_output=pd.DataFrame({0: answer}),
     )
