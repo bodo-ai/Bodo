@@ -13,6 +13,13 @@ schedules:
     include:
     - develop
 
+parameters:
+  - name: BUILD_MAC_CONDA
+    type: boolean
+    default: false
+  - name: BUILD_PIP
+    type: boolean
+    default: false
 
 # NOTE: these variables determine artifactory channel to publish Bodo/BodoSQL/Iceberg packages.
 # See get_channel.sh
@@ -24,12 +31,12 @@ variables:
   OBFUSCATE: 1
 
 stages:
-- stage: Build_Bodo_Binary
-  displayName: 'Build Bodo Binary'
+- stage: Build_Bodo_Binary_Linux_Conda
+  displayName: 'Build Bodo Binary for Linux Conda'
   jobs:
   - job: find_suffix
     pool:
-      vmImage: macOS-latest
+      vmImage: ubuntu-latest
     steps:
     - script: |
         set -exo pipefail
@@ -38,53 +45,59 @@ stages:
         echo "##vso[task.setvariable variable=fileSuffix;isOutput=true]$FILE_SUFFIX"
       displayName: 'write FILE_SUFFIX'
       name: suffix_step
-
-  # Bodo build:
-  # Note: for all the bodo build steps,
-  # the name string is used later in the buildscripts to determine which version of conda to install
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: Linux
       vmImage: ubuntu-latest
-      useNumbaDev: false
       platformBuild: false
       weeklyTest: false
+
+# Additional Conda Packages. Usually disabled for Nightly Runs
+# But useful to have when testing all Conda Builds
+- stage: Build_Bodo_Binary_Other_Conda
+  displayName: 'Build Bodo Binary for Other Conda'
+  dependsOn: []
+  condition: or(eq('${{ parameters.BUILD_MAC_CONDA }}', 'true'), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'))
+  jobs:
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: macOS
       vmImage: macOS-latest
-      useNumbaDev: false
       platformBuild: false
       weeklyTest: false
 #  - template: buildscripts/azure/azure-build-binary-windows.yml
 #    parameters:
 #      name: Windows
 #      vmImage: windows-2019
-#      useNumbaDev: false
   - template: buildscripts/azure/azure-build-binary-linux-macos.yml
     parameters:
       name: macOS_ARM
       vmImage: macOS-latest
-      useNumbaDev: false
       platformBuild: false
       weeklyTest: false
+      buildARM: true
+
+# Pip Packages. Usually disabled for Nightly Runs
+# But useful to have when testing all Pip Builds
+- stage: Build_Bodo_Binary_Pip
+  displayName: 'Build Bodo Binary for Pip'
+  dependsOn: []
+  condition: or(eq('${{ parameters.BUILD_PIP }}', 'true'), in(variables['Build.Reason'], 'IndividualCI', 'BatchedCI'))
+  jobs:
   - template: buildscripts/azure/azure-build-binary-linux-pip.yml
     parameters:
       name: Linux_pip
       vmImage: ubuntu-latest
-      useNumbaDev: false
       platformBuild: false
 #  - template: buildscripts/azure/azure-build-binary-windows-pip.yml
 #    parameters:
 #      name: Windows_pip
 #      vmImage: windows-2019
-#      useNumbaDev: false
 #      platformBuild: false
   - template: buildscripts/azure/azure-build-binary-macos-x86-pip.yml
     parameters:
       name: macOS_x86_pip
       vmImage: macOS-latest
-      useNumbaDev: false
       platformBuild: false
 
 # Note: It is difficult to enforce the exact version of bodo to use for the build, outside of
@@ -94,7 +107,7 @@ stages:
 
 - stage: Build_BodoSQL_Binary
   displayName: 'Build BodoSQL Binary'
-  dependsOn: Build_Bodo_Binary
+  dependsOn: Build_Bodo_Binary_Linux_Conda
   jobs:
 
   # BodoSQL build:
@@ -114,7 +127,7 @@ stages:
   # Bodo tests
 - stage: Test_Bodo_Binary
   displayName: 'Test Bodo Binary'
-  dependsOn: Build_Bodo_Binary
+  dependsOn: Build_Bodo_Binary_Linux_Conda
   jobs:
 
   - template: buildscripts/azure/azure-test-binary-linux-macos.yml
