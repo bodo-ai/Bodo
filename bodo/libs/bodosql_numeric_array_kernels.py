@@ -392,7 +392,7 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
             elif func_name == "POWER":
                 scalar_text += "res[i] = np.power(np.float64(arg0), arg1)"
             elif func_name == "ROUND":
-                scalar_text += "res[i] = np.round(arg0, arg1)"
+                scalar_text += "res[i] = round_half_always_up(arg0, arg1)"
             elif func_name == "TRUNC":
                 scalar_text += "if int(arg1) == arg1:\n"
                 # numpy truncates to the integer nearest to zero, so we shift by the number of decimals as appropriate
@@ -405,8 +405,15 @@ def create_numeric_util_overload(func_name):  # pragma: no cover
             else:
                 raise ValueError(f"Unknown function name: {func_name}")
 
+            extra_globals = {"round_half_always_up": round_half_always_up}
+
             return gen_vectorized(
-                arg_names, arg_types, propagate_null, scalar_text, out_dtype
+                arg_names,
+                arg_types,
+                propagate_null,
+                scalar_text,
+                out_dtype,
+                extra_globals=extra_globals,
             )
 
     return overload_numeric_util
@@ -422,6 +429,50 @@ def _install_numeric_overload(funcs_utils_names):
 
 
 _install_numeric_overload(funcs_utils_names)
+
+
+@numba.generated_jit(nopython=True)
+def round_half_always_up(x, places):
+    """Variant of builtin round() that avoids Python's tie-breaking behavior:
+
+                             x: 0.5, 1.5, 2.5, 3.5
+                   round(x, 0): 0.0, 2.0, 2.0, 4.0
+    round_half_always_up(x, 0): 0.0, 1.0, 2.0, 3.0
+
+    Args:
+        x (integer/float): the number to be rounded
+        places (integer): how many places to round to (can be positive or negative)
+
+    Returns:
+        integer/float: x rounded to the specified number of places (same type as x)
+    """
+    func_text = "def impl(x, places):\n"
+    func_text += "  sign = -1 if x < 0 else 1\n"
+    func_text += "  x = abs(x)\n"
+    func_text += "  shift = 10 ** abs(places)\n"
+    func_text += "  if places < 0:\n"
+    func_text += "    x /= shift\n"
+    func_text += "    r = x % 1\n"
+    func_text += "    if r < 0.5: x = floor(x)\n"
+    func_text += "    else: x = ceil(x)\n"
+    func_text += "    x *= shift\n"
+    func_text += "  else:\n"
+    func_text += "    x *= shift\n"
+    func_text += "    r = x % 1\n"
+    func_text += "    if r < 0.5: x = floor(x)\n"
+    func_text += "    else: x = ceil(x)\n"
+    func_text += "    x /= shift\n"
+    if is_valid_int_arg(x):
+        func_text += "  x = np.int64(x)\n"
+    func_text += "  return x * sign\n"
+    loc_vars = {}
+    exec(
+        func_text,
+        {"bodo": bodo, "floor": math.floor, "ceil": math.ceil, "np": np},
+        loc_vars,
+    )
+    impl = loc_vars["impl"]
+    return impl
 
 
 @numba.generated_jit(nopython=True)
