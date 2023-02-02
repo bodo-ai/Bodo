@@ -4,7 +4,7 @@ Common IR extension functions for connectors such as CSV, Parquet and JSON reade
 """
 import sys
 from collections import defaultdict
-from typing import Literal, Set, Tuple
+from typing import Dict, List, Literal, Set, Tuple, Union
 
 import numba
 import pandas as pd
@@ -651,99 +651,45 @@ def generate_arrow_filters(
         for predicate in filters:
             dnf_and_conds = []
             expr_and_conds = []
-            for v in predicate:
-                col_expr = _get_filter_column_arrow_expr(v[0], filter_map)
+            for p in predicate:
                 # First update expr since these include all expressions.
-                # If v[2] is a var we pass the variable at runtime,
+                # If p[2] is a var we pass the variable at runtime,
                 # otherwise we pass a constant (i.e. NULL) which
                 # requires special handling
-                if v[1] == "ALWAYS_TRUE":
-                    # Special operator handling the true case.
-                    expr_val = "ds.scalar(True)"
-                elif v[1] in ("ALWAYS_FALSE", "ALWAYS_NULL"):
-                    # Special operators for False. Since we are
-                    # filtering we can map NULL -> False.
-                    expr_val = "ds.scalar(False)"
-                elif isinstance(v[2], ir.Var):
-                    # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
-                    # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
-                    # column_cast and scalar_cast.
-                    column_cast, scalar_cast = determine_filter_cast(
-                        original_out_types,
-                        typemap,
-                        v,
-                        orig_colname_map,
-                        partition_names,
-                        source,
-                    )
-                    filter_var = filter_map[v[2].name]
-                    if v[1] == "in":
-                        # Expected output for this format should look like
-                        # ds.field('A').isin(filter_var)
-                        expr_val = f"{col_expr}.isin({filter_var})"
-
-                    elif v[1] == "case_insensitive_equality":
-                        # case_insensitive_equality is just == with both inputs converted
-                        # to lower case. This is used by ilike
-                        expr_val = f"(pa.compute.ascii_lower({col_expr}{column_cast}) == pa.compute.ascii_lower(ds.scalar({filter_var}){scalar_cast}))"
-
-                    elif v[1] in (
-                        "startswith",
-                        "endswith",
-                        "contains",
-                        "case_insensitive_startswith",
-                        "case_insensitive_endswith",
-                        "case_insensitive_contains",
-                    ):
-                        op = v[1]
-                        prefix = "case_insensitive_"
-                        if op.startswith(prefix):
-                            ignore_case = True
-                            # These functions have the form case_insensitive_funcname.
-                            # Extract just func name.
-                            op = op[len(prefix) :]
-                        else:
-                            ignore_case = False
-                        if op == "startswith":
-                            func_name = "starts_with"
-                        elif op == "endswith":
-                            func_name = "ends_with"
-                        elif op == "contains":
-                            func_name = "match_substring"
-                        # All of these functions require no scalar.
-                        scalar_arg = filter_var
-                        # Expected output for this format should look like
-                        # pa.compute.func(ds.field('A'), scalar, ignore_case=var)
-                        expr_val = f"pa.compute.{func_name}({col_expr}, {scalar_arg}, ignore_case={ignore_case})"
-                    else:
-                        # Expected output for this format should like
-                        # (ds.field('A') > ds.scalar(py_var))
-                        expr_val = f"({col_expr}{column_cast} {v[1]} ds.scalar({filter_var}){scalar_cast})"
-                else:
-                    # Currently the only constant expressions we support are IS [NOT] NULL
-                    assert (
-                        v[2] == "NULL"
-                    ), "unsupported constant used in filter pushdown"
-                    if v[1] == "is not":
-                        prefix = "~"
-                    else:
-                        prefix = ""
-                    # Expected output for this format should like
-                    # (~ds.field('A').is_null())
-                    expr_val = f"({prefix}{col_expr}.is_null())"
+                expr_val = _generate_column_expr_filter(
+                    p,
+                    filter_map,
+                    original_out_types,
+                    typemap,
+                    orig_colname_map,
+                    partition_names,
+                    source,
+                )
                 expr_and_conds.append(expr_val)
                 # Now handle the dnf section. We can only append a value if its not a constant
                 # expression and is a partition column. If we already know skip_partitions = False,
                 # then we skip partitions as they will be unused.
 
                 if not skip_partitions:
+                    # operators supported in DNF expressions. is/is not is only supported by iceberg
+                    dnf_ops = {
+                        "==",
+                        "!=",
+                        "<",
+                        ">",
+                        "<=",
+                        ">=",
+                        "in",
+                        "is",
+                        "is not",
+                    }
                     if (
-                        v[0] in partition_names
-                        and isinstance(v[2], ir.Var)
-                        and v[1] not in ("startswith", "endswith", "contains")
+                        p[0] in partition_names
+                        and isinstance(p[2], ir.Var)
+                        and p[1] in dnf_ops
                     ):
                         if output_dnf:
-                            dnf_str = f"('{v[0]}', '{v[1]}', {filter_map[v[2].name]})"
+                            dnf_str = f"('{p[0]}', '{p[1]}', {filter_map[p[2].name]})"
                         else:
                             dnf_str = expr_val
                         dnf_and_conds.append(dnf_str)
@@ -751,13 +697,13 @@ def generate_arrow_filters(
                     # Iceberg, since supporting nulls in Parquet/Arrow/Hive partitioning is
                     # complicated (e.g. Spark allows users to specify custom null directory)
                     elif (
-                        v[0] in partition_names
-                        and not isinstance(v[2], ir.Var)
+                        p[0] in partition_names
+                        and not isinstance(p[2], ir.Var)
                         and source == "iceberg"
-                        and v[1] not in ("startswith", "endswith", "contains")
+                        and p[1] in dnf_ops
                     ):
                         if output_dnf:
-                            dnf_str = f"('{v[0]}', '{v[1]}', '{v[2]}')"
+                            dnf_str = f"('{p[0]}', '{p[1]}', '{p[2]}')"
                         else:
                             dnf_str = expr_val
                         dnf_and_conds.append(dnf_str)
@@ -939,3 +885,120 @@ def determine_filter_cast(
         ):  # pragma: no cover
             return col_cast, ".cast(pyarrow.timestamp('ns'), safe=False)"
     return col_cast, ""
+
+
+def _generate_column_expr_filter(
+    filter: Tuple[Union[str, Tuple], str, Union[ir.Var, str]],
+    filter_map: Dict[str, str],
+    original_out_types: Tuple,
+    typemap: Dict[str, types.Type],
+    orig_colname_map: Dict[int, str],
+    partition_names: List[str],
+    source: Literal["parquet", "iceberg"],
+) -> str:
+    """Generates an Arrow format expression filter representing the comparison for a single column.
+
+    Args:
+        filter (Tuple[Union[str, Tuple], str, Union[ir.Var, str]]): The column filter to parse.
+        filter_map (Dict[str, str]): Mapping of the IR variable name to the runtime variable name.
+        original_out_types (Tuple): A tuple of column data types for the input DataFrame, including dead
+            columns.
+        typemap (Dict[str, types.Type]): Mapping of ir Variable names to their type.
+        orig_colname_map (Dict[int, str]): Mapping of column index to its column name.
+        partition_names (List[str]): List of column names that represent parquet partitions.
+        source (Literal[&quot;parquet&quot;, &quot;iceberg&quot;]): The input source that needs the filters.
+            Either parquet or iceberg.
+
+    Returns:
+        str: A string representation of an arrow expression equivalent to the filter.
+    """
+    p0, p1, p2 = filter
+    if p1 == "ALWAYS_TRUE":
+        # Special operator for True.
+        expr_val = "ds.scalar(True)"
+    elif p1 == "ALWAYS_FALSE":
+        # Special operator for False
+        expr_val = "ds.scalar(False)"
+    elif p1 == "ALWAYS_NULL":
+        # Special operator for NULL
+        expr_val = "ds.scalar(None)"
+    elif p1 == "not":
+        inner_filter = _generate_column_expr_filter(
+            p0,
+            filter_map,
+            original_out_types,
+            typemap,
+            orig_colname_map,
+            partition_names,
+            source,
+        )
+        expr_val = f"~({inner_filter})"
+    else:
+        col_expr = _get_filter_column_arrow_expr(p0, filter_map)
+        if isinstance(p2, ir.Var):
+            # expr conds don't do some of the casts that DNF expressions do (for example String and Timestamp).
+            # For known cases where we need to cast we generate the cast. For simpler code we return two strings,
+            # column_cast and scalar_cast.
+            column_cast, scalar_cast = determine_filter_cast(
+                original_out_types,
+                typemap,
+                filter,
+                orig_colname_map,
+                partition_names,
+                source,
+            )
+            filter_var = filter_map[p2.name]
+            if p1 == "in":
+                # Expected output for this format should look like
+                # ds.field('A').isin(filter_var)
+                expr_val = f"({col_expr}.isin({filter_var}))"
+            elif p1 == "case_insensitive_equality":
+                # case_insensitive_equality is just
+                # == with both inputs converted to lower case. This is used
+                # by ilike
+                expr_val = f"(pa.compute.ascii_lower({col_expr}{column_cast}) == pa.compute.ascii_lower(ds.scalar({filter_var}){scalar_cast}))"
+
+            elif p1 in (
+                "startswith",
+                "endswith",
+                "contains",
+                "case_insensitive_startswith",
+                "case_insensitive_endswith",
+                "case_insensitive_contains",
+            ):
+                op = p1
+                # Handle if its case insensitive
+                prefix = "case_insensitive_"
+                if op.startswith(prefix):
+                    ignore_case = True
+                    # These functions have the form case_insensitive_funcname.
+                    # Extract just func name.
+                    op = op[len(prefix) :]
+                else:
+                    ignore_case = False
+                if op == "startswith":
+                    func_name = "starts_with"
+                elif op == "endswith":
+                    func_name = "ends_with"
+                elif op == "contains":
+                    func_name = "match_substring"
+                # All of these functions require no scalar.
+                scalar_arg = filter_var
+                # Expected output for this format should look like
+                # pa.compute.func(ds.field('A'), scalar, ignore_case=var)
+                expr_val = f"(pa.compute.{func_name}({col_expr}, {scalar_arg}, ignore_case={ignore_case}))"
+            else:
+                # Expected output for this format should like
+                # (ds.field('A') > ds.scalar(py_var))
+                expr_val = f"({col_expr}{column_cast} {p1} ds.scalar({filter_var}){scalar_cast})"
+        else:
+            # Currently the only constant expressions we support are IS [NOT] NULL
+            assert p2 == "NULL", "unsupported constant used in filter pushdown"
+            if p1 == "is not":
+                prefix = "~"
+            else:
+                prefix = ""
+            # Expected output for this format should like
+            # (~ds.field('A').is_null())
+            expr_val = f"({prefix}{col_expr}.is_null())"
+    return expr_val

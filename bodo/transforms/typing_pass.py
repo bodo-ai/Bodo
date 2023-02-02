@@ -8,7 +8,7 @@ import operator
 import types as pytypes
 import warnings
 from collections import defaultdict
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Union
 
 import numba
 import numpy as np
@@ -897,7 +897,7 @@ class TypingTransforms:
                         old_or_set.add(new_and_cond)
                         expr_changed = True
                 # Sort for the set comparison
-                combined_filters = tuple(sorted(old_or_set))
+                combined_filters = tuple(sorted(old_or_set, key=lambda x: str(x)))
                 if combined_filters not in new_filter_set:
                     # Append to avoid adding the same OR condition multiple times
                     new_filter_set.add(combined_filters)
@@ -905,7 +905,7 @@ class TypingTransforms:
         # Convert the output back to list(list(tuple)). Here we
         # sort to keep everything consistent on all ranks as iterating
         # through a set depends on a randomized hash seed.
-        filters = sorted([list(x) for x in new_filter_set])
+        filters = sorted([list(x) for x in new_filter_set], key=lambda x: str(x))
 
         # Update the logs with the successful filter pushdown.
         # (no exception was raise until this end point so filters are valid)
@@ -1153,6 +1153,14 @@ class TypingTransforms:
         be excluded from filter dependency reordering
         """
         # e.g. (df["A"] == 3) | (df["A"] == 4)
+        if self._is_logical_not_filter_pushdown(index_def, func_ir):
+            nodes = self._get_filter_nodes(
+                self._remove_series_wrappers_from_def(
+                    get_definition(func_ir, get_unary_arg(index_def))
+                ),
+                func_ir,
+            )
+            return {index_def} | nodes
         if self._is_or_filter_pushdown(
             index_def, func_ir
         ) or self._is_and_filter_pushdown(index_def, func_ir):
@@ -1170,6 +1178,94 @@ class TypingTransforms:
             )
             return {index_def} | left_nodes | right_nodes
         return {index_def}
+
+    def _negate_column_filter(
+        self,
+        old_filter: Tuple[str, str, ir.Var],
+        new_ir_assigns: List[ir.Stmt],
+        loc: ir.Loc,
+        func_ir: ir.FunctionIR,
+    ) -> Tuple[str, str, ir.Var]:
+        """Negate an individual filter by wrapping it in the NOT operator.
+        If we
+
+        Args:
+            old_filter (Tuple[str, str, ir.Var]): The filter to be negated
+            new_ir_assigns (List[ir.Stmt]): List of statements to add the IR when new IR variables
+                must be created. This is update with a dummy variable for NOT.
+            loc (ir.Loc): Location for any dummy variables generated.
+            func_ir (ir.FunctionIR): Function IR used for updating definitions.
+
+        Returns:
+            Tuple[str, str, ir.Var]: The new filter with the operator negated.
+        """
+        require(isinstance(old_filter, tuple) and len(old_filter) == 3)
+        if old_filter[1] == "not":
+            # NOT(NOT X) = X, so we just remove the previous NOT.
+            return old_filter[0]
+
+        # Generate a dummy variable.
+        # Create a new IR Expr for the constant pattern.
+        expr_value = ir.Const(None, loc)
+        # Generate a variable from the Expr
+        new_name = mk_unique_var("dummy_var")
+        new_var = ir.Var(ir.Scope(None, loc), new_name, loc)
+        new_assign = ir.Assign(target=new_var, value=expr_value, loc=loc)
+        # Append the assign so we update the IR.
+        new_ir_assigns.append(new_assign)
+        # Update the definitions. This is safe since the name is unique.
+        func_ir._definitions[new_name] = [expr_value]
+        return (old_filter, "not", new_var)
+
+    def _get_negate_filters(
+        self,
+        filters: List[List[Tuple[Union[str, Tuple], str, ir.Var]]],
+        new_ir_assigns: List[ir.Stmt],
+        loc: ir.Loc,
+        func_ir: ir.FunctionIR,
+    ) -> List[List[Tuple[Union[str, Tuple], str, ir.Var]]]:
+        """Negate the a series of filters in ARROW format.
+        We convert the expression by leveraging DE MORGAN'S LAWS:
+
+        NOT(A OR B)  == (NOT A) AND (NOT B)
+        NOT(A AND B) == (NOT A) OR (NOT B)
+
+        Doing this we convert the expression, wrapping each column expression in a NOT,
+        and then swapping the ANDs and ORs.
+
+        Args:
+            filters (List[List[Tuple[Union[str, Tuple], str, ir.Var]]]): The original
+            filters that need to be negated.
+            new_ir_assigns (List[ir.Stmt]): List of statements to add the IR when new IR variables
+                must be created. This is update with a dummy variable for NOT.
+            loc (ir.Loc): Location for any dummy variables generated.
+            func_ir (ir.FunctionIR): Function IR used for updating definitions.
+
+        Returns:
+            List[List[Tuple[Union[str, Tuple], str, ir.Var]]]: The new filters that have been
+            negated.
+        """
+        # First just negate each expression. We have not handled
+        # AND/OR yet.
+        negated_filters = []
+        for and_filter in filters:
+            negated_inner = []
+            for column_filter in and_filter:
+                negated_inner.append(
+                    self._negate_column_filter(
+                        column_filter, new_ir_assigns, loc, func_ir
+                    )
+                )
+            negated_filters.append(negated_inner)
+
+        # HANDLE THE AND/OR by the distributive property.
+        # A AND (B OR C) -> AB OR AC. We use this with
+        # DE MORGAN'S LAWS to generate new AND filters,
+        # This produces a cartesian product of filters.
+        # For example:
+        # ~((A & B) | (C & D & E)) == ((~A | ~B) & (~C | ~D | ~E)
+        # == (~A & ~C) | (~A & ~D) | (~A & ~E) | (~B & ~C) | (~B & ~D) | (~B & ~E)
+        return [list(x) for x in itertools.product(*negated_filters)]
 
     def _get_column_filter(
         self,
@@ -1539,7 +1635,13 @@ class TypingTransforms:
             Function that abstracts away the recursive steps of getting the filters
             from the child exprs of index_def.
             """
-            if self._is_logical_op_filter_pushdown(child_def, func_ir):
+            if self._is_logical_not_filter_pushdown(child_def, func_ir):
+                arg_var = get_unary_arg(child_def)
+                arg_def = get_definition(func_ir, arg_var)
+                child_or = self._get_negate_filters(
+                    get_child_filter(arg_def), new_ir_assigns, index_def.loc, func_ir
+                )
+            elif self._is_logical_op_filter_pushdown(child_def, func_ir):
                 l_def = get_definition(func_ir, get_binop_arg(child_def, 0))
                 l_def = self._remove_series_wrappers_from_def(l_def)
                 r_def = get_definition(func_ir, get_binop_arg(child_def, 1))
@@ -1574,6 +1676,14 @@ class TypingTransforms:
                     ]
                 ]
             return child_or
+
+        if self._is_logical_not_filter_pushdown(index_def, func_ir):
+            arg_var = get_unary_arg(index_def)
+            arg_def = get_definition(func_ir, arg_var)
+            filters = get_child_filter(arg_def)
+            return self._get_negate_filters(
+                filters, new_ir_assigns, index_def.loc, func_ir
+            )
 
         if self._is_logical_op_filter_pushdown(index_def, func_ir):
             if self._is_or_filter_pushdown(index_def, func_ir):
@@ -1681,7 +1791,6 @@ class TypingTransforms:
                         filters.append(left_or_cond + right_or_cond)
                 return filters
 
-        # TODO: Support NOT
         if self._is_cmp_op_filter_pushdown(index_def, func_ir):
             lhs = get_binop_arg(index_def, 0)
             rhs = get_binop_arg(index_def, 1)
@@ -4766,6 +4875,27 @@ class TypingTransforms:
                 )
         return False
 
+    def _is_logical_not_filter_pushdown(
+        self, index_def: ir.Expr, func_ir: ir.FunctionIR
+    ) -> bool:
+        """Performs an equality check on the index_def expr with the
+        NOT operators, operator.invert (Pandas uses ~) and the
+        boolnot bodosql_array_kernel.
+
+        Args:
+            index_def (ir.Expr): The expression that may be a valid not expression.
+            func_ir (ir.FunctionIR): Function IR used for finding the call expression.
+
+        Returns:
+            bool: Is this expression a valid not operator?
+        """
+        if is_expr(index_def, "unary"):
+            return index_def.fn == operator.invert
+        elif is_call(index_def):
+            call_name = guard(find_callname, func_ir, index_def, self.typemap)
+            return call_name == ("boolnot", "bodo.libs.bodosql_array_kernels")
+        return False
+
     def _is_logical_op_filter_pushdown(
         self, index_def: ir.Expr, func_ir: ir.FunctionIR
     ) -> bool:
@@ -5190,6 +5320,26 @@ def _find_updated_containers(blocks, topo_order):
     return updated_containers, equiv_vars
 
 
+def get_unary_arg(child_def: ir.Expr) -> ir.Var:
+    """The child accessors of an expr differ depending on whether
+    the expr is a unary or a function call.
+
+    Therefore this is a wrapper method to support both types of expr
+    with a single interface.
+
+    Args:
+        child_def (ir.Expr): The expression that maps to a unary function.
+            It is either op = "call" or op = "unary"
+
+    Returns:
+        ir.Var: The IR variable for the argument.
+    """
+    if is_expr(child_def, "unary"):
+        return child_def.value
+    require(is_expr(child_def, "call") and len(child_def.args) == 1)
+    return child_def.args[0]
+
+
 def get_binop_arg(child_def, arg_no):
     """
     The child accessors of an expr differ depending on whether
@@ -5207,6 +5357,7 @@ def get_binop_arg(child_def, arg_no):
         else:
             return child_def.rhs
 
+    require(is_expr(child_def, "call") and len(child_def.args) == 2)
     return child_def.args[arg_no]
 
 

@@ -1398,7 +1398,7 @@ def test_filter_pushdown_past_column_filters():
     stream = io.StringIO()
     logger = create_string_io_logger(stream)
 
-    # TODO: We currnetly clear the logger stream before each call to check_func
+    # TODO: We currently clear the logger stream before each call to check_func
     # via calling stream.seek/truncate. We should investigate if this actually
     # fully clears the logger, or if additional work is needed.
     with set_logging_stream(logger, 1):
@@ -2601,3 +2601,35 @@ def test_pq_invalid_column_selection(datapath, memory_leak_check):
 
     with pytest.raises(BodoError, match="C not in Parquet file schema"):
         bodo.jit(test_impl)(datapath("nested_struct_example.pq"))
+
+
+def test_python_not_filter_pushdown(memory_leak_check):
+    """Tests that the Pandas ~ operator works with filter pushdown."""
+    try:
+        if bodo.get_rank() == 0:
+            df = pd.DataFrame(
+                {
+                    "A": [0, 1, 2, 3] * 10,
+                    "B": [1, 2, 3, 4, 5] * 8,
+                }
+            )
+            df.to_parquet("pq_data")
+        bodo.barrier()
+
+        def impl(path):
+            df = pd.read_parquet("pq_data")
+            df = df[~(df.B == 2)]
+            return df["A"]
+
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            # TODO: Fix index
+            check_func(impl, ("pq_data",), reset_index=True)
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['A']")
+    finally:
+        if bodo.get_rank() == 0:
+            os.remove("pq_data")
