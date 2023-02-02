@@ -74,6 +74,7 @@ from bodo.utils.typing import (
 )
 from bodo.utils.utils import (
     find_build_tuple,
+    get_filter_predicate_compute_func,
     get_getsetitem_index_var,
     is_array_typ,
     is_assign,
@@ -1196,7 +1197,9 @@ class TypingTransforms:
         Returns:
             Tuple[str, str, ir.Var]: The filter for a column with a boolean output type.
         """
-        colname = guard(self._get_col_name, col_def, df_var, df_col_names, func_ir)
+        colname = guard(
+            self._get_col_name, col_def, df_var, df_col_names, func_ir, new_ir_assigns
+        )
         require(colname)
         # Verify that the column has a boolean type.
         df_typ = self.typemap[df_var.name]
@@ -1246,22 +1249,22 @@ class TypingTransforms:
         )
         if call_list[0] in ("notna", "isna", "notnull", "isnull"):
             return self._get_null_filter(
-                call_def, call_list, func_ir, df_var, df_col_names
+                call_def, call_list, func_ir, df_var, df_col_names, new_ir_assigns
             )
         elif call_list[0] == "isin":
             return self._get_isin_filter(
-                call_list, call_def, func_ir, df_var, df_col_names
+                call_list, call_def, func_ir, df_var, df_col_names, new_ir_assigns
             )
         elif call_list == (
             "is_in",
             "bodo.libs.bodosql_array_kernels",
         ):  # pragma: no cover
             return self._get_bodosql_array_kernel_is_in_filter(
-                call_def, func_ir, df_var, df_col_names
+                call_def, func_ir, df_var, df_col_names, new_ir_assigns
             )
         elif call_list[0] in ("startswith", "endswith"):  # pragma: no cover
             return self._get_starts_ends_with_filter(
-                call_list, call_def, func_ir, df_var, df_col_names
+                call_list, call_def, func_ir, df_var, df_col_names, new_ir_assigns
             )
         elif call_list == (
             "like_kernel",
@@ -1275,21 +1278,27 @@ class TypingTransforms:
             # This should be caught by a surrounding function.
             raise GuardException
 
-    def _get_null_filter(self, call_def, call_list, func_ir, df_var, df_col_names):
+    def _get_null_filter(
+        self, call_def, call_list, func_ir, df_var, df_col_names, new_ir_assigns
+    ):
         """
         Function used by _get_partition_filters to extract null related
         filters from series method calls.
         """
         # support both Series.isna() and pd.isna() forms
         arr_var = call_list[1] if isinstance(call_list[1], ir.Var) else call_def.args[0]
-        colname = self._get_col_name(arr_var, df_var, df_col_names, func_ir)
+        colname = self._get_col_name(
+            arr_var, df_var, df_col_names, func_ir, new_ir_assigns
+        )
         if call_list[0] in ("notna", "notnull"):
             op = "is not"
         else:
             op = "is"
         return (colname, op, "NULL")
 
-    def _get_isin_filter(self, call_list, call_def, func_ir, df_var, df_col_names):
+    def _get_isin_filter(
+        self, call_list, call_def, func_ir, df_var, df_col_names, new_ir_assigns
+    ):
         """
         Function used by _get_partition_filters to extract isin related
         filters from series method calls.
@@ -1305,12 +1314,14 @@ class TypingTransforms:
                 list_set_typ.dtype, bodo.hiframes.pd_timestamp_ext.PandasTimestampType
             )
         )
-        colname = self._get_col_name(call_list[1], df_var, df_col_names, func_ir)
+        colname = self._get_col_name(
+            call_list[1], df_var, df_col_names, func_ir, new_ir_assigns
+        )
         op = "in"
         return (colname, op, list_set_arg)
 
     def _get_bodosql_array_kernel_is_in_filter(
-        self, call_def, func_ir, df_var, df_col_names
+        self, call_def, func_ir, df_var, df_col_names, new_ir_assigns
     ):  # pragma: no cover
         """
         Function used by _get_partition_filters to extract isin related
@@ -1339,16 +1350,20 @@ class TypingTransforms:
             )
         )
 
-        colname = self._get_col_name(call_def.args[0], df_var, df_col_names, func_ir)
+        colname = self._get_col_name(
+            call_def.args[0], df_var, df_col_names, func_ir, new_ir_assigns
+        )
         op = "in"
         return (colname, op, call_def.args[1])
 
     def _get_starts_ends_with_filter(
-        self, call_list, call_def, func_ir, df_var, df_col_names
+        self, call_list, call_def, func_ir, df_var, df_col_names, new_ir_assigns
     ):  # pragma: no cover
         # This path is only taken on Azure because snowflake
         # is not tested on AWS.
-        colname = self._get_col_name(call_list[1], df_var, df_col_names, func_ir)
+        colname = self._get_col_name(
+            call_list[1], df_var, df_col_names, func_ir, new_ir_assigns
+        )
         op = call_list[0]
         return (colname, op, call_def.args[0])
 
@@ -1387,7 +1402,9 @@ class TypingTransforms:
         """
         args = call_def.args
         # Get the column names
-        colname = self._get_col_name(args[0], df_var, df_col_names, func_ir)
+        colname = self._get_col_name(
+            args[0], df_var, df_col_names, func_ir, new_ir_assigns
+        )
         # Get the other args. We can only do filter pushdown if all of them are literals
         pattern_arg = args[1]
         pattern_type = self.typemap.get(pattern_arg.name, None)
@@ -1668,9 +1685,11 @@ class TypingTransforms:
         if self._is_cmp_op_filter_pushdown(index_def, func_ir):
             lhs = get_binop_arg(index_def, 0)
             rhs = get_binop_arg(index_def, 1)
-            left_colname = guard(self._get_col_name, lhs, df_var, df_col_names, func_ir)
+            left_colname = guard(
+                self._get_col_name, lhs, df_var, df_col_names, func_ir, new_ir_assigns
+            )
             right_colname = guard(
-                self._get_col_name, rhs, df_var, df_col_names, func_ir
+                self._get_col_name, rhs, df_var, df_col_names, func_ir, new_ir_assigns
             )
 
             require(
@@ -1732,15 +1751,10 @@ class TypingTransforms:
         if isinstance(col_val, str):
             return out_types[col_names.index(col_val)]
 
-        # only coalesce is supported currently
-        assert (
-            isinstance(col_val, tuple)
-            and len(col_val) == 3
-            and col_val[1] == "coalesce"
-        ), "invalid column in filter predicate"
-        return out_types[col_names.index(col_val[0])]
+        get_filter_predicate_compute_func(col_val)
+        return self._get_filter_col_type(col_val[0], out_types, col_names)
 
-    def _get_col_name(self, var, df_var, df_col_names, func_ir):
+    def _get_col_name(self, var, df_var, df_col_names, func_ir, new_ir_assigns):
         """get column name for dataframe column access like df["A"] if possible.
         Throws GuardException if not possible.
         """
@@ -1766,7 +1780,7 @@ class TypingTransforms:
                 # https://pandas.pydata.org/docs/reference/api/pandas.to_datetime.html
                 require((len(var_def.args) == 1) and not var_def.kws)
                 return self._get_col_name(
-                    var_def.args[0], df_var, df_col_names, func_ir
+                    var_def.args[0], df_var, df_col_names, func_ir, new_ir_assigns
                 )
             # BodoSQL generates get_dataframe_data() calls for projections
             if (
@@ -1799,15 +1813,78 @@ class TypingTransforms:
                     and not isinstance(arg_type, types.Optional)
                 )
 
-                col_name = self._get_col_name(args[0], df_var, df_col_names, func_ir)
+                col_name = self._get_col_name(
+                    args[0], df_var, df_col_names, func_ir, new_ir_assigns
+                )
                 return (col_name, "coalesce", args[1])
 
+            if fdef == ("lower", "bodo.libs.bodosql_array_kernels") or fdef == (
+                "upper",
+                "bodo.libs.bodosql_array_kernels",
+            ):
+                require((len(var_def.args) == 1) and not var_def.kws)
+                args = find_build_tuple(self.func_ir, var_def.args[0])
+                require(len(args) == 1)
+
+                # arg[0] must be an array / valid scalar
+                arg_type = self.typemap.get(args[0].name, None)
+                if arg_type in (None, types.undefined, types.unknown):
+                    self.needs_transform = True
+                    raise GuardException
+
+                col_name = self._get_col_name(
+                    args[0], df_var, df_col_names, func_ir, new_ir_assigns
+                )
+                # Create a new IR Expr for the constant pattern.
+                expr_value = ir.Const(None, var_def.loc)
+                # Generate a variable from the Expr
+                new_name = mk_unique_var("dummy_var")
+                new_var = ir.Var(ir.Scope(None, var_def.loc), new_name, var_def.loc)
+                new_assign = ir.Assign(
+                    target=new_var, value=expr_value, loc=var_def.loc
+                )
+                # Append the assign so we update the IR.
+                new_ir_assigns.append(new_assign)
+                # Update the definitions. This is safe since the name is unique.
+                func_ir._definitions[new_name] = [expr_value]
+
+                return (col_name, fdef[0], new_var)
+
+            if fdef[0] in ("str.lower", "str.upper"):
+                # make sure fdef[1] is a Series
+                arg_type = self.typemap.get(fdef[1].name, None)
+                if arg_type in (None, types.undefined, types.unknown):
+                    self.needs_transform = True
+                    raise GuardException
+                require(isinstance(arg_type, SeriesType))
+                col_name = self._get_col_name(
+                    fdef[1], df_var, df_col_names, func_ir, new_ir_assigns
+                )
+
+                # Create a new IR Expr for the constant pattern.
+                expr_value = ir.Const(None, var_def.loc)
+                # Generate a variable from the Expr
+                new_name = mk_unique_var("dummy_var")
+                new_var = ir.Var(ir.Scope(None, var_def.loc), new_name, var_def.loc)
+                new_assign = ir.Assign(
+                    target=new_var, value=expr_value, loc=var_def.loc
+                )
+                # Append the assign so we update the IR.
+                new_ir_assigns.append(new_assign)
+                # Update the definitions. This is safe since the name is unique.
+                func_ir._definitions[new_name] = [expr_value]
+                return (col_name, fdef[0].split(".")[1], new_var)
+
+            # We only support astype at this point
             require(
                 isinstance(fdef, tuple)
                 and len(fdef) == 2
                 and isinstance(fdef[1], ir.Var)
+                and fdef[0] == "astype"
             )
-            return self._get_col_name(fdef[1], df_var, df_col_names, func_ir)
+            return self._get_col_name(
+                fdef[1], df_var, df_col_names, func_ir, new_ir_assigns
+            )
 
         require(is_expr(var_def, "getitem"))
         require(var_def.value.name == df_var.name)

@@ -17,7 +17,11 @@ from bodo.transforms.distributed_analysis import Distribution
 from bodo.transforms.table_column_del_pass import get_live_column_nums_block
 from bodo.utils.py_objs import install_py_obj_class
 from bodo.utils.typing import BodoError
-from bodo.utils.utils import debug_prints, is_array_typ
+from bodo.utils.utils import (
+    debug_prints,
+    get_filter_predicate_compute_func,
+    is_array_typ,
+)
 
 
 def connector_array_analysis(node, equiv_set, typemap, array_analysis):
@@ -556,14 +560,20 @@ def _get_filter_column_arrow_expr(col_val, filter_map):
     if isinstance(col_val, str):
         return f"ds.field('{col_val}')"
 
-    # only coalesce is supported currently
-    assert (
-        isinstance(col_val, tuple) and len(col_val) == 3 and col_val[1] == "coalesce"
-    ), "invalid column in filter predicate"
-    scalar_val = (
-        filter_map[col_val[2].name] if isinstance(col_val[2], ir.Var) else col_val[2]
-    )
-    return f"pa.compute.coalesce(ds.field('{col_val[0]}'), ds.scalar({scalar_val}))"
+    filter = _get_filter_column_arrow_expr(col_val[0], filter_map)
+    column_compute_func = get_filter_predicate_compute_func(col_val)
+
+    if column_compute_func == "coalesce":
+        scalar_val = (
+            filter_map[col_val[2].name]
+            if isinstance(col_val[2], ir.Var)
+            else col_val[2]
+        )
+        return f"pa.compute.coalesce({filter}, ds.scalar({scalar_val}))"
+    elif column_compute_func == "lower":
+        return f"pa.compute.utf8_lower({filter})"
+    elif column_compute_func == "upper":
+        return f"pa.compute.utf8_upper({filter})"
 
 
 def generate_arrow_filters(
@@ -814,11 +824,8 @@ def _get_filter_column_type(col_val, col_types, orig_colname_map):
     if isinstance(col_val, str):
         return col_types[orig_colname_map[col_val]]
 
-    # only coalesce is supported currently
-    assert (
-        isinstance(col_val, tuple) and len(col_val) == 3 and col_val[1] == "coalesce"
-    ), "invalid column in filter predicate"
-    return col_types[orig_colname_map[col_val[0]]]
+    get_filter_predicate_compute_func(col_val)
+    return _get_filter_column_type(col_val[0], col_types, orig_colname_map)
 
 
 def determine_filter_cast(

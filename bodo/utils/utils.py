@@ -1490,3 +1490,25 @@ def synchronize_error_njit(exception_str, error_message):
     """
     with numba.objmode():
         synchronize_error(exception_str, error_message)
+
+
+def get_filter_predicate_compute_func(col_val):
+    """
+    Verifies that the input filter (col_val) is valid and
+    maintains the required Tuple[str, str, Var] structure
+    internal to the Bodo compiler.
+
+    Returns the compute function name as a string literal.
+    """
+    assert (
+        isinstance(col_val, tuple) and len(col_val) == 3
+    ), f"Filter must maintain the structure Tuple[str, str, Var]. Invalid filter: {col_val}"
+
+    supported_compute_funcs = ["coalesce", "lower", "upper"]
+
+    compute_func = col_val[1]
+
+    assert (
+        compute_func in supported_compute_funcs
+    ), f"Unsupported compute function for column in filter predicate: {compute_func}"
+    return compute_func

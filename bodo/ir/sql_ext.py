@@ -271,7 +271,7 @@ def remove_dead_sql(
     return sql_node
 
 
-def _get_sql_column_str(p0, converted_colnames, filter_map):
+def _get_sql_column_str(p0, converted_colnames, filter_map):  # pragma: no cover
     """get SQL code for representing a column in filter pushdown.
     E.g. WHERE  ( ( coalesce(\"L_COMMITDATE\", {f0}) >= {f1} ) )
 
@@ -286,13 +286,23 @@ def _get_sql_column_str(p0, converted_colnames, filter_map):
         str: code representing the column (e.g. "A", "coalesce(\"L_COMMITDATE\", {f0})")
     """
     if isinstance(p0, tuple):
-
         col_name = _get_sql_column_str(p0[0], converted_colnames, filter_map)
-
-        scalar_val = (
-            "{" + filter_map[p0[2].name] + "}" if isinstance(p0[2], ir.Var) else p0[2]
-        )
-        return f"{p0[1]}({col_name}, {scalar_val})"
+        sql_op = p0[1]
+        if sql_op == "coalesce":
+            scalar_val = (
+                "{" + filter_map[p0[2].name] + "}"
+                if isinstance(p0[2], ir.Var)
+                else p0[2]
+            )
+            return f"coalesce({col_name}, {scalar_val})"
+        elif sql_op == "lower":
+            return f"lower({col_name})"
+        elif sql_op == "upper":
+            return f"upper({col_name})"
+        else:
+            raise BodoError(
+                f"SQL Function {col_name} is not supported for filter pushdown!"
+            )
 
     assert isinstance(p0, str), "_get_sql_column_str: expected string column name"
     col_name = convert_col_name(p0, converted_colnames)

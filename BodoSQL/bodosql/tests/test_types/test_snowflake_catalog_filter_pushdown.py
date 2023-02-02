@@ -193,6 +193,202 @@ def test_snowflake_catalog_coalesce_pushdown(memory_leak_check):
         check_logger_msg(stream, r"WHERE  ( ( coalesce(\"MYCOL2\", {f0}) > {f1} ) )")
 
 
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_lower_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test filter pushdown with lower on a column.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    new_df = pd.DataFrame(
+        {
+            "A": ["LoWeR", "LOWER", "lower", "loweR", "lover", "rover"] * 10,
+        }
+    )
+
+    with create_snowflake_table(
+        new_df, "lower_pushdown_table", db, schema
+    ) as table_name:
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        query = f"select a from {table_name} where lower(a) = 'lower'"
+
+        # make sure filter pushdown worked
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a.str.lower() == "lower"]
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                sort_output=True,
+                reset_index=True,
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            check_logger_msg(stream, r"WHERE  ( ( lower(\"A\") = {f1} ) )")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_upper_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Test filter pushdown with upper on a column.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    new_df = pd.DataFrame(
+        {
+            "A": ["UppER", "UPPER", "upper", "uppeR", "uvver", "utter"] * 10,
+        }
+    )
+
+    with create_snowflake_table(
+        new_df, "upper_pushdown_table", db, schema
+    ) as table_name:
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        query = f"select a from {table_name} where upper(a) = 'UPPER'"
+
+        # make sure filter pushdown worked
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a.str.upper() == "UPPER"]
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                sort_output=True,
+                reset_index=True,
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            check_logger_msg(stream, r"WHERE  ( ( upper(\"A\") = {f1} ) )")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_coalesce_lower_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test filter pushdown with coalesce and lower on a column.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    new_df = pd.DataFrame(
+        {
+            "A": ["LoWeR", "LOWER", "lower", None, "lover", None] * 10,
+            "B": [100, 1000, 10000, 11, 1321, 10] * 10,
+        }
+    )
+
+    expected_output = pd.DataFrame({"b": [11, 10] * 10})
+
+    with create_snowflake_table(
+        new_df, "coalesce_lower_pushdown_table", db, schema
+    ) as table_name:
+        query = f"select b from {table_name} where coalesce(lower(a), 'macedonia') = 'macedonia'"
+
+        # make sure filter pushdown worked
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                sort_output=True,
+                reset_index=True,
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Columns loaded ['b']")
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            check_logger_msg(
+                stream, r"WHERE  ( ( coalesce(lower(\"A\"), {f1}) = {f2} ) )"
+            )
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_upper_coalesce_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Test filter pushdown with upper and coalesce on a column.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    new_df = pd.DataFrame(
+        {
+            "A": ["MaCedOniA", "UPPER", "macedonia", None, "MACEDONIA", None] * 10,
+            "B": [100, 1000, 10000, 11, 1321, 10] * 10,
+        }
+    )
+
+    expected_output = pd.DataFrame({"b": [100, 10000, 11, 1321, 10] * 10})
+
+    with create_snowflake_table(
+        new_df, "upper_coalesce_pushdown_table", db, schema
+    ) as table_name:
+        query = f"select b from {table_name} where upper(coalesce(a, 'macedonia')) = 'MACEDONIA'"
+
+        # make sure filter pushdown worked
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                sort_output=True,
+                reset_index=True,
+                check_dtype=False,
+            )
+            check_logger_msg(stream, "Columns loaded ['b']")
+            check_logger_msg(stream, "Filter pushdown successfully performed")
+            check_logger_msg(
+                stream, r"WHERE  ( ( upper(coalesce(\"A\", {f0})) = {f2} ) )"
+            )
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
 def test_snowflake_catalog_coalesce_not_pushdown(memory_leak_check):
     """
     Make sure coalesce with two column input is not pushed down since not supported yet

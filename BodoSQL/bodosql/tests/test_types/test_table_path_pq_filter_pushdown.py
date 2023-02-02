@@ -340,6 +340,134 @@ def test_coalesce_filter_pushdown(datapath, memory_leak_check):
         )
 
 
+def test_lower_filter_pushdown(datapath, memory_leak_check):
+    """
+    Test lower support in Parquet filter pushdown
+    """
+    filename = datapath("string_lower_upper.pq")
+    test_str_val = "macedonia"
+    df = pd.read_parquet(filename)
+    py_output = df[df.A.str.lower() == test_str_val]
+
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    def impl(bc):
+        return bc.sql(f"select * from table1 where lower(A) = '{test_str_val}'")
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (bc,), py_output=py_output, reset_index=True, sort_output=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(
+            stream, "(((pa.compute.utf8_lower(ds.field('A')) == ds.scalar(f1))))"
+        )
+
+
+def test_coalesce_lower_filter_pushdown(datapath, memory_leak_check):
+    """
+    Test nested coalesce and lower support in Parquet filter pushdown
+    """
+    filename = datapath("string_lower_upper.pq")
+    test_str_val = "macedonia"
+    df = pd.read_parquet(filename)
+    py_output = df[df.A.str.lower().fillna(test_str_val) == test_str_val]
+
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    def impl(bc):
+        return bc.sql(
+            f"select * from table1 where coalesce(lower(A), '{test_str_val}') = '{test_str_val}'"
+        )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (bc,), py_output=py_output, reset_index=True, sort_output=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(
+            stream,
+            "(((pa.compute.coalesce(pa.compute.utf8_lower(ds.field('A')), ds.scalar(f1)) == ds.scalar(f2))))",
+        )
+
+
+def test_upper_filter_pushdown(datapath, memory_leak_check):
+    """
+    Test upper support in Parquet filter pushdown
+    """
+    filename = datapath("string_lower_upper.pq")
+    test_str_val = "macedonia"
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    def impl(bc):
+        return bc.sql(f"select * from table1 where upper(A) = '{test_str_val.upper()}'")
+
+    df = pd.read_parquet(filename)
+    py_output = df[df.A.str.upper() == test_str_val.upper()]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+
+        check_func(impl, (bc,), py_output=py_output, reset_index=True, sort_output=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(
+            stream,
+            "(((pa.compute.utf8_upper(ds.field('A')) == ds.scalar(f1))))",
+        )
+
+
+def test_upper_coalesce_filter_pushdown(datapath, memory_leak_check):
+    """
+    Test nested upper and coalesce support in Parquet filter pushdown
+    """
+    filename = datapath("string_lower_upper.pq")
+    test_str_val = "macedonia"
+    df = pd.read_parquet(filename)
+    py_output = df[df.A.fillna(test_str_val).str.upper() == test_str_val.upper()]
+
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    def impl(bc):
+        return bc.sql(
+            f"select * from table1 where upper(coalesce(A, '{test_str_val}')) = '{test_str_val.upper()}'"
+        )
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        check_func(impl, (bc,), py_output=py_output, reset_index=True, sort_output=True)
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(
+            stream,
+            "(((pa.compute.utf8_upper(pa.compute.coalesce(ds.field('A'), ds.scalar(f0))) == ds.scalar(f2))))",
+        )
+
+
 @pytest.mark.slow
 def test_table_path_filter_pushdown_multitable(datapath, memory_leak_check):
     """
