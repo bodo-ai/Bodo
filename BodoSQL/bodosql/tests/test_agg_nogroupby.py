@@ -681,3 +681,85 @@ def test_tz_aware_having(memory_leak_check):
         is_out_distributed=False,
         expected_output=py_output,
     )
+
+
+def test_single_value(spark_info, memory_leak_check):
+    """Test Calcite's SINGLE_VALUE Agg function"""
+    query = "select B from t1 where t1.A = (select C from t2)"
+
+    df1 = pd.DataFrame(
+        {
+            "A": [0, 0, 1, 1, 1, 1],
+            "B": [1.0, 2.5, 1000.0, 100.0, 4.2, 1.001],
+            "C": [-1.0, -2.5, -1000.0, -100.0, -4.2, 4.5],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [0.1],
+            "B": [2],
+            "C": [1],
+            "D": [1.1],
+        }
+    )
+
+    check_query(
+        query,
+        {"t1": df1, "t2": df2},
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        # ensure_single_value() makes input replicated, causing error for dist arg
+        only_jit_seq=True,
+    )
+
+
+def test_single_value2(spark_info, memory_leak_check):
+    """Test Calcite's SINGLE_VALUE Agg function in a max query"""
+    query = "select max((select max(A)-1 from t1)) from t1"
+
+    df1 = pd.DataFrame(
+        {
+            "A": pd.date_range("2022-02-05", periods=8).date,
+        }
+    )
+
+    check_query(
+        query,
+        {"t1": df1},
+        spark_info,
+        check_names=False,
+        check_dtype=False,
+        is_out_distributed=False,
+    )
+
+
+def test_single_value_error():
+    """Make sure Calcite's SINGLE_VALUE Agg implementation raises an error for input
+    with more than one value
+    """
+    query = "select * from t1 where t1.A = (select A from t2)"
+
+    df1 = pd.DataFrame(
+        {
+            "A": [0, 0, 1],
+        }
+    )
+    df2 = pd.DataFrame(
+        {
+            "A": [1, 2],
+        }
+    )
+
+    with pytest.raises(ValueError, match=r"Expected single value in column"):
+        check_query(
+            query,
+            {"t1": df1, "t2": df2},
+            None,
+            check_names=False,
+            check_dtype=False,
+            # ensure_single_value() makes input replicated, causing error for dist arg
+            only_jit_seq=True,
+            # dummy output to avoid Spark errors
+            expected_output=1,
+        )

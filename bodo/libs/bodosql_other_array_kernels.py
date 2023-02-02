@@ -733,3 +733,24 @@ def _install_is_overload():
 
 
 _install_is_overload()
+
+
+@numba.njit(no_cpython_wrapper=True)
+def ensure_single_value(A):  # pragma: no cover
+    """Implements Calcite's SINGLE_VALUE, which returns input if it has only one value.
+    Otherwise raises an error.
+    https://github.com/apache/calcite/blob/f14cf4c32b9079984a988bbad40230aa6a59b127/core/src/main/java/org/apache/calcite/sql/fun/SqlSingleValueAggFunction.java#L36
+
+    Args:
+        A (Series | array): input column with single value
+
+    Raises:
+        ValueError: error if input has more than one value
+
+    Returns:
+        Series | array: same as input
+    """
+    if len(A) != 1:
+        raise ValueError("Expected single value in column")
+
+    return A
