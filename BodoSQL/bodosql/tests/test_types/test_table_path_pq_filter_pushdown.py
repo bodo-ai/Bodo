@@ -1191,6 +1191,211 @@ def test_in_filter_pushdown_e2e(datapath):
         check_logger_msg(stream, "Filter pushdown successfully performed.")
 
 
+def test_not_in_filter_pushdown(datapath):
+    """
+    Basic test for filter pushdown of NOT IN.
+    """
+
+    test_in_query = """ SELECT * FROM table1 where part not in ('a', 'b', 'Z')"""
+    filepath = datapath("sample-parquet-data/partitioned")
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filepath, "parquet"),
+        }
+    )
+
+    def impl(bc, test_in_query):
+        return bc.sql(test_in_query)
+
+    # Compare entirely to Pandas output to simplify the process.
+    # Load the data once and then filter for each query.
+    py_output = pd.read_parquet(filepath)
+    py_output["part"] = py_output["part"].astype(str)
+    py_output = py_output[~py_output["part"].isin(["a", "b", "Z"])]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+
+    with set_logging_stream(logger, 1):
+        check_func(impl, (bc, test_in_query), py_output=py_output, reset_index=True)
+        check_logger_msg(stream, "Filter pushdown successfully performed.")
+
+
+def test_not_like_filter_pushdown(datapath, memory_leak_check):
+    """
+    Tests that queries with not like perform filter pushdown for all the
+    cases with the optimized paths.
+    """
+    filename = datapath("sample-parquet-data/rphd_sample.pq")
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Compare entirely to Pandas output to simplify the process.
+    # Load the data once and then filter for each query.
+    py_output = pd.read_parquet(filename)[["uuid"]]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[
+            ~(py_output.uuid == "ce4d3aa7-476b-4772-94b4-18224490c7a1")
+        ]
+        query1 = "Select uuid from table1 where uuid not like 'ce4d3aa7-476b-4772-94b4-18224490c7a1'"
+        check_func(
+            impl,
+            (bc, query1),
+            py_output=expected_output,
+            reset_index=True,
+            sort_output=True,
+        )
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[~py_output.uuid.str.endswith("c")]
+        query2 = "Select uuid from table1 where uuid not like '%c'"
+        check_func(
+            impl,
+            (bc, query2),
+            py_output=expected_output,
+            reset_index=True,
+            sort_output=True,
+        )
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[~py_output.uuid.str.startswith("1")]
+        query3 = "Select uuid from table1 where uuid not like '1%'"
+        check_func(
+            impl,
+            (bc, query3),
+            py_output=expected_output,
+            reset_index=True,
+            sort_output=True,
+        )
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[~py_output.uuid.str.contains("5")]
+        query4 = "Select uuid from table1 where uuid not like '%5%'"
+        check_func(
+            impl,
+            (bc, query4),
+            py_output=expected_output,
+            reset_index=True,
+            sort_output=True,
+        )
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+
+
+def test_not_ilike_filter_pushdown(datapath, memory_leak_check):
+    """
+    Tests that queries with not ilike perform filter pushdown for all the
+    cases with the optimized paths.
+    """
+    filename = datapath("sample-parquet-data/rphd_sample.pq")
+    bc = bodosql.BodoSQLContext(
+        {
+            "table1": bodosql.TablePath(filename, "parquet"),
+        }
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    # Compare entirely to Pandas output to simplify the process.
+    # Load the data once and then filter for each query.
+    py_output = pd.read_parquet(filename)[["uuid"]]
+
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[
+            ~(py_output.uuid == "ce4d3aa7-476b-4772-94b4-18224490c7a1")
+        ]
+        query1 = "Select uuid from table1 where uuid not ilike 'ce4d3AA7-476b-4772-94b4-18224490c7a1'"
+        check_func(
+            impl,
+            (bc, query1),
+            py_output=expected_output,
+            reset_index=True,
+            sort_output=True,
+        )
+
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[~py_output.uuid.str.endswith("c")]
+        query2 = "Select uuid from table1 where uuid not ilike '%C'"
+        check_func(
+            impl,
+            (bc, query2),
+            py_output=expected_output,
+            reset_index=True,
+            sort_output=True,
+        )
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[~py_output.uuid.str.lower().str.startswith("a1")]
+        query3 = "Select uuid from table1 where uuid not ilike 'A1%'"
+        check_func(
+            impl,
+            (bc, query3),
+            py_output=expected_output,
+            reset_index=True,
+            sort_output=True,
+        )
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+    stream = io.StringIO()
+    logger = create_string_io_logger(stream)
+    with set_logging_stream(logger, 1):
+        expected_output = py_output[~py_output.uuid.str.contains("6b")]
+        query4 = "Select uuid from table1 where uuid not ilike '%6B%'"
+        check_func(
+            impl,
+            (bc, query4),
+            py_output=expected_output,
+            reset_index=True,
+            sort_output=True,
+        )
+        check_logger_msg(
+            stream, "Filter pushdown successfully performed. Moving filter step:"
+        )
+        check_logger_msg(stream, "Columns loaded ['uuid']")
+
+
 @pytest.mark.slow
 def test_multiple_loads_filter_pushdown(datapath, memory_leak_check):
     """

@@ -5,7 +5,7 @@ We piggyback on the pandas implementation. Future plan is to have a faster
 version for this task.
 """
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 import numba
@@ -432,87 +432,13 @@ def sql_distributed_run(
             for and_list in sql_node.filters:
                 and_conds = []
                 for p in and_list:
-                    # If p[2] is a constant that isn't in the IR (i.e. NULL)
-                    # just load the value directly, otherwise load the variable
-                    # at runtime.
-                    p0, p2 = p[0], p[2]
-                    p0 = _get_sql_column_str(
-                        p0, sql_node.converted_colnames, filter_map
+                    single_filter = _generate_column_filter(
+                        p,
+                        scalars_to_unpack,
+                        sql_node.converted_colnames,
+                        filter_map,
+                        typemap,
                     )
-                    scalar_filter = (
-                        "{" + filter_map[p[2].name] + "}"
-                        if isinstance(p2, ir.Var)
-                        else p2
-                    )
-                    if p[1] == "ALWAYS_TRUE":
-                        # Special operator for True
-                        single_filter = ["(TRUE)"]
-                    elif p[1] in ("ALWAYS_FALSE", "ALWAYS_NULL"):
-                        # Special operators for False. Since we are
-                        # filtering we can map NULL -> False.
-                        single_filter = ["(FALSE)"]
-                    elif p[1] in ("startswith", "endswith", "contains"):
-                        single_filter = [
-                            "(",
-                            p[1],
-                            "(",
-                            p0,
-                            ",",
-                            scalar_filter,
-                            "))",
-                        ]
-                    elif p[1] in (
-                        "case_insensitive_startswith",
-                        "case_insensitive_endswith",
-                        "case_insensitive_contains",
-                        "case_insensitive_equality",
-                    ):
-                        op = p[1][len("case_insensitive_") :]
-                        if op == "equality":
-                            # Equality is just =, not a function
-                            single_filter = [
-                                "(LOWER(",
-                                p0,
-                                ") = LOWER(",
-                                scalar_filter,
-                                "))",
-                            ]
-                        else:
-                            single_filter = [
-                                "(",
-                                op,
-                                "(LOWER(",
-                                p0,
-                                "), LOWER(",
-                                scalar_filter,
-                                ")))",
-                            ]
-                    elif p[1] in ("like", "ilike"):
-                        # You can't pass the empty string to escape. As a result we
-                        # must confirm its not the empty string
-                        has_escape = True
-                        escape_typ = typemap[p[2].name][1]
-                        if is_overload_constant_str(escape_typ):
-                            escape_val = get_overload_const_str(escape_typ)
-                            has_escape = escape_val != ""
-                        escape_section = (
-                            f"escape {{{filter_map[p[2].name]}[1]}}"
-                            if has_escape
-                            else ""
-                        )
-                        single_filter = [
-                            "(",
-                            p0,
-                            p[1],
-                            f"{{{filter_map[p[2].name]}[0]}} {escape_section}",
-                            ")",
-                        ]
-                        # Indicate the tuple variable is not directly passed to Snowflake, instead its
-                        # components are.
-                        scalars_to_unpack.append(p[2].name)
-                    else:
-                        single_filter = ["(", p0, p[1], scalar_filter, ")"]
-
                     and_conds.append(" ".join(single_filter))
                 or_conds.append(" ( " + " AND ".join(and_conds) + " ) ")
             where_cond = " WHERE " + " OR ".join(or_conds)
@@ -730,6 +656,121 @@ def escape_column_names(col_names, db_type, converted_colnames):
     return col_str
 
 
+def _generate_column_filter(
+    filter: Tuple[Union[str, Tuple], str, Union[ir.Var, str]],
+    scalars_to_unpack: List[str],
+    converted_colnames: List[str],
+    filter_map: Dict[str, str],
+    typemap: Dict[str, types.Type],
+) -> List[str]:
+    """Generate a filter string
+
+    Args:
+        filter (Tuple[Union[str, Tuple], str, Union[ir.Var, str]]): filter in Bodo format to convert
+        scalars_to_unpack (List[str]): A list that will be appended to with any scalars that should be
+            unpacked before converting to a Snowflake literal. This is to ensure we have a tuple of literals
+            as opposed to a Tuple literal.
+        converted_colnames (List[str]): List of column names that must have their case converted.
+        filter_map (Dict[str, str]): Mapping of IR variable name to runtime variable name.
+        typemap (Dict[str, types.Type]): Dictionary used to determine scalar types for each variable name.
+
+    Returns:
+        List[str]: The string components to be joined to generate a single filter without AND/OR.
+    """
+    p0, p1, p2 = filter
+    if p1 == "ALWAYS_TRUE":
+        # Special operator for True
+        single_filter = ["(TRUE)"]
+    elif p1 == "ALWAYS_FALSE":
+        # Special operators for False.
+        single_filter = ["(FALSE)"]
+    elif p1 == "ALWAYS_NULL":
+        # Special operators for NULL.
+        single_filter = ["(NULL)"]
+    elif p1 == "not":
+        # Not recurses on another function operation.
+        inner_filter = _generate_column_filter(
+            p0, scalars_to_unpack, converted_colnames, filter_map, typemap
+        )
+        single_filter = ["(", "NOT"] + inner_filter + [")"]
+    else:
+        # These operators must operate on a column that we will load.
+        p0 = _get_sql_column_str(p0, converted_colnames, filter_map)
+        # If p2 is a constant that isn't in the IR (i.e. NULL)
+        # just load the value directly, otherwise load the variable
+        # at runtime.
+        scalar_filter = (
+            "{" + filter_map[p2.name] + "}" if isinstance(p2, ir.Var) else p2
+        )
+        if p1 in (
+            "startswith",
+            "endswith",
+            "contains",
+        ):
+            single_filter = [
+                "(",
+                p1,
+                "(",
+                p0,
+                ",",
+                scalar_filter,
+                "))",
+            ]
+        elif p1 in (
+            "case_insensitive_startswith",
+            "case_insensitive_endswith",
+            "case_insensitive_contains",
+            "case_insensitive_equality",
+        ):
+            op = p1[len("case_insensitive_") :]
+            if op == "equality":
+                comparison = "="
+                # Equality is just =, not a function
+                single_filter = [
+                    "(LOWER(",
+                    p0,
+                    ")",
+                    comparison,
+                    "LOWER(",
+                    scalar_filter,
+                    "))",
+                ]
+            else:
+                single_filter = [
+                    "(",
+                    op,
+                    "(LOWER(",
+                    p0,
+                    "), LOWER(",
+                    scalar_filter,
+                    ")))",
+                ]
+        elif p1 in ("like", "ilike"):
+            # You can't pass the empty string to escape. As a result we
+            # must confirm its not the empty string
+            has_escape = True
+            escape_typ = typemap[p2.name][1]
+            if is_overload_constant_str(escape_typ):
+                escape_val = get_overload_const_str(escape_typ)
+                has_escape = escape_val != ""
+            escape_section = (
+                f"escape {{{filter_map[p2.name]}[1]}}" if has_escape else ""
+            )
+            single_filter = [
+                "(",
+                p0,
+                p1,
+                f"{{{filter_map[p2.name]}[0]}} {escape_section}",
+                ")",
+            ]
+            # Indicate the tuple variable is not directly passed to Snowflake, instead its
+            # components are.
+            scalars_to_unpack.append(p2.name)
+        else:
+            single_filter = ["(", p0, p1, scalar_filter, ")"]
+    return single_filter
+
+
 @numba.generated_jit(nopython=True, no_cpython_wrapper=True)
 def _get_snowflake_sql_literal_scalar(filter_value):
     """
@@ -783,7 +824,9 @@ def _get_snowflake_sql_literal_scalar(filter_value):
         # datetime64 needs to be a Timestamp literal
         return lambda filter_value: bodo.ir.sql_ext._get_snowflake_sql_literal_scalar(
             pd.Timestamp(filter_value)
-        )
+        )  # pragma: no cover
+    elif filter_type == types.none:
+        return lambda filter_value: "NULL"  # pragma: no cover
     else:
         raise BodoError(
             f"pd.read_sql(): Internal error, unsupported scalar type {filter_type} used in filter pushdown."
@@ -803,6 +846,7 @@ def _get_snowflake_sql_literal(filter_value):
         types.unicode_type,
         types.bool_,
         bodo.datetime64ns,
+        types.none,
     )
     filter_type = types.unliteral(filter_value)
     if (

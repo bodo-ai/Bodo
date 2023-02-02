@@ -659,7 +659,7 @@ def test_snowflake_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
         return bc.sql(query)
 
     with create_snowflake_table(
-        new_df, "like_pushdown_table", db, schema
+        new_df, "ilike_pushdown_table", db, schema
     ) as table_name:
         # Load the whole table in pandas.
         conn_str = get_snowflake_connection_string(db, schema)
@@ -1097,6 +1097,589 @@ def test_snowflake_column_pushdown(test_db_snowflake_catalog, memory_leak_check)
             check_func(
                 impl,
                 (bc, query3),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_not_column_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that queries with WHERE using NOT with a boolean column support
+    filter pushdown. This also tests AND/OR support.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {
+            "A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10,
+            "B": [True, False, False, True] * 10,
+            "C": [True, True, True, False] * 10,
+        }
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "where_not_column_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        query1 = f"Select a from {table_name} where not b"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~py_output.b][["a"]]
+            check_func(
+                impl,
+                (bc, query1),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query2 = f"Select a from {table_name} where not(b or c)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~(py_output.b | py_output.c)][["a"]]
+            check_func(
+                impl,
+                (bc, query2),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query3 = f"Select a from {table_name} where not(b and c)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~(py_output.b & py_output.c)][["a"]]
+            check_func(
+                impl,
+                (bc, query3),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query4 = f"Select a from {table_name} where (not b) or c"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~py_output.b | py_output.c][["a"]]
+            check_func(
+                impl,
+                (bc, query4),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query5 = f"Select a from {table_name} where (not b) and c"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~py_output.b & py_output.c][["a"]]
+            check_func(
+                impl,
+                (bc, query5),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_not_comparison_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests filter pushdown queries using NOT with various comparison
+    operators.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {
+            "A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10,
+            "B": [1, 2, 3, 4] * 10,
+            "C": [True, True, True, True, False] * 8,
+        }
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "where_not_compare_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        query1 = f"Select a from {table_name} where not (b <> 3)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~(py_output.b != 3)][["a"]]
+            check_func(
+                impl,
+                (bc, query1),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query2 = f"Select a from {table_name} where not (b <= 3)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~(py_output.b <= 3)][["a"]]
+            check_func(
+                impl,
+                (bc, query2),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query3 = f"Select a from {table_name} where not (b < 3)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~(py_output.b < 3)][["a"]]
+            check_func(
+                impl,
+                (bc, query3),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query4 = f"Select a from {table_name} where not (b >= 3)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~(py_output.b >= 3)][["a"]]
+            check_func(
+                impl,
+                (bc, query4),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query5 = f"Select a from {table_name} where not (b > 3)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~(py_output.b > 3)][["a"]]
+            check_func(
+                impl,
+                (bc, query5),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query6 = f"Select a from {table_name} where NOT((b > 3 OR b < 2) AND C)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[
+                ~(((py_output.b > 3) | (py_output.b < 2)) & py_output.c)
+            ][["a"]]
+            check_func(
+                impl,
+                (bc, query6),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_not_is_null_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests filter pushdown queries using NOT with IS NULL
+    operators.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {
+            "A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10,
+            "B": pd.Series([1, None, 3, None] * 10, dtype="Int64"),
+        }
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "where_not_is_null_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        query1 = f"Select a from {table_name} where not (b is NULL)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~(py_output.b.isna())][["a"]]
+            check_func(
+                impl,
+                (bc, query1),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        query2 = f"Select a from {table_name} where not (b is not NULL)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~(py_output.b.notna())][["a"]]
+            check_func(
+                impl,
+                (bc, query2),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_not_in_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests filter pushdown queries using NOT IN.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {
+            "A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10,
+            "B": pd.Series([1, 2, 3, None] * 10, dtype="Int64"),
+        }
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(new_df, "where_not_in_table", db, schema) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        query = f"Select a from {table_name} where b not in (1, 3)"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[
+                (~py_output.b.isin([1, 3])) & py_output.b.notna()
+            ][["a"]]
+            check_func(
+                impl,
+                (bc, query),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_not_like_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that queries with not like perform filter pushdown for all the
+    cases with the optimized paths.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["afewf", "b%bf", "hello", "happy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "not_like_pushdown_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        # equality test
+        query1 = f"Select a from {table_name} where a not like 'hello'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a != "hello"]
+            check_func(
+                impl,
+                (bc, query1),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # startswith test
+        query2 = f"Select a from {table_name} where a not like 'he%'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~py_output.a.str.startswith("he")]
+            check_func(
+                impl,
+                (bc, query2),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # endswith test
+        query3 = f"Select a from {table_name} where a not like '%lo'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~py_output.a.str.endswith("lo")]
+            check_func(
+                impl,
+                (bc, query3),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # contains test
+        query4 = f"Select a from {table_name} where a not like '%e%'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~py_output.a.str.contains("e")]
+            check_func(
+                impl,
+                (bc, query4),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_not_ilike_pushdown(test_db_snowflake_catalog, memory_leak_check):
+    """
+    Tests that queries with not ilike perform filter pushdown for all the
+    cases with the optimized paths.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame(
+        {"A": ["AFewf", "b%Bf", "hELlO", "HAPPy", "hel", "llo", "b%L", "ab%%bf"] * 10}
+    )
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "not_ilike_pushdown_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        # equality test
+        query1 = f"Select a from {table_name} where a not ilike 'hello'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a.str.lower() != "hello"]
+            check_func(
+                impl,
+                (bc, query1),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # startswith test
+        query2 = f"Select a from {table_name} where a not ilike 'He%'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~py_output.a.str.lower().str.startswith("he")]
+            check_func(
+                impl,
+                (bc, query2),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # endswith test
+        query3 = f"Select a from {table_name} where a not ilike '%lo'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~py_output.a.str.lower().str.endswith("lo")]
+            check_func(
+                impl,
+                (bc, query3),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+        # contains test
+        query4 = f"Select a from {table_name} where a not ilike '%e%'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[~py_output.a.str.lower().str.contains("e")]
+            check_func(
+                impl,
+                (bc, query4),
+                py_output=expected_output,
+                reset_index=True,
+                sort_output=True,
+            )
+            check_logger_msg(
+                stream, "Filter pushdown successfully performed. Moving filter step:"
+            )
+            check_logger_msg(stream, "Columns loaded ['a']")
+
+
+@pytest.mark.skipif(
+    "AGENT_NAME" not in os.environ,
+    reason="requires Azure Pipelines",
+)
+def test_snowflake_not_like_regex_pushdown(
+    test_db_snowflake_catalog, memory_leak_check
+):
+    """
+    Tests that queries with NOT LIKE that perform filter pushdown where the pattern
+    cannot be simplified to avoid regular expression matching.
+    """
+    bc = bodosql.BodoSQLContext(catalog=test_db_snowflake_catalog)
+    db = test_db_snowflake_catalog.database
+    schema = test_db_snowflake_catalog.connection_params["schema"]
+    new_df = pd.DataFrame({"A": ["AFewf", "b%Bf", "hELlO", "HAPPy"] * 10})
+
+    def impl(bc, query):
+        return bc.sql(query)
+
+    with create_snowflake_table(
+        new_df, "not_like_regex_pushdown_table", db, schema
+    ) as table_name:
+        # Load the whole table in pandas.
+        conn_str = get_snowflake_connection_string(db, schema)
+        py_output = pd.read_sql(f"select * from {table_name}", conn_str)
+        # equality test
+        query = f"Select a from {table_name} where a not like 'hE_lO'"
+        stream = io.StringIO()
+        logger = create_string_io_logger(stream)
+        with set_logging_stream(logger, 1):
+            expected_output = py_output[py_output.a != "hELlO"]
+            check_func(
+                impl,
+                (bc, query),
                 py_output=expected_output,
                 reset_index=True,
                 sort_output=True,
