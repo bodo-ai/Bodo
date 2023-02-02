@@ -52,6 +52,10 @@ public class AggCodeGen {
     equivalentPandasNameMethodMap.put("VARIANCE_POP", "var_pop");
     equivalentPandasNameMethodMap.put("VARIANCE_SAMP", "var");
     equivalentHelperFnMap.put("BOOLOR_AGG", "boolor_agg");
+    // Calcite's SINGLE_VALUE returns input if it has only one value, otherwise raises an error
+    // https://github.com/apache/calcite/blob/f14cf4c32b9079984a988bbad40230aa6a59b127/core/src/main/java/org/apache/calcite/sql/fun/SqlSingleValueAggFunction.java#L36
+    equivalentHelperFnMap.put(
+        "SINGLE_VALUE", "bodo.libs.bodosql_array_kernels.ensure_single_value");
   }
 
   /**
@@ -125,7 +129,8 @@ public class AggCodeGen {
 
       // We need an optional type in case the series is empty.
       if (a.getAggregation().getKind() != SqlKind.COUNT
-          && a.getAggregation().getKind() != SqlKind.SUM0) {
+          && a.getAggregation().getKind() != SqlKind.SUM0
+          && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE) {
         aggString.append("bodosql.libs.null_handling.null_if_not_flag(");
       }
 
@@ -154,7 +159,8 @@ public class AggCodeGen {
       }
 
       if (a.getAggregation().getKind() != SqlKind.COUNT
-          && a.getAggregation().getKind() != SqlKind.SUM0) {
+          && a.getAggregation().getKind() != SqlKind.SUM0
+          && a.getAggregation().getKind() != SqlKind.SINGLE_VALUE) {
         // We need an optional type in case the series is empty
         aggString.append(", len(").append(seriesBuilder).append(") > 0)");
       }
