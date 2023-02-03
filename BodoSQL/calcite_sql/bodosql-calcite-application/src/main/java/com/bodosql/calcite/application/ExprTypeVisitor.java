@@ -435,6 +435,7 @@ public class ExprTypeVisitor {
           || fnName.equals("CURDATE")
           || fnName.equals("CURRENT_DATE")
           || fnName.equals("UNIX_TIMESTAMP")
+          || fnName.equals("TIMEFROMPARTS")
           || fnName.equals("TIME_FROM_PARTS")) {
         // PI/Rand take no arguments and output scalar.
         // TODO: Fix Rand as it should output a column in some cases

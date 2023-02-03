@@ -45,7 +45,7 @@ to_time_util = make_time_to_time_util("TO_TIME")
 
 @numba.generated_jit(nopython=True)
 def time_from_parts_util(hour, minute, second, nanosecond):  # pragma: no cover
-    """Kernel for `TIME_FROM_PARTS`"""
+    """Kernel for `TIMEFROMPARTS` and `TIME_FROM_PARTS`"""
 
     verify_int_arg(hour, "TIME_FROM_PARTS", "hour")
     verify_int_arg(minute, "TIME_FROM_PARTS", "minute")
@@ -57,6 +57,6 @@ def time_from_parts_util(hour, minute, second, nanosecond):  # pragma: no cover
     propagate_null = [True] * 4
     scalar_text = "res[i] = bodo.Time(arg0, arg1, arg2, arg3)"
 
-    out_dtype = bodo.TimeType(9)
+    out_dtype = bodo.TimeArrayType(9)
 
     return gen_vectorized(arg_names, arg_types, propagate_null, scalar_text, out_dtype)
