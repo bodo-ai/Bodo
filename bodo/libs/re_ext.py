@@ -26,7 +26,7 @@ from numba.extending import (
     unbox,
 )
 
-from bodo.libs.str_ext import string_type
+from bodo.libs.str_ext import re_escape_len, re_escape_with_output, string_type
 from bodo.utils.typing import (
     BodoError,
     gen_objmode_func_overload,
@@ -247,7 +247,30 @@ gen_objmode_func_overload(re.match, "re_match_type")
 gen_objmode_func_overload(re.fullmatch, "re_match_type")
 gen_objmode_func_overload(re.split, "list_str_type")
 gen_objmode_func_overload(re.sub, "unicode_type")
-gen_objmode_func_overload(re.escape, "unicode_type")
+
+
+@overload(re.escape)
+def overload_re_escape(pattern):
+    """Implementation of re.escape that works by calling C++
+    kernels equivalent to the Cpython re.escape implementation.
+    All allocations are done via JIT/Numpy.
+
+    Args:
+        pattern (types.unicode_type): String that needs to be escaped.
+
+    Returns: The escaped pattern.
+    """
+
+    def impl(pattern):  # pragma: no cover
+        new_length = re_escape_len(pattern)
+        # Allocate the output string.
+        out_str = numba.cpython.unicode._empty_string(
+            pattern._kind, new_length, pattern._is_ascii
+        )
+        re_escape_with_output(pattern, out_str)
+        return out_str
+
+    return impl
 
 
 @overload(re.findall, no_unliteral=True)
