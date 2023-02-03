@@ -2525,8 +2525,10 @@ public class PandasCodeGenVisitor extends RelVisitor {
                 fnOperation.getOperands().get(0).getType().getSqlTypeName(),
                 operandsInfo.get(0),
                 fnName);
+          case "TIMEFROMPARTS":
           case "TIME_FROM_PARTS":
             return generateTimeFromPartsCode(
+                fnName,
                 operandsInfo.get(0),
                 operandsInfo.get(1),
                 operandsInfo.get(2),

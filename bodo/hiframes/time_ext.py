@@ -47,6 +47,7 @@ _nanos_per_milli = 1000 * _nanos_per_micro
 _nanos_per_second = 1000 * _nanos_per_milli
 _nanos_per_minute = 60 * _nanos_per_second
 _nanos_per_hour = 60 * _nanos_per_minute
+_nanos_per_day = 24 * _nanos_per_hour
 
 
 class Time:
@@ -67,12 +68,15 @@ class Time:
         ), "All time components must be integers"
 
         self.value = np.int64(
-            hour * _nanos_per_hour
-            + minute * _nanos_per_minute
-            + second * _nanos_per_second
-            + millisecond * _nanos_per_milli
-            + microsecond * _nanos_per_micro
-            + nanosecond
+            (
+                hour * _nanos_per_hour
+                + minute * _nanos_per_minute
+                + second * _nanos_per_second
+                + millisecond * _nanos_per_milli
+                + microsecond * _nanos_per_micro
+                + nanosecond
+            )
+            % _nanos_per_day
         )
 
     def __repr__(self):

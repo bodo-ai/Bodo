@@ -264,6 +264,7 @@ public class DatetimeFnCodeGen {
    * @return the rexNodeVisitorInfo for the function call
    */
   public static RexNodeVisitorInfo generateTimeFromPartsCode(
+      String fnName,
       RexNodeVisitorInfo arg1Info,
       RexNodeVisitorInfo arg2Info,
       RexNodeVisitorInfo arg3Info,
@@ -273,7 +274,8 @@ public class DatetimeFnCodeGen {
 
     if (arg4Info == null) {
       name =
-          "TIME_FROM_PARTS("
+          fnName
+              + "("
               + arg1Info.getName()
               + ", "
               + arg2Info.getName()
@@ -290,7 +292,8 @@ public class DatetimeFnCodeGen {
               + ", 0)";
     } else {
       name =
-          "TIME_FROM_PARTS("
+          fnName
+              + "("
               + arg1Info.getName()
               + ", "
               + arg2Info.getName()
