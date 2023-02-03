@@ -589,7 +589,7 @@ def get_schema(
     undetermined_str_cols = snowflake_case_map.keys() - str_as_dict_cols
     for name in undetermined_str_cols:
         # Always quote column names for correctness
-        query_args.append(f'count (distinct "{snowflake_case_map[name]}")')
+        query_args.append(f'approx_count_distinct("{snowflake_case_map[name]}")')
         string_col_ind.append(str_col_name_to_ind[snowflake_case_map[name]])
 
     # Determine if the string columns are dictionary encoded
@@ -618,7 +618,7 @@ def get_schema(
             # It is hard to get Snowflake to consistently
             # and deterministically time out, so this branch
             # isn't tested in the unit tests.
-            dict_encode_timeout_info = (probe_limit, query_args)
+            dict_encode_timeout_info = (probe_limit, list(undetermined_str_cols))
 
             if SF_READ_DICT_ENCODING_IF_TIMEOUT:
                 for i in string_col_ind:
