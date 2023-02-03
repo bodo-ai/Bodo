@@ -142,6 +142,31 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           // What group of functions does this fall into?
           SqlFunctionCategory.TIMEDATE);
 
+  public static final SqlFunction TIMEFROMPARTS =
+      new SqlFunction(
+          "TIMEFROMPARTS",
+          // What SqlKind should match?
+          SqlKind.OTHER_FUNCTION,
+          // What Value should the return type be
+          ReturnTypes.TIME_NULLABLE,
+          // What should be used to infer operand types. We don't use
+          // this so we set it to None.
+          null,
+          OperandTypes.or(
+              OperandTypes.sequence(
+                  "TIMEFROMPARTS(HOUR, MINUTE, SECOND)",
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER),
+              OperandTypes.sequence(
+                  "TIMEFROMPARTS(HOUR, MINUTE, SECOND, NANOSECOND)",
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER,
+                  OperandTypes.INTEGER)),
+          // What group of functions does this fall into?
+          SqlFunctionCategory.TIMEDATE);
+
   public static final SqlFunction TIME_FROM_PARTS =
       new SqlFunction(
           "TIME_FROM_PARTS",
@@ -630,6 +655,7 @@ public final class DatetimeOperatorTable implements SqlOperatorTable {
           YEARWEEK,
           WEEKDAY,
           TO_TIME,
+          TIMEFROMPARTS,
           TIME_FROM_PARTS,
           TIME,
           TIMEADD,
