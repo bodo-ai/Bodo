@@ -1932,17 +1932,16 @@ class TypingTransforms:
                 "bodo.libs.bodosql_array_kernels",
             ):
                 require((len(var_def.args) == 1) and not var_def.kws)
-                args = find_build_tuple(self.func_ir, var_def.args[0])
-                require(len(args) == 1)
-
-                # arg[0] must be an array / valid scalar
-                arg_type = self.typemap.get(args[0].name, None)
+                arg0 = var_def.args[0]
+                # arg[0] must be an array
+                arg_type = self.typemap.get(arg0.name, None)
+                require(is_array_typ(arg_type))
                 if arg_type in (None, types.undefined, types.unknown):
                     self.needs_transform = True
                     raise GuardException
 
                 col_name = self._get_col_name(
-                    args[0], df_var, df_col_names, func_ir, new_ir_assigns
+                    arg0, df_var, df_col_names, func_ir, new_ir_assigns
                 )
                 # Create a new IR Expr for the constant pattern.
                 expr_value = ir.Const(None, var_def.loc)
